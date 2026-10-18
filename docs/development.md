@@ -14,6 +14,12 @@ selected for this skeleton. Its pflag dependency supplies established Boolean,
 scalar, and repeated-flag parsing; the standard library handles encoding and
 context-independent value validation.
 
+The CLI presentation adapter uses
+[Charm ANSI v0.11.7](https://github.com/charmbracelet/x/tree/ansi/v0.11.7/ansi)
+for ANSI-aware cell measurement, wrapping and truncation. Styling and semantic
+blocks stay in `internal/cli`; terminal and environment facts are injected by
+the composition root. Color never enters domain results or raw exports.
+
 Desired-state parsing selects unmodified
 [go.yaml.in/yaml/v3 v3.0.5](https://github.com/yaml/go-yaml/releases/tag/v3.0.5)
 as its stable v3 baseline. The node representation exposes scalar tags, styles,

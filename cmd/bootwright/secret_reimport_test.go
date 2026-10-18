@@ -45,14 +45,14 @@ func TestAnIdenticalReimportFromAnotherDirectoryKeepsSecretsAvailable(t *testing
 	}
 	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", moved, "--yes")
 	contextRun(t, services, 0, "secret", "check")
-	if generated, _ := contextRun(t, services, 0, "secret", "generate"); !strings.HasPrefix(generated, "[SKIPPED] Generated Secrets are current") || !strings.Contains(generated, "Unchanged  ca, token") {
+	if generated, _ := contextRun(t, services, 0, "secret", "generate"); !strings.HasPrefix(generated, "  ○ Generated Secrets are current") || !strings.Contains(generated, "Unchanged  ca, token") {
 		t.Fatalf("generate after a moved import re-minted material:\n%s", generated)
 	}
 
 	addSecretInput(t, moved, "secret.yaml", documents[1]+"\n---\n"+documents[0])
 	contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", moved, "--yes")
 	contextRun(t, services, 0, "secret", "check")
-	if generated, _ := contextRun(t, services, 0, "secret", "generate"); !strings.HasPrefix(generated, "[SKIPPED] Generated Secrets are current") {
+	if generated, _ := contextRun(t, services, 0, "secret", "generate"); !strings.HasPrefix(generated, "  ○ Generated Secrets are current") {
 		t.Fatalf("generate after reordered documents re-minted material:\n%s", generated)
 	}
 }

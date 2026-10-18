@@ -22,7 +22,7 @@ func TestANotReadyPreflightWithoutACommandOffersNone(t *testing.T) {
 		"Use a Fedora controller for libvirt preparation until RHEL AppStream credential acquisition is configured.")}
 	var out, errOut bytes.Buffer
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"preflight", "controller", "--context", "lab"})
-	if code != 1 || !strings.Contains(out.String(), "  Outcome  not-ready\n") || strings.Contains(out.String(), "Next") {
+	if code != 1 || !strings.Contains(out.String(), "    Outcome  not-ready\n") || strings.Contains(out.String(), "Next") {
 		t.Fatalf("exit %d, out %q", code, out.String())
 	}
 	if !strings.Contains(out.String(), "Libvirt client") || !strings.Contains(errOut.String(), "Use a Fedora controller") {

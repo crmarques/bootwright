@@ -230,7 +230,7 @@ func steps(plan reconciliation.Plan, states map[string]reconciliation.BlockState
 		}
 		slices.Sort(after)
 		out = append(out, PlanStep{
-			ID: block.ID, Description: block.Description, Stage: string(block.Stage),
+			ID: block.ID, Description: block.Description, Implementation: block.Implementation, Kind: block.Kind, Object: block.Object, Stage: string(block.Stage),
 			Impacts: slices.Clone(block.Impacts), State: state,
 			After: after, Wave: schedule.Waves[block.ID] + 1, Consumes: slices.Clone(block.Consumes),
 		})

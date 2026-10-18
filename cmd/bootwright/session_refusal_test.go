@@ -33,7 +33,7 @@ func TestABoundaryRefusalOfASessionExitsTwoFiftyFive(t *testing.T) {
 		}
 		var stdout, stderr bytes.Buffer
 		code := classification.Diagnostic(&stdout, &stderr, refusal, refusedStatus(classification, test.code))
-		if code != test.want || stdout.Len() != 0 || !strings.HasPrefix(stderr.String(), "[FAIL] runtime.privilege: ") {
+		if code != test.want || stdout.Len() != 0 || !strings.HasPrefix(stderr.String(), "  error  runtime.privilege\n    ") {
 			t.Fatalf("%v refused with %d = %d, stdout %q, stderr %q; want %d", test.args, test.code, code, stdout.String(), stderr.String(), test.want)
 		}
 	}
@@ -99,7 +99,7 @@ func TestTheBoundaryGivesASessionItsOwnStatus(t *testing.T) {
 		if code != test.want || stdout.Len() != 0 || (len(elevated) == 1) != test.elevated {
 			t.Fatalf("%s: exit %d, elevated %d times, stdout %q, stderr %q; want %d", test.name, code, len(elevated), stdout.String(), stderr.String(), test.want)
 		}
-		if reported := strings.HasPrefix(stderr.String(), "[FAIL] "+test.code+": "); reported != (test.code != "") {
+		if reported := strings.HasPrefix(stderr.String(), "  error  "+test.code+"\n"); reported != (test.code != "") {
 			t.Fatalf("%s: stderr %q, want the %q refusal", test.name, stderr.String(), test.code)
 		}
 		if test.elevated && elevated[0].Session != (test.args[1] != "stop") {

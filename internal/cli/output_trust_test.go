@@ -33,7 +33,7 @@ func TestTrustReportNamesEveryEndpointActionAndFingerprint(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := out.String()
-	if !strings.HasPrefix(text, "[OK] 3 machine(s) checked, 2 recorded") {
+	if !strings.HasPrefix(text, "  ✓ 3 machine(s) checked, 2 recorded") {
 		t.Fatalf("headline = %q", text)
 	}
 	for _, expected := range []string{
@@ -74,7 +74,7 @@ func TestAnUnchangedTrustReportSaysSo(t *testing.T) {
 	if err := writeTrustReport(&empty, "machine trust", &enrollment.Report{Context: "lab"}, false); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(empty.String(), "[SKIPPED]") {
+	if !strings.HasPrefix(empty.String(), "  ○ ") {
 		t.Fatalf("empty selection = %q", empty.String())
 	}
 }
@@ -132,15 +132,14 @@ func TestTheTrustPlanNamesEveryPendingFingerprint(t *testing.T) {
 	if err := NewTrustPlanPresenter(&out).PresentTrustPlan(context.Background(), *trustReport()); err != nil {
 		t.Fatal(err)
 	}
-	want := "Host-key trust plan for context lab: 3 machine(s) checked, 2 pending\n" +
-		"\n" +
-		"MACHINE    ADDRESS            ACTION   KEY          FINGERPRINT\n" +
-		"node-a     192.0.2.10         add      ssh-ed25519  SHA256:aaa\n" +
-		"node-b     [192.0.2.11]:2222  replace  ssh-ed25519  SHA256:bbb (was SHA256:ccc)\n" +
-		"installed  -                  skip     -            host key comes from its installation evidence\n"
+	want := "  Host-key trust plan for context lab: 3 machine(s) checked, 2 pending\n\n" +
+		"      MACHINE      node-a\n      ADDRESS      192.0.2.10\n      ACTION       add\n      KEY          ssh-ed25519\n      FINGERPRINT  SHA256:aaa\n\n" +
+		"      MACHINE      node-b\n      ADDRESS      [192.0.2.11]:2222\n      ACTION       replace\n      KEY          ssh-ed25519\n      FINGERPRINT  SHA256:bbb (was SHA256:ccc)\n\n" +
+		"      MACHINE      installed\n      ADDRESS      -\n      ACTION       skip\n      KEY          -\n      FINGERPRINT  host key comes from its installation evidence\n"
 	if out.String() != want {
 		t.Fatalf("plan = %q, want %q", out.String(), want)
 	}
+
 }
 
 // The operator saw the table before confirming, so the result after recording
@@ -152,7 +151,7 @@ func TestAPresentedTrustResultRepeatsOnlyItsHeadline(t *testing.T) {
 	if err := writeTrustReport(&out, "machine trust", report, false); err != nil {
 		t.Fatal(err)
 	}
-	if out.String() != "[OK] 3 machine(s) checked, 2 recorded\n" {
+	if out.String() != "  ✓ 3 machine(s) checked, 2 recorded\n" {
 		t.Fatalf("result = %q", out.String())
 	}
 }
@@ -258,21 +257,20 @@ func TestARemovalRowNamesTheKeyItRemovesAndWhy(t *testing.T) {
 	if err := NewTrustPlanPresenter(&plan).PresentTrustPlan(context.Background(), report); err != nil {
 		t.Fatal(err)
 	}
-	want := "Host-key trust plan for context lab: 1 machine(s) checked, 2 pending\n" +
-		"\n" +
-		"MACHINE  ADDRESS     ACTION  KEY          FINGERPRINT\n" +
-		"node-a   192.0.2.10  add     ssh-ed25519  SHA256:aaa\n" +
-		"retired  192.0.2.10  remove  ssh-ed25519  SHA256:old (no longer declared; node-a now uses its address)\n"
+	want := "  Host-key trust plan for context lab: 1 machine(s) checked, 2 pending\n\n" +
+		"      MACHINE      node-a\n      ADDRESS      192.0.2.10\n      ACTION       add\n      KEY          ssh-ed25519\n      FINGERPRINT  SHA256:aaa\n\n" +
+		"      MACHINE      retired\n      ADDRESS      192.0.2.10\n      ACTION       remove\n      KEY          ssh-ed25519\n      FINGERPRINT  SHA256:old (no longer declared; node-a now uses its address)\n"
 	if plan.String() != want {
 		t.Fatalf("plan = %q, want %q", plan.String(), want)
 	}
+
 	dry := report
 	dry.DryRun = true
 	var text bytes.Buffer
 	if err := writeTrustReport(&text, "machine trust", &dry, false); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(text.String(), "[OK] 1 machine(s) checked, 2 pending; nothing was recorded\n") ||
+	if !strings.HasPrefix(text.String(), "  ✓ 1 machine(s) checked, 2 pending; nothing was recorded\n") ||
 		!strings.Contains(text.String(), "SHA256:old (no longer declared; node-a now uses its address)") {
 		t.Fatalf("result = %q", text.String())
 	}
@@ -283,7 +281,7 @@ func TestARemovalRowNamesTheKeyItRemovesAndWhy(t *testing.T) {
 	if err := writeTrustReport(&headline, "machine trust", &recorded, false); err != nil {
 		t.Fatal(err)
 	}
-	if headline.String() != "[OK] 1 machine(s) checked, 2 recorded\n" {
+	if headline.String() != "  ✓ 1 machine(s) checked, 2 recorded\n" {
 		t.Fatalf("result = %q", headline.String())
 	}
 	var out bytes.Buffer

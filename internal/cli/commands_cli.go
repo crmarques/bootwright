@@ -3,7 +3,7 @@ package cli
 func presentationCommands() []commandSpec {
 	return []commandSpec{
 		{path: "version", short: "Show executable and dependency build identities"},
-		{path: "help", short: "Show human help for an exact command path"},
+		{path: "help", short: "Show help for an exact command path"},
 		{path: "completion bash", short: "Generate a Bash completion script", flags: []flagSpec{boolFlag("no-descriptions", "Omit completion descriptions")}},
 		{path: "completion zsh", short: "Generate a Zsh completion script", flags: []flagSpec{boolFlag("no-descriptions", "Omit completion descriptions")}},
 		{path: "completion fish", short: "Generate a Fish completion script", flags: []flagSpec{boolFlag("no-descriptions", "Omit completion descriptions")}},

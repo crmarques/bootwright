@@ -1,19 +1,20 @@
-Controller readiness
+  Controller readiness
 
-  Scope       context lab
-  Controller  controller
-  Platform    fedora 43/amd64
-  Route       direct
+    Scope       context lab
+    Controller  controller
+    Platform    fedora 43/amd64
+    Route       direct
 
-Checks
-  [OK]  Target tools        openshift-clients 4.21.15, openshift-install 4.21.15
-  [OK]  Libvirt client      libvirt client
-  [OK]  Controller binding  controller
+  Checks
+  [OK]   Target tools         openshift-clients 4.21.15, openshift-install 4.21.15
+  [OK]   Libvirt client       libvirt client
+  [OK]   Controller binding   controller
 
-  Host      Fedora Linux 43 (amd64), glibc 2.42 — tested
-  Runtime   Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — ready
-  Packages  podman 5:5.8.1-1.fc43 (updates), openssh-clients 10.2p1-1.fc43 (present before bootwright)
-  Nothing to do.
+    Host      Fedora Linux 43 (amd64), glibc 2.42 — tested
+    Runtime   Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — ready
+    Packages  podman 5:5.8.1-1.fc43 (updates), openssh-clients 10.2p1-1.fc43 (present before
+              bootwright)
+    Nothing to do.
 
-  Outcome  ready
-  Next     bootwright plan --context lab
+    Outcome  ready
+    Next     bootwright plan --context lab

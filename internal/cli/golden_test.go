@@ -575,7 +575,9 @@ func cliGoldens() []cliGolden {
 		// Refused setups: a confirmation refusal's remedy repeats the
 		// operator's invocation with --yes (internal/cli/confirmation.go).
 		{golden: "cli-setup-confirmation-refused", args: "setup", code: 1,
-			stderr: "[FAIL] controller.setup: setup confirmation requires an interactive terminal; next: review the plan, then repeat bootwright setup with --yes\n",
+			stderr: "  error  controller.setup\n" +
+				"    setup confirmation requires an interactive terminal\n" +
+				"    Next: review the plan, then repeat bootwright setup with --yes\n",
 			record: func(r *dispatchRecord) {
 				r.result.controller = &prerequisites.Report{
 					Platform: platform, Route: "direct (no HTTPS_PROXY)", Outcome: "planned", PlanPresented: true, ProgressPresented: true,
@@ -588,7 +590,11 @@ func cliGoldens() []cliGolden {
 		// and the store's refusal of it
 		// (internal/workspace/contextfs/root_inspection_linux_amd64.go).
 		{golden: "cli-setup-plan-state-root", args: "setup --dry-run", code: 1,
-			stderr: "[FAIL] context.state: the state root is a directory owned by root:root with mode 0755, but it must be a directory owned by root:root with mode 0700; next: nothing repairs it, because Bootwright never changes the owner or mode of an existing state root\n",
+			stderr: "  error  context.state\n" +
+				"    the state root is a directory owned by root:root with mode 0755, but it must be a directory\n" +
+				"    owned by root:root with mode 0700\n" +
+				"    Next: nothing repairs it, because Bootwright never changes the owner or mode of an existing\n" +
+				"    state root\n",
 			record: stateRootRefused},
 		{golden: "cli-setup-plan-state-root-json", args: "setup --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
 			stateRootRefused(r)
@@ -624,7 +630,9 @@ func cliGoldens() []cliGolden {
 		// A host whose table looks whole still shows the host check that is not
 		// ready, here an interrupted setup.
 		{golden: "cli-preflight-controller-interrupted", args: "preflight controller", code: 1,
-			stderr: "[FAIL] preflight.failed: required controller prerequisites are not ready; next: run bootwright setup\n",
+			stderr: "  error  preflight.failed\n" +
+				"    required controller prerequisites are not ready\n" +
+				"    Next: run bootwright setup\n",
 			record: func(r *dispatchRecord) {
 				r.result.controller = &prerequisites.Report{
 					Platform: platform, Route: "direct", Outcome: "not-ready", Next: "bootwright setup",
@@ -644,7 +652,9 @@ func cliGoldens() []cliGolden {
 			}},
 		// A host that is already ready renders the same table and nothing else
 		// to do; its informational lines go to standard error.
-		{golden: "cli-setup-ready", args: "setup", stderr: "[WARN] controller.loader-preload: /etc/ld.so.preload is not empty, so it loads libraries into every process, root dnf runs included; setup continues\n",
+		{golden: "cli-setup-ready", args: "setup", stderr: "  warning  controller.loader-preload\n" +
+			"    /etc/ld.so.preload is not empty, so it loads libraries into every process, root dnf runs\n" +
+			"    included; setup continues\n",
 			record: func(r *dispatchRecord) {
 				r.result.controller = &prerequisites.Report{
 					Platform: platform, Route: "direct", Outcome: "unchanged",
@@ -734,7 +744,9 @@ func cliGoldens() []cliGolden {
 				r.result.lifecycleOperation = operation("failed")
 				r.err = diagnostics.NewFailureWithRemediation("lifecycle.state", "the apply did not complete", "", "continue it with bootwright apply --context lab")
 			},
-			stderr: "[FAIL] lifecycle.state: the apply did not complete; next: continue it with bootwright apply --context lab\n",
+			stderr: "  error  lifecycle.state\n" +
+				"    the apply did not complete\n" +
+				"    Next: continue it with bootwright apply --context lab\n",
 		},
 		{golden: "cli-apply-paused", args: "apply --yes --stage infra-components,substrates", record: func(r *dispatchRecord) { r.result.lifecycleOperation = operation("paused") }},
 		{
@@ -744,7 +756,10 @@ func cliGoldens() []cliGolden {
 				r.err = diagnostics.NewFailureWithRemediation("lifecycle.unknown", "an effect has an unresolved outcome", "",
 					"resolve it with bootwright apply --context lab, which observes that effect before anything else starts, or take back what it started with bootwright destroy --context lab")
 			},
-			stderr: "[FAIL] lifecycle.unknown: an effect has an unresolved outcome; next: resolve it with bootwright apply --context lab, which observes that effect before anything else starts, or take back what it started with bootwright destroy --context lab\n",
+			stderr: "  error  lifecycle.unknown\n" +
+				"    an effect has an unresolved outcome\n" +
+				"    Next: resolve it with bootwright apply --context lab, which observes that effect before\n" +
+				"    anything else starts, or take back what it started with bootwright destroy --context lab\n",
 		},
 		{
 			golden: "cli-apply-running", args: "apply --yes", code: 1,
@@ -752,11 +767,17 @@ func cliGoldens() []cliGolden {
 				r.result.lifecycleOperation = operation("running")
 				r.err = diagnostics.NewFailureWithRemediation("lifecycle.state", "the apply did not complete", "", "continue it with bootwright apply --context lab")
 			},
-			stderr: "[FAIL] lifecycle.state: the apply did not complete; next: continue it with bootwright apply --context lab\n",
+			stderr: "  error  lifecycle.state\n" +
+				"    the apply did not complete\n" +
+				"    Next: continue it with bootwright apply --context lab\n",
 		},
 		{
 			args: "apply --yes --stage machines", code: 1, record: func(r *dispatchRecord) { r.err = unauthorized },
-			stderr: "[FAIL] lifecycle.authorization: this plan has data-loss consequences that are not authorized: step 3 (install the operating system of metal-01); next: repeat it with the authorization: bootwright apply --context lab --stage machines --authorize data-loss\n",
+			stderr: "  error  lifecycle.authorization\n" +
+				"    this plan has data-loss consequences that are not authorized: step 3 (install the operating\n" +
+				"    system of metal-01)\n" +
+				"    Next: repeat it with the authorization: bootwright apply --context lab --stage machines\n" +
+				"    --authorize data-loss\n",
 		},
 		// Status: an apply that failed beside records that contradict it,
 		// which offers no next step, and an idle context, whose empty row
@@ -778,14 +799,33 @@ func cliGoldens() []cliGolden {
 		// envelope's diagnostics in JSON; a failed validate has no result.
 		{
 			golden: "cli-validate", args: "validate -f inputs", record: func(r *dispatchRecord) { r.report = validation() },
-			stderr: "[WARN] api.selection clusters/ocp-02/cluster.yaml:4:9: cluster root is excluded by the Environment selection [ContainerCluster/ocp-02] ($.metadata.name); next: include the cluster in the matching Environment root selection\n" +
-				"[WARN] api.deferred playbooks/reserved.yaml:5:1: CustomPlaybook is a reserved declaration and cannot execute. [CustomPlaybook/reserved] ($.spec)\n",
+			stderr: "  warning  ContainerCluster/ocp-02\n" +
+				"    api.selection\n" +
+				"    clusters/ocp-02/cluster.yaml:4:9\n" +
+				"    cluster root is excluded by the Environment selection\n" +
+				"    Field: $.metadata.name\n" +
+				"    Next: include the cluster in the matching Environment root selection\n" +
+				"\n" +
+				"  warning  CustomPlaybook/reserved\n" +
+				"    api.deferred\n" +
+				"    playbooks/reserved.yaml:5:1\n" +
+				"    CustomPlaybook is a reserved declaration and cannot execute.\n" +
+				"    Field: $.spec\n",
 		},
 		{golden: "cli-validate-json", args: "validate -f inputs --output json", record: func(r *dispatchRecord) { r.report = validation() }},
 		{
 			args: "validate -f inputs", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid },
-			stderr: "[FAIL] api.required environment.yaml:6:3: required field is absent [Environment/lab-rhel] ($.spec.domains.base)\n" +
-				"[FAIL] api.field infra/machines/rhel-01.yaml:12:5: field is not permitted by this schema [Machine/rhel-01] ($.spec.network.adresses)\n",
+			stderr: "  error  Environment/lab-rhel\n" +
+				"    api.required\n" +
+				"    environment.yaml:6:3\n" +
+				"    required field is absent\n" +
+				"    Field: $.spec.domains.base\n" +
+				"\n" +
+				"  error  Machine/rhel-01\n" +
+				"    api.field\n" +
+				"    infra/machines/rhel-01.yaml:12:5\n" +
+				"    field is not permitted by this schema\n" +
+				"    Field: $.spec.network.adresses\n",
 		},
 		{golden: "cli-validate-failed-json", args: "validate -f inputs --output json", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid }},
 		{golden: "cli-render-effective", args: "render effective", record: func(r *dispatchRecord) { r.result.effective = effective() }},
@@ -797,7 +837,11 @@ func cliGoldens() []cliGolden {
 			record: func(r *dispatchRecord) {
 				r.result.admission = &contexts.AdmissionResult{Context: lab, Counts: compilation.Counts{FilesSeen: 14, ObjectsDecoded: 14}, FilesCopied: 14, InputChanged: true, Diagnostics: []diagnostic{deferred}}
 			},
-			stderr: "[WARN] api.deferred playbooks/reserved.yaml:5:1: CustomPlaybook is a reserved declaration and cannot execute. [CustomPlaybook/reserved] ($.spec)\n",
+			stderr: "  warning  CustomPlaybook/reserved\n" +
+				"    api.deferred\n" +
+				"    playbooks/reserved.yaml:5:1\n" +
+				"    CustomPlaybook is a reserved declaration and cannot execute.\n" +
+				"    Field: $.spec\n",
 		},
 		{golden: "cli-context-update", args: "context update --name lab --input-dir inputs --yes", record: func(r *dispatchRecord) {
 			r.result.admission = &contexts.AdmissionResult{Context: lab, Counts: compilation.Counts{FilesSeen: 14, ObjectsDecoded: 14}}
@@ -815,7 +859,8 @@ func cliGoldens() []cliGolden {
 			record: func(r *dispatchRecord) {
 				r.result.deletion = &contexts.DeleteResult{Name: "retired", Outcome: "deleted", OrphansAbandoned: true, ReleasedReservations: []string{"libvirt-domain:bootwright-lab-rhel-01", "socket:192.0.2.1:8000"}}
 			},
-			stderr: "[WARN] context.orphaned: the objects this context owned were abandoned and are no longer managed\n",
+			stderr: "  warning  context.orphaned\n" +
+				"    the objects this context owned were abandoned and are no longer managed\n",
 		},
 
 		// Secrets. A negative check keeps its complete result on standard
@@ -843,17 +888,23 @@ func cliGoldens() []cliGolden {
 				r.result.secretCheck = missing()
 				r.err = unstoredSecret
 			},
-			stderr: "[FAIL] secret.input: Secret registry-pull-secret has no stored material [Secret/registry-pull-secret]; next: bootwright secret set --context lab --name registry-pull-secret --value-file <path>\n",
+			stderr: "  error  Secret/registry-pull-secret\n" +
+				"    secret.input\n" +
+				"    Secret registry-pull-secret has no stored material\n" +
+				"    Next: bootwright secret set --context lab --name registry-pull-secret --value-file <path>\n",
 		},
 		{golden: "cli-secret-check-negative-json", args: "secret check --output json", code: 1, record: func(r *dispatchRecord) {
 			r.result.secretCheck = missing()
 			r.err = unstoredSecret
 		}},
+		{golden: "cli-secret-info", args: "secret info", record: func(r *dispatchRecord) { r.result.secretList = listed() }},
+		{golden: "cli-secret-info-json", args: "secret info --output json", record: func(r *dispatchRecord) { r.result.secretList = listed() }},
 		{golden: "cli-secret-list", args: "secret list", record: func(r *dispatchRecord) { r.result.secretList = listed() }},
 		{golden: "cli-secret-list-json", args: "secret list --output json", record: func(r *dispatchRecord) { r.result.secretList = listed() }},
 		{
 			args: "secret list --context lab", code: 1, record: func(r *dispatchRecord) { r.err = noInput },
-			stderr: "[FAIL] context.input: context has no desired state; run context update --name lab --input-dir <dir>\n",
+			stderr: "  error  context.input\n" +
+				"    context has no desired state; run context update --name lab --input-dir <dir>\n",
 		},
 		{golden: "cli-secret-list-refused-json", args: "secret list --context lab --output json", code: 1, record: func(r *dispatchRecord) { r.err = noInput }},
 		// An explicit sensitive result is the requested bytes with no added
@@ -868,7 +919,11 @@ func cliGoldens() []cliGolden {
 		}},
 		{
 			args: "cluster kubeconfig --name ceph", code: 1, record: func(r *dispatchRecord) { r.err = kubeconfigNotApplicable },
-			stderr: "[FAIL] cluster.not-applicable: bootwright cluster kubeconfig does not apply to ceph, a managed Ceph StorageCluster; it applies to OpenShift and OKD ContainerClusters only; next: bootwright cluster info --context lab lists the clusters this context selects and their kinds\n",
+			stderr: "  error  cluster.not-applicable\n" +
+				"    bootwright cluster kubeconfig does not apply to ceph, a managed Ceph StorageCluster; it\n" +
+				"    applies to OpenShift and OKD ContainerClusters only\n" +
+				"    Next: bootwright cluster info --context lab lists the clusters this context selects and\n" +
+				"    their kinds\n",
 		},
 		{golden: "cli-secret-encryption-init", args: "secret encryption init", record: func(r *dispatchRecord) {
 			r.result.encryptionMutation = &encryption.MutationResult{Context: secretContext, Implementation: selection, ActiveKey: retiredKey, Changed: true}
@@ -896,7 +951,10 @@ func cliGoldens() []cliGolden {
 				r.mediaChange = &media.Change{Action: media.ReplaceChange, Name: storedImage.Name, Stored: true, Readable: true, Entry: storedImage, NewOrigin: "file:///srv/images/rhel-9.8-x86_64-dvd.iso"}
 				r.err = declinedConfirmation("media add --name rhel-9.8-x86_64-dvd.iso --from-file rhel-9.8-x86_64-dvd.iso", "media replace", storedImage.Name)
 			},
-			stderr: "[FAIL] media.store: media confirmation was declined; nothing changed; next: review it, then repeat bootwright media add --from-file rhel-9.8-x86_64-dvd.iso --name rhel-9.8-x86_64-dvd.iso with --yes\n",
+			stderr: "  error  media.store\n" +
+				"    media confirmation was declined; nothing changed\n" +
+				"    Next: review it, then repeat bootwright media add --from-file rhel-9.8-x86_64-dvd.iso\n" +
+				"    --name rhel-9.8-x86_64-dvd.iso with --yes\n",
 		},
 		{
 			golden: "cli-media-delete-plan", args: "media delete --name rhel-9.8-x86_64-dvd.iso", code: 1,
@@ -904,7 +962,10 @@ func cliGoldens() []cliGolden {
 				r.mediaChange = &media.Change{Action: media.DeleteChange, Name: storedImage.Name, Stored: true, Readable: true, Entry: storedImage, Retained: true}
 				r.err = declinedConfirmation("media delete --name rhel-9.8-x86_64-dvd.iso", "media delete", storedImage.Name)
 			},
-			stderr: "[FAIL] media.store: media confirmation was declined; nothing changed; next: review it, then repeat bootwright media delete --name rhel-9.8-x86_64-dvd.iso with --yes\n",
+			stderr: "  error  media.store\n" +
+				"    media confirmation was declined; nothing changed\n" +
+				"    Next: review it, then repeat bootwright media delete --name rhel-9.8-x86_64-dvd.iso with\n" +
+				"    --yes\n",
 		},
 		{golden: "cli-media-list", args: "media list --checksums", record: func(r *dispatchRecord) { r.result.mediaList = stored(true) }},
 		{golden: "cli-media-list-json", args: "media list --checksums --output json", record: func(r *dispatchRecord) { r.result.mediaList = stored(true) }},
@@ -918,6 +979,8 @@ func cliGoldens() []cliGolden {
 		// JSON invocation silences: TestAJSONInvocationWritesNoProgress in
 		// cmd/bootwright proves that wiring, and these goldens hold what the
 		// Runner writes.
+		{golden: "cli-machine-info", args: "machine info", record: func(r *dispatchRecord) { r.result.machines = machines(false) }},
+		{golden: "cli-machine-info-json", args: "machine info --output json", record: func(r *dispatchRecord) { r.result.machines = machines(false) }},
 		{golden: "cli-machine-list", args: "machine list --power-status", record: func(r *dispatchRecord) { r.result.machines = machines(true) }},
 		{golden: "cli-machine-list-json", args: "machine list --power-status --output json", record: func(r *dispatchRecord) { r.result.machines = machines(true) }},
 		{golden: "cli-machine-list-silent", args: "machine list --silent", record: func(r *dispatchRecord) { r.result.machines = machines(false) }},
@@ -932,13 +995,18 @@ func cliGoldens() []cliGolden {
 		// envelope names the retained file.
 		{
 			args: "machine stop --name rhel-01 --yes", code: 1, record: refusedRun,
-			stderr: "[FAIL] lifecycle.state: the adapter operation did not complete; next: read the adapter output retained in this run's run.output\n",
+			stderr: "  error  lifecycle.state\n" +
+				"    the adapter operation did not complete\n" +
+				"    Next: read the adapter output retained in this run's run.output\n",
 		},
 		{golden: "cli-machine-stop-refused-json", args: "machine stop --name rhel-01 --yes --output json", code: 1, record: refusedRun},
 		{golden: "cli-machine-stop-several", args: "machine stop --name rhel-02,rhel-01 --yes", record: poweredSeveral},
 		{golden: "cli-machine-stop-several-json", args: "machine stop --name rhel-01,rhel-02 --yes --output json", record: poweredSeveral},
 		{golden: "cli-machine-stop-several-failed", args: "machine stop --name rhel-01,rhel-02 --yes", code: 1, record: failedSeveral,
-			stderr: "[FAIL] lifecycle.state: the adapter operation did not complete [Machine/rhel-02]; next: read the adapter output retained in this run's run.output\n"},
+			stderr: "  error  Machine/rhel-02\n" +
+				"    lifecycle.state\n" +
+				"    the adapter operation did not complete\n" +
+				"    Next: read the adapter output retained in this run's run.output\n"},
 		{golden: "cli-machine-stop-several-failed-json", args: "machine stop --name rhel-01,rhel-02 --yes --output json", code: 1, record: failedSeveral},
 		{golden: "cli-machine-trust", args: "machine trust --replace db-01 --yes", record: func(r *dispatchRecord) { r.result.trust = trusted() }},
 		{golden: "cli-machine-trust-json", args: "machine trust --replace db-01 --yes --output json", record: func(r *dispatchRecord) { r.result.trust = trusted() }},
@@ -946,13 +1014,17 @@ func cliGoldens() []cliGolden {
 		// Envelopes: a usage error, which never dispatches, and a command
 		// whose use case this build does not provide.
 		{
-			args: "status --output yaml", code: 2,
-			stderr: "[FAIL] cli.usage: --output must be one of: text, json\nUsage: bootwright status [flags]\nRun 'bootwright help' for available commands.\n",
+			args: "status --output invalid", code: 2,
+			stderr: "  error  cli.usage\n" +
+				"    --output must be one of: text, json, yaml\n" +
+				"Usage: bootwright status [flags]\n" +
+				"Run 'bootwright help' for available commands.\n",
 		},
 		{golden: "cli-usage-json", args: "status --output json --yes", code: 2},
 		{
 			args: "status", code: 1, record: func(r *dispatchRecord) { r.err = availability.ErrNotImplemented },
-			stderr: "[FAIL] cli.not-implemented: bootwright status is not implemented\n",
+			stderr: "  error  cli.not-implemented\n" +
+				"    bootwright status is not implemented\n",
 		},
 		{golden: "cli-not-implemented-json", args: "status --output json", code: 1, record: func(r *dispatchRecord) { r.err = availability.ErrNotImplemented }},
 	}, append(clusterGoldens(), diffGoldens()...)...)
@@ -1012,17 +1084,19 @@ func TestClusterKubeconfigWritesExactlyItsBytesOrOneDiagnostic(t *testing.T) {
 		secretstore.Failure("store.implementation", "this context's secret store is local-keyring-v3, which this Bootwright build cannot open"),
 	} {
 		code, out, errOut := run(nil, failure)
-		if code != 1 || out != "" || strings.Count(errOut, "[FAIL] ") != 1 || strings.Count(errOut, "\n") != 1 {
+		if code != 1 || out != "" || strings.Count(errOut, "  error  ") != 1 {
 			t.Fatalf("a refused kubeconfig exited %d with %q and standard error %q, want exit 1, no output and one diagnostic", code, out, errOut)
 		}
 	}
 	code, out, errOut := run(&containeraccess.KubeconfigResult{Context: "lab", Cluster: "sno"}, nil)
-	if code != 1 || out != "" || strings.Count(errOut, "[FAIL] ") != 1 {
+	if code != 1 || out != "" || strings.Count(errOut, "  error  ") != 1 {
 		t.Fatalf("an empty kubeconfig exited %d with %q and standard error %q", code, out, errOut)
 	}
 	code, out, errOut = run(&containeraccess.KubeconfigResult{Context: "lab", Cluster: "sno", Unproved: true, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(kubeconfigFixture)})}, nil)
-	if code != 0 || out != kubeconfigFixture || strings.Count(errOut, "\n") != 1 || !strings.Contains(errOut, "access.unproved") ||
-		!strings.Contains(errOut, "ContainerCluster sno was kept from an installation whose completion was never proved") || strings.Contains(errOut, "[FAIL] ") {
+	wantWarning := "  warning  access.unproved\n" +
+		"    the administrator kubeconfig of ContainerCluster sno was kept from an installation whose\n" +
+		"    completion was never proved, so the access it grants was not proved\n"
+	if code != 0 || out != kubeconfigFixture || errOut != wantWarning {
 		t.Fatalf("an unproved kubeconfig exited %d with %q and standard error %q, want its bytes and one warning", code, out, errOut)
 	}
 }
@@ -1087,7 +1161,7 @@ func TestPausedFailedUnknownAndRunningResultsNameTheNextCommand(t *testing.T) {
 			test.record(record)
 			var out bytes.Buffer
 			New(Config{Out: &out, Services: dispatchSpies(record)}).Run(context.Background(), strings.Fields(test.args))
-			named := strings.Contains(out.String(), "/logs\n  Next  bootwright apply --context lab\noperation: ")
+			named := strings.Contains(out.String(), "/logs\n    Next  bootwright apply --context lab\noperation: ")
 			if named != want || strings.Contains(out.String(), "Next ") != want {
 				t.Fatalf("the result names a next command: %t, want %t: %q", named, want, out.String())
 			}
@@ -1100,8 +1174,9 @@ func TestPausedFailedUnknownAndRunningResultsNameTheNextCommand(t *testing.T) {
 
 // A command becomes available by a catalog edit alone, so the catalog decides
 // what must be pinned: every available command needs a successful case with a
-// golden, and one in JSON when it accepts --output. A golden no case writes is
-// stale and fails rather than lingering.
+// golden. Existing JSON contracts and the new info views also have byte goldens;
+// structured_output_test.go exercises universal format support for the remaining
+// commands. A golden no case writes is stale and fails rather than lingering.
 func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 	// A session's standard output is the remote process's own bytes
 	// (specs/cli/output.md, streams), so Bootwright writes nothing to pin.
@@ -1120,6 +1195,11 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 			coveredJSON[test.path()] = coveredJSON[test.path()] || test.json()
 		}
 	}
+	jsonContracts := []string{
+		"validate", "preflight storage-cluster", "render effective", "status", "diff",
+		"secret check", "secret list", "secret info", "secret encryption status", "machine trust", "setup",
+		"machine list", "machine info", "machine start", "machine stop", "machine restart", "media list", "cluster list", "cluster info",
+	}
 	implemented := map[string]bool{}
 	for _, spec := range commandCatalog() {
 		if !spec.implemented {
@@ -1132,9 +1212,8 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 		if !covered[spec.path] {
 			t.Errorf("available command %q has no successful golden case", spec.path)
 		}
-		acceptsOutput := slices.ContainsFunc(spec.flags, func(flag flagSpec) bool { return flag.name == "output" })
-		if acceptsOutput && !coveredJSON[spec.path] {
-			t.Errorf("available command %q accepts --output but has no successful JSON golden case", spec.path)
+		if slices.Contains(jsonContracts, spec.path) && !coveredJSON[spec.path] {
+			t.Errorf("available command %q has a JSON contract but no successful JSON golden case", spec.path)
 		}
 	}
 	for _, path := range sessions {

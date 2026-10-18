@@ -92,7 +92,7 @@ func assertInterruptOutput(t *testing.T, code int, out, errOut string, jsonMode 
 		if err := json.Unmarshal([]byte(out), &envelope); err != nil || envelope.OK || envelope.ExitCode != 130 || envelope.Result != nil || len(envelope.Diagnostics) != 1 || envelope.Diagnostics[0].Code != "runtime.interrupted" || len(envelope.Logs) != 0 || errOut != "" || strings.Count(out, "\n") != 1 {
 			t.Fatalf("interrupt JSON: %s stderr=%q error=%v", out, errOut, err)
 		}
-	} else if out != "" || errOut != "[FAIL] runtime.interrupted: operation interrupted\n" {
+	} else if out != "" || errOut != "  error  runtime.interrupted\n    operation interrupted\n" {
 		t.Fatalf("interrupt text: stdout=%q stderr=%q", out, errOut)
 	}
 }
@@ -239,13 +239,13 @@ func TestAnInterruptedRegisteredOperationKeepsItsResultAndReceipt(t *testing.T) 
 			}
 			code, out, errOut := interrupted(result, path)
 			verb := strings.ToUpper(path[:1]) + path[1:]
-			want := "[FAIL] " + verb + " running\n\nResult\n" +
-				"  [DONE]     serve artifacts for lab-artifacts\n" +
-				"  [PENDING]  resolve names for lab-dns\n\n" +
-				"  Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n" +
-				"  Next  " + next + "\n" +
+			want := "  ! " + verb + " running\n\n  Result\n" +
+				"    [DONE] serve artifacts for lab-artifacts\n" +
+				"    [PENDING] resolve names for lab-dns\n\n" +
+				"    Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n" +
+				"    Next  " + next + "\n" +
 				"operation: op-abc\nverb: " + path + "\nstate: running\nnext: continue-" + path + "\n"
-			if code != 130 || out != want || errOut != "[FAIL] runtime.interrupted: operation interrupted; next: "+next+"\n" {
+			if code != 130 || out != want || errOut != "  error  runtime.interrupted\n    operation interrupted\n    Next: "+next+"\n" {
 				t.Fatalf("exit %d\nstdout %q\nwant   %q\nstderr %q", code, out, want, errOut)
 			}
 		})

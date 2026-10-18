@@ -1,20 +1,30 @@
-Realize the complete selected Environment, or continue the exact operation an interruption left behind. The plan is always complete; --stage only gates which blocks this invocation starts, and the operation pauses at that boundary. Review the plan before confirming; --yes skips ordinary confirmation.
+  bootwright / apply
+      Realize the complete selected Environment, or continue the exact operation an
+      interruption left behind. The plan is always complete; --stage only gates which blocks
+      this invocation starts, and the operation pauses at that boundary. Review the plan before
+      confirming; --yes skips ordinary confirmation.
 
-Usage:
-  bootwright apply [flags]
+  Usage
+    bootwright apply [flags]
 
-Examples:
-  bootwright apply --context lab --stage machines
+  Command flags
+      --authorize  Acknowledge a planned risk (data-loss) (values: data-loss)
+      --stage      Select comma-separated stages to start (default: all) (values: controller,
+                   infra-components, substrates, machines, clusters, add-ons)
+      --yes        Confirm the command's ordinary confirmation
 
-Flags:
-      --authorize stringArray   Acknowledge a planned risk (data-loss) (values: data-loss)
-      --stage string            Select comma-separated stages to start (default: all) (values: controller, infra-components, substrates, machines, clusters, add-ons)
-      --yes                     Confirm the command's ordinary confirmation
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
 
-Global Flags:
-      --context string             Select a context (default: current context)
-  -h, --help                       Show help for this command
-      --ssh-ask-sudo-password      Request the borrowed account's sudo password
-      --ssh-id-file string         Offer an explicit private key for eligible SSH access
-      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
-      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines
+  More detail
+    Use --help --detail full to include SSH overrides.
+
+  Examples
+    bootwright apply --context lab --stage machines

@@ -1,20 +1,30 @@
-Show cluster details and static access applicability, readiness and invocation templates from local desired state and evidence, with no host contact. Applicable to all selected ContainerClusters and StorageClusters, including external storage clusters. A managed Ceph StorageCluster also reports its release, FSID, frozen image, monitors and administrator command. --name takes a comma-separated list. --secrets requires --name naming exactly one cluster and applies to managed Ceph StorageClusters only.
+  bootwright / cluster info
+      Show cluster details and static access applicability, readiness and invocation templates
+      from local desired state and evidence, with no host contact. Applicable to all selected
+      ContainerClusters and StorageClusters, including external storage clusters. A managed
+      Ceph StorageCluster also reports its release, FSID, frozen image, monitors and
+      administrator command. --name takes a comma-separated list. --secrets requires --name
+      naming exactly one cluster and applies to managed Ceph StorageClusters only.
 
-Usage:
-  bootwright cluster info [flags]
+  Usage
+    bootwright cluster info [flags]
 
-Examples:
-  bootwright cluster info --context lab --name storage
+  Command flags
+      --name     Select comma-separated cluster names (default: all)
+      --secrets  Include explicitly selected sensitive values
 
-Flags:
-      --name string     Select comma-separated cluster names (default: all)
-      --output string   Select output mode (values: text, json) (default "text")
-      --secrets         Include explicitly selected sensitive values
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
 
-Global Flags:
-      --context string             Select a context (default: current context)
-  -h, --help                       Show help for this command
-      --ssh-ask-sudo-password      Request the borrowed account's sudo password
-      --ssh-id-file string         Offer an explicit private key for eligible SSH access
-      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
-      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines
+  More detail
+    Use --help --detail full to include SSH overrides.
+
+  Examples
+    bootwright cluster info --context lab --name storage

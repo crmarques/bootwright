@@ -1,128 +1,142 @@
 package cli
 
 import (
-	"fmt"
 	"io"
 	"strings"
-	"unicode/utf8"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
-// The shared human layout indents every group body by one unit and separates
-// aligned columns by one gap. Both are fixed so unrelated commands cannot drift.
 const (
 	displayIndent = "  "
 	displayGap    = 2
 )
 
-// display accumulates one command's human result in the shared layout: an
-// optional headline, titled sections, aligned label/value fields and aligned
-// columns. Every caller-supplied value crosses the display boundary here, so
-// callers pass raw values and never pre-escape or pre-pad them.
-type display struct{ text strings.Builder }
+// display records raw facts; the renderer owns escaping, styling, spacing and width.
+type display struct {
+	blocks []func(*displayRenderer)
+	// text preserves ordered native previews, flushed before the next block.
+	text strings.Builder
+}
 
 type field struct{ Label, Value string }
-
-func (d *display) headline(status, text string) {
-	d.separate()
-	if status != "" {
-		fmt.Fprintf(&d.text, "[%s] %s\n", status, escapeDisplayLine(text))
-		return
-	}
-	fmt.Fprintf(&d.text, "%s\n", escapeDisplayLine(text))
-}
-
-// section opens a group. A titled group prints its heading; an untitled group
-// only separates its fields from the preceding block.
-func (d *display) section(title string) {
-	d.separate()
-	if title != "" {
-		fmt.Fprintf(&d.text, "%s\n", escapeDisplayLine(title))
-	}
-}
-
-func (d *display) separate() {
-	if d.text.Len() != 0 {
-		d.text.WriteByte('\n')
-	}
-}
-
-func (d *display) fields(values ...field) {
-	rows := make([][]string, 0, len(values))
-	for _, value := range values {
-		rows = append(rows, []string{value.Label, value.Value})
-	}
-	d.rows(rows)
-}
-
-// rows aligns each column to its widest cell. Trailing padding is never
-// written, so a short final cell cannot leave invisible whitespace.
-func (d *display) rows(rows [][]string) {
-	widths := displayWidths(rows)
-	for _, row := range rows {
-		d.text.WriteString(displayIndent)
-		d.text.WriteString(displayRow(row, widths))
-		d.text.WriteByte('\n')
-	}
-}
-
-// table prints an aligned column header above its rows. The header participates
-// in column width so a wide heading never collides with its values.
-func (d *display) table(headers []string, rows [][]string) {
-	widths := displayWidths(append([][]string{headers}, rows...))
-	d.text.WriteString(displayRow(headers, widths))
-	d.text.WriteByte('\n')
-	for _, row := range rows {
-		d.text.WriteString(displayRow(row, widths))
-		d.text.WriteByte('\n')
-	}
-}
-
-// step is one numbered planned change with the effects it causes. An effect
-// belongs to its step, so an operator never has to guess which change in the
-// list produces the one they are reading.
 type step struct {
 	Text    string
 	Effects []string
 }
 
-// steps numbers an ordered list. The marker column is padded so a two-digit
-// step keeps its text aligned, and a single space follows it as prose expects.
-// Effects are indented one unit past their step's text.
+// tableStyle declares semantic columns independently of resource names and headers.
+type tableStyle struct {
+	Kind     string
+	Identity int
+	States   []int
+}
+
+type displayRenderer struct {
+	options PresentationOptions
+	text    strings.Builder
+}
+
+func (d *display) flushText() {
+	if d.text.Len() == 0 {
+		return
+	}
+	value := d.text.String()
+	d.text.Reset()
+	d.blocks = append(d.blocks, func(r *displayRenderer) { r.text.WriteString(value) })
+}
+
+func (d *display) custom(render func(*displayRenderer)) {
+	d.flushText()
+	d.blocks = append(d.blocks, render)
+}
+
+func (d *display) headline(status, title string) {
+	d.custom(func(r *displayRenderer) {
+		r.gap()
+		if status == "" {
+			r.paragraph(title, "  ", "identity")
+			return
+		}
+		mark := "○"
+		switch status {
+		case "OK", "DONE":
+			mark = "✓"
+		case "FAIL", "UNKNOWN", "CANCELED":
+			mark = "!"
+		}
+		r.styledParagraph(escapeDisplayLine(title), "  "+styleStatusSymbol(mark, status, r.options)+" ", "plain")
+	})
+}
+
+func (d *display) section(title string) {
+	d.custom(func(r *displayRenderer) {
+		r.gap()
+		if title != "" {
+			r.paragraph(title, "  ", "accent")
+		}
+	})
+}
+
+func (d *display) subsection(title string) {
+	d.custom(func(r *displayRenderer) { r.paragraph(title, "    ", "muted") })
+}
+
+func (d *display) separate() { d.section("") }
+
+func (d *display) fields(values ...field) {
+	copy := append([]field(nil), values...)
+	d.custom(func(r *displayRenderer) { r.fields(copy, false) })
+}
+
+func (d *display) mutedFields(values ...field) {
+	copy := append([]field(nil), values...)
+	d.custom(func(r *displayRenderer) { r.fields(copy, true) })
+}
+
+func (d *display) rows(rows [][]string) {
+	d.custom(func(r *displayRenderer) { r.table(nil, rows, tableStyle{Identity: -1}) })
+}
+
+func (d *display) table(headers []string, rows [][]string) {
+	d.custom(func(r *displayRenderer) { r.table(headers, rows, tableStyle{Identity: -1}) })
+}
+
+func (d *display) resourceTable(headers []string, rows [][]string, style tableStyle) {
+	d.custom(func(r *displayRenderer) { r.table(headers, rows, style) })
+}
+
+func (d *display) resourceHeading(kind, name, state string) {
+	d.custom(func(r *displayRenderer) { r.resourceHeading(kind, name, state) })
+}
+
 func (d *display) steps(items []step) {
-	width := 0
-	markers := make([]string, len(items))
-	for index := range items {
-		markers[index] = fmt.Sprintf("%d.", index+1)
-		if size := utf8.RuneCountInString(markers[index]); size > width {
-			width = size
+	d.custom(func(r *displayRenderer) {
+		for _, item := range items {
+			r.paragraph("○ "+item.Text, "    ", "plain")
+			for _, effect := range item.Effects {
+				r.paragraph(effect, "      ", "muted")
+			}
 		}
-	}
-	effectIndent := displayIndent + strings.Repeat(" ", width+1) + displayIndent
-	for index, item := range items {
-		d.text.WriteString(displayIndent)
-		d.text.WriteString(markers[index])
-		d.text.WriteString(strings.Repeat(" ", width-utf8.RuneCountInString(markers[index])+1))
-		d.text.WriteString(escapeDisplayLine(item.Text))
-		d.text.WriteByte('\n')
-		for _, effect := range item.Effects {
-			d.text.WriteString(effectIndent)
-			d.text.WriteString(escapeDisplayLine(effect))
-			d.text.WriteByte('\n')
-		}
-	}
+	})
 }
 
 func (d *display) lines(items []string) {
-	rows := make([][]string, 0, len(items))
-	for _, item := range items {
-		rows = append(rows, []string{item})
-	}
-	d.rows(rows)
+	d.custom(func(r *displayRenderer) {
+		for _, item := range items {
+			r.paragraph(item, "    ", "plain")
+		}
+	})
 }
 
-// displayValue shows an empty value as absent, so a column or field reads as
-// absent rather than blank. Every other value stays raw for display to escape
-// once.
+func (d *display) mutedLines(items []string) {
+	d.custom(func(r *displayRenderer) {
+		for _, item := range items {
+			r.paragraph(item, "      ", "muted")
+		}
+	})
+}
+
 func displayValue(value string) string {
 	if value == "" {
 		return "-"
@@ -131,14 +145,252 @@ func displayValue(value string) string {
 }
 
 func (d *display) writeTo(out io.Writer) error {
-	text := d.text.String()
-	if n, err := io.WriteString(out, text); err != nil || n != len(text) {
-		if err == nil {
-			err = io.ErrShortWrite
-		}
-		return err
+	d.flushText()
+	r := &displayRenderer{options: presentationFor(out)}
+	if r.options.Format != "text" {
+		return nil
 	}
-	return nil
+	for _, render := range d.blocks {
+		render(r)
+	}
+	text := strings.TrimRight(r.text.String(), "\n")
+	if text == "" {
+		return nil
+	}
+	text += "\n"
+	n, err := io.WriteString(out, text)
+	if err == nil && n != len(text) {
+		err = io.ErrShortWrite
+	}
+	return err
+}
+
+func (r *displayRenderer) gap() {
+	if r.text.Len() > 0 && !strings.HasSuffix(r.text.String(), "\n\n") {
+		r.text.WriteByte('\n')
+	}
+}
+
+func (r *displayRenderer) line(value string) {
+	if r.options.ASCII {
+		value = presentationASCII(value)
+	}
+	r.text.WriteString(fitDisplayRow(strings.TrimRight(value, " "), r.options.columns()))
+	r.text.WriteByte('\n')
+}
+
+func (r *displayRenderer) tone(value, tone string) string {
+	switch tone {
+	case "muted":
+		return styleMuted(value, r.options)
+	case "identity":
+		return styleIdentity(value, r.options)
+	case "accent":
+		return styleAccent(value, r.options)
+	case "state":
+		return styleState(value, r.options)
+	}
+	return value
+}
+
+func (r *displayRenderer) paragraph(value, indent, tone string) {
+	r.styledParagraph(escapeDisplayLine(value), indent, tone)
+}
+
+func (r *displayRenderer) styledParagraph(escaped, indent, tone string) {
+	if r.options.ASCII {
+		escaped = presentationASCII(escaped)
+	}
+	width := max(1, r.options.columns()-displayCellWidth(indent))
+	for _, line := range wrapDisplayText(escaped, width) {
+		r.line(indent + r.tone(line, tone))
+		indent = strings.Repeat(" ", displayCellWidth(indent))
+	}
+}
+
+func (r *displayRenderer) fields(values []field, muted bool) {
+	labelWidth := 0
+	for _, value := range values {
+		labelWidth = max(labelWidth, displayCellWidth(escapeDisplayLine(value.Label)))
+	}
+	for _, value := range values {
+		label := escapeDisplayLine(value.Label)
+		indent, tone := "    ", "plain"
+		if muted {
+			indent, tone = "      ", "muted"
+		}
+		prefix := label + strings.Repeat(" ", labelWidth-displayCellWidth(label)+displayGap)
+		if r.options.columns()-displayCellWidth(indent+prefix) < 12 {
+			r.paragraph(value.Label+": "+value.Value, indent, tone)
+			continue
+		}
+		width := r.options.columns() - displayCellWidth(indent+prefix)
+		escaped := escapeDisplayLine(value.Value)
+		if r.options.ASCII {
+			escaped = presentationASCII(escaped)
+		}
+		for n, line := range wrapDisplayText(escaped, width) {
+			if n == 0 {
+				if muted {
+					r.line(indent + styleMuted(prefix+line, r.options))
+				} else {
+					r.line(indent + styleMuted(prefix, r.options) + line)
+				}
+			} else {
+				r.line(indent + strings.Repeat(" ", displayCellWidth(prefix)) + r.tone(line, tone))
+			}
+		}
+	}
+}
+
+// Wrap at spaces; hard-wrap only tokens wider than a whole row.
+func wrapDisplayText(value string, width int) []string {
+	width = max(1, width)
+	var lines []string
+	line := ""
+	for index, word := range strings.Split(value, " ") {
+		separator := ""
+		if index > 0 {
+			separator = " "
+		}
+		if displayCellWidth(line+separator+word) <= width {
+			line += separator + word
+			continue
+		}
+		if line != "" {
+			lines = append(lines, strings.TrimRight(line, " "))
+			line = ""
+		}
+		if displayCellWidth(word) > width {
+			parts := strings.Split(ansi.Hardwrap(word, width, false), "\n")
+			lines = append(lines, parts[:len(parts)-1]...)
+			line = parts[len(parts)-1]
+		} else {
+			line = word
+		}
+	}
+	return append(lines, strings.TrimRight(line, " "))
+}
+
+func (r *displayRenderer) resourceHeading(kind, name, state string) {
+	prefix := "  ○ "
+	if kind != "" {
+		prefix += escapeDisplayLine(kind) + " | "
+	}
+	name = escapeDisplayLine(name)
+	if displayCellWidth(prefix+name) > r.options.columns() {
+		prefix = "  ○ "
+	}
+	if r.options.ASCII {
+		name = presentationASCII(name)
+	}
+	parts := strings.Split(ansi.Hardwrap(name, max(1, r.options.columns()-displayCellWidth(prefix)), false), "\n")
+	for n, part := range parts {
+		line := prefix + styleIdentity(part, r.options)
+		if n == len(parts)-1 && state != "" {
+			suffix := styleMuted(" · ", r.options) + styleState(escapeDisplayLine(state), r.options)
+			if displayCellWidth(line+suffix) <= r.options.columns() {
+				line += suffix
+			} else {
+				r.line(line)
+				r.styledParagraph(escapeDisplayLine(state), "    ", "state")
+				return
+			}
+		}
+		r.line(line)
+		prefix = strings.Repeat(" ", displayCellWidth(prefix))
+	}
+}
+
+func (r *displayRenderer) table(headers []string, rows [][]string, style tableStyle) {
+	widths := displayWidths(append([][]string{headers}, rows...))
+	if r.options.ASCII {
+		for _, row := range append([][]string{headers}, rows...) {
+			for col, cell := range row {
+				widths[col] = max(widths[col], displayCellWidth(presentationASCII(escapeDisplayLine(cell))))
+			}
+		}
+	}
+	total := 2 + max(0, len(widths)-1)*3
+	for _, width := range widths {
+		total += width
+	}
+	stateColumn := func(column int) bool {
+		for _, index := range style.States {
+			if index == column {
+				return true
+			}
+		}
+		return false
+	}
+	if total > r.options.columns() && len(headers) == 0 {
+		for _, row := range rows {
+			r.paragraph(strings.Join(row, "  "), "    ", "plain")
+		}
+		return
+	}
+	if total > r.options.columns() && len(headers) > 0 {
+		for n, row := range rows {
+			if n > 0 {
+				r.gap()
+			}
+			headedState := -1
+			if style.Identity >= 0 && style.Identity < len(row) {
+				state := ""
+				for _, col := range style.States {
+					if col < len(row) {
+						state = row[col]
+						headedState = col
+						break
+					}
+				}
+				r.resourceHeading(style.Kind, row[style.Identity], state)
+			}
+			var values []field
+			for col, value := range row {
+				if col >= len(headers) || col == style.Identity || col == headedState {
+					continue
+				}
+				values = append(values, field{Label: headers[col], Value: value})
+			}
+			r.fields(values, true)
+		}
+		return
+	}
+	printRow := func(row []string, heading bool) {
+		last := len(row) - 1
+		for last >= 0 && row[last] == "" {
+			last--
+		}
+		var line strings.Builder
+		line.WriteString("  ")
+		for col := 0; col <= last; col++ {
+			value := escapeDisplayLine(row[col])
+			if r.options.ASCII {
+				value = presentationASCII(value)
+			}
+			styled := value
+			if heading || style.Identity >= 0 {
+				styled = styleMuted(value, r.options)
+			}
+			if !heading && col == style.Identity {
+				styled = styleIdentity(value, r.options)
+			} else if !heading && stateColumn(col) {
+				styled = styleState(value, r.options)
+			}
+			line.WriteString(styled)
+			if col < last {
+				line.WriteString(strings.Repeat(" ", widths[col]-displayCellWidth(value)+3))
+			}
+		}
+		r.line(line.String())
+	}
+	if len(headers) > 0 {
+		printRow(headers, true)
+	}
+	for _, row := range rows {
+		printRow(row, false)
+	}
 }
 
 func displayWidths(rows [][]string) []int {
@@ -148,9 +400,7 @@ func displayWidths(rows [][]string) []int {
 			for index >= len(widths) {
 				widths = append(widths, 0)
 			}
-			if width := utf8.RuneCountInString(escapeDisplayLine(cell)); width > widths[index] {
-				widths[index] = width
-			}
+			widths[index] = max(widths[index], displayCellWidth(escapeDisplayLine(cell)))
 		}
 	}
 	return widths
@@ -158,19 +408,16 @@ func displayWidths(rows [][]string) []int {
 
 func displayRow(row []string, widths []int) string {
 	var text strings.Builder
-	last := -1
-	for index, cell := range row {
-		if cell != "" {
-			last = index
-		}
+	last := len(row) - 1
+	for last >= 0 && row[last] == "" {
+		last--
 	}
 	for index := 0; index <= last; index++ {
 		cell := escapeDisplayLine(row[index])
 		text.WriteString(cell)
-		if index == last {
-			break
+		if index != last {
+			text.WriteString(strings.Repeat(" ", widths[index]-displayCellWidth(cell)+displayGap))
 		}
-		text.WriteString(strings.Repeat(" ", widths[index]-utf8.RuneCountInString(cell)+displayGap))
 	}
 	return text.String()
 }

@@ -57,11 +57,11 @@ func TestUpdateAndDeletePresentWhatTheyChangeBeforeThePrompt(t *testing.T) {
 		t.Fatalf("the declined update = %d, asked %d times\n%s%s", code, confirmer.asked, out.String(), errOut.String())
 	}
 	for _, line := range []string{"Context update plan\n", "  Name             alpha\n", "  Input directory  " + input + "\n", "  Files to copy    3\n", "  Files seen       3\n", "  Objects decoded  "} {
-		if !strings.Contains(confirmer.stdout, line) {
+		if !strings.Contains(humanContent(confirmer.stdout), humanContent(line)) {
 			t.Fatalf("before the update prompt standard output lacks %q:\n%s", line, confirmer.stdout)
 		}
 	}
-	if !strings.Contains(confirmer.stderr, "[WARN] api.selection "+filepath.Join(input, "excluded.yaml")) || !sameFingerprints(before, confirmer.fingerprint) || !sameFingerprints(before, stateFingerprint(t, root)) {
+	if !strings.Contains(humanContent(confirmer.stderr), humanContent("  warning  api.selection\n    "+filepath.Join(input, "excluded.yaml"))) || !sameFingerprints(before, confirmer.fingerprint) || !sameFingerprints(before, stateFingerprint(t, root)) {
 		t.Fatalf("before the update prompt standard error held %q, or the store changed", confirmer.stderr)
 	}
 	out.Reset()
@@ -70,7 +70,7 @@ func TestUpdateAndDeletePresentWhatTheyChangeBeforeThePrompt(t *testing.T) {
 		t.Fatalf("the declined deletion = %d, asked %d times\n%s%s", code, confirmer.asked, out.String(), errOut.String())
 	}
 	for _, line := range []string{"Context deletion plan\n", "  Input revisions  selected rev-", "  Keyring          removed with every secret version it holds\n", "  Reservations     none\n", "  Owned objects    none\n"} {
-		if !strings.Contains(confirmer.stdout, line) {
+		if !strings.Contains(humanContent(confirmer.stdout), humanContent(line)) {
 			t.Fatalf("before the deletion prompt standard output lacks %q:\n%s", line, confirmer.stdout)
 		}
 	}

@@ -72,7 +72,7 @@ func TestContextSuccessJourneysHaveCompleteTextResults(t *testing.T) {
 					t.Fatal(out.String())
 				}
 			default:
-				if !strings.Contains(out.String(), "Mode     ready\n  Current  yes\n") {
+				if !strings.Contains(out.String(), "Mode     ready\n    Current  yes\n") {
 					t.Fatal("missing current details", out.String())
 				}
 			}
@@ -86,7 +86,7 @@ func TestContextEmptyListAndPermanentDeletion(t *testing.T) {
 		result commandResult
 		want   string
 	}{
-		{[]string{"context", "list"}, commandResult{list: &contexts.ListResult{}}, "[OK] No contexts\n"},
+		{[]string{"context", "list"}, commandResult{list: &contexts.ListResult{}}, "  ✓ No contexts\n"},
 		{[]string{"context", "delete", "--name", "example", "--purge", "--yes"}, commandResult{deletion: &contexts.DeleteResult{Name: "example", Outcome: "deleted"}}, "Context deleted"},
 	} {
 		var out, errOut bytes.Buffer
@@ -107,7 +107,7 @@ func TestContextAdmissionWarningsArePrintedOnceAndEscaped(t *testing.T) {
 		record := &dispatchRecord{result: syntheticContextResults()}
 		record.result.admission.Diagnostics = warnings
 		var out, errOut bytes.Buffer
-		if code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), args); code != 0 || strings.Count(errOut.String(), "[WARN]") != 2 || strings.Contains(out.String(), "[WARN]") || strings.Contains(errOut.String(), "\x1b") || !strings.HasPrefix(errOut.String(), "[WARN] api.selection a.yaml:") || !strings.Contains(errOut.String(), escapeDisplayLine(raw)) {
+		if code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), args); code != 0 || strings.Count(errOut.String(), "  warning  ") != 2 || strings.Contains(out.String(), "  warning  ") || strings.Contains(errOut.String(), "\x1b") || !strings.HasPrefix(errOut.String(), "  warning  api.selection\n    a.yaml\n") || !strings.Contains(errOut.String(), escapeDisplayLine(raw)) {
 			t.Fatal(code, out.String(), errOut.String())
 		}
 		if warnings[0].Message != raw || warnings[0].Source.Path != "z"+raw {
@@ -175,7 +175,7 @@ func TestContextInformationalAndMalformedInvocationsRemainInert(t *testing.T) {
 		{"context", "init", "--help"}, {"context", "update", "-f", "input", "--unknown"},
 		{"context", "init", "--name", "example", "-f", "one", "-f", "two"},
 		{"context", "delete", "--name", "example", "--purge=false"},
-		{"context", "list", "--output", "json"}, {"context", "current", "--name", "example"},
+		{"context", "current", "--name", "example"},
 		{"render", "effective", "--help"}, {"render", "effective", "-f", "input"},
 		{"__bootwright_complete", "context", ""}, {"version"},
 	} {
@@ -255,7 +255,7 @@ func TestAbandonedOrphansAreReportedOnceOnStandardError(t *testing.T) {
 	record := &dispatchRecord{result: commandResult{deletion: &contexts.DeleteResult{Name: "example", Outcome: "deleted", OrphansAbandoned: true}}}
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(),
 		[]string{"context", "delete", "--name", "example", "--purge", "--allow-orphans", "--yes"})
-	if code != 0 || strings.Count(errOut.String(), "[WARN] context.orphaned") != 1 || strings.Contains(out.String(), "[WARN]") {
+	if code != 0 || strings.Count(errOut.String(), "  warning  context.orphaned") != 1 || strings.Contains(out.String(), "  warning  ") {
 		t.Fatal("abandonment warning", code, out.String(), errOut.String())
 	}
 	if !strings.Contains(out.String(), "Orphans abandoned  true") {

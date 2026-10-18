@@ -19,7 +19,7 @@ func TestASoleEmptyOccurrenceOfARepeatableFlagIsAUsageError(t *testing.T) {
 	} {
 		t.Run(strings.Join(test.args, " "), func(t *testing.T) {
 			code, out, errOut, record := runRecorded(test.args)
-			want := "[FAIL] cli.usage: --" + test.flag + " must not contain an empty occurrence\n"
+			want := "  error  cli.usage\n    --" + test.flag + " must not contain an empty occurrence\n"
 			if code != 2 || out != "" || record.calls != 0 || !strings.HasPrefix(errOut, want) {
 				t.Fatalf("code=%d out=%q calls=%d stderr=%q, want code 2, no call and stderr starting %q", code, out, record.calls, errOut, want)
 			}

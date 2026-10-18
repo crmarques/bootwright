@@ -165,15 +165,19 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 }
 
 func syntaxJSON(command *cobra.Command, args []string) bool {
-	if command.LocalNonPersistentFlags().Lookup("output") == nil {
-		return false
-	}
+	return structuredFormat(syntaxFormat(command, args))
+}
+
+func syntaxFormat(command *cobra.Command, args []string) string {
 	output := "text"
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--" {
 			break
 		}
 		if !strings.HasPrefix(args[i], "-") {
+			if hasPayload(command) {
+				break
+			}
 			continue
 		}
 		flag, attached := tokenFlag(command.Root(), command, args[i])
@@ -183,6 +187,9 @@ func syntaxJSON(command *cobra.Command, args []string) bool {
 		value := ""
 		if attached {
 			_, value, _ = strings.Cut(args[i], "=")
+			if !strings.Contains(args[i], "=") && strings.HasPrefix(args[i], "-o") {
+				value = args[i][2:]
+			}
 		}
 		if flag.NoOptDefVal == "" && !attached {
 			if i+1 < len(args) {
@@ -194,7 +201,7 @@ func syntaxJSON(command *cobra.Command, args []string) bool {
 			output = value
 		}
 	}
-	return output == "json"
+	return output
 }
 
 func tokenFlag(root, current *cobra.Command, token string) (*pflag.Flag, bool) {
@@ -219,7 +226,7 @@ func tokenFlag(root, current *cobra.Command, token string) (*pflag.Flag, bool) {
 	if len(token) == 2 {
 		return flag, false
 	}
-	if token[2] == '=' || short == "f" {
+	if token[2] == '=' || short == "f" || short == "o" {
 		return flag, true
 	}
 	return nil, false

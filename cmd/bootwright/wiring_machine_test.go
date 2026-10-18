@@ -139,7 +139,7 @@ func TestTrustEnrollmentPresentsOnTheProcessStandardOutput(t *testing.T) {
 	if err := options.Presenter.PresentTrustPlan(context.Background(), report); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(out.String(), "Host-key trust plan for context lab: 1 machine(s) checked, 1 pending\n") ||
+	if !strings.HasPrefix(out.String(), "  Host-key trust plan for context lab: 1 machine(s) checked, 1 pending\n") ||
 		!strings.Contains(out.String(), "SHA256:aaa") {
 		t.Fatalf("standard output = %q", out.String())
 	}

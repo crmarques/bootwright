@@ -841,7 +841,9 @@ the guard reads that evidence as pristine.
 
 ## Command results and confirmation
 
-Context commands are text-only. Details include name, initialization and
+Context commands support human, JSON and YAML results through the
+[shared output contract](cli/output.md#json-output). Default text details include
+name, initialization and
 input readiness, and the invoking user's current marker. List sorts by name;
 `current --short` emits only the name and LF. Human details show `Current` as
 `yes` or `no`, `Input` as `imported` or `not imported`, and retain the context
@@ -850,7 +852,8 @@ context with imported input, input update with `--name <name>` otherwise,
 `context init` to resume initialization, or `context delete` to resume
 deletion. Input admission reports counts
 and copied files; default creation does not invent compilation counts.
-Warnings appear once on stderr. No private paths, payloads or digests appear:
+Human warnings appear once on stderr; structured warnings appear in envelope
+diagnostics with empty stderr. No private paths, payloads or digests appear:
 a refusal naming damaged store state names its entry relative to the state
 root.
 

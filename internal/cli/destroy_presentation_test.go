@@ -23,7 +23,7 @@ func TestADestroyPlanTextNamesTheMachinesToStopFirst(t *testing.T) {
 	if err := writeLifecyclePlan(&out, result); err != nil {
 		t.Fatal(err)
 	}
-	if want := "\n  Stop first  rhel-01, rhel-02\n  Requires    --authorize data-loss (step 1)\noperation: "; !strings.Contains(out.String(), want) {
+	if want := "\n    Stop first  rhel-01, rhel-02\n    Requires    --authorize data-loss (step 1)\noperation: "; !strings.Contains(out.String(), want) {
 		t.Fatalf("plan text = %q, missing %q", out.String(), want)
 	}
 	out.Reset()

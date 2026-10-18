@@ -1,18 +1,27 @@
-Preview the next legal full-context operation, or the exact continuation point of an incomplete one. It reads durable state and changes nothing. With --stage it also shows which blocks that selection would start.
+  bootwright / plan
+      Preview the next legal full-context operation, or the exact continuation point of an
+      incomplete one. It reads durable state and changes nothing. With --stage it also shows
+      which blocks that selection would start.
 
-Usage:
-  bootwright plan [flags]
+  Usage
+    bootwright plan [flags]
 
-Examples:
-  bootwright plan --context lab --stage machines
+  Command flags
+      --stage  Select comma-separated stages to start (default: all) (values: controller,
+               infra-components, substrates, machines, clusters, add-ons)
 
-Flags:
-      --stage string   Select comma-separated stages to start (default: all) (values: controller, infra-components, substrates, machines, clusters, add-ons)
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
 
-Global Flags:
-      --context string             Select a context (default: current context)
-  -h, --help                       Show help for this command
-      --ssh-ask-sudo-password      Request the borrowed account's sudo password
-      --ssh-id-file string         Offer an explicit private key for eligible SSH access
-      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
-      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines
+  More detail
+    Use --help --detail full to include SSH overrides.
+
+  Examples
+    bootwright plan --context lab --stage machines

@@ -21,7 +21,7 @@ func TestFailureRepresentations(t *testing.T) {
 			if out.String() != want || errOut.Len() != 0 {
 				t.Fatalf("JSON output = %q, stderr = %q", out.String(), errOut.String())
 			}
-		} else if out.Len() != 0 || errOut.String() != "[FAIL] cli.not-implemented: bootwright validate is not implemented\n" {
+		} else if out.Len() != 0 || errOut.String() != "  error  cli.not-implemented\n    bootwright validate is not implemented\n" {
 			t.Fatalf("human output = %q, stderr = %q", out.String(), errOut.String())
 		}
 	}
@@ -58,7 +58,7 @@ func TestDiagnosticRemediationRepresentations(t *testing.T) {
 			}
 			continue
 		}
-		want := "[FAIL] api.required input.yaml:4:3: metadata.name is required [NetworkConfig/management] ($.metadata.name); next: set metadata.name to a unique DNS label\n"
+		want := "  error  NetworkConfig/management\n    api.required\n    input.yaml:4:3\n    metadata.name is required\n    Field: $.metadata.name\n    Next: set metadata.name to a unique DNS label\n"
 		if out.Len() != 0 || errOut.String() != want {
 			t.Fatalf("human output = %q, stderr = %q", out.String(), errOut.String())
 		}

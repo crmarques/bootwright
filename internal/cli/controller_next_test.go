@@ -17,7 +17,7 @@ func TestReadyReadinessNamesThePlanOnlyForAContext(t *testing.T) {
 		want string
 	}{
 		{args: []string{"preflight", "controller"}},
-		{args: []string{"preflight", "controller", "--context", "lab"}, name: "lab", want: "  Next     bootwright plan --context lab\n"},
+		{args: []string{"preflight", "controller", "--context", "lab"}, name: "lab", want: "    Next     bootwright plan --context lab\n"},
 	} {
 		report := controllerReport("ready", false)
 		report.Actions = nil
@@ -30,7 +30,7 @@ func TestReadyReadinessNamesThePlanOnlyForAContext(t *testing.T) {
 		if code != 0 || errOut.Len() != 0 {
 			t.Fatalf("%v: exit %d, stderr %q", test.args, code, errOut.String())
 		}
-		if !strings.HasSuffix(out.String(), "  Outcome  ready\n"+test.want) {
+		if !strings.HasSuffix(out.String(), "    Outcome  ready\n"+test.want) {
 			t.Errorf("%v ended %q, want the outcome followed by %q", test.args, out.String(), test.want)
 		}
 	}

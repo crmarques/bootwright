@@ -17,7 +17,10 @@ const logLocationLabel = "Logs"
 
 // LifecyclePlanPresenter writes the frozen plan before confirmation, so an
 // operator sees exactly what an operation would do before authorizing it.
-type LifecyclePlanPresenter struct{ out io.Writer }
+type LifecyclePlanPresenter struct {
+	out   io.Writer
+	model *lifecyclePresentation
+}
 
 func NewLifecyclePlanPresenter(out io.Writer) *LifecyclePlanPresenter {
 	return &LifecyclePlanPresenter{out: out}
@@ -39,6 +42,9 @@ func (p *LifecyclePlanPresenter) PresentLifecyclePlan(ctx context.Context, resul
 	if err := text.writeTo(p.out); err != nil {
 		return &lifecycleOutputFailure{}
 	}
+	if p.model != nil {
+		p.model.seed(result)
+	}
 	return nil
 }
 
@@ -51,13 +57,16 @@ func (*lifecycleOutputFailure) Error() string { return "lifecycle plan output fa
 // LifecycleProgressPresenter streams each block and presentation group while
 // the operation runs, because a silent process is indistinguishable from a
 // stuck one. A group is a sub-step of its block.
-type LifecycleProgressPresenter struct{ progress progressPresenter }
+type LifecycleProgressPresenter struct {
+	progress progressPresenter
+	model    *lifecyclePresentation
+}
 
 // NewLifecycleProgressPresenter streams to out. Given a terminal width reader
 // the running row is rewritten in place within it; anywhere else rows are
 // appended.
 func NewLifecycleProgressPresenter(out io.Writer, columns func() int) *LifecycleProgressPresenter {
-	return &LifecycleProgressPresenter{progress: progressPresenter{out: out, clock: systemProgressClock(), columns: columns}}
+	return &LifecycleProgressPresenter{progress: progressPresenter{out: out, clock: systemProgressClock(), columns: selectedProgressColumns(out, columns)}}
 }
 
 // Finish terminates a row a terminal is still rewriting. The runner calls it
@@ -72,7 +81,16 @@ func (p *LifecycleProgressPresenter) ReportProgress(ctx context.Context, event l
 	if p == nil || p.progress.out == nil || ctx.Err() != nil || event.Block == "" {
 		return
 	}
+	target, identity := "", ""
 	label, detail := event.Description, event.Detail
+	if p.model != nil {
+		p.model.report(event)
+		if event.Phase == lifecycle.EffectPhase {
+			if action, object, knownIdentity := p.model.action(event.Block); action != "" {
+				label, target, identity = action, object, knownIdentity
+			}
+		}
+	}
 	if label == "" {
 		label = event.Block
 	}
@@ -80,7 +98,7 @@ func (p *LifecycleProgressPresenter) ReportProgress(ctx context.Context, event l
 		detail = event.Group
 	}
 	p.progress.report(ctx, progressEvent{
-		Heading: lifecyclePhaseHeading(event.Phase), Label: label, Detail: detail, Status: event.Status,
+		Heading: lifecyclePhaseHeading(event.Phase), Label: label, Target: target, Identity: identity, Detail: detail, Status: event.Status,
 		Position: event.Position, Total: event.Total, Nested: event.Group != "",
 		Completed: event.Completed, Declared: event.Declared,
 	})
@@ -126,27 +144,7 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 		return
 	}
 	text.section("Plan")
-	items := make([]step, 0, len(result.Steps))
-	for _, planned := range result.Steps {
-		line := planned.Description
-		if planned.Stage != "" {
-			line += " [" + planned.Stage + "]"
-		}
-		if result.Continuation {
-			line += " [" + planned.State + "]"
-		}
-		for _, token := range planned.Consumes {
-			line += " [" + token + "]"
-		}
-		if marker := selectionMarker(planned); marker != "" {
-			line += " [" + marker + "]"
-		}
-		if waiting := waitMarker(planned); waiting != "" {
-			line += " " + waiting
-		}
-		items = append(items, step{Text: line, Effects: planned.Impacts})
-	}
-	text.steps(items)
+	text.lifecycleSteps(result)
 	var closing []field
 	if len(result.Stages) != 0 {
 		closing = append(closing, field{Label: "Stages", Value: strings.Join(result.Stages, ", ")},
@@ -305,11 +303,7 @@ func writeLifecycleOperation(out io.Writer, result *lifecycle.OperationResult) e
 	}
 	if len(result.Blocks) != 0 {
 		text.section("Result")
-		rows := make([][]string, 0, len(result.Blocks))
-		for _, block := range result.Blocks {
-			rows = append(rows, []string{blockStatusToken(block.State), block.Description})
-		}
-		text.rows(rows)
+		text.lifecycleOutcomes(result.Blocks)
 	}
 	var closing []field
 	if result.LogLocation != "" {

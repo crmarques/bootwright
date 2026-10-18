@@ -1,23 +1,44 @@
-Prepare this host's context-independent controller prerequisites: the baseline host packages, installed through the host's own dnf, and the controller runtime, a venv on the OS Python holding exactly the wheels this build locks. Setup selects no context; the prerequisites a context adds are installed by the controller stage of apply. A ready host makes no request and no change. Otherwise the plan shows dnf's own preview before confirmation. --dry-run never elevates: it names the host package requirements without a preview and makes no changes, and --output json, accepted only with --dry-run, also lists every locked wheel's file, URL and SHA-256. --wheel-mirror reads each locked wheel as <mirror>/<filename> from a file:/// directory or an HTTPS base, as untrusted transport: the lock's SHA-256 alone decides whether the bytes are used. --download-only --dest-dir DIR never elevates and changes only DIR: on any connected host it writes the locked wheels of every Python ABI, the pip wheel and a copy of lock.json, so DIR serves an offline host as a --wheel-mirror. Review the plan before confirming; --yes skips ordinary confirmation.
+  bootwright / setup
+      Prepare this host's context-independent controller prerequisites: the baseline host
+      packages, installed through the host's own dnf, and the controller runtime, a venv on the
+      OS Python holding exactly the wheels this build locks. Setup selects no context; the
+      prerequisites a context adds are installed by the controller stage of apply. A ready host
+      makes no request and no change. Otherwise the plan shows dnf's own preview before
+      confirmation. --dry-run never elevates: it names the host package requirements without a
+      preview and makes no changes, and --dry-run --output json or --output yaml also lists
+      every locked wheel's file, URL and SHA-256. --wheel-mirror reads each locked wheel as
+      <mirror>/<filename> from a file:/// directory or an HTTPS base, as untrusted transport:
+      the lock's SHA-256 alone decides whether the bytes are used. --download-only --dest-dir
+      DIR never elevates and changes only DIR: on any connected host it writes the locked
+      wheels of every Python ABI, the pip wheel and a copy of lock.json, so DIR serves an
+      offline host as a --wheel-mirror. Review the plan before confirming; --yes skips ordinary
+      confirmation.
 
-Usage:
-  bootwright setup [flags]
+  Usage
+    bootwright setup [flags]
 
-Examples:
-  bootwright setup --dry-run
+  Command flags
+      --dest-dir       Write the locked wheels, the pip wheel and lock.json into this directory
+                       (requires --download-only)
+      --download-only  Write the locked files for an offline host and change nothing else;
+                       never elevates
+      --dry-run        Limit work to the command's dry-run boundary
+      --wheel-mirror   Read each locked wheel as <mirror>/<filename>: file:///<directory> or
+                       https://<host>/<base>; its bytes must still match the lock
+      --yes            Confirm the command's ordinary confirmation
 
-Flags:
-      --dest-dir string       Write the locked wheels, the pip wheel and lock.json into this directory (requires --download-only)
-      --download-only         Write the locked files for an offline host and change nothing else; never elevates
-      --dry-run               Limit work to the command's dry-run boundary
-      --output string         Select output mode (values: text, json) (default "text")
-      --wheel-mirror string   Read each locked wheel as <mirror>/<filename>: file:///<directory> or https://<host>/<base>; its bytes must still match the lock
-      --yes                   Confirm the command's ordinary confirmation
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Ignored: setup selects no context
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
 
-Global Flags:
-      --context string             Ignored: setup selects no context
-  -h, --help                       Show help for this command
-      --ssh-ask-sudo-password      Request the borrowed account's sudo password
-      --ssh-id-file string         Offer an explicit private key for eligible SSH access
-      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
-      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines
+  More detail
+    Use --help --detail full to include SSH overrides.
+
+  Examples
+    bootwright setup --dry-run

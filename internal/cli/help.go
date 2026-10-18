@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // controllerContextUsage describes --context for the two commands that never
@@ -21,23 +22,86 @@ func controllerContextUsage(path string) (string, bool) {
 }
 
 func writeHelp(w io.Writer, command *cobra.Command) error {
-	if usage, ok := controllerContextUsage(command.Annotations["bootwright.command"]); ok {
-		if flag := command.InheritedFlags().Lookup("context"); flag != nil {
-			previous := flag.Usage
-			flag.Usage = usage
-			defer func() { flag.Usage = previous }()
-		}
-	}
-	var text strings.Builder
+	var text display
+	text.headline("", strings.ReplaceAll(command.CommandPath(), "bootwright ", "bootwright / "))
 	description := command.Long
 	if description == "" {
 		description = command.Short
 	}
-	fmt.Fprintln(&text, description)
-	fmt.Fprintln(&text)
-	text.WriteString(command.UsageString())
-	_, err := io.WriteString(w, strings.TrimRight(text.String(), "\n")+"\n")
-	return err
+	text.mutedLines([]string{description})
+	text.section("Usage")
+	text.lines([]string{command.UseLine()})
+	if command == command.Root() {
+		for _, group := range []struct{ title, names string }{
+			{"Start", "context setup validate preflight"},
+			{"Lifecycle", "plan apply destroy status diff"},
+			{"Resources", "machine cluster media secret add-ons render"},
+			{"Tools", "version completion help"},
+		} {
+			var rows [][]string
+			for _, name := range strings.Fields(group.names) {
+				if child := exactChild(command, name); child != nil && !child.Hidden {
+					rows = append(rows, []string{name, child.Short})
+				}
+			}
+			text.section(group.title)
+			text.resourceTable([]string{"COMMAND", "PURPOSE"}, rows, tableStyle{Kind: "Command", Identity: 0})
+		}
+	} else if command.HasAvailableSubCommands() {
+		var rows [][]string
+		for _, child := range command.Commands() {
+			if !child.Hidden {
+				rows = append(rows, []string{child.Name(), child.Short})
+			}
+		}
+		text.section("Commands")
+		text.resourceTable([]string{"COMMAND", "PURPOSE"}, rows, tableStyle{Kind: "Command", Identity: 0})
+	}
+	appendFlags := func(title string, flags *pflag.FlagSet, advanced bool) {
+		var values []field
+		flags.VisitAll(func(flag *pflag.Flag) {
+			if flag.Hidden || strings.HasPrefix(flag.Name, "ssh-") != advanced {
+				return
+			}
+			label := "--" + flag.Name
+			if flag.Shorthand != "" {
+				label = "-" + flag.Shorthand + ", " + label
+			}
+			usage := flag.Usage
+			if flag.Name == "context" {
+				if contextual, ok := controllerContextUsage(command.Annotations["bootwright.command"]); ok {
+					usage = contextual
+				}
+			}
+			if flag.DefValue != "" && flag.DefValue != "false" && flag.DefValue != "[]" {
+				usage += " · default " + flag.DefValue
+			}
+			values = append(values, field{Label: label, Value: usage})
+		})
+		if len(values) > 0 {
+			text.section(title)
+			text.mutedFields(values...)
+		}
+	}
+	appendFlags("Command flags", command.LocalNonPersistentFlags(), false)
+	common := command.InheritedFlags()
+	if command == command.Root() {
+		common = command.PersistentFlags()
+	}
+	appendFlags("Common flags", common, false)
+	if presentationFor(w).Detail == "full" {
+		appendFlags("SSH overrides", common, true)
+	} else {
+		text.section("More detail")
+		text.lines([]string{"Use --help --detail full to include SSH overrides."})
+	}
+	if command.Example != "" {
+		text.section("Examples")
+		for _, line := range strings.Split(command.Example, "\n") {
+			text.lines([]string{strings.TrimSpace(line)})
+		}
+	}
+	return text.writeTo(w)
 }
 
 func writeConciseHelp(w io.Writer, command *cobra.Command) error {
@@ -51,6 +115,7 @@ func presentationCommand(path string) bool {
 
 func helpExample(path string) string {
 	examples := map[string]string{
+		"machine info": "--context lab --name node", "secret info": "--context lab --name ssh-key",
 		"context init": "--name lab --input-dir ./input", "context update": "--name lab --input-dir ./input", "context use": "--name lab", "context list": "", "context current": "--short", "context delete": "--name lab --purge",
 		"secret set": "--name token --value-file ./token --yes", "secret generate": "--name ssh-key", "secret check": "--output json", "secret list": "--output json", "secret show": "--name token --part value", "secret delete": "--name token", "secret encryption init": "", "secret encryption status": "", "secret encryption rotate": "",
 		"media add": "--name installer.iso --from-file ./installer.iso", "media list": "--checksums", "media delete": "--name installer.iso",

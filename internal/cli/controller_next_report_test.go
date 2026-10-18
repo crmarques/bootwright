@@ -22,7 +22,7 @@ func TestANotReadyPreflightOffersTheCommandItsServiceDecided(t *testing.T) {
 		record := &dispatchRecord{result: commandResult{controller: report}, err: diagnostics.NewFailureWithRemediation("preflight.failed", "required controller prerequisites are not ready", "", "run "+next)}
 		var out, errOut bytes.Buffer
 		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"preflight", "controller", "--context", "lab"})
-		if code != 1 || !strings.Contains(out.String(), "  Outcome  not-ready\n  Next     "+next+"\n") {
+		if code != 1 || !strings.Contains(out.String(), "    Outcome  not-ready\n    Next     "+next+"\n") {
 			t.Errorf("next %q: exit %d, out %q", next, code, out.String())
 		}
 	}

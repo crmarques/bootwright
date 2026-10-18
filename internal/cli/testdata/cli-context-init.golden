@@ -1,12 +1,12 @@
-[OK] Context initialized
+  ✓ Context initialized
 
-  Name     lab
-  Mode     ready
-  Current  yes
-  Input    imported
-  Next     bootwright validate --context lab
+    Name     lab
+    Mode     ready
+    Current  yes
+    Input    imported
+    Next     bootwright validate --context lab
 
-Admitted input
-  Files copied     14
-  Files seen       14
-  Objects decoded  14
+  Admitted input
+    Files copied     14
+    Files seen       14
+    Objects decoded  14

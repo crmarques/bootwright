@@ -14,17 +14,17 @@ func TestVersionOutput(t *testing.T) {
 	}{
 		{
 			name: "defaults",
-			want: "Bootwright\n\n  Version            devel\n  Commit             unknown\n  Source             unknown\n  Go                 unknown\n  Target             unknown/unknown\n  Dependency bundle  none\n",
+			want: "  Bootwright\n\n    Version            devel\n    Commit             unknown\n    Source             unknown\n    Go                 unknown\n    Target             unknown/unknown\n    Dependency bundle  none\n",
 		},
 		{
 			name: "normalized",
 			info: BuildInfo{Version: " v0.1.0 ", Commit: " ABCDEF0 ", Source: " CLEAN ", GoVersion: " go1.26.7 ", GOOS: " linux ", GOARCH: " amd64 ", DependencyBundle: " sha256:" + strings.Repeat("a", 64) + " "},
-			want: "Bootwright\n\n  Version            v0.1.0\n  Commit             abcdef0\n  Source             clean\n  Go                 go1.26.7\n  Target             linux/amd64\n  Dependency bundle  sha256:" + strings.Repeat("a", 64) + "\n",
+			want: "  Bootwright\n\n    Version            v0.1.0\n    Commit             abcdef0\n    Source             clean\n    Go                 go1.26.7\n    Target             linux/amd64\n    Dependency bundle  sha256:" + strings.Repeat("a", 64) + "\n",
 		},
 		{
 			name: "unsafe build values",
 			info: BuildInfo{Version: "v1\n\x1b[2J", Commit: "not-a-commit", Source: "dirty", GoVersion: "go\xff", GOOS: "x\\y", DependencyBundle: "sha256:" + strings.Repeat("A", 64)},
-			want: "Bootwright\n\n  Version            v1\\n\\u001b[2J\n  Commit             unknown\n  Source             unknown\n  Go                 go\\xff\n  Target             x\\\\y/unknown\n  Dependency bundle  none\n",
+			want: "  Bootwright\n\n    Version            v1\\n\\u001b[2J\n    Commit             unknown\n    Source             unknown\n    Go                 go\\xff\n    Target             x\\\\y/unknown\n    Dependency bundle  none\n",
 		},
 	}
 	for _, tt := range tests {
@@ -46,7 +46,7 @@ func TestVersionSourceState(t *testing.T) {
 		{supplied: " MODIFIED ", want: "modified"},
 		{supplied: "", want: "unknown"},
 		{supplied: "dirty", want: "unknown"},
-		{supplied: "clean\n  Commit             0000000", want: "unknown"},
+		{supplied: "clean\n    Commit             0000000", want: "unknown"},
 	} {
 		var out bytes.Buffer
 		if err := writeVersion(&out, BuildInfo{Source: test.supplied}); err != nil {

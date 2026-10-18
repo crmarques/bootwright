@@ -78,7 +78,7 @@ func TestTheDeletionWalkNamesItsContextEntryAndExit(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := "[FAIL] context.state: context alpha cannot be verified: " + entry + ": " + test.reason + "; next: remove " + entry +
+			want := "  error  context.state\n    context alpha cannot be verified: " + entry + ": " + test.reason + "\n    Next: remove " + entry +
 				" beneath the state root, which this deletion never removes because it cannot verify it as the context's own, then repeat " +
 				"bootwright context delete --name alpha --purge, adding --allow-orphans when the deletion abandons what the context owns; " +
 				"or restore the whole store from a matching backup\n"
@@ -86,7 +86,7 @@ func TestTheDeletionWalkNamesItsContextEntryAndExit(t *testing.T) {
 				{"context", "delete", "--name", "alpha", "--purge", "--yes"},
 				{"context", "delete", "--name", "alpha", "--purge", "--allow-orphans", "--yes"},
 			} {
-				if _, stderr := contextRun(t, services, 1, args...); stderr != want || strings.Contains(stderr, root) {
+				if _, stderr := contextRun(t, services, 1, args...); humanContent(stderr) != humanContent(want) || strings.Contains(stderr, root) {
 					t.Fatalf("%v refused with %q, want %q", args, stderr, want)
 				}
 			}
@@ -122,9 +122,9 @@ func TestAStateRootThatIsALinkIsRefusedAsARootOfAnotherType(t *testing.T) {
 	if err := os.Symlink(root+"-real", root); err != nil {
 		t.Fatal(err)
 	}
-	want := "[FAIL] context.state: the state root is a symbolic link owned by " + owner + " with mode 0777, but it must be a directory owned by " +
-		owner + " with mode 0700; next: replace " + root + " with a directory, such as the directory the link names or a mount of that storage, then repeat the command\n"
-	if _, stderr := contextRun(t, services, 1, "context", "list"); stderr != want {
+	want := "  error  context.state\n    the state root is a symbolic link owned by " + owner + " with mode 0777, but it must be a directory owned by " +
+		owner + " with mode 0700\n    Next: replace " + root + " with a directory, such as the directory the link names or a mount of that storage, then repeat the command\n"
+	if _, stderr := contextRun(t, services, 1, "context", "list"); humanContent(stderr) != humanContent(want) {
 		t.Fatalf("context list refused with %q, want %q", stderr, want)
 	}
 }

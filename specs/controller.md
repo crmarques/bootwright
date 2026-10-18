@@ -897,8 +897,12 @@ state follows the
 
 ## Results and qualification
 
-Both commands are text-only, except a dry run's `--output json`. Order checks
-and actions by dependency order, then stable prerequisite identity. Show the
+Both commands support human, JSON and YAML results through the
+[shared output contract](cli/output.md#json-output). A dry run preserves its
+existing JSON result schema; other structured results project the returned
+checks, actions, preview, receipt and next command through CLI-owned tagged
+DTOs, suppressing streamed progress. Order checks and actions by dependency
+order, then stable prerequisite identity. Show the
 baseline or explicit context scope, the resolved acquisition route with what
 selected it, required/observed versions, planned changes, readiness and next
 safe command. A direct route names what chose it too: `direct (no

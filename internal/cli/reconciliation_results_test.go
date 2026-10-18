@@ -77,12 +77,12 @@ func TestPlanNestsEachImpactUnderTheStepThatCausesIt(t *testing.T) {
 	if err := writeLifecyclePlan(&out, result); err != nil {
 		t.Fatal(err)
 	}
-	want := "Plan\n" +
-		"  1. serve artifacts for lab on controller [infra-components]\n" +
-		"       open-listener 192.0.2.1:8443\n" +
-		"       create-path /var/lib/artifacts\n" +
-		"  2. resolve names for lab-dns on controller [infra-components]\n" +
-		"       open-listener 192.0.2.1:53\n"
+	want := "Plan\n  Infrastructure · 2 blocks\n" +
+		"    ○ 1. serve artifacts for lab on controller · pending\n" +
+		"      open-listener 192.0.2.1:8443\n" +
+		"      create-path /var/lib/artifacts\n" +
+		"    ○ 2. resolve names for lab-dns on controller · pending\n" +
+		"      open-listener 192.0.2.1:53\n"
 	if !strings.Contains(out.String(), want) {
 		t.Fatalf("plan text = %q, want %q", out.String(), want)
 	}
@@ -96,13 +96,13 @@ func TestContinuationPlanShowsEachBlockState(t *testing.T) {
 	if err := writeLifecyclePlan(&out, result); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "Apply continuation plan") || !strings.Contains(out.String(), "[done]") {
+	if !strings.Contains(out.String(), "Apply continuation plan") || !strings.Contains(out.String(), "· done") {
 		t.Fatalf("continuation plan = %q", out.String())
 	}
 }
 
 func TestOperationResultLeadsWithItsOutcomeAndNamesItsLog(t *testing.T) {
-	for state, token := range map[string]string{"done": "[OK]", "failed": "[FAIL]", "unknown": "[UNKNOWN]"} {
+	for state, token := range map[string]string{"done": "  ✓", "failed": "  !", "unknown": "  !"} {
 		t.Run(state, func(t *testing.T) {
 			var out bytes.Buffer
 			result := &lifecycle.OperationResult{
@@ -148,7 +148,7 @@ func TestOperationResultTextEscapesOnce(t *testing.T) {
 		t.Fatalf("operation text escaped a value twice: %q", out.String())
 	}
 	for _, want := range []string{
-		"[FAIL] Apply " + shown("state") + "\n", "  [DONE]  " + shown("description") + "\n",
+		"  ! Apply " + shown("state") + "\n", "    [DONE] " + shown("description") + "\n",
 		"  Logs  " + shown("location") + "\n", "\nstate: " + shown("state") + "\n",
 	} {
 		if !strings.Contains(out.String(), want) {
@@ -171,7 +171,7 @@ func TestSettledOperationSaysItDidNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	rendered := out.String()
-	if !strings.HasPrefix(rendered, "[OK] Apply done") {
+	if !strings.HasPrefix(rendered, "  ✓ Apply done") {
 		t.Fatalf("headline = %q", rendered)
 	}
 	if !strings.Contains(rendered, "Nothing to do: this context already holds the state it declares.") {
@@ -288,7 +288,7 @@ func TestStatusRendersTextAndJSON(t *testing.T) {
 	}
 	// The build that registered the operation is what a removal is planned
 	// from, so a refusal naming it as the remedy is readable in advance.
-	for _, want := range []string{"Context lab", "  Mode  ready\n", "Controller binding", "ArtifactServer/lab", "Registered by", "1.4.0 (9f2c1ab)"} {
+	for _, want := range []string{"context | lab", "  Mode  ready\n", "Controller binding", "ArtifactServer/lab", "Registered by", "1.4.0 (9f2c1ab)"} {
 		if !strings.Contains(text.String(), want) {
 			t.Fatalf("status text = %q, missing %q", text.String(), want)
 		}
@@ -333,9 +333,9 @@ func TestPlanResultMarksWhatAStageSelectionWouldStart(t *testing.T) {
 	}
 	rendered := out.String()
 	for _, want := range []string{
-		"1. serve artifacts for lab on controller [infra-components] [not selected]",
-		"2. realize metal [substrates] [start]",
-		"3. realize kubevirt [substrates] [deferred: waits on host-virtualization]",
+		"1. serve artifacts for lab on controller · pending · not selected",
+		"2. realize metal · pending · start",
+		"3. realize kubevirt · pending · deferred: waits on host-virtualization",
 		"Stages  substrates",
 		"Starts  1 of 3 blocks, 2 deferred",
 	} {
@@ -360,8 +360,8 @@ func TestPlanResultMarksTheBlockTheNextApplyResolvesFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"  1. install rhel-01 [machines] [unknown] [resolve]\n",
-		"  2. install rhel-02 [machines] [pending] [deferred: waits on os-install-rhel-01]\n",
+		"    ○ 1. install rhel-01 · unknown · resolve\n",
+		"    ○ 2. install rhel-02 · pending · deferred: waits on os-install-rhel-01\n",
 		"  Starts  1 of 2 blocks, 1 deferred\n",
 	} {
 		if !strings.Contains(out.String(), want) {
@@ -389,11 +389,11 @@ func TestPlanResultMarksEveryBlockTheNextApplyRetries(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"  1. prepare Ceph host rhel-01 [clusters] [failed] [retry]\n",
-		"  2. prepare Ceph host rhel-02 [clusters] [failed] [retry]\n",
-		"  3. prepare Ceph host rhel-03 [clusters] [failed] [retry]\n",
-		"  4. trust the Ceph registry [clusters] [pending] [start]\n",
-		"  5. bootstrap Ceph [clusters] [pending] [deferred: waits on ceph-host-rhel-01]\n",
+		"    ○ 1. prepare Ceph host rhel-01 · failed · retry\n",
+		"    ○ 2. prepare Ceph host rhel-02 · failed · retry\n",
+		"    ○ 3. prepare Ceph host rhel-03 · failed · retry\n",
+		"    ○ 4. trust the Ceph registry · pending · start\n",
+		"    ○ 5. bootstrap Ceph · pending · deferred: waits on ceph-host-rhel-01\n",
 		"  Starts  4 of 5 blocks, 1 deferred\n",
 	} {
 		if !strings.Contains(out.String(), want) {
@@ -408,10 +408,10 @@ func TestPlanResultWithoutASelectionCarriesNoMarker(t *testing.T) {
 		t.Fatal(err)
 	}
 	rendered := out.String()
-	if !strings.Contains(rendered, "1. serve artifacts for lab on controller [infra-components]") {
+	if !strings.Contains(rendered, "1. serve artifacts for lab on controller · pending") {
 		t.Fatalf("plan text = %q", rendered)
 	}
-	for _, absent := range []string{"[start]", "[not selected]", "Stages", "Starts"} {
+	for _, absent := range []string{" · start", " · not selected", "Stages", "Starts"} {
 		if strings.Contains(rendered, absent) {
 			t.Fatalf("plan text = %q, unexpected %q", rendered, absent)
 		}
@@ -433,7 +433,7 @@ func TestPausedOperationReportsSuccessAndItsContinuation(t *testing.T) {
 		t.Fatal(err)
 	}
 	rendered := out.String()
-	if !strings.HasPrefix(rendered, "[OK] Apply paused") {
+	if !strings.HasPrefix(rendered, "  ✓ Apply paused") {
 		t.Fatalf("headline = %q", rendered)
 	}
 	if !strings.HasSuffix(rendered, "operation: op-abc\nverb: apply\nstate: paused\nnext: continue-apply\n") {
@@ -471,7 +471,7 @@ func TestFailedOperationKeepsItsResultLogAndReceipt(t *testing.T) {
 			if !strings.HasSuffix(rendered, "next: continue-"+path+"\n") {
 				t.Fatalf("result does not end with its receipt: %q", rendered)
 			}
-			if errOut.String() != "[FAIL] lifecycle.state: the operation did not complete\n" {
+			if errOut.String() != "  error  lifecycle.state\n    the operation did not complete\n" {
 				t.Fatalf("stderr = %q", errOut.String())
 			}
 		})
@@ -486,7 +486,7 @@ func TestRefusedOperationPresentsOnlyItsDiagnostic(t *testing.T) {
 	if code != 1 || out.String() != "" {
 		t.Fatalf("refusal code=%d stdout=%q", code, out.String())
 	}
-	if errOut.String() != "[FAIL] lifecycle.stage: no block carries the selected stage\n" {
+	if errOut.String() != "  error  lifecycle.stage\n    no block carries the selected stage\n" {
 		t.Fatalf("stderr = %q", errOut.String())
 	}
 }
@@ -549,16 +549,16 @@ func TestStatusTextEscapesOnce(t *testing.T) {
 		t.Fatalf("status text escaped a value twice: %q", text.String())
 	}
 	for _, want := range []string{
-		"[OK] Context " + shown("ctx") + "\n", "  Mode  " + shown("mode") + "\n", "  [UNKNOWN]  " + shown("check") + "\n",
+		"  ○ context | " + shown("ctx") + " · ok\n", "  Mode  " + shown("mode") + "\n", "  [UNKNOWN]   " + shown("check") + "\n",
 		"  Revision         " + shown("rev") + "\n", "  Environment      " + shown("env") + "\n",
-		"  [UNKNOWN]  " + shown("ckind") + "/" + shown("cname") + "\n", "  [UNKNOWN]  " + shown("skind") + "/" + shown("sname") + "\n",
-		"  [UNKNOWN]  " + shown("vkind") + "/" + shown("vname") + "  " + shown("machine") + "\n", "  " + shown("step") + "\n",
+		"  [UNKNOWN]   " + shown("ckind") + "/" + shown("cname") + "\n", "  [UNKNOWN]   " + shown("skind") + "/" + shown("sname") + "\n",
+		"  [UNKNOWN]   " + shown("vkind") + "/" + shown("vname") + "   " + shown("machine") + "\n", "  " + shown("step") + "\n",
 		"  Operation  " + shown("operation") + "\n", "  Verb       " + shown("verb") + "\n",
 		"  State      " + shown("opstate") + "\n", "  Next       " + shown("next") + "\n",
-		"  [FAIL]  " + shown("description") + "\n",
+		"    [FAIL] " + shown("description") + "\n",
 		"  Registered by  " + shown("build") + "\n", "  Logs           " + shown("location") + "\n",
-		"Contradictions\n  " + shown("contradiction") + "\n",
-		"Unresolved " + shown("block") + "\n  Reason  " + shown("reason") + "\n  Remedy  " + shown("remedy") + "\n",
+		"Contradictions\n    " + shown("contradiction") + "\n",
+		"Unresolved " + shown("block") + "\n    Reason  " + shown("reason") + "\n    Remedy  " + shown("remedy") + "\n",
 	} {
 		if !strings.Contains(text.String(), want) {
 			t.Fatalf("status text = %q, missing %q", text.String(), want)
@@ -794,21 +794,21 @@ func TestPlanNamesTheStepsEachOneWaitsFor(t *testing.T) {
 		{ID: "machine", Description: "realize the machine rhel-01", Stage: "machines", State: "pending", After: []int{3}, Wave: 3},
 	}
 	var out bytes.Buffer
-	if err := writeLifecyclePlan(&out, result); err != nil {
+	if err := writeLifecyclePlan(WithPresentation(&out, PresentationOptions{Detail: "full", Width: 180}), result); err != nil {
 		t.Fatal(err)
 	}
 	rendered := out.String()
 	for _, want := range []string{
-		"1. serve artifacts for lab [infra-components]\n",
-		"3. realize the libvirt host [substrates] [after 1, 2]\n",
-		"4. realize the machine rhel-01 [machines] [after 3]\n",
+		"1. serve artifacts for lab · pending\n",
+		"3. realize the libvirt host · pending · [after 1, 2]\n",
+		"4. realize the machine rhel-01 · pending · [after 3]\n",
 		"Concurrency  3 waves, widest 2 steps\n",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("plan text %q omits %q", rendered, want)
 		}
 	}
-	if strings.Contains(rendered, "1. serve artifacts for lab [infra-components] [after") {
+	if strings.Contains(rendered, "1. serve artifacts for lab · pending · [after") {
 		t.Fatalf("a step that waits for nothing named a predecessor: %q", rendered)
 	}
 }
@@ -853,7 +853,7 @@ func TestPlanReportsItsWidthAndTheBuildsBound(t *testing.T) {
 		if err := writeLifecyclePlan(&out, result); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(out.String(), "\n  Concurrency  "+test.want+"\n") || strings.Contains(out.String(), "at once") {
+		if !strings.Contains(out.String(), "\n    Concurrency  "+test.want+"\n") || strings.Contains(out.String(), "at once") {
 			t.Fatalf("waves %d, widest %d, bound %d: plan text = %q, want %q", test.waves, test.widest, test.bound, out.String(), test.want)
 		}
 	}
@@ -871,14 +871,14 @@ func TestPlanMarksTheStepsAnAuthorizationAcknowledges(t *testing.T) {
 		{ID: "metal", Description: "install metal-01", Stage: "machines", State: "pending", Consumes: []string{"data-loss"}, Selection: lifecycle.StepNotSelected, After: []int{2}},
 	}
 	var out bytes.Buffer
-	if err := writeLifecyclePlan(&out, result); err != nil {
+	if err := writeLifecyclePlan(WithPresentation(&out, PresentationOptions{Detail: "full", Width: 180}), result); err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"  1. realize the machine rhel-01 [machines] [done] [data-loss]\n",
-		"  2. serve artifacts for lab [infra-components] [pending] [start]\n",
-		"  3. install metal-01 [machines] [pending] [data-loss] [not selected] [after 2]\n",
-		"\n  Requires  --authorize data-loss (step 1, 3)\noperation: ",
+		"    ○ 1. realize the machine rhel-01 · done · data-loss\n",
+		"    ○ 2. serve artifacts for lab · pending · start\n",
+		"    ○ 3. install metal-01 · pending · not selected · data-loss · [after 2]\n",
+		"\n    Requires  --authorize data-loss (step 1, 3)\noperation: ",
 	} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("plan text = %q, missing %q", out.String(), want)
@@ -905,11 +905,11 @@ func TestLifecyclePlanPresenterWritesBeforeConfirmationAndStopsOnFailure(t *test
 	if err := NewLifecyclePlanPresenter(&out).PresentLifecyclePlan(context.Background(), *result); err != nil {
 		t.Fatal(err)
 	}
-	want := "Apply plan\n\nPlan\n" +
-		"  1. serve artifacts for lab on controller [infra-components] [data-loss]\n" +
-		"       open-listener 192.0.2.1:8443\n\n" +
-		"  Concurrency  1 wave, widest 1 step\n" +
-		"  Requires     --authorize data-loss (step 1)\n"
+	want := "  Apply plan\n\n  Plan\n  Infrastructure · 1 block\n" +
+		"    ○ 1. serve artifacts for lab on controller · pending · data-loss\n" +
+		"      open-listener 192.0.2.1:8443\n\n" +
+		"    Concurrency  1 wave, widest 1 step\n" +
+		"    Requires     --authorize data-loss (step 1)\n"
 	if out.String() != want {
 		t.Fatalf("presented %q, want %q", out.String(), want)
 	}
@@ -927,7 +927,7 @@ func TestLifecyclePlanPresenterWritesBeforeConfirmationAndStopsOnFailure(t *test
 			code := New(Config{Out: &stdout, ErrOut: &stderr, Services: dispatchSpies(record)}).Run(context.Background(), []string{"apply", "--yes"})
 			wantErr := ""
 			if presenter == nil {
-				wantErr = "[FAIL] runtime.internal: lifecycle plan presentation is not configured\n"
+				wantErr = "  error  runtime.internal\n    lifecycle plan presentation is not configured\n"
 			}
 			if code != 1 || stdout.Len() != 0 || stderr.String() != wantErr {
 				t.Fatalf("exit %d, stdout %q, stderr %q, want stderr %q", code, stdout.String(), stderr.String(), wantErr)

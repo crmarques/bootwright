@@ -15,12 +15,12 @@ import (
 )
 
 const (
-	absentGhost = "[FAIL] context.state: context ghost does not exist; next: create it with bootwright context init --name ghost, " +
+	absentGhost = "  error  context.state\n    context ghost does not exist\n    Next: create it with bootwright context init --name ghost, " +
 		"or select an existing one with bootwright context use --name <context>; bootwright context list names them\n"
-	absentEmpty = "[FAIL] context.state: context empty does not exist; next: create it with bootwright context init --name empty, " +
+	absentEmpty = "  error  context.state\n    context empty does not exist\n    Next: create it with bootwright context init --name empty, " +
 		"or select an existing one with bootwright context use --name <context>; bootwright context list names them\n"
-	missingEmptyInput = "[FAIL] context.input: context empty has no desired state; next: import it with bootwright context update --name empty --input-dir <dir>\n"
-	noSelection       = "[FAIL] context.state: no current context is selected; next: select one with bootwright context use --name <context>, " +
+	missingEmptyInput = "  error  context.input\n    context empty has no desired state\n    Next: import it with bootwright context update --name empty --input-dir <dir>\n"
+	noSelection       = "  error  context.state\n    no current context is selected\n    Next: select one with bootwright context use --name <context>, " +
 		"or create one with bootwright context init --name <context>\n"
 )
 
@@ -36,7 +36,7 @@ func contextRefusal(t *testing.T, services cli.Services, args ...string) (int, s
 func requireContextRefusal(t *testing.T, services cli.Services, want string, args ...string) {
 	t.Helper()
 	code, out, errOut := contextRefusal(t, services, args...)
-	if code != 1 || out != "" || errOut != want {
+	if code != 1 || out != "" || humanContent(errOut) != humanContent(want) {
 		t.Fatalf("%v: code=%d stdout=%q\nstderr=%q\nwant code 1 and stderr %q", args, code, out, errOut, want)
 	}
 }
@@ -197,12 +197,12 @@ func TestAnUnsafeSelectionFileIsNamedWithItsRepair(t *testing.T) {
 			if err := unsafe.damage(filepath.Dir(root)); err != nil {
 				t.Fatal(err)
 			}
-			want := "[FAIL] context.state: " + unsafe.message + "; next: " + unsafe.next + "\n"
+			want := "  error  context.state\n    " + unsafe.message + "\n    Next: " + unsafe.next + "\n"
 			for _, args := range [][]string{{"context", "current"}, {"validate"}, {"context", "use", "--name", "alpha"}} {
 				requireContextRefusal(t, services, want, args...)
 			}
-			requireContextRefusal(t, services, "[FAIL] context.state: context beta was created, but the current selection could not be updated: "+
-				unsafe.message+"; next: select it with bootwright context use --name beta\n", "context", "init", "--name", "beta")
+			requireContextRefusal(t, services, "  error  context.state\n    context beta was created, but the current selection could not be updated: "+
+				unsafe.message+"\n    Next: select it with bootwright context use --name beta\n", "context", "init", "--name", "beta")
 			requireContextRefusal(t, services, want, "context", "use", "--name", "beta")
 		})
 	}
@@ -216,6 +216,6 @@ func TestAnUnavailableSecretStoreTypeIsRefusedUnderItsContextFile(t *testing.T) 
 	if err := os.WriteFile(file, []byte("apiVersion: bootwright.io/v1alpha1\nkind: Context\nmetadata:\n  name: demo\nspec:\n  secretStore:\n    type: vault\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	requireContextRefusal(t, services, "[FAIL] secret.store.implementation "+file+": requested secret store type is unavailable\n", "context", "init", "--name", "demo", "-f", file)
+	requireContextRefusal(t, services, "  error  secret.store.implementation\n    "+file+"\n    requested secret store type is unavailable\n", "context", "init", "--name", "demo", "-f", file)
 	requireContextRefusal(t, services, strings.ReplaceAll(absentGhost, "ghost", "demo"), "context", "use", "--name", "demo")
 }

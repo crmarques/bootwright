@@ -8,7 +8,7 @@ import (
 )
 
 func machineTrustCommand() commandSpec {
-	spec := commandSpec{path: "machine trust", short: "Inspect and maintain exact host-key trust", flags: []flagSpec{stringFlag("machines", "Select comma-separated machine names (default: all)"), stringFlag("replace", "Select comma-separated replacements (default: none)"), dryRunFlag(), confirmationFlag(), outputFlag()}}
+	spec := commandSpec{path: "machine trust", short: "Inspect and maintain exact host-key trust", flags: []flagSpec{stringFlag("machines", "Select comma-separated machine names (default: all)"), stringFlag("replace", "Select comma-separated replacements (default: none)"), dryRunFlag(), confirmationFlag()}}
 	spec.long = spec.short + ". It observes exactly the endpoints this context declares and records what" +
 		" they present. A Machine that proves its host key another way is reported and left alone;" +
 		" a changed key is superseded only by naming it in --replace."

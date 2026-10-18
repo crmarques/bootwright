@@ -1,19 +1,24 @@
-Manage add-ons
+  bootwright / add-ons
+      Manage add-ons
 
-Usage:
-  bootwright add-ons [command]
+  Usage
+    bootwright add-ons [flags]
 
-Available Commands:
-  add         Register an immutable add-on catalog release (unavailable)
-  delete      Delete an add-on registration (unavailable)
-  list        List add-on catalog registrations (unavailable)
+  Commands
+  COMMAND   PURPOSE
+  add       Register an immutable add-on catalog release (unavailable)
+  delete    Delete an add-on registration (unavailable)
+  list      List add-on catalog registrations (unavailable)
 
-Global Flags:
-      --context string             Select a context (default: current context)
-  -h, --help                       Show help for this command
-      --ssh-ask-sudo-password      Request the borrowed account's sudo password
-      --ssh-id-file string         Offer an explicit private key for eligible SSH access
-      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
-      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
 
-Use "bootwright add-ons [command] --help" for more information about a command.
+  More detail
+    Use --help --detail full to include SSH overrides.

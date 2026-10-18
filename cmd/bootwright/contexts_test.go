@@ -117,7 +117,7 @@ func TestCompleteContextJourney(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(identical, "[OK] Context unchanged\n") || registry.Contexts[0].Revision != first.Revision {
+	if !strings.HasPrefix(identical, "  ✓ Context unchanged\n") || registry.Contexts[0].Revision != first.Revision {
 		t.Fatalf("an identical update replaced the revision: %s %+v", identical, registry.Contexts[0])
 	}
 	if err := os.WriteFile(filepath.Join(input, "environment.yaml"), []byte(strings.ReplaceAll(syntheticEnvironment, "example.test", "changed.test")), 0600); err != nil {
@@ -179,14 +179,14 @@ func TestMissingContextRegistryExplainsSafeRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := stateFingerprint(t, root)
-	want := "[FAIL] context.state: the state root holds state but no registry.json this build can read; next: another Bootwright build may have created this root and may manage live environments there: run this build on another controller host, or retire that build's environments before archiving its root, and never move it aside while its services run; a store this build created is restored whole from a matching backup\n"
+	want := "  error  context.state\n    the state root holds state but no registry.json this build can read\n    Next: another Bootwright build may have created this root and may manage live environments there: run this build on another controller host, or retire that build's environments before archiving its root, and never move it aside while its services run; a store this build created is restored whole from a matching backup\n"
 	for _, args := range [][]string{
 		{"context", "list"},
 		{"context", "delete", "--name", "test", "--purge"},
 		{"context", "init", "--name", "test"},
 	} {
 		out, stderr := contextRun(t, services, 1, args...)
-		if out != "" || stderr != want {
+		if out != "" || humanContent(stderr) != humanContent(want) {
 			t.Fatalf("%v: stdout=%q stderr=%q", args, out, stderr)
 		}
 		if !sameFingerprints(before, stateFingerprint(t, root)) {
@@ -206,13 +206,13 @@ func TestAHandRemovedContextIsNamedAndAbandonedByItsPurge(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, stderr := contextRun(t, services, 1, "context", "list")
-	if !strings.Contains(stderr, "context.state: context beta cannot be verified: contexts/beta: no such file or directory") ||
+	if !strings.Contains(stderr, "context.state\n    context beta cannot be verified: contexts/beta: no such file or directory") ||
 		!strings.Contains(stderr, "--allow-orphans") || strings.Contains(stderr, root) {
 		t.Fatalf("list refused with %q", stderr)
 	}
 	_, stderr = contextRun(t, services, 1, "context", "delete", "--name", "beta", "--purge", "--yes")
-	if !strings.Contains(stderr, "context.unsafe-delete: context beta has lost its directory") ||
-		!strings.Contains(stderr, "bootwright context delete --name beta --purge --allow-orphans") {
+	if !strings.Contains(stderr, "context.unsafe-delete\n    context beta has lost its directory") ||
+		!strings.Contains(humanContent(stderr), humanContent("bootwright context delete --name beta --purge --allow-orphans")) {
 		t.Fatalf("the purge refused with %q", stderr)
 	}
 	contextRun(t, services, 0, "context", "delete", "--name", "beta", "--purge", "--allow-orphans", "--yes")
@@ -468,8 +468,8 @@ func TestProtectedContextCannotBeDeleted(t *testing.T) {
 // evidence absent or empty, not an unrecognized record.
 func TestMissingEvidenceIsRefusedAndAbandonedAsCorruptEvidenceIs(t *testing.T) {
 	exit := "bootwright context delete --name alpha --purge --allow-orphans"
-	refusal := ": the mutation evidence of context alpha is missing, corrupt or unsupported, so nothing proves what it owns; " +
-		"next: review its records with bootwright status --context alpha, then abandon whatever it owns with " + exit + "\n"
+	refusal := "\n    the mutation evidence of context alpha is missing, corrupt or unsupported, so nothing proves what it owns\n    " +
+		"Next: review its records with bootwright status --context alpha, then abandon whatever it owns with " + exit + "\n"
 	for name, test := range map[string]struct {
 		damage func(string) error
 		entry  string
@@ -483,17 +483,17 @@ func TestMissingEvidenceIsRefusedAndAbandonedAsCorruptEvidenceIs(t *testing.T) {
 			if err := test.damage(filepath.Join(root, "contexts", "alpha", "state", "mutation.json")); err != nil {
 				t.Fatal(err)
 			}
-			if out, _ := contextRun(t, services, 0, "status", "--context", "alpha"); !strings.Contains(out, "Next steps\n  "+exit+"\n") ||
-				!strings.Contains(out, "Contradictions\n  "+test.entry+"\n") {
+			if out, _ := contextRun(t, services, 0, "status", "--context", "alpha"); !strings.Contains(out, "Next steps\n    "+exit+"\n") ||
+				!strings.Contains(out, "Contradictions\n    "+test.entry+"\n") {
 				t.Fatalf("status named no orphan acknowledgement or not %q:\n%s", test.entry, out)
 			}
-			if _, stderr := contextRun(t, services, 1, "apply", "--context", "alpha", "--yes"); !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(stderr, test.entry) {
+			if _, stderr := contextRun(t, services, 1, "apply", "--context", "alpha", "--yes"); !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(humanContent(stderr), humanContent(test.entry)) {
 				t.Fatalf("the apply refused with %q, want it to name %q", stderr, test.entry)
 			}
-			if _, stderr := contextRun(t, services, 1, "context", "update", "--name", "alpha", "--input-dir", input, "--yes"); stderr != "[FAIL] context.state"+refusal {
+			if _, stderr := contextRun(t, services, 1, "context", "update", "--name", "alpha", "--input-dir", input, "--yes"); humanContent(stderr) != humanContent("  error  context.state"+refusal) {
 				t.Fatalf("the update refused with %q", stderr)
 			}
-			if _, stderr := contextRun(t, services, 1, "context", "delete", "--name", "alpha", "--purge", "--yes"); stderr != "[FAIL] context.unsafe-delete"+refusal {
+			if _, stderr := contextRun(t, services, 1, "context", "delete", "--name", "alpha", "--purge", "--yes"); humanContent(stderr) != humanContent("  error  context.unsafe-delete"+refusal) {
 				t.Fatalf("the default deletion refused with %q", stderr)
 			}
 			if out, _ := contextRun(t, services, 0, append(strings.Fields(strings.TrimPrefix(exit, "bootwright ")), "--yes")...); !strings.Contains(out, "Orphans abandoned  true") {
@@ -583,7 +583,7 @@ func TestAnIdenticalReimportOverACompletedApplyPublishesNothing(t *testing.T) {
 	}
 	before := stateFingerprint(t, root)
 	out, stderr := contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input)
-	if !strings.HasPrefix(out, "[OK] Context unchanged\n") || stderr != "" || !sameFingerprints(before, stateFingerprint(t, root)) {
+	if !strings.HasPrefix(out, "  ✓ Context unchanged\n") || stderr != "" || !sameFingerprints(before, stateFingerprint(t, root)) {
 		t.Fatalf("the identical re-import changed the store or asked: %s %s", out, stderr)
 	}
 	registry, err := repository.View(context.Background())
@@ -599,8 +599,8 @@ func TestAnIdenticalReimportOverACompletedApplyPublishesNothing(t *testing.T) {
 		t.Fatalf("changed input over a completed apply published without confirmation: %s", stderr)
 	}
 	out, stderr = contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
-	want := "[WARN] lifecycle.state: context alpha holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back; next: take it back with bootwright destroy --context alpha, then run bootwright apply --context alpha\n"
-	if !strings.HasPrefix(out, "[OK] Context updated\n") || stderr != want {
+	want := "  warning  lifecycle.state\n    context alpha holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back\n    Next: take it back with bootwright destroy --context alpha, then run bootwright apply --context alpha\n"
+	if !strings.HasPrefix(out, "  ✓ Context updated\n") || humanContent(stderr) != humanContent(want) {
 		t.Fatalf("changed input over a completed apply: %s %q", out, stderr)
 	}
 	registry, err = repository.View(context.Background())
@@ -618,8 +618,8 @@ func TestAnIdenticalReimportReportsItsWarningsOnce(t *testing.T) {
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	before := stateFingerprint(t, root)
 	out, stderr := contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input)
-	warning := "[WARN] api.selection " + filepath.Join(input, "excluded.yaml") + ":"
-	if !strings.HasPrefix(out, "[OK] Context unchanged\n") || strings.Count(stderr, "[WARN] ") != 1 || !strings.HasPrefix(stderr, warning) || !sameFingerprints(before, stateFingerprint(t, root)) {
+	warning := "  warning  api.selection\n    " + filepath.Join(input, "excluded.yaml")
+	if !strings.HasPrefix(out, "  ✓ Context unchanged\n") || strings.Count(stderr, "  warning  ") != 1 || !strings.HasPrefix(humanContent(stderr), humanContent(warning)) || !sameFingerprints(before, stateFingerprint(t, root)) {
 		t.Fatalf("the identical re-import lost or repeated its warning, or changed the store: %s %q", out, stderr)
 	}
 }

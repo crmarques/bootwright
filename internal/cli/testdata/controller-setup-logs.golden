@@ -1,8 +1,8 @@
-Controller setup
+  Controller setup
 
-  Scope     baseline
-  Platform  fedora 44/amd64
-  Route     direct
+    Scope     baseline
+    Platform  fedora 44/amd64
+    Route     direct
 
 Checks
   [OK]       Host: fedora 44/amd64
@@ -10,10 +10,10 @@ Checks
   [FAIL]     Host packages: required openssh-clients, podman; observed missing podman
   [OK]       Setup state: complete
 
-Host package requirements
-  podman
+  Host package requirements
+    podman
 
-dnf preview
+  dnf preview
   Updating and loading repositories:
   Repositories loaded.
   Package            Arch    Version          Repository   Size
@@ -28,8 +28,8 @@ dnf preview
   Operation aborted by the user.
   Note: this install also updates core packages (glibc); dnf applies it as for any package install
 
-Planned changes
-  1. Install host packages with dnf: podman
+  Planned changes
+    ○ Install host packages with dnf: podman
 
   Logs  /var/lib/bootwright/setup/runs/setup-000003
 
@@ -39,7 +39,7 @@ Progress
   [RUNNING]  [2/2] Setup receipt
   [DONE]     [2/2] Setup receipt
 
-  Outcome    changed
-  Readiness  all required prerequisites verified
-  Logs       /var/lib/bootwright/setup/runs/setup-000003
-  Next       bootwright preflight controller
+    Outcome    changed
+    Readiness  all required prerequisites verified
+    Logs       /var/lib/bootwright/setup/runs/setup-000003
+    Next       bootwright preflight controller

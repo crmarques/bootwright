@@ -13,7 +13,7 @@ import (
 // names the build that registered it, and says "step" for one position and
 // "steps" for several. A preview that carries none has no such field.
 func TestPlanNamesTheStepsAnotherBuildRuns(t *testing.T) {
-	const closing = "  Build        "
+	const closing = "    Build        "
 	for _, test := range []struct {
 		name  string
 		build *lifecycle.AnotherBuild
@@ -32,7 +32,7 @@ func TestPlanNamesTheStepsAnotherBuildRuns(t *testing.T) {
 			result.Continuation, result.AnotherBuild = true, test.build
 			result.Waves, result.Widest = 1, 1
 			var out bytes.Buffer
-			if err := writeLifecyclePlan(&out, result); err != nil {
+			if err := writeLifecyclePlan(WithPresentation(&out, PresentationOptions{Width: 180}), result); err != nil {
 				t.Fatal(err)
 			}
 			rendered := out.String()

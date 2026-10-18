@@ -92,6 +92,10 @@ func validateFlagValues(flags *pflag.FlagSet, path string, spec commandSpec) str
 
 func validateSharedFlags(command *cobra.Command, path string) string {
 	flags := command.Flags()
+	width, err := strconv.Atoi(stringValue(flags, "width"))
+	if err != nil || width != 0 && (width < 24 || width > 500) {
+		return "--width must be 0 or an integer from 24 through 500"
+	}
 	if contextName := stringValue(flags, "context"); contextName != "" && !dnsLabel(contextName) {
 		return "--context must be a lowercase DNS label"
 	}
@@ -105,8 +109,11 @@ func validateSharedFlags(command *cobra.Command, path string) string {
 	if boolValue(flags, "ssh-user-for-provisioned") && stringValue(flags, "ssh-user") == "" {
 		return "--ssh-user-for-provisioned requires --ssh-user"
 	}
+	if SessionCommand(path) && selectedStructured(command) {
+		return "live SSH sessions require --output text"
+	}
 	if boolValue(flags, "ssh-ask-sudo-password") && selectedJSON(command) {
-		return "--ssh-ask-sudo-password conflicts with JSON output"
+		return "--ssh-ask-sudo-password conflicts with " + structuredLabel(command) + " output"
 	}
 	for _, name := range []string{"clusters", "machines", "replace", "stage"} {
 		if flags.Lookup(name) == nil {
@@ -200,7 +207,7 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 		return validateRenderDirectories(flags)
 	case "machine list":
 		if boolValue(flags, "silent") && selectedJSON(command) {
-			return "--silent conflicts with JSON output"
+			return "--silent conflicts with " + structuredLabel(command) + " output"
 		}
 		// A silent invocation carries names alone, so a reading it could never
 		// print would contact every management controller for nothing.
@@ -209,11 +216,11 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 		}
 	case "machine stop", "machine restart":
 		if selectedJSON(command) && !boolValue(flags, "yes") {
-			return "JSON power changes require --yes"
+			return structuredLabel(command) + " power changes require --yes"
 		}
 	case "machine trust":
 		if selectedJSON(command) && !boolValue(flags, "yes") && !boolValue(flags, "dry-run") {
-			return "JSON trust changes require --yes or --dry-run"
+			return structuredLabel(command) + " trust changes require --yes or --dry-run"
 		}
 		machines := normalizeNames(stringValue(flags, "machines"))
 		if len(machines) != 0 {
@@ -230,8 +237,6 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 func validateSetupFlags(flags *pflag.FlagSet) string {
 	download := boolValue(flags, "download-only")
 	switch {
-	case stringValue(flags, "output") == "json" && !boolValue(flags, "dry-run"):
-		return "setup accepts --output json only with --dry-run"
 	case download && boolValue(flags, "dry-run"):
 		return "--download-only conflicts with --dry-run; setup --dry-run --output json lists the locked files"
 	case download && stringValue(flags, "dest-dir") == "":
@@ -398,4 +403,11 @@ func validateEnumList(flag flagSpec, members []string, supplied bool) string {
 		}
 	}
 	return ""
+}
+
+func structuredLabel(command *cobra.Command) string {
+	if stringValue(command.Flags(), "output") == "yaml" {
+		return "YAML"
+	}
+	return "JSON"
 }

@@ -89,13 +89,16 @@ type Receipt struct {
 // when no stage selection is active, and otherwise says whether this
 // invocation would start the block or why it would not.
 type PlanStep struct {
-	ID          string
-	Description string
-	Stage       string
-	Impacts     []string
-	State       string
-	Selection   string
-	WaitsOn     string
+	ID             string
+	Description    string
+	Implementation string
+	Kind           string
+	Object         string
+	Stage          string
+	Impacts        []string
+	State          string
+	Selection      string
+	WaitsOn        string
 	// After names the steps this one waits for, by their place in the plan, so
 	// an operator reads what orders the work from the list itself. A step that
 	// waits for nothing names none.

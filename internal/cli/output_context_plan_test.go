@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -38,11 +39,12 @@ func TestTheContextUpdatePlanNamesItsInputCountsAndWarnings(t *testing.T) {
 		t.Fatal(err)
 	}
 	matchesTextGolden(t, "context-update-plan", out.Bytes())
-	want := "[WARN] api.selection /srv/inputs/lab/clusters/ocp-02/cluster.yaml:4:9: cluster root is excluded by the Environment selection\n" +
-		"[WARN] lifecycle.state: context lab holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back; next: take it back with bootwright destroy --context lab, then run bootwright apply --context lab\n"
-	if errOut.String() != want {
+	want := "warning api.selection /srv/inputs/lab/clusters/ocp-02/cluster.yaml:4:9 cluster root is excluded by the Environment selection " +
+		"warning lifecycle.state context lab holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back Next: take it back with bootwright destroy --context lab, then run bootwright apply --context lab"
+	if strings.Join(strings.Fields(errOut.String()), " ") != want {
 		t.Fatalf("standard error = %q, want %q", errOut.String(), want)
 	}
+
 }
 
 // The deletion plan names the revision, the keyring and the reservations it
@@ -122,7 +124,7 @@ func TestAPresentedUpdateResultDoesNotRepeatItsWarnings(t *testing.T) {
 		if err := writeAdmission(&out, &errOut, "context update", result); err != nil {
 			t.Fatal(err)
 		}
-		if (errOut.Len() == 0) != presented || !bytes.HasPrefix(out.Bytes(), []byte("[OK] Context updated\n")) {
+		if (errOut.Len() == 0) != presented || !bytes.HasPrefix(out.Bytes(), []byte("  ✓ Context updated\n")) {
 			t.Fatalf("presented %t: stdout %q, stderr %q", presented, out.String(), errOut.String())
 		}
 	}

@@ -183,7 +183,7 @@ func TestClusterSessionRefusalsExitTwoFiftyFiveBeforeAnyCredential(t *testing.T)
 					args = append(args, "--", "hostname", "--node", "rhel-01")
 				}
 				code, out, errOut := rig.run(t, args...)
-				if code != 255 || out != "" || !strings.HasPrefix(errOut, "[FAIL] "+tt.code+": ") {
+				if code != 255 || out != "" || !strings.HasPrefix(errOut, "  error  "+tt.code+"\n") {
 					t.Fatalf("exit %d, out %q, err %q; want 255 and %s", code, out, errOut, tt.code)
 				}
 				if rig.lender.requested != nil || len(rig.client.sessions) != 0 {
@@ -227,7 +227,7 @@ func TestClusterExecOnSeveralNodesRunsEachMachineOnceTogether(t *testing.T) {
 	}
 	rig := newCephSessionRig(t, second)
 	code, out, errOut := rig.run(t, "cluster", "exec", "--context", "lab", "--name", "ceph-twin,ceph-lab", "--node", "rhel-02", "--", "true")
-	if code != 255 || out != "" || !strings.HasPrefix(errOut, "[FAIL] access.target: ") || !strings.Contains(errOut, "StorageCluster ceph-twin declares none of the nodes rhel-02") ||
+	if code != 255 || out != "" || !strings.HasPrefix(errOut, "  error  access.target\n    ") || !strings.Contains(errOut, "StorageCluster ceph-twin declares none of the nodes rhel-02") ||
 		rig.lender.requested != nil || len(rig.client.sessions) != 0 {
 		t.Fatalf("exit %d, out %q, err %q, lent %v", code, out, errOut, rig.lender.requested)
 	}

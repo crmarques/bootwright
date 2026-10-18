@@ -94,9 +94,9 @@ before sudo starts the command, whether or not standard input is a terminal,
 since sudo's I/O log would record the value: `log_ttyin` logs the keystrokes
 typed at the terminal, `log_stdin` a standard input that is not the terminal,
 and `log_input` sets both (sudoers(5), I/O LOGGING). When sudo will not
-list its policy without a password, an interactive invocation (not JSON, with
+list its policy without a password, an interactive invocation (not JSON or YAML, with
 standard input a terminal) first validates the credential with `sudo -v`,
-which prompts on the terminal, and reads the listing again. A JSON or
+which prompts on the terminal, and reads the listing again. A JSON, YAML or
 non-terminal invocation, a listing still unreadable, one that times out and
 one over 64 KiB each refuse with `secret.input` before sudo starts the
 command, reading nothing. The remedy is `--value-file` or
@@ -129,6 +129,16 @@ Without renew, create missing/stale values; renew replaces the selected set with
 no extra prompt. Generate reports by name the generated Secrets it changed and
 those it left unchanged. `check` validates all declarations and their current keyring
 material. `list` reads metadata only; an uninitialized store is empty.
+`info [--name <list>]` reuses that same metadata listing and adds no material
+read, availability check or reveal operation. Omission selects all rows;
+comma-separated names are trimmed, deduplicated and matched exactly. Unknown
+names or a separator-only list produce an empty selection; an explicitly empty
+scalar is a usage error. Selection copies the service result rather than
+mutating its rows, parts or version pointers. Human info groups declared type
+and parts under Identity, and source, current ordinal and bound-version count
+under Custody; full detail also shows an available durable version identifier.
+It reports no inferred usage, retention policy or readiness. JSON and YAML use
+the same CLI-owned metadata row fields as `secret list`.
 `delete --name` removes an active mapping, including orphans, while retaining
 bound versions; existing deletion confirms unless yes, before the lease as a
 file-input replacement does, and refuses with `secret.store.conflict`,
@@ -141,8 +151,11 @@ Parts are value for opaque/token/Docker JSON; username/password; certificate for
 CA; certificate/private-key for TLS; private-key/public-key for SSH. Generated
 CA also retains explicitly revealable private-key; ordinary CA consumers receive
 only certificates. Show never reveals superseded/bound versions or falls back.
-Validate/authenticate the complete part before exact raw stdout, no added LF or
-JSON. A partial writer failure emits no secondary diagnostic.
+Validate/authenticate the complete part before output. Default text mode emits
+exact raw stdout without an added LF. Explicit JSON or YAML output uses the
+[structured export envelope](cli/output.md#streams-and-exit-status), with UTF-8
+content or base64 for non-UTF-8 bytes, under the same reveal authority. A
+partial writer failure emits no secondary diagnostic.
 
 Bounds: 1 MiB/part, 2 MiB/version, 64 MiB referenced material, 4096 versions and
 4096 bindings. Opaque preserves exact bytes. Tokens/passwords are nonempty UTF-8
@@ -372,9 +385,10 @@ its fingerprint covers, never through a current mapping or a binding.
 A new version takes one more than the highest ordinal that secret has ever
 reached, so deleting a version never renumbers the ones that remain and an
 ordinal keeps naming the same material for as long as it exists. The ordinal is
-how a person names a version: human output shows `v<sequence>` and never the
-identifier. The identifier remains the only durable reference, so current
-mappings, bindings, and every JSON result continue to carry it. `sequence` is
+how a person names a version: human lists show `v<sequence>`; full `secret info`
+may also show the durable identifier. The identifier remains the only durable
+reference, so current mappings, bindings, and JSON or YAML metadata results
+continue to carry it. `sequence` is
 required and at least 1; a version without it is corrupt and refuses with
 `secret.store.corrupt`. A produced version takes no ordinal from a Secret of
 the same name, whose series counts its own versions alone. Compute the
@@ -461,7 +475,9 @@ import/export or FIPS claims.
 
 ## Results and failures
 
-Check/list JSON has context (name/mode) and name-sorted secrets. Check rows:
+Check/list/info JSON and YAML have context (name/mode) and name-sorted secrets.
+Info uses the list row DTO and applies its optional exact-name filter. Check
+rows:
 name/type/source/parts/status/nullable version/sequence; statuses
 available/missing/stale/invalid. A complete negative check keeps its result and
 returns 1 with one diagnostic per Secret that is not available: missing as

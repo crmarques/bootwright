@@ -258,7 +258,7 @@ func writeSecretCheckText(out io.Writer, result *custody.CheckResult) error {
 	for _, row := range sortedSecretCheckRows(result.Secrets) {
 		rows = append(rows, []string{row.Name, row.Type, row.Source, displaySecretParts(row.Parts), row.Status, displayVersionOrdinal(row.Version, row.Sequence)})
 	}
-	text.table([]string{"NAME", "TYPE", "SOURCE", "PARTS", "STATUS", "VERSION"}, rows)
+	text.resourceTable([]string{"NAME", "TYPE", "SOURCE", "PARTS", "STATUS", "VERSION"}, rows, tableStyle{Kind: "secret", Identity: 0, States: []int{4}})
 	return text.writeTo(out)
 }
 
@@ -272,7 +272,7 @@ func writeSecretListText(out io.Writer, result *custody.ListResult) error {
 	for _, row := range sortedSecretListRows(result.Secrets) {
 		rows = append(rows, []string{row.Name, row.Type, row.Source, displaySecretParts(row.Parts), row.State, displayVersionOrdinal(row.CurrentVersion, row.CurrentSequence), strconv.Itoa(row.BoundVersions)})
 	}
-	text.table([]string{"NAME", "TYPE", "SOURCE", "PARTS", "STATE", "CURRENT-VERSION", "BOUND-VERSIONS"}, rows)
+	text.resourceTable([]string{"NAME", "TYPE", "SOURCE", "PARTS", "STATE", "CURRENT-VERSION", "BOUND-VERSIONS"}, rows, tableStyle{Kind: "secret", Identity: 0, States: []int{4}})
 	return text.writeTo(out)
 }
 
@@ -549,4 +549,36 @@ func displayEncryptionStatus(result *encryption.StatusResult) *encryptionStatusR
 
 func displayComponent(value encryption.ComponentStatus) componentStatus {
 	return componentStatus{ID: escapeDisplayLine(value.ID), InterfaceVersion: value.InterfaceVersion, StateVersion: value.StateVersion, ConfigVersion: value.ConfigVersion}
+}
+
+// Secret info exposes custody metadata through a CLI-owned tagged DTO. It
+// never acquires material or invokes availability checks.
+type secretInfoResult secretListResult
+
+func (secretInfoResult) documentedResult() {}
+
+func writeSecretInfo(out io.Writer, command string, result *custody.ListResult, jsonMode bool) error {
+	if jsonMode {
+		return writeEnvelope(out, commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0,
+			Result: secretInfoResult(displaySecretList(result)), Diagnostics: []diagnostic{}, Logs: []string{}})
+	}
+	var text display
+	if len(result.Secrets) == 0 {
+		text.headline("OK", "No stored secrets are selected")
+		return text.writeTo(out)
+	}
+	full := presentationFor(out).Detail == "full"
+	for _, row := range sortedSecretListRows(result.Secrets) {
+		text.resourceHeading("secret", row.Name, row.State)
+		text.subsection("Identity")
+		text.mutedFields(field{Label: "Type", Value: row.Type}, field{Label: "Parts", Value: displaySecretParts(row.Parts)})
+		text.subsection("Custody")
+		text.mutedFields(field{Label: "Source", Value: row.Source},
+			field{Label: "Current version", Value: displayVersionOrdinal(row.CurrentVersion, row.CurrentSequence)},
+			field{Label: "Bound versions", Value: strconv.Itoa(row.BoundVersions)})
+		if full && row.CurrentVersion != nil {
+			text.mutedFields(field{Label: "Version ID", Value: *row.CurrentVersion})
+		}
+	}
+	return text.writeTo(out)
 }

@@ -58,13 +58,7 @@ func TestSecretNormalOutputsAndStateNeverContainMaterialOrDigests(t *testing.T) 
 			{0, []string{"render", "effective"}},
 		} {
 			args := append(append([]string{}, invocation.args...), "--output", output)
-			structured := invocation.args[0] == "render" || invocation.args[1] == "list" || invocation.args[1] == "check" || invocation.args[1] == "encryption" && invocation.args[2] == "status"
-			if structured {
-				run(invocation.exit, args...)
-			} else {
-				run(invocation.exit, invocation.args...)
-				run(2, args...)
-			}
+			run(invocation.exit, args...)
 		}
 		// Secret commands have no verbose mode; rejecting it must also be safe.
 		run(2, "secret", "list", "--verbose", "--output", output)

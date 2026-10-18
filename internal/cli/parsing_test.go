@@ -49,17 +49,20 @@ func TestRawBoundsPrecedeHelpAndJSON(t *testing.T) {
 	}
 }
 
+// Inherited presentation flags survive command resolution. Command-local flags
+// still belong only to their exact owner, and a value resembling --output
+// never becomes a selector when consumed by another flag.
 func TestUsageJSONRespectsLocalFlagOwnership(t *testing.T) {
 	for _, test := range []struct {
 		args []string
 		json bool
 	}{
-		{[]string{"render", "--output", "json", "effective"}, false},
-		{[]string{"render", "--output=json", "effective", "--help"}, false},
-		{[]string{"render", "--output", "json", "effective", "--unknown"}, false},
-		{[]string{"render", "--output", "json", "effective", "--output", "text"}, false},
-		{[]string{"render", "--output", "text", "effective", "--output", "json"}, true},
+		{[]string{"render", "--output", "json", "effective", "--unknown"}, true},
+		{[]string{"render", "--output=json", "effective", "--clusters", "demo"}, true},
+		{[]string{"render", "--output", "json", "effective", "--output", "text", "--unknown"}, false},
+		{[]string{"render", "--output", "text", "effective", "--output", "json", "--unknown"}, true},
 		{[]string{"render", "--clusters", "--output=json", "effective"}, false},
+		{[]string{"render", "--clusters", "demo", "--output=json", "effective"}, true},
 	} {
 		code, out, errOut, record := runRecorded(test.args)
 		if code != 2 || record.calls != 0 {

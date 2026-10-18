@@ -1,13 +1,14 @@
-Controller setup
+  Controller setup
 
-  Scope     baseline
-  Platform  fedora 43/amd64
-  Route     direct
+    Scope     baseline
+    Platform  fedora 43/amd64
+    Route     direct
 
-  Host      Fedora Linux 43 (amd64), glibc 2.42 — tested
-  Runtime   Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — ready
-  Packages  podman 5:5.8.1-1.fc43 (updates), openssh-clients 10.2p1-1.fc43 (present before bootwright)
-  Nothing to do.
+    Host      Fedora Linux 43 (amd64), glibc 2.42 — tested
+    Runtime   Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — ready
+    Packages  podman 5:5.8.1-1.fc43 (updates), openssh-clients 10.2p1-1.fc43 (present before
+              bootwright)
+    Nothing to do.
 
-  Outcome  unchanged
-  Next     bootwright preflight controller
+    Outcome  unchanged
+    Next     bootwright preflight controller

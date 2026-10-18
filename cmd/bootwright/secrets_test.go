@@ -395,8 +395,14 @@ func TestConfirmationPromptsNameTheSecretAndTheContext(t *testing.T) {
 			if !terminal {
 				prompt, reason = "", "requires an interactive terminal"
 			}
-			want := prompt + "[FAIL] secret.store.conflict: " + probe.label + " confirmation " + reason + probe.object + "; next: " + probe.remedy + "\n"
-			if code != 1 || out.Len() != 0 || errOut.String() != want {
+			subject := "secret.store.conflict"
+			codeLine := ""
+			if probe.object != "" {
+				subject = strings.Trim(probe.object, " []")
+				codeLine = "    secret.store.conflict\n"
+			}
+			want := prompt + "  error  " + subject + "\n" + codeLine + "    " + probe.label + " confirmation " + reason + "\n    Next: " + probe.remedy + "\n"
+			if code != 1 || out.Len() != 0 || (prompt != "" && !strings.HasPrefix(errOut.String(), prompt)) || humanContent(errOut.String()) != humanContent(want) {
 				t.Fatalf("%v at a terminal %t = %d, stdout %q\nstderr %q\nwant   %q", probe.args, terminal, code, out.String(), errOut.String(), want)
 			}
 			if !sameFingerprints(before, stateFingerprint(t, root)) {

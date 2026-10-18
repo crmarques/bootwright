@@ -25,11 +25,11 @@ func machineList() *inventory.ListResult {
 
 func TestMachineListPresentsEveryRowAndItsAbsentValues(t *testing.T) {
 	var out bytes.Buffer
-	if err := writeMachineList(&out, "machine list", machineList(), false, false); err != nil {
+	if err := writeMachineList(WithPresentation(&out, PresentationOptions{Width: 220}), "machine list", machineList(), false, false); err != nil {
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
-	if len(lines) != 3 || !strings.HasPrefix(lines[0], "NAME") {
+	if len(lines) != 3 || !strings.HasPrefix(strings.TrimSpace(lines[0]), "NAME") {
 		t.Fatalf("table = %q", out.String())
 	}
 	if !strings.Contains(lines[0], "LIFECYCLE") || strings.Contains(lines[0], "POWER") {
@@ -47,7 +47,7 @@ func TestMachineListPresentsEveryRowAndItsAbsentValues(t *testing.T) {
 // declares them, because the contact and the addresses are different facts.
 func TestMachineListShowsEveryDeclaredIPBesideTheContact(t *testing.T) {
 	var out bytes.Buffer
-	if err := writeMachineList(&out, "machine list", machineList(), false, false); err != nil {
+	if err := writeMachineList(WithPresentation(&out, PresentationOptions{Width: 220}), "machine list", machineList(), false, false); err != nil {
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
@@ -69,7 +69,7 @@ func TestMachineListShowsPowerOnlyWhereAReadingWasTaken(t *testing.T) {
 	result := machineList()
 	result.PowerRead, result.Machines[0].Power = true, "on"
 	var out bytes.Buffer
-	if err := writeMachineList(&out, "machine list", result, false, false); err != nil {
+	if err := writeMachineList(WithPresentation(&out, PresentationOptions{Width: 220}), "machine list", result, false, false); err != nil {
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
@@ -85,7 +85,7 @@ func TestMachineListShowsPowerOnlyWhereAReadingWasTaken(t *testing.T) {
 // else at all.
 func TestMachineListSilentPrintsOnlyNames(t *testing.T) {
 	var out bytes.Buffer
-	if err := writeMachineList(&out, "machine list", machineList(), true, false); err != nil {
+	if err := writeMachineList(WithPresentation(&out, PresentationOptions{Width: 220}), "machine list", machineList(), true, false); err != nil {
 		t.Fatal(err)
 	}
 	if out.String() != "guest\nnode\n" {
@@ -102,7 +102,7 @@ func TestMachineListSilentPrintsOnlyNames(t *testing.T) {
 
 func TestMachineListJSONCarriesItsContextAndRows(t *testing.T) {
 	var out bytes.Buffer
-	if err := writeMachineList(&out, "machine list", machineList(), false, true); err != nil {
+	if err := writeMachineList(WithPresentation(&out, PresentationOptions{Width: 220}), "machine list", machineList(), false, true); err != nil {
 		t.Fatal(err)
 	}
 	want := `{"schemaVersion":"v1alpha1","command":"machine list","ok":true,"exitCode":0,` +
@@ -122,7 +122,7 @@ func TestMachineListJSONSaysWhetherControllersWereAsked(t *testing.T) {
 	result := machineList()
 	result.PowerRead, result.Machines[0].Power = true, "off"
 	var out bytes.Buffer
-	if err := writeMachineList(&out, "machine list", result, false, true); err != nil {
+	if err := writeMachineList(WithPresentation(&out, PresentationOptions{Width: 220}), "machine list", result, false, true); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), `"lifecycle":"applied","power":"off"`) || !strings.Contains(out.String(), `"powerRead":true`) {
@@ -139,7 +139,7 @@ func TestMachineListJSONOmitsAbsentScalars(t *testing.T) {
 		{Name: "sno-01", OS: "provided", Clusters: []string{"sno"}, Lifecycle: "not-applied"},
 	}}
 	var out bytes.Buffer
-	if err := writeMachineList(&out, "machine list", result, false, true); err != nil {
+	if err := writeMachineList(WithPresentation(&out, PresentationOptions{Width: 220}), "machine list", result, false, true); err != nil {
 		t.Fatal(err)
 	}
 	var envelope struct {
@@ -194,7 +194,7 @@ func TestPowerResultReportsTheProvedStateAndWhetherItChanged(t *testing.T) {
 	if err := writeMachinePower(&out, "machine stop", result, false); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(out.String(), "[OK] Machine is off") || !strings.Contains(out.String(), "Previous") {
+	if !strings.Contains(out.String(), "✓ Machine is off") || !strings.Contains(out.String(), "Previous") {
 		t.Fatalf("human output = %q", out.String())
 	}
 	var settled bytes.Buffer
@@ -202,7 +202,7 @@ func TestPowerResultReportsTheProvedStateAndWhetherItChanged(t *testing.T) {
 	if err := writeMachinePower(&settled, "machine stop", unchanged, false); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(settled.String(), "[SKIPPED] Machine is off") {
+	if !strings.Contains(settled.String(), "○ Machine is off") {
 		t.Fatalf("settled output = %q", settled.String())
 	}
 	var encoded bytes.Buffer
@@ -273,7 +273,7 @@ func TestMachineListAndPowerTextEscapeOnce(t *testing.T) {
 		Provider: raw("provider"), Clusters: []string{raw("c1"), raw("c2")}, Lifecycle: raw("lifecycle"), Power: raw("power"),
 	}}}
 	var list bytes.Buffer
-	if err := writeMachineList(&list, "machine list", listing, false, false); err != nil {
+	if err := writeMachineList(WithPresentation(&list, PresentationOptions{Width: 220}), "machine list", listing, false, false); err != nil {
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimSuffix(list.String(), "\n"), "\n")
@@ -296,9 +296,9 @@ func TestMachineListAndPowerTextEscapeOnce(t *testing.T) {
 		t.Fatalf("power text escaped a value twice: %q", text.String())
 	}
 	for _, want := range []string{
-		"[OK] Machine is " + shown("power") + "\n", "  Machine   " + shown("machine") + "\n",
-		"  Power     " + shown("power") + "\n", "  Previous  " + shown("previous") + "\n",
-		"  Logs      " + shown("location") + "\n",
+		"✓ Machine is " + shown("power") + "\n", "    Machine   " + shown("machine") + "\n",
+		"    Power     " + shown("power") + "\n", "    Previous  " + shown("previous") + "\n",
+		"    Logs      " + shown("location") + "\n",
 	} {
 		if !strings.Contains(text.String(), want) {
 			t.Fatalf("power text = %q, missing %q", text.String(), want)

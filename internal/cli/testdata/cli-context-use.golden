@@ -1,7 +1,7 @@
-[OK] Current context selected
+  ✓ Current context selected
 
-  Name     lab
-  Mode     ready
-  Current  yes
-  Input    imported
-  Next     bootwright validate --context lab
+    Name     lab
+    Mode     ready
+    Current  yes
+    Input    imported
+    Next     bootwright validate --context lab

@@ -26,7 +26,7 @@ func TestValidationSuccessHasExactStableRepresentations(t *testing.T) {
 		if code != 0 || errOut.Len() != 0 || record.calls != 1 || record.request.(compilation.ValidateRequest).ContextName != "" {
 			t.Fatalf("code=%d out=%q err=%q record=%#v", code, out.String(), errOut.String(), record)
 		}
-		want := "[OK] Desired state is valid (files seen: 2, objects decoded: 4)\n"
+		want := "  ✓ Desired state is valid\n\n  Admission\n    Files seen       2\n    Objects decoded  4\n"
 		if jsonMode {
 			want = "{\"schemaVersion\":\"v1alpha1\",\"command\":\"validate\",\"ok\":true,\"exitCode\":0,\"result\":{\"counts\":{\"filesSeen\":2,\"objectsDecoded\":4},\"excludedContainerClusters\":[],\"excludedStorageClusters\":[],\"excludedResourceFiles\":[],\"advisories\":[]},\"diagnostics\":[],\"logs\":[]}\n"
 		}
@@ -62,7 +62,7 @@ func TestValidationWarningsAreSortedEscapedOnceAndPreserved(t *testing.T) {
 		t.Fatal("warning membership or order", envelope)
 	}
 	d := envelope.Diagnostics[1]
-	want := escapeDisplayLine(raw)
+	want := `<value>\\path\n\u001b\xff`
 	for _, value := range []string{d.Message, d.Object.APIVersion, d.Object.Kind, d.Object.Name, d.Field, d.Remediation, envelope.Result.ExcludedStorageClusters[0]} {
 		if value != want {
 			t.Fatalf("escaping=%q, want %q", value, want)
@@ -75,8 +75,12 @@ func TestValidationWarningsAreSortedEscapedOnceAndPreserved(t *testing.T) {
 	if err := writeValidation(&out, &errOut, "validate", report, false); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(errOut.String(), "[WARN]") != 2 || strings.Count(errOut.String(), "\n") != 2 || strings.Contains(errOut.String(), "\x1b") || !strings.HasPrefix(errOut.String(), "[WARN] api.excluded a.yaml: excluded\n") {
-		t.Fatal("human warning contract", errOut.String())
+	wantWarnings := "  warning  api.excluded\n    a.yaml\n    excluded\n\n" +
+		"  warning  " + want + "/" + want + "\n" +
+		"    api.deferred\n    z" + want + ":4:3\n" +
+		"    " + want + "\n    Field: " + want + "\n    Next: " + want + "\n"
+	if errOut.String() != wantWarnings || strings.Contains(errOut.String(), "\x1b") {
+		t.Fatalf("human warnings = %q, want %q", errOut.String(), wantWarnings)
 	}
 	after, _ := json.Marshal(report)
 	if !bytes.Equal(before, after) {

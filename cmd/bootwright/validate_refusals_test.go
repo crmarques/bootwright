@@ -34,7 +34,7 @@ func TestValidatePrintsOneRefusalAlikeInTextAndJSON(t *testing.T) {
 		t.Fatalf("validate exit = %d\nstdout=%s\nstderr=%s", code, out.String(), errOut.String())
 	}
 	text := out.String() + errOut.String()
-	if !strings.Contains(text, "[FAIL] api.field") || !strings.Contains(text, "[Machine/rhel-01] ("+field+"); next: "+remediation+"\n") {
+	if !strings.Contains(text, "  error  Machine/rhel-01\n    api.field") || !strings.Contains(text, "Field: "+field+"\n    Next: "+remediation+"\n") {
 		t.Fatalf("text refusal lacks its object, field or next step:\n%s", text)
 	}
 	out.Reset()

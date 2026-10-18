@@ -60,7 +60,7 @@ func TestPrivilegeDiagnosticPreservesTheOutputContract(t *testing.T) {
 	if code := ClassifyInvocation([]string{"render", "effective"}).Diagnostic(&out, &errOut, refusal, 1); code != 1 {
 		t.Fatal(code)
 	}
-	if want := "[FAIL] runtime.privilege: sudo invocation failed; next: run sudo -v\n"; out.Len() != 0 || errOut.String() != want {
+	if want := "  error  runtime.privilege\n    sudo invocation failed\n    Next: run sudo -v\n"; out.Len() != 0 || errOut.String() != want {
 		t.Fatalf("stdout %q stderr %q, want stderr %q", out.String(), errOut.String(), want)
 	}
 }
@@ -76,7 +76,7 @@ const (
 	// ignoresRoute: admitted when its command is available, and it acquires
 	// nothing before a context exists.
 	ignoresRoute
-	// notAdmitted: refused or informational, so it classifies as nothing.
+	// notAdmitted: refused or informational, so it grants no effect capability.
 	notAdmitted
 )
 
@@ -136,6 +136,7 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"secret generate", nil, ignoresRoute},
 		{"secret check", nil, ignoresRoute},
 		{"secret list", nil, ignoresRoute},
+		{"secret info", nil, ignoresRoute},
 		{"secret show", []string{"--name", "demo", "--part", "value"}, ignoresRoute},
 		{"secret delete", []string{"--name", "demo"}, ignoresRoute},
 		{"secret encryption init", nil, ignoresRoute},
@@ -160,6 +161,7 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"apply", []string{"--stage", "controller"}, ignoresRoute},
 		{"destroy", nil, ignoresRoute},
 		{"machine list", nil, ignoresRoute},
+		{"machine info", nil, ignoresRoute},
 		{"machine rsh", []string{"--name", "demo"}, ignoresRoute},
 		{"machine exec", []string{"--name", "demo", "--", "uname"}, ignoresRoute},
 		{"machine start", []string{"--name", "demo"}, ignoresRoute},
@@ -202,8 +204,8 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 				t.Errorf("%v: %+v; want an admitted invocation that reads no route", args, classified)
 			}
 		case notAdmitted:
-			if classified != (InvocationClass{}) {
-				t.Errorf("%v: %+v; want no classification", args, classified)
+			if classified.RequiresRoot || classified.AmbientRoute || classified.SecretStdin != "" {
+				t.Errorf("%v: %+v; want no effect capabilities", args, classified)
 			}
 		}
 	}

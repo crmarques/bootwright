@@ -1,46 +1,53 @@
-[OK] Context lab
+  ○ context | lab · ok
 
-  Mode  ready
+      Mode  ready
 
-Setup
-  [OK]  Controller binding
-  [OK]  Controller setup
+  Setup
+  [OK]   Controller binding
+  [OK]   Controller setup
 
-Desired
-  Revision         rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f
-  Environment      lab-rhel
-  Files seen       14
-  Objects decoded  14
+  Desired
+      Revision         rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f
+      Environment      lab-rhel
+      Files seen       14
+      Objects decoded  14
 
-Clusters
-  [PENDING]  ContainerCluster/ocp-01
+  Clusters
+  State       Cluster
+  [PENDING]   ContainerCluster/ocp-01
 
-Storage clusters
-  [SKIPPED]  StorageCluster/ceph-01
+  Storage clusters
+  State       Cluster
+  [SKIPPED]   StorageCluster/ceph-01
 
-Shared services
-  [OK]       ArtifactServer/lab-artifacts  controller
-  [SKIPPED]  DNSServer/lab-dns             controller
-  [FAIL]     Proxy/lab-proxy               controller
+  Shared services
+  State       Service                        Machine
+  [OK]        ArtifactServer/lab-artifacts   controller
+  [SKIPPED]   DNSServer/lab-dns              controller
+  [FAIL]      Proxy/lab-proxy                controller
 
-Secrets
-  Declared  3
-  Bindings  1
+  Secrets
+    Declared  3
+    Bindings  1
 
-Lifecycle
-  Operation  op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
-  Verb       apply
-  State      failed
-  Next       continue-apply
+  Lifecycle
+    Operation  op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
+    Verb       apply
+    State      failed
+    Next       continue-apply
 
-  [DONE]     serve artifacts for lab-artifacts on controller
-  [FAIL]     proxy egress for lab-proxy on controller
-  [DONE]     realize the libvirt host of lab-libvirt on controller
-  [FAIL]     realize the virtual machine rhel-01 and its controller
-  [PENDING]  install the operating system of rhel-01
+  Infrastructure
+    [DONE] serve artifacts for lab-artifacts on controller
+    [FAIL] proxy egress for lab-proxy on controller
+  Substrates
+    [DONE] realize the libvirt host of lab-libvirt on controller
+  Machines
+    [FAIL] realize the virtual machine rhel-01 and its controller
+    [PENDING] install the operating system of rhel-01
 
-  Registered by  1.4.0 (9f2c1ab), another build than this one
-  Logs           /var/lib/bootwright/contexts/lab/state/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/logs
+      Registered by  1.4.0 (9f2c1ab), another build than this one
+      Logs           /var/lib/bootwright/contexts/lab/state/operations/op-6f1c2a9e0b7d4c3f8a5e2
+                     d1b0c9f8e7a/logs
 
-Contradictions
-  os-install-rhel-01 (no block record, yet an attempt of it is recorded)
+  Contradictions
+    os-install-rhel-01 (no block record, yet an attempt of it is recorded)

@@ -88,6 +88,12 @@ func requiredEnumFlag(name, help string, values ...string) flagSpec {
 
 func globalFlags() []flagSpec {
 	return []flagSpec{
+		outputFlag(),
+		enumFlag("color", "auto", "Select terminal colors", "auto", "always", "never"),
+		enumFlag("progress", "auto", "Select progress animation", "auto", "always", "never"),
+		enumFlag("detail", "compact", "Select human detail", "compact", "full"),
+		boolFlag("ascii", "Use ASCII status markers"),
+		{name: "width", help: "Set presentation width (0: automatic)", kind: "string", defaultValue: "0"},
 		stringFlag("context", "Select a context (default: current context)"),
 		stringFlag("ssh-id-file", "Offer an explicit private key for eligible SSH access"),
 		stringFlag("ssh-user", "Borrow an explicit POSIX account for eligible SSH access"),
@@ -132,7 +138,11 @@ func confirmationFlag() flagSpec {
 	return boolFlag("yes", "Confirm the command's ordinary confirmation")
 }
 
-func outputFlag() flagSpec { return enumFlag("output", "text", "Select output mode", "text", "json") }
+func outputFlag() flagSpec {
+	flag := enumFlag("output", "text", "Select output mode", "text", "json", "yaml")
+	flag.short = "o"
+	return flag
+}
 
 func clustersFlag() flagSpec {
 	return stringFlag("clusters", "Select comma-separated cluster names (default: all)")
@@ -171,7 +181,7 @@ func trustFlag() flagSpec {
 }
 
 func preflightFlags() []flagSpec {
-	return []flagSpec{clustersFlag(), dryRunFlag(), outputFlag(), trustFlag()}
+	return []flagSpec{clustersFlag(), dryRunFlag(), trustFlag()}
 }
 
 const payloadHelp = " Bootwright flags go before the command." +

@@ -299,7 +299,7 @@ func writeClusterList(out io.Writer, command string, result *inspection.ListResu
 	for _, row := range result.Clusters {
 		rows = append(rows, []string{row.Name, row.Kind})
 	}
-	text.table([]string{"NAME", "KIND"}, rows)
+	text.resourceTable([]string{"NAME", "KIND"}, rows, tableStyle{Kind: "cluster", Identity: 0})
 	return text.writeTo(out)
 }
 
@@ -321,49 +321,76 @@ func writeClusterInfo(out, errOut io.Writer, command string, result *inspection.
 		text.headline("OK", "No clusters are selected")
 		return text.writeTo(out)
 	}
+	full := presentationFor(out).Detail == "full"
 	for _, cluster := range result.Clusters {
-		text.section(cluster.Kind + " " + cluster.Name)
-		writeAccessCommands(&text, result.Context, cluster.Name, cluster.AccessCommands, false)
+		text.resourceHeading("cluster", cluster.Name, "")
+		text.subsection("Topology")
+		text.mutedFields(field{Label: "Type", Value: cluster.Kind})
+		writeAccessCommands(&text, result.Context, cluster.Name, cluster.AccessCommands, full)
 	}
 	for _, cluster := range result.Storage {
-		text.section(cluster.Kind + " " + cluster.Name)
+		status := ""
 		if cluster.Ceph != nil {
-			writeManagedCeph(&text, cluster.Name, cluster.Ceph)
+			status = cluster.Ceph.Status
 		}
-		writeAccessCommands(&text, result.Context, cluster.Name, cluster.AccessCommands, cluster.Ceph != nil)
+		text.resourceHeading("cluster", cluster.Name, status)
+		text.subsection("Topology")
+		text.mutedFields(field{Label: "Type", Value: cluster.Kind})
+		if cluster.Ceph != nil {
+			writeManagedCeph(&text, result.Context, cluster.Name, cluster.Ceph, cluster.AccessCommands, full)
+		} else {
+			writeAccessCommands(&text, result.Context, cluster.Name, cluster.AccessCommands, full)
+		}
 	}
 	return text.writeTo(out)
 }
 
-func writeManagedCeph(text *display, cluster string, ceph *inspection.ManagedCeph) {
-	fields := []field{
-		{Label: "Management", Value: ceph.Management}, {Label: "Release", Value: ceph.Release}, {Label: "Status", Value: ceph.Status},
+func writeManagedCeph(text *display, contextName, cluster string, ceph *inspection.ManagedCeph, commands []inspection.AccessCommand, full bool) {
+	text.mutedFields(field{Label: "Management", Value: ceph.Management}, field{Label: "Release", Value: ceph.Release})
+	if ceph.Status == inspection.StatusReady {
+		text.mutedFields(field{Label: "Admin node", Value: ceph.AdminNode})
 	}
+	writeAccessCommands(text, contextName, cluster, commands, full)
+	if ceph.Status == inspection.StatusReady {
+		for index, monitor := range ceph.Monitors {
+			label := ""
+			if index == 0 {
+				label = "Monitors"
+			}
+			text.mutedFields(field{Label: label, Value: monitor.Host + "  " + monitor.FQDN + "  " + monitor.Address})
+		}
+		text.mutedFields(field{Label: "Ceph command", Value: ceph.CephCommand})
+	}
+	if ceph.Dashboard != nil {
+		fields := dashboardAccessFields(ceph.Dashboard)
+		if !full && ceph.Dashboard.CertificateSHA256 != "" {
+			fields = fields[:len(fields)-1]
+		}
+		text.mutedFields(fields...)
+	}
+	text.subsection("Evidence")
+	fields := []field{{Label: "Status", Value: ceph.Status}}
 	if ceph.Status != inspection.StatusReady {
 		fields = append(fields, field{Label: "Reason", Value: ceph.Reason}, field{Label: "Next", Value: ceph.Remedy})
-		fields = append(fields, dashboardFields(cluster, ceph.Dashboard)...)
-		text.fields(fields...)
-		return
+	} else if full {
+		fields = append(fields, field{Label: "FSID", Value: ceph.FSID}, field{Label: "Image", Value: ceph.Image.Reference},
+			field{Label: "Digest", Value: ceph.Image.Digest}, field{Label: "Platform", Value: ceph.Image.Platform})
 	}
-	fields = append(fields,
-		field{Label: "FSID", Value: ceph.FSID},
-		field{Label: "Image", Value: ceph.Image.Reference},
-		field{Label: "Digest", Value: ceph.Image.Digest},
-		field{Label: "Platform", Value: ceph.Image.Platform},
-	)
-	for index, monitor := range ceph.Monitors {
-		label := ""
-		if index == 0 {
-			label = "Monitors"
+	text.mutedFields(fields...)
+	if ceph.Dashboard != nil {
+		d := ceph.Dashboard
+		password := "hidden; rerun with --secrets --name " + cluster
+		if d.Revealed {
+			value, _ := d.Password.Part(secrets.ValuePart)
+			password = string(value)
+			clear(value)
 		}
-		fields = append(fields, field{Label: label, Value: monitor.Host + "  " + monitor.FQDN + "  " + monitor.Address})
+		text.subsection("Custody")
+		text.mutedFields(field{Label: "User", Value: d.User}, field{Label: "Password", Value: password})
 	}
-	fields = append(fields, field{Label: "Admin node", Value: ceph.AdminNode}, field{Label: "Ceph command", Value: ceph.CephCommand})
-	fields = append(fields, dashboardFields(cluster, ceph.Dashboard)...)
-	text.fields(fields...)
 }
 
-func dashboardFields(cluster string, d *inspection.Dashboard) []field {
+func dashboardAccessFields(d *inspection.Dashboard) []field {
 	if d == nil {
 		return nil
 	}
@@ -379,14 +406,7 @@ func dashboardFields(cluster string, d *inspection.Dashboard) []field {
 	if d.Reason != "" {
 		status += ": " + d.Reason
 	}
-	fields = append(fields, field{Label: "Dashboard status", Value: status}, field{Label: "User", Value: d.User})
-	password := "hidden; rerun with --secrets --name " + cluster
-	if d.Revealed {
-		value, _ := d.Password.Part(secrets.ValuePart)
-		password = string(value)
-		clear(value)
-	}
-	fields = append(fields, field{Label: "Password", Value: password})
+	fields = append(fields, field{Label: "Dashboard status", Value: status})
 	if d.CertificateSHA256 != "" {
 		fields = append(fields, field{Label: "Certificate SHA-256", Value: colonHex(d.CertificateSHA256) + "  (self-signed; compare before accepting the browser warning)"})
 	}
@@ -401,25 +421,24 @@ func colonHex(digest string) string {
 	return strings.Join(pairs, ":")
 }
 
-func writeAccessCommands(text *display, contextName, cluster string, commands []inspection.AccessCommand, afterFields bool) {
-	if afterFields {
-		text.text.WriteString("\n")
-	}
-	text.text.WriteString(displayIndent + "Access\n")
-	rows := make([][]string, 0, 2*len(commands))
+func writeAccessCommands(text *display, contextName, cluster string, commands []inspection.AccessCommand, full bool) {
+	text.subsection("Access")
 	for _, command := range commands {
-		template := accessTemplate(contextName, cluster, command)
+		text.mutedFields(field{Label: command.Command, Value: command.Status})
 		switch command.Status {
 		case inspection.StatusReady:
-			rows = append(rows, []string{command.Command, command.Status, template})
+			text.mutedLines([]string{accessTemplate(contextName, cluster, command)})
 		case inspection.StatusNotApplicable:
-			rows = append(rows, []string{command.Command, command.Status, command.Reason})
+			if full {
+				text.mutedLines([]string{command.Reason})
+			}
 		default:
-			rows = append(rows, []string{command.Command, command.Status, command.Reason},
-				[]string{"", "", "template (" + command.Status + "): " + template})
+			text.mutedLines([]string{command.Reason})
+			if full {
+				text.mutedLines([]string{"template (" + command.Status + "): " + accessTemplate(contextName, cluster, command)})
+			}
 		}
 	}
-	text.rows(rows)
 }
 
 func accessTemplate(contextName, cluster string, command inspection.AccessCommand) string {

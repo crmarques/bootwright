@@ -43,7 +43,7 @@ func TestRunnerDispatchesEveryApplicationCommand(t *testing.T) {
 			if slices.Contains([]string{"machine rsh", "machine exec", "cluster rsh", "cluster exec"}, record.path) {
 				want = 255
 			}
-			if code != want || out != "" || record.calls != 1 || errOut != "[FAIL] cli.not-implemented: bootwright "+record.path+" is not implemented\n" {
+			if code != want || out != "" || record.calls != 1 || errOut != "  error  cli.not-implemented\n    bootwright "+record.path+" is not implemented\n" {
 				t.Fatalf("code=%d out=%q err=%q calls=%d", code, out, errOut, record.calls)
 			}
 		})
@@ -58,7 +58,7 @@ func TestHelpPrecedenceAndClosedSyntax(t *testing.T) {
 		{"", 0}, {"help", 0}, {"completion", 0}, {"context", 2}, {"secret encryption", 2}, {"context --help", 0}, {"--help context init", 0}, {"help context init", 0},
 		{"context init --name= --help", 0}, {"context init -f a -f b --help", 0}, {"secret show --part invalid --help", 0}, {"status --output invalid --help", 0}, {"machine list --silent --output json --help", 0}, {"machine list --help --output invalid", 0},
 		{"render --output json", 0}, {"render --clusters one --output json", 0}, {"render --output invalid", 2}, {"render --input-dir= --help", 0},
-		{"version --help=false", 0}, {"version --help=invalid", 2}, {"machine --output json list", 2}, {"render --output json effective", 2}, {"render effective --input-dir input", 2},
+		{"version --help=false", 0}, {"version --help=invalid", 2}, {"render effective --input-dir input", 2},
 		{"example --help", 2}, {"help example", 2}, {"container-cluster --help", 2}, {"help container-cluster", 2}, {"clu list", 2}, {"VERSION", 2}, {"--version", 2}, {"version --format json", 2}, {"__complete", 2}, {"__completeNoDesc", 2}, {"help __bootwright_complete", 2},
 		{"version --", 2}, {"version --help --bad", 2}, {"machine list --silent invalid --help", 0}, {"machine list --silent=invalid --help", 2}, {"version -vh", 2},
 	}
@@ -86,13 +86,13 @@ func TestResolutionFailuresExplainOnlyTrustedReasons(t *testing.T) {
 		{"unknown-flag", []string{"version", "--" + privateArgument}, "unknown flag"},
 		{"missing-value", []string{"context", "init", "--name"}, "flag value is missing"},
 		{"command", []string{privateArgument}, "unknown command"},
-		{"flag-owner", []string{"render", "--output", "text", "effective"}, "flag does not apply to the selected subcommand"},
+		{"flag-owner", []string{"render", "--input-dir", "input", "effective"}, "flag does not apply to the selected subcommand"},
 		{"help-command", []string{"help", privateArgument}, "unknown help command"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			code, out, errOut, record := runRecorded(test.args)
-			if code != 2 || out != "" || record.calls != 0 || !strings.HasPrefix(errOut, "[FAIL] cli.usage: "+test.want+"\n") {
+			if code != 2 || out != "" || record.calls != 0 || !strings.HasPrefix(errOut, "  error  cli.usage\n    "+test.want+"\n") {
 				t.Fatalf("code=%d out=%q stderr=%q calls=%d", code, out, errOut, record.calls)
 			}
 			if strings.Contains(errOut, privateArgument) {
@@ -135,7 +135,7 @@ func TestWithdrawnFlagsAreUsageErrors(t *testing.T) {
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			code, out, errOut, record := runRecorded(args)
-			if code != 2 || out != "" || record.calls != 0 || !strings.HasPrefix(errOut, "[FAIL] cli.usage: unknown flag\n") {
+			if code != 2 || out != "" || record.calls != 0 || !strings.HasPrefix(errOut, "  error  cli.usage\n    unknown flag\n") {
 				t.Fatalf("code=%d out=%q stderr=%q calls=%d", code, out, errOut, record.calls)
 			}
 		})
@@ -318,7 +318,7 @@ func TestAFlagWrittenAfterThePayloadIsRefusedWithWhereFlagsGo(t *testing.T) {
 	} {
 		t.Run(strings.Join(test.args, " "), func(t *testing.T) {
 			code, out, errOut, record := runRecorded(test.args)
-			if code != 2 || out != "" || record.calls != 0 || !strings.HasPrefix(errOut, "[FAIL] cli.usage: "+test.want+"\n") {
+			if code != 2 || out != "" || record.calls != 0 || !strings.HasPrefix(errOut, "  error  cli.usage\n    "+test.want+"\n") {
 				t.Fatalf("code=%d out=%q stderr=%q calls=%d", code, out, errOut, record.calls)
 			}
 			if strings.Contains(errOut, privateArgument) {
@@ -409,14 +409,14 @@ func TestASessionRefusalExitsTwoFiftyFive(t *testing.T) {
 			code      int
 			report    string
 		}{
-			{name: "trust.identity", err: refusal("trust.identity"), code: 255, report: "[FAIL] trust.identity: the session cannot open; next: do what it says\n"},
-			{name: "access.target", err: refusal("access.target"), code: 255, report: "[FAIL] access.target: the session cannot open; next: do what it says\n"},
-			{name: "access.unavailable", err: refusal("access.unavailable"), code: 255, report: "[FAIL] access.unavailable: the session cannot open; next: do what it says\n"},
-			{name: "canceled", err: context.Canceled, code: 255, report: "[FAIL] runtime.canceled: operation canceled\n"},
-			{name: "deadline", err: context.DeadlineExceeded, code: 255, report: "[FAIL] runtime.deadline: operation deadline exceeded\n"},
-			{name: "unsupported", code: 255, report: "[FAIL] runtime.internal: application service returned an unsupported result\n"},
+			{name: "trust.identity", err: refusal("trust.identity"), code: 255, report: "  error  trust.identity\n    the session cannot open\n    Next: do what it says\n"},
+			{name: "access.target", err: refusal("access.target"), code: 255, report: "  error  access.target\n    the session cannot open\n    Next: do what it says\n"},
+			{name: "access.unavailable", err: refusal("access.unavailable"), code: 255, report: "  error  access.unavailable\n    the session cannot open\n    Next: do what it says\n"},
+			{name: "canceled", err: context.Canceled, code: 255, report: "  error  runtime.canceled\n    operation canceled\n"},
+			{name: "deadline", err: context.DeadlineExceeded, code: 255, report: "  error  runtime.deadline\n    operation deadline exceeded\n"},
+			{name: "unsupported", code: 255, report: "  error  runtime.internal\n    application service returned an unsupported result\n"},
 			{name: "usage", err: &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "access.target", Message: "the session cannot open"}}, Usage: true}, code: 2},
-			{name: "interrupted", err: context.Canceled, interrupt: true, code: 130, report: "[FAIL] runtime.interrupted: operation interrupted\n"},
+			{name: "interrupted", err: context.Canceled, interrupt: true, code: 130, report: "  error  runtime.interrupted\n    operation interrupted\n"},
 		} {
 			t.Run(invocation+"/"+test.name, func(t *testing.T) {
 				var out, errOut bytes.Buffer
@@ -433,6 +433,27 @@ func TestASessionRefusalExitsTwoFiftyFive(t *testing.T) {
 					t.Fatalf("exit = %d, want %d; out = %q err = %q", code, test.code, out.String(), errOut.String())
 				}
 			})
+		}
+	}
+}
+
+func TestGlobalOutputAppliesAcrossTheCommandPath(t *testing.T) {
+	for _, args := range [][]string{
+		{"machine", "--output", "json", "list"},
+		{"render", "--output", "json", "effective"},
+		{"--output", "json", "machine", "list"},
+	} {
+		code, out, errOut, record := runRecorded(args)
+		if code != 1 || errOut != "" || record.calls != 1 {
+			t.Fatalf("%v: %d %q %q calls %d", args, code, out, errOut, record.calls)
+		}
+		var envelope struct {
+			Command     string
+			ExitCode    int
+			Diagnostics []diagnostic
+		}
+		if err := json.Unmarshal([]byte(out), &envelope); err != nil || envelope.Command != record.path || envelope.ExitCode != code || len(envelope.Diagnostics) != 1 || envelope.Diagnostics[0].Code != "cli.not-implemented" {
+			t.Fatalf("%v: %s (%v)", args, out, err)
 		}
 	}
 }

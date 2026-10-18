@@ -197,10 +197,10 @@ func TestValidateAndContextInitAgreeOnOneDirectory(t *testing.T) {
 	}
 	validate := []string{"validate", "-f", input}
 	initialize := []string{"context", "init", "--name", "beta", "--input-dir", input}
-	text := "[FAIL] input.read " + host + ": " + want.Message + "; next: " + want.Remediation
+	text := "  error  input.read\n    " + host + "\n    " + want.Message + "\n    Next: " + want.Remediation
 	for _, args := range [][]string{validate, initialize} {
 		out, errOut := contextRun(t, services, 1, args...)
-		if !slices.Contains(strings.Split(out+errOut, "\n"), text) {
+		if !strings.Contains(humanContent(out+errOut), humanContent(text)) {
 			t.Errorf("%v reported\nstdout=%s\nstderr=%s\nwant the line %s", args, out, errOut, text)
 		}
 	}

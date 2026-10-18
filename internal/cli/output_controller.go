@@ -29,7 +29,7 @@ type ControllerPresenter struct {
 // errOut. Given a terminal width reader the running row is rewritten in place
 // within it; anywhere else rows are appended.
 func NewControllerPresenter(out, errOut io.Writer, columns func() int) *ControllerPresenter {
-	return &ControllerPresenter{progress: progressPresenter{out: out, clock: systemProgressClock(), columns: columns}, errOut: errOut}
+	return &ControllerPresenter{progress: progressPresenter{out: out, clock: systemProgressClock(), columns: selectedProgressColumns(out, columns)}, errOut: errOut}
 }
 
 // PresentControllerScope opens the result before inspection starts streaming
@@ -92,7 +92,7 @@ func (p *ControllerPresenter) PresentControllerPlan(ctx context.Context, report 
 // ReportProgress streams one row under the heading its phase owns. A phase
 // that arrives before the scope also opens the headline.
 func (p *ControllerPresenter) ReportProgress(ctx context.Context, event prerequisites.ProgressEvent) {
-	if p == nil || p.progress.out == nil || ctx.Err() != nil || event.Action == "" {
+	if p == nil || p.progress.out == nil || ctx.Err() != nil || event.Action == "" || presentationFor(p.progress.out).Progress == "never" {
 		return
 	}
 	heading, nested := "Progress", event.Detail != ""
@@ -257,7 +257,9 @@ func writeControllerReport(out, errOut io.Writer, command string, report *prereq
 	// A setup that failed before its plan settled has nothing to plan; every
 	// other unpresented plan still names what would change.
 	if !report.PlanPresented && !(report.ProgressPresented && report.Outcome == "planned") {
-		controllerPlanText(&text, report, !presented, !presented, showReceiptTable(command, report))
+		controllerPlanText(&text, report, !presented, !presented || presentationFor(out).Progress == "never", showReceiptTable(command, report))
+	} else if !report.PlanPresented && presentationFor(out).Progress == "never" {
+		controllerChecksText(&text, report, false)
 	}
 	// After the plan was presented, an unfinished setup must still say which of
 	// its approved actions took effect.
@@ -396,16 +398,7 @@ func controllerPlanText(text *display, report *prerequisites.Report, scope, chec
 		controllerScopeText(text, report)
 	}
 	if checks {
-		rows := make([][]string, 0, len(report.Checks))
-		for _, check := range report.Checks {
-			if !table || check.Scope == prerequisites.ContextScope || check.Status != "ready" {
-				rows = append(rows, []string{checkToken(check.Status), controllerActionLabel(check.ID), check.Summary()})
-			}
-		}
-		if len(rows) != 0 {
-			text.section("Checks")
-			text.rows(rows)
-		}
+		controllerChecksText(text, report, table)
 	}
 	if table {
 		text.section("")
@@ -534,4 +527,18 @@ func (r *Runner) setupPlanFailure(path string, report *prerequisites.Report, ref
 		return 1
 	}
 	return exitCode
+}
+
+func controllerChecksText(text *display, report *prerequisites.Report, table bool) {
+	rows := make([][]string, 0, len(report.Checks))
+	for _, check := range report.Checks {
+		if !table || check.Scope == prerequisites.ContextScope || check.Status != "ready" {
+			rows = append(rows, []string{checkToken(check.Status), controllerActionLabel(check.ID), check.Summary()})
+		}
+	}
+	if len(rows) != 0 {
+		text.section("Checks")
+		text.rows(rows)
+	}
+
 }

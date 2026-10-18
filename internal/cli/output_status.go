@@ -142,9 +142,9 @@ func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMod
 		})
 	}
 	var text display
-	text.headline("OK", "Context "+result.Context.Name)
+	text.resourceHeading("context", result.Context.Name, "ok")
 	text.section("")
-	text.fields(field{Label: "Mode", Value: displayValue(result.Context.Mode)})
+	text.mutedFields(field{Label: "Mode", Value: displayValue(result.Context.Mode)})
 	writeStatusSetup(&text, result.SetupChecks)
 	writeStatusDesired(&text, result.Desired)
 	writeStatusClusters(&text, "Clusters", result.Clusters)
@@ -187,7 +187,7 @@ func writeStatusSetup(text *display, checks []lifecycle.SetupCheck) {
 
 func writeStatusDesired(text *display, desired lifecycle.DesiredSummary) {
 	text.section("Desired")
-	text.fields(
+	text.mutedFields(
 		field{Label: "Revision", Value: displayValue(desired.Revision)},
 		field{Label: "Environment", Value: displayValue(desired.Environment)},
 		field{Label: "Files seen", Value: strconv.Itoa(desired.Files)},
@@ -204,7 +204,7 @@ func writeStatusClusters(text *display, title string, clusters []lifecycle.Clust
 	for _, cluster := range clusters {
 		rows = append(rows, []string{serviceStatusToken(cluster.Status), cluster.Kind + "/" + cluster.Name})
 	}
-	text.rows(rows)
+	text.resourceTable([]string{"State", "Cluster"}, rows, tableStyle{Kind: "cluster", Identity: 1, States: []int{0}})
 }
 
 func writeStatusShared(text *display, services []lifecycle.ServiceSummary) {
@@ -216,7 +216,7 @@ func writeStatusShared(text *display, services []lifecycle.ServiceSummary) {
 	for _, service := range services {
 		rows = append(rows, []string{serviceStatusToken(service.Status), service.Kind + "/" + service.Name, displayValue(service.Machine)})
 	}
-	text.rows(rows)
+	text.resourceTable([]string{"State", "Service", "Machine"}, rows, tableStyle{Kind: "service", Identity: 1, States: []int{0}})
 }
 
 // writeStatusLifecycle adds what JSON leaves out: the build that registered
@@ -236,11 +236,7 @@ func writeStatusLifecycle(text *display, result *lifecycle.StatusResult) {
 	)
 	if len(summary.Blocks) != 0 {
 		text.section("")
-		rows := make([][]string, 0, len(summary.Blocks))
-		for _, block := range summary.Blocks {
-			rows = append(rows, []string{blockStatusToken(block.State), block.Description})
-		}
-		text.rows(rows)
+		text.lifecycleOutcomes(summary.Blocks)
 	}
 	var tail []field
 	switch {
@@ -256,7 +252,7 @@ func writeStatusLifecycle(text *display, result *lifecycle.StatusResult) {
 	}
 	if len(tail) != 0 {
 		text.section("")
-		text.fields(tail...)
+		text.mutedFields(tail...)
 	}
 	for _, block := range summary.Blocks {
 		if block.Unresolved == nil {

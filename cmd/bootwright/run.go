@@ -31,20 +31,27 @@ func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer
 // privilegeBoundary is what an interactive invocation acquires from its
 // process before it may cross into root.
 type privilegeBoundary struct {
-	lookupEnv func(string) (string, bool)
-	accounts  privilege.AccountResolver
-	guard     func(int) (func(), error)
-	euid      func() int
-	elevate   func(context.Context, privilege.Invocation) privilege.Outcome
+	lookupEnv     func(string) (string, bool)
+	accounts      privilege.AccountResolver
+	guard         func(int) (func(), error)
+	euid          func() int
+	elevate       func(context.Context, privilege.Invocation) privilege.Outcome
+	inputTerminal func() (bool, error)
 }
 
 func processBoundary() privilegeBoundary {
 	elevator := privilege.Elevator{Executable: privilege.ReexecutionPath, Sudo: privilege.QualifiedSudo, Executor: privilege.ProcessExecutor{}, Delay: privilege.Timer{}}
-	return privilegeBoundary{lookupEnv: os.LookupEnv, accounts: privilege.Resolver{}, guard: privilege.GuardParent, euid: os.Geteuid, elevate: elevator.Run}
+	return privilegeBoundary{lookupEnv: os.LookupEnv, accounts: privilege.Resolver{}, guard: privilege.GuardParent, euid: os.Geteuid, elevate: elevator.Run, inputTerminal: stdinTerminal}
 }
 
 func (b privilegeBoundary) run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	classification := cli.ClassifyInvocation(args)
+	if classification.JSON && classification.SecretStdin != "" && b.inputTerminal != nil {
+		terminal, err := b.inputTerminal()
+		if err != nil || terminal {
+			return refuseAtBoundary(classification, stdout, stderr, cli.StructuredSecretInputDiagnostic(), 2)
+		}
+	}
 	if classification.RequiresRoot {
 		_, errorTerminal := terminalFile(stderr)
 		privilege.AnnounceStart(stderr, errorTerminal)
@@ -84,8 +91,9 @@ func (b privilegeBoundary) runElevated(ctx context.Context, classification cli.I
 // elevationInvocation acquires the process facts the elevator decides from.
 func elevationInvocation(classification cli.InvocationClass, args []string, route controller.Route, stdout, stderr io.Writer) privilege.Invocation {
 	terminal, err := stdinTerminal()
+	_, noColor := os.LookupEnv("NO_COLOR")
 	invocation := privilege.Invocation{
-		JSON: classification.JSON, Arguments: args, Route: route, Terminal: os.Getenv("TERM"),
+		JSON: classification.JSON, Arguments: cli.CarryPresentation(args, cli.PresentationOptions{NoColor: noColor, Color: "auto"}), Route: route, Terminal: os.Getenv("TERM"),
 		Input: os.Stdin, Output: stdout, Error: stderr, InputTerminal: err == nil && terminal,
 		Session: sessionCommand(classification), SecretStdin: classification.SecretStdin,
 	}
@@ -101,6 +109,10 @@ func elevationInvocation(classification cli.InvocationClass, args []string, rout
 // refuseAtBoundary reports a refusal at the privilege boundary with the
 // status its command's contract gives it.
 func refuseAtBoundary(classification cli.InvocationClass, stdout, stderr io.Writer, refusal diagnostics.Diagnostic, code int) int {
+	_, noColor := os.LookupEnv("NO_COLOR")
+	classification.Presentation.Columns = terminalColumns(stderr)
+	classification.Presentation.NoColor = noColor
+	classification.Presentation.Dumb = os.Getenv("TERM") == "dumb"
 	return classification.Diagnostic(stdout, stderr, refusal, refusedStatus(classification, code))
 }
 
@@ -126,31 +138,46 @@ func refusedStatus(classification cli.InvocationClass, code int) int {
 // arguments and selects the same way. A refused confirmation repeats those
 // arguments.
 func interactiveProcess(classification cli.InvocationClass, args []string, stdout, stderr io.Writer, route controller.Route) (processDependencies, invocationHooks) {
-	confirmer := cli.NewConfirmation(readStdin, stderr, stdinTerminal).Repeating(args)
 	// A terminal gets its running progress row rewritten in place within the
 	// width it can erase; a pipe or file receives every row appended.
 	columns := terminalColumns(stdout)
-	controllerPresenter := cli.NewControllerPresenter(stdout, stderr, columns)
-	lifecycleProgress := cli.NewInvocationProgress(stdout, columns, classification.JSON)
+	_, noColor := os.LookupEnv("NO_COLOR")
+	options := cli.ResolvePresentation(args, cli.PresentationOptions{Columns: columns, NoColor: noColor, Dumb: os.Getenv("TERM") == "dumb"})
+	errorOptions := options
+	errorOptions.Columns = terminalColumns(stderr)
+	output, errors := cli.WithPresentation(stdout, options), cli.WithPresentation(stderr, errorOptions)
+	confirmationTerminal, confirmationOutput := stdinTerminal, errors
+	progressOutput, progressErrors := output, errors
+	if classification.JSON {
+		confirmationTerminal = func() (bool, error) { return false, nil }
+		confirmationOutput = io.Discard
+		progressOutput, progressErrors = cli.WithPresentation(io.Discard, options), cli.WithPresentation(io.Discard, errorOptions)
+	}
+	confirmer := cli.NewConfirmation(readStdin, confirmationOutput, confirmationTerminal).Repeating(args)
+	controllerPresenter := cli.NewControllerPresenter(progressOutput, progressErrors, columns)
+	lifecyclePlan, lifecycleProgress := cli.NewLifecyclePresenters(progressOutput, columns, classification.JSON)
 	// An operation records the build the version command reports, which names
 	// the commit of a build stamped with no version.
 	build := buildInformation()
 	process := processDependencies{
 		Confirmer:          confirmer,
 		SessionConfirmer:   confirmer,
-		Streams:            machineaccess.Streams{In: os.Stdin, Out: os.Stdout, Err: os.Stderr},
+		Streams:            machineaccess.Streams{In: os.Stdin, Out: stdout, Err: stderr},
 		Terminal:           stdinTerminal,
 		SecretInput:        secretInputFunc(readStdin),
 		SecretTerminal:     newSecretTerminal(os.Stdin, stderr),
 		Progress:           controllerPresenter,
 		Presenter:          controllerPresenter,
 		LifecycleProgress:  lifecycleProgress,
-		LifecyclePresenter: cli.NewLifecyclePlanPresenter(stdout),
-		MediaPresenter:     cli.NewMediaChangePresenter(stdout),
+		LifecyclePresenter: lifecyclePlan,
+		MediaPresenter:     cli.NewMediaChangePresenter(progressOutput),
 		Executable:         lifecycle.Executable{Version: build.Version, Commit: build.Commit, Modified: strings.EqualFold(strings.TrimSpace(build.Source), "modified")},
 		AmbientRoute:       route,
 	}
-	hooks := invocationHooks{begin: beginSignalOperation, finish: func() {
+	if classification.JSON {
+		process.SecretTerminal = structuredSecretTerminal{source: process.SecretTerminal}
+	}
+	hooks := invocationHooks{presentation: options, errorColumns: errorOptions.Columns, begin: beginSignalOperation, finish: func() {
 		controllerPresenter.Finish()
 		lifecycleProgress.Finish()
 	}}
@@ -160,8 +187,10 @@ func interactiveProcess(classification cli.InvocationClass, args []string, stdou
 // invocationHooks carries what only an interactive process supplies to the
 // runner: operation cancellation and the progress finisher.
 type invocationHooks struct {
-	begin  func(context.Context) (context.Context, func())
-	finish func()
+	begin        func(context.Context) (context.Context, func())
+	finish       func()
+	presentation cli.PresentationOptions
+	errorColumns func() int
 }
 
 // buildStamp reads the toolchain's own stamp of this executable.
@@ -224,6 +253,8 @@ func runServices(ctx context.Context, args []string, stdout, stderr io.Writer, s
 		ErrOut:              stderr,
 		BuildInfo:           buildInformation(),
 		Services:            services,
+		Presentation:        hook.presentation,
+		ErrorColumns:        hook.errorColumns,
 		CompletionPaths:     completionPaths,
 		BeginOperation:      hook.begin,
 		FinishProgress:      hook.finish,

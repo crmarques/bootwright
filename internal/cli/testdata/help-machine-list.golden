@@ -1,21 +1,28 @@
-List machines and the lifecycle position each has reached, as this context's own durable evidence proves it. Add --power-status to also read each machine's power state from its management controller, which is the only part of this command that contacts a host.
+  bootwright / machine list
+      List machines and the lifecycle position each has reached, as this context's own durable
+      evidence proves it. Add --power-status to also read each machine's power state from its
+      management controller, which is the only part of this command that contacts a host.
 
-Usage:
-  bootwright machine list [flags]
+  Usage
+    bootwright machine list [flags]
 
-Examples:
-  bootwright machine list --context lab --power-status
+  Command flags
+      --clusters      Select comma-separated cluster names (default: all)
+      --power-status  Read each machine's power state from its management controller
+      --silent        Print only sorted machine names
 
-Flags:
-      --clusters string   Select comma-separated cluster names (default: all)
-      --output string     Select output mode (values: text, json) (default "text")
-      --power-status      Read each machine's power state from its management controller
-      --silent            Print only sorted machine names
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
 
-Global Flags:
-      --context string             Select a context (default: current context)
-  -h, --help                       Show help for this command
-      --ssh-ask-sudo-password      Request the borrowed account's sudo password
-      --ssh-id-file string         Offer an explicit private key for eligible SSH access
-      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
-      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines
+  More detail
+    Use --help --detail full to include SSH overrides.
+
+  Examples
+    bootwright machine list --context lab --power-status

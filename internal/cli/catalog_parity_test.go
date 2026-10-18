@@ -59,7 +59,7 @@ func TestUsageDistinguishesUnknownAndMisplacedFlags(t *testing.T) {
 		message string
 	}{
 		{[]string{"version", "--not-a-flag"}, "unknown flag"},
-		{[]string{"version", "--output", "json"}, "flag is not accepted by this command"},
+		{[]string{"version", "--checksums"}, "flag is not accepted by this command"},
 		{[]string{"machine", "list", "--yes"}, "flag is not accepted by this command"},
 		{[]string{"context", "--purge", "list"}, "flag is not accepted at this position"},
 		{[]string{"--name", "example", "context", "init"}, "flag is not accepted at this position"},

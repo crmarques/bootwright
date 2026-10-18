@@ -1,24 +1,29 @@
-Apply plan
+  Apply plan
 
-Plan
-  1. serve artifacts for lab-artifacts on controller [infra-components] [start]
-       create-container-unit
-       open-listener 192.0.2.1:8443
-  2. realize the libvirt host of lab-libvirt on controller [substrates] [start] [after 1]
-       create-libvirt-pool lab-libvirt
-       create-libvirt-network lab
-  3. install the operating system of metal-01 [machines] [data-loss] [not selected] [after 1]
-       install-operating-system metal-01
-       power-on metal-01
-  4. realize the virtual machine rhel-01 and its controller [machines] [not selected] [after 2]
-       create-libvirt-domain rhel-01
-  5. install the operating system of rhel-01 [machines] [deferred: waits on machine-rhel-01] [after 4]
-       power-on rhel-01
+  Plan
+  Infrastructure · 1 block
+    ○ 1. serve artifacts for lab-artifacts on controller · pending · start
+      create-container-unit
+      open-listener 192.0.2.1:8443
 
-  Stages       infra-components, substrates
-  Starts       2 of 5 blocks, 3 deferred
-  Concurrency  4 waves, widest 2 steps; this build starts 1 block at a time
-  Requires     --authorize data-loss (step 3)
+  Substrates · 1 block
+    ○ 2. realize the libvirt host of lab-libvirt on controller · pending · start
+      create-libvirt-pool lab-libvirt
+      create-libvirt-network lab
+
+  Machines · 3 blocks
+    ○ 3. install the operating system of metal-01 · pending · not selected · data-loss
+      install-operating-system metal-01
+      power-on metal-01
+    ○ 4. realize the virtual machine rhel-01 and its controller · pending · not selected
+      create-libvirt-domain rhel-01
+    ○ 5. install the operating system of rhel-01 · pending · deferred: waits on machine-rhel-01
+      power-on rhel-01
+
+    Stages       infra-components, substrates
+    Starts       2 of 5 blocks, 3 deferred
+    Concurrency  4 waves, widest 2 steps; this build starts 1 block at a time
+    Requires     --authorize data-loss (step 3)
 operation: none
 verb: plan
 state: preview

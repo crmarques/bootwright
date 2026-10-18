@@ -20,17 +20,17 @@ func clustersPreflightCommand() commandSpec {
 }
 
 func allPreflightCommand() commandSpec {
-	return commandSpec{path: "preflight all", short: "Check all prerequisites", flags: []flagSpec{dryRunFlag(), outputFlag(), trustFlag()}}
+	return commandSpec{path: "preflight all", short: "Check all prerequisites", flags: []flagSpec{dryRunFlag(), trustFlag()}}
 }
 
 func environmentClusterCommands() []commandSpec {
 	return []commandSpec{
-		available(commandSpec{path: "cluster list", short: "List container and storage clusters", long: "List container and storage clusters in canonical name order. Applicable to all selected ContainerClusters and StorageClusters, including external storage clusters.", flags: []flagSpec{outputFlag()}}),
+		available(commandSpec{path: "cluster list", short: "List container and storage clusters", long: "List container and storage clusters in canonical name order. Applicable to all selected ContainerClusters and StorageClusters, including external storage clusters."}),
 		available(commandSpec{path: "cluster info", short: "Show cluster details and static access applicability", long: "Show cluster details and static access applicability, readiness and invocation templates from local desired state and evidence, with no host contact." +
 			" Applicable to all selected ContainerClusters and StorageClusters, including external storage clusters." +
 			" A managed Ceph StorageCluster also reports its release, FSID, frozen image, monitors and administrator command." +
 			" --name takes a comma-separated list." +
-			" --secrets requires --name naming exactly one cluster and applies to managed Ceph StorageClusters only.", flags: []flagSpec{stringFlag("name", "Select comma-separated cluster names (default: all)"), boolFlag("secrets", "Include explicitly selected sensitive values"), outputFlag()}}),
+			" --secrets requires --name naming exactly one cluster and applies to managed Ceph StorageClusters only.", flags: []flagSpec{stringFlag("name", "Select comma-separated cluster names (default: all)"), boolFlag("secrets", "Include explicitly selected sensitive values")}}),
 		available(clusterSessionCommand(commandSpec{path: "cluster rsh", short: "Open an SSH session on a cluster node's Machine"})),
 		available(clusterExecCommand()),
 	}

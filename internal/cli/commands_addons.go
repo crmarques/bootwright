@@ -10,14 +10,14 @@ import (
 
 func addOnCatalogCommands() []commandSpec {
 	return []commandSpec{
-		{path: "add-ons list", short: "List add-on catalog registrations", flags: []flagSpec{outputFlag()}},
+		{path: "add-ons list", short: "List add-on catalog registrations"},
 		{path: "add-ons add", short: "Register an immutable add-on catalog release", flags: []flagSpec{nameFlag(), stringFlag("version", "Select the catalog release version"), confirmationFlag()}},
 		{path: "add-ons delete", short: "Delete an add-on registration", flags: []flagSpec{nameFlag(), confirmationFlag()}},
 	}
 }
 
 func addOnPreflightCommand() commandSpec {
-	return commandSpec{path: "preflight add-ons", short: "Check add-on prerequisites", flags: []flagSpec{clustersFlag(), outputFlag()}}
+	return commandSpec{path: "preflight add-ons", short: "Check add-on prerequisites", flags: []flagSpec{clustersFlag()}}
 }
 
 type AddOnCatalogService interface {

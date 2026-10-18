@@ -119,14 +119,14 @@ func TestSeveralMachinesHeadlineTheirChange(t *testing.T) {
 		rows []power.Result
 		want string
 	}{
-		{[]power.Result{row("a", false), row("b", false)}, "[SKIPPED] 2 machines settled\n"},
-		{[]power.Result{row("a", false), row("b", true)}, "[OK] 2 machines settled\n"},
+		{[]power.Result{row("a", false), row("b", false)}, "  ○ 2 machines settled\n"},
+		{[]power.Result{row("a", false), row("b", true)}, "  ✓ 2 machines settled\n"},
 	} {
 		var out bytes.Buffer
 		if err := writeMachinePower(&out, "machine stop", batchOf(tc.rows...), false); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.HasPrefix(out.String(), tc.want) || !strings.Contains(out.String(), "MACHINE  POWER  PREVIOUS  LOGS\n") {
+		if !strings.HasPrefix(out.String(), tc.want) || !strings.Contains(strings.Join(strings.Fields(out.String()), " "), "MACHINE POWER PREVIOUS LOGS") {
 			t.Fatalf("output = %q, want %q and the table", out.String(), tc.want)
 		}
 	}
@@ -146,7 +146,7 @@ func TestAFailedBatchWritesItsRowsToStandardOutputAndItsDiagnosticsToStandardErr
 	var out, errOut bytes.Buffer
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).
 		Run(context.Background(), strings.Fields("machine stop --name a,b --yes"))
-	if code != 1 || !strings.HasPrefix(out.String(), "[FAIL] 1 of 2 machines did not settle\n") || !strings.Contains(errOut.String(), "[FAIL] lifecycle.state") {
+	if code != 1 || !strings.HasPrefix(out.String(), "  ! 1 of 2 machines did not settle\n") || !strings.Contains(errOut.String(), "  error  lifecycle.state\n    the adapter operation did not complete\n") {
 		t.Fatalf("code=%d out=%q err=%q", code, out.String(), errOut.String())
 	}
 	if strings.Contains(out.String(), "lifecycle.state") || strings.Contains(errOut.String(), "MACHINE") {
@@ -156,7 +156,7 @@ func TestAFailedBatchWritesItsRowsToStandardOutputAndItsDiagnosticsToStandardErr
 	errOut.Reset()
 	code = New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).
 		Run(context.Background(), strings.Fields("machine stop --name a,b,c --yes"))
-	if code != 1 || !strings.HasPrefix(out.String(), "[FAIL] 2 of 3 machines did not settle\n") {
+	if code != 1 || !strings.HasPrefix(out.String(), "  ! 2 of 3 machines did not settle\n") {
 		t.Fatalf("a Machine that failed before its run has no row but still counts: code=%d out=%q", code, out.String())
 	}
 }
@@ -207,7 +207,7 @@ func TestAFailureWithNoSettledBatchWritesDiagnosticsOnly(t *testing.T) {
 			record.result.power = tc.result
 			var out, errOut bytes.Buffer
 			code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), strings.Fields(tc.args))
-			if code != 1 || out.Len() != 0 || !strings.Contains(errOut.String(), "[FAIL] machine.power") {
+			if code != 1 || out.Len() != 0 || errOut.String() != "  error  machine.power\n    refused\n" {
 				t.Fatalf("code=%d out=%q err=%q", code, out.String(), errOut.String())
 			}
 		})

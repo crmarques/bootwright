@@ -67,7 +67,7 @@ func TestCompleteNegativeSecretCheckKeepsStructuredResult(t *testing.T) {
 			t.Fatalf("%s code=%d calls=%d", mode, code, record.calls)
 		}
 		if mode == "text" {
-			if !strings.Contains(out, "token  token  contextStore  value  missing  -") || errOut != "[FAIL] secret.input: secret token is missing\n" {
+			if !strings.Contains(strings.Join(strings.Fields(out), " "), "token token contextStore value missing -") || errOut != "  error  secret.input\n    secret token is missing\n" {
 				t.Fatalf("text stdout=%q stderr=%q", out, errOut)
 			}
 			continue
@@ -196,7 +196,7 @@ func TestSecretMutationAndEncryptionResults(t *testing.T) {
 	mutation := &custody.MutationResult{Context: secretResultContext(), Name: "sample", Changed: 1, Parts: []secrets.Part{secrets.ValuePart}}
 	record := &dispatchRecord{result: commandResult{secretMutation: mutation}}
 	code, out, errOut := runSecretResult([]string{"secret", "set", "--name", "sample", "--value-file", "value"}, record)
-	if code != 0 || !strings.Contains(out, "[OK] Secret set complete") || !strings.Contains(out, "Parts      value") || errOut != "" {
+	if code != 0 || !strings.Contains(out, "✓ Secret set complete") || !strings.Contains(out, "Parts      value") || errOut != "" {
 		t.Fatalf("mutation code=%d stdout=%q stderr=%q", code, out, errOut)
 	}
 
@@ -204,7 +204,7 @@ func TestSecretMutationAndEncryptionResults(t *testing.T) {
 	encryptionMutation := &encryption.MutationResult{Context: secretResultContext(), Implementation: selection, ActiveKey: "key-1", Changed: true}
 	record = &dispatchRecord{result: commandResult{encryptionMutation: encryptionMutation}}
 	code, out, errOut = runSecretResult([]string{"secret", "encryption", "init"}, record)
-	if code != 0 || !strings.Contains(out, "[OK] Secret encryption initialized") || !strings.Contains(out, "Type         local-keyring") || errOut != "" {
+	if code != 0 || !strings.Contains(out, "✓ Secret encryption initialized") || !strings.Contains(out, "Type         local-keyring") || errOut != "" {
 		t.Fatalf("encryption mutation code=%d stdout=%q stderr=%q", code, out, errOut)
 	}
 }
@@ -218,9 +218,9 @@ func TestSecretGenerateAndDeleteResultsNameTheirSecrets(t *testing.T) {
 		mutation custody.MutationResult
 		want     string
 	}{
-		{"secret generate", custody.MutationResult{}, "[SKIPPED] No generated Secret is declared\n\n  Changed    none\n  Unchanged  none\n"},
-		{"secret generate --name b", custody.MutationResult{Name: "b", Changed: 1, ChangedNames: []string{"b"}}, "[OK] Secrets generated\n\n  Changed    b\n  Unchanged  none\n"},
-		{"secret delete --name b --yes", custody.MutationResult{Name: "b", Unchanged: 1}, "[SKIPPED] Secret b has no current version; nothing was deleted\n"},
+		{"secret generate", custody.MutationResult{}, "  ○ No generated Secret is declared\n\n    Changed    none\n    Unchanged  none\n"},
+		{"secret generate --name b", custody.MutationResult{Name: "b", Changed: 1, ChangedNames: []string{"b"}}, "  ✓ Secrets generated\n\n    Changed    b\n    Unchanged  none\n"},
+		{"secret delete --name b --yes", custody.MutationResult{Name: "b", Unchanged: 1}, "  ○ Secret b has no current version; nothing was deleted\n"},
 		{"secret generate", custody.MutationResult{Changed: 1}, ""},
 		{"secret generate", custody.MutationResult{Changed: 1, ChangedNames: []string{"b"}, Parts: []secrets.Part{secrets.ValuePart}}, ""},
 		{"secret generate", custody.MutationResult{Changed: 1, Unchanged: 1, ChangedNames: []string{"b"}, UnchangedNames: []string{"b"}}, ""},
@@ -301,8 +301,8 @@ func TestSecretTextEscapesOnce(t *testing.T) {
 			t.Fatalf("encryption status text = %q, missing %q", text, want)
 		}
 	}
-	first := strings.Index(text, "\n"+shown("a-key")+"  "+shown("active")+"   3\n")
-	second := strings.Index(text, "\n"+shown("b-key")+"  "+shown("retired")+"  8\n")
+	first := strings.Index(text, shown("a-key"))
+	second := strings.Index(text, shown("b-key"))
 	if first < 0 || second < first {
 		t.Fatalf("encryption status keys = %q, want %s then %s", text, shown("a-key"), shown("b-key"))
 	}

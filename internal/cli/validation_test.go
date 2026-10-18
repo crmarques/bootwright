@@ -31,7 +31,11 @@ func TestFlagRelationshipsAndFormats(t *testing.T) {
 		{"machine list --power-status", true}, {"machine list --power-status --output json", true}, {"machine list --power-status --silent", false}, {"machine list --power-status --silent=false", true},
 		{"version --context=", true}, {"version --context=bad.name", false}, {"version --ssh-user=account", true}, {"version --ssh-user=Account", false}, {"version --ssh-user-for-provisioned", false}, {"version --ssh-user=account --ssh-user-for-provisioned", true}, {"status --ssh-ask-sudo-password --output=json", false}, {"status --ssh-ask-sudo-password=false --output=json", true},
 		{"setup --wheel-mirror file:///srv/wheels", true}, {"setup --wheel-mirror https://mirror.example/wheels --dry-run", true}, {"setup --wheel-mirror http://mirror.example/wheels", false}, {"setup --wheel-mirror https://user@mirror.example/wheels", false}, {"setup --wheel-mirror https://mirror.example:8443/wheels", false}, {"setup --wheel-mirror https://mirror.example/wheels?token=x", false}, {"setup --wheel-mirror file://host/srv/wheels", false}, {"setup --wheel-mirror wheels", false}, {"setup --wheel-mirror ftp://mirror.example/wheels", false},
-		{"setup --download-only --dest-dir wheels", true}, {"setup --download-only --dest-dir wheels --wheel-mirror file:///srv/wheels", true}, {"setup --download-only", false}, {"setup --download-only --dest-dir=", false}, {"setup --dest-dir wheels", false}, {"setup --download-only --dest-dir wheels --dry-run", false}, {"setup --download-only --dest-dir wheels --output json", false}, {"setup --download-only=false --dest-dir wheels", false},
+		{"setup --download-only --dest-dir wheels", true}, {"setup --download-only --dest-dir wheels --wheel-mirror file:///srv/wheels", true}, {"setup --download-only", false}, {"setup --download-only --dest-dir=", false}, {"setup --dest-dir wheels", false}, {"setup --download-only --dest-dir wheels --dry-run", false}, {"setup --download-only --dest-dir wheels --output json", true}, {"setup --download-only=false --dest-dir wheels", false},
+		{"status --output yaml", true}, {"version -oyaml", true}, {"version -o=json", true}, {"setup --output yaml --yes", true},
+		{"version --width 0", true}, {"version --width 24", true}, {"version --width 500", true}, {"version --width 23", false}, {"version --width 501", false}, {"version --width invalid", false},
+		{"version --detail full --color always --progress never --ascii", true}, {"version --detail invalid", false}, {"version --color invalid", false}, {"version --progress invalid", false},
+		{"machine list --silent --output yaml", false}, {"machine stop --name demo --output yaml", false}, {"machine stop --name demo --output yaml --yes", true}, {"machine trust --output yaml --dry-run", true},
 		{"context use --name= --name=demo", false}, {"context use --name=INVALID --name=demo", true}, {"status --output=invalid --output=text", true}, {"status --output= --output=text", false}, {"version --ssh-user= --ssh-user=account", false}, {"version --context= --context=demo", true},
 	}
 	for _, tc := range cases {
@@ -131,7 +135,7 @@ func TestMediaURLBoundaries(t *testing.T) {
 	} {
 		args := []string{"media", "add", "--name", "image.iso", "--from-url", value, "--sha256", strings.Repeat("a", 64)}
 		code, _, errOut, record := runRecorded(args)
-		if code != 2 || record.calls != 0 || !strings.Contains(errOut, want) {
+		if code != 2 || record.calls != 0 || !strings.Contains(strings.Join(strings.Fields(errOut), " "), want) {
 			t.Errorf("--from-url %q: code=%d calls=%d err=%q, want exit 2 naming %q", value, code, record.calls, errOut, want)
 		}
 	}
@@ -151,7 +155,7 @@ func TestMediaFileBoundaries(t *testing.T) {
 		longest + "a":           "--from-file must name a path whose file:// URL is at most 512 bytes",
 	} {
 		code, _, errOut, record := runRecorded([]string{"media", "add", "--name", "image.iso", "--from-file", value})
-		if code != 2 || record.calls != 0 || !strings.Contains(errOut, want) {
+		if code != 2 || record.calls != 0 || !strings.Contains(strings.Join(strings.Fields(errOut), " "), want) {
 			t.Errorf("--from-file %q: code=%d calls=%d err=%q, want exit 2 naming %q", value, code, record.calls, errOut, want)
 		}
 	}

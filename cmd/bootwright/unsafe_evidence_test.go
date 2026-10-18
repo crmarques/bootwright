@@ -17,8 +17,8 @@ import (
 // acknowledged deletion abandons the context and leaves anything outside the
 // store intact.
 func TestUnsafeEvidenceIsRefusedNamingItsContextEntryAndExit(t *testing.T) {
-	prefix := "[FAIL] context.state: context alpha cannot be verified: contexts/alpha/state/mutation.json: "
-	suffix := "; next: remove contexts/alpha/state/mutation.json beneath the state root, which leaves nothing to prove what the context owns, " +
+	prefix := "  error  context.state\n    context alpha cannot be verified: contexts/alpha/state/mutation.json: "
+	suffix := "\n    Next: remove contexts/alpha/state/mutation.json beneath the state root, which leaves nothing to prove what the context owns, " +
 		"then abandon whatever it owns with bootwright context delete --name alpha --purge --allow-orphans; or restore the whole store from a matching backup\n"
 	for name, damage := range map[string]func(evidence, outside string) error{
 		"permissions": func(evidence, _ string) error { return os.Chmod(evidence, 0644) },
@@ -63,7 +63,7 @@ func TestUnsafeEvidenceIsRefusedNamingItsContextEntryAndExit(t *testing.T) {
 				{"destroy", "--context", "alpha", "--yes"},
 			} {
 				_, stderr := contextRun(t, services, 1, args...)
-				if !strings.HasPrefix(stderr, prefix) || !strings.HasSuffix(stderr, suffix) || strings.Contains(stderr, root) {
+				if !strings.HasPrefix(humanContent(stderr), humanContent(prefix)) || !strings.HasSuffix(humanContent(stderr), humanContent(suffix)) || strings.Contains(stderr, root) {
 					t.Fatalf("%v refused with %q", args, stderr)
 				}
 			}

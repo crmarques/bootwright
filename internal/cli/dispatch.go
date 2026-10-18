@@ -84,7 +84,7 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 		return s.invokeContexts(ctx, path, &values, args)
 	case "add-ons list", "add-ons add", "add-ons delete":
 		return commandResult{}, s.invokeAddOnCatalog(ctx, path, &values, args)
-	case "secret set", "secret generate", "secret check", "secret list", "secret show", "secret delete":
+	case "secret set", "secret generate", "secret check", "secret list", "secret info", "secret show", "secret delete":
 		return s.invokeSecrets(ctx, path, &values, args)
 	case "secret encryption init", "secret encryption status", "secret encryption rotate":
 		return s.invokeEncryption(ctx, path, &values, args)
@@ -114,7 +114,7 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 		return commandResult{}, s.invokeInstaller(ctx, path, &values, args)
 	case "render storage":
 		return commandResult{}, s.invokeStorageArtifacts(ctx, path, &values, args)
-	case "machine list":
+	case "machine list", "machine info":
 		return s.invokeMachineInventory(ctx, path, &values, args)
 	case "machine rsh", "machine exec":
 		return s.invokeMachineAccess(ctx, path, &values, args)

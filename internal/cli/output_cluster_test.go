@@ -143,7 +143,9 @@ func clusterGoldens() []cliGolden {
 	list := func(r *dispatchRecord) { r.result.clusterList = clusterListResult() }
 	revealed := func(r *dispatchRecord) { r.result.clusterInfo = storageOnly(revealedCeph(false)) }
 	unproved := func(r *dispatchRecord) { r.result.clusterInfo = storageOnly(revealedCeph(true)) }
-	warning := "[WARN] access.unproved: the dashboard administrator password of StorageCluster storage was kept from an apply that never proved the dashboard reachable, so the access it grants was not proved\n"
+	warning := "  warning  access.unproved\n" +
+		"    the dashboard administrator password of StorageCluster storage was kept from an apply that\n" +
+		"    never proved the dashboard reachable, so the access it grants was not proved\n"
 	return []cliGolden{
 		{golden: "cli-cluster-list", args: "cluster list", record: list},
 		{golden: "cli-cluster-list-json", args: "cluster list --output json", record: list},

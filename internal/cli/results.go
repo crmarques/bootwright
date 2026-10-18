@@ -34,6 +34,11 @@ func encodingFailure(ctx context.Context, err error) error {
 
 func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path string, result commandResult) (bool, error) {
 	out, errOut := r.config.Out, r.config.ErrOut
+	if selectedStructured(command) {
+		if handled, err := writeAdditionalStructuredResult(out, command, path, result); handled {
+			return true, err
+		}
+	}
 	switch path {
 	case "preflight storage-cluster":
 		if result.storagePreflight != nil {
@@ -56,26 +61,8 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		if result.validation != nil {
 			return true, writeValidation(out, errOut, path, result.validation, selectedJSON(command))
 		}
-	case "context init", "context update":
-		if validAdmission(result.admission) {
-			return true, writeAdmission(out, errOut, path, result.admission)
-		}
-	case "context use":
-		if result.use != nil && validContextSummary(result.use.Context) {
-			return true, writeContextUse(out, result.use)
-		}
-	case "context list":
-		if validContextList(result.list) {
-			return true, writeContextList(out, result.list)
-		}
-	case "context current":
-		if result.current != nil && validContextSummary(result.current.Context) {
-			return true, writeContextCurrent(out, result.current, boolValue(command.Flags(), "short"))
-		}
-	case "context delete":
-		if result.deletion != nil && result.deletion.Name != "" && result.deletion.Outcome == "deleted" {
-			return true, writeContextDelete(out, errOut, result.deletion)
-		}
+	case "context init", "context update", "context use", "context list", "context current", "context delete":
+		return r.writeContextResult(command, path, result)
 	case "secret set", "secret generate", "secret delete":
 		if validSecretMutation(path, result.secretMutation) {
 			return true, writeSecretMutation(out, path, result.secretMutation)
@@ -83,6 +70,10 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 	case "secret check":
 		if availableSecretCheck(result.secretCheck) {
 			return true, writeSecretCheck(out, errOut, path, result.secretCheck, nil, 0, selectedJSON(command))
+		}
+	case "secret info":
+		if validSecretList(result.secretList) {
+			return true, writeSecretInfo(out, path, result.secretList, selectedStructured(command))
 		}
 	case "secret list":
 		if validSecretList(result.secretList) {
@@ -95,6 +86,10 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 	case "media list":
 		if result.mediaList != nil {
 			return true, writeMediaList(out, path, result.mediaList, selectedJSON(command))
+		}
+	case "machine info":
+		if validMachineList(result.machines) {
+			return true, writeMachineInfo(out, path, result.machines, selectedStructured(command))
 		}
 	case "machine list":
 		if validMachineList(result.machines) {
@@ -132,6 +127,33 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 	return false, nil
 }
 
+func (r *Runner) writeContextResult(command *cobra.Command, path string, result commandResult) (bool, error) {
+	out, errOut := r.config.Out, r.config.ErrOut
+	switch path {
+	case "context init", "context update":
+		if validAdmission(result.admission) {
+			return true, writeAdmission(out, errOut, path, result.admission)
+		}
+	case "context use":
+		if result.use != nil && validContextSummary(result.use.Context) {
+			return true, writeContextUse(out, result.use)
+		}
+	case "context list":
+		if validContextList(result.list) {
+			return true, writeContextList(out, result.list)
+		}
+	case "context current":
+		if result.current != nil && validContextSummary(result.current.Context) {
+			return true, writeContextCurrent(out, result.current, boolValue(command.Flags(), "short"))
+		}
+	case "context delete":
+		if result.deletion != nil && result.deletion.Name != "" && result.deletion.Outcome == "deleted" {
+			return true, writeContextDelete(out, errOut, result.deletion)
+		}
+	}
+	return false, nil
+}
+
 func (r *Runner) writeLifecycleInspection(ctx context.Context, command *cobra.Command, path string, result commandResult) (bool, error) {
 	out := r.config.Out
 	switch {
@@ -161,10 +183,11 @@ func writeReveal(out, errOut io.Writer, command *cobra.Command, path string, res
 	return false, nil
 }
 
-// createdLogs names the private logs an invocation created before it failed.
-// A power verb's run retains its output before its adapter runs and returns
-// that name beside a refusal, so its failure envelope can list every file.
+// createdLogs preserves each private log reference even when its invocation failed.
 func (r commandResult) createdLogs() []string {
+	if r.lifecycleOperation != nil {
+		return r.lifecycleOperation.Logs
+	}
 	return powerLogs(r.power)
 }
 
@@ -175,17 +198,18 @@ func (r *Runner) writeNegativeSecretCheck(command *cobra.Command, path string, r
 	return true, writeSecretCheck(r.config.Out, r.config.ErrOut, path, result.secretCheck, diagnostics, 1, selectedJSON(command))
 }
 
-// writeExecutedLifecycle presents an operation that ran and then failed. The
-// operation summary, its log reference and its receipt are the evidence the
-// operator continues from, so a terminal failure keeps them on standard output
-// and carries the diagnostics on standard error. A refusal registers no
-// operation and therefore has no result to present.
+// An executed failure keeps its result, logs and receipt for continuation.
+// Human diagnostics use stderr; structured diagnostics share its envelope.
+// A refusal registers no operation and has no result.
 func (r *Runner) writeExecutedLifecycle(path string, result commandResult, diagnostics []diagnostic) (bool, error) {
 	if path != "apply" && path != "destroy" {
 		return false, nil
 	}
 	if result.lifecycleOperation == nil {
 		return false, nil
+	}
+	if structuredFormat(presentationFor(r.config.Out).Format) {
+		return true, writeStructuredOperation(r.config.Out, path, result.lifecycleOperation, diagnostics, 1)
 	}
 	if err := writeLifecycleOperation(r.config.Out, result.lifecycleOperation); err != nil {
 		return true, err
@@ -208,6 +232,13 @@ func interruptedLifecycle(ctx context.Context, path string, result commandResult
 // log reference, next command and receipt, then the interrupt alone: what the
 // cancellation made each block report is in the result and its logs.
 func (r *Runner) writeInterruptedLifecycle(path string, operation *lifecycle.OperationResult) int {
+	if structuredFormat(presentationFor(r.config.Out).Format) {
+		reported := []diagnostic{{Severity: "error", Code: "runtime.interrupted", Message: "operation interrupted", Remediation: operation.NextCommand}}
+		if writeStructuredOperation(r.config.Out, path, operation, reported, 130) != nil {
+			return 1
+		}
+		return 130
+	}
 	if err := writeLifecycleOperation(r.config.Out, operation); err != nil {
 		return 1
 	}

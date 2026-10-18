@@ -1,10 +1,12 @@
 # Command-line Interface
 
 `bootwright` exposes the [desired-state API](api.md) to operators and automation.
-Equivalent logical input produces the same ordered output regardless of TTY,
-locale, map iteration or discovery order. Prompts, explicit sensitive exports,
-and the elapsed times, terminal redraw and interleaving of concurrent steps'
-[progress rows](cli/output.md#long-running-progress) are the named exceptions.
+Equivalent logical input produces the same ordered result facts regardless of
+TTY, locale, map iteration or discovery order. Human presentation may vary with
+explicit flags and injected terminal capabilities; structured JSON and YAML
+retain their documented DTOs. Prompts, explicit sensitive exports, and the
+elapsed times, terminal redraw and interleaving of concurrent steps' [progress
+rows](cli/output.md#long-running-progress) follow their named stream contracts.
 Progress is presentation: the plan, the result rows and the receipt that follow
 it are ordered by the frozen plan whatever ran together.
 
@@ -68,11 +70,11 @@ CLI owns its temporary message and exit status. Such an invocation:
   state-root resolution, standard-input read, prompt, privilege escalation,
   secret access, random generation, ambient-configuration read, filesystem
   stat, open, read, or write, process launch, network access, or remote effect;
-- in human mode, writes no standard output, emits one LF-terminated
-  `[FAIL] cli.not-implemented: bootwright <command> is not implemented`
-  diagnostic on standard error, and exits `1`; and
-- when the command supports and selects JSON output, emits the normal single
-  JSON envelope on standard output with `ok: false`, `exitCode: 1`,
+- in human mode, writes no standard output, emits one LF-terminated error
+  group on standard error with code `cli.not-implemented` and message
+  `bootwright <command> is not implemented`, and exits `1`; and
+- when JSON or YAML output is selected, emits the normal single
+  selected-format envelope on standard output with `ok: false`, `exitCode: 1`,
   `result: null`, one `cli.not-implemented` diagnostic, and empty `logs`, emits
   nothing on standard error, and exits `1`.
 
@@ -102,19 +104,20 @@ not.
 
 A raw-bound violation always emits one source-free `cli.usage` diagnostic plus
 concise root help on standard error, emits nothing on standard output, and exits
-`2`. It never establishes JSON mode, and neither `--help` nor argument order can
+`2`. It never establishes a structured output mode, and neither `--help` nor argument order can
 bypass it. The diagnostic does not echo an argument or its contents. Rejection
 invokes no command or unavailable handler and performs no standard-input,
 ambient-configuration, filesystem, state, secret, random, prompt, privilege,
 process, network, or remote I/O.
 
 Command and flag names are case-sensitive and may not be abbreviated. A long
-value flag accepts `--flag <value>` or `--flag=<value>`; `-f` additionally
-accepts `-f<value>`. A Boolean flag accepts its bare form as `true` or an
+value flag accepts `--flag <value>` or `--flag=<value>`; `-f` and `-o` additionally
+accept attached values such as `-f<value>` and `-ojson`. A Boolean flag accepts
+its bare form as `true` or an
 attached value such as `--yes=false` or `-h=false`; a separated token is a
 positional operand, not its value. Boolean values use Go's case-sensitive
 `strconv.ParseBool` spellings: `1`, `t`, `T`, `TRUE`, `true`, `True`, `0`, `f`,
-`F`, `FALSE`, `false`, and `False`. The only shorthands are `-h` and `-f`.
+`F`, `FALSE`, `false`, and `False`. The only shorthands are `-h`, `-f` and inherited `-o`.
 
 A command-local flag is recognized only after its complete owning command path
 has been resolved and is not inherited by descendants. Before the complete
@@ -148,7 +151,7 @@ resolved scalar value under the last-occurrence-wins rule.
 `--clusters`, `--machines`, `--replace`, and `--stage` are comma-separated
 lists, and so are the required `--name` of `machine start`, `machine stop`,
 `machine restart` and `machine exec`, the required `--name` and the `--node` of
-`cluster exec`, and the `--name` of `cluster info`.
+`cluster exec`, and the optional `--name` of `cluster info`, `machine info` and `secret info`.
 Whitespace around a member is ignored, empty members are ignored, and duplicate
 members collapse to their first occurrence. Omission selects all eligible
 objects only where the command row says “default all.” Empty resolved lists
@@ -174,6 +177,7 @@ preserve these command-specific compatibility rules:
   `--node` of `cluster exec`, must likewise resolve to at least one member, so
   a comma-only value is a usage error. `cluster rsh` opens one interactive
   session, so a comma in its `--name` or `--node` is a usage error; and
+- `machine info` and `secret info` omit `--name` to select all metadata rows; supplied names match exactly after list normalization. Unknown names and separator-only lists select no rows. An explicitly empty scalar occurrence still fails under the general rule above; and
 - `cluster info --secrets` requires `--name` to name exactly one cluster after
   normalization, so a list of several is a usage error.
 
@@ -272,7 +276,7 @@ replacement during authentication cannot substitute code. Sudo policies that
 refuse that executable path fail closed. A sudoers rule must therefore match
 `/proc/<pid>/exe`: sudo compares a command's base name before its path, so a
 rule naming the Bootwright binary does not match the re-execution. Sudo owns
-terminal password handling; Bootwright never captures the password. JSON or
+terminal password handling; Bootwright never captures the password. JSON, YAML or
 noninteractive invocation uses noninteractive sudo and fails without cached or
 passwordless authorization. Preserve argv, stdin payloads, outputs and status.
 An interactive invocation hands sudo the invoking terminal itself on every
@@ -290,7 +294,7 @@ removes. Every later byte passes unchanged. In a human noninteractive
 invocation, lines beginning with `sudo:` and a space that arrive before the
 start line are held, at most 16 of at most 4096 bytes each, and reach standard
 error once the child starts; any other line releases the held lines in order
-and ends the holding. An interactive invocation passes them at once. JSON mode
+and ends the holding. An interactive invocation passes them at once. Structured mode
 forwards nothing that arrives before the start line, whatever it begins with,
 such as a sudoers denial, so its standard error stays empty: it holds every
 such line within the same bounds, drops any beyond them, and discards what it
@@ -300,13 +304,13 @@ result was written, the supervisor reports `runtime.interrupted` after an
 interrupt and `runtime.privilege` otherwise. An interactive invocation whose
 sudo ran ends with the child's status and no report of the supervisor's own,
 since sudo's refusals and the child's own diagnostics, an interrupt's included,
-already reached standard error. A JSON child that exits nonzero without writing
+already reached standard error. A structured child that exits nonzero without writing
 its document reports `runtime.interrupted` after an interrupt,
 `runtime.internal` naming its status once it started, and `runtime.privilege`
 otherwise. In a human noninteractive invocation, when the child never started
 and nothing but held lines reached standard error, the supervisor reports
 `runtime.interrupted` after an interrupt, and `runtime.privilege` only when sudo
-exited 1 having held a line. That `runtime.privilege` report, and a JSON
+exited 1 having held a line. That `runtime.privilege` report, and a structured
 invocation's, carries the held lines, each without sudo's prefix, as the reason
 sudo refused. The first held line that names a cause decides its remedy: a
 required password points to `sudo -v` in that terminal, or running as root; a
@@ -345,7 +349,7 @@ Keep the same parent and terminal identity. An unambiguous positive effective
 timeout refreshes at half its duration, including fractional minutes. Zero and
 negative timeouts need no expiry refresh. Unknown policy uses a 30-second
 best-effort interval; never assume a five-minute timeout. Refresh failure or
-timeout warns once on standard error, except in JSON mode, whose standard error
+timeout warns once on standard error, except in structured mode, whose standard error
 stays empty, and stops refresh without terminating the elevated command.
 Completion/cancellation stops and reaps every refresh process. Never leave a
 daemon or invalidate the user's wider sudo cache. The same `sudo -n -ll`
@@ -391,14 +395,14 @@ remedy `sudo install -m 0755 <path> /usr/local/bin/bootwright`. The invoking
 account's own build output, such as `bin/bootwright` at mode `0755` beneath its
 home, stays allowed.
 
-For a usage failure, JSON mode is established only after an exact
-JSON-capable command is resolved and its final scalar `--output` occurrence
-validly selects `json`. Once established, a later usage failure emits the normal
-JSON envelope on standard output with `ok: false`, `exitCode: 2`, `result: null`,
-one source-free `cli.usage` diagnostic, and empty `logs`; it emits nothing on
-standard error. The position of the valid final `--output json` occurrence does
-not change this result. An error before that mode selection remains a human
-usage failure. Explicit help remains human under the precedence above.
+After raw bounds pass, a valid final inherited `--output json` or `--output
+yaml` selects the corresponding single-document envelope for usage failures,
+including command-resolution failures. It carries `ok: false`, `exitCode: 2`,
+`result: null`, one source-free `cli.usage` diagnostic and empty `logs`, and
+writes nothing on standard error. The selector may precede or follow the
+command path. Invalid selectors remain human failures, and flag-shaped remote
+payload never selects Bootwright's mode. Explicit help retains precedence over
+semantic validation and uses the selected human or structured representation.
 
 ## Context and setup behavior
 
@@ -457,14 +461,14 @@ unavailable, forbidden, malformed, or contradictory observation is an explicit
 failed or unknown check, never success or absence.
 
 Any otherwise syntactically and semantically valid `render` invocation prints
-human render help and succeeds when neither `--input-dir` nor `--output-dir` is
-supplied. This includes an invocation with `--output json` or other valid render
-flags: it emits no JSON envelope and performs no command work. The path flags
+render help and succeeds when neither `--input-dir` nor `--output-dir` is
+supplied. It uses the selected human, JSON or YAML help representation and
+performs no command work. The path flags
 otherwise follow their [relationships](cli/commands.md#flag-relationships-and-safeguards).
 What the artifact renderers write, and the Environment preflight families'
 dry-run and host-key detail, are [deferred](deferred/cli-access-and-rendering.md).
 `render effective` is the read-only exception: text mode emits canonical
-effective YAML and JSON mode places the complete canonical effective-state
+effective YAML, and either structured mode places the complete canonical effective-state
 array in `result.effectiveState`, alongside admission `counts`; neither mode
 writes an artifact. Rendering contacts no host, management controller, cluster,
 or provider, launches no managed
@@ -797,6 +801,19 @@ log, history, cache, terminal title, or second stream. Callers are responsible
 for a restrictive destination if they redirect an explicit reveal. Help and
 completion never reveal.
 
+`machine info [--name <list>]` reads the same local inventory service as
+`machine list`, with power reads disabled. It filters exact names at the CLI
+boundary after the service returns, retaining an independent copy of selected
+rows. Human output groups available Placement, Access and Evidence facts;
+full detail adds declared addresses and provider identity. No host, management
+controller, trust probe or credential is contacted or read. Its structured
+result has the same fields as the machine listing, with its own command name.
+
+`secret info [--name <list>]` similarly filters the existing metadata listing.
+It groups Identity and Custody facts without checking availability, decrypting
+material, invoking reveal, or inventing usage metadata. The
+[Secrets contract](secrets.md#acquisition-and-commands) owns its metadata scope.
+
 `machine list` reports two independent things about each selected Machine and
 never conflates them. Its lifecycle position is how far this context's own
 operations have carried the Machine, which durable evidence proves locally. Its
@@ -875,8 +892,8 @@ The target and its applicability are settled from the compiled graph before
 any custody read, so a name that selects nothing, or selects a StorageCluster,
 reads no credential bytes. A store this build cannot open refuses with its own
 [`secret.store.*` diagnostic](secrets.md#local-keyring-v4). The discovery
-action is `cluster info`. On success, standard output is exactly the custodied
-bytes with no added LF, and standard error is empty, or, for a copy custody
+action is `cluster info`. In default text mode, successful standard output is
+exactly the custodied bytes with no added LF, and standard error is empty, or, for a copy custody
 holds unproved, holds exactly one `access.unproved` warning naming the cluster and saying its
 access was not proved, as the copy was kept from an installation whose
 completion was never proved; on any failure, standard output is empty
@@ -885,7 +902,11 @@ apply that proves the installation complete, or from the removal that kept the
 unproved copy before deleting the installer's work area
 ([produced material custody](state-reconciliation.md#produced-material-custody)),
 until the destroy that completes the context's removal withdraws it, and
-`context delete --purge --allow-orphans` removes it with the keyring.
+`context delete --purge --allow-orphans` removes it with the keyring. Explicit
+JSON or YAML output wraps the same sensitive bytes in the
+[structured export envelope](cli/output.md#streams-and-exit-status), places any
+unproved-access warning in envelope diagnostics, and leaves standard error
+empty.
 
 ### Machine SSH sessions
 
@@ -1189,7 +1210,7 @@ non-interactive or canceled confirmation records nothing. A plan that cannot
 be written to standard output asks nothing and records nothing, and fails
 `trust.identity` naming the context and the repeat of `machine trust` with
 `--context`.
-Under `--yes` or `--dry-run`, and in JSON, which
+Under `--yes` or `--dry-run`, and in either structured format, which
 [requires one of them](cli/commands.md#flag-relationships-and-safeguards),
 nothing precedes the result, which carries every Machine's row once.
 

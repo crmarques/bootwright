@@ -23,7 +23,11 @@ func NewInvocationProgress(out io.Writer, columns func() int, jsonMode bool) Inv
 	if jsonMode {
 		return silentProgress{}
 	}
-	return NewLifecycleProgressPresenter(out, columns)
+	presenter := NewLifecycleProgressPresenter(out, columns)
+	if presentationFor(out).Progress == "never" {
+		return quietInvocationProgress{presenter: presenter}
+	}
+	return presenter
 }
 
 type silentProgress struct{}

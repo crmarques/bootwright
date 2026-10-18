@@ -88,7 +88,11 @@ func writeMachineList(out io.Writer, command string, result *inventory.ListResul
 		}
 		rows = append(rows, cells)
 	}
-	text.table(headings, rows)
+	states := []int{6}
+	if result.PowerRead {
+		states = append(states, 7)
+	}
+	text.resourceTable(headings, rows, tableStyle{Kind: "machine", Identity: 0, States: states})
 	return text.writeTo(out)
 }
 
@@ -108,4 +112,45 @@ func displayMachineList(result *inventory.ListResult) machineListPresentation {
 	return machineListPresentation{
 		Context: escapeDisplayLine(result.Context), Machines: rows, PowerRead: result.PowerRead,
 	}
+}
+
+// Machine info has its own documented DTO while preserving the inventory facts
+// used by the list presentation.
+type machineInfoPresentation machineListPresentation
+
+func (machineInfoPresentation) documentedResult() {}
+
+func writeMachineInfo(out io.Writer, command string, result *inventory.ListResult, jsonMode bool) error {
+	if jsonMode {
+		return writeEnvelope(out, commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0,
+			Result: machineInfoPresentation(displayMachineList(result)), Diagnostics: []diagnostic{}, Logs: []string{}})
+	}
+	var text display
+	if len(result.Machines) == 0 {
+		text.headline("OK", "No machines are selected")
+		return text.writeTo(out)
+	}
+	full := presentationFor(out).Detail == "full"
+	for _, row := range result.Machines {
+		text.resourceHeading("machine", row.Name, row.Lifecycle)
+		text.subsection("Placement")
+		fields := []field{{Label: "OS", Value: displayValue(row.OS)}, {Label: "Clusters", Value: displayValue(strings.Join(row.Clusters, ", "))}}
+		if full {
+			fields = append(fields, field{Label: "Provider", Value: displayValue(row.Provider)})
+		}
+		text.mutedFields(fields...)
+		text.subsection("Access")
+		text.mutedFields(field{Label: "Contact", Value: displayValue(row.Address)})
+		if full {
+			text.mutedFields(field{Label: "Addresses", Value: displayValue(strings.Join(row.IPs, ", "))})
+		}
+		text.subsection("Evidence")
+		text.mutedFields(field{Label: "Lifecycle", Value: row.Lifecycle})
+		power := "not read"
+		if result.PowerRead {
+			power = displayValue(row.Power)
+		}
+		text.mutedFields(field{Label: "Power", Value: power})
+	}
+	return text.writeTo(out)
 }

@@ -101,6 +101,7 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 		{"secret", "generate"},
 		{"secret", "check"},
 		{"secret", "list"},
+		{"secret", "info"},
 		{"secret", "show", "--name", "example", "--part", "value"},
 		{"secret", "delete", "--name", "example"},
 		{"secret", "encryption", "init"},
@@ -125,6 +126,7 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 		{"apply"},
 		{"destroy"},
 		{"machine", "list"},
+		{"machine", "info"},
 		{"machine", "rsh", "--name", "example"},
 		{"machine", "exec", "--name", "example", "--", "--help"},
 		{"machine", "start", "--name", "example"},
@@ -143,14 +145,14 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			code := runServices(context.Background(), args, &stdout, &stderr, services)
-			prefix := "[FAIL] cli.not-implemented: bootwright "
+			prefix := "  error  cli.not-implemented\n    bootwright "
 			if args[0] == "validate" && len(args) > 1 || args[0] == "context" && (args[1] == "init" || args[1] == "update") {
-				prefix = "[FAIL] input.not-found "
+				prefix = "  error  input.not-found\n"
 			} else if args[0] == "context" || args[0] == "secret" || args[0] == "validate" || args[0] == "preflight" && args[1] == "storage-cluster" ||
 				args[0] == "plan" || args[0] == "status" || args[0] == "apply" || args[0] == "destroy" ||
 				args[0] == "machine" || args[0] == "cluster" && (args[1] == "kubeconfig" || args[1] == "rsh" || args[1] == "exec" || args[1] == "list" || args[1] == "info") ||
 				args[0] == "render" && len(args) > 1 && args[1] == "effective" {
-				prefix = "[FAIL] context.state:"
+				prefix = "  error  context.state\n"
 			}
 			if args[0] == "context" && args[1] == "list" {
 				if code != 0 || stderr.Len() != 0 {
@@ -209,7 +211,7 @@ func TestComposedExplicitValidationIsContextFree(t *testing.T) {
 			if err := json.Unmarshal(out.Bytes(), &envelope); err != nil || !envelope.OK || envelope.Result.Counts.FilesSeen != 1 || envelope.Result.Counts.ObjectsDecoded != 2 || len(envelope.Diagnostics) != 0 {
 				t.Fatalf("complete compiler result %s: %v", out.String(), err)
 			}
-		} else if out.String() != "[OK] Desired state is valid (files seen: 1, objects decoded: 2)\n" {
+		} else if out.String() != "  ✓ Desired state is valid\n\n  Admission\n    Files seen       1\n    Objects decoded  2\n" {
 			t.Fatal(out.String())
 		}
 	}

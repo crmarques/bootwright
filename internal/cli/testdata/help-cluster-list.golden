@@ -1,18 +1,22 @@
-List container and storage clusters in canonical name order. Applicable to all selected ContainerClusters and StorageClusters, including external storage clusters.
+  bootwright / cluster list
+      List container and storage clusters in canonical name order. Applicable to all selected
+      ContainerClusters and StorageClusters, including external storage clusters.
 
-Usage:
-  bootwright cluster list [flags]
+  Usage
+    bootwright cluster list [flags]
 
-Examples:
-  bootwright cluster list --context lab
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
 
-Flags:
-      --output string   Select output mode (values: text, json) (default "text")
+  More detail
+    Use --help --detail full to include SSH overrides.
 
-Global Flags:
-      --context string             Select a context (default: current context)
-  -h, --help                       Show help for this command
-      --ssh-ask-sudo-password      Request the borrowed account's sudo password
-      --ssh-id-file string         Offer an explicit private key for eligible SSH access
-      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
-      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines
+  Examples
+    bootwright cluster list --context lab

@@ -1,0 +1,27 @@
+  ○ machine | controller · not-applied
+    Placement
+      OS        provided
+      Clusters  -
+    Access
+      Contact  controller.lab.example.test
+    Evidence
+      Lifecycle  not-applied
+      Power  not read
+  ○ machine | rhel-01 · applied
+    Placement
+      OS        installed
+      Clusters  -
+    Access
+      Contact  rhel-01.lab.example.test
+    Evidence
+      Lifecycle  applied
+      Power  not read
+  ○ machine | sno-01 · not-applied
+    Placement
+      OS        provided
+      Clusters  sno
+    Access
+      Contact  -
+    Evidence
+      Lifecycle  not-applied
+      Power  not read

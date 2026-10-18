@@ -1,18 +1,28 @@
-Open an SSH session as the Machine's resolved identity; confirm or refuse an unproved host key and return the client's exit status. The session runs as the identity the Machine's desired state authorizes, over a host key proved before any credential is offered; an unproved key is confirmed interactively or refused. The exit status is the client's.
+  bootwright / machine rsh
+      Open an SSH session as the Machine's resolved identity; confirm or refuse an unproved
+      host key and return the client's exit status. The session runs as the identity the
+      Machine's desired state authorizes, over a host key proved before any credential is
+      offered; an unproved key is confirmed interactively or refused. The exit status is the
+      client's.
 
-Usage:
-  bootwright machine rsh [flags]
+  Usage
+    bootwright machine rsh [flags]
 
-Examples:
-  bootwright machine rsh --context lab --name node
+  Command flags
+      --name  Select the exact object name (required)
 
-Flags:
-      --name string   Select the exact object name (required)
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
 
-Global Flags:
-      --context string             Select a context (default: current context)
-  -h, --help                       Show help for this command
-      --ssh-ask-sudo-password      Request the borrowed account's sudo password
-      --ssh-id-file string         Offer an explicit private key for eligible SSH access
-      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
-      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines
+  More detail
+    Use --help --detail full to include SSH overrides.
+
+  Examples
+    bootwright machine rsh --context lab --name node

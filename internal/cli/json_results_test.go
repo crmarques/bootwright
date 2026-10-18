@@ -16,6 +16,21 @@ import (
 
 // cliResults is every type a command may encode as its JSON result.
 var cliResults = []reflect.Type{
+	reflect.TypeFor[controllerPresentation](),
+	reflect.TypeFor[contextPresentation](),
+	reflect.TypeFor[contextListPresentation](),
+	reflect.TypeFor[contextAdmissionPresentation](),
+	reflect.TypeFor[contextDeletionPresentation](),
+	reflect.TypeFor[secretMutationPresentation](),
+	reflect.TypeFor[mediaMutationPresentation](),
+	reflect.TypeFor[encryptionMutationPresentation](),
+	reflect.TypeFor[setupDownloadPresentation](),
+	reflect.TypeFor[exportResult](),
+	reflect.TypeFor[helpPresentation](),
+	reflect.TypeFor[versionPresentation](),
+	reflect.TypeFor[planPresentation](),
+	reflect.TypeFor[operationPresentation](),
+
 	reflect.TypeFor[validationResult](),
 	reflect.TypeFor[storagePreflightResult](),
 	reflect.TypeFor[effectiveResult](),
@@ -31,6 +46,8 @@ var cliResults = []reflect.Type{
 	reflect.TypeFor[mediaListPresentation](),
 	reflect.TypeFor[clusterListPresentation](),
 	reflect.TypeFor[clusterInfoPresentation](),
+	reflect.TypeFor[machineInfoPresentation](),
+	reflect.TypeFor[secretInfoResult](),
 }
 
 // sharedResultLeaves are the only types from outside this package a result may

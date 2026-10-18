@@ -13,12 +13,13 @@ func secretCommands() []commandSpec {
 	return []commandSpec{
 		available(commandSpec{path: "secret set", short: "Store confidential material", flags: []flagSpec{nameFlag(), fileFlag("value-file", "Read a value from a file"), boolFlag("value-stdin", "Read a value from standard input"), undisclosedFlag("username", "Store this username with a password"), fileFlag("password-file", "Read a password from a file"), boolFlag("password-stdin", "Read a password from standard input"), fileFlag("certificate-file", "Read a certificate or CA bundle from a file"), fileFlag("private-key-file", "Read a private key from a file"), fileFlag("public-key-file", "Read an SSH public key from a file"), confirmationFlag()}, long: "Store one declared contextStore secret using the exact input flags for its type. Stdin-backed replacement requires --yes."}),
 		available(commandSpec{path: "secret generate", short: "Generate declared secret material", flags: []flagSpec{stringFlag("name", "Select one generated secret (default: all)"), boolFlag("renew", "Renew selected generated material")}}),
-		available(commandSpec{path: "secret check", short: "Check secret availability and types", flags: []flagSpec{outputFlag()}}),
-		available(commandSpec{path: "secret list", short: "List secret metadata", flags: []flagSpec{outputFlag()}}),
+		available(commandSpec{path: "secret check", short: "Check secret availability and types"}),
+		available(commandSpec{path: "secret info", short: "Inspect secret identity and custody metadata", flags: []flagSpec{stringFlag("name", "Select comma-separated secret names (default: all)")}, long: "Show stored secret identity, parts, and custody metadata. --name takes a comma-separated list (default: all). This command reads metadata only; it never reads or reveals secret material."}),
+		available(commandSpec{path: "secret list", short: "List secret metadata"}),
 		available(commandSpec{path: "secret show", short: "Export raw sensitive secret bytes to standard output", flags: []flagSpec{nameFlag(), requiredEnumFlag("part", "Select the secret part", "value", "username", "password", "certificate", "private-key", "public-key")}}),
 		available(commandSpec{path: "secret delete", short: "Remove an active secret mapping, retaining bound versions", flags: []flagSpec{nameFlag(), confirmationFlag()}}),
 		available(commandSpec{path: "secret encryption init", short: "Initialize or recover the configured confidential store"}),
-		available(commandSpec{path: "secret encryption status", short: "Show encryption metadata", flags: []flagSpec{outputFlag()}}),
+		available(commandSpec{path: "secret encryption status", short: "Show encryption metadata"}),
 		available(commandSpec{path: "secret encryption rotate", short: "Rotate the active encryption key", flags: []flagSpec{confirmationFlag()}}),
 	}
 }
@@ -68,6 +69,13 @@ func (s Services) invokeSecrets(ctx context.Context, path string, values *reques
 			ContextName: values.text("context"),
 		}, s.Secrets.List)
 		return commandResult{secretList: result}, err
+	case "secret info":
+		names := selectedInfoNames(values)
+		result, err := invokeResult(ctx, values, custody.ListRequest{ContextName: values.text("context")}, s.Secrets.List)
+		if err != nil {
+			return commandResult{}, err
+		}
+		return commandResult{secretList: selectSecretInfo(result, names)}, nil
 	case "secret show":
 		result, err := invokeResult(ctx, values, custody.ShowRequest{
 			ContextName: values.text("context"),

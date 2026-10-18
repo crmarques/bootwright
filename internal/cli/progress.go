@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 )
 
 // progressHeartbeat bounds how long an appended running row may stay silent
@@ -24,14 +23,13 @@ const (
 // replacement overwrites the running row completely.
 const eraseLine = "\r\x1b[2K"
 
-// progressElision marks a redrawn row the terminal is too narrow to show
-// whole. progressWrapGuard keeps the last column empty, because a terminal
+// progressWrapGuard keeps the last column empty, because a terminal
 // that wraps as soon as a line is filled would start a second physical line
 // the erase cannot reach.
-const (
-	progressElision   = "..."
-	progressWrapGuard = 1
-)
+const progressWrapGuard = 1
+
+// progressElision is the shared renderer marker asserted by redraw tests.
+const progressElision = "..."
 
 // progressTokenWidth aligns streamed rows without knowing which tokens follow:
 // every token a running step can stream is at most as wide as [RUNNING].
@@ -62,6 +60,8 @@ func systemProgressClock() progressClock {
 type progressEvent struct {
 	Heading   string
 	Label     string
+	Target    string
+	Identity  string
 	Detail    string
 	Status    string
 	Position  int
@@ -78,9 +78,10 @@ type progressEvent struct {
 // because the heartbeat fires on the clock's goroutine while blocks running at
 // the same time each report on their own.
 type progressPresenter struct {
-	out     io.Writer
-	clock   progressClock
-	columns progressColumns
+	out      io.Writer
+	clock    progressClock
+	columns  progressColumns
+	overview func() []string
 
 	mu      sync.Mutex
 	heading string
@@ -96,6 +97,8 @@ type progressPresenter struct {
 
 type progressStep struct {
 	label     string
+	target    string
+	identity  string
 	position  int
 	total     int
 	detail    string
@@ -114,7 +117,7 @@ type progressStep struct {
 }
 
 func (p *progressPresenter) report(ctx context.Context, event progressEvent) {
-	if p == nil || p.out == nil || ctx.Err() != nil || event.Label == "" {
+	if p == nil || p.out == nil || ctx.Err() != nil || event.Label == "" || presentationFor(p.out).Progress == "never" {
 		return
 	}
 	p.mu.Lock()
@@ -127,6 +130,8 @@ func (p *progressPresenter) report(ctx context.Context, event progressEvent) {
 		p.steps = append(p.steps, step)
 	}
 	step.ctx = ctx
+	step.target = event.Target
+	step.identity = event.Identity
 	if event.Declared > 0 {
 		step.completed, step.declared = event.Completed, event.Declared
 	}
@@ -270,7 +275,7 @@ func (p *progressPresenter) openHeading(heading string) {
 	}
 	p.closeLine()
 	p.heading = heading
-	io.WriteString(p.out, "\n"+escapeDisplayLine(heading)+"\n")
+	io.WriteString(p.out, "\n"+styleAccent(escapeDisplayLine(heading), presentationFor(p.out))+"\n")
 }
 
 // closeLine ends the running block a terminal is still rewriting. Its rows stay
@@ -329,14 +334,23 @@ func (p *progressPresenter) append(step *progressStep, status, detail, suffix st
 func (p *progressPresenter) redraw(now time.Time) {
 	var out strings.Builder
 	p.erase(&out)
-	for index, step := range p.steps {
+	rows := []string{}
+	if p.overview != nil && p.heading == "Progress" {
+		rows = append(rows, p.overview()...)
+	}
+	for _, step := range p.steps {
+		rows = append(rows, p.row("running", step, step.detail, step.note))
+		step.reported = now
+	}
+	for index, row := range rows {
 		if index != 0 {
 			out.WriteString("\n")
 		}
-		out.WriteString(p.row("running", step, step.detail, step.note))
-		step.reported = now
+		if room := p.columns() - progressWrapGuard; room > 0 {
+			out.WriteString(fitDisplayRow(row, room))
+		}
 	}
-	p.drawn = len(p.steps)
+	p.drawn = len(rows)
 	if out.Len() != 0 {
 		io.WriteString(p.out, out.String())
 	}
@@ -368,17 +382,18 @@ func (p *progressPresenter) erase(out *strings.Builder) {
 // terminal reports, so the block's height is exactly one line per step.
 func (p *progressPresenter) row(status string, step *progressStep, detail, suffix string) string {
 	token := progressStatusToken(status)
-	lead := displayIndent + token + strings.Repeat(" ", max(progressTokenWidth-len(token), 0)+displayGap)
-	subject := progressPosition(step.position, step.total) + escapeDisplayLine(step.label)
+	opts := presentationFor(p.out)
+	lead := displayIndent + styleState(token, opts) + strings.Repeat(" ", max(progressTokenWidth-len(token), 0)+displayGap)
+	subject := progressPosition(step.position, step.total) + lifecycleActionLabel(step.label, step.target, step.identity, opts)
 	if detail != "" {
-		subject += ": " + escapeDisplayLine(detail)
+		subject += styleMuted(": "+escapeDisplayLine(detail), opts)
 		if step.declared > 0 {
-			subject += fmt.Sprintf(" - %d%%", step.completed*100/step.declared)
+			subject += styleMuted(fmt.Sprintf(" - %d%%", step.completed*100/step.declared), opts)
 		}
 	}
 	tail := ""
 	if suffix != "" {
-		tail = strings.Repeat(" ", displayGap) + suffix
+		tail = styleMuted(strings.Repeat(" ", displayGap)+suffix, opts)
 	}
 	if !p.terminal() {
 		return lead + subject + tail
@@ -404,21 +419,17 @@ func progressPosition(position, total int) string {
 func fitTerminalRow(lead, subject, tail string, columns int) string {
 	row := lead + subject + tail
 	columns -= progressWrapGuard
-	if columns <= 0 || utf8.RuneCountInString(row) <= columns {
+	if columns <= 0 {
+		return ""
+	}
+	if displayCellWidth(row) <= columns {
 		return row
 	}
-	room := columns - utf8.RuneCountInString(lead) - utf8.RuneCountInString(tail) - len(progressElision)
+	room := columns - displayCellWidth(lead) - displayCellWidth(tail)
 	if room <= 0 {
-		return cutColumns(row, columns)
+		return fitDisplayRow(row, columns)
 	}
-	return lead + cutColumns(subject, room) + progressElision + tail
-}
-
-func cutColumns(text string, columns int) string {
-	if utf8.RuneCountInString(text) <= columns {
-		return text
-	}
-	return string([]rune(text)[:columns])
+	return lead + fitDisplayRow(subject, room) + tail
 }
 
 // formatElapsed truncates to whole seconds and omits anything shorter than one

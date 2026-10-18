@@ -1,48 +1,66 @@
-ContainerCluster edge
-  Access
-  cluster exec        not-implemented  sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig
-                                       template (not-implemented): bootwright cluster exec --context lab --name edge --node <node> -- <command>...
-  cluster kubeconfig  ready            bootwright cluster kubeconfig --context lab --name edge
-  cluster kubectl     not-implemented  this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig
-                                       template (not-implemented): bootwright cluster kubectl --context lab --name edge -- <command>...
-  cluster oc          not-implemented  this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig
-                                       template (not-implemented): bootwright cluster oc --context lab --name edge -- <command>...
-  cluster rsh         not-implemented  sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig
-                                       template (not-implemented): bootwright cluster rsh --context lab --name edge --node <node>
-
-ContainerCluster okd-lab
-  Access
-  cluster exec        not-implemented  sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig
-                                       template (not-implemented): bootwright cluster exec --context lab --name okd-lab --node <node> -- <command>...
-  cluster kubeconfig  unavailable      this context holds no administrator kubeconfig for okd-lab until an apply proves its installation complete; run bootwright apply --context lab
-                                       template (unavailable): bootwright cluster kubeconfig --context lab --name okd-lab
-  cluster kubectl     not-implemented  this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig
-                                       template (not-implemented): bootwright cluster kubectl --context lab --name okd-lab -- <command>...
-  cluster oc          not-implemented  this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig
-                                       template (not-implemented): bootwright cluster oc --context lab --name okd-lab -- <command>...
-  cluster rsh         not-implemented  sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig
-                                       template (not-implemented): bootwright cluster rsh --context lab --name okd-lab --node <node>
-
-StorageCluster archive
-  Access
-  cluster exec        not-applicable  the external StorageCluster archive declares no node roster; sessions apply to managed Ceph StorageClusters
-  cluster kubeconfig  not-applicable  applies to OpenShift and OKD ContainerClusters only
-  cluster kubectl     not-applicable  applies to OpenShift and OKD ContainerClusters only
-  cluster oc          not-applicable  applies to OpenShift and OKD ContainerClusters only
-  cluster rsh         not-applicable  the external StorageCluster archive declares no node roster; sessions apply to managed Ceph StorageClusters
-
-StorageCluster storage
-  Management  managed
-  Release     9.9.1.2
-  Status      unavailable
-  Reason      no apply of this context's current operation has completed the cluster's bootstrap
-  Next        bootwright apply --context lab --stage clusters
-
-  Access
-  cluster exec        unavailable     the Machine rhel-01, which runs node rhel-01, has no proved host key; bootwright apply --context lab --stage machines records it
-                                      template (unavailable): bootwright cluster exec --context lab --name storage --node rhel-01 -- <command>...
-  cluster kubeconfig  not-applicable  applies to OpenShift and OKD ContainerClusters only
-  cluster kubectl     not-applicable  applies to OpenShift and OKD ContainerClusters only
-  cluster oc          not-applicable  applies to OpenShift and OKD ContainerClusters only
-  cluster rsh         unavailable     the Machine rhel-01, which runs node rhel-01, has no proved host key; bootwright apply --context lab --stage machines records it
-                                      template (unavailable): bootwright cluster rsh --context lab --name storage --node rhel-01
+  ○ cluster | edge
+    Topology
+      Type  ContainerCluster
+    Access
+      cluster exec  not-implemented
+      sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
+      reached through bootwright cluster kubeconfig
+      cluster kubeconfig  ready
+      bootwright cluster kubeconfig --context lab --name edge
+      cluster kubectl  not-implemented
+      this handoff is not yet implemented; the cluster is reached through bootwright cluster
+      kubeconfig
+      cluster oc  not-implemented
+      this handoff is not yet implemented; the cluster is reached through bootwright cluster
+      kubeconfig
+      cluster rsh  not-implemented
+      sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
+      reached through bootwright cluster kubeconfig
+  ○ cluster | okd-lab
+    Topology
+      Type  ContainerCluster
+    Access
+      cluster exec  not-implemented
+      sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
+      reached through bootwright cluster kubeconfig
+      cluster kubeconfig  unavailable
+      this context holds no administrator kubeconfig for okd-lab until an apply proves its
+      installation complete; run bootwright apply --context lab
+      cluster kubectl  not-implemented
+      this handoff is not yet implemented; the cluster is reached through bootwright cluster
+      kubeconfig
+      cluster oc  not-implemented
+      this handoff is not yet implemented; the cluster is reached through bootwright cluster
+      kubeconfig
+      cluster rsh  not-implemented
+      sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
+      reached through bootwright cluster kubeconfig
+  ○ cluster | archive
+    Topology
+      Type  StorageCluster
+    Access
+      cluster exec  not-applicable
+      cluster kubeconfig  not-applicable
+      cluster kubectl  not-applicable
+      cluster oc  not-applicable
+      cluster rsh  not-applicable
+  ○ cluster | storage · unavailable
+    Topology
+      Type  StorageCluster
+      Management  managed
+      Release     9.9.1.2
+    Access
+      cluster exec  unavailable
+      the Machine rhel-01, which runs node rhel-01, has no proved host key; bootwright apply
+      --context lab --stage machines records it
+      cluster kubeconfig  not-applicable
+      cluster kubectl  not-applicable
+      cluster oc  not-applicable
+      cluster rsh  unavailable
+      the Machine rhel-01, which runs node rhel-01, has no proved host key; bootwright apply
+      --context lab --stage machines records it
+    Evidence
+      Status  unavailable
+      Reason  no apply of this context's current operation has completed the cluster's
+              bootstrap
+      Next    bootwright apply --context lab --stage clusters

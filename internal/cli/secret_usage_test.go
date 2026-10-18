@@ -20,14 +20,14 @@ func TestServiceUsageRefusalExitsTwoWithConciseHelp(t *testing.T) {
 	args := []string{"secret", "set", "--name", "pull", "--certificate-file", "pull.pem"}
 	record := &dispatchRecord{err: &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{refusal}, Usage: true}}
 	code, out, errOut := runSecretResult(args, record)
-	want := "[FAIL] secret.input: Secret pull is of type dockerConfigJson; secret set takes --value-file <path> or --value-stdin [Secret/pull]; next: bootwright secret set --context lab --name pull --value-file <path>\n" +
+	want := "  error  Secret/pull\n    secret.input\n    Secret pull is of type dockerConfigJson; secret set takes --value-file <path> or\n    --value-stdin\n    Next: bootwright secret set --context lab --name pull --value-file <path>\n" +
 		"Usage: bootwright secret set [flags]\nRun 'bootwright help' for available commands.\n"
 	if code != 2 || out != "" || errOut != want || record.calls != 1 {
 		t.Fatalf("usage refusal code=%d stdout=%q stderr=%q calls=%d", code, out, errOut, record.calls)
 	}
 	record = &dispatchRecord{err: &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{refusal}}}
 	code, out, errOut = runSecretResult(args, record)
-	if code != 1 || out != "" || strings.Contains(errOut, "Usage:") || !strings.HasPrefix(errOut, "[FAIL] secret.input: ") {
+	if code != 1 || out != "" || strings.Contains(errOut, "Usage:") || !strings.HasPrefix(errOut, "  error  Secret/pull\n    secret.input\n") {
 		t.Fatalf("operational refusal code=%d stdout=%q stderr=%q", code, out, errOut)
 	}
 }
@@ -43,7 +43,7 @@ func TestSecretSetAlternativeConflictsRefuseBeforeTheService(t *testing.T) {
 		t.Run(test.args, func(t *testing.T) {
 			record := &dispatchRecord{}
 			code, out, errOut := runSecretResult(strings.Fields(test.args), record)
-			want := "[FAIL] cli.usage: " + test.message + "\nUsage: bootwright secret set [flags]\nRun 'bootwright help' for available commands.\n"
+			want := "  error  cli.usage\n    " + test.message + "\nUsage: bootwright secret set [flags]\nRun 'bootwright help' for available commands.\n"
 			if code != 2 || out != "" || errOut != want || record.calls != 0 {
 				t.Fatalf("code=%d stdout=%q stderr=%q calls=%d", code, out, errOut, record.calls)
 			}

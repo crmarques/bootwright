@@ -15,7 +15,7 @@ func containerPreflightCommand() commandSpec {
 }
 
 func installerRenderCommand() commandSpec {
-	return commandSpec{path: "render installer", short: "Render container-cluster installer artifacts", flags: []flagSpec{clustersFlag(), sensitiveFlag(), outputFlag()}}
+	return commandSpec{path: "render installer", short: "Render container-cluster installer artifacts", flags: []flagSpec{clustersFlag(), sensitiveFlag()}}
 }
 
 func containerAccessCommands() []commandSpec {

@@ -1,15 +1,24 @@
-Verify local controller prerequisites without installing or changing state. Omit --context for the host baseline; only an explicit nonempty --context adds that context's own target tools, the native closures its controller stage selects (the libvirt client, the hypervisor and the installer-media tooling) and its host binding.
+  bootwright / preflight controller
+      Verify local controller prerequisites without installing or changing state. Omit
+      --context for the host baseline; only an explicit nonempty --context adds that context's
+      own target tools, the native closures its controller stage selects (the libvirt client,
+      the hypervisor and the installer-media tooling) and its host binding.
 
-Usage:
-  bootwright preflight controller [flags]
+  Usage
+    bootwright preflight controller [flags]
 
-Examples:
-  bootwright preflight controller --context lab
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select explicit Environment requirements (default: baseline)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
 
-Global Flags:
-      --context string             Select explicit Environment requirements (default: baseline)
-  -h, --help                       Show help for this command
-      --ssh-ask-sudo-password      Request the borrowed account's sudo password
-      --ssh-id-file string         Offer an explicit private key for eligible SSH access
-      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
-      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines
+  More detail
+    Use --help --detail full to include SSH overrides.
+
+  Examples
+    bootwright preflight controller --context lab

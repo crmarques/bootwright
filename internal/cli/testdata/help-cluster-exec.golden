@@ -1,19 +1,38 @@
-Run a command over SSH on cluster nodes' Machines as the Machine's resolved identity; confirm or refuse an unproved host key and return the client's exit status. The session runs as the identity the Machine's desired state authorizes, over a host key proved before any credential is offered; an unproved key is confirmed interactively or refused. The exit status is the client's. Bootwright flags go before the command. Use -- before a flag-shaped first payload value to preserve it as data. After the first payload value, all remaining tokens belong to the payload. --name takes a comma-separated list, and each cluster runs the command on the Machine behind its first node in name order. --node takes a comma-separated list and selects those nodes, by name then by FQDN, in every listed cluster that declares them. The command runs on every resolved Machine at once, each output line is prefixed by its Machine, and the exit status is the highest any client returned. External StorageClusters are inapplicable, and sessions on OpenShift/OKD ContainerClusters are not yet available.
+  bootwright / cluster exec
+      Run a command over SSH on cluster nodes' Machines as the Machine's resolved identity;
+      confirm or refuse an unproved host key and return the client's exit status. The session
+      runs as the identity the Machine's desired state authorizes, over a host key proved
+      before any credential is offered; an unproved key is confirmed interactively or refused.
+      The exit status is the client's. Bootwright flags go before the command. Use -- before a
+      flag-shaped first payload value to preserve it as data. After the first payload value,
+      all remaining tokens belong to the payload. --name takes a comma-separated list, and each
+      cluster runs the command on the Machine behind its first node in name order. --node takes
+      a comma-separated list and selects those nodes, by name then by FQDN, in every listed
+      cluster that declares them. The command runs on every resolved Machine at once, each
+      output line is prefixed by its Machine, and the exit status is the highest any client
+      returned. External StorageClusters are inapplicable, and sessions on OpenShift/OKD
+      ContainerClusters are not yet available.
 
-Usage:
-  bootwright cluster exec <command>... [flags]
+  Usage
+    bootwright cluster exec <command>... [flags]
 
-Examples:
-  bootwright cluster exec --context lab --name storage -- uname -a
+  Command flags
+      --name  Select comma-separated cluster names (required)
+      --node  Select declared nodes by comma-separated name, then FQDN (default: each cluster's
+              first node in name order)
 
-Flags:
-      --name string   Select comma-separated cluster names (required)
-      --node string   Select declared nodes by comma-separated name, then FQDN (default: each cluster's first node in name order)
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
 
-Global Flags:
-      --context string             Select a context (default: current context)
-  -h, --help                       Show help for this command
-      --ssh-ask-sudo-password      Request the borrowed account's sudo password
-      --ssh-id-file string         Offer an explicit private key for eligible SSH access
-      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
-      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines
+  More detail
+    Use --help --detail full to include SSH overrides.
+
+  Examples
+    bootwright cluster exec --context lab --name storage -- uname -a

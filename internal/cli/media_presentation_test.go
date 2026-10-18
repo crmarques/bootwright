@@ -49,17 +49,17 @@ func TestMediaChangePresentationNamesWhatItCouldNotRead(t *testing.T) {
 	}{
 		"an unreadable record": {
 			media.Change{Action: media.ReplaceChange, Name: "demo.iso", Stored: true, NewOrigin: "file:///images/demo.iso"},
-			"Media replacement\n\n  Name        demo.iso\n  Record      unreadable\n  New source  file:///images/demo.iso\n",
+			"  Media replacement\n\n    Name        demo.iso\n    Record      unreadable\n    New source  file:///images/demo.iso\n",
 		},
 		"a retained stage alone": {
 			media.Change{Action: media.DeleteChange, Name: "demo.iso", Retained: true},
-			"Media deletion\n\n  Name      demo.iso\n  Retained  the stage an interrupted add kept, removed too\n",
+			"  Media deletion\n\n    Name      demo.iso\n    Retained  the stage an interrupted add kept, removed too\n",
 		},
 		"a control character in the record": {
 			media.Change{Action: media.DeleteChange, Name: "demo.iso", Stored: true, Readable: true, Entry: managedos.MediaEntry{
 				Name: "demo.iso", Size: 4, SHA256: "abc", Source: "file:///images/de\x1bmo.iso", Added: "2026-09-15T09:00:00Z",
 			}},
-			"Media deletion\n\n  Name    demo.iso\n  Size    4\n  Digest  sha256:abc\n  Added   2026-09-15T09:00:00Z\n  Source  file:///images/de\\u001bmo.iso\n",
+			"  Media deletion\n\n    Name    demo.iso\n    Size    4\n    Digest  sha256:abc\n    Added   2026-09-15T09:00:00Z\n    Source  file:///images/de\\u001bmo.iso\n",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

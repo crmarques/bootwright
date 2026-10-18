@@ -121,7 +121,7 @@ func TestInterruptDuringRealConfirmationPreservesSelection(t *testing.T) {
 	}
 	err = command.Wait()
 	var exit *exec.ExitError
-	if !errors.As(err, &exit) || exit.ExitCode() != 130 || !strings.HasPrefix(stdout.String(), "Context update plan\n") || strings.Contains(stdout.String(), "[OK]") || !strings.Contains(stderr.String(), "runtime.interrupted") {
+	if !errors.As(err, &exit) || exit.ExitCode() != 130 || !strings.HasPrefix(stdout.String(), "  Context update plan\n") || strings.Contains(stdout.String(), "✓") || !strings.Contains(stderr.String(), "runtime.interrupted") {
 		t.Fatalf("interrupt: %v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	after, err := repository.View(context.Background())

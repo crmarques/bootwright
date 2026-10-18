@@ -123,8 +123,8 @@ func TestTheShippedMediaServiceReportsAndPresentsOnStdout(t *testing.T) {
 	if _, err := services.Media.Delete(ctx, media.DeleteMediaRequest{Name: "demo.iso"}); err != nil || !shelf.deleted || prompt.prompts != 1 {
 		t.Fatalf("the shipped media delete: deleted %t, prompts %d (%#v)", shelf.deleted, prompt.prompts, diagnostics.Of(err))
 	}
-	shown := "Media deletion\n\n  Name    demo.iso\n  Size    4\n  Digest  sha256:" + shelf.entry.SHA256 +
-		"\n  Added   2026-09-15T09:00:00Z\n  Source  file:///images/demo.iso\n"
+	shown := "  Media deletion\n\n    Name    demo.iso\n    Size    4\n    Digest  sha256:" + shelf.entry.SHA256 +
+		"\n    Added   2026-09-15T09:00:00Z\n    Source  file:///images/demo.iso\n"
 	if out.String() != shown {
 		t.Fatalf("the shipped media delete showed %q, want %q", out.String(), shown)
 	}

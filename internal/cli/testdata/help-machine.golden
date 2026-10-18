@@ -1,23 +1,45 @@
-Manage machine
+  bootwright / machine
+      Manage machine
 
-Usage:
-  bootwright machine [command]
+  Usage
+    bootwright machine [flags]
 
-Available Commands:
-  exec        Run a command over SSH as the Machine's resolved identity; confirm or refuse an unproved host key and return the client's exit status
-  list        List machines and the lifecycle position each has reached
-  restart     Restart machines through their management controllers
-  rsh         Open an SSH session as the Machine's resolved identity; confirm or refuse an unproved host key and return the client's exit status
-  start       Power machines on through their management controllers
-  stop        Shut machines down through their management controllers
-  trust       Inspect and maintain exact host-key trust
+  Commands
+  ○ Command | exec
+      PURPOSE  Run a command over SSH as the Machine's resolved identity; confirm or refuse an
+               unproved host key and return the client's exit status
 
-Global Flags:
-      --context string             Select a context (default: current context)
-  -h, --help                       Show help for this command
-      --ssh-ask-sudo-password      Request the borrowed account's sudo password
-      --ssh-id-file string         Offer an explicit private key for eligible SSH access
-      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
-      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines
+  ○ Command | info
+      PURPOSE  Inspect machine placement, access, and recorded evidence
 
-Use "bootwright machine [command] --help" for more information about a command.
+  ○ Command | list
+      PURPOSE  List machines and the lifecycle position each has reached
+
+  ○ Command | restart
+      PURPOSE  Restart machines through their management controllers
+
+  ○ Command | rsh
+      PURPOSE  Open an SSH session as the Machine's resolved identity; confirm or refuse an
+               unproved host key and return the client's exit status
+
+  ○ Command | start
+      PURPOSE  Power machines on through their management controllers
+
+  ○ Command | stop
+      PURPOSE  Shut machines down through their management controllers
+
+  ○ Command | trust
+      PURPOSE  Inspect and maintain exact host-key trust
+
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
+
+  More detail
+    Use --help --detail full to include SSH overrides.

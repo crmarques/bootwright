@@ -13,7 +13,7 @@ func storagePreflightCommand() commandSpec {
 }
 
 func storageRenderCommand() commandSpec {
-	return commandSpec{path: "render storage", short: "Render storage artifacts", flags: []flagSpec{clustersFlag(), outputFlag()}}
+	return commandSpec{path: "render storage", short: "Render storage artifacts", flags: []flagSpec{clustersFlag()}}
 }
 
 type StoragePreflightService interface {

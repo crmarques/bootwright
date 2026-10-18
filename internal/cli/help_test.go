@@ -33,7 +33,7 @@ func TestHelpGolden(t *testing.T) {
 				t.Fatalf("help: %d %q", code, errOut.String())
 			}
 			matchesTextGolden(t, "help-"+name, out.Bytes())
-			if (specFor(path).implemented || presentationCommand(path)) && !strings.Contains(out.String(), "Examples:") {
+			if (specFor(path).implemented || presentationCommand(path)) && !strings.Contains(out.String(), "  Examples\n") {
 				t.Error("available command has no example")
 			}
 			for _, flag := range specFor(path).flags {
@@ -57,10 +57,10 @@ func TestHelpMarksUnavailableCommands(t *testing.T) {
 			continue
 		}
 		code, out, errOut, record := runRecorded(append(strings.Fields(spec.path), "--help"))
-		if code != 0 || errOut != "" || record.calls != 0 || !strings.Contains(out, "recognized but not implemented") {
+		if code != 0 || errOut != "" || record.calls != 0 || !strings.Contains(strings.Join(strings.Fields(out), " "), "recognized but not implemented") {
 			t.Fatalf("%s: %d %q %q", spec.path, code, out, errOut)
 		}
-		if slices.Contains(strings.Fields(spec.path), "cluster") && strings.Contains(out, "Examples:") {
+		if slices.Contains(strings.Fields(spec.path), "cluster") && strings.Contains(out, "  Examples\n") {
 			t.Errorf("unavailable command %s offers execution example", spec.path)
 		}
 	}
@@ -99,7 +99,26 @@ func TestAGroupWithAnAvailableSubcommandIsNotListedUnavailable(t *testing.T) {
 
 func TestScalarEnumRefusalListsAllowedValues(t *testing.T) {
 	code, out, errOut, record := runRecorded([]string{"validate", "--output", "unsupported"})
-	if code != 2 || out != "" || record.calls != 0 || !strings.Contains(errOut, "--output must be one of: text, json") {
+	if code != 2 || out != "" || record.calls != 0 || !strings.Contains(errOut, "--output must be one of: text, json, yaml") {
 		t.Fatalf("%d %q %q", code, out, errOut)
+	}
+}
+
+func TestHelpExposesInheritedPresentationChoices(t *testing.T) {
+	for _, path := range []string{"", "machine info", "secret info", "apply"} {
+		code, out, errOut, record := runRecorded(append(strings.Fields(path), "--help"))
+		if code != 0 || errOut != "" || record.calls != 0 {
+			t.Fatalf("%s help: %d %q", path, code, errOut)
+		}
+		for _, name := range []string{"--output", "--color", "--progress", "--detail", "--ascii", "--width"} {
+			if !strings.Contains(out, name) {
+				t.Errorf("%s help omits inherited %s", path, name)
+			}
+		}
+		for _, value := range []string{"yaml", "auto", "always", "never", "compact", "full"} {
+			if !strings.Contains(out, value) {
+				t.Errorf("%s help omits presentation value %s", path, value)
+			}
+		}
 	}
 }

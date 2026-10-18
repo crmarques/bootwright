@@ -53,7 +53,7 @@ func TestClusterListAndInfoReadOnlyLocalStateForAnExplicitOrCurrentContext(t *te
 	services, _, _ := snoContext(t)
 	for _, args := range [][]string{{"--context", "lab-sno"}, {}} {
 		out, stderr := contextRun(t, services, 0, append([]string{"cluster", "list"}, args...)...)
-		if stderr != "" || out != "NAME  KIND\nceph  StorageCluster\nsno   ContainerCluster\n" {
+		if stderr != "" || out != "  NAME   KIND\n  ceph   StorageCluster\n  sno    ContainerCluster\n" {
 			t.Fatalf("%v listed %q with standard error %q", args, out, stderr)
 		}
 		out, stderr = contextRun(t, services, 0, append([]string{"cluster", "list", "--output", "json"}, args...)...)
@@ -84,7 +84,7 @@ func TestClusterListAndInfoReadOnlyLocalStateForAnExplicitOrCurrentContext(t *te
 		t.Fatalf("external entry = %v", external)
 	}
 	out, stderr = contextRun(t, services, 0, "cluster", "info", "--name", "ceph")
-	if stderr != "" || !strings.HasPrefix(out, "StorageCluster ceph\n") || strings.Contains(out, "sno") || !strings.Contains(out, "not-applicable") {
+	if stderr != "" || !strings.HasPrefix(out, "  ○ cluster | ceph\n") || strings.Contains(out, "sno") || !strings.Contains(out, "not-applicable") {
 		t.Fatalf("selected info = %q with standard error %q", out, stderr)
 	}
 }

@@ -36,16 +36,16 @@ func TestSecretSetFlagMistakesExitTwoNamingTheType(t *testing.T) {
 		for _, flags := range test.wrong {
 			args := append([]string{"secret", "set", "--name", test.name}, flags...)
 			stdout, stderr := contextRun(t, services, 2, args...)
-			want := "[FAIL] secret.input: Secret " + test.name + " is of type " + test.kind + "; secret set takes " + test.takes +
-				" [Secret/" + test.name + "]; next: bootwright secret set --context alpha --name " + test.name + " " + test.remedy +
+			want := "  error  Secret/" + test.name + "\n    secret.input\n    Secret " + test.name + " is of type " + test.kind + "; secret set takes " + test.takes +
+				"\n    Next: bootwright secret set --context alpha --name " + test.name + " " + test.remedy +
 				"\nUsage: bootwright secret set [flags]\nRun 'bootwright help' for available commands.\n"
-			if stdout != "" || stderr != want {
+			if stdout != "" || humanContent(stderr) != humanContent(want) {
 				t.Errorf("%v wrote %q and %q, want only %q", args, stdout, stderr, want)
 			}
 		}
 	}
 	_, stderr := contextRun(t, services, 2, "secret", "set", "--name", "password", "--username", "two words", "--password-file", file)
-	if !strings.HasPrefix(stderr, "[FAIL] secret.input: Secret password takes a --username that is one nonempty UTF-8 line of at most 1 MiB with no whitespace or colon [Secret/password]; next: bootwright secret set --context alpha --name password ") {
+	if !strings.HasPrefix(humanContent(stderr), humanContent("  error  Secret/password\n    secret.input\n    Secret password takes a --username that is one nonempty UTF-8 line of at most 1 MiB with no whitespace or colon\n    Next: bootwright secret set --context alpha --name password ")) {
 		t.Errorf("an unusable --username gave %q", stderr)
 	}
 	contextRun(t, services, 0, "secret", "set", "--name", "opaque", "--value-file", file)

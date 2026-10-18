@@ -21,8 +21,13 @@ func machineCommands() []commandSpec {
 				"controller, which is the only part of this command that contacts a host.",
 			flags: []flagSpec{
 				clustersFlag(), boolFlag("power-status", "Read each machine's power state from its management controller"),
-				boolFlag("silent", "Print only sorted machine names"), outputFlag(),
+				boolFlag("silent", "Print only sorted machine names"),
 			},
+		}),
+		available(commandSpec{
+			path: "machine info", short: "Inspect machine placement, access, and recorded evidence",
+			long:  "Show the selected machines' declared placement and access and the lifecycle evidence recorded by this context. --name takes a comma-separated list (default: all). This command reads local inventory without contacting a host or reading power.",
+			flags: []flagSpec{stringFlag("name", "Select comma-separated machine names (default: all)")},
 		}),
 		available(sessionCommand(commandSpec{path: "machine rsh", short: "Open an SSH session", flags: []flagSpec{nameFlag()}})),
 		available(machineExecCommand()),
@@ -52,7 +57,7 @@ func powerCommand(path, short string, interrupts bool) commandSpec {
 		flags = append(flags, boolFlag("force", "Cut power instead of asking the operating system to shut down"), confirmationFlag())
 	}
 	return commandSpec{
-		path: path, short: short, flags: append(flags, outputFlag()),
+		path: path, short: short, flags: flags,
 		long: short + ". --name takes a comma-separated list, and the command applies to every listed machine at once. Success reports the power state the controller proved, not the state that was requested.",
 	}
 }
@@ -84,6 +89,13 @@ func (s Services) invokeMachineInventory(ctx context.Context, path string, value
 			Power:       values.boolean("power-status"),
 		}, s.MachineInventory.List)
 		return commandResult{machines: result}, err
+	case "machine info":
+		names := selectedInfoNames(values)
+		result, err := invokeResult(ctx, values, inventory.ListRequest{ContextName: values.text("context")}, s.MachineInventory.List)
+		if err != nil {
+			return commandResult{}, err
+		}
+		return commandResult{machines: selectMachineInfo(result, names)}, nil
 	default:
 		return commandResult{}, errors.New("command has no application dispatch")
 	}

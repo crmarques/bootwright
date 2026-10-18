@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -78,7 +79,7 @@ func TestControllerNegativeReportPreservesStreamsAndSafeDiagnostics(t *testing.T
 // never change its exit status; a report whose warning is not one is refused.
 func TestControllerSetupReportsItsWarningsOnStandardError(t *testing.T) {
 	warning := diagnostics.Diagnostic{Severity: "warning", Code: "controller.unsupported", Message: "the publisher's Index API page is version 1.5, newer than the 1.4 this build reads", Remediation: "use a Bootwright build that reads this Index API version"}
-	want := "[WARN] controller.unsupported: the publisher's Index API page is version 1.5, newer than the 1.4 this build reads; next: use a Bootwright build that reads this Index API version\n"
+	want := "  warning  controller.unsupported\n    the publisher's Index API page is version 1.5, newer than the 1.4 this build reads\n    Next: use a Bootwright build that reads this Index API version\n"
 	run := func(report *prerequisites.Report, err error) (int, string, string) {
 		var out, errOut bytes.Buffer
 		record := &dispatchRecord{result: commandResult{controller: report}, err: err}
@@ -92,7 +93,7 @@ func TestControllerSetupReportsItsWarningsOnStandardError(t *testing.T) {
 	}
 	declined := controllerReport("planned", false)
 	declined.Warnings = []diagnostics.Diagnostic{warning}
-	if code, out, errOut := run(declined, diagnostics.NewFailure("controller.setup", "setup was declined", "")); code != 1 || errOut != want+"[FAIL] controller.setup: setup was declined\n" || !strings.Contains(out, "Outcome  planned") {
+	if code, out, errOut := run(declined, diagnostics.NewFailure("controller.setup", "setup was declined", "")); code != 1 || errOut != want+"  error  controller.setup\n    setup was declined\n" || !strings.Contains(out, "Outcome  planned") {
 		t.Fatal(code, out, errOut)
 	}
 	misfiled := controllerReport("changed", false)
@@ -250,7 +251,7 @@ func TestControllerChecksUseContractStatusTokens(t *testing.T) {
 		if err := NewControllerPresenter(&out, nil, nil).PresentControllerPlan(context.Background(), *report); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(out.String(), "  "+token+"  Controller runtime  ") {
+		if !strings.Contains(strings.Join(strings.Fields(out.String()), " "), token+" Controller runtime ") {
 			t.Fatalf("status %q rendered as %q, want %s", status, out.String(), token)
 		}
 		for _, internal := range []string{"[ready]", "[not-ready]", "[unverified]"} {
@@ -277,7 +278,7 @@ func TestControllerIncompleteSetupReportsPerActionProgress(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit = %d", code)
 	}
-	for _, want := range []string{"\nProgress\n", "  [DONE]     Controller runtime\n", "  [UNKNOWN]  Host packages\n", "  [SKIPPED]  Controller binding\n"} {
+	for _, want := range []string{"\n  Progress\n", "  [DONE]      Controller runtime\n", "  [UNKNOWN]   Host packages\n", "  [SKIPPED]   Controller binding\n"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("result %q lacks %q", out.String(), want)
 		}
@@ -323,7 +324,7 @@ func TestControllerResolutionRowsPrecedeThePlanUnderOneHeadline(t *testing.T) {
 		"  [RUNNING]  [1/2] Python and Ansible\n" +
 		"  [OK]       [1/2] Python and Ansible: Python 3.14.7, Ansible 2.21.4\n" +
 		"  [OK]       [2/2] Native packages: no changes\n" +
-		"\n  Scope     baseline\n"
+		"\n    Scope     baseline\n"
 	if !strings.HasPrefix(rendered, prefix) {
 		t.Fatalf("result = %q, want prefix %q", rendered, prefix)
 	}
@@ -332,7 +333,7 @@ func TestControllerResolutionRowsPrecedeThePlanUnderOneHeadline(t *testing.T) {
 		"  [RUNNING]  [1/1] Controller runtime: acquiring python.tar.gz - 0%\n" +
 		"  [RUNNING]  [1/1] Controller runtime: acquiring ansible.tar.gz - 50%\n" +
 		"  [DONE]     [1/1] Controller runtime\n"
-	if strings.Count(rendered, "Controller setup\n") != 1 || !strings.Contains(rendered, "\nChecks\n") || !strings.HasSuffix(rendered, suffix) {
+	if strings.Count(rendered, "Controller setup\n") != 1 || !strings.Contains(rendered, "\n  Checks\n") || !strings.HasSuffix(rendered, suffix) {
 		t.Fatalf("result = %q", rendered)
 	}
 }
@@ -355,15 +356,15 @@ func TestControllerScopeChecksResolutionAndPlanStreamInOrder(t *testing.T) {
 	if err := presenter.PresentControllerPlan(ctx, *report); err != nil {
 		t.Fatal(err)
 	}
-	want := "Controller setup\n\n  Scope     baseline\n  Platform  fedora 43/amd64\n" +
+	want := "  Controller setup\n\n    Scope     baseline\n    Platform  fedora 43/amd64\n" +
 		"\nChecks\n" +
 		"  [OK]       Host: fedora 43/amd64\n" +
 		"  [RUNNING]  Controller runtime: verifying the controller runtime\n" +
 		"  [FAIL]     Controller runtime: required qualified Python and Ansible; observed missing or unverified\n" +
 		"\nResolving\n" +
 		"  [OK]       [1/1] Native packages: no changes\n" +
-		"\nHost package requirements\n  qualified-source.tar.gz\n" +
-		"\nPlanned changes\n  1. Prepare the qualified controller runtime\n"
+		"\n  Host package requirements\n    qualified-source.tar.gz\n" +
+		"\n  Planned changes\n    ○ Prepare the qualified controller runtime\n"
 	if out.String() != want {
 		t.Fatalf("result = %q, want %q", out.String(), want)
 	}
@@ -378,7 +379,7 @@ func TestControllerReadinessStreamsUnderItsOwnHeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.ReadinessPhase, Action: "host", Status: "ok", Detail: "fedora 43/amd64"})
-	want := "Controller readiness\n\n  Scope     baseline\n  Platform  fedora 43/amd64\n\nChecks\n  [OK]       Host: fedora 43/amd64\n"
+	want := "  Controller readiness\n\n    Scope     baseline\n    Platform  fedora 43/amd64\n\nChecks\n  [OK]       Host: fedora 43/amd64\n"
 	if out.String() != want {
 		t.Fatalf("result = %q, want %q", out.String(), want)
 	}
@@ -394,7 +395,7 @@ func TestRunnerFinishesProgressBeforeTheReadyResult(t *testing.T) {
 	var out bytes.Buffer
 	config := Config{Out: &out, Services: dispatchSpies(record), FinishProgress: func() { out.WriteString("<finished>") }}
 	code := New(config).Run(context.Background(), []string{"setup"})
-	want := "<finished>\nPlanned changes\n  none\n\n  Outcome  unchanged\n  Next     bootwright preflight controller\n"
+	want := "<finished>\n  Planned changes\n    none\n\n    Outcome  unchanged\n    Next     bootwright preflight controller\n"
 	if code != 0 || out.String() != want {
 		t.Fatalf("code=%d result=%q, want %q", code, out.String(), want)
 	}
@@ -405,8 +406,8 @@ func TestRunnerFinishesProgressBeforeTheReadyResult(t *testing.T) {
 // next command its service took from the remediation, none when it named none.
 func TestControllerResolutionFailureReportsOutcomeOnly(t *testing.T) {
 	for next, want := range map[string]string{
-		"":                 "\n  Outcome  planned\n",
-		"bootwright setup": "\n  Outcome  planned\n  Next     bootwright setup\n",
+		"":                 "\n    Outcome  planned\n",
+		"bootwright setup": "\n    Outcome  planned\n    Next     bootwright setup\n",
 	} {
 		report := controllerReport("planned", false)
 		report.ProgressPresented, report.Next = true, next
@@ -449,7 +450,7 @@ func (s *sequence) first(stream, text string) int {
 // before presenting one (B202, D91).
 func TestTheSetupPlanCarriesItsResolutionWarningsBeforeThePrompt(t *testing.T) {
 	warning := diagnostics.Diagnostic{Severity: "warning", Code: "controller.unsupported", Message: "the publisher's Index API page is version 1.5, newer than the 1.4 this build reads", Remediation: "use a Bootwright build that reads this Index API version"}
-	const printed = "[WARN] controller.unsupported: the publisher's Index API page is version 1.5, newer than the 1.4 this build reads; next: use a Bootwright build that reads this Index API version\n"
+	const printed = "  warning  controller.unsupported\n    the publisher's Index API page is version 1.5, newer than the 1.4 this build reads\n    Next: use a Bootwright build that reads this Index API version\n"
 	var streams sequence
 	out, errOut := sequenceStream{"out", &streams}, sequenceStream{"err", &streams}
 	plan := controllerReport("planned", false)
@@ -478,12 +479,12 @@ func TestTheSetupPlanCarriesItsResolutionWarningsBeforeThePrompt(t *testing.T) {
 	// Retention runs after the prompt, so its line is the result's to write.
 	retention := diagnostics.Diagnostic{Severity: "warning", Code: "controller.runtime-retention", Message: "kept: 3 runtimes (1 in use)"}
 	presented.Warnings = append(presented.Warnings, retention)
-	if errOut := run(presented, nil); errOut != "[WARN] controller.runtime-retention: kept: 3 runtimes (1 in use)\n" {
+	if errOut := run(presented, nil); errOut != "  warning  controller.runtime-retention\n    kept: 3 runtimes (1 in use)\n" {
 		t.Fatalf("the result wrote %q for a warning raised after the presented plan", errOut)
 	}
 	stopped := controllerReport("planned", false)
 	stopped.ProgressPresented, stopped.Warnings = true, []diagnostics.Diagnostic{warning}
-	if errOut := run(stopped, diagnostics.NewFailure("controller.setup", "publisher metadata is unavailable", "")); errOut != printed+"[FAIL] controller.setup: publisher metadata is unavailable\n" {
+	if errOut := run(stopped, diagnostics.NewFailure("controller.setup", "publisher metadata is unavailable", "")); errOut != printed+"  error  controller.setup\n    publisher metadata is unavailable\n" {
 		t.Fatalf("a setup that stopped before its plan printed %q", errOut)
 	}
 }
@@ -496,9 +497,9 @@ func TestControllerScopeNamesTheAcquisitionRoute(t *testing.T) {
 		route string
 		want  string
 	}{
-		{"direct", "  Scope     baseline\n  Platform  fedora 43/amd64\n  Route     direct\n"},
-		{"http://proxy.example:3128 (HTTPS_PROXY), 2 bypass entries", "  Scope     baseline\n  Platform  fedora 43/amd64\n  Route     http://proxy.example:3128 (HTTPS_PROXY), 2 bypass entries\n"},
-		{"", "  Scope     baseline\n  Platform  fedora 43/amd64\n"},
+		{"direct", "    Scope     baseline\n    Platform  fedora 43/amd64\n    Route     direct\n"},
+		{"http://proxy.example:3128 (HTTPS_PROXY), 2 bypass entries", "    Scope     baseline\n    Platform  fedora 43/amd64\n    Route     http://proxy.example:3128 (HTTPS_PROXY), 2 bypass entries\n"},
+		{"", "    Scope     baseline\n    Platform  fedora 43/amd64\n"},
 	} {
 		var out bytes.Buffer
 		presenter := NewControllerPresenter(&out, nil, nil)
@@ -580,4 +581,26 @@ func TestControllerSetupShowsThePreviewAndNamesItsRunGolden(t *testing.T) {
 		t.Fatalf("the plan did not show dnf's preview verbatim:\n%s", rendered)
 	}
 	matchesTextGolden(t, "controller-setup-logs", out.Bytes())
+}
+
+func TestControllerSuppressedProgressStillPresentsChecks(t *testing.T) {
+	var out bytes.Buffer
+	stream := WithPresentation(&out, PresentationOptions{Progress: "never"})
+	presenter := NewControllerPresenter(stream, nil, nil)
+	report := controllerReport("planned", false)
+	presenter.ReportProgress(context.Background(), prerequisites.ProgressEvent{Phase: prerequisites.InspectionPhase, Action: "python-runtime", Status: "running"})
+	if err := presenter.PresentControllerPlan(context.Background(), *report); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Checks") || !strings.Contains(out.String(), "Controller runtime") || strings.Contains(out.String(), "RUNNING") {
+		t.Fatalf("suppressed plan = %q", out.String())
+	}
+	out.Reset()
+	report.ProgressPresented = true
+	if err := writeControllerReport(stream, io.Discard, "preflight controller", report); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Checks") || !strings.Contains(out.String(), "Controller runtime") {
+		t.Fatalf("suppressed final checks = %q", out.String())
+	}
 }

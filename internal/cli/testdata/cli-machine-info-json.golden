@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "machine info",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "machines": [
+      {
+        "name": "controller",
+        "contact": "controller.lab.example.test",
+        "addresses": [
+          "192.0.2.1"
+        ],
+        "os": "provided",
+        "clusters": [],
+        "lifecycle": "not-applied"
+      },
+      {
+        "name": "rhel-01",
+        "contact": "rhel-01.lab.example.test",
+        "addresses": [
+          "198.51.100.11"
+        ],
+        "os": "installed",
+        "provider": "lab-libvirt",
+        "clusters": [],
+        "lifecycle": "applied"
+      },
+      {
+        "name": "sno-01",
+        "addresses": [],
+        "os": "provided",
+        "clusters": [
+          "sno"
+        ],
+        "lifecycle": "not-applied"
+      }
+    ],
+    "powerRead": false
+  },
+  "diagnostics": [],
+  "logs": []
+}

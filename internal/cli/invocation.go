@@ -12,8 +12,11 @@ import (
 // account, filesystem, stdin, signal or process capabilities.
 type InvocationClass struct {
 	RequiresRoot bool
+	// JSON marks either structured format for the privilege supervisor.
 	JSON         bool
+	Format       string
 	Command      string
+	Presentation PresentationOptions
 	// AmbientRoute marks the invocations whose parsed flags acquire before any
 	// context exists, so the invoking environment is the only place a proxy
 	// choice can come from. Every context-backed or local shape, including
@@ -33,22 +36,29 @@ func ClassifyInvocation(args []string) InvocationClass {
 		return InvocationClass{}
 	}
 	resolved, err := resolveInvocation(root, args)
-	if err != nil || resolved.helpTarget != nil {
+	if err != nil {
 		return InvocationClass{}
 	}
 	command := resolved.command
 	path := strings.TrimSpace(strings.TrimPrefix(command.CommandPath(), "bootwright"))
-	if command.ParseFlags(resolved.arguments) != nil || boolValue(command.Flags(), "help") || validateInvocation(command, path) != "" || !privilegedOperation(path) {
+	if command.ParseFlags(resolved.arguments) != nil {
 		return InvocationClass{}
 	}
+	classification := InvocationClass{Command: path, JSON: selectedStructured(command), Format: stringValue(command.Flags(), "output"), Presentation: normalizePresentation(commandPresentation(command, PresentationOptions{}))}
+	if resolved.helpTarget != nil || boolValue(command.Flags(), "help") || validateInvocation(command, path) != "" || !privilegedOperation(path) {
+		return classification
+	}
 	if path == "validate" && len(arrayValue(command.Flags(), "file")) != 0 {
-		return InvocationClass{}
+		return classification
 	}
 	ambient := contextFreeAcquisition(path, command.Flags())
 	if path == "setup" && (boolValue(command.Flags(), "dry-run") || boolValue(command.Flags(), "download-only")) {
-		return InvocationClass{Command: path, AmbientRoute: ambient}
+		classification.AmbientRoute = ambient
+		return classification
 	}
-	return InvocationClass{RequiresRoot: true, JSON: selectedJSON(command), Command: path, AmbientRoute: ambient, SecretStdin: secretStdin(path, command.Flags())}
+	classification.RequiresRoot, classification.AmbientRoute = true, ambient
+	classification.SecretStdin = secretStdin(path, command.Flags())
+	return classification
 }
 
 func secretStdin(path string, flags *pflag.FlagSet) string {
@@ -80,6 +90,20 @@ func contextFreeAcquisition(path string, flags *pflag.FlagSet) bool {
 // The refusal carries its own code and operator action, so the remediation
 // survives.
 func (c InvocationClass) Diagnostic(out, errOut io.Writer, reported diagnostics.Diagnostic, exitCode int) int {
+	decorate := func(stream io.Writer) io.Writer {
+		injected := presentationFor(stream)
+		options := c.Presentation
+		if c.Format != "" {
+			options.Format = c.Format
+		}
+		if injected.Columns != nil {
+			options.Columns = injected.Columns
+		}
+		options.NoColor = options.NoColor || injected.NoColor
+		options.Dumb = options.Dumb || injected.Dumb
+		return WithPresentation(stream, options)
+	}
+	out, errOut = decorate(out), decorate(errOut)
 	if writeDiagnostics(out, errOut, c.Command, []diagnostic{reported}, exitCode, c.JSON, nil) != nil {
 		return 1
 	}

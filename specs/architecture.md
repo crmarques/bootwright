@@ -167,6 +167,10 @@ one that is well-known, trusted, and fits the task. Prefer the standard library
 or dependencies already in use when suitable. Specs name a dependency's role,
 never its version; exact versions live only in the lock files (`go.mod`,
 `scripts/tools`, the Ansible locks) and in [development](../docs/development.md).
+The CLI uses the established YAML encoder for a second representation of its
+tagged result DTOs, and a focused terminal-cell width and ANSI wrapping
+library for human presentation. These libraries own no domain decisions,
+terminal discovery, output authority or operation scheduling.
 
 ## Product flow
 
@@ -340,7 +344,14 @@ version, and invalid usage.
 `internal/cli` is the driving adapter backed by the selected framework. It owns
 the public command catalog, framework configuration, contract-specific
 validation, help content and templates, prompts, presentation, diagnostics,
-output-mode selection, and exit-code mapping. `runner.go` orders one invocation:
+output-mode selection, and exit-code mapping. Its shared human renderer owns
+semantic identity and state styling, terminal-cell wrapping, width adaptation,
+and compact or full detail. Commands pass raw application facts with explicit
+column roles; one CLI-owned tagged DTO defines each structured result for both
+JSON and YAML. The composition root injects terminal, environment and timing
+facts; the CLI never discovers them. Lifecycle presentation copies frozen plan
+values and observes durable events without admitting or scheduling work.
+`runner.go` orders one invocation:
 parse, validate, dispatch, render. `catalog.go` is the single list of commands;
 each entry also records whether the command requires root and whether it is
 implemented, so no second list of command paths exists. Each

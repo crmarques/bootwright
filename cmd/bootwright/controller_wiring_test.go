@@ -153,7 +153,7 @@ func TestUnsuppliedControllerPortsRemainUnavailable(t *testing.T) {
 	for _, args := range [][]string{{"setup"}, {"setup", "--dry-run"}, {"preflight", "controller"}} {
 		var out, errOut bytes.Buffer
 		code := runServices(context.Background(), args, &out, &errOut, services)
-		if code != 1 || out.Len() != 0 || !strings.HasPrefix(errOut.String(), "[FAIL] cli.not-implemented: bootwright ") {
+		if code != 1 || out.Len() != 0 || !strings.HasPrefix(errOut.String(), "  error  cli.not-implemented\n    bootwright ") {
 			t.Fatal(args, code, out.String(), errOut.String())
 		}
 	}

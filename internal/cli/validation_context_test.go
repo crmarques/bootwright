@@ -67,7 +67,7 @@ func TestValidateNamesTheContextInTheRetiredFileSourceRemedy(t *testing.T) {
 			if code != 1 || len(state.requests) != 1 {
 				t.Fatalf("exit = %d, validations = %d, stderr %q", code, len(state.requests), errOut.String())
 			}
-			stderr := errOut.String()
+			stderr := strings.Join(strings.Fields(errOut.String()), " ")
 			if !strings.Contains(stderr, "bootwright secret set --name a "+test.want) || !strings.Contains(stderr, "keep --context <context> here") {
 				t.Fatalf("stderr = %q, want a remedy naming %q", stderr, test.want)
 			}

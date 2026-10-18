@@ -13,10 +13,16 @@ its syntax and context-independent safety checks still apply.
 
 | Flag | Type and default | Contract |
 | --- | --- | --- |
+| `-o, --output text\|json\|yaml` | format; `text` | Select human output or one structured envelope. JSON and YAML use the same CLI-owned result DTO; existing JSON schemas remain stable. [Stream exceptions](output.md#streams-and-exit-status) preserve raw default exports and refuse structured live SSH sessions before dispatch. |
+| `--color auto\|always\|never` | enum; `auto` | Style human output using injected terminal capabilities; `auto` respects the composition root's no-color and dumb-terminal facts. Structured output never contains ANSI. |
+| `--progress auto\|always\|never` | enum; `auto` | Select automatic terminal redraw, explicitly requested redraw, or no progress stream. This changes no operation or durable result. Structured output suppresses progress. |
+| `--detail compact\|full` | enum; `compact` | Select concise human facts or the available detailed evidence and access templates. Structured results retain every documented field. |
+| `--ascii[=<bool>]` | Boolean; `false` | Use ASCII presentation markers instead of Unicode markers. Raw exports remain byte-exact. |
+| `--width <columns>` | integer; `0` | Use automatic width at `0`, or an explicit bound from `24` through `500`, capped by an injected terminal width when available. Wrapping measures terminal cells. |
 | `--context <name>` | context name; current context | Select the named context for a context-backed command. `setup` and `preflight controller` consume it as the [Controller journeys](../controller.md#the-setup-flow) define, and the [flag relationships](#flag-relationships-and-safeguards) below restrict it. |
 | `--ssh-id-file <path>` | path; none | Offer this private key first for an SSH operation; a declared credential remains the fallback. A leading `~` resolves from the invoking account database, not an untrusted `HOME`; the opened file must satisfy the private-file rules in [security](../security.md). |
 | `--ssh-user <name>` | POSIX user name; none | Use one explicitly borrowed account for eligible OS-ready machines. On [`machine rsh` and `machine exec`](../cli.md#machine-ssh-sessions) it reaches any account under the session's credential rules. It does not alter desired state or the managed identity Bootwright installs. |
-| `--ssh-ask-sudo-password[=<bool>]` | Boolean; `false` | Prompt once for the borrowed account's sudo password, hold it only in bounded memory for this invocation, and never place it in arguments, environment, state, output, or logs. It conflicts with JSON output and non-interactive execution, and is not consumed by `machine rsh` or `machine exec`. |
+| `--ssh-ask-sudo-password[=<bool>]` | Boolean; `false` | Prompt once for the borrowed account's sudo password, hold it only in bounded memory for this invocation, and never place it in arguments, environment, state, output, or logs. It conflicts with JSON or YAML output and non-interactive execution, and is not consumed by `machine rsh` or `machine exec`. |
 | `--ssh-user-for-provisioned[=<bool>]` | Boolean; `false` | Extend `--ssh-user` to Bootwright-provisioned machines. It requires `--ssh-user`; the same frozen account must pass the managed-OS ownership probe. It is not consumed by `machine rsh` or `machine exec`, which reach a provisioned Machine's accounts through `--ssh-user` alone. |
 
 Every command also accepts `-h` and `--help`. Help performs no desired-state
@@ -33,7 +39,7 @@ Context-independent validation of inherited flags always checks an explicitly
 non-empty `--context` against the context-name DNS-label grammar, an explicit
 `--ssh-user` against the trimmed grammar above,
 `--ssh-user-for-provisioned=true` for its required non-empty `--ssh-user`, and
-`--ssh-ask-sudo-password=true` for its conflict with JSON output. TTY detection,
+`--ssh-ask-sudo-password=true` for its conflict with JSON or YAML output. TTY detection,
 prompting, path inspection, tilde expansion, and operating-system account lookup
 are deferred until an available use case needs them. An unavailable invocation
 performs none of those operations.
@@ -55,20 +61,21 @@ process or network access. “Mutate” permits only the named, planned effects.
 | `bootwright context list` | none | contexts in canonical name order | read local state |
 | `bootwright context current` | `--short` false | current context details, or only its name with `--short` | read local state |
 | `bootwright context delete` | required `--name <name>` and `--purge`; `--allow-orphans` and `--yes` false | permanent local deletion summary, saying whether it abandoned objects, which its confirmation names with `bootwright status --context <name>` as their inventory or says cannot be listed, and the host reservation keys it released | guarded removal under [permanent deletion](../contexts.md#permanent-deletion); never resource mutation |
-| `bootwright add-ons list` | `--output text\|json` default `text` | built-in catalog and machine-local registrations | read embedded and local catalog state |
+| `bootwright add-ons list` | none | built-in catalog and machine-local registrations | read embedded and local catalog state |
 | `bootwright add-ons add` | required `--name <name>[:<version>]`; `--version <version>` default catalog default; `--yes` false | registered immutable catalog release | local add-on registration |
 | `bootwright add-ons delete` | required `--name <name>[:<version>]`; `--yes` false | removed matching registration | local add-on registration deletion |
 | `bootwright secret set` | required `--name`; type-specific `--value-file`, `--value-stdin`, `--username`, `--password-file`, `--password-stdin`, `--certificate-file`, `--private-key-file`, `--public-key-file` under [Secrets](../secrets.md); `--yes` false | stored identity and parts, never values | local confidential write |
 | `bootwright secret generate` | optional `--name`; `--renew` false | changed and unchanged Secret names | atomic selected generated-material batch |
-| `bootwright secret check` | `--output text\|json` default `text` | declared availability/type checks | bounded material reads; no values emitted |
-| `bootwright secret list` | `--output text\|json` default `text` | context secret identities, types, parts, and availability | read confidential-store metadata |
+| `bootwright secret check` | none | declared availability/type checks | bounded material reads; no values emitted |
+| `bootwright secret list` | none | context secret identities, types, parts, and availability | read confidential-store metadata |
+| `bootwright secret info` | `--name <list>` default all | selected secret identity, parts, state, version and binding metadata | read confidential-store metadata only; no material read or availability check |
 | `bootwright secret show` | required `--name` and `--part value\|username\|password\|certificate\|private-key\|public-key` | exact selected sensitive bytes | read and reveal current declared part |
 | `bootwright secret delete` | required `--name <name>`; `--yes` false | deleted identity, or nothing deleted | local logical deletion, preserving bound versions |
 | `bootwright secret encryption init` | none | configured implementation and active key | idempotent initialization using Context configuration |
-| `bootwright secret encryption status` | `--output text\|json` default `text` | keyring and encrypted-store status | read confidential metadata |
+| `bootwright secret encryption status` | none | keyring and encrypted-store status | read confidential metadata |
 | `bootwright secret encryption rotate` | `--yes` false | new active key, retired keys and re-encrypted version and part counts | atomic local key rotation and re-encryption |
 | `bootwright media add` | required `--name <filename.iso>` and exactly one of `--from-file <path>` or `--from-url <https-url>`; `--sha256 <digest>`; `--yes` false | stored media identity, size, and verified digest | local copy or bounded download over the [context-free route](../controller.md#the-context-free-acquisition-route) and atomic publication |
-| `bootwright media list` | `--checksums` false; `--output text\|json` default `text` | media names, sizes, recorded digests and reserving contexts, and with `--checksums` each computed digest and its verification | read local media; `--checksums` reads each image in full |
+| `bootwright media list` | `--checksums` false | media names, sizes, recorded digests and reserving contexts, and with `--checksums` each computed digest and its verification | read local media; `--checksums` reads each image in full |
 | `bootwright media delete` | required `--name <filename.iso>`; `--yes` false | deleted media identity | local media deletion when not frozen by an operation |
 
 The required controller declaration and context-free setup boundary follow
@@ -80,21 +87,21 @@ The three `media` commands follow the host-wide
 
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
-| `bootwright validate` | repeatable `-f, --file <file-or-dir>`; `--output text\|json` default `text` | validation summary with admission counts, exclusions and advisories | read the supplied input, or the selected context's input when `-f` is omitted; no write |
+| `bootwright validate` | repeatable `-f, --file <file-or-dir>` | validation summary with admission counts, exclusions and advisories | read the supplied input, or the selected context's input when `-f` is omitted; no write |
 | `bootwright preflight controller` | none | [baseline or explicit-context controller readiness](../controller.md#the-setup-flow), including the acquisition route it resolved | bounded local observation; no state publication |
-| `bootwright preflight infra` | `--clusters <list>` default all; `--dry-run` false; `--output text\|json` default `text`; `--trust-on-first-use=<bool>` default `true` | infrastructure readiness checks | observe unless `--dry-run`, which is local-only |
+| `bootwright preflight infra` | `--clusters <list>` default all; `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | infrastructure readiness checks | observe unless `--dry-run`, which is local-only |
 | `bootwright preflight clusters` | same flags as `preflight infra` | all selected cluster readiness checks | observe unless `--dry-run` |
 | `bootwright preflight container-cluster` | same flags as `preflight infra`, with ContainerCluster-only selection | container-cluster readiness checks | observe unless `--dry-run` |
 | `bootwright preflight storage-cluster` | same flags as `preflight infra`, with StorageCluster-only selection | storage-cluster readiness checks | observe unless `--dry-run` |
-| `bootwright preflight add-ons` | `--clusters <list>` default all ContainerClusters; `--output text\|json` default `text` | add-on prerequisite checks | bounded observation |
-| `bootwright preflight all` | `--dry-run` false; `--output text\|json` default `text`; `--trust-on-first-use=<bool>` default `true` | all controller, infrastructure, cluster, storage, and add-on checks | observe unless `--dry-run` |
+| `bootwright preflight add-ons` | `--clusters <list>` default all ContainerClusters | add-on prerequisite checks | bounded observation |
+| `bootwright preflight all` | `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | all controller, infrastructure, cluster, storage, and add-on checks | observe unless `--dry-run` |
 | `bootwright plan` | `--stage <list>` default all stages | next legal full-context plan or exact continuation point, with the steps each block waits for, how wide the plan is and how many blocks this build starts at a time, and the blocks a stage selection would start | none |
-| `bootwright status` | `--output text\|json` default `text` | context readiness, lifecycle state, and next safe commands | read local state |
-| `bootwright diff` | `--observe` false; `--output text\|json` default `text` | each object's desired state beside what the context's apply realized, from its records or, with `--observe`, read live, as a [comparison](../cli.md#desired-and-realized-state-comparison) | read local state; with `--observe`, a bounded read-only observation of each block the context's apply realized, on the host that block froze, after the store-internal [cache-only rebuild](../controller.md#the-controller-runtime) of this build's runtime when its directory is missing |
-| `bootwright render` | `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--clusters <list>` default all; `--sensitive` false; `--output text\|json` default `text` | whole external-tool artifact manifest, or render help when neither path flag is supplied | local artifact writes only |
-| `bootwright render effective` | `--output text\|json` default `text` | normalized effective desired state and object counts | none |
-| `bootwright render installer` | `--clusters <list>` default all ContainerClusters; `--sensitive` false; `--output text\|json` default `text` | installer artifact manifest | local placeholder files and optional sensitive files |
-| `bootwright render storage` | `--clusters <list>` default all StorageClusters; `--output text\|json` default `text` | storage artifact manifest | local native files or scripts only; never execution |
+| `bootwright status` | none | context readiness, lifecycle state, and next safe commands | read local state |
+| `bootwright diff` | `--observe` false | each object's desired state beside what the context's apply realized, from its records or, with `--observe`, read live, as a [comparison](../cli.md#desired-and-realized-state-comparison) | read local state; with `--observe`, a bounded read-only observation of each block the context's apply realized, on the host that block froze, after the store-internal [cache-only rebuild](../controller.md#the-controller-runtime) of this build's runtime when its directory is missing |
+| `bootwright render` | `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--clusters <list>` default all; `--sensitive` false | whole external-tool artifact manifest, or render help when neither path flag is supplied | local artifact writes only |
+| `bootwright render effective` | none | normalized effective desired state and object counts | none |
+| `bootwright render installer` | `--clusters <list>` default all ContainerClusters; `--sensitive` false | installer artifact manifest | local placeholder files and optional sensitive files |
+| `bootwright render storage` | `--clusters <list>` default all StorageClusters | storage artifact manifest | local native files or scripts only; never execution |
 | `bootwright apply` | repeatable `--authorize <token>[,<token>...]`; `--stage <list>` default all stages; `--yes` false | completed full apply, a pause at the selected stage boundary, exact continued state, or a settled result when the declared state is already realized | complete planned mutation, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) |
 | `bootwright destroy` | repeatable `--authorize <token>[,<token>...]`; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
 
@@ -102,16 +109,17 @@ The three `media` commands follow the host-wide
 
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
-| `bootwright machine list` | `--clusters <list>` default all; `--power-status` false; `--silent` false; `--output text\|json` default `text` | Machines with their declared contact and addresses and the evidence-backed lifecycle position each reached, their controller-reported power with `--power-status`, or sorted names with `--silent` | read local state; with `--power-status`, read each machine's power through its management controller |
+| `bootwright machine list` | `--clusters <list>` default all; `--power-status` false; `--silent` false | Machines with their declared contact and addresses and the evidence-backed lifecycle position each reached, their controller-reported power with `--power-status`, or sorted names with `--silent` | read local state; with `--power-status`, read each machine's power through its management controller |
+| `bootwright machine info` | `--name <list>` default all | selected machine placement, contact, addresses, and recorded lifecycle evidence | read local inventory only; no host or power contact |
 | `bootwright machine rsh` | required `--name <machine>` | an interactive SSH session on the exact Machine as its resolved identity; the client's exit status is the result | read state, open the session's credential for its duration, read or record host trust, run one pinned SSH client |
 | `bootwright machine exec` | required `--name <list>` and `<command>...` | the exact argument vector runs on the Machine, or on every listed Machine at once with [each line prefixed by its Machine](../cli.md#machine-ssh-sessions); the remote command's exit status is the result, the highest of them for several | same |
-| `bootwright machine trust` | `--machines <list>` default all; `--replace <list>` default none; `--dry-run` false; `--yes` false; `--output text\|json` default `text` | exact host-key trust plan, and the recorded result unless dry-run | bounded SSH host-key observation of the selected Machines; context trust-store write unless dry-run |
-| `bootwright machine start` | required `--name <list>`; `--output text\|json` default `text` | the power state each Machine's management controller proved once the operation settled | bounded power operation through that controller, one concurrent [batch](../cli.md#machine-power-operations) for several Machines |
-| `bootwright machine stop` | required `--name <list>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after the operating system is asked to shut down | same |
-| `bootwright machine restart` | required `--name <list>`; `--force` false; `--yes` false; `--output text\|json` default `text` | same, after a proved stop and a proved start | same |
-| `bootwright setup` | `--dry-run` false; `--yes` false; `--output` text; `--wheel-mirror <file:///dir or https://base>` default none; `--download-only` false; `--dest-dir <dir>` default none | [context-independent controller prerequisite plan or completed setup](../controller.md#the-setup-flow); with `--dry-run --output json`, the plan and every locked wheel; with `--download-only`, the [files written for an offline host](../controller.md#offline-and-mirrored-wheels) | host packages through the host's own dnf after its verbatim preview, and the controller runtime from locked wheels over the [context-free route](../controller.md#the-context-free-acquisition-route), or from `--wheel-mirror`; a ready host makes no request and no change; dry-run only lists requirement names; `--output json` requires `--dry-run`; `--download-only` requires `--dest-dir`, conflicts with `--dry-run`, never elevates, reads no setup state and writes only the directory |
-| `bootwright cluster list` | `--output text\|json` default `text` | container and storage cluster names and kinds in canonical order | read local state |
-| `bootwright cluster info` | `--name <list>` default all unless `--secrets`, which requires exactly one cluster; `--secrets` false; `--output text\|json` default `text` | cluster kinds, endpoints, access-command applicability and availability, artifact availability, for a managed Ceph cluster its release, FSID, frozen image, monitors, administrator command and dashboard access, and optional explicit sensitive values | read local state and optional confidential material |
+| `bootwright machine trust` | `--machines <list>` default all; `--replace <list>` default none; `--dry-run` false; `--yes` false | exact host-key trust plan, and the recorded result unless dry-run | bounded SSH host-key observation of the selected Machines; context trust-store write unless dry-run |
+| `bootwright machine start` | required `--name <list>` | the power state each Machine's management controller proved once the operation settled | bounded power operation through that controller, one concurrent [batch](../cli.md#machine-power-operations) for several Machines |
+| `bootwright machine stop` | required `--name <list>`; `--force` false; `--yes` false | same, after the operating system is asked to shut down | same |
+| `bootwright machine restart` | required `--name <list>`; `--force` false; `--yes` false | same, after a proved stop and a proved start | same |
+| `bootwright setup` | `--dry-run` false; `--yes` false; `--wheel-mirror <file:///dir or https://base>` default none; `--download-only` false; `--dest-dir <dir>` default none | [context-independent controller prerequisite plan or completed setup](../controller.md#the-setup-flow); with `--dry-run --output json`, the plan and every locked wheel; with `--download-only`, the [files written for an offline host](../controller.md#offline-and-mirrored-wheels) | host packages through the host's own dnf after its verbatim preview, and the controller runtime from locked wheels over the [context-free route](../controller.md#the-context-free-acquisition-route), or from `--wheel-mirror`; a ready host makes no request and no change; dry-run only lists requirement names; `--download-only` requires `--dest-dir`, conflicts with `--dry-run`, never elevates, reads no setup state and writes only the directory |
+| `bootwright cluster list` | none | container and storage cluster names and kinds in canonical order | read local state |
+| `bootwright cluster info` | `--name <list>` default all unless `--secrets`, which requires exactly one cluster; `--secrets` false | cluster kinds, endpoints, access-command applicability and availability, artifact availability, for a managed Ceph cluster its release, FSID, frozen image, monitors, administrator command and dashboard access, and optional explicit sensitive values | read local state and optional confidential material |
 | `bootwright cluster rsh` | required `--name <cluster>` (one cluster); `--node <node>` default first node in canonical name order (at most one) | an interactive SSH session on the resolved node's Machine under the [cluster session contract](../cli.md#cluster-sessions); the client's exit status is the result | same as `machine rsh` |
 | `bootwright cluster exec` | required `--name <list>`; `--node <list>` default each cluster's first node in canonical name order; required `<command>...` | the exact argument vector runs on the resolved node's Machine, or on every resolved Machine at once with [each line prefixed by its Machine](../cli.md#several-clusters-and-nodes), under the [cluster session contract](../cli.md#cluster-sessions); the remote command's exit status is the result, the highest of them for several | same as `machine exec` |
 | `bootwright cluster oc` | required `--name <cluster>` and non-empty `<command>...` | bounded `oc` handoff descriptor | read context-owned access metadata only |
@@ -189,14 +197,14 @@ to hide or enable commands. Target-aware discovery belongs to `cluster info`.
 error: the `Bootwright` headline, then exactly these six fields in this order.
 
 ```text
-Bootwright
+  Bootwright
 
-  Version            v0.4.0
-  Commit             9f2c1d0e3b5a7c8d9e0f1a2b3c4d5e6f70819293
-  Source             clean
-  Go                 go1.26.9
-  Target             linux/amd64
-  Dependency bundle  sha256:<64 hexadecimal digits>
+    Version            v0.4.0
+    Commit             9f2c1d0e3b5a7c8d9e0f1a2b3c4d5e6f70819293
+    Source             clean
+    Go                 go1.26.9
+    Target             linux/amd64
+    Dependency bundle  sha256:<64 hexadecimal digits>
 ```
 
 The composition root supplies every value. It obtains the Go runtime, GOOS, and
@@ -277,10 +285,14 @@ integration.
 
 ## Flag relationships and safeguards
 
-`--output` is command-local and accepts exactly `text` or `json`. There is no
-YAML output mode, global output flag, or `--format` alias. `apply`, `destroy`,
-`plan`, setup mutations, access-handoff commands, credential-export commands,
-`version`, help, and completion are text or raw only.
+`--output` is inherited and accepts exactly `text`, `json`, or `yaml`; `-o`
+is its shorthand and `--format` is not an alias. It is valid before or after a
+command path. Every command supports one structured document, including help,
+version, completion scripts, plan and lifecycle outcomes. Live SSH sessions
+require `text` and refuse structured modes with `cli.usage` before dispatch,
+privilege or session effects. Default raw credential exports and effective YAML
+retain their exact bytes; explicit structured exports use the
+[documented envelope](output.md#json-output).
 
 `--yes` suppresses only the named command's
 [ordinary confirmation](../cli.md#ordinary-confirmation) after target
@@ -292,7 +304,7 @@ confirm a safe command-owned overwrite, recreation, or replacement, but it
 does not itself select a target or authorize data loss,
 a changed or unknown identity, a failed probe, or another named risk. If a
 prompt remains necessary, the command fails instead when standard input is
-non-interactive, JSON output is selected, or a safe answer cannot be read.
+non-interactive, JSON or YAML output is selected, or a safe answer cannot be read.
 
 `context delete` requires `--purge` to resolve to `true`; omission or
 `--purge=false` fails without changing state. `--yes` independently controls
@@ -333,9 +345,9 @@ and requires `--output-dir`. A non-empty `--context` or
 requires `--output-dir` and `--sensitive`.
 
 `machine list --silent=true` emits only sorted names as text and conflicts
-with a resolved `--output json` and with `--power-status`, because a reading it
+with resolved JSON or YAML output and with `--power-status`, because a reading it
 could never print would contact every management controller for nothing. Each
-conflict is `cli.usage` with exit `2` and the normal JSON failure envelope;
+conflict is `cli.usage` with exit `2` and the normal selected structured failure envelope;
 `--silent=false` permits both. These relationships use final scalar values and
 follow explicit-help precedence.
 
@@ -348,11 +360,11 @@ one Machine.
 `--force` cuts the power instead of asking the operating system to shut down,
 and is accepted only by `stop` and `restart`, which interrupt a running system;
 those two also take the ordinary confirmation, while `start` interrupts nothing
-and takes neither. A `stop` or `restart` with a resolved `--output json`
+and takes neither. A `stop` or `restart` with resolved JSON or YAML output
 requires `--yes`; without it the invocation is `cli.usage` with exit `2` and
 acts on nothing.
 
-A `machine trust --output json` invocation with pending trust-store writes
+A `machine trust` invocation selecting JSON or YAML with pending trust-store writes
 requires `--yes`; without it the invocation must use `--dry-run` or fails
 without writing.
 

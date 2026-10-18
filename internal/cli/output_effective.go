@@ -39,7 +39,7 @@ func writeEffective(ctx context.Context, out io.Writer, command string, result *
 	if jsonMode {
 		payload := effectiveResult{Counts: displayCounts(result.Counts), EffectiveState: json.RawMessage(data)}
 		var encoded bytes.Buffer
-		if err := writeEnvelope(&encoded, commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, Result: payload, Diagnostics: []diagnostic{}, Logs: []string{}}); err != nil {
+		if err := writeEnvelope(WithPresentation(&encoded, presentationFor(out)), commandEnvelope{SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, Result: payload, Diagnostics: []diagnostic{}, Logs: []string{}}); err != nil {
 			return encodingFailure(ctx, err)
 		}
 		data = encoded.Bytes()

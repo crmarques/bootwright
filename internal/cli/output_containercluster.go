@@ -17,16 +17,21 @@ func writeKubeconfig(out, errOut io.Writer, result *containeraccess.KubeconfigRe
 		return &resultFailure{"runtime.internal", "application service returned an unsupported result", 1}
 	}
 	defer clear(value)
-	if result.Unproved {
-		warning := diagnostic{Severity: "warning", Code: "access.unproved", Message: "the administrator kubeconfig of ContainerCluster " + result.Cluster +
-			" was kept from an installation whose completion was never proved, so the access it grants was not proved"}
-		if err := writeHumanDiagnostics(errOut, displayDiagnostics([]diagnostic{warning})); err != nil {
-			return err
-		}
+	if err := writeHumanDiagnostics(errOut, displayDiagnostics(kubeconfigWarnings(result))); err != nil {
+		return err
 	}
+
 	n, err := out.Write(value)
 	if err == nil && n != len(value) {
 		err = io.ErrShortWrite
 	}
 	return err
+}
+
+func kubeconfigWarnings(result *containeraccess.KubeconfigResult) []diagnostic {
+	if !result.Unproved {
+		return nil
+	}
+	return []diagnostic{{Severity: "warning", Code: "access.unproved", Message: "the administrator kubeconfig of ContainerCluster " + result.Cluster +
+		" was kept from an installation whose completion was never proved, so the access it grants was not proved"}}
 }

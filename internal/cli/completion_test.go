@@ -18,8 +18,8 @@ func completionFixture(t *testing.T) *cobra.Command {
 	root.PersistentFlags().BoolP("help", "h", false, "Show help")
 	cluster := &cobra.Command{Use: "cluster", Short: "Inspect clusters"}
 	list := &cobra.Command{Use: "list", Short: "List clusters"}
-	list.Flags().String("output", "text", "Choose output")
-	if err := list.Flags().SetAnnotation("output", "bootwright.enum", []string{"text", "json"}); err != nil {
+	root.PersistentFlags().StringP("output", "o", "text", "Choose output")
+	if err := root.PersistentFlags().SetAnnotation("output", "bootwright.enum", []string{"text", "json", "yaml"}); err != nil {
 		t.Fatal(err)
 	}
 	cluster.AddCommand(list, &cobra.Command{Use: "info", Short: "Inspect cluster details"})
@@ -45,11 +45,11 @@ func TestCompletionCandidates(t *testing.T) {
 		{"prefix", []string{"cluster", "i"}, []string{"info"}},
 		{"help path", []string{"help", "cluster", ""}, []string{"info", "list"}},
 		{"help after global", []string{"--context", "sample", "help", "cluster", ""}, []string{"info", "list"}},
-		{"help flags", []string{"help", "cluster", "list", "--"}, []string{"--context", "--help"}},
+		{"help flags", []string{"help", "cluster", "list", "--"}, []string{"--context", "--help", "--output"}},
 		{"inherited value", []string{"--context", "sample", "cluster", ""}, []string{"info", "list"}},
-		{"enum", []string{"cluster", "list", "--output", ""}, []string{"json", "text"}},
+		{"enum", []string{"cluster", "list", "--output", ""}, []string{"json", "text", "yaml"}},
 		{"attached enum", []string{"cluster", "list", "--output=j"}, []string{"--output=json"}},
-		{"flags", []string{"validate", "-"}, []string{"--context", "--file", "--help", "--strict", "-f", "-h"}},
+		{"flags", []string{"validate", "-"}, []string{"--context", "--file", "--help", "--output", "--strict", "-f", "-h", "-o"}},
 		{"boolean", []string{"validate", "--strict=tr"}, []string{"--strict=true"}},
 		{"free context", []string{"--context", ""}, nil},
 		{"free path", []string{"validate", "--file", ""}, nil},
@@ -205,4 +205,25 @@ func TestPathCompletionAppendsNoSpaceOnlyAfterADirectory(t *testing.T) {
 
 func completionCandidates(root *cobra.Command, words []string, descriptions bool) []string {
 	return completionCandidatesWithCatalog(root, words, descriptions, completionCatalog{})
+}
+
+func TestProductionPresentationCompletionUsesOnlyStaticChoices(t *testing.T) {
+	root, err := newCommandTree(New(Config{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		args []string
+		want []string
+	}{
+		{[]string{"--output", ""}, []string{"json", "text", "yaml"}},
+		{[]string{"machine", "info", "-o", ""}, []string{"json", "text", "yaml"}},
+		{[]string{"secret", "info", "--color", ""}, []string{"always", "auto", "never"}},
+		{[]string{"apply", "--progress", ""}, []string{"always", "auto", "never"}},
+		{[]string{"cluster", "info", "--detail", ""}, []string{"compact", "full"}},
+	} {
+		if got := completionCandidates(root, test.args, false); !reflect.DeepEqual(got, test.want) {
+			t.Errorf("%q candidates=%q want=%q", test.args, got, test.want)
+		}
+	}
 }

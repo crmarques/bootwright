@@ -1,6 +1,6 @@
-[OK] Destroy done
+  ✓ Destroy done
 
-  Nothing to remove: this context owns no realized state.
+    Nothing to remove: this context owns no realized state.
 operation: none
 verb: destroy
 state: done

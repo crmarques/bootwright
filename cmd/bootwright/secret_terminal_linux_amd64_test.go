@@ -179,7 +179,7 @@ func TestTheComposedSecretSetReadsFromTheTerminalBehindStandardInput(t *testing.
 	contextRun(t, services, 0, "secret", "encryption", "init")
 
 	_, stderr := contextRun(t, services, 2, "secret", "set", "--name", "opaque", "--value-stdin")
-	if !strings.Contains(stderr, "pipe the value into bootwright secret set --context alpha --name opaque --value-stdin, or use --value-file <path>") ||
+	if !strings.Contains(humanContent(stderr), humanContent("pipe the value into bootwright secret set --context alpha --name opaque --value-stdin, or use --value-file <path>")) ||
 		len(terminal.prompts) != 0 || reads != 0 {
 		t.Fatalf("an opaque value at a terminal: %d prompts, %d reads, stderr %q", len(terminal.prompts), reads, stderr)
 	}

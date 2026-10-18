@@ -1,15 +1,20 @@
-Apply continuation plan
+  Apply continuation plan
 
-Plan
-  1. serve artifacts for lab-artifacts on controller [infra-components] [done]
-       create-container-unit
-  2. realize the libvirt host of lab-libvirt on controller [substrates] [failed] [after 1]
-       create-libvirt-pool lab-libvirt
-  3. install the operating system of rhel-01 [machines] [pending] [after 2]
-       install-operating-system rhel-01
+  Plan
+  Infrastructure · 1 block
+    ○ 1. serve artifacts for lab-artifacts on controller · done
+      create-container-unit
 
-  Concurrency  3 waves, widest 1 step
-  Build        1.4.0 (9f2c1ab) registered this operation; steps 2, 3 run under this build
+  Substrates · 1 block
+    ○ 2. realize the libvirt host of lab-libvirt on controller · failed
+      create-libvirt-pool lab-libvirt
+
+  Machines · 1 block
+    ○ 3. install the operating system of rhel-01 · pending
+      install-operating-system rhel-01
+
+    Concurrency  3 waves, widest 1 step
+    Build        1.4.0 (9f2c1ab) registered this operation; steps 2, 3 run under this build
 operation: op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
 verb: plan
 state: preview

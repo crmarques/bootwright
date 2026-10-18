@@ -206,7 +206,7 @@ func TestALostFrozenBindingLeavesOnlyTheOrphanAcknowledgedDelete(t *testing.T) {
 				}
 				for _, want := range []string{"lifecycle.state", "the apply " + applied + " (failed) froze the Secret binding " + bound.ID + ", " + loss.why + ";",
 					"ArtifactServer/alpha", "restore the context's keyring from a complete backup", "bootwright context delete --name alpha --purge --allow-orphans"} {
-					if !strings.Contains(first, want) {
+					if !strings.Contains(humanContent(first), humanContent(want)) {
 						t.Fatalf("the %s refusal does not name %q:\n%s", verb, want, first)
 					}
 				}

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"go.yaml.in/yaml/v3"
 )
 
 type diagnostic = diagnostics.Diagnostic
@@ -26,12 +28,46 @@ type commandEnvelope struct {
 }
 
 func writeEnvelope(out io.Writer, envelope commandEnvelope) error {
-	encoder := json.NewEncoder(out)
+	if presentationFor(out).Format != "yaml" {
+		encoder := json.NewEncoder(out)
+		encoder.SetEscapeHTML(false)
+		return encoder.Encode(envelope)
+	}
+	var encoded bytes.Buffer
+	encoder := json.NewEncoder(&encoded)
 	encoder.SetEscapeHTML(false)
-	return encoder.Encode(envelope)
+	if err := encoder.Encode(envelope); err != nil {
+		return err
+	}
+	var document yaml.Node
+	if err := yaml.Unmarshal(encoded.Bytes(), &document); err != nil {
+		return err
+	}
+	var blockStyle func(*yaml.Node)
+	blockStyle = func(node *yaml.Node) {
+		node.Style = 0
+		for _, child := range node.Content {
+			blockStyle(child)
+		}
+	}
+	blockStyle(&document)
+	encoded.Reset()
+	yamlEncoder := yaml.NewEncoder(&encoded)
+	yamlEncoder.SetIndent(2)
+	if err := yamlEncoder.Encode(&document); err != nil {
+		return err
+	}
+	if err := yamlEncoder.Close(); err != nil {
+		return err
+	}
+	n, err := out.Write(encoded.Bytes())
+	if err == nil && n != encoded.Len() {
+		err = io.ErrShortWrite
+	}
+	return err
 }
 
-// jsonResult is a command's documented JSON result. Only the result types this
+// jsonResult is a command's documented structured result. Only the result types this
 // package declares implement it, so a domain value, whose field names and
 // shape belong to its own package, can never be encoded as a result.
 type jsonResult interface{ documentedResult() }
@@ -104,8 +140,11 @@ func writeValidation(out, errOut io.Writer, command string, report *compilation.
 	if err := writeHumanDiagnostics(errOut, diagnostics); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(out, "[OK] Desired state is valid (files seen: %d, objects decoded: %d)\n", report.Counts.FilesSeen, report.Counts.ObjectsDecoded)
-	return err
+	var text display
+	text.headline("OK", "Desired state is valid")
+	text.section("Admission")
+	text.fields(field{Label: "Files seen", Value: fmt.Sprint(report.Counts.FilesSeen)}, field{Label: "Objects decoded", Value: fmt.Sprint(report.Counts.ObjectsDecoded)})
+	return text.writeTo(out)
 }
 
 func displayNames(values []string) []string {
@@ -152,14 +191,11 @@ func escapeDiagnostics(values []diagnostic) []diagnostic {
 
 // Values reaching this function have already crossed the display boundary.
 func writeHumanDiagnostics(out io.Writer, diagnostics []diagnostic) error {
+	var text display
 	for _, d := range diagnostics {
-		status := "FAIL"
-		if d.Severity == "warning" {
-			status = "WARN"
-		}
 		location := ""
 		if d.Source != nil && d.Source.Path != "" {
-			location = " " + d.Source.Path
+			location = d.Source.Path
 			if d.Source.Line > 0 {
 				location += fmt.Sprintf(":%d", d.Source.Line)
 				if d.Source.Column > 0 {
@@ -167,21 +203,29 @@ func writeHumanDiagnostics(out io.Writer, diagnostics []diagnostic) error {
 				}
 			}
 		}
-		message := d.Message
+		subject := d.Code
 		if d.Object != nil {
-			message += " [" + d.Object.Kind + "/" + d.Object.Name + "]"
+			subject = d.Object.Kind + "/" + d.Object.Name
 		}
-		if d.Field != "" {
-			message += " (" + d.Field + ")"
-		}
-		if d.Remediation != "" {
-			message += "; next: " + d.Remediation
-		}
-		if _, err := fmt.Fprintf(out, "[%s] %s%s: %s\n", status, d.Code, location, message); err != nil {
-			return err
-		}
+		text.custom(func(r *displayRenderer) {
+			r.gap()
+			r.styledParagraph(styleState(d.Severity, r.options)+"  "+styleIdentity(subject, r.options), "  ", "plain")
+			if subject != d.Code {
+				r.styledParagraph(d.Code, "    ", "muted")
+			}
+			if location != "" {
+				r.styledParagraph(location, "    ", "muted")
+			}
+			r.styledParagraph(d.Message, "    ", "plain")
+			if d.Field != "" {
+				r.styledParagraph("Field: "+d.Field, "    ", "muted")
+			}
+			if d.Remediation != "" {
+				r.styledParagraph("Next: "+d.Remediation, "    ", "plain")
+			}
+		})
 	}
-	return nil
+	return text.writeTo(out)
 }
 
 // displayLines escapes each entry of a list a result names, and is never nil,

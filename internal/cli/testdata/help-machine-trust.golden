@@ -1,22 +1,29 @@
-Inspect and maintain exact host-key trust. It observes exactly the endpoints this context declares and records what they present. A Machine that proves its host key another way is reported and left alone; a changed key is superseded only by naming it in --replace.
+  bootwright / machine trust
+      Inspect and maintain exact host-key trust. It observes exactly the endpoints this context
+      declares and records what they present. A Machine that proves its host key another way is
+      reported and left alone; a changed key is superseded only by naming it in --replace.
 
-Usage:
-  bootwright machine trust [flags]
+  Usage
+    bootwright machine trust [flags]
 
-Examples:
-  bootwright machine trust --context lab --dry-run
+  Command flags
+      --dry-run   Limit work to the command's dry-run boundary
+      --machines  Select comma-separated machine names (default: all)
+      --replace   Select comma-separated replacements (default: none)
+      --yes       Confirm the command's ordinary confirmation
 
-Flags:
-      --dry-run           Limit work to the command's dry-run boundary
-      --machines string   Select comma-separated machine names (default: all)
-      --output string     Select output mode (values: text, json) (default "text")
-      --replace string    Select comma-separated replacements (default: none)
-      --yes               Confirm the command's ordinary confirmation
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
 
-Global Flags:
-      --context string             Select a context (default: current context)
-  -h, --help                       Show help for this command
-      --ssh-ask-sudo-password      Request the borrowed account's sudo password
-      --ssh-id-file string         Offer an explicit private key for eligible SSH access
-      --ssh-user string            Borrow an explicit POSIX account for eligible SSH access
-      --ssh-user-for-provisioned   Extend the borrowed account to provisioned machines
+  More detail
+    Use --help --detail full to include SSH overrides.
+
+  Examples
+    bootwright machine trust --context lab --dry-run

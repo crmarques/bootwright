@@ -86,14 +86,14 @@ func TestAnInterruptedInitResumesFromAnotherDirectoryAndFromNoInput(t *testing.T
 	t.Run("refusals over the reservation name both exits", func(t *testing.T) {
 		services, repository, first, _ := contextFixture(t)
 		interruptInit(t, repository, first)
-		const want = "[FAIL] context.state: context alpha is still initializing: an earlier context init did not finish; " +
-			"next: finish it with bootwright context init --name alpha and its original Context file, from any input directory, " +
+		const want = "  error  context.state\n    context alpha is still initializing: an earlier context init did not finish\n    " +
+			"Next: finish it with bootwright context init --name alpha and its original Context file, from any input directory, " +
 			"or discard it with bootwright context delete --name alpha --purge\n"
 		for _, args := range [][]string{{"context", "use", "--name", "alpha"}, {"validate", "--context", "alpha"}} {
 			requireContextRefusal(t, services, want, args...)
 		}
 		_, errOut := contextRun(t, services, 0, "context", "delete", "--name", "alpha", "--purge", "--yes")
-		if strings.Contains(errOut, "[FAIL]") {
+		if strings.Contains(errOut, "  error  ") {
 			t.Fatal(errOut)
 		}
 		registry, err := repository.View(context.Background())

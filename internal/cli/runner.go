@@ -14,6 +14,9 @@ import (
 )
 
 type Config struct {
+	Presentation PresentationOptions
+	// ErrorColumns is stderr's terminal capability; nil means nonterminal.
+	ErrorColumns        func() int
 	Out                 io.Writer
 	ErrOut              io.Writer
 	BuildInfo           BuildInfo
@@ -144,6 +147,7 @@ func (r *Runner) Run(ctx context.Context, args []string) int {
 }
 
 func (r *Runner) run(ctx context.Context, args []string) int {
+	r.bindPresentation(ResolvePresentation(args, r.config.Presentation))
 	root, err := newCommandTree(r)
 	if err != nil {
 		return r.failure(nil, "", "runtime.internal", "CLI configuration failed", 1, false)
@@ -174,7 +178,7 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 		command = resolved.helpTarget
 	}
 	if resolved.helpTarget != nil || boolValue(command.Flags(), "help") {
-		if err := writeHelp(r.config.Out, command); err != nil {
+		if err := r.writeSelectedHelp(command); err != nil {
 			return 1
 		}
 		return 0
@@ -183,22 +187,22 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 		return r.failure(command, path, "cli.usage", message, 2, selectedJSON(command))
 	}
 	if path == "" || path == "completion" || (path == "render" && stringValue(command.Flags(), "input-dir") == "" && stringValue(command.Flags(), "output-dir") == "") {
-		if err := writeHelp(r.config.Out, command); err != nil {
+		if err := r.writeSelectedHelp(command); err != nil {
 			return 1
 		}
 		return 0
 	}
 	if command.Annotations["bootwright.command"] == "" {
-		return r.failure(command, path, "cli.usage", "a complete command path is required", 2, false)
+		return r.failure(command, path, "cli.usage", "a complete command path is required", 2, selectedStructured(command))
 	}
 	if path == "version" {
-		if err := writeVersion(r.config.Out, r.config.BuildInfo); err != nil {
+		if err := r.writeSelectedVersion(); err != nil {
 			return 1
 		}
 		return 0
 	}
 	if strings.HasPrefix(path, "completion ") {
-		if err := writeCompletion(r.config.Out, root, strings.TrimPrefix(path, "completion "), boolValue(command.Flags(), "no-descriptions")); err != nil {
+		if err := r.writeSelectedCompletion(root, path, boolValue(command.Flags(), "no-descriptions")); err != nil {
 			return 1
 		}
 		return 0
@@ -229,13 +233,11 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 	if errors.As(err, &controllerOutput) || errors.As(err, &lifecycleOutput) {
 		return 1
 	}
-	// A session's streams and exit status are the remote process's own, even
-	// when an interrupt arrived while it ran. There is no result to present and
-	// no status to add: the operator has already seen everything it produced.
+	// Remote sessions own their streams and status, including interruptions.
 	if err == nil && result.session != nil {
 		return result.session.ExitCode
 	}
-	setupJSON := path == "setup" && selectedJSON(command)
+	setupJSON := (path == "setup" || path == "preflight controller") && selectedJSON(command)
 	if err != nil && !setupJSON && (path == "setup" || path == "preflight controller") && validControllerReport(result.controller) {
 		if presentErr := writeControllerReport(r.config.Out, r.config.ErrOut, path, result.controller); presentErr != nil {
 			return 1
@@ -260,34 +262,8 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 		return r.failureNaming(command, path, "runtime.deadline", "operation deadline exceeded", refused, selectedJSON(command), logs)
 	}
 	usage := diagnostics.IsUsage(err)
-	if diagnostics := diagnostics.Of(err); len(diagnostics) != 0 {
-		if handled, presentErr := r.writeNegativeReadinessResults(command, path, result, diagnostics); handled {
-			if presentErr != nil {
-				return 1
-			}
-			return 1
-		}
-		if handled, _ := r.writeExecutedFailure(command, path, result, diagnostics); handled {
-			return 1
-		}
-		// A service's refusal of how it was invoked, such as a flag set the
-		// declared Secret type does not take, is a usage failure.
-		exitCode := refused
-		if usage {
-			exitCode = 2
-		}
-		if setupJSON && validControllerReport(result.controller) {
-			return r.setupPlanFailure(path, result.controller, diagnostics, exitCode)
-		}
-		if err := writeDiagnostics(r.config.Out, r.config.ErrOut, path, diagnostics, exitCode, selectedJSON(command), logs); err != nil {
-			return 1
-		}
-		if usage && !selectedJSON(command) {
-			if err := writeConciseHelp(r.config.ErrOut, command); err != nil {
-				return 1
-			}
-		}
-		return exitCode
+	if reported := diagnostics.Of(err); len(reported) != 0 {
+		return r.writeServiceDiagnostics(command, path, result, reported, usage, logs)
 	}
 	if err == nil {
 		handled, presentErr := r.writeResult(ctx, command, path, result)
@@ -305,6 +281,42 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 	return r.failureNaming(command, path, "runtime.internal", "application service returned an unsupported result", refused, selectedJSON(command), logs)
 }
 
+func (r *Runner) writeServiceDiagnostics(command *cobra.Command, path string, result commandResult, reported []diagnostic, usage bool, logs []string) int {
+	if handled, presentErr := r.writeNegativeReadinessResults(command, path, result, reported); handled {
+		if presentErr != nil {
+			return 1
+		}
+		return 1
+	}
+	if handled, _ := r.writeExecutedFailure(command, path, result, reported); handled {
+		return 1
+	}
+	// A service's refusal of how it was invoked, such as a flag set the
+	// declared Secret type does not take, is a usage failure.
+	exitCode := refusalStatus(path)
+	if usage {
+		exitCode = 2
+	}
+	if (path == "setup" || path == "preflight controller") && selectedStructured(command) && validControllerReport(result.controller) {
+		if path == "setup" && result.controller.DryRun {
+			return r.setupPlanFailure(path, result.controller, reported, exitCode)
+		}
+		if writeStructuredController(r.config.Out, path, result.controller, reported, exitCode) != nil {
+			return 1
+		}
+		return exitCode
+	}
+	if err := writeDiagnostics(r.config.Out, r.config.ErrOut, path, reported, exitCode, selectedJSON(command), logs); err != nil {
+		return 1
+	}
+	if usage && !selectedJSON(command) {
+		if err := writeConciseHelp(r.config.ErrOut, command); err != nil {
+			return 1
+		}
+	}
+	return exitCode
+}
+
 // refusalStatus is the status of a refusal of path. An SSH session's status is
 // the remote command's, 0 to 254, so every refusal Bootwright reports before
 // the session opens exits 255, the SSH client's own failure status. A usage
@@ -317,7 +329,7 @@ func refusalStatus(path string) int {
 }
 
 func selectedJSON(command *cobra.Command) bool {
-	return stringValue(command.Flags(), "output") == "json"
+	return selectedStructured(command)
 }
 
 func (r *Runner) failure(command *cobra.Command, path, code, message string, exitCode int, jsonMode bool) int {

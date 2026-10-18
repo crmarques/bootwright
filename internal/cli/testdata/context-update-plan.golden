@@ -1,7 +1,7 @@
-Context update plan
+  Context update plan
 
-  Name             lab
-  Input directory  /srv/inputs/lab
-  Files to copy    15
-  Files seen       14
-  Objects decoded  13
+    Name             lab
+    Input directory  /srv/inputs/lab
+    Files to copy    15
+    Files seen       14
+    Objects decoded  13

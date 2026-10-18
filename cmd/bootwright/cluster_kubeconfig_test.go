@@ -120,7 +120,7 @@ func snoContext(t *testing.T) (cli.Services, *contextfs.Store, string) {
 
 func singleDiagnostic(t *testing.T, stderr, code string) {
 	t.Helper()
-	if strings.Count(stderr, "\n") != 1 || !strings.HasPrefix(stderr, "[FAIL] "+code+": ") {
+	if strings.Count(stderr, "  error  ") != 1 || !strings.HasPrefix(stderr, "  error  "+code+"\n") {
 		t.Fatalf("standard error = %q, want exactly one %s diagnostic", stderr, code)
 	}
 }
@@ -151,7 +151,7 @@ func TestClusterKubeconfigJourney(t *testing.T) {
 			t.Fatalf("%s wrote %q", name, out)
 		}
 		singleDiagnostic(t, stderr, code)
-		if !strings.Contains(stderr, "bootwright cluster info --context lab-sno") {
+		if !strings.Contains(humanContent(stderr), humanContent("bootwright cluster info --context lab-sno")) {
 			t.Fatalf("%s names no discovery action: %q", name, stderr)
 		}
 	}
@@ -159,7 +159,7 @@ func TestClusterKubeconfigJourney(t *testing.T) {
 		t.Fatal("the removal withdrew nothing")
 	}
 	out, stderr = contextRun(t, services, 1, "cluster", "kubeconfig", "--name", "sno")
-	if out != "" || !strings.Contains(stderr, "; next: bootwright apply --context lab-sno") {
+	if out != "" || !strings.Contains(stderr, "\n    Next: bootwright apply --context lab-sno") {
 		t.Fatalf("a withdrawn kubeconfig wrote %q with %q", out, stderr)
 	}
 	singleDiagnostic(t, stderr, "access.unavailable")
@@ -186,7 +186,7 @@ func TestTheComposedStoreRefusesAV3Keyring(t *testing.T) {
 		{"secret", "list"}, {"secret", "encryption", "init"}, {"cluster", "kubeconfig", "--name", "sno"},
 	} {
 		out, stderr := contextRun(t, services, 1, args...)
-		if out != "" || !strings.Contains(stderr, "local-keyring-v3") || !strings.HasSuffix(stderr, "; next: "+retiredRemedy+"\n") {
+		if out != "" || !strings.Contains(stderr, "local-keyring-v3") || !strings.HasSuffix(humanContent(stderr), humanContent("\n    Next: "+retiredRemedy+"\n")) {
 			t.Fatalf("%v wrote %q with %q", args, out, stderr)
 		}
 		singleDiagnostic(t, stderr, "secret.store.implementation")

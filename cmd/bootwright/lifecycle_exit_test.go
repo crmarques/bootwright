@@ -186,10 +186,10 @@ func TestTheDeletionARefusalNamesOverUnrecognizedEvidenceRuns(t *testing.T) {
 			for _, verb := range []string{"apply", "destroy"} {
 				_, stderr := contextRun(t, services, 1, verb, "--context", "alpha", "--yes")
 				var named []string
-				if found := namedDeletion.FindStringSubmatch(stderr); found != nil {
+				if found := namedDeletion.FindStringSubmatch(strings.Join(strings.Fields(stderr), " ")); found != nil {
 					named = strings.Fields(found[1])
 				}
-				if !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(stderr, test.entry) ||
+				if !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(humanContent(stderr), humanContent(test.entry)) ||
 					!slices.Equal(named, test.named) || strings.Contains(stderr, "restore the whole store") {
 					t.Fatalf("the %s refused with %s", verb, stderr)
 				}
@@ -231,7 +231,7 @@ func TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, stderr := contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
-	if !strings.HasPrefix(out, "[OK] Context updated\n") || !strings.HasPrefix(stderr, "[WARN] lifecycle.state: context alpha holds a completed apply") {
+	if !strings.HasPrefix(out, "  ✓ Context updated\n") || !strings.HasPrefix(stderr, "  warning  lifecycle.state\n    context alpha holds a completed apply") {
 		t.Fatalf("the update over a completed apply: %s %q", out, stderr)
 	}
 	before := stateFingerprint(t, root)
@@ -239,7 +239,7 @@ func TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses(t *testing.T) {
 	const named = "the desired state changed after this apply completed: it changes Environment/synthetic (spec.domains.base, spec.domains.clusters and 3 more fields), " +
 		"Machine/service-host (spec.network.addresses[fqdn].address)"
 	const remedy = "take back what it owns with bootwright destroy --context alpha, then run bootwright apply --context alpha; bootwright diff --context alpha shows each change"
-	if !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(stderr, named) || !strings.Contains(stderr, remedy) ||
+	if !strings.Contains(stderr, "lifecycle.state") || !strings.Contains(humanContent(stderr), humanContent(named)) || !strings.Contains(humanContent(stderr), humanContent(remedy)) ||
 		!sameFingerprints(before, stateFingerprint(t, root)) {
 		t.Fatalf("the apply over the changed input refused with %s", stderr)
 	}

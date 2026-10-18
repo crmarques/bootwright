@@ -1,5 +1,13 @@
-[OK] 2 machines settled
+  ✓ 2 machines settled
 
-MACHINE  POWER  PREVIOUS  LOGS
-rhel-01  off    on        /var/lib/bootwright/contexts/lab/state/runs/run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a
-rhel-02  off    off       /var/lib/bootwright/contexts/lab/state/runs/run-0a1b2c3d4e5f60718293a4b5c6d7e8f9
+      MACHINE   rhel-01
+      POWER     off
+      PREVIOUS  on
+      LOGS      /var/lib/bootwright/contexts/lab/state/runs/run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9
+                a
+
+      MACHINE   rhel-02
+      POWER     off
+      PREVIOUS  off
+      LOGS      /var/lib/bootwright/contexts/lab/state/runs/run-0a1b2c3d4e5f60718293a4b5c6d7e8f
+                9

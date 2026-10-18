@@ -1,1 +1,5 @@
-[OK] Desired state is valid (files seen: 15, objects decoded: 15)
+  ✓ Desired state is valid
+
+  Admission
+    Files seen       15
+    Objects decoded  15

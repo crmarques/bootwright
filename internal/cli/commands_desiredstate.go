@@ -12,11 +12,11 @@ import (
 )
 
 func validationCommand() commandSpec {
-	return available(commandSpec{path: "validate", short: "Validate a complete desired-state input universe", flags: []flagSpec{{name: "file", short: "f", help: "Supply an input file or directory (repeatable)", kind: "stringArray", path: "file"}, outputFlag()}})
+	return available(commandSpec{path: "validate", short: "Validate a complete desired-state input universe", flags: []flagSpec{{name: "file", short: "f", help: "Supply an input file or directory (repeatable)", kind: "stringArray", path: "file"}}})
 }
 
 func effectiveStateCommand() commandSpec {
-	return available(commandSpec{path: "render effective", short: "Show normalized effective desired state", flags: []flagSpec{outputFlag()}})
+	return available(commandSpec{path: "render effective", short: "Show normalized effective desired state"})
 }
 
 type DesiredStateService interface {

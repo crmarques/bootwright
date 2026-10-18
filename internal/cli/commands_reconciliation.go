@@ -10,8 +10,8 @@ import (
 func lifecycleInspectionCommands() []commandSpec {
 	return []commandSpec{
 		available(commandSpec{path: "plan", short: "Preview the next complete lifecycle operation", flags: []flagSpec{stageFlag()}, long: "Preview the next legal full-context operation, or the exact continuation point of an incomplete one. It reads durable state and changes nothing. With --stage it also shows which blocks that selection would start."}),
-		available(commandSpec{path: "status", short: "Show context readiness and lifecycle state", flags: []flagSpec{outputFlag()}, long: "Report context readiness, desired state and lifecycle progress from durable records. It performs no probe."}),
-		available(commandSpec{path: "diff", short: "Compare desired state with what this context realized", flags: []flagSpec{boolFlag("observe", "Read each realized block's target through its read-only observation"), outputFlag()}, long: "Compare the context's desired state with what its apply realized, object by object. Without --observe it reads durable records only and contacts no host; with --observe it reads each realized block's target through that block's read-only observation. It changes nothing."}),
+		available(commandSpec{path: "status", short: "Show context readiness and lifecycle state", long: "Report context readiness, desired state and lifecycle progress from durable records. It performs no probe."}),
+		available(commandSpec{path: "diff", short: "Compare desired state with what this context realized", flags: []flagSpec{boolFlag("observe", "Read each realized block's target through its read-only observation")}, long: "Compare the context's desired state with what its apply realized, object by object. Without --observe it reads durable records only and contacts no host; with --observe it reads each realized block's target through that block's read-only observation. It changes nothing."}),
 	}
 }
 
