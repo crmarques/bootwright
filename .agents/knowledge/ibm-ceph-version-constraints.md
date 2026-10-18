@@ -45,6 +45,13 @@ controls. Those tests do not establish real image, host-policy or MGR lifecycle
 qualification; keep the transport's confinement and refusal proofs when adding
 version handling.
 
+The [listener replacement evidence](ibm-ceph-native-ssh.md#listener-replacement-and-socket-reuse)
+owns the shared AsyncSSH `2.13.2`/`2.17.0` address-reuse default, synthetic
+rebind correction, exclusive live-bind check and bounded listener diagnostics.
+This requirement follows the probe's listener lifecycle across those inspected
+SDKs; it adds no release allowlist or automatic version selection. Preserve
+operator control and qualify the actual selected runtime independently.
+
 ## Bootstrap license call and diagnostics
 
 The authenticated downstream changes archives from the public

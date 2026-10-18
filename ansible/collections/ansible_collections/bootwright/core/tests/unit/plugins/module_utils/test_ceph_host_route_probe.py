@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import builtins
+import errno
 import json
 import os
 from pathlib import Path
@@ -681,6 +682,77 @@ def test_final_listener_cleanup_cannot_add_unreported_connections_or_effects(mon
         asyncio.run(PROBE.finalize_cases(None, set(), [Listener()], value, "missingNativeConfig"))
 
 
+@pytest.mark.parametrize("failure", [None, "create", "prove"])
+def test_exercise_rebinds_closed_outer_socket_without_sharing_active_listener(monkeypatch, failure):
+    endpoints, listeners, cases, options = {}, [], [], []
+    closed = None
+
+    async def accepted(reader, writer):
+        writer.close()
+        await writer.wait_closed()
+        closed.set()
+
+    class SDK:
+        SSHServer = object
+
+        async def create_server(self, factory, address, port, **kwargs):
+            endpoint = (address, port)
+            replacement = endpoint in endpoints
+            options.append((kwargs.get("reuse_address", False), kwargs.get("reuse_port", False)))
+            if replacement and failure == "create":
+                raise OSError(errno.EADDRINUSE, "private listener endpoint")
+            listener = await asyncio.start_server(
+                accepted, "127.0.0.1", endpoints.get(endpoint, (None, 0))[1],
+                reuse_address=kwargs.get("reuse_address", False), reuse_port=kwargs.get("reuse_port", False))
+            endpoints[endpoint] = listener.sockets[0].getsockname()
+            listeners.append(listener)
+            return listener
+
+    def prove(listener, address, port):
+        assert listener.sockets[0].getsockname() == endpoints[(address, port)]
+        if len(listeners) == 5 and failure == "prove":
+            raise ValueError("private proof endpoint")
+
+    async def run_case(native, provider, counters, host, positive, case, connections):
+        cases.append(case)
+        if positive:
+            assert case == "correctKey"
+            endpoint = endpoints[(PROBE.ADDRESS, PROBE.OUTER_PORT)]
+            # An active listener must remain exclusive even though closed sockets are reusable.
+            with pytest.raises(OSError) as caught:
+                await asyncio.start_server(accepted, *endpoint, reuse_address=True, reuse_port=False)
+            assert caught.value.errno == errno.EADDRINUSE
+            reader, writer = await asyncio.open_connection(*endpoint)
+            assert await reader.read() == b""
+            await closed.wait()
+            writer.close()
+            await writer.wait_closed()
+        return {"case": case}
+
+    monkeypatch.setattr(PROBE, "prove_listener", prove)
+    monkeypatch.setattr(PROBE, "run_case", run_case)
+    monkeypatch.setattr(PROBE, "manager", lambda *args: types.SimpleNamespace(cons={}, mgr=types.SimpleNamespace()))
+    key = types.SimpleNamespace(export_public_key=lambda unused: b"synthetic public key")
+
+    async def exercise():
+        nonlocal closed
+        closed = asyncio.Event()
+        return await asyncio.wait_for(PROBE.exercise_cases(SDK(), None, dict.fromkeys(PROBE.KEYS, key)), 3)
+
+    if failure:
+        with pytest.raises(PROBE.ListenerRefusal) as caught:
+            asyncio.run(exercise())
+        assert caught.value.listener == "replacement"
+        assert caught.value.operation == failure
+        assert cases == ["correctKey"]
+    else:
+        result = asyncio.run(exercise())
+        assert cases == ["correctKey", "wrongKey", "unknownTarget", "unavailableProxy", "missingNativeConfig"]
+        assert list(result) == cases
+    assert options == [(True, False)] * 5
+    assert all(not listener.is_serving() and not listener.sockets for listener in listeners)
+
+
 @pytest.mark.parametrize("reason", [None, "missingNativeConfig", "wrongKey"])
 def test_actual_entrypoint_suppresses_vendor_text_and_preserves_fixed_failure(reason):
     source = Path(PROBE.__file__).read_text().replace('if __name__ == "__main__":\n    sys.exit(main())', "")
@@ -719,3 +791,31 @@ def test_actual_entrypoint_publishes_only_fixed_failed_case_and_six_integer_coun
 def test_only_two_fixed_actions_are_accepted(arguments):
     with pytest.raises(PROBE.Refusal):
         PROBE.execute(arguments)
+
+
+@pytest.mark.parametrize("number,category,error_class", [
+    (errno.EADDRINUSE, "address-in-use", "OSError"),
+    (errno.EACCES, "permission-denied", "PermissionError"),
+    (errno.EPERM, "permission-denied", "PermissionError"),
+    (errno.EADDRNOTAVAIL, "address-unavailable", "OSError"),
+    (errno.EIO, "other", "OSError"),
+    (None, "none", "ValueError"),
+])
+def test_listener_entrypoint_reports_fixed_categories_without_native_text(number, category, error_class):
+    source = Path(PROBE.__file__).read_text().replace('if __name__ == "__main__":\n    sys.exit(main())', "")
+    error = "ValueError('private listener endpoint')" if number is None else "OSError(" + str(number) + ", 'private listener endpoint')"
+    source += ("\ndef execute(arguments):\n    raise ListenerRefusal('replacement', 'create', " + error + ")\n"
+               "sys.exit(main(['exercise']))\n")
+    result = subprocess.run([sys.executable, "-I", "-c", source], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=3, check=False)
+    assert result.returncode == 1 and result.stderr == b""
+    assert json.loads(result.stdout) == {
+        "schema": PROBE.SCHEMA, "ok": False, "reason": "route-listener-refusal", "listener": "replacement",
+        "operation": "create", "errorClass": error_class, "socketError": category,
+    }
+    assert b"private listener endpoint" not in result.stdout
+
+
+@pytest.mark.parametrize("listener,operation", [("private endpoint", "create"), ("outer", "private operation")])
+def test_listener_diagnostics_reject_unlisted_fields(listener, operation):
+    refused = pytest.raises(PROBE.Refusal, PROBE.ListenerRefusal, listener, operation, ValueError("private detail"))
+    assert not isinstance(refused.value, PROBE.ListenerRefusal)

@@ -15,6 +15,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import contextlib
+import errno
 import importlib.util
 import json
 import os
@@ -109,6 +110,23 @@ class PhaseRefusal(Refusal):
         require(phase in PHASES)
         self.reason = "route-" + phase + "-refusal"
         super().__init__(self.reason)
+
+
+class ListenerRefusal(PhaseRefusal):
+    """Only fixed listener roles and error categories leave the probe."""
+
+    def __init__(self, listener, operation, error):
+        require(listener in ("inner", "direct-target", "direct-unknown", "outer", "replacement"))
+        require(operation in ("create", "prove"))
+        super().__init__("listener")
+        self.listener = listener
+        self.operation = operation
+        self.error_class = exception_class(error)
+        categories = {errno.EADDRINUSE: "address-in-use", errno.EACCES: "permission-denied",
+                      errno.EPERM: "permission-denied", errno.EADDRNOTAVAIL: "address-unavailable"}
+        self.socket_error = "none"
+        if isinstance(error, OSError):
+            self.socket_error = categories.get(error.errno, "other") if type(error.errno) is int else "other"
 
 
 @contextlib.contextmanager
@@ -595,27 +613,37 @@ async def exercise_cases(ssh, provider, keys, helper=None, manifest=None):
     connections, listeners, cases = set(), [], {}
     native = manager(provider, keys["client"].export_public_key("openssh").decode("ascii").strip())
 
-    async def listen(kind, address, port, host_key):
-        with phase("listener"):
+    async def listen(label, kind, address, port, host_key):
+        operation = "create"
+        try:
+            # AsyncSSH disables address reuse by default. Both outer sockets
+            # need it to replace the key after accepted TCP connections close;
+            # reuse_port stays off so another live listener cannot share it.
             listener = await ssh.create_server(server_factory(ssh, kind, counters, connections, keys["client"]), address, port,
                                                server_host_keys=[host_key], process_factory=process_factory(counters, kind),
-                                               encoding="utf-8", login_timeout=CASE_LIMIT)
+                                               encoding="utf-8", login_timeout=CASE_LIMIT,
+                                               reuse_address=True, reuse_port=False)
             listeners.append(listener)
+            operation = "prove"
             prove_listener(listener, address, port)
             return listener
+        except (DirectFallback, CaseRefusal, PhaseRefusal):
+            raise
+        except Exception as error:
+            raise ListenerRefusal(label, operation, error) from None
 
     current = "correctKey"
     try:
-        await listen("inner", INNER_ADDRESS, INNER_PORT, keys["inner"])
-        await listen("direct", ADDRESS, INNER_PORT, keys["inner"])
-        await listen("direct", UNKNOWN_ADDRESS, INNER_PORT, keys["inner"])
-        outer = await listen("outer", ADDRESS, OUTER_PORT, keys["outer"])
+        await listen("inner", "inner", INNER_ADDRESS, INNER_PORT, keys["inner"])
+        await listen("direct-target", "direct", ADDRESS, INNER_PORT, keys["inner"])
+        await listen("direct-unknown", "direct", UNKNOWN_ADDRESS, INNER_PORT, keys["inner"])
+        outer = await listen("outer", "outer", ADDRESS, OUTER_PORT, keys["outer"])
         if helper is not None:
             await loopback_controls(helper, manifest, counters, connections)
         cases[current] = await run_case(native, provider, counters, HOST, True, current, connections)
         outer.close()
         await outer.wait_closed()
-        outer = await listen("outer", ADDRESS, OUTER_PORT, keys["replacement"])
+        outer = await listen("replacement", "outer", ADDRESS, OUTER_PORT, keys["replacement"])
         current = "wrongKey"
         cases[current] = await run_case(native, provider, counters, HOST, False, current, connections)
         current = "unknownTarget"
@@ -696,6 +724,9 @@ def main(arguments=None):
         value = {"schema": SCHEMA, "ok": False, "reason": error.reason}
         if isinstance(error, CaseFailure) and error.counters is not None:
             value.update(case=error.case, counters=error.counters, errorClass=error.error_class)
+        if isinstance(error, ListenerRefusal):
+            value.update(listener=error.listener, operation=error.operation,
+                         errorClass=error.error_class, socketError=error.socket_error)
     except Exception:
         status = 1
         value = {"schema": SCHEMA, "ok": False, "reason": "route-refusal"}

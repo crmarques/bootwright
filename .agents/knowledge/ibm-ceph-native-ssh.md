@@ -115,3 +115,35 @@ public key and unknown target FIPS facts; it does not invent host observations.
 These findings concern public artifacts, not acceptance of an image or a real
 SSH route. Header and archive checks authenticate the inspected source; they
 do not claim a complete source-RPM payload verification.
+
+## Listener replacement and socket reuse
+
+The route probe closes its synthetic outer listener after the positive case,
+waits for it to close, then binds the same endpoint with a replacement host
+key for the wrong-key case. Both [AsyncSSH 2.13.2](https://raw.githubusercontent.com/ronf/asyncssh/v2.13.2/asyncssh/connection.py)
+and [2.17.0](https://raw.githubusercontent.com/ronf/asyncssh/v2.17.0/asyncssh/connection.py)
+default `listen(reuse_address=False, reuse_port=False)`; `create_server`
+forwards those options. The public IBM AsyncSSH source RPM above confirms
+that behavior for its 2.17.0 source. An explicit `False` overrides
+[asyncio's Unix address-reuse default](https://docs.python.org/3.12/library/asyncio-eventloop.html#asyncio.loop.create_server),
+which applies when its argument is `None`.
+
+`SSHAcceptor.close` stops listening and `wait_closed` delegates to the asyncio
+server; closing the listener does not clear TCP `TIME_WAIT` left by accepted
+connections. A synthetic reproduction using the authenticated public SDK on
+ephemeral loopback endpoints reproduced `EADDRINUSE` after an active server
+close with the default options. Setting `reuse_address=True` on both the
+initial and replacement listeners allowed the rebind. Keeping
+`reuse_port=False` still refused a duplicate bind while the initial listener
+was active. Both listener generations need the address-reuse option; retain
+the exact bound-address proof, direct-contact listeners, event counters and
+all negative SSH cases.
+
+A bare `route-listener-refusal` covers listener creation and the subsequent
+socket proof. It cannot establish which listener or operation failed, or
+whether the cause was address reuse, permissions or another error. Use a
+bounded diagnostic with a fixed listener label, `create` or `prove` operation,
+and fixed `errorClass`/`socketError` categories; keep native exception text and
+endpoint details private. Source inspection and synthetic rebinding establish
+this probe lifecycle requirement. Actual-image and host acceptance still
+require the complete behavioral route proof for the operator's selection.
