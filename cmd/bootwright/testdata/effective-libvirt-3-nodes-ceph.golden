@@ -395,8 +395,8 @@ spec:
     release: 9.9.2.0
     packageVersion: 20.2.2-349.el9cp
     image:
-      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
-      version: v9.9.2-26729
+      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+      version: v9.9.2
     ibm:
       callHome: enabled
       packages:
