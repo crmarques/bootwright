@@ -91,3 +91,27 @@ can replace an existing identity. The fixed generator is
 [`ceph-authtool --gen-print-key`](https://docs.ceph.com/en/tentacle/man/8/ceph-authtool/).
 Signed-package inspection and a synthetic generator probe do not qualify
 authorization, interrupted continuation or client removal in a running cluster.
+
+## Provider runtime and package imports
+
+The public [RHEL 10 AsyncSSH source RPM](https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel10/source/python-asyncssh-2.17.0-1.el10cp.src.rpm)
+publishes version 2.17.0. The route probe previously required exactly 2.13.2
+before either synthetic preparation or the behavioral checks. That check
+produced `route-runtime-refusal` for an otherwise importable SDK, independently
+of its SSH behavior. The probe now reaches its behavioral checks with the SDK
+in the selected image; an import failure still refuses at the runtime phase.
+
+The downstream changes archive authenticated by the signed header of IBM's
+[Ceph 20.2.2 source RPM](https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel10/source/ceph-20.2.2-349.el10cp.src.rpm)
+adds a relative import of `is_fips_enabled` and `get_default_ssh_config` from
+`cephadm.utils`. Its SSH manager also reads cached target FIPS facts and the
+manager's public key. A standalone `ssh.py` module has no package context for
+that import. Load its actual utility source with the SSH source in an isolated
+package, registering modules before execution because the utilities define a
+dataclass. This avoids running the daemon package initializer or substituting
+the provider's FIPS behavior. The synthetic manager supplies its generated
+public key and unknown target FIPS facts; it does not invent host observations.
+
+These findings concern public artifacts, not acceptance of an image or a real
+SSH route. Header and archive checks authenticate the inspected source; they
+do not claim a complete source-RPM payload verification.

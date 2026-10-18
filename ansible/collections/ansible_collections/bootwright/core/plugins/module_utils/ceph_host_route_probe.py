@@ -12,6 +12,7 @@ from __future__ import annotations
 # Exact type identity is the validation here: a bool is not an int and a capability object is never a subclass.
 # pylint: disable=unidiomatic-typecheck
 
+import ast
 import asyncio
 import contextlib
 import importlib.util
@@ -222,25 +223,48 @@ def fixed_module(name, path):
     return module
 
 
-def provider_module():
-    descriptor = os.open(PROVIDER_SOURCE, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+def provider_source(path):
+    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | os.O_CLOEXEC)
     with os.fdopen(descriptor, "rb") as stream:
         info = os.fstat(stream.fileno())
         require(stat.S_ISREG(info.st_mode) and info.st_mode & 0o022 == 0 and 0 < info.st_size <= 1024 * 1024)
         raw = stream.read(1024 * 1024 + 1)
         require(len(raw) == info.st_size)
+    return raw
+
+
+def provider_module():
+    raw = provider_source(PROVIDER_SOURCE)
+    imports_utils = any(isinstance(node, ast.ImportFrom) and node.level == 1 and node.module == "utils"
+                        for node in ast.parse(raw, PROVIDER_SOURCE).body)
+    utils_path = os.path.join(os.path.dirname(PROVIDER_SOURCE), "utils.py")
+    utils_source = provider_source(utils_path) if imports_utils else None
+    package_name = "bootwright_native_cephadm"
     stubs = {name: types.ModuleType(name) for name in ("ceph", "ceph.deployment", "ceph.deployment.hostspec", "orchestrator")}
     stubs["ceph"].__path__ = []
     stubs["ceph.deployment"].__path__ = []
     stubs["ceph.deployment.hostspec"].normalize_hostname = lambda value: value
     stubs["orchestrator"].OrchestratorError = Refusal
-    previous = {name: sys.modules.get(name) for name in stubs}
+    modules = dict(stubs)
+    package = types.ModuleType(package_name)
+    package.__path__ = []
+    modules[package_name] = package
+    sources = []
+    if utils_source is not None:
+        sources.append(("utils", utils_path, utils_source))
+    sources.append(("ssh", PROVIDER_SOURCE, raw))
+    for name, path, unused in sources:
+        module = types.ModuleType(package_name + "." + name)
+        module.__file__ = path
+        module.__package__ = package_name
+        modules[module.__name__] = module
+        setattr(package, name, module)
+    previous = {name: sys.modules.get(name) for name in modules}
     try:
-        sys.modules.update(stubs)
-        module = types.ModuleType("bootwright_native_ssh_route")
-        module.__file__ = PROVIDER_SOURCE
-        exec(compile(raw, PROVIDER_SOURCE, "exec"), module.__dict__)
-        return module
+        sys.modules.update(modules)
+        for name, path, source in sources:
+            exec(compile(source, path, "exec"), modules[package_name + "." + name].__dict__)
+        return modules[package_name + ".ssh"]
     finally:
         for name, value in previous.items():
             if value is None:
@@ -290,7 +314,7 @@ def parser_preflight(ssh, helper, manifest):
         require(result.returncode == 0)
 
 
-def manager(provider):
+def manager(provider, client_public=""):
     class Inventory:
         def __contains__(self, host):
             return host in (HOST, UNKNOWN_HOST)
@@ -299,7 +323,12 @@ def manager(provider):
             require(host in (HOST, UNKNOWN_HOST))
             return ADDRESS if host == HOST else UNKNOWN_ADDRESS
 
-    mgr = types.SimpleNamespace(inventory=Inventory(), ssh_user=USER, _ssh_options="route",
+    class Cache:
+        def get_host_fips_enabled(self, host):
+            require(host in (HOST, UNKNOWN_HOST))
+            return None
+
+    mgr = types.SimpleNamespace(inventory=Inventory(), cache=Cache(), ssh_user=USER, ssh_pub=client_public, _ssh_options="route",
                                 ssh_keepalive_interval=2, ssh_keepalive_count_max=1,
                                 tkey=types.SimpleNamespace(name=TUNNEL_ROOT + "/identity"),
                                 ssh_config_fname=TUNNEL_ROOT + "/native_config", sudo_hardening=False,
@@ -564,7 +593,7 @@ async def loopback_controls(helper, manifest, counters, connections):
 async def exercise_cases(ssh, provider, keys, helper=None, manifest=None):
     counters = {name: 0 for name in COUNTERS}
     connections, listeners, cases = set(), [], {}
-    native = manager(provider)
+    native = manager(provider, keys["client"].export_public_key("openssh").decode("ascii").strip())
 
     async def listen(kind, address, port, host_key):
         with phase("listener"):
@@ -631,7 +660,6 @@ def execute(arguments):
     require(len(arguments) == 1 and arguments[0] in ("prepare", "exercise"))
     with phase("runtime"):
         import asyncssh
-        require(getattr(asyncssh, "__version__", None) == "2.13.2")
     return prepare(asyncssh) if arguments[0] == "prepare" else asyncio.run(exercise(asyncssh))
 
 

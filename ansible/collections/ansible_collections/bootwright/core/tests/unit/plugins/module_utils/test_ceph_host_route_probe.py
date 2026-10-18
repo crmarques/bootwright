@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import builtins
 import json
 import os
 from pathlib import Path
@@ -123,6 +124,123 @@ def test_provider_import_stubs_are_only_error_bookkeeping_and_are_restored(tmp_p
     module = PROBE.provider_module()
     assert module.normalized == "route-target" and module.error is PROBE.Refusal
     assert sys.modules["orchestrator"] is sentinel
+
+
+@pytest.mark.parametrize("preexisting", [False, True])
+@pytest.mark.parametrize("failure", [False, True])
+def test_provider_relative_helpers_execute_without_package_init_and_restore_modules(tmp_path, monkeypatch, preexisting, failure):
+    source = tmp_path / "ssh.py"
+    source.write_text("from .utils import NativeOptions, get_default_ssh_config\n"
+                      "options = NativeOptions(get_default_ssh_config())\n" +
+                      ("raise RuntimeError('private fixture detail')\n" if failure else ""))
+    (tmp_path / "utils.py").write_text(
+        "from __future__ import annotations\nfrom dataclasses import dataclass\n"
+        "@dataclass\nclass NativeOptions:\n    config: str\n"
+        "def get_default_ssh_config():\n    return 'native helper configuration'\n")
+    effect = tmp_path / "package-init-effect"
+    (tmp_path / "__init__.py").write_text("open(" + repr(str(effect)) + ", 'w').write('unexpected')\n")
+    names = ("bootwright_native_cephadm", "bootwright_native_cephadm.ssh", "bootwright_native_cephadm.utils",
+             "ceph", "ceph.deployment", "ceph.deployment.hostspec", "orchestrator")
+    previous = {}
+    for name in names:
+        if preexisting:
+            previous[name] = types.ModuleType(name)
+            monkeypatch.setitem(sys.modules, name, previous[name])
+        else:
+            monkeypatch.delitem(sys.modules, name, raising=False)
+    monkeypatch.setattr(PROBE, "PROVIDER_SOURCE", str(source))
+    if failure:
+        with pytest.raises(RuntimeError, match="^private fixture detail$"):
+            PROBE.provider_module()
+    else:
+        module = PROBE.provider_module()
+        assert module.options.config == module.get_default_ssh_config() == "native helper configuration"
+        assert type(module.options).__module__ == "bootwright_native_cephadm.utils"
+    assert not effect.exists()
+    for name in names:
+        if preexisting:
+            assert sys.modules[name] is previous[name]
+        else:
+            assert name not in sys.modules
+
+
+@pytest.mark.parametrize("change", ["mutable", "symlink", "oversized"])
+def test_unsafe_provider_helper_refuses_before_either_source_executes(tmp_path, monkeypatch, change):
+    effect = tmp_path / "effect"
+    payload = "open(" + repr(str(effect)) + ", 'w').write('unexpected')\n"
+    source = tmp_path / "ssh.py"
+    source.write_text(payload + "from .utils import native_option\n")
+    helper = tmp_path / "utils.py"
+    helper.write_text(payload + "native_option = True\n")
+    if change == "mutable":
+        helper.chmod(0o666)
+    elif change == "symlink":
+        target = tmp_path / "helper-target.py"
+        helper.rename(target)
+        helper.symlink_to(target)
+    else:
+        helper.write_text(payload + "#" * (1024 * 1024))
+    monkeypatch.setattr(PROBE, "PROVIDER_SOURCE", str(source))
+    with pytest.raises((PROBE.Refusal, OSError)):
+        PROBE.provider_module()
+    assert not effect.exists()
+
+
+def test_provider_without_relative_helpers_needs_no_sibling_utils(tmp_path, monkeypatch):
+    source = tmp_path / "ssh.py"
+    source.write_text("from orchestrator import OrchestratorError\nnative_error = OrchestratorError\n")
+    monkeypatch.setattr(PROBE, "PROVIDER_SOURCE", str(source))
+    module = PROBE.provider_module()
+    assert module.native_error is PROBE.Refusal
+    assert not (tmp_path / "utils.py").exists()
+
+
+def test_native_manager_receives_synthetic_public_key_and_unknown_host_fips_facts():
+    public = synthetic()["keys"]["client"]["public"]
+    manager = PROBE.manager(types.SimpleNamespace(SSHManager=lambda mgr: mgr), public)
+    assert manager.ssh_pub == public
+    for host in (PROBE.HOST, PROBE.UNKNOWN_HOST):
+        assert manager.cache.get_host_fips_enabled(host) is None
+    with pytest.raises(PROBE.Refusal):
+        manager.cache.get_host_fips_enabled("foreign-host")
+    assert manager.inventory.get_addr(PROBE.HOST) == PROBE.ADDRESS
+    assert manager.inventory.get_addr(PROBE.UNKNOWN_HOST) == PROBE.UNKNOWN_ADDRESS
+
+
+@pytest.mark.parametrize("version", ["2.13.2", "2.21.0", "synthetic-future-sdk"])
+@pytest.mark.parametrize("action", ["prepare", "exercise"])
+def test_native_sdk_version_reaches_behavioral_proof(monkeypatch, version, action):
+    ssh = types.ModuleType("asyncssh")
+    ssh.__version__ = version
+    monkeypatch.setitem(sys.modules, "asyncssh", ssh)
+    calls = []
+
+    def prepare(module):
+        calls.append(("prepare", module))
+        return {"synthetic": "prepared"}
+
+    async def exercise(module):
+        calls.append(("exercise", module))
+        return {"cases": "proved"}
+
+    monkeypatch.setattr(PROBE, "prepare", prepare)
+    monkeypatch.setattr(PROBE, "exercise", exercise)
+    assert PROBE.execute([action]) == ({"synthetic": "prepared"} if action == "prepare" else {"cases": "proved"})
+    assert calls == [(action, ssh)]
+
+
+def test_missing_native_sdk_still_refuses_at_runtime_before_proof(monkeypatch):
+    original = builtins.__import__
+
+    def import_module(name, *args, **kwargs):
+        if name == "asyncssh":
+            raise ModuleNotFoundError("private fixture dependency")
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_module)
+    monkeypatch.setattr(PROBE, "prepare", lambda ssh: pytest.fail("prepare without the native SDK"))
+    with pytest.raises(PROBE.PhaseRefusal, match="^route-runtime-refusal$"):
+        PROBE.execute(["prepare"])
 
 
 class NativeHostError(ValueError):
