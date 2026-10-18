@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import base64
+import datetime
 import errno
 import hashlib
 import hmac
@@ -2089,15 +2090,51 @@ class Worker:
             self.markers.write("tunnel-config-complete-" + name + ".json", intent)
         return True, not present
 
-    def call_home_acceptance(self):
+    def call_home_acceptance(self, optional=False):
         values = self.ceph("config", "dump")
         require(isinstance(values, list), "native-output")
         selected = [value for value in values if isinstance(value, dict) and value.get("name") == "mgr/cephadm/call_home_needs_acceptance"]
+        if not selected and optional:
+            return None
         require(len(selected) == 1 and selected[0].get("section") == "mgr" and selected[0].get("mask") == "", "call-home-drift")
         # The manager stores Python's str(bool); the MON normalizes a known option's spelling, so either one is the same flag.
         value = selected[0].get("value")
         require(isinstance(value, str) and value.lower() in ("true", "false"), "call-home-drift")
         return value.lower() == "true"
+
+    def initialize_call_home(self, mutate):
+        """Finish the native seed's missing Call Home initialization without re-bootstrapping."""
+        require(self.request["callHome"] == "enabled", "call-home-unqualified")
+        intent = dict(self.configuration_intent(), step="call_home_initialize")
+        prefix = "tunnel-config-"
+        attempted = self.markers.read(prefix + "attempt-call_home_initialize.json")
+        completed = self.markers.read(prefix + "complete-call_home_initialize.json")
+        require(attempted is None or canonical(attempted) == canonical(intent), "ownership")
+        require(completed is None or attempted is not None and canonical(completed) == canonical(intent), "ownership")
+        needed = self.call_home_acceptance(optional=True)
+        changed = False
+        if attempted is None:
+            if needed is not None:
+                return True, False
+            require(self.markers.read("tunnel-config-attempt-call_home.json") is None
+                    and self.markers.read("tunnel-config-complete-call_home.json") is None
+                    and self.markers.read("call-home-accepted.json") is None
+                    and self.markers.read("tunnel-configured.json") is None, "call-home-drift")
+            if not mutate:
+                return False, False
+            self.markers.write(prefix + "attempt-call_home_initialize.json", intent)
+            self.manager_retry(self.tunnel_effect, "orch", "enable-call-home", "--raise-automation-warning", json_result=False)
+            needed = self.call_home_acceptance()
+            require(needed, "call-home-drift")
+            changed = True
+        else:
+            require(needed is not None, "partial-cluster")
+            acceptance = dict(self.configuration_intent(), step="call_home")
+            require(needed or canonical(self.markers.read("tunnel-config-attempt-call_home.json")) == canonical(acceptance), "call-home-drift")
+        self.call_home_state()
+        if mutate and completed is None:
+            self.markers.write(prefix + "complete-call_home_initialize.json", intent)
+        return True, changed
 
     def configure_call_home(self, mutate):
         intent = dict(self.configuration_intent(), step="call_home")
@@ -2138,8 +2175,11 @@ class Worker:
             for name, wanted, command in values:
                 proved, effect = self.configure_setting(name, wanted, command, mutate)
                 complete, changed = complete and proved, changed or effect
-            proved, effect = self.configure_call_home(mutate)
+            proved, effect = self.initialize_call_home(mutate)
             complete, changed = complete and proved, changed or effect
+            if proved:
+                proved, effect = self.configure_call_home(mutate)
+                complete, changed = complete and proved, changed or effect
         self.config_database()
         return complete, changed
 
@@ -2453,6 +2493,38 @@ class Worker:
             result[name] = host
         return result
 
+    def license_accepted(self):
+        """Read the MON's provider record against the proved image, without native license extraction."""
+        keys = self.configuration_keys()
+        selected = sorted(key for key in keys if key.startswith("mgr/cephadm/") and re.search(r"_license_[0-9a-f]{32}\Z", key))
+        require(len(selected) <= 128, "native-output")
+        if not selected:
+            return False
+        image_id = self.runtime_profile()["imageID"]
+        accepted, budget = False, MAX_OUTPUT
+        for key in selected:
+            raw = self.ceph_text("config-key", "get", key)
+            require(isinstance(raw, bytes) and len(raw) <= budget, "native-output")
+            budget -= len(raw)
+            try:
+                value = json.loads(raw, object_pairs_hook=unique_object)
+            except (ValueError, UnicodeError):
+                raise Refusal("native-output") from None
+            require(isinstance(value, dict) and set(value) == {"ceph_version", "image_id", "accept_time", "license"}, "native-output")
+            require(all(isinstance(value[name], str) and value[name] for name in value), "native-output")
+            require(HEX.fullmatch(value["image_id"]) is not None and len(value["ceph_version"]) <= 1024
+                    and len(value["accept_time"]) <= 128, "native-output")
+            try:
+                timestamp = datetime.datetime.fromisoformat(value["accept_time"])
+            except ValueError:
+                raise Refusal("native-output") from None
+            require(timestamp.tzinfo is not None, "native-output")
+            digest = hashlib.md5(value["license"].encode("utf-8"), usedforsecurity=False).hexdigest()
+            expected = "mgr/cephadm/" + value["ceph_version"].replace(" ", "_") + "_license_" + digest
+            require(key == expected, "native-output")
+            accepted = accepted or value["image_id"] == image_id
+        return accepted
+
     def enroll(self):
         require(self.markers.owned(), "ownership")
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
@@ -2507,6 +2579,10 @@ class Worker:
             require(current is not None and set(current.get("labels", [])) == set(spec["labels"]), "not-ready")
             if complete is None:
                 self.markers.write(prefix + "-complete.json", intent)
+        if not self.license_accepted():
+            self.manager_retry(self.tunnel_effect, "orch", "accept-license", "--image", self.request["image"], json_result=False)
+            require(self.license_accepted(), "not-ready")
+            changed = True
         return {"changed": changed}
 
     def device_identities(self, publish=None):
@@ -3316,6 +3392,9 @@ class Worker:
         require(isinstance(status, dict) and status.get("fsid") == self.request["fsid"], "native-output")
         require(isinstance(status.get("health"), dict), "native-output")
         evidence["health"], healthy = self.readiness_health(status["health"])
+        license_ready = self.request["action"] != "cluster" or self.license_accepted()
+        if not license_ready:
+            self.blocking = sorted(set(self.blocking) | {"IBM_LICENSE_NOT_ACCEPTED"})[:16]
         pg_ready = placement_groups_ready(status, self.request["action"])
         self.call_home_state()
         quorum = self.ceph("quorum_status")
@@ -3380,7 +3459,7 @@ class Worker:
         evidence["removed"] = evidence["owned"] and not evidence["exists"]
         # A manager container this host is restarting is unfinished work, named beside the blocking health checks.
         self.blocking = (pending + self.blocking)[:16]
-        evidence["ready"] = ready and pg_ready and healthy and not pending
+        evidence["ready"] = ready and pg_ready and healthy and license_ready and not pending
         evidence["partial"] = evidence["exists"] and not evidence["ready"]
         return evidence
 

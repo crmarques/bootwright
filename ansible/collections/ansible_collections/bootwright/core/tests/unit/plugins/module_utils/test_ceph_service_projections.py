@@ -16,6 +16,7 @@ private = fixtures.private
 @pytest.fixture
 def projection_world(native, private):
     fixtures.prepared_bootstrap(native, private)
+    native.license_accepted = lambda: True
     daemons, hosts, stored, effects = [], {}, {}, []
     native.daemons = lambda: copy.deepcopy(daemons)
     native.markers.records["transport-ready.json"] = {"synthetic": True}

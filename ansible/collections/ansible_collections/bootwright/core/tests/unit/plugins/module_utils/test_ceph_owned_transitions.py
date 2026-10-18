@@ -16,6 +16,7 @@ def world(core_request):
     native = ceph_native.Worker(core_request, core_request["bootstrap"], markers=fixtures.Markers())
     native.prove_registry = lambda: None
     native.provider_registry_absent = lambda: None
+    native.license_accepted = lambda: True
     native.config_database = lambda: None
     native.normalized_services = lambda groups: groups
     native.recovery_scope = lambda: {"cluster": copy.deepcopy(core_request)}

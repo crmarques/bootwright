@@ -102,6 +102,9 @@ def worker(core_request, answers, markers=None):
     # Actual registry custody is covered by test_ceph_registry.py.
     native.prove_registry = lambda wanted=None: None
     native.provider_registry_absent = lambda: None
+    # Phase snapshots explicitly assume the selected image's license was
+    # accepted; test_ceph_bootstrap_finalization exercises the real MON reader.
+    native.license_accepted = lambda: True
     return native, calls
 
 

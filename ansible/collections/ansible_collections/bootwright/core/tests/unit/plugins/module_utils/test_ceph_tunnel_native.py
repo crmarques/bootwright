@@ -762,6 +762,7 @@ def test_enrollment_has_no_host_effect_until_all_current_tunnel_proofs_pass(nati
     native.verify_tunnel_configuration = lambda: events.append("config")
     native.verify_manager_mounts = lambda observed: events.append("mount")
     native.daemons = lambda: initial_daemons(native)
+    native.license_accepted = lambda: True
 
     def ceph(*args, **kwargs):
         if args == ("fsid",):

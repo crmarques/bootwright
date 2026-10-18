@@ -415,6 +415,7 @@ def test_lost_mount_reply_is_finalized_by_coordinator_before_enrollment_without_
     native.native_source = source
     native.capture_bootstrap_outputs()
     native.configuration_complete = lambda: True
+    native.license_accepted = lambda: True
     inventory, effects = [], []
     intent = staging.stage_intent(native.request)
     generations = itertools.count(1)
@@ -645,6 +646,9 @@ def enrollment_fixture(native, failures):
 
     native.verify_tunnel_configuration = configuration
     native.ceph = ceph
+    # These restarted-manager fixtures begin after license acceptance; the
+    # finalization suite models absent acceptance and the late native effect.
+    native.license_accepted = lambda: True
     return inventory, events
 
 

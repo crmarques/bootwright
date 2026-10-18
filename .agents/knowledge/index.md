@@ -7,6 +7,7 @@ investigating or designing, then open only the relevant page.
 | Area or symptom | Page |
 | --- | --- |
 | Desired-state API, `v1alpha1`, 27-kind catalog with StorageClient, controller Machine and proxy, historical 27-to-21-kind alignment | [api-alignment.md](api-alignment.md) |
+| IBM Ceph version constraints, `9.9.2.0`, Ceph `20.2.2`, guest/RPM/container coordinates, SDK/import changes, bootstrap `accept-license`, `no hosts defined`, Call Home initialization, MON license acceptance, source versus actual-image qualification | [ibm-ceph-version-constraints.md](ibm-ceph-version-constraints.md) |
 | IBM Ceph native SSH, AsyncSSH `known_hosts=None`, `route-runtime-refusal`, SDK versions, relative utility imports, source-artifact inspection | [ibm-ceph-native-ssh.md](ibm-ceph-native-ssh.md) |
 | IBM Ceph removal, `rm-cluster`, shared-file ownership, OSD erase and incomplete cleanup | [ibm-ceph-cleanup.md](ibm-ceph-cleanup.md) |
 | IBM Ceph package dependencies, signed RPMs, `ACCEPT_EULA`, license and RHEL DVD sources, authored `cephadm-ansible`, DNF no match for `5.0.3-1` without `.el9cp`, `native-refusal:packages` at the first live call, comps `<!DOCTYPE comps PUBLIC>` refused, hardlinked crypto-policies files, `native package signature` on a fresh guest (no vendor key in its RPM database), `keysFromFd` and `BytesIO` | [ibm-ceph-package-acquisition.md](ibm-ceph-package-acquisition.md) |
