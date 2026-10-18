@@ -45,7 +45,9 @@ Media is shared by contexts on this host. Registration freezes its identity and 
 
 ## IBM entitlement
 
-The [Entitlement](storage/entitlement.yaml) binds `registry.credentialsRef: ibm-registry`; import the key into that [Secret](secret-descriptors/ibm-registry.yaml) below. The [cluster declaration](storage/cluster.yaml) uses the code-pinned IBM Storage Ceph 9.9.1.2 release and image tag. Apply resolves the tag through the Entitlement and freezes the linux/amd64 child digest; continuation never refreshes it. Apply admits only `cp.icr.io` and the verified-tunnel transport for this release. Supply credentials rather than a manual registry login or image pre-pull.
+The [Entitlement](storage/entitlement.yaml) binds `registry.credentialsRef: ibm-registry`; import the key into that [Secret](secret-descriptors/ibm-registry.yaml) below. The [cluster declaration](storage/cluster.yaml) selects IBM Storage Ceph 9.9.2.0 (Tentacle), the latest release in the [IBM release table](https://www.ibm.com/support/pages/what-are-red-hat-and-ibm-storage-ceph-releases-and-corresponding-ceph-package-versions) on 2026-10-18: upstream Ceph 20.2.2 and container tag `v9.9.2-26729`. The table shows the RHEL 10 package build; this RHEL 9.8 example selects the corresponding `20.2.2-349.el9cp` packages and `cephadm-ansible` `5.0.3-1.el9cp` published in [IBM's RHEL 9 repository](https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/). These are authored selections, not code pins or a claim of release acceptance.
+
+Apply resolves the tag through the Entitlement and freezes the linux/amd64 child digest; continuation never refreshes it. The exact image must be available through the operator's entitlement. This example selects `cp.icr.io` and the verified-tunnel transport. Supply credentials rather than a manual registry login or image pre-pull.
 
 Run `secret set` with the key on standard input from a terminal or a protected file. Never place the entitlement key in YAML, a shell variable or an argument.
 
@@ -110,6 +112,22 @@ selects its signed package without enabling NFS orchestration.
 
 ## Validate the cluster
 
+First check live observations and guest prerequisites after the final apply completes:
+
+```sh
+./bin/bootwright status
+./bin/bootwright diff --observe
+./bin/bootwright preflight storage-cluster
+./bin/bootwright machine list --power-status
+./bin/bootwright machine exec --name rhel-01,rhel-02,rhel-03 -- systemctl is-active sshd chronyd qemu-guest-agent
+./bin/bootwright machine exec --name rhel-01,rhel-02,rhel-03 -- chronyc tracking
+./bin/bootwright machine exec --name rhel-01,rhel-02,rhel-03 -- chronyc sources -v
+./bin/bootwright machine exec --name rhel-01,rhel-02,rhel-03 -- rpm -q cephadm ceph-common cephadm-ansible
+./bin/bootwright machine exec --name rhel-01,rhel-02,rhel-03 -- lsblk -b -o NAME,TYPE,SIZE,SERIAL,ROTA,FSTYPE,MOUNTPOINTS
+```
+
+Require a completed apply, no unexplained live drift, successful prerequisite checks, three powered-on guests, active services and synchronized clocks (`Leap status: Normal` with a selected `^*` time source). Expect Ceph packages `20.2.2-349.el9cp` and cephadm-ansible `5.0.3-1.el9cp` on every guest. The owned data disk is `/dev/sda`, nonrotational (`ROTA=0`), with its declared serial; the root disk remains `/dev/vda`. After Ceph provisions the OSD, the data disk is in use and need not be blank. Command success or a locally recorded completed apply alone does not establish current storage readiness.
+
 `cluster info` prints the cluster's release, FSID, frozen image digest, monitors, admin node and its Ceph command (`cephCommand`), the line that runs `ceph` on the admin node with the administrator configuration and keyring that apply keeps there. It reads local evidence and contacts no host.
 
 ```sh
@@ -121,16 +139,97 @@ Run each check below as that printed command followed by the arguments shown, wr
 ```text
 <cephCommand> -s
 <cephCommand> health detail
+<cephCommand> fsid
+<cephCommand> versions
 <cephCommand> mon stat
+<cephCommand> quorum_status --format json-pretty
 <cephCommand> mgr stat
 <cephCommand> mgr services
+<cephCommand> mgr module ls
+<cephCommand> orch status
 <cephCommand> orch host ls
-<cephCommand> orch ps
+<cephCommand> orch ls --refresh
+<cephCommand> orch ps --refresh
+<cephCommand> orch ps --refresh --format json-pretty
+<cephCommand> osd stat
 <cephCommand> osd tree
+<cephCommand> pg stat
 <cephCommand> osd pool ls detail
+<cephCommand> osd pool get rbd-data all
+<cephCommand> osd pool application get rbd-data
+<cephCommand> osd pool stats rbd-data
+<cephCommand> df detail
+<cephCommand> config get global osd_pool_default_size
+<cephCommand> config get global osd_pool_default_min_size
 ```
 
-`osd pool ls detail` shows `rbd-data` with size 2, min_size 2 and the `rbd` application.
+Use the [native monitoring commands](https://docs.ceph.com/en/tentacle/rados/operations/monitoring/) and [orchestrator service status](https://docs.ceph.com/en/tentacle/cephadm/services/) to check every declared storage component:
+
+| Component | Required result |
+| --- | --- |
+| Cluster identity and release | Live `fsid` matches `cluster info`; `versions` reports Ceph 20.2.2 for all MON, MGR and OSD daemons. Each daemon's `container_image_digests` in the JSON `orch ps` output includes the frozen registry digest reported by `cluster info`; a container image ID is a different identifier. |
+| MON | Exactly three expected monitors, all in quorum, on `rhel-01`, `rhel-02` and `rhel-03` (native names may include the domain). |
+| MGR and orchestrator | One active and one standby MGR, both running; orchestrator backend `cephadm` is available and not paused. |
+| Hosts and placement | All three declared FQDNs have label `ceph-core`, no offline or maintenance status, and the intended MON/MGR/OSD services reach their requested running counts: 3/2/3. Use `--refresh` to avoid relying on cached daemon state. |
+| OSD and disks | Exactly three OSDs are both up and in, with weight greater than zero, SSD class and one OSD under each declared host. Match each OSD to its guest and data device with `osd metadata` below. |
+| Placement groups | A positive PG count; every PG is `active+clean`. No degraded, undersized, inactive, peering, misplaced or recovering PGs remain. |
+| RBD pool | `rbd-data` is replicated, `size=2`, `min_size=2`, `pg_autoscale_mode=on`, has the `rbd` application and a positive PG count. `df detail` shows available capacity; no near-full/full condition remains. Global new-pool defaults are also 2/2. |
+| IBM Call Home | `mgr module ls` shows `call_home_agent` enabled, as declared. Inspect any Call Home health warning separately. |
+| Dashboard | `dashboard` module enabled, HTTPS URL published by `mgr services`, certificate verified and login successful as described below. |
+| Pool client | `client.rbd-canary` has the exact pool-scoped capabilities below; the optional client test proves authenticated RBD access. |
+
+For each numeric OSD ID from `osd tree`, replace `<id>` and check the actual device and running configuration:
+
+```text
+<cephCommand> osd metadata <id> --format json-pretty
+<cephCommand> config show osd.<id> osd_memory_target_autotune
+<cephCommand> config show osd.<id> osd_memory_target
+```
+
+Require the declared host and SSD device identity, `false` for autotuning and `2147483648` for the memory target on every OSD. The target is not a process memory cap.
+
+For a strict health check with an exit status, pipe only the JSON health document to a local parser:
+
+```text
+<cephCommand> health --format json | python3 -c 'import json, sys; h = json.load(sys.stdin); print(h["status"], ",".join(sorted(h.get("checks", {})))); sys.exit(0 if h["status"] == "HEALTH_OK" else 1)'
+```
+
+This check returns 0 only for `HEALTH_OK`. Bootwright can complete with the isolated `CHA_ERROR_SENDING_REPORT` warning when Call Home egress fails; that still fails this strict check and needs an explicit operator decision. Other warnings are not accepted. Recheck health and PGs after each data test and after recovery. If a command fails, a host is unreachable or counts disagree, readiness is unproved; inspect the named component rather than treating partial output as success.
+
+CephFS, object gateways, NFS, NVMe-oF, iSCSI and the monitoring stack are not declared by this example. Their presence is not an expected readiness result.
+
+### Pool client
+
+Inspect the declared client's capabilities without printing its key. Keep the parser in the pipeline; raw `auth get` output is confidential:
+
+```text
+<cephCommand> auth get client.rbd-canary --format json | python3 -c 'import json, sys; rows = json.load(sys.stdin); expected = {"mon": "profile rbd", "mgr": "profile rbd pool=rbd-data", "osd": "profile rbd pool=rbd-data"}; ok = len(rows) == 1 and rows[0].get("entity") == "client.rbd-canary" and rows[0].get("caps") == expected; print("pool client caps:", "OK" if ok else "FAIL"); sys.exit(0 if ok else 1)'
+```
+
+Capability equality proves the configured scope. The following optional test exercises the client itself through native tools. It exports the existing credential only to a root-private temporary keyring on the admin guest, writes and compares 1 MiB, then grows the new retained image `rbd-data/client-canary` to 16 MiB. It neither changes the principal nor reads Bootwright's private custody files. Run it once; replace `rhel-01` if the printed admin node differs, and replace `<conf>` and `<keyring>` with the administrator paths from `cephCommand`:
+
+```text
+./bin/bootwright cluster exec --name ceph-lab --node rhel-01 -- sudo -n bash -s -- '<conf>' '<keyring>' <<'CHECK'
+set -euo pipefail
+umask 077
+conf=$1
+admin_keyring=$2
+check_dir=$(mktemp -d /var/tmp/ceph-client-check.XXXXXXXX)
+printf 'Scratch directory on admin guest: %s\n' "$check_dir"
+trap 'rm -f -- "$check_dir/client.keyring" "$check_dir/input" "$check_dir/output"; rmdir -- "$check_dir"' EXIT
+ceph --conf "$conf" --keyring "$admin_keyring" auth get client.rbd-canary -o "$check_dir/client.keyring" >/dev/null
+rbd_client=(rbd --conf "$conf" --id rbd-canary --keyring "$check_dir/client.keyring")
+"${rbd_client[@]}" ls --pool rbd-data --format json | python3 -c 'import json, sys; sys.exit("client-canary" in json.load(sys.stdin))'
+head -c 1048576 /dev/urandom > "$check_dir/input"
+"${rbd_client[@]}" import "$check_dir/input" rbd-data/client-canary
+"${rbd_client[@]}" export rbd-data/client-canary "$check_dir/output"
+cmp -n 1048576 "$check_dir/output" "$check_dir/input"
+"${rbd_client[@]}" resize --size 16M rbd-data/client-canary
+"${rbd_client[@]}" info rbd-data/client-canary
+CHECK
+```
+
+Require exit 0 and a 16 MiB image. An existing image or a failed listing stops the script before writing. A lost response after import is an unknown outcome: inspect the retained image instead of repeating the script. Temporary input and keyring are removed on normal exit; after a killed session, remove only the exact printed guest scratch directory after confirming the session ended. The retained image is removed with the owned disks during destroy. This native operator check adds no Bootwright credential-export API or release-acceptance claim.
 
 ### Client data
 
@@ -156,6 +255,8 @@ Apply enabled the Ceph dashboard on the active manager. `cluster info` reports i
 The certificate is self-signed. Before accepting the browser warning, compare the SHA-256 fingerprint the browser shows with the printed one.
 
 A standby manager redirects to the active one. A status of `unproved` means the apply's TLS check did not reach the dashboard with the stored certificate; do not accept the warning until the fingerprints match.
+
+To prove current operation, open the active URL from the controller, verify its certificate fingerprint, log in and confirm that the dashboard shows this FSID, all three hosts, three OSDs up/in and the `rbd-data` pool. A stored dashboard status or a listening TCP port alone does not prove a current TLS connection and working login. Keep passwords out of shell arguments, screenshots and saved validation output.
 
 ## Changed input and build recovery
 

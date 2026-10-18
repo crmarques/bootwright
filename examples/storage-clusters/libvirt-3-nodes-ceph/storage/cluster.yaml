@@ -1,4 +1,4 @@
-# Example authored IBM Storage Ceph 9.9.1.2; apply resolves this tag through the Entitlement and freezes its digest.
+# Example authored IBM Storage Ceph 9.9.2.0; apply resolves this tag through the Entitlement and freezes its digest.
 apiVersion: bootwright.io/v1alpha1
 kind: StorageCluster
 metadata:
@@ -10,12 +10,12 @@ spec:
 
   ceph:
     distribution: ibm
-    release: 9.9.1.2
-    packageVersion: 20.2.1-405.el9cp
+    release: 9.9.2.0
+    packageVersion: 20.2.2-349.el9cp
 
     image:
       base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
-      version: v9.9.1-25074
+      version: v9.9.2-26729
 
     ibm:
       callHome: enabled
