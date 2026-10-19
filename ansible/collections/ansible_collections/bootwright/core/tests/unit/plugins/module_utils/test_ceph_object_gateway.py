@@ -359,6 +359,39 @@ def test_recorded_entity_gone_or_changed_refuses(tmp_path, case):
         observe(monitor, markers)
 
 
+def test_recorded_gateway_with_rgw_root_gone_refuses_without_radosgw_admin(tmp_path):
+    request = gateway_request()
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    apply_all(monitor, markers)
+    monitor.pools = [pool for pool in monitor.pools if pool["pool_name"] != ".rgw.root"]
+    monitor.realms, monitor.zonegroups, monitor.zones = {}, {}, {}
+    before = len(monitor.radosgw_calls())
+    with pytest.raises(ceph_native.NativeFailure, match="^object-realm-foreign$") as caught:
+        worker(monitor, markers).gateway_zone()
+    assert caught.value.native_error["cause"] == "realm objects is gone"
+    assert len(monitor.radosgw_calls()) == before
+    assert not any(pool["pool_name"] == ".rgw.root" for pool in monitor.pools)
+
+
+def test_renamed_gateway_applies_after_a_foreign_name_refusal(tmp_path):
+    request = gateway_request()
+    markers = markers_for(tmp_path, request)
+    markers.write("rgw-root.json", {"owner": OWNER, "fsid": FSID, "pool": ".rgw.root"})
+    monitor = Monitor(request, pools=[{"pool_name": ".rgw.root", "pool_id": 1}])
+    monitor.realms["objects"] = {"id": str(uuid.uuid4()), "name": "objects"}
+    before = records(markers)
+    with pytest.raises(ceph_native.NativeFailure, match="^object-realm-foreign$") as caught:
+        worker(monitor, markers).gateway_zone()
+    assert caught.value.native_error["cause"] == "realm objects"
+    assert records(markers) == before and monitor.mutations == []
+    renamed = gateway_request(spec={"rgw_realm": "renamed"}, realm="renamed")
+    monitor.request = renamed
+    again = ceph_native.Markers(renamed, root=str(tmp_path))
+    assert worker(monitor, again).gateway_zone() == {"changed": True}
+    assert again.read("gateway-objects-intent.json") == intent(renamed) and "renamed" in monitor.realms
+
+
 def test_realm_create_never_passes_default(tmp_path):
     request = gateway_request()
     markers = markers_for(tmp_path, request)

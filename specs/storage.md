@@ -596,12 +596,14 @@ configuration store creates the shared `.rgw.root` pool when it is absent, so
 `radosgw-admin` itself (the verified `ceph-common` package and the hash its
 record holds, `artifact` when it changes), then proves `.rgw.root` absent or
 under the claim this operation's gateways share through monitor commands only,
-and writes that claim and the gateway's own record before any `radosgw-admin`
-call. A realm, zone group or zone of the gateway's names without its creation
-record, a recorded one that is gone or now names another ID or realm, or a
-`.rgw.root` without the claim refuses `object-realm-foreign` before any
-create; a name is adopted only under the attempt record written before its
-create. The phase creates the realm, then the zone group and zone with
+and writes that claim before any `radosgw-admin` call; while `.rgw.root` is
+absent no `radosgw-admin` call runs before every name proof passes. A realm,
+zone group or zone of the gateway's names without its creation record, a
+recorded one that is gone or now names another ID or realm, or a `.rgw.root`
+without the claim refuses `object-realm-foreign` before any create and before
+the gateway's own record is written, so renaming a refused name applies; the
+refusal sends a recorded one that is gone or changed to `bootwright destroy`.
+A name is adopted only under the attempt record written before its create. The phase creates the realm, then the zone group and zone with
 `--master` and never with `--default`, records each native ID, and adds the
 zone to its zone group once when a lost response left it outside.
 `gateway_placement` binds the declared pools to the zone's `default-placement`

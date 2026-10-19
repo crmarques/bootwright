@@ -186,7 +186,9 @@ func TestAnObjectRealmForeignRefusalNamesItsNextStep(t *testing.T) {
 		d[0].Message != "the cluster holds RGW configuration this operation did not create: a .rgw.root pool without this operation's claim, "+
 			"or a realm, zone group or zone of the StorageObjectGateway's names without its creation record, or one it created that is gone or changed" ||
 		d[0].Remediation != "find what the native error names with ceph osd pool ls and radosgw-admin realm list, zonegroup list and zone list; "+
-			"rename spec.realm, spec.zoneGroup or spec.zone of the StorageObjectGateway, or remove the foreign configuration outside Bootwright, then apply again; "+
+			"for a foreign name, rename spec.realm, spec.zoneGroup or spec.zone of the StorageObjectGateway, or remove the foreign configuration outside Bootwright, "+
+			"then apply again; when the native error says one this operation created is gone or changed, take back what this context owns with "+
+			"bootwright destroy --context <context>, then apply; "+
 			"Bootwright never adopts RGW configuration it did not create" {
 		t.Fatalf("an object-realm-foreign refusal reached the operator as %s %+v", effect, d)
 	}

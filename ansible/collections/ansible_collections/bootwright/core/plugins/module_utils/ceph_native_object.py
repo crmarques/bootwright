@@ -5,9 +5,10 @@ with --default (src/rgw/radosgw-admin/radosgw-admin.cc:5110-5133), its zone's de
 commit, then its one rgw document applied as one `orch apply -i -` stream. Every radosgw-admin access to the config
 store creates the shared `.rgw.root` pool when it is absent (src/rgw/driver/rados/config/impl.h:93,
 src/rgw/driver/rados/rgw_tools.cc:24-52), so the pool is proved absent or claimed through monitor commands, and the
-claim and the gateway's record are written, before the first radosgw-admin call; an observation never calls
-radosgw-admin while the pool is absent. A realm, zone group or zone of the gateway's names is adopted only under this
-operation's attempt record. The gateway never reads or creates an object user. Like the core worker it imports only
+claim is written, before the first radosgw-admin call; no radosgw-admin call runs while the pool is absent, so a
+recorded realm that is gone refuses with no effect. The gateway's record is written only after every name proof
+passes, before its first create, so a refused name leaves no record. A realm, zone group or zone of the gateway's
+names is adopted only under this operation's attempt record. The gateway never reads or creates an object user. Like the core worker it imports only
 the target Python standard library and the core worker modules.
 """
 
@@ -315,19 +316,19 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         return ids["zone"] in identities(value.get("zones")) and value.get("master_zone") == ids["zone"]
 
     def gateway_zone(self):
-        """Ownership and every proof before any write; the claim and record before any radosgw-admin call; then realm, zone group and zone."""
+        """Every proof before any write; the claim before any radosgw-admin call; the record once no name refuses; then realm, zone group and zone."""
         self.owned_cluster()
         self.verify_tool()
         digest = self.tool_digest()
         tool = self.markers.read(self.record("tool"))
         require(tool is None or tool == {"sha256": digest}, "artifact")
         present = self.root_present()
+        names = self.listed() if present else {kind: set() for kind in KINDS}
+        ids = self.foreign_check(names)
         if not present:
             self.markers.write(ROOT_CLAIM, self.root_claim())
         self.markers.write(self.record("intent"), self.intent())
         self.markers.write(self.record("tool"), {"sha256": digest})
-        names = self.listed()
-        ids = self.foreign_check(names)
         changed = self.master_zone(names, ids)
         if not self.member(ids):
             self.radosgw("zonegroup", "add", *self.site("realm", "zonegroup", "zone"), "--master", json_result=False)
