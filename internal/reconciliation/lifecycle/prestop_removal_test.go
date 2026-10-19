@@ -150,3 +150,31 @@ func TestPreStopRemovalKeepsUnrelatedMachinesStopFirst(t *testing.T) {
 		t.Fatalf("live unrelated Machine admitted removal: %v (%v)", h.capability.destroys, err)
 	}
 }
+
+func TestPreStopRemovalFailureEndsTheRemoval(t *testing.T) {
+	h, _ := preStopHarness(t, false)
+	completeApply(t, h)
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
+	result, err := destroy(h)
+	if err == nil || result == nil || result.Receipt.State != string(reconciliation.OperationFailed) || !slices.Equal(h.capability.destroys, []string{"installation"}) {
+		t.Fatalf("failed pre-stop inverse = %+v, removed %v (%v)", result, h.capability.destroys, err)
+	}
+}
+
+func TestPreStopRemovalRetriesAResolvedFailedInverse(t *testing.T) {
+	h, _ := preStopHarness(t, false)
+	completeApply(t, h)
+	h.capability.quiescence = map[string]Quiescence{"machine": {State: Live, Reason: "running", Stop: preStopMachineStop}}
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := destroy(h); err == nil {
+		t.Fatal("unknown pre-stop inverse reported success")
+	}
+	h.capability.outcomes, h.capability.observations = nil, []Observation{{Effect: reconciliation.EffectNoEffect}}
+	result, err := destroy(h)
+	if firstCode(err) != "lifecycle.live" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) || !slices.Equal(h.capability.destroys, []string{"installation", "installation"}) {
+		t.Fatalf("resolved failed pre-stop = %+v, removed %v (%v)", result, h.capability.destroys, err)
+	}
+	if blockState(t, h, "storage") != reconciliation.BlockPending || blockState(t, h, "machine") != reconciliation.BlockPending {
+		t.Fatalf("retried pre-stop started other inverses: %v", h.capability.destroys)
+	}
+}
