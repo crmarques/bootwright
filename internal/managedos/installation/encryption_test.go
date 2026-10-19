@@ -55,6 +55,7 @@ func encryptionExecution(t *testing.T, request Request, recovery []byte) lifecyc
 	}
 	material := fleetMaterial()
 	material["lab-artifacts-tls"] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: []byte("CERTIFICATE")})
+	material["lab-bmc-tls"] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: []byte("BMC CERTIFICATE")})
 	if recovery != nil {
 		material["rhel-luks-recovery"] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: recovery})
 	}
@@ -260,6 +261,7 @@ func TestRecoveryPassphraseNeverReachesRequestValuesOrEvidence(t *testing.T) {
 		t.Fatal("the apply did not reach the adapter")
 	}
 	run := runner.requests[0]
+	assertMaterialsResolve(t, "apply", run)
 	want := lifecycle.MaterialFile{Name: "recovery", Part: secrets.ValuePart, Secret: "rhel-luks-recovery", Variable: "recoveryPassphrase"}
 	if !slices.Contains(run.Materials, want) {
 		t.Fatalf("materials = %+v", run.Materials)
@@ -290,6 +292,7 @@ func TestRecoveryPassphraseNeverReachesRequestValuesOrEvidence(t *testing.T) {
 		if len(runner.requests) != 1 {
 			t.Fatalf("%s did not reach the adapter", operation)
 		}
+		assertMaterialsResolve(t, operation, runner.requests[0])
 		for _, material := range runner.requests[0].Materials {
 			if material.Secret == "rhel-luks-recovery" {
 				t.Fatalf("%s lends the recovery passphrase as %+v", operation, material)
@@ -299,6 +302,18 @@ func TestRecoveryPassphraseNeverReachesRequestValuesOrEvidence(t *testing.T) {
 	data, err := reconciliation.Freeze(Evidence{RootEncryption: true, NetworkDifferences: []string{}}, "installation evidence")
 	if err != nil || strings.Contains(string(data), sentinel) {
 		t.Fatalf("evidence = %s (%v)", data, err)
+	}
+}
+
+func assertMaterialsResolve(t *testing.T, operation string, run lifecycle.RunRequest) {
+	t.Helper()
+	for _, material := range run.Materials {
+		if material.Name == "host-key" || material.Name == "host-key.pub" {
+			t.Fatalf("%s lends a host key on the guest-agent channel: %+v", operation, material)
+		}
+		if _, ok := run.Material[material.Secret]; material.Secret == "" || !ok {
+			t.Fatalf("%s lends %+v from a Secret the attempt does not hold", operation, material)
+		}
 	}
 }
 
