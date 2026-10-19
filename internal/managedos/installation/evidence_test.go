@@ -341,6 +341,26 @@ func TestANetworkFailureIsPartialNeverNoEffect(t *testing.T) {
 	}
 }
 
+// The network restart powers the guest off after a delivered-key Machine has
+// withdrawn its key pair and image, so a Machine interrupted before its disk
+// boot leaves nothing to read: no marker, nothing published and a powered-off
+// controller read. That is the one window convergence reads as no effect, which
+// the specification names; a Machine whose image stays published reads partial
+// in the same window.
+func TestAPrivateMachinePoweredOffByTheRestartReadsNoEffect(t *testing.T) {
+	off := func(image bool) []byte {
+		return encode(t, Evidence{Address: "198.51.100.11", Image: image, Power: "Off", Request: "digest", NetworkDifferences: []string{}})
+	}
+	private := Request{Address: "198.51.100.11", Private: &Publication{Path: "/var/lib/bootwright-services/x", URL: "https://x"}}
+	if effect, _ := installationEffect(reconciliation.Apply, off(false), private, "digest", "{}"); effect != reconciliation.EffectNoEffect {
+		t.Fatalf("a delivered-key machine powered off by the restart reads as %s, want no-effect", effect)
+	}
+	public := Request{Address: "198.51.100.11"}
+	if effect, _ := installationEffect(reconciliation.Apply, off(true), public, "digest", "{}"); effect != reconciliation.EffectPartial {
+		t.Fatalf("a machine whose image stays published reads as %s, want partial", effect)
+	}
+}
+
 // A network that drifted after its restart is partial while the adapter has
 // not claimed its postcondition, and unknown when it claims one it did not
 // prove.

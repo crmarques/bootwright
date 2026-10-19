@@ -501,7 +501,7 @@ unfinished work is a positive partial realization the next attempt converges,
 which is either content it published on a powered-off guest that never
 installed, or the frozen marker with the completion not yet true. The frozen
 marker with a network not yet converged, rolled back, mismatched or drifted is
-a positive partial realization; network convergence never yields no effect. Over the pinned fleet
+a positive partial realization; network convergence yields no effect only in the one window below. Over the pinned fleet
 connection, when it answers, the observation also reads the network marker,
 the boot ID and `nmstatectl show --json`, and compares the running network
 with its declaration. A
@@ -510,7 +510,13 @@ neither the key pair nor the image; that subtree left on a powered-off guest
 that never installed is its partial. Anything else
 stays unknown, including a guest answering with another marker and a powered-on
 guest with none, because the first belongs to another installation and the
-second may be running the installer now. A removal's resolution observes only
+second may be running the installer now. A delivered-key Machine the network
+restart powered off before its disk boot is the one window that leaves nothing
+to read: the withdrawn key pair and image, no marker over the unanswered
+identity read and a powered-off controller read are exactly what an apply that
+stopped before it published anything leaves, so it reads positive no effect.
+The next apply installs it again, as the interruption table below says; a
+Machine whose installer image stays published reads partial in the same window. A removal's resolution observes only
 the published content, which the removal withdraws whatever the guest holds, so
 it reads neither the identity channel, the fleet account nor the controller:
 none left is its completion; the whole completion, which content alone never
@@ -664,7 +670,8 @@ the document and the marker only on standard input. In order:
 **Failures and recovery.** Every failure of the phase follows the proof that
 the guest holds this request's install marker, so the attempt fails and the
 resolution's observation reads a positive partial realization when the marker
-still reads, or unknown when the guest does not answer; never no effect. The
+still reads, or unknown when the guest does not answer; no effect only for the
+delivered-key window the resolution paragraph names. The
 document is frozen with the installation and the install marker names the
 request's digest, so neither a continuation nor a new plan can change the
 declared network of an installed Machine: a network declaration error is
