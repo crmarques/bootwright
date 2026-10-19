@@ -1,0 +1,79 @@
+---
+# Registration runs once the installed machine's network converged and its FIPS
+# and root-encryption proofs passed, over the pinned fleet connection guest.yml
+# makes, option for option; test_register_session_is_the_guest_connection holds
+# the two equal. The organization and activation key are lent as files whose
+# paths only the controller module reads: their values reach the machine only
+# on the fixed worker's standard input, never a task variable.
+- name: Read the effective crypto policy on this connection's placement host
+  bootwright.core.ssh_key_policy:
+  register: managedos_install_anaconda_registration_ssh_policy
+
+- name: Publish the guest's own host key for this one connection
+  ansible.builtin.copy:
+    content: '{{ bootwright_os_install_request.address }} {{ managedos_install_anaconda_host_key | trim }}'
+    dest: '{{ managedos_install_anaconda_scratch }}/known_hosts'
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
+- name: Write the one-connection client configuration
+  ansible.builtin.copy:
+    content: '{{ managedos_install_anaconda_registration_ssh_policy.configuration }}'
+    dest: '{{ managedos_install_anaconda_scratch }}/ssh_config'
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
+- name: Name the algorithms the guest's key is accepted under
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_registration_host_key_algorithms: >-
+      {{ managedos_install_anaconda_host_key
+         | bootwright.core.host_key_algorithms(managedos_install_anaconda_registration_ssh_policy.hostKeyAlgorithms) }}
+  changed_when: false
+
+- name: Register the installed machine through the fixed worker on that exact key
+  bootwright.core.managedos_registration:
+    operation: register
+    address: '{{ bootwright_os_install_request.address }}'
+    user: '{{ bootwright_os_install_request.user }}'
+    identity: '{{ bootwright_os_install_material.fleetIdentity }}'
+    ssh_config: '{{ managedos_install_anaconda_scratch }}/ssh_config'
+    known_hosts: '{{ managedos_install_anaconda_scratch }}/known_hosts'
+    host_key_algorithms: '{{ managedos_install_anaconda_registration_host_key_algorithms }}'
+    policy_host_key_algorithms: '{{ managedos_install_anaconda_registration_ssh_policy.hostKeyAlgorithms }}'
+    request: '{{ bootwright_os_install_digest }}'
+    organization_file: '{{ bootwright_os_install_material.rhsmOrganization }}'
+    activation_key_file: '{{ bootwright_os_install_material.rhsmActivationKey }}'
+    enable: '{{ bootwright_os_install_request.registration.repositories.enable }}'
+    disable: '{{ bootwright_os_install_request.registration.repositories.disable }}'
+    timeout: 630
+  register: managedos_install_anaconda_registration_result
+  failed_when: false
+  changed_when: false
+  no_log: true
+
+- name: Remove the one-connection known-hosts file
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_scratch }}/known_hosts'
+    state: absent
+  changed_when: false
+
+- name: Remove the one-connection client configuration
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_scratch }}/ssh_config'
+    state: absent
+  changed_when: false
+
+- name: Name the registration the worker answered with
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_registration:
+      consumer: >-
+        {{ managedos_install_anaconda_registration_result.registration.consumer
+           if (managedos_install_anaconda_registration_result.ok | default(false) | bool) else '' }}
+      state: >-
+        {{ 'owned' if (managedos_install_anaconda_registration_result.ok | default(false) | bool)
+           and (managedos_install_anaconda_registration_result.registration.owned | default(false) | bool) else '' }}
+  changed_when: false

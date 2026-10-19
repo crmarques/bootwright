@@ -646,6 +646,52 @@
         - managedos_install_anaconda_fips_requested | bool
         - not (managedos_install_anaconda_fips | bool)
 
+    - name: Register the installed machine with its subscription service after its network converged
+      ansible.builtin.include_tasks: register.yml
+      when: bootwright_os_install_request.registration is defined
+
+    - name: Name a registration the subscription service or the machine refused
+      bootwright.core.managedos_install_protocol:
+        phase: refused
+        reason: '{{ managedos_install_anaconda_registration_result.reason }}'
+      when:
+        - bootwright_os_install_request.registration is defined
+        - not (managedos_install_anaconda_registration_result.ok | default(false) | bool)
+        - managedos_install_anaconda_registration_result.reason | default('') in managedos_install_anaconda_registration_refusals
+      vars:
+        managedos_install_anaconda_registration_refusals:
+          - registration-input
+          - registration-foreign
+          - registration-refused
+          - registration-identity-collision
+          - registration-unavailable
+          - registration-repositories
+      no_log: true
+
+    # The message names the Machine and the worker's closed vocabulary only:
+    # the worker's detail and any other module output never reach it.
+    - name: Refuse a machine its registration did not complete on
+      ansible.builtin.fail:
+        msg: >-
+          Machine {{ bootwright_os_install_request.identity.object }} was not
+          registered with its subscription service:
+          {{ managedos_install_anaconda_registration_reason }}{{ managedos_install_anaconda_registration_cause }}
+      vars:
+        managedos_install_anaconda_registration_reason: >-
+          {{ managedos_install_anaconda_registration_result.reason | default('')
+             if managedos_install_anaconda_registration_result.reason | default('') in
+             ['registration-input', 'registration-foreign', 'registration-refused', 'registration-identity-collision',
+              'registration-unavailable', 'registration-repositories', 'registration-unreachable', 'transport']
+             else 'unexpected answer' }}
+        managedos_install_anaconda_registration_cause: >-
+          {{ ' (' ~ managedos_install_anaconda_registration_result.cause ~ ')'
+             if managedos_install_anaconda_registration_result.cause | default('') in
+             ['service', 'timeout', 'tooling', 'unregister', 'session', 'host-key', 'exit', 'answer']
+             else '' }}
+      when:
+        - bootwright_os_install_request.registration is defined
+        - not (managedos_install_anaconda_registration_result.ok | default(false) | bool)
+
     - name: Prove everything this installation publishes is in place
       bootwright.core.managedos_install_inspect:
         request: '{{ bootwright_os_install_request }}'
@@ -667,7 +713,8 @@
     phase: completed
     outcome: >-
       {{ 'unchanged' if (managedos_install_anaconda_was_installed | bool)
-      and not (managedos_install_anaconda_network_result.changed | default(true) | bool) else 'changed' }}
+      and not (managedos_install_anaconda_network_result.changed | default(true) | bool)
+      and not (managedos_install_anaconda_registration_result.registration.changed | default(false) | bool) else 'changed' }}
     digest: '{{ bootwright_os_install_digest }}'
     observation: '{{ managedos_install_anaconda_after.observation }}'
     marker: '{{ managedos_install_anaconda_marker }}'
@@ -686,4 +733,6 @@
     fipsRequired: "{{ 'fips=1' in (bootwright_os_install_request.installerArguments | default([])) }}"
     rootEncryption: '{{ managedos_install_anaconda_root_encryption | default(false) }}'
     rootEncryptionRequired: "{{ bootwright_os_install_request.diskEncryption is defined }}"
+    registration: '{{ managedos_install_anaconda_registration | default({}) }}'
+    registrationRequired: "{{ bootwright_os_install_request.registration is defined }}"
   no_log: true

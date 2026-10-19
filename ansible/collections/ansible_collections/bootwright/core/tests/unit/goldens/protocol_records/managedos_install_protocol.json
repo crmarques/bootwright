@@ -199,6 +199,10 @@
             "power": "On",
             "private": false,
             "reachable": true,
+            "registration": {
+              "consumer": "",
+              "state": ""
+            },
             "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             "rootEncryption": false,
             "tree": true,
@@ -245,6 +249,10 @@
             "power": "Off",
             "private": false,
             "reachable": true,
+            "registration": {
+              "consumer": "",
+              "state": ""
+            },
             "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             "rootEncryption": false,
             "tree": true,
@@ -283,6 +291,10 @@
             "power": "",
             "private": false,
             "reachable": false,
+            "registration": {
+              "consumer": "",
+              "state": ""
+            },
             "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             "rootEncryption": false,
             "tree": false,

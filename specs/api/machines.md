@@ -571,7 +571,7 @@ optional. Validation is lexical only.
 | `spec.os.architecture` | string | yes | `x86_64`. |
 | `spec.installer.anaconda` | object | union | Anaconda arm below. |
 | `spec.installer.templateClone` | object | union | A [refused arm](#refused-arms). |
-| `spec.subscription.entitlementRef` | string | no | Global `Entitlement` of type `redhat-rhel`. |
+| `spec.subscription.entitlementRef` | string | no | Global `Entitlement` of type `redhat-rhel`; refused at installation until destroy unregisters; then registers the installed system with the hosted subscription service ([managed OS](../managed-os.md#registration)). |
 | `spec.proxy` | choice object | no | External Proxy choice; omission uses direct access. |
 | `spec.ntp` | array of selections | no | NTPServer selections; omission leaves the native OS default. |
 | `spec.customizations` | object | no | Closed customization groups below. |
@@ -694,7 +694,11 @@ The installation writes each entry as the installed system's own
 repository is never an install source. A subscription
 repository block sets at least one of `enable` and `disable` and requires a
 registration entitlement from either top-level `subscription` or Anaconda
-`fromSubscription`.
+`fromSubscription`. The subscription repositories are frozen in the
+installation request, so a repository edit is another installation, and an
+Entitlement whose `spec.rhsm.management` is `external` refuses them at
+installation, because they are applied only to a registration the installation
+performs ([managed OS](../managed-os.md#registration)).
 
 `security.diskEncryption` requires exactly `unlock.tpm2` and required
 `recoveryPassphraseRef` to an `opaque` or `token` Secret containing the recovery

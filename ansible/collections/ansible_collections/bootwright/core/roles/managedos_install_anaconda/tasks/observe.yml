@@ -75,6 +75,12 @@
       ansible.builtin.include_tasks: root_encryption.yml
       when: managedos_install_anaconda_reachable.rc | default(1) == 0
 
+    - name: Read the installed machine's subscription registration the same way an apply proves it
+      ansible.builtin.include_tasks: registration_observe.yml
+      when:
+        - managedos_install_anaconda_reachable.rc | default(1) == 0
+        - bootwright_os_install_request.registration is defined
+
   always:
     - name: Remove private connection files
       bootwright.core.lifecycle_scratch:
@@ -123,4 +129,6 @@
     fipsRequired: "{{ 'fips=1' in (bootwright_os_install_request.installerArguments | default([])) }}"
     rootEncryption: '{{ managedos_install_anaconda_root_encryption | default(false) }}'
     rootEncryptionRequired: "{{ bootwright_os_install_request.diskEncryption is defined }}"
+    registration: '{{ managedos_install_anaconda_registration | default({}) }}'
+    registrationRequired: "{{ bootwright_os_install_request.registration is defined }}"
   no_log: true

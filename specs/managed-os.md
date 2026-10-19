@@ -138,9 +138,13 @@ profile an installed Machine selects names its `redfishVirtualMedia`
 endpoint, on every substrate, because the installer image is always booted
 through it. A profile selecting
 `initialPassword`, a top-level
-`subscription`, `fromSubscription`, `mirror` or `templateClone` refuses before
+`subscription`, `mirror` or `templateClone` refuses before
 registration. These shapes carry secret bytes or effects this contract does not
-prove. A profile enabling `fips` is admitted on a virtual Machine and refused
+prove; `subscription` stays refused until destroy can unregister what an
+installation registers, and [Registration](#registration) states what it does
+once admitted. A profile selecting `fromSubscription` refuses too, because it
+registers inside the installer, where a failed registration cannot be retried
+without installing again. A profile enabling `fips` is admitted on a virtual Machine and refused
 on a physical one, as [FIPS mode](#fips-mode) states. A profile selecting
 `diskEncryption` is admitted on a virtual Machine and refused on a physical
 one, as [Root-disk encryption](#root-disk-encryption) states. A profile enabling `ssh.passwordAuthentication` refuses too, because no
@@ -208,7 +212,8 @@ automatic partitioning when a Machine its substrate created names none, or,
 for a profile selecting `diskEncryption`, partitioned by the `%include` of the
 storage file its `%pre` writes ([Root-disk encryption](#root-disk-encryption));
 the `minimal` environment, the profile's packages, the clevis packages of an
-encrypted root disk, and `qemu-guest-agent` on a
+encrypted root disk, `subscription-manager` for a profile that registers
+([Registration](#registration)), and `qemu-guest-agent` on a
 Machine whose identity channel is the guest agent; the profile's enabled and
 disabled services; SELinux and firewall as selected; and a `%post` that writes
 the install marker, establishes the host key its identity channel requires,
@@ -442,7 +447,9 @@ rollback time and 30 seconds, 330 seconds, one hour for the rest of
 the media work and each read's own time, and the
 [bound](substrates.md#identity-and-power-operations) of every call an apply
 makes to the machine's controller, 1 hour 17 minutes 20 seconds, which is 4 hours
-50 minutes 50 seconds for these budgets and within the runner's ceiling. Those
+50 minutes 50 seconds for these budgets and within the runner's ceiling. A
+registering request adds 15 minutes for its
+[registration](#registration), 5 hours 5 minutes 50 seconds for these budgets. Those
 calls are the pre-boot power read, the insert, the power-off, boot selection
 and power-on that boot the installer, the eject, disk selection and power-on
 that boot the installed system, the eject the verification repeats, and the
@@ -470,10 +477,13 @@ proved it after a restart, as [network convergence](#network-convergence)
 states, and, when the profile enables `fips`, the installed system reporting
 FIPS mode, as [FIPS mode](#fips-mode) states, and, when the profile selects
 `diskEncryption`, the root filesystem proved on a TPM2-bound LUKS device, as
-[Root-disk encryption](#root-disk-encryption) states. The evidence records the marker
+[Root-disk encryption](#root-disk-encryption) states, and, when the request
+registers, a registration this installation owns, as
+[Registration](#registration) states. The evidence records the marker
 digest, the host public key, the address, whether that connection was accepted,
-the network result, `fips`, whether the installed system proved FIPS mode, and
-`rootEncryption`, whether it proved its root disk encrypted; a later consumer that
+the network result, `fips`, whether the installed system proved FIPS mode,
+`rootEncryption`, whether it proved its root disk encrypted, and
+`registration`, the consumer and the ownership state the worker read; a later consumer that
 connects to the Machine binds that key, never a first-use answer from the
 network. An observation proves completion the same way, because it is what
 resolves an interrupted apply: an observation that proves the marker and the
@@ -483,15 +493,17 @@ connection yet is converging rather than failed.
 
 **Replay.** A Machine whose guest already answers with the frozen marker
 boots no installer but still converges its
-[network](#network-convergence); it reports `completed` with the same
+[network](#network-convergence) and, when the request registers, its
+[registration](#registration); it reports `completed` with the same
 evidence, and outcome `unchanged` only when the network marker names this
-request from an earlier boot and the running network matches its declaration.
-An apply that booted the installer, or that applied, rolled back or restarted
-the network, reports `changed`. The installer answer is
+request from an earlier boot, the running network matches its declaration and
+the registration worker reported its registration unchanged.
+An apply that booted the installer, that applied, rolled back or restarted
+the network, or that registered or adopted a registration, reports `changed`. The installer answer is
 the first identity read's, frozen before the boot, never the marker the
 installer has written by completion. The only
 differences it converges are its own published content, an ejection it did
-not complete and the Machine's declared network, each performed again for a
+not complete, the Machine's declared network and its registration, each performed again for a
 guest already holding that marker. A
 guest that
 answers with a different marker, or a powered-on guest with none, refuses:
@@ -522,10 +534,14 @@ unfinished work is a positive partial realization the next attempt converges,
 which is either content it published on a powered-off guest that never
 installed, or the frozen marker with the completion not yet true. The frozen
 marker with a network not yet converged, rolled back, mismatched or drifted is
-a positive partial realization; network convergence yields no effect only in the one window below. Over the pinned fleet
+a positive partial realization; network convergence yields no effect only in the one window below.
+The frozen marker with an `absent` or `pending` registration is a positive
+partial realization too, and a `foreign` registration stays unknown, as
+[Registration](#registration) states. Over the pinned fleet
 connection, when it answers, the observation also reads the network marker,
 the boot ID and `nmstatectl show --json`, and compares the running network
-with its declaration. A
+with its declaration, and, for a registering request, inspects the
+registration. A
 private completion, of a delivered key or an encrypted root disk, has nothing
 published beneath its private subtree, neither its private material nor the
 image; that subtree left on a powered-off guest
@@ -945,6 +961,91 @@ on the console, because `systemd-cryptsetup` waits without a timeout
 ([crypttab(5)](https://man7.org/linux/man-pages/man5/crypttab.5.html)), until
 the identity budget fails the apply. Recovery is the console with the recovery
 passphrase.
+
+### Registration
+
+A profile selecting `spec.subscription` with a `managed` `redhat-rhel`
+Entitlement registers the installed system with the hosted subscription
+service inside its `os-install-<machine>` block.
+
+**Admission.** A profile selecting `spec.subscription` still refuses before
+plan registration, as the "A subscription" row of the
+[refusal table](#refusal-table) states, until destroy can unregister what an
+installation registered; the contract below is what an installation performs
+once it is admitted. An Entitlement whose `spec.rhsm.management` is `external`
+registers nothing and freezes nothing. Only the hosted subscription service is
+registered with: an Entitlement selecting `spec.rhsm.satellite` or setting
+`spec.rhsm.connectToInsights` refuses, and so does a Machine whose effective
+proxy names a Proxy, because the registration has no route but a direct one; a
+physical Machine refuses, its qualification being
+[B78](milestones/m1.md#b78); and subscription repositories on an `external`
+Entitlement refuse, because this executable applies them only to a
+registration it performs. Each of these refusals names the field that selects
+it and the change that admits the profile; their table rows arrive with the
+admission.
+
+**Frozen request.** The installation request freezes `registration`: the
+`entitlementRef`, the `organizationRef` and `activationKeyRef` Secret
+references and `repositories.enable` and `repositories.disable`, each sorted
+and never null, from
+[`spec.customizations.repositories.subscription`](api/machines.md#installer-arms);
+never a value. `%packages` adds `subscription-manager`. A repository edit
+changes the request and so the marker, so it is another installation: the
+context is taken back with `bootwright destroy` and applied again.
+
+**Effect.** After the installed system's network converged and its FIPS and
+root-encryption proofs passed, the apply runs the controller module
+`managedos_registration` over the pinned fleet connection
+[network convergence](#network-convergence) uses, option for option. The module
+runs one fixed worker as root through `sudo -n /usr/bin/python3 -I -c`; the
+worker starts the private register bus
+(`com.redhat.RHSM1.RegisterServer.Start`) and calls
+`RegisterWithActivationKeys` with the organization, the one activation key and
+empty options and connection options, never `subscription-manager register`,
+`clean` or `--force`. Sources:
+[register.py](https://github.com/candlepin/subscription-manager/blob/main/src/rhsmlib/dbus/objects/register.py),
+[constants.py](https://github.com/candlepin/subscription-manager/blob/main/src/rhsmlib/dbus/constants.py)
+and [subscription-manager(8)](https://www.mankier.com/8/subscription-manager).
+
+**Ownership.** A registration is this installation's when the CN of the
+consumer certificate `/etc/pki/consumer/cert.pem` equals the consumer the
+root-only 0600 record `/etc/bootwright/registration.json` names and that record
+names this request's digest. With no registration the worker registers,
+writing the record `pending` before the call, so a lost reply reads `pending`;
+a `pending` registration is adopted; an owned one is left unchanged; any other
+registration is foreign, refuses `registration-foreign` and is left registered.
+
+**Repositories.** The worker applies the repositories, when the request names any, in one
+`subscription-manager repos` call, every `--disable` first, then every
+`--enable`; `*` in `disable` disables every repository. They are applied on
+every apply, so they converge.
+
+**Values.** The organization and the activation key are each one line of 1 to
+255 printable ASCII characters without whitespace; another value refuses
+`api.value` before the adapter runs, naming the Secret and never a byte of it.
+They are lent to the apply alone, as material files only the controller
+module reads, and reach the machine only on the worker's standard input, as
+the [adapter boundary](#adapter-boundary) states.
+
+**Evidence and completion.** The evidence records `registration.consumer` and
+`registration.state`; a registering installation completes only with an
+`owned` registration. An observation reads the registration the same way,
+through the worker's `inspect` operation, which changes nothing: with the
+frozen marker, an `absent` or `pending` registration is a positive partial
+realization the next apply converges, and a `foreign` one stays unknown.
+
+**Refusals.** The apply names `registration-input`, `registration-foreign`,
+`registration-refused`, `registration-identity-collision`,
+`registration-unavailable` and `registration-repositories` to the runner,
+which reports each with the message and remedy Go owns for it. A worker that
+did not answer over its connection, or a session that failed, fails the apply
+with `Machine <machine> was not registered with its subscription service:
+<reason>`, the worker's closed reason and cause and nothing else, and the effect
+is resolved by observation. Nothing is installed again on a retry: the
+registration is all the next apply repeats.
+
+**Bound.** The deadline of a registering request adds 15 minutes for the
+registration, the worker's whole session being bounded at 630 seconds.
 
 ### Shared package-tree publication
 

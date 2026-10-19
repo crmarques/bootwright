@@ -7,6 +7,8 @@ invoking Bootwright process.
 
 from __future__ import annotations
 
+import re
+
 from ansible.plugins.action import ActionBase
 from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol
 from ansible_collections.bootwright.core.plugins.module_utils.adapter_protocol import publishes, unreached
@@ -25,6 +27,14 @@ MEDIA_REFUSALS = ("media-changed-boot",)
 POLICY_REFUSALS = ("ssh-policy-unavailable", "ssh-policy-host-excluded", "ssh-policy-fleet-excluded", "ssh-policy-generated-excluded")
 FIPS_REFUSALS = ("fips-not-enabled",)
 ENCRYPTION_REFUSALS = ("root-encryption-unproved",)
+REGISTRATION_REFUSALS = (
+    "registration-input", "registration-foreign", "registration-refused", "registration-identity-collision",
+    "registration-unavailable", "registration-repositories",
+)
+# The ownership states the registration worker reads; only an owned or a
+# pending registration names its consumer.
+REGISTRATION_STATES = ("", "owned", "pending", "absent", "foreign")
+CONSUMER = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 POWER_STATES = ("", "On", "Off")
 MAX_MARKER = 4096
 MAX_HOST_KEY = 4096
@@ -67,6 +77,21 @@ def differences(value):
     return list(value)
 
 
+def registration(value):
+    """The registration the worker read, or none; the same rules as Go's decode."""
+    if value in (None, "", {}):
+        return {"consumer": "", "state": ""}
+    if not isinstance(value, dict) or set(value) != {"consumer", "state"}:
+        raise ValueError("registration")
+    consumer, state = value["consumer"], value["state"]
+    if not isinstance(consumer, str) or state not in REGISTRATION_STATES:
+        raise ValueError("registration")
+    named = CONSUMER.fullmatch(consumer) is not None if state in ("owned", "pending") else consumer == ""
+    if not named:
+        raise ValueError("registration")
+    return {"consumer": consumer, "state": state}
+
+
 def presence(arguments, request_digest):
     """The evidence a completion proves.
 
@@ -95,6 +120,7 @@ def presence(arguments, request_digest):
         "power": str(power),
         "private": bool(observation.get("private")),
         "reachable": bool(arguments.get("reachable")),
+        "registration": registration(arguments.get("registration")),
         "request": adapter_protocol.request_digest(request_digest),
         "rootEncryption": flag(arguments.get("rootEncryption")),
         "tree": bool(observation.get("tree")),
@@ -111,6 +137,7 @@ def presence(arguments, request_digest):
         and evidence["network"] and evidence["networkReboot"]
         and (evidence["fips"] or not flag(arguments.get("fipsRequired")))
         and (evidence["rootEncryption"] or not flag(arguments.get("rootEncryptionRequired")))
+        and (evidence["registration"]["state"] == "owned" or not flag(arguments.get("registrationRequired")))
     )
     return evidence
 
@@ -125,7 +152,7 @@ def remaining(arguments):
     return [name for name in CONTENT if observation.get(name)]
 
 
-def unproved(evidence, private_delivery=False, fips_required=False, encryption_required=False):
+def unproved(evidence, private_delivery=False, fips_required=False, encryption_required=False, registration_required=False):
     """What a completion proof still lacks, named for the same reason."""
     names = [name for name in ("marker", "hostKey", "address") if not evidence[name]]
     if evidence["media"]:
@@ -145,6 +172,8 @@ def unproved(evidence, private_delivery=False, fips_required=False, encryption_r
         names.append("fips")
     if encryption_required and not evidence["rootEncryption"]:
         names.append("rootEncryption")
+    if registration_required and evidence["registration"]["state"] != "owned":
+        names.append("registration")
     return names
 
 
@@ -166,6 +195,7 @@ def absence(arguments, request_digest):
         "power": "",
         "private": False,
         "reachable": False,
+        "registration": {"consumer": "", "state": ""},
         "request": adapter_protocol.request_digest(request_digest),
         "rootEncryption": False,
         "tree": False,
@@ -186,7 +216,7 @@ def completion(arguments):
         evidence = presence(arguments, request_digest)
         unmet = unproved(
             evidence, flag(arguments.get("privateDelivery")), flag(arguments.get("fipsRequired")),
-            flag(arguments.get("rootEncryptionRequired")),
+            flag(arguments.get("rootEncryptionRequired")), flag(arguments.get("registrationRequired")),
         )
         verb = "not proved"
     if publishes(evidence, arguments.get("observed")):
@@ -199,7 +229,7 @@ CAPABILITY = adapter_protocol.Capability(
     "the installation capability result could not be published",
     completion,
     phases=adapter_protocol.REFUSING_PHASES,
-    refusals=REFUSALS + MEDIA_REFUSALS + POLICY_REFUSALS + FIPS_REFUSALS + ENCRYPTION_REFUSALS,
+    refusals=REFUSALS + MEDIA_REFUSALS + POLICY_REFUSALS + FIPS_REFUSALS + ENCRYPTION_REFUSALS + REGISTRATION_REFUSALS,
 )
 PHASES = CAPABILITY.phases
 

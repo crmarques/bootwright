@@ -40,6 +40,18 @@ options:
       - C(root-encryption-unproved) names an installed system that does not
         report its root filesystem on a TPM2-bound LUKS device although its
         installation encrypted the root disk.
+      - C(registration-input) names an organization or activation key the
+        registration worker refused as not one line of printable ASCII.
+      - C(registration-foreign) names an installed system registered with a
+        subscription consumer this installation did not create.
+      - C(registration-refused) names a registration the subscription service
+        refused with the organization and activation key.
+      - C(registration-identity-collision) names another registered host the
+        subscription service reports with the same hardware identity.
+      - C(registration-unavailable) names a subscription service or
+        registration tooling that did not answer.
+      - C(registration-repositories) names subscription repository IDs the
+        subscription service did not accept.
     type: str
     required: false
   outcome:
@@ -107,6 +119,19 @@ options:
     description:
       - Whether the frozen request encrypts the root disk, so a completion
         proves it.
+    type: bool
+    required: false
+  registration:
+    description:
+      - The consumer UUID and the ownership state the registration worker
+        read, C(owned), C(pending), C(absent) or C(foreign); a consumer is
+        named only for an owned or a pending registration.
+    type: dict
+    required: false
+  registrationRequired:
+    description:
+      - Whether the frozen request registers the installed system, so a
+        completion proves an owned registration.
     type: bool
     required: false
   privateDelivery:

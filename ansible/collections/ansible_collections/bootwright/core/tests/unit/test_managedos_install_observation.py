@@ -82,17 +82,19 @@ def machine_reads():
     """The tasks that read the machine rather than the published content."""
     found = [task for task in tasks()
              if READ in task
-             or task.get("ansible.builtin.include_tasks") in ("identity.yml", "reachable.yml", "network_observe.yml", "host_security.yml")
+             or task.get("ansible.builtin.include_tasks") in (
+                 "identity.yml", "reachable.yml", "network_observe.yml", "host_security.yml", "registration_observe.yml")
              or (task.get("bootwright.core.lifecycle_scratch") or {}).get("state", "present") == "present" and "bootwright.core.lifecycle_scratch" in task]
-    # Private connection files, the identity, fleet, network, FIPS and controller reads.
-    assert len(found) == 6
+    # Private connection files, the identity, fleet, network, FIPS, registration and controller reads.
+    assert len(found) == 7
     return found
 
 
 @pytest.mark.parametrize("observes", [None, ""], ids=["unscoped", "empty"])
 def test_an_apply_observation_reads_the_machine(observes):
     variables = scope(observes, managedos_install_anaconda_host_key="ssh-ed25519 AAAAHOST",
-                      managedos_install_anaconda_reachable={"rc": 0})
+                      managedos_install_anaconda_reachable={"rc": 0},
+                      bootwright_os_install_request={"address": "198.51.100.11", "registration": {}})
     assert all(runs(task, variables) for task in machine_reads())
 
 

@@ -52,7 +52,9 @@ def test_a_changed_boot_image_is_named_to_the_runner(monkeypatch):
 
 
 @pytest.mark.parametrize("reason", ["ssh-policy-unavailable", "ssh-policy-host-excluded", "ssh-policy-fleet-excluded",
-                                    "ssh-policy-generated-excluded", "fips-not-enabled", "root-encryption-unproved"])
+                                    "ssh-policy-generated-excluded", "fips-not-enabled", "root-encryption-unproved",
+                                    "registration-input", "registration-foreign", "registration-refused",
+                                    "registration-identity-collision", "registration-unavailable", "registration-repositories"])
 def test_early_key_policy_refusals_use_the_go_owned_public_diagnostic(reason, monkeypatch):
     result, published = run({"phase": "refused", "reason": reason}, monkeypatch)
     assert result == {"changed": False}
@@ -115,3 +117,44 @@ def test_an_encrypting_installation_completes_only_with_the_root_encryption_proo
         evidence, refused = protocol.completion(arguments)
         assert evidence["rootEncryption"] is False and evidence["postcondition"] is True and refused is None
     assert protocol.absence({"observation": {}}, DIGEST)["rootEncryption"] is False
+
+
+CONSUMER = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
+
+
+# A registering installation completes only when the worker read a registration
+# this installation owns; any other installation is unaffected by what it reads.
+def test_a_registering_installation_completes_only_with_an_owned_registration():
+    for read in ({"consumer": "", "state": "absent"}, {"consumer": CONSUMER, "state": "pending"},
+                 {"consumer": "", "state": "foreign"}, {}, None):
+        evidence, refused = protocol.completion(proved(registrationRequired=True, registration=read))
+        assert evidence["postcondition"] is False
+        assert refused is not None and refused.endswith("not proved: registration")
+    evidence, refused = protocol.completion(proved(registrationRequired="True", registration={"consumer": CONSUMER, "state": "owned"}))
+    assert evidence["registration"] == {"consumer": CONSUMER, "state": "owned"}
+    assert evidence["postcondition"] is True and refused is None
+    for arguments in (proved(), proved(registration={"consumer": "", "state": "absent"}), proved(registrationRequired=False)):
+        evidence, refused = protocol.completion(arguments)
+        assert evidence["postcondition"] is True and refused is None
+    assert protocol.completion(proved())[0]["registration"] == {"consumer": "", "state": ""}
+    assert protocol.absence({"observation": {}}, DIGEST)["registration"] == {"consumer": "", "state": ""}
+
+
+@pytest.mark.parametrize("read", [
+    {"consumer": CONSUMER, "state": "registered"},
+    {"consumer": "", "state": "owned"},
+    {"consumer": "", "state": "pending"},
+    {"consumer": CONSUMER.upper(), "state": "owned"},
+    {"consumer": CONSUMER + "0", "state": "owned"},
+    {"consumer": CONSUMER, "state": "absent"},
+    {"consumer": CONSUMER, "state": "foreign"},
+    {"consumer": CONSUMER, "state": "owned", "changed": True},
+    {"state": "absent"},
+    {"consumer": 7, "state": "owned"},
+    "owned",
+], ids=repr)
+def test_a_malformed_registration_is_never_published(read, monkeypatch):
+    with pytest.raises(ValueError, match="registration"):
+        protocol.presence(proved(registration=read), DIGEST)
+    result, published = run(dict(proved(registration=read), phase="completed", outcome="changed"), monkeypatch)
+    assert result.get("failed") is True and not published
