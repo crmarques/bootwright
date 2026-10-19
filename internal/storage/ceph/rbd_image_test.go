@@ -70,7 +70,7 @@ func TestRBDImageExplicitEmptyFeaturesFreezeEmpty(t *testing.T) {
 func TestClientOnPoolWithDataPoolImageRefuses(t *testing.T) {
 	client := childOf(api.StorageClient, "consumer", "poolRef", "volumes", "access", "read-write")
 	message := "StorageClient consumer names pool volumes, whose StorageRBDImage disk keeps its data in pool %s; the client's caps cover only its declared pool"
-	remedy := "point spec.poolRef at a pool whose images declare no dataPoolRef, or remove spec.dataPoolRef from StorageRBDImage disk; B489 (X57) derives the data-pool caps"
+	remedy := "point spec.poolRef at a pool whose images declare no dataPoolRef, or remove spec.dataPoolRef from StorageRBDImage disk; B489 derives the data-pool caps"
 	for _, data := range []api.Object{ecData(), replicatedPool("archive")} {
 		catalog := planCatalog(6, 6, nil, replicatedPool("volumes"), data, client, imageOf("disk", "volumes", "dataPoolRef", data.Name()))
 		_, err := planned(t, catalog, api.StorageClient, "consumer")

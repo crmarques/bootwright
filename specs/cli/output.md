@@ -190,6 +190,12 @@ Each raw value is deterministically escaped once before wrapping, so no
 attacker-controlled terminal sequence or line break can create presentation
 structure. A refusal names the object or block, observed or missing evidence,
 safety reason and exact safe next action; it never invents a force command.
+A product string names no decision, question, milestone or slice ID and no
+vendor release or support status; a refusal of a feature Bootwright does not
+realize says so and may name its backlog item.
+`TestOperatorStringsNameNoDecisionOrQuestionID` and
+`TestRefusalsNameNoVendorRelease` check the Go sources and the collection's
+plugins.
 A context-backed next action carries `--context <name>` for the context the
 invocation resolved. The context-free commands `setup`, `media` and `version`
 take none. No diagnostic carries confidential material.

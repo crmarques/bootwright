@@ -289,10 +289,10 @@ func clientRequest(c api.Catalog, client api.Object, contextName string) (Reques
 		return Request{}, err
 	}
 	if r.Pool.Type == "erasure" {
-		return Request{}, failure("lifecycle.unsupported", "StorageClient "+client.Name()+" names erasure-coded pool "+pool.Name()+"; RBD image headers and the client's pool-scoped caps need a replicated RBD pool", "point spec.poolRef at a replicated rbd pool; caps on erasure-coded data pools are derived by B489 (X57)")
+		return Request{}, failure("lifecycle.unsupported", "StorageClient "+client.Name()+" names erasure-coded pool "+pool.Name()+"; RBD image headers and the client's pool-scoped caps need a replicated RBD pool", "point spec.poolRef at a replicated rbd pool; B489 derives the caps on erasure-coded data pools")
 	}
 	if image, data := dataPoolImage(c, client.Spec().Get("clusterRef").Text(), pool.Name()); image != "" {
-		return Request{}, failure("lifecycle.unsupported", "StorageClient "+client.Name()+" names pool "+pool.Name()+", whose StorageRBDImage "+image+" keeps its data in pool "+data+"; the client's caps cover only its declared pool", "point spec.poolRef at a pool whose images declare no dataPoolRef, or remove spec.dataPoolRef from StorageRBDImage "+image+"; B489 (X57) derives the data-pool caps")
+		return Request{}, failure("lifecycle.unsupported", "StorageClient "+client.Name()+" names pool "+pool.Name()+", whose StorageRBDImage "+image+" keeps its data in pool "+data+"; the client's caps cover only its declared pool", "point spec.poolRef at a pool whose images declare no dataPoolRef, or remove spec.dataPoolRef from StorageRBDImage "+image+"; B489 derives the data-pool caps")
 	}
 	r.Action = "client"
 	r.Pool = nil

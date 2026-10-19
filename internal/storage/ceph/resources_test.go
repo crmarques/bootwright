@@ -227,7 +227,7 @@ func TestClientOnErasurePoolRefusesAtPlan(t *testing.T) {
 	catalog := planCatalog(6, 6, nil, erasurePool("volumes", requestMap("dataChunks", 4, "codingChunks", 2)),
 		childOf(api.StorageClient, "consumer", "poolRef", "volumes", "access", "read-write"))
 	_, err := planned(t, catalog, api.StorageClient, "consumer")
-	refusedWith(t, err, "lifecycle.unsupported", "StorageClient consumer names erasure-coded pool volumes; RBD image headers and the client's pool-scoped caps need a replicated RBD pool", "point spec.poolRef at a replicated rbd pool; caps on erasure-coded data pools are derived by B489 (X57)")
+	refusedWith(t, err, "lifecycle.unsupported", "StorageClient consumer names erasure-coded pool volumes; RBD image headers and the client's pool-scoped caps need a replicated RBD pool", "point spec.poolRef at a replicated rbd pool; B489 derives the caps on erasure-coded data pools")
 }
 
 func TestPoolRequestGoldenReplicatedWithPolicy(t *testing.T) {

@@ -278,7 +278,7 @@ The [resource contract](storage-resources.md) owns those relationships.
 ### RGW, ingress and NFS records
 
 Admission accepts `rgw`, `ingress` and `nfs` documents under closed records
-whose members and spelling follow IBM's python3-ceph-common 20.2.1-405 ServiceSpec schema (the package the build pins); planning
+whose members and spelling follow IBM's python3-ceph-common 20.2.1-405 ServiceSpec schema (the source read for these records, not a pinned build); planning
 still refuses each of them `lifecycle.unsupported` until its execution lane.
 
 | Type | Admitted `spec` members |
