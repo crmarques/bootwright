@@ -619,9 +619,10 @@ placement count of `rgw` daemons running on the frozen Ceph image and an HTTP
 status line from each daemon's frontend port, probed from the bootstrap host; a
 readiness timeout names `rgw@rgw.<id>` and `http@rgw.<id>`. S3 requests are the
 operator's acceptance. Observation never writes and never calls `radosgw-admin`
-while `.rgw.root` is absent; evidence carries the zone ID, the endpoint FQDN
-and each daemon's host, name and service, never zone keys, a stored
-specification or user data. The block never reads or creates an object user
+while `.rgw.root` is absent; evidence carries the zone ID, the endpoint FQDN,
+each daemon's host, name and service, and an `endpoint` member holding whether
+the terminating service answered and, with TLS, the SHA-256 of the leaf it
+served, never zone keys, a stored specification, TLS material or user data. The block never reads or creates an object user
 (cephadm's own `dashboard` user is tolerated). TLS and an ingress refuse at
 plan until they are realized ([refusal table](#refusal-table)), and the block
 retires only with the cluster's hosts.

@@ -44,8 +44,8 @@ def document(spec=None):
 
 
 def gateway_request(spec=None, **members):
-    gateway = {"dataExtraPool": "objects.rgw.buckets.non-ec", "dataPool": "objects.rgw.buckets.data", "documents": [document(spec)], "endpoint": "",
-               "indexPool": "objects.rgw.buckets.index", "name": "objects", "realm": "objects", "zone": "objects", "zoneGroup": "objects",
+    gateway = {"bindings": [], "dataExtraPool": "objects.rgw.buckets.non-ec", "dataPool": "objects.rgw.buckets.data", "documents": [document(spec)],
+               "endpoint": "", "indexPool": "objects.rgw.buckets.index", "name": "objects", "realm": "objects", "zone": "objects", "zoneGroup": "objects",
                "zonePools": list(DERIVED)}
     gateway.update(members)
     request = dict(settings.cluster(), clusterSSHTransport="verified-tunnel", action="gateway", gateway=gateway)
@@ -628,6 +628,7 @@ INVALID = {
     "zonePools missing the index pool": without_index,
     "extra member": lambda: gateway_request(extra=True),
     "second document": lambda: gateway_request(documents=[document(), dict(document(), service_id="more")]),
+    "bindings not empty": lambda: gateway_request(bindings=[{"path": "/spec/ssl_cert", "secretRef": "gateway-tls", "serviceRef": "rgw.objects"}]),
     "endpoint not a name": lambda: gateway_request(endpoint="https://objects.example.test"),
     "realm not a label": lambda: gateway_request(realm="Objects"),
     "gateway on a pool action": lambda: dict(gateway_request(), action="pool", pool={"name": "volumes"}),
@@ -670,7 +671,8 @@ def observation(request, ready, daemons=(), resource=None):
     return {"version": ceph_native.EVIDENCE_VERSION, "request": "", "action": "gateway", "owner": OWNER, "fsid": FSID, "owned": True, "exists": True,
             "ready": ready, "removed": False, "partial": not ready, "health": "HEALTH_OK", "hosts": [h["name"] for h in request["hosts"]],
             "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [], "osds": [], "resource": resource or {"id": "", "path": ""},
-            "client": "", "dashboard": {"url": "", "certificateSHA256": "", "reachable": False}, "daemons": list(daemons)}
+            "client": "", "dashboard": {"url": "", "certificateSHA256": "", "reachable": False},
+            "endpoint": {"certificateSHA256": "", "reachable": ready}, "daemons": list(daemons)}
 
 
 class Transport:
@@ -736,5 +738,35 @@ def test_core_evidence_admits_gateway_resource_and_daemons():
                          (dict(value, daemons=[dict(row, host="node-3")]), other),
                          (dict(value, daemons=[dict(row, service="rgw.other")]), request),
                          (dict(value, daemons=[dict(row, secret=SECRET_KEY)]), request)):
+        with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+            ceph_core.evidence(copy.deepcopy(bad), "d" * 64, against)
+
+
+def test_gateway_evidence_carries_the_endpoint_member(tmp_path, monkeypatch):
+    markers, monitor = ready_gateway(tmp_path)
+    ready, unused, evidence = observe(monitor, markers)
+    assert ready is True and evidence["endpoint"] == {"certificateSHA256": "", "reachable": True}
+    monkeypatch.setattr(ceph_native_object, "answers", lambda address, number: False)
+    ready, blocking, evidence = observe(monitor, markers)
+    assert ready is False and blocking == ["http@rgw.objects"] and evidence["endpoint"] == {"certificateSHA256": "", "reachable": False}
+
+
+def test_core_evidence_admits_only_a_gateway_endpoint():
+    request = gateway_request(endpoint="objects.ceph.example.test")
+    plain = dict(observation(request, True), request="d" * 64)
+    assert ceph_core.evidence(copy.deepcopy(plain), "d" * 64, request)["endpoint"] == {"certificateSHA256": "", "reachable": True}
+    pool = dict(observation(request, True), request="d" * 64, action="pool", endpoint={"certificateSHA256": "", "reachable": False})
+    assert ceph_core.evidence(copy.deepcopy(pool), "d" * 64)["action"] == "pool"
+    tls = copy.deepcopy(request)
+    tls["gateway"]["bindings"] = [{"path": "/spec/ssl_cert", "secretRef": "gateway-tls", "serviceRef": "rgw.objects"},
+                                  {"path": "/spec/ssl_key", "secretRef": "gateway-tls", "serviceRef": "rgw.objects"}]
+    served = dict(plain, endpoint={"certificateSHA256": "a" * 64, "reachable": True})
+    assert ceph_core.evidence(copy.deepcopy(served), "d" * 64, tls)["endpoint"]["certificateSHA256"] == "a" * 64
+    for bad, against in ((dict(pool, endpoint={"certificateSHA256": "", "reachable": True}), None),
+                         (dict(plain, endpoint={"certificateSHA256": "a" * 64, "reachable": True}), request),
+                         (dict(plain, endpoint={"certificateSHA256": "", "reachable": True, "url": ""}), request),
+                         (dict(plain, endpoint={"certificateSHA256": "A" * 64, "reachable": True}), tls),
+                         (dict(plain, endpoint={"certificateSHA256": "", "reachable": "yes"}), request),
+                         (dict(plain, endpoint={"certificateSHA256": "", "reachable": True}), tls)):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
             ceph_core.evidence(copy.deepcopy(bad), "d" * 64, against)

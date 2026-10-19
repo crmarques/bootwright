@@ -7,6 +7,10 @@
     "reachable": true,
     "url": "https://node-1:8443/"
   },
+  "endpoint": {
+    "certificateSHA256": "",
+    "reachable": false
+  },
   "exists": true,
   "fsid": "5effe704-a878-5cae-8b43-c81f7112832a",
   "health": "HEALTH_OK",
@@ -68,5 +72,5 @@
     "id": "",
     "path": ""
   },
-  "version": "ceph-core-evidence-v5"
+  "version": "ceph-core-evidence-v6"
 }

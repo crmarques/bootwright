@@ -140,11 +140,12 @@ def evidence(value, request_digest, request=None):
     if isinstance(value, dict) and value.get("version") == ceph_host_runtime.EVIDENCE_VERSION:
         return host_evidence(value, request_digest, request)
     fields = {"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs",
-              "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "daemons"}
+              "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons"}
     ceph_native.require(isinstance(value, dict) and set(value) == fields, "evidence")
     ceph_native.require(value["version"] == ceph_native.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
                         "evidence")
     dashboard_evidence(value)
+    endpoint_evidence(value, request)
     actions = ("cluster", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway")
     ceph_native.require(value["action"] in actions, "evidence")
     daemon_evidence(value, request)
@@ -226,6 +227,21 @@ def dashboard_evidence(value):
     ceph_native.require(type(dashboard["reachable"]) is bool and (not dashboard["reachable"] or proved), "evidence")
     if value["action"] != "cluster":
         ceph_native.require(not addresses and dashboard == {"url": "", "certificateSHA256": "", "reachable": False}, "evidence")
+
+
+def endpoint_evidence(value, request=None):
+    """Whether a gateway's terminating service answered and, with TLS, the SHA-256 of the bound leaf it served; every other action has none."""
+    endpoint = value["endpoint"]
+    ceph_native.require(isinstance(endpoint, dict) and set(endpoint) == {"certificateSHA256", "reachable"}, "evidence")
+    ceph_native.require(endpoint["certificateSHA256"] == "" or ceph_native.digest(endpoint["certificateSHA256"]), "evidence")
+    ceph_native.require(type(endpoint["reachable"]) is bool, "evidence")
+    if value.get("action") != "gateway":
+        ceph_native.require(endpoint == {"certificateSHA256": "", "reachable": False}, "evidence")
+        return
+    if request is not None:
+        tls = bool(request["gateway"]["bindings"])
+        ceph_native.require(tls or endpoint["certificateSHA256"] == "", "evidence")
+        ceph_native.require(not (endpoint["reachable"] and tls) or endpoint["certificateSHA256"] != "", "evidence")
 
 
 def tls_certificate(address, port, timeout=10):

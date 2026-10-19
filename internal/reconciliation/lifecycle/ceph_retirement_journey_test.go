@@ -73,6 +73,7 @@ func (r *fleetRunner) Run(_ context.Context, run lifecycle.RunRequest) (lifecycl
 	case "gateway":
 		evidence.Resource = ceph.ResourceEvidence{ID: "0b8c6f2e-3c1d-4a5e-9f70-1a2b3c4d5e6f"}
 		evidence.Daemons = []ceph.UnitDaemon{{Host: fleetHosts[0], Name: "rgw.objects." + fleetHosts[0] + ".abcdef", Service: "rgw.objects"}}
+		evidence.Endpoint = ceph.EndpointEvidence{Reachable: true}
 	case "client":
 		evidence.Client = "client." + request.Client.Name
 		credential := `[{"caps":{"mgr":"profile rbd pool=volumes","mon":"profile rbd","osd":"profile rbd pool=volumes"},"entity":"client.consumer","key":"` + base64.StdEncoding.EncodeToString([]byte("consumer-key")) + `"}]`

@@ -74,7 +74,7 @@ SUBVOLUME_PATH = re.compile(r"/volumes/(?:_nogroup|[A-Za-z0-9][A-Za-z0-9_.-]{0,1
 CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount", "cache", "enroll",
                          "services", "dashboard", "dashboard_read", "observe", "bootstrap_state", "host_state", "destroy"))
 CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "observe", "bootstrap_state", "host_state", "dashboard_read"))
-EVIDENCE_VERSION = "ceph-core-evidence-v5"
+EVIDENCE_VERSION = "ceph-core-evidence-v6"
 DASHBOARD_USER = "admin"
 DASHBOARD_PORT = 8443
 DASHBOARD_LENGTH = 32
@@ -512,7 +512,7 @@ def host_scope(request):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v15")
+    require(request["version"] == "ceph-core-v16")
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])
@@ -3370,7 +3370,8 @@ class Worker:
         return {"version": EVIDENCE_VERSION, "request": "", "action": self.request["action"], "fsid": self.request["fsid"],
                 "owner": self.request["owner"], "owned": self.markers.owned(), "exists": False, "ready": False, "removed": False, "partial": False,
                 "health": "", "hosts": [], "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [], "osds": [],
-                "resource": {"id": "", "path": ""}, "client": "", "dashboard": {"url": "", "certificateSHA256": "", "reachable": False}, "daemons": []}
+                "resource": {"id": "", "path": ""}, "client": "", "dashboard": {"url": "", "certificateSHA256": "", "reachable": False},
+                "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": []}
 
     def observe(self):
         if self.recovery_enabled() and self.request["action"] == "cluster" and self.markers.read("bootstrap-enrollment.json") is None:

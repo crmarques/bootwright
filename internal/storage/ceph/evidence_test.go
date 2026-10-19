@@ -86,6 +86,9 @@ func TestDaemonAbsenceNeverProvesClusterCleanup(t *testing.T) {
 func TestEvidenceRejectsMissingUnknownNullAndDuplicateFields(t *testing.T) {
 	r := runtimeRequest()
 	data := evidenceBytes(t, readyEvidence(r))
+	if _, err := EvaluateEvidence(data, r, "digest", false); err != nil {
+		t.Fatalf("canonical evidence refused: %v", err)
+	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
 		t.Fatal(err)
@@ -97,8 +100,15 @@ func TestEvidenceRejectsMissingUnknownNullAndDuplicateFields(t *testing.T) {
 	fields["partial"] = json.RawMessage(`false`)
 	fields["key"] = json.RawMessage(`"secret"`)
 	extra, _ := json.Marshal(fields)
+	delete(fields, "key")
+	delete(fields, "endpoint")
+	missingEndpoint, _ := json.Marshal(fields)
+	fields["endpoint"] = json.RawMessage(`null`)
+	nullEndpoint, _ := json.Marshal(fields)
+	fields["endpoint"] = json.RawMessage(`{"certificateSHA256":"","reachable":false,"url":""}`)
+	extraEndpoint, _ := json.Marshal(fields)
 	duplicate := append([]byte(`{"owner":"foreign",`), data[1:]...)
-	for _, bad := range [][]byte{missing, null, extra, duplicate} {
+	for _, bad := range [][]byte{missing, null, extra, duplicate, missingEndpoint, nullEndpoint, extraEndpoint} {
 		if _, err := EvaluateEvidence(bad, r, "digest", false); err == nil {
 			t.Fatal("noncanonical evidence accepted")
 		}

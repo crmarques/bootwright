@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-const EvidenceVersion = "ceph-core-evidence-v5"
+const EvidenceVersion = "ceph-core-evidence-v6"
 
 const DashboardPort = "8443"
 
@@ -45,6 +45,11 @@ type DashboardEvidence struct {
 	URL               string `json:"url"`
 }
 
+type EndpointEvidence struct {
+	CertificateSHA256 string `json:"certificateSHA256"`
+	Reachable         bool   `json:"reachable"`
+}
+
 type OSDEvidence struct {
 	Host string `json:"host"`
 	ID   int    `json:"id"`
@@ -68,6 +73,7 @@ type Evidence struct {
 	Client      string            `json:"client"`
 	Daemons     []UnitDaemon      `json:"daemons"`
 	Dashboard   DashboardEvidence `json:"dashboard"`
+	Endpoint    EndpointEvidence  `json:"endpoint"`
 	Exists      bool              `json:"exists"`
 	FSID        string            `json:"fsid"`
 	Health      string            `json:"health"`
@@ -97,10 +103,10 @@ func decodeEvidence(data []byte) (Evidence, error) {
 		return e, err
 	}
 	fields, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](data, 60*1024, "Ceph members")
-	if err != nil || len(fields) != 21 {
+	if err != nil || len(fields) != 22 {
 		return Evidence{}, evidenceFailure()
 	}
-	required := []string{"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs", "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "daemons"}
+	required := []string{"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs", "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons"}
 	for _, key := range required {
 		v, ok := fields[key]
 		if !ok || string(v) == "null" {
@@ -139,6 +145,10 @@ func decodeEvidence(data []byte) (Evidence, error) {
 	}
 	dashboard, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](fields["dashboard"], 60*1024, "Ceph dashboard members")
 	if err != nil || !closedMembers(dashboard, "url", "certificateSHA256", "reachable") {
+		return Evidence{}, evidenceFailure()
+	}
+	endpoint, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](fields["endpoint"], 60*1024, "Ceph endpoint members")
+	if err != nil || !closedMembers(endpoint, "certificateSHA256", "reachable") {
 		return Evidence{}, evidenceFailure()
 	}
 	resource, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](fields["resource"], 60*1024, "Ceph resource members")
@@ -181,6 +191,17 @@ func validDashboard(e Evidence, r Request) bool {
 		seen[m.Host] = true
 	}
 	return true
+}
+
+func validEndpoint(e Evidence, r Request) bool {
+	if r.Action != "gateway" || r.Gateway == nil {
+		return e.Endpoint == EndpointEvidence{}
+	}
+	tls, digest := len(r.Gateway.Bindings) != 0, e.Endpoint.CertificateSHA256
+	if digest != "" && (!tls || !certificateDigest.MatchString(digest)) {
+		return false
+	}
+	return !e.Endpoint.Reachable || !tls || digest != ""
 }
 
 func sameNames(actual, want []string) bool {
@@ -361,7 +382,7 @@ func validateReady(e Evidence, r Request) bool {
 	case "subvolume":
 		return subvolumeResource(e, r)
 	case "gateway":
-		return r.Gateway != nil && zoneID.MatchString(e.Resource.ID) && e.Resource.Path == r.Gateway.Endpoint && everyDocumentRuns(e, r)
+		return r.Gateway != nil && zoneID.MatchString(e.Resource.ID) && e.Resource.Path == r.Gateway.Endpoint && everyDocumentRuns(e, r) && e.Endpoint.Reachable
 	}
 	return false
 }
@@ -374,7 +395,7 @@ func EvaluateEvidence(data []byte, r Request, digest string, removal bool) (reco
 	if err != nil {
 		return reconciliation.EffectUnknown, err
 	}
-	if e.Version != EvidenceVersion || e.Request != digest || digest == "" || e.Action != r.Action || e.Owner != r.Owner || r.Owner == "" || e.FSID != r.FSID || r.FSID == "" || !validateScope(e, r) || !validDashboard(e, r) {
+	if e.Version != EvidenceVersion || e.Request != digest || digest == "" || e.Action != r.Action || e.Owner != r.Owner || r.Owner == "" || e.FSID != r.FSID || r.FSID == "" || !validateScope(e, r) || !validDashboard(e, r) || !validEndpoint(e, r) {
 		return reconciliation.EffectUnknown, evidenceFailure()
 	}
 	if e.Ready && (!e.Owned || !e.Exists || e.Partial || e.Removed) || e.Removed && (!e.Owned || e.Exists || e.Ready || e.Partial) || e.Partial && (!e.Owned || !e.Exists || e.Ready || e.Removed) {
@@ -389,7 +410,7 @@ func EvaluateEvidence(data []byte, r Request, digest string, removal bool) (reco
 		if r.Action == "cluster" && (!sameNames(e.Hosts, hostNames(r)) || len(e.Monitors) != 0 || len(e.OSDs) != 0 || e.MGRActive != "" || len(e.MGRStandbys) != 0) {
 			return reconciliation.EffectUnknown, evidenceFailure()
 		}
-		if e.Resource != (ResourceEvidence{}) || e.Client != "" || len(e.Daemons) != 0 {
+		if e.Resource != (ResourceEvidence{}) || e.Client != "" || len(e.Daemons) != 0 || e.Endpoint != (EndpointEvidence{}) {
 			return reconciliation.EffectUnknown, evidenceFailure()
 		}
 		if removal {

@@ -46,7 +46,7 @@ PROBE_LIMIT = 256
 PROBE_REQUEST = b"GET / HTTP/1.0\r\n\r\n"
 STATUS_LINE = re.compile(rb"HTTP/1\.[01] [1-5][0-9]{2}(?: [^\r\n]*)?\r?\n")
 PENDING = re.compile(r"(?:rgw|http)@rgw\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
-MEMBERS = frozenset(("dataExtraPool", "dataPool", "documents", "endpoint", "indexPool", "name", "realm", "zone", "zoneGroup", "zonePools"))
+MEMBERS = frozenset(("bindings", "dataExtraPool", "dataPool", "documents", "endpoint", "indexPool", "name", "realm", "zone", "zoneGroup", "zonePools"))
 KINDS = ("realm", "zonegroup", "zone")
 LISTS = {"realm": "realms", "zonegroup": "zonegroups", "zone": "zones"}
 MAX_NAMES = 1024
@@ -95,9 +95,10 @@ def validate_document(document, gateway, request, hosts):
 
 
 def validate(request, hosts):
-    """One gateway: its native names, its frozen pools and endpoint, and exactly one plain HTTP rgw document."""
+    """One gateway: its native names, its frozen pools and endpoint, no TLS binding and exactly one plain HTTP rgw document."""
     gateway = request.get("gateway")
     require(isinstance(gateway, dict) and set(gateway) == MEMBERS)
+    require(gateway["bindings"] == [])
     require(named(gateway["name"]) and label(gateway["name"]))
     require(all(label(gateway[key]) for key in ("realm", "zoneGroup", "zone")))
     placement = [gateway[key] for key in ("indexPool", "dataPool", "dataExtraPool")]
@@ -442,6 +443,7 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         evidence["exists"] = owned or any(self.frozen(kind) in names[kind] for kind in KINDS) or bool(specs) or bool(running)
         proved = owned and self.observe_gateway(evidence, ids, specs)
         daemons = self.gateway_daemons(running)
+        evidence["endpoint"] = {"certificateSHA256": "", "reachable": daemons}
         evidence["daemons"] = sorted(({"host": row["hostname"], "name": row["daemon_type"] + "." + row["daemon_id"], "service": row["service_name"]}
                                       for row in running), key=lambda item: item["name"])[:ceph_native_units.MAX_DAEMONS]
         return ready and owned and proved and daemons

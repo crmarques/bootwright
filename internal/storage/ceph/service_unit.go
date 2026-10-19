@@ -142,9 +142,11 @@ func nfsIngressSpecOf(spec api.Value) any {
 
 var unitSpecMembers = map[string][]string{
 	"nfs": {"enable_haproxy_protocol", "monitoring_port", "port", "virtual_ip"},
-	"rgw": {"only_bind_port_on_networks", "rgw_exit_timeout_secs", "rgw_frontend_port", "rgw_frontend_type", "rgw_realm", "rgw_zone", "rgw_zonegroup", "ssl"},
+	"rgw": {"certificate_source", "only_bind_port_on_networks", "rgw_exit_timeout_secs", "rgw_frontend_port", "rgw_frontend_type", "rgw_realm", "rgw_zone", "rgw_zonegroup", "ssl"},
 	"ingress": {"backend_service", "enable_haproxy_protocol", "first_virtual_router_id", "frontend_port", "haproxy_peer_communication_port",
 		"health_check_interval", "keepalive_only", "monitor_port", "virtual_ip", "virtual_interface_networks"},
+	"ingress-rgw": {"backend_service", "certificate_source", "first_virtual_router_id", "frontend_port", "health_check_interval", "monitor_port", "ssl",
+		"virtual_interface_networks", "virtual_ip"},
 }
 
 func unitDocumentOf(cluster api.Object, svc api.Value, spec func(api.Value) any) (json.RawMessage, error) {
@@ -159,8 +161,12 @@ func unitDocumentOf(cluster api.Object, svc api.Value, spec func(api.Value) any)
 			"remove those options from "+name+" in spec.ceph.services")
 	}
 	t := svc.Get("service_type").Text()
+	members := unitSpecMembers[t]
+	if t == "ingress" && serviceFamily(cluster, svc) == "rgw" {
+		members = unitSpecMembers["ingress-rgw"]
+	}
 	for _, member := range svc.Get("spec").Fields() {
-		if !slices.Contains(unitSpecMembers[t], member.Name) {
+		if !slices.Contains(members, member.Name) {
 			return nil, failure("lifecycle.unsupported", "the native service "+name+" carries spec."+member.Name+", which Bootwright does not realize for this service",
 				"remove spec."+member.Name+" from "+name+" in spec.ceph.services")
 		}

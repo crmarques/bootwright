@@ -13,6 +13,7 @@ import (
 )
 
 type Gateway struct {
+	Bindings      []GatewayBinding  `json:"bindings"`
 	DataExtraPool string            `json:"dataExtraPool"`
 	DataPool      string            `json:"dataPool"`
 	Documents     []json.RawMessage `json:"documents"`
@@ -25,7 +26,14 @@ type Gateway struct {
 	ZonePools     []string          `json:"zonePools"`
 }
 
+type GatewayBinding struct {
+	Path       string `json:"path"`
+	SecretRef  string `json:"secretRef"`
+	ServiceRef string `json:"serviceRef"`
+}
+
 type rgwSpec struct {
+	CertificateSource      string `json:"certificate_source,omitempty"`
 	OnlyBindPortOnNetworks bool   `json:"only_bind_port_on_networks,omitempty"`
 	RGWExitTimeoutSecs     *int64 `json:"rgw_exit_timeout_secs,omitempty"`
 	RGWFrontendPort        *int64 `json:"rgw_frontend_port,omitempty"`
@@ -34,6 +42,18 @@ type rgwSpec struct {
 	RGWZone                string `json:"rgw_zone"`
 	RGWZoneGroup           string `json:"rgw_zonegroup"`
 	SSL                    bool   `json:"ssl,omitempty"`
+}
+
+type rgwIngressSpec struct {
+	BackendService           string   `json:"backend_service"`
+	CertificateSource        string   `json:"certificate_source,omitempty"`
+	FirstVirtualRouterID     *int64   `json:"first_virtual_router_id,omitempty"`
+	FrontendPort             *int64   `json:"frontend_port,omitempty"`
+	HealthCheckInterval      string   `json:"health_check_interval,omitempty"`
+	MonitorPort              *int64   `json:"monitor_port,omitempty"`
+	SSL                      bool     `json:"ssl,omitempty"`
+	VirtualIP                string   `json:"virtual_ip"`
+	VirtualInterfaceNetworks []string `json:"virtual_interface_networks,omitempty"`
 }
 
 func GatewayBlockID(gateway string) string { return "ceph-gateway-" + gateway }
@@ -86,10 +106,53 @@ func gatewayPoolObject(block reconciliation.Block, r Request) string {
 
 func rgwSpecOf(gateway api.Value) func(api.Value) any {
 	return func(spec api.Value) any {
-		return rgwSpec{OnlyBindPortOnNetworks: spec.Get("only_bind_port_on_networks").Bool(), RGWExitTimeoutSecs: integerOf(spec.Get("rgw_exit_timeout_secs")),
-			RGWFrontendPort: integerOf(spec.Get("rgw_frontend_port")), RGWFrontendType: spec.Get("rgw_frontend_type").Text(), RGWRealm: gateway.Get("realm").Text(),
-			RGWZone: gateway.Get("zone").Text(), RGWZoneGroup: gateway.Get("zoneGroup").Text(), SSL: spec.Get("ssl").Bool()}
+		return rgwSpec{CertificateSource: spec.Get("certificate_source").Text(), OnlyBindPortOnNetworks: spec.Get("only_bind_port_on_networks").Bool(),
+			RGWExitTimeoutSecs: integerOf(spec.Get("rgw_exit_timeout_secs")), RGWFrontendPort: integerOf(spec.Get("rgw_frontend_port")), RGWFrontendType: spec.Get("rgw_frontend_type").Text(),
+			RGWRealm: gateway.Get("realm").Text(), RGWZone: gateway.Get("zone").Text(), RGWZoneGroup: gateway.Get("zoneGroup").Text(), SSL: spec.Get("ssl").Bool()}
 	}
+}
+
+func rgwIngressSpecOf(spec api.Value) any {
+	return rgwIngressSpec{BackendService: spec.Get("backend_service").Text(), CertificateSource: spec.Get("certificate_source").Text(),
+		FirstVirtualRouterID: integerOf(spec.Get("first_virtual_router_id")), FrontendPort: integerOf(spec.Get("frontend_port")),
+		HealthCheckInterval: spec.Get("health_check_interval").Text(), MonitorPort: integerOf(spec.Get("monitor_port")), SSL: spec.Get("ssl").Bool(),
+		VirtualIP: spec.Get("virtual_ip").Text(), VirtualInterfaceNetworks: spec.Get("virtual_interface_networks").Strings()}
+}
+
+func gatewayTLSSecret(g *Gateway) string {
+	if g == nil || len(g.Bindings) == 0 {
+		return ""
+	}
+	return g.Bindings[0].SecretRef
+}
+
+func gatewayBindings(cluster api.Object, services ...string) []GatewayBinding {
+	out := []GatewayBinding{}
+	for _, binding := range cluster.Spec().Get("ceph", "serviceBindings").Items() {
+		ref := binding.Get("serviceRef").Text()
+		if !slices.Contains(services, ref) {
+			continue
+		}
+		for _, secret := range binding.Get("secrets").Items() {
+			out = append(out, GatewayBinding{Path: secret.Get("path").Text(), SecretRef: secret.Get("secretRef").Text(), ServiceRef: ref})
+		}
+	}
+	slices.SortStableFunc(out, func(a, b GatewayBinding) int {
+		if c := strings.Compare(a.ServiceRef, b.ServiceRef); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Path, b.Path)
+	})
+	return out
+}
+
+func frontingIngress(cluster api.Object, backend string) (api.Value, bool) {
+	for _, svc := range cluster.Spec().Get("ceph", "services").Items() {
+		if svc.Get("service_type").Text() == "ingress" && svc.Get("spec", "backend_service").Text() == backend {
+			return svc, true
+		}
+	}
+	return api.Value{}, false
 }
 
 func placementPool(gateway api.Value, suffix string) string {
@@ -124,6 +187,20 @@ func gatewayRequest(cluster, gateway api.Object, base Request) (Request, error) 
 	if err != nil {
 		return Request{}, err
 	}
+	documents, bound := []json.RawMessage{document}, []string{storage.NativeServiceName(svc)}
+	if ingress, found := frontingIngress(cluster, storage.NativeServiceName(svc)); found {
+		fronting, err := unitDocumentOf(cluster, ingress, rgwIngressSpecOf)
+		if err != nil {
+			return Request{}, err
+		}
+		documents, bound = append(documents, fronting), append(bound, storage.NativeServiceName(ingress))
+	}
+	bindings, endpoint := gatewayBindings(cluster, bound...), spec.Get("endpoint", "fqdn").Text()
+	if len(bindings) != 0 && endpoint == "" {
+		name := gateway.Name()
+		return Request{}, failure("api.invariant", "StorageObjectGateway "+name+" terminates TLS at "+bindings[0].ServiceRef+" but declares no spec.endpoint, whose FQDN its certificate must name",
+			"declare spec.endpoint on StorageObjectGateway "+name+": spec.endpoint.fqdn with the name its clients use, or spec.endpoint: {} to derive it from the gateway, cluster and Environment storage domain")
+	}
 	zonePools := []string{}
 	for _, suffix := range ZonePoolSuffixes {
 		zonePools = append(zonePools, placementPool(spec, suffix))
@@ -131,8 +208,8 @@ func gatewayRequest(cluster, gateway api.Object, base Request) (Request, error) 
 	slices.Sort(zonePools)
 	r := base
 	r.Action = "gateway"
-	r.Gateway = &Gateway{DataExtraPool: placementPool(spec, "buckets.non-ec"), DataPool: placementPool(spec, "buckets.data"), Documents: []json.RawMessage{document},
-		Endpoint: spec.Get("endpoint", "fqdn").Text(), IndexPool: placementPool(spec, "buckets.index"), Name: gateway.Name(), Realm: spec.Get("realm").Text(),
+	r.Gateway = &Gateway{Bindings: bindings, DataExtraPool: placementPool(spec, "buckets.non-ec"), DataPool: placementPool(spec, "buckets.data"), Documents: documents,
+		Endpoint: endpoint, IndexPool: placementPool(spec, "buckets.index"), Name: gateway.Name(), Realm: spec.Get("realm").Text(),
 		Zone: spec.Get("zone").Text(), ZoneGroup: spec.Get("zoneGroup").Text(), ZonePools: slices.Compact(zonePools)}
 	return r, nil
 }

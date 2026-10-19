@@ -144,8 +144,8 @@ func automationFormats() map[string]automationFormat {
 
 		"ceph-host-v3":                {class: formatMirrored},
 		"ceph-host-evidence-v1":       {class: formatMirrored},
-		"ceph-core-v15":               {class: formatMirrored},
-		"ceph-core-evidence-v5":       {class: formatMirrored},
+		"ceph-core-v16":               {class: formatMirrored},
+		"ceph-core-evidence-v6":       {class: formatMirrored},
 		"ceph-packages-v2":            {class: formatMirrored},
 		"ceph-image-v3":               {class: formatMirrored},
 		"os-package-tree-evidence-v1": {class: formatMirrored},

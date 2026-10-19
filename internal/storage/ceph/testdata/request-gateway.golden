@@ -34,6 +34,7 @@
     }
   ],
   "gateway": {
+    "bindings": [],
     "dataExtraPool": "objects.rgw.buckets.non-ec",
     "dataPool": "objects.rgw.buckets.data",
     "documents": [
@@ -185,5 +186,5 @@
       }
     }
   ],
-  "version": "ceph-core-v15"
+  "version": "ceph-core-v16"
 }

@@ -58,7 +58,7 @@ func TestGatewayRequestGolden(t *testing.T) {
 	g := gatewayOf(t, d).Gateway
 	derived := []string{"objects.rgw.buckets.data", "objects.rgw.buckets.index", "objects.rgw.buckets.non-ec", "objects.rgw.control", "objects.rgw.dedup", "objects.rgw.log", "objects.rgw.meta", "objects.rgw.otp"}
 	if !reflect.DeepEqual(g.ZonePools, derived) || g.IndexPool != "objects.rgw.buckets.index" || g.DataPool != "objects.rgw.buckets.data" || g.DataExtraPool != "objects.rgw.buckets.non-ec" ||
-		g.Name != "objects" || g.Realm != "objects" || g.ZoneGroup != "objects" || g.Zone != "objects" || g.Endpoint != "" || len(g.Documents) != 1 {
+		g.Name != "objects" || g.Realm != "objects" || g.ZoneGroup != "objects" || g.Zone != "objects" || g.Endpoint != "" || len(g.Documents) != 1 || g.Bindings == nil || len(g.Bindings) != 0 || gatewayTLSSecret(g) != "" {
 		t.Fatalf("the gateway froze %+v", g)
 	}
 	var document struct {
@@ -169,6 +169,7 @@ func gatewayEvidence(r Request) Evidence {
 	e := readyEvidence(r)
 	e.Resource = ResourceEvidence{ID: "0b8c6f2e-3c1d-4a5e-9f70-1a2b3c4d5e6f", Path: "s3.example.test"}
 	e.Daemons = []UnitDaemon{{Host: "node-2", Name: "rgw.objects.node-2.abcdef", Service: "rgw.objects"}}
+	e.Endpoint = EndpointEvidence{Reachable: true}
 	return e
 }
 

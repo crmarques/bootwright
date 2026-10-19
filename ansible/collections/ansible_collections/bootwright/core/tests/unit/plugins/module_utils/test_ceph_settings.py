@@ -34,7 +34,7 @@ def cluster():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v15", "action": "cluster", "cluster": "example", "owner": OWNER, "fsid": FSID,
+    return {"controller": "controller", "version": "ceph-core-v16", "action": "cluster", "cluster": "example", "owner": OWNER, "fsid": FSID,
             "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -245,11 +245,11 @@ def test_a_host_scope_never_carries_settings():
 
 
 def evidence_of(request, ready, resource=None):
-    return {"version": "ceph-core-evidence-v5", "request": "d" * 64, "action": request["action"], "owner": request["owner"], "fsid": request["fsid"],
+    return {"version": "ceph-core-evidence-v6", "request": "d" * 64, "action": request["action"], "owner": request["owner"], "fsid": request["fsid"],
             "owned": True, "exists": True, "ready": ready, "removed": False, "partial": not ready, "health": "HEALTH_OK",
             "hosts": [h["name"] for h in request["hosts"]], "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [], "osds": [],
             "resource": resource or {"id": "", "path": ""}, "client": "", "dashboard": {"url": "", "certificateSHA256": "", "reachable": False},
-            "daemons": []}
+            "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": []}
 
 
 def test_core_execute_dispatches_the_settings_phase(monkeypatch):
