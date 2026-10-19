@@ -252,7 +252,7 @@ func validateScope(e Evidence, r Request) bool {
 	if e.Client != "" {
 		return false
 	}
-	if r.Action == "cluster" && e.Resource != (ResourceEvidence{}) {
+	if (r.Action == "cluster" || r.Action == "settings") && e.Resource != (ResourceEvidence{}) {
 		return false
 	}
 	if (r.Action == "pool" || r.Action == "policy" || r.Action == "filesystem") && e.Resource.ID != "" && !resourceID.MatchString(e.Resource.ID) {
@@ -276,6 +276,8 @@ func validateReady(e Evidence, r Request) bool {
 	switch r.Action {
 	case "cluster":
 		return true
+	case "settings":
+		return r.Settings != nil
 	case "policy":
 		return r.Policy != nil && resourceID.MatchString(e.Resource.ID)
 	case "pool":

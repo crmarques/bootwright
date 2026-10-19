@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -26,20 +27,7 @@ func TestExampleBlockFilePlansAllBlocks(t *testing.T) {
 	if refused := productionUnsupported(t, state); len(refused) != 0 {
 		t.Fatalf("the capabilities refuse %+v", refused)
 	}
-	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
-	input := lifecycle.PlanInput{Verb: reconciliation.Apply, State: state, Controller: "controller", Context: lifecycle.ContextIdentity{Name: blockFileExample}}
-	var definitions []reconciliation.BlockDefinition
-	for _, binding := range resolver.Bindings() {
-		capability, ok := resolver.Resolve(binding.Kind, binding.Implementation)
-		if !ok {
-			t.Fatal("unresolved production capability", binding)
-		}
-		contribution, err := capability.Plan(context.Background(), input)
-		if err != nil {
-			t.Fatalf("%v: %+v", binding, diagnostics.Of(err))
-		}
-		definitions = append(definitions, contribution.Definitions...)
-	}
+	definitions := productionDefinitions(t, state, blockFileExample)
 	if _, err := reconciliation.NewPlan(reconciliation.Apply, definitions); err != nil {
 		t.Fatal(err)
 	}
@@ -72,4 +60,23 @@ func TestExampleBlockFilePlansAllBlocks(t *testing.T) {
 			}
 		}
 	}
+}
+
+func productionDefinitions(t *testing.T, state *compilation.State, name string) []reconciliation.BlockDefinition {
+	t.Helper()
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
+	input := lifecycle.PlanInput{Verb: reconciliation.Apply, State: state, Controller: "controller", Context: lifecycle.ContextIdentity{Name: name}}
+	var definitions []reconciliation.BlockDefinition
+	for _, binding := range resolver.Bindings() {
+		capability, ok := resolver.Resolve(binding.Kind, binding.Implementation)
+		if !ok {
+			t.Fatal("unresolved production capability", binding)
+		}
+		contribution, err := capability.Plan(context.Background(), input)
+		if err != nil {
+			t.Fatalf("%v: %+v", binding, diagnostics.Of(err))
+		}
+		definitions = append(definitions, contribution.Definitions...)
+	}
+	return definitions
 }

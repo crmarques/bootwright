@@ -59,64 +59,19 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			return plan, err
 		}
 		request.Controller = input.Controller
-		if _, err := cephDeadline(request, "apply"); err != nil {
-			return plan, err
-		}
-		canonical, err := request.Canonical()
-		if err != nil {
-			return plan, err
-		}
-		requires := []reconciliation.ObjectRef{}
-		switch c.kind {
-		case api.StorageCluster:
-			for _, host := range request.Hosts {
-				requires = append(requires, hostRequirement(host))
-			}
-			slices.SortFunc(requires, func(a, b reconciliation.ObjectRef) int {
-				return strings.Compare(a.Kind+"/"+a.Object, b.Kind+"/"+b.Object)
-			})
-			requires = slices.Compact(requires)
-		case api.StoragePool:
-			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageCluster), Object: request.Cluster})
-			if ref := object.Spec().Get("placementPolicyRef").Text(); ref != "" {
-				requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePlacementPolicy), Object: ref})
-			}
-		case api.StorageClient:
-			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: request.Client.Pool})
-		case api.StorageRBDImage:
-			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: request.RBD.Pool})
-			if request.RBD.DataPool != "" {
-				requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: request.RBD.DataPool})
-			}
-		case api.StorageFilesystem:
-			for _, pool := range append([]string{request.Filesystem.MetadataPool}, request.Filesystem.DataPools...) {
-				requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: pool})
-			}
-		case api.StorageSubvolume:
-			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageFilesystem), Object: request.Subvolume.Filesystem})
-		}
-		impacts := []string{"realize Ceph " + request.Action + " " + object.Name()}
-		consumes := []string{}
-		if input.Verb == reconciliation.Destroy {
-			impacts = []string{"remove Ceph " + request.Action + " " + object.Name()}
-			consumes = []string{reconciliation.AuthorizationDataLoss}
-		}
-		dependencies := []string{}
-		if c.kind == api.StoragePlacementPolicy {
-			dependencies = append(dependencies, ClusterBlockID(request.Cluster))
-		} else if c.kind != api.StoragePool {
-			dependencies = append(dependencies, ImageBlockID(request.Cluster))
-		}
+		requests := []Request{request}
 		if c.kind == api.StorageCluster {
-			for _, host := range request.Hosts {
-				dependencies = append(dependencies, HostBlockID(request.Cluster, host.Machine))
+			if settings, needed := settingsRequest(request, object); needed {
+				requests = append(requests, settings)
 			}
 		}
-		if c.kind == api.StorageRBDImage || c.kind == api.StorageFilesystem || c.kind == api.StorageSubvolume {
-			dependencies = append(dependencies, ClusterBlockID(request.Cluster))
+		for _, r := range requests {
+			definition, err := c.definition(input.Verb, object, r)
+			if err != nil {
+				return plan, err
+			}
+			plan.Definitions = append(plan.Definitions, definition)
 		}
-		slices.Sort(dependencies)
-		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: "ceph-" + request.Action + "-" + object.Name(), Description: strings.Join(impacts, ""), Stage: reconciliation.StageClusters, Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph/" + request.Cluster}, Impacts: impacts, Consumes: consumes, Kind: string(c.kind), Object: object.Name(), Implementation: Implementation, ContentDigest: ContentDigest(), Request: canonical})
 		plan.Secrets = append(plan.Secrets, request.ClusterKeyRef, request.RegistryRef)
 		for _, h := range request.Hosts {
 			plan.Secrets = append(plan.Secrets, h.SSHKeyRef)
@@ -128,6 +83,62 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
 	return plan, nil
+}
+
+func (c Capability) definition(verb reconciliation.Verb, object api.Object, request Request) (reconciliation.BlockDefinition, error) {
+	if _, err := cephDeadline(request, "apply"); err != nil {
+		return reconciliation.BlockDefinition{}, err
+	}
+	canonical, err := request.Canonical()
+	if err != nil {
+		return reconciliation.BlockDefinition{}, err
+	}
+	impacts := []string{"realize Ceph " + request.Action + " " + object.Name()}
+	consumes := []string{}
+	if verb == reconciliation.Destroy {
+		impacts = []string{"remove Ceph " + request.Action + " " + object.Name()}
+		consumes = []string{reconciliation.AuthorizationDataLoss}
+	}
+	requires, dependencies := placement(object, request)
+	return reconciliation.BlockDefinition{ID: "ceph-" + request.Action + "-" + object.Name(), Description: strings.Join(impacts, ""), Stage: reconciliation.StageClusters, Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph/" + request.Cluster}, Impacts: impacts, Consumes: consumes, Kind: string(c.kind), Object: object.Name(), Implementation: Implementation, ContentDigest: ContentDigest(), Request: canonical}, nil
+}
+
+func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, []string) {
+	requires := []reconciliation.ObjectRef{}
+	dependencies := []string{ClusterBlockID(request.Cluster), ImageBlockID(request.Cluster)}
+	switch request.Action {
+	case "cluster":
+		dependencies = []string{ImageBlockID(request.Cluster)}
+		for _, host := range request.Hosts {
+			requires = append(requires, hostRequirement(host))
+			dependencies = append(dependencies, HostBlockID(request.Cluster, host.Machine))
+		}
+		slices.SortFunc(requires, func(a, b reconciliation.ObjectRef) int {
+			return strings.Compare(a.Kind+"/"+a.Object, b.Kind+"/"+b.Object)
+		})
+		requires = slices.Compact(requires)
+	case "policy":
+		dependencies = []string{ClusterBlockID(request.Cluster)}
+	case "pool":
+		if ref := object.Spec().Get("placementPolicyRef").Text(); ref != "" {
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePlacementPolicy), Object: ref})
+		}
+	case "client":
+		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: request.Client.Pool})
+	case "rbd":
+		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: request.RBD.Pool})
+		if request.RBD.DataPool != "" {
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: request.RBD.DataPool})
+		}
+	case "filesystem":
+		for _, pool := range append([]string{request.Filesystem.MetadataPool}, request.Filesystem.DataPools...) {
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: pool})
+		}
+	case "subvolume":
+		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageFilesystem), Object: request.Subvolume.Filesystem})
+	}
+	slices.Sort(dependencies)
+	return requires, dependencies
 }
 
 // Unsupported runs before operation registration and before secret custody.
@@ -198,7 +209,10 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if r.Action == "subvolume" && r.Subvolume != nil {
 		object = r.Subvolume.Name
 	}
-	if action == "" || r.Action != action || e.Block.Kind != string(c.kind) || e.Block.Object != object {
+	if c.kind == api.StorageCluster && r.Action == "settings" {
+		action = "settings"
+	}
+	if action == "" || r.Action != action || (r.Action == "settings") != (r.Settings != nil) || e.Block.Kind != string(c.kind) || e.Block.Object != object {
 		return Request{}, failure("lifecycle.state", "Ceph request does not match its frozen resource identity", "")
 	}
 	if r.Owner != "" || r.FSID != "" || e.ApplyOperation == "" {

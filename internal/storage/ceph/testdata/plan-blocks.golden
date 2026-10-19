@@ -1,6 +1,7 @@
 [
   {
     "dependencies": [
+      "ceph-cluster-example",
       "ceph-image-example",
       "ceph-pool-volumes"
     ],
@@ -77,9 +78,6 @@
   {
     "dependencies": [
       "ceph-cluster-example",
-      "ceph-host-example-node-1",
-      "ceph-host-example-node-2",
-      "ceph-host-example-node-3",
       "ceph-image-example"
     ],
     "exclusive": [

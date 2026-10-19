@@ -411,7 +411,7 @@ StorageCluster. Diagnostics name the field, never the authored address.
 
 The `nfs` manager module is derived from the declared NFS services (D159
 clause 9): `spec.ceph.mgrModules` refuses it at its entry, and Bootwright
-enables it for a declared `nfs` service.
+enables it for a declared `nfs` service through the cluster's settings block.
 
 ## Hosts, placement and CRUSH
 

@@ -104,6 +104,21 @@ func TestInspectReadsFSIDImageAndMonitorsFromTheCurrentOperationsEvidence(t *tes
 	}
 }
 
+func TestInspectIgnoresTheSettingsBlockEvidence(t *testing.T) {
+	catalog, cluster := inspectedCluster()
+	want, reason := Inspect(catalog, cluster, provedPair(t))
+	if reason != "" {
+		t.Fatalf("the proved pair inspects as %q", reason)
+	}
+	settings := inspectedClusterEvidence(t, func(e *Evidence) {
+		e.Action, e.MonAddrs, e.Dashboard = "settings", []MonitorAddress{}, DashboardEvidence{}
+	})
+	got, reason := Inspect(catalog, cluster, append(provedPair(t), inspectedProof(Implementation, reconciliation.Apply, reconciliation.BlockDone, settings)))
+	if reason != "" || !reflect.DeepEqual(got, want) {
+		t.Fatalf("a completed settings block makes the inspection %+v (%q), want %+v", got, reason, want)
+	}
+}
+
 func TestInspectReportsAReasonUnlessBothProofsAreCompleteAndReady(t *testing.T) {
 	catalog, cluster := inspectedCluster()
 	otherAction := inspectedClusterEvidence(t, func(e *Evidence) { e.Action = "pool"; e.Resource = ResourceEvidence{ID: "1"} })

@@ -112,8 +112,9 @@ CORE = {
     "registry": "cp.icr.io",
     "registryRef": "ibm-registry",
     "services": [{"placement": {"count": 2, "hosts": ["node-1"]}, "service_type": "mgr"}],
+    "settings": {"modules": ["nfs"]},
     "subvolume": {"filesystem": "files", "gid": 0, "group": "", "mode": "755", "name": "docs", "pool": "files-data", "sizeBytes": 0, "uid": 0},
-    "version": "ceph-core-v12",
+    "version": "ceph-core-v13",
 }
 
 IMAGE = {
@@ -130,7 +131,7 @@ IMAGE = {
     "version": "ceph-image-v3",
 }
 
-HOST = {"cluster": {key: value for key, value in CORE.items() if key not in ("action", "delegated")}, "host": "node-1", "version": "ceph-host-v3"}
+HOST = {"cluster": {key: value for key, value in CORE.items() if key not in ("action", "delegated", "settings")}, "host": "node-1", "version": "ceph-host-v3"}
 
 # Role, its entry points, the request variable and the request carrying every
 # member the Go side encodes, with the variables its entry point also requires.

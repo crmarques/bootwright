@@ -48,7 +48,7 @@ CLUSTER_REASONS = (
     "not-removed", "cluster-unavailable", "device", "foreign-cluster", "native-command", "native-timeout", "native-output", "unknown", "transport",
     "remote-refusal", "adapter-exception", "foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget",
     "foreign-rbd-image", "rbd-image-identity", "foreign-filesystem", "filesystem-identity", "filesystem-multiple-disabled", "foreign-subvolume-group",
-    "mds-coverage", "foreign-subvolume", "subvolume-identity",
+    "mds-coverage", "foreign-subvolume", "subvolume-identity", "foreign-image",
 )
 
 
@@ -131,7 +131,7 @@ def evidence(value, request_digest, request=None):
     ceph_native.require(value["version"] == ceph_native.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
                         "evidence")
     dashboard_evidence(value)
-    ceph_native.require(value["action"] in ("cluster", "pool", "client", "policy", "rbd", "filesystem", "subvolume"), "evidence")
+    ceph_native.require(value["action"] in ("cluster", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings"), "evidence")
     ceph_native.require(all(type(value[k]) is bool for k in ("owned", "exists", "ready", "removed", "partial")), "evidence")
     ceph_native.require(value["health"] in ("", "HEALTH_OK", "HEALTH_WARN", "HEALTH_ERR"), "evidence")
     ceph_native.require(ceph_native.named(value["owner"]), "evidence")
@@ -612,7 +612,7 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
                     for host in request["hosts"]:
                         transport.call(host, "devices")
                     changed = transport.call(bootstrap, "services")["changed"] or changed
-            elif request["action"] in ("pool", "policy", "rbd", "subvolume"):
+            elif request["action"] in ("pool", "policy", "rbd", "subvolume", "settings"):
                 changed = transport.call(bootstrap, request["action"])["changed"] or changed
             elif request["action"] == "filesystem":
                 changed = apply_filesystem(request, bootstrap, transport, now, pause) or changed

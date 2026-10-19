@@ -426,12 +426,12 @@ def validate(request):
     """Admit only the implemented core envelope, including concrete devices."""
     require(isinstance(request, dict))
     required = SCOPE_MEMBERS | {"action"}
-    resources = {"pool", "client", "policy", "rbd", "filesystem", "subvolume"}
+    resources = {"pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings"}
     require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"delegated"} - resources)
     hosts = scope_checks(request)
     validate_delegated(request, hosts)
     if request["action"] == "cluster":
-        require(not {"pool", "client", "policy", "rbd", "filesystem", "subvolume"} & set(request))
+        require(not {"pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings"} & set(request))
         return request
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_resources
     require(request["action"] in ceph_native_resources.ACTIONS)
@@ -500,7 +500,7 @@ def host_scope(request):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v12")
+    require(request["version"] == "ceph-core-v13")
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])

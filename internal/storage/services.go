@@ -14,6 +14,28 @@ var derivedManagerModules = []derivedManagerModule{
 	{module: "nfs", family: "nfs", item: "B478"},
 }
 
+func DerivedManagerModules(ceph api.Value) []string {
+	modules := []string{}
+	for _, service := range ceph.Get("services").Items() {
+		for _, row := range derivedManagerModules {
+			if service.Get("service_type").Text() == row.family {
+				modules = append(modules, row.module)
+			}
+		}
+	}
+	slices.Sort(modules)
+	return slices.Compact(modules)
+}
+
+func DerivableManagerModules() []string {
+	modules := []string{}
+	for _, row := range derivedManagerModules {
+		modules = append(modules, row.module)
+	}
+	slices.Sort(modules)
+	return modules
+}
+
 func (a *admission) clusterServices(ceph api.Value) {
 	public := a.prefixes(ceph.Get("networks", "publicCIDRs"), "$.spec.ceph.networks.publicCIDRs")
 	private := a.prefixes(ceph.Get("networks", "clusterCIDRs"), "$.spec.ceph.networks.clusterCIDRs")

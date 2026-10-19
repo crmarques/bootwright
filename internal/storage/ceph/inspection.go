@@ -145,6 +145,10 @@ func inspectImage(cluster string, proofs []lifecycle.BlockEvidence) (ImageInspec
 }
 
 func inspectCluster(cluster string, proofs []lifecycle.BlockEvidence) (Evidence, string) {
+	proofs = slices.DeleteFunc(slices.Clone(proofs), func(proof lifecycle.BlockEvidence) bool {
+		evidence, err := decodeEvidence(proof.Evidence)
+		return err == nil && evidence.Action == "settings"
+	})
 	proof, count := appliedProof(proofs, cluster, Implementation)
 	if count == 0 {
 		return Evidence{}, noClusterProof

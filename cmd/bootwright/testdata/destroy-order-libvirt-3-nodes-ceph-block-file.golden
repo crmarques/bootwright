@@ -1,0 +1,28 @@
+apply:
+  0 ceph-image-ceph-lab
+  3 ceph-host-ceph-lab-rhel-01
+  3 ceph-host-ceph-lab-rhel-02
+  3 ceph-host-ceph-lab-rhel-03
+  4 ceph-cluster-ceph-lab
+  5 ceph-policy-ssd-hosts
+  5 ceph-pool-cephfs-data
+  5 ceph-pool-cephfs-metadata
+  6 ceph-filesystem-files
+  6 ceph-pool-rbd-data
+  7 ceph-client-rbd-canary
+  7 ceph-rbd-rbd-disk
+  7 ceph-subvolume-docs
+destroy:
+  0 ceph-client-rbd-canary
+  0 ceph-rbd-rbd-disk
+  0 ceph-subvolume-docs
+  1 ceph-filesystem-files
+  1 ceph-pool-rbd-data
+  2 ceph-policy-ssd-hosts
+  2 ceph-pool-cephfs-data
+  2 ceph-pool-cephfs-metadata
+  3 ceph-cluster-ceph-lab
+  4 ceph-host-ceph-lab-rhel-01
+  4 ceph-host-ceph-lab-rhel-02
+  4 ceph-host-ceph-lab-rhel-03
+  5 ceph-image-ceph-lab

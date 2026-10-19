@@ -122,6 +122,20 @@ func TestANativeOptionUndeclaredRefusalNamesTheDestroyItsInputChangeNeeds(t *tes
 	}
 }
 
+func TestAForeignImageRefusalNamesTheSettingAndNeverOverwrites(t *testing.T) {
+	r := coreRequest()
+	r.Action, r.Settings = "settings", &Settings{Modules: []string{"nfs"}}
+	e := withMaterial(executionFor(t, r), r)
+	observation, err := New(api.StorageCluster, &refusingRunner{reason: "foreign-image"}).Observe(context.Background(), e)
+	d := diagnostics.Of(err)
+	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+		d[0].Message != "a cephadm container_image setting of the Ceph cluster holds an image this operation did not freeze, or is set outside the mgr section" ||
+		d[0].Remediation != "find the setting the native error names in ceph config dump, then remove it with ceph config rm or set it to the frozen image outside Bootwright and apply again; "+
+			"Bootwright never overwrites a container_image setting it did not write" {
+		t.Fatalf("a foreign-image refusal reached the operator as %+v %+v", observation, d)
+	}
+}
+
 // The module publishes only a reason its block names, and a token the block
 // does not name as unknown with the token in its detail, so each table names
 // exactly what ceph_core.py may publish for its block, unknown among them.

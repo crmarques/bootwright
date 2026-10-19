@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -77,8 +78,10 @@ func TestFrozenRequestGolden(t *testing.T) {
 		r.Hosts[i].Location = map[string]string{}
 		r.Hosts[i].KnownHosts = ""
 	}
-	for _, action := range []string{"cluster", "policy", "pool", "client", "rbd", "subvolume"} {
+	for _, action := range []string{"cluster", "policy", "pool", "client", "rbd", "subvolume", "settings"} {
 		r.Action = action
+		r.Settings = nil
+		r.Auxiliary = nil
 		r.Policy = nil
 		r.Pool = nil
 		r.Client = nil
@@ -99,6 +102,10 @@ func TestFrozenRequestGolden(t *testing.T) {
 		if action == "subvolume" {
 			r.Subvolume = &Subvolume{Filesystem: "files", Mode: "755", Name: "docs", Pool: "fs-data"}
 		}
+		if action == "settings" {
+			r.Settings = &Settings{Modules: []string{"nfs"}}
+			r.Auxiliary = []AuxiliaryReference{{Name: "haproxy", Image: r.Registry + "/synthetic/haproxy@sha256:" + strings.Repeat("a", 64)}, {Name: "keepalived", Image: r.Registry + "/synthetic/keepalived@sha256:" + strings.Repeat("b", 64)}}
+		}
 		data, err := r.Canonical()
 		if err != nil {
 			t.Fatal(err)
@@ -113,7 +120,7 @@ func TestFrozenRequestGolden(t *testing.T) {
 			t.Fatal("frozen request did not round-trip")
 		}
 	}
-	r.Action, r.Subvolume = "cluster", nil
+	r.Action, r.Subvolume, r.Settings, r.Auxiliary = "cluster", nil, nil, nil
 	r.Delegated = []DelegatedService{{Name: "ingress.rgw.objects", Hosts: []string{"node-1", "node-2"}}, {Name: "rgw.objects", Hosts: []string{"node-1", "node-2"}}}
 	data, err := r.Canonical()
 	if err != nil {

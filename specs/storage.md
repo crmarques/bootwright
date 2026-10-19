@@ -120,7 +120,19 @@ Each selected auxiliary image sits beneath the Entitlement registry namespace,
 resolves in the image block to its own linux/amd64 manifest digest under the
 Ceph image's rules, the authored-digest rule included, and is frozen in the
 image request and evidence. The cluster and host blocks take frozen auxiliary
-digests only from that original resolution proof. Bootwright keeps no default
+digests only from that original resolution proof. A settings block
+`ceph-settings-<cluster>`, planned only when the cluster freezes an auxiliary
+image or a declared service derives a manager module, is the single writer of
+these cluster-global settings: it sets each frozen auxiliary digest with
+`ceph config set mgr mgr/cephadm/container_image_<name> <image>` and enables
+each derived manager module (`nfs` for a declared `nfs` service) with
+`ceph mgr module enable`. It writes a setting only while the monitor
+configuration database holds no entry for it, accepts an entry that holds
+exactly the frozen digest in the `mgr` section, and refuses `foreign-image`
+before any write for any other entry of that setting (another value, section,
+mask or location), never overwriting it. Every other block only reads these
+settings. The settings block follows the cluster block and, like every cluster
+child, retires with the cluster. Bootwright keeps no default
 auxiliary image; until one can be selected, a declared service that needs one
 refuses before operation registration (see the [refusal table](#refusal-table)).
 A native deploy that still pulls an image uses only the protected guest registry
@@ -176,6 +188,11 @@ them:
 - Pools precede their filesystems; filesystem/MDS or object storage prerequisites
   precede their NFS exports; gateways precede their ingress endpoints. An export
   for a downstream consumer waits for all resources and material it describes.
+- Every child block of a cluster (its settings block, placement policies,
+  pools, clients, RBD images, filesystems and subvolumes) depends on the cluster
+  block by its block identity, never through the StorageCluster API identity
+  that the cluster's image, host and settings blocks share; a client still
+  follows its pool through the StoragePool it names.
 
 Before an apply that selects managed Ceph claims an operation or binds secrets,
 it observes aggregate declared libvirt CPU, memory and backing-filesystem disk

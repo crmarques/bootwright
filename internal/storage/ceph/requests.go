@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v12"
+const Version = "ceph-core-v13"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -213,6 +213,7 @@ type Request struct {
 	RegistryRef              string                       `json:"registryRef"`
 	Release                  string                       `json:"release"`
 	Services                 []json.RawMessage            `json:"services"`
+	Settings                 *Settings                    `json:"settings,omitempty"`
 	Subvolume                *Subvolume                   `json:"subvolume,omitempty"`
 	Version                  string                       `json:"version"`
 }

@@ -1,7 +1,7 @@
-"""Fixed Ceph pool, placement policy, client, RBD image, CephFS filesystem and subvolume worker phases, shipped beside the core worker as source.
+"""Fixed Ceph pool, placement policy, client, RBD image, CephFS filesystem, subvolume and settings worker phases, shipped beside the core worker as source.
 
 A cluster request and a host scope never load this module: only a pool, policy, client,
-RBD image, filesystem or subvolume action reaches its validation and its worker. Like the core worker it imports
+RBD image, filesystem, subvolume or settings action reaches its validation and its worker. Like the core worker it imports
 only the target Python standard library and the core worker, and its native
 output stays private until projected into evidence.
 """
@@ -21,11 +21,11 @@ import re
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import (
-    Custody, Refusal, canonical, named, read_regular, require, unique_object,
+    Custody, NativeFailure, Refusal, canonical, named, read_regular, require, unique_object,
 )
 
-ACTIONS = ("pool", "client", "policy", "rbd", "filesystem", "subvolume")
-PHASES = frozenset(("pool", "client", "client_read", "policy", "rbd", "filesystem", "filesystem_ranks", "filesystem_groups", "subvolume"))
+ACTIONS = ("pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings")
+PHASES = frozenset(("pool", "client", "client_read", "policy", "rbd", "filesystem", "filesystem_ranks", "filesystem_groups", "subvolume", "settings"))
 READ_ONLY_PHASES = frozenset(("client_read", "filesystem_ranks"))
 
 POOL_ATTEMPT = "ceph-pool-attempt-v2"
@@ -34,6 +34,12 @@ RBD_ATTEMPT = "ceph-rbd-image-attempt-v1"
 FILESYSTEM_ATTEMPT = "ceph-filesystem-attempt-v1"
 GROUP_ATTEMPT = "ceph-subvolume-group-attempt-v1"
 SUBVOLUME_ATTEMPT = "ceph-subvolume-attempt-v1"
+# The manager option cephadm registers per auxiliary image, read in section mgr (src/pybind/mgr/cephadm/module.py:499-500).
+IMAGE_KEY = "mgr/cephadm/container_image_"
+# The manager modules a declared service family derives; internal/storage/services.go holds the same set.
+DERIVED_MODULES = (
+    "nfs",
+)
 SUBVOLUME_MEMBERS = frozenset(("filesystem", "gid", "group", "mode", "name", "pool", "sizeBytes", "uid"))
 # A subvolume's user metadata key: printable ASCII, stored lower case (doc/cephfs/fs-volumes.rst:572-575).
 OWNER_KEY = "bootwright-owner"
@@ -79,6 +85,7 @@ def validate(request, hosts):
     require(request["action"] == "rbd" or "rbd" not in request)
     require(request["action"] == "filesystem" or "filesystem" not in request)
     require(request["action"] == "subvolume" or "subvolume" not in request)
+    require(request["action"] == "settings" or "settings" not in request)
     if request["action"] == "pool":
         require("client" not in request and "policy" not in request)
         validate_pool(request.get("pool"), osd_hosts)
@@ -100,6 +107,19 @@ def validate(request, hosts):
     elif request["action"] == "subvolume":
         require("pool" not in request and "client" not in request and "policy" not in request)
         validate_subvolume(request.get("subvolume"))
+    elif request["action"] == "settings":
+        require(not {"pool", "client", "policy", "rbd", "filesystem", "subvolume"} & set(request))
+        validate_settings(request)
+
+
+def validate_settings(request):
+    """The derived manager modules, in name order, beside the frozen auxiliary images; a settings block always has something to write."""
+    settings = request.get("settings")
+    require(isinstance(settings, dict) and set(settings) == {"modules"})
+    modules = settings["modules"]
+    require(isinstance(modules, list) and all(isinstance(module, str) and module in DERIVED_MODULES for module in modules))
+    require(modules == sorted(set(modules)))
+    require(bool(modules) or bool(request.get("auxiliary")))
 
 
 def validate_subvolume(subvolume):
@@ -708,6 +728,8 @@ class ResourceWorker(ceph_native.Worker):
             ready = self.observe_filesystem(evidence, ready)
         elif action == "subvolume":
             ready = self.observe_subvolume(evidence, ready)
+        elif action == "settings":
+            ready = self.observe_settings(ready)
         elif action == "client":
             client = self.request["client"]
             auth = self.ceph("auth", "ls")
@@ -726,6 +748,61 @@ class ResourceWorker(ceph_native.Worker):
             evidence["client"] = "client." + client["name"] if entries else ""
             ready = ready and bool(entries) and entries[0].get("caps") == self.caps()
         return ready
+
+    def image_settings(self):
+        """Each frozen auxiliary image's setting: held only as the one mgr-section entry of the frozen value; any other entry is foreign."""
+        wanted = {IMAGE_KEY + entry["name"]: entry["image"] for entry in self.request.get("auxiliary", [])}
+        observed = self.ceph("config", "dump")
+        require(isinstance(observed, list) and all(isinstance(entry, dict) for entry in observed), "native-output")
+        held, foreign = set(), set()
+        for entry in observed:
+            name = entry.get("name")
+            if name not in wanted:
+                continue
+            located = any(field in entry for field in ("location_type", "location_value", "device_class"))
+            if entry.get("section") == "mgr" and entry.get("mask") == "" and not located and name not in held and entry.get("value") == wanted[name]:
+                held.add(name)
+            else:
+                foreign.add(name)
+        if foreign:
+            raise NativeFailure("foreign-image", self.native_coordinate(), ", ".join(sorted(foreign)))
+        return wanted, held
+
+    def manager_modules(self):
+        """The enabled and always-on manager modules `mgr module ls` lists."""
+        modules = self.ceph("mgr", "module", "ls")
+        require(isinstance(modules, dict), "native-output")
+        present = set()
+        for field in ("enabled_modules", "always_on_modules"):
+            value = modules.get(field)
+            require(isinstance(value, list) and len(value) <= 128 and all(named(name) for name in value), "native-output")
+            require(len(set(value)) == len(value), "native-output")
+            present |= set(value)
+        return present
+
+    def settings(self):
+        """Write each absent frozen image setting and enable each missing derived module, after every refusal is proved and before none is."""
+        require(self.markers.owned(), "ownership")
+        wanted, held = self.image_settings()
+        present = self.manager_modules()
+        changed = False
+        for entry in self.request.get("auxiliary", []):
+            key = IMAGE_KEY + entry["name"]
+            if key not in held:
+                self.ceph("config", "set", "mgr", key, wanted[key], json_result=False)
+                changed = True
+        for module in self.request["settings"]["modules"]:
+            if module not in present:
+                self.ceph("mgr", "module", "enable", module, json_result=False)
+                changed = True
+        wanted, held = self.image_settings()
+        require(held == set(wanted) and set(self.request["settings"]["modules"]) <= self.manager_modules(), "native-output")
+        return {"changed": changed}
+
+    def observe_settings(self, ready):
+        """Read-only: ready once every frozen image setting is held and every derived module is enabled."""
+        wanted, held = self.image_settings()
+        return ready and held == set(wanted) and set(self.request["settings"]["modules"]) <= self.manager_modules()
 
     def observe_pool(self, evidence, ready):
         pool = self.request["pool"]

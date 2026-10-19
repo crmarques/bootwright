@@ -232,8 +232,8 @@ func TestPolicyBlockRequiresClusterAndPoolRequiresPolicy(t *testing.T) {
 	if policy.Kind != string(api.StoragePlacementPolicy) || policy.Object != "fast" || len(policy.Requires) != 0 || !slices.Equal(policy.Dependencies, []string{ClusterBlockID("example")}) {
 		t.Fatalf("the policy block is %+v", policy)
 	}
-	if !slices.Contains(pool.Requires, reconciliation.ObjectRef{Kind: string(api.StoragePlacementPolicy), Object: "fast"}) || !slices.Contains(pool.Requires, reconciliation.ObjectRef{Kind: string(api.StorageCluster), Object: "example"}) {
-		t.Fatalf("the pool block requires %+v", pool.Requires)
+	if !slices.Equal(pool.Requires, []reconciliation.ObjectRef{{Kind: string(api.StoragePlacementPolicy), Object: "fast"}}) || !slices.Equal(pool.Dependencies, []string{ClusterBlockID("example"), ImageBlockID("example")}) {
+		t.Fatalf("the pool block requires %+v and depends on %v", pool.Requires, pool.Dependencies)
 	}
 	for _, kind := range []string{"Machine", "MachineInstallProfile"} {
 		for _, name := range []string{"node-1", "node-2", "node-3", "rhel"} {
