@@ -227,7 +227,9 @@ def test_registration_refusals_are_named_and_the_failure_is_closed(result, messa
 
     refused = apply_task(lambda task: FAIL in task and RESULT in str(task.get("vars", "")), "refuse an unregistered machine")
     assert "no_log" not in refused
+    assert refused["when"] == [REGISTERING, "not (%s.ok | default(false) | bool)" % RESULT]
     assert holds(refused["when"], **{RESULT: result})
+    assert not holds(refused["when"], False)
     assert not holds(refused["when"], **{RESULT: {"ok": True}})
     rendered = render(refused[FAIL]["msg"], **dict(refused["vars"], **{RESULT: result}))
     assert rendered == "Machine rhel-01 was not registered with its subscription service: " + message
