@@ -26,6 +26,7 @@ func (Observer) Observe(ctx context.Context, target preflight.Target) (preflight
 		return preflight.Facts{Reason: "verified remote capacity observation is unavailable"}, nil
 	}
 	facts := preflight.Facts{}
+	inventoryFailure := ""
 	var cpus unix.CPUSet
 	if err := unix.SchedGetaffinity(0, &cpus); err == nil {
 		facts.Available.CPU = int64(cpus.Count())
@@ -33,6 +34,7 @@ func (Observer) Observe(ctx context.Context, target preflight.Target) (preflight
 		foreign, err := foreignCPUs(ctx, target.Allocations)
 		if err != nil {
 			facts.CPUKnown = false
+			inventoryFailure = inventoryReason(err)
 		} else {
 			facts.Available.CPU = max(0, facts.Available.CPU-foreign)
 		}
@@ -47,19 +49,25 @@ func (Observer) Observe(ctx context.Context, target preflight.Target) (preflight
 		facts.DiskIdentity = identity
 		facts.DiskKnown = true
 	}
-	if !facts.CPUKnown || !facts.MemoryKnown || !facts.DiskKnown {
-		facts.Reason = "one or more bounded local kernel capacity facts could not be read"
-	}
+	facts.Reason = unreadReason(facts, inventoryFailure)
 	facts.Reusable = map[string]preflight.Quantities{}
+	facts.Unproved = map[string]string{}
 	for _, allocation := range target.Allocations {
 		if allocation.Allocated {
 			credit, err := reusable(ctx, allocation)
-			if err == nil {
-				facts.Reusable[allocation.Machine] = credit
-			}
+			recordReuse(&facts, allocation.Machine, credit, err)
 		}
 	}
 	return facts, ctx.Err()
+}
+func unreadReason(facts preflight.Facts, inventoryFailure string) string {
+	if facts.CPUKnown && facts.MemoryKnown && facts.DiskKnown {
+		return ""
+	}
+	if inventoryFailure != "" && facts.MemoryKnown && facts.DiskKnown {
+		return inventoryFailure
+	}
+	return "one or more bounded local kernel capacity facts could not be read"
 }
 func readBounded(path string, limit int64) ([]byte, error) { return readSafe(path, limit) }
 
@@ -111,5 +119,18 @@ func availableDisk(path string) (int64, string, error) {
 			return 0, "", err
 		}
 		path = filepath.Dir(path)
+	}
+}
+func recordReuse(facts *preflight.Facts, machine string, credit preflight.Quantities, err error) {
+	var runtime runtimeUnproved
+	if err == nil || errors.As(err, &runtime) {
+		facts.Reusable[machine] = credit
+	}
+	if err != nil {
+		reason := err.Error()
+		if len(reason) > 160 {
+			reason = strings.ToValidUTF8(reason[:160], "")
+		}
+		facts.Unproved[machine] = reason
 	}
 }

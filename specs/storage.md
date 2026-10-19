@@ -54,7 +54,7 @@ consuming items qualify their native fields and resource lifecycles.
 Projection preserves authored native values unless an explicit API rule
 normalizes them; it never silently drops a field or replaces it with a default.
 Defaults affecting topology, durability, security or effects are frozen from
-the qualified release or verified against the frozen expected value. Final
+the selected artifacts or verified against the frozen expected value. Final
 core services are explicit; omitted optional service families are absent and
 bootstrap suppresses their automatic deployment. Unavoidable generated helpers
 still have planned effects, images, dependencies and a derived owner.
@@ -151,7 +151,9 @@ it observes aggregate declared libvirt CPU, memory and backing-filesystem disk
 capacity, including guests outside the selected cluster. Pure planning performs
 no capacity probes. Apply re-proves the capacity gate under its exclusive
 transaction before registration or native effects. [Storage preflight](cli/commands.md) reports the same
-capacity checks; unknown facts cannot authorize effects. The provider authors
+capacity checks; unknown facts cannot authorize effects. The gate runs only for an apply
+transition that may still start or resolve a libvirt Machine block in its
+selection; a continuation whose Machine blocks are all done is not gated. The provider authors
 its reserve explicitly through `libvirt.capacityReserve`; there is no inferred
 vendor sizing profile or default reserve. Existing owned allocations receive
 credit only after exact protected domain, process and backing-file proofs.
@@ -203,8 +205,11 @@ owned markers scoped by owner, FSID and host:
 1. Package installation from the frozen package decision, keeping the
    inherited crypto-policy proof.
 2. A pull of the frozen image digest with a protected authfile, a signature
-   policy limited to the selected repository and bounded attempts. A pull counts
-   only after local inspection proves the digest and the linux/amd64 platform.
+   policy limited to the selected repository and at most three bounded attempts
+   per preparation run. A pull counts only after local inspection proves the
+   digest and the linux/amd64 platform. The retained attempt records serve
+   crash diagnosis and recovery; they never refuse a later apply while the image
+   is still absent, so that apply makes its own three attempts.
 3. A runtime profile from a contained probe of the image: the ceph account,
    crypto policy, SELinux label and cephadm bytes, bound to the authenticated
    frozen image. Host RPM payloads retain their independent authenticity and
@@ -218,7 +223,11 @@ The cluster block depends on every host block, re-proves the recorded profile
 against the inspected image, and refuses a missing or contradicting one. Between
 the tunnel mount and enrollment it publishes and proves the exact cephadm bytes
 in the cache. A host block removes nothing; packages and the image are retained
-shared host state. Guest pull credentials enter only the invocation-local
+shared host state. The owned per-FSID host runtime tree under
+`/var/lib/bootwright/ceph-host/<fsid>` (profile, route, payload, device
+identities, pull journals, and the ephemeral broker material a killed pull can
+leave) and the `ceph-packages/<fsid>` package journal are retained too; they
+hold no credential. Guest pull credentials enter only the invocation-local
 registry broker over protected stdin. Podman receives an empty authfile and
 an ephemeral mutual-TLS identity; upstream entitlement and bearer credentials
 remain broker-owned. Authentication, token exchanges and manifest reads connect
@@ -226,10 +235,11 @@ only to the frozen registry authority with ordinary host TLS verification;
 foreign token realms and manifest redirects refuse. The broker admits only
 bounded reads within the frozen repository. Local clients without the invocation
 certificate cannot use it, and a proxy bypass carries no entitlement or bearer
-credential.
+credential. The native client receives an empty signature-lookaside
+configuration; trust stays the frozen digest and the signature policy.
 
 For an admitted blob GET or HEAD, the verified registry may delegate delivery
-through one 307 or 308 response. The broker follows that one hop internally;
+through one redirect response (301, 302, 303, 307 or 308). The broker follows that one hop internally;
 it never sends the Location to the native client. The destination must be
 HTTPS on port 443, without userinfo or a fragment. Every resolved address must
 be public unicast; a private, reserved, mixed, scoped, IPv4-mapped or IPv6
@@ -242,6 +252,8 @@ without another authentication exchange or hop. Delivery response metadata is
 normalized and error bodies are not published, so it cannot echo a private URL
 into the native client's output. The native client still verifies blobs against
 the frozen manifest's digests; a redirect never substitutes an artifact.
+Registry resolution follows the same single delivery hop, under the same rules,
+when it reads a configuration blob.
 
 Delivery shares the existing concurrency, byte and operation deadlines. DNS
 runs in a bounded, isolated subprocess of the existing host interpreter,
@@ -266,7 +278,7 @@ capture proves both bootstrap outputs root's own single-link files closed to
 writes by others and makes them private before recording their identities;
 observation never changes them. A phase that restarts the manager waits,
 bounded and inside its worker budget, for the MON to report an available
-manager whose orchestrator answers. Orchestrator reads repeat only while that manager restarts. Per-host enrollment
+manager whose orchestrator answers. Orchestrator reads, and the idempotent IBM enable-call-home and accept-license declarations, repeat while the active manager restarts. Per-host enrollment
 and label attempts and per-service apply attempts retain exact intent before
 effects and exact completion after native readback. A lost reply settles from
 the same host/service identity; drift refuses. Native ServiceSpec defaults come
@@ -413,7 +425,10 @@ daemon rows must agree on the same numeric OSD identity, owned host and exact
 declared disk identity. Declared enabled IBM Call Home requires current native module
 state as well as frozen consent; declared disabled Call Home is realized as
 [storage API](api/storage.md) states. IBM license readiness applies only
-where the selected image carries the IBM license contract. Expected manager-cache lag and OSDs still
+where the selected image carries the IBM license contract. There the MON must
+hold the `mgr/cephadm/<version>_license_<digest>` record for the selected build
+whose image ID equals the runtime profile's image ID; otherwise readiness reports
+`IBM_LICENSE_NOT_ACCEPTED` as blocking. Expected manager-cache lag and OSDs still
 starting yield partial evidence, including an OSD the map holds that has not
 booted and so reports no device identity; effective daemon configuration is
 checked only after the selected OSD is running, up and in. Apply may repeat
@@ -446,9 +461,12 @@ the staged MGR port proof is unchanged. The phase enables the module with TLS,
 creates Ceph's self-signed certificate only when absent, waits for publication
 of the dashboard endpoint before an attempt-marked MGR redeploy, and proves
 the dashboard port in every intended running MGR's refreshed deployment
-metadata. If publication changes during failover, one scoped repair plan may
-redeploy each affected owned MGR once; its per-daemon intent precedes the
-effect, and an ambiguous acknowledgment is observed without resubmission.
+metadata. If publication changes during failover, one scoped repair plan
+redeploys each affected owned standby MGR after publication, failing over first
+when the target is active; its per-daemon intent is written inside the transport
+and cache holds just before the effect, and a target still on its recorded
+container on a later apply is requested again once per apply, because a pending
+redeploy coalesces.
 Missing port proof never completes that phase. The phase then creates user
 `admin` with a generated password. The password lives in produced
 custody, reaches the native tool on standard input only and never appears in

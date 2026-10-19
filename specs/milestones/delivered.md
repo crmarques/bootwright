@@ -6635,8 +6635,9 @@ commit body.
 
 **Remaining scope:** M2c to M2e remain open; full M2 is not done. B315 to B317,
 B494 and surviving-host removal retain their full-M2 gates. Parked
-[B537](backlog.md#b537), [B616](backlog.md#b616), [B617](backlog.md#b617) and
-[B618](backlog.md#b618) remain registered follow-ups and do not reopen M2b.
+[B537](backlog.md#b537), [B616](backlog.md#b616) and [B617](backlog.md#b617)
+remain registered follow-ups and do not reopen M2b; B618 was delivered later by
+[X102](#x102--audit-defects-for-full-ibm-ceph-m2).
 No later implementation or publication is authorized by this completion.
 
 #### B615
@@ -6834,3 +6835,209 @@ branch that rebases, and the line of module names in the Ceph native worker is
 now 157 columns wide, which that branch re-wraps when it adds a module. Auxiliary
 image selection is not a version specialization, and its contract stays with
 B479.
+
+### X102 — Audit defects for full IBM Ceph (M2)
+
+**Owner:** Storage, with State reconciliation and CLI. A defect slice of
+[M2](m2.md), delivered as one commit on the owner's approval of 2026-10-19 to
+fix the general defects of the 2026-10-18 audit of main `fcff2f58f..ce190446a`.
+**Decision:** [D163](backlog.md#decisions), which authorizes it and records that
+Bootwright registers and enforces no component version rule. A slice is the
+ordered items of one milestone, so D163's audit work is split: this slice
+carries the M2 items and X103 the M1 items. **Items:** B636, B637, B618, B638,
+B639, B640, B641 and B642, with B648 and B649 settled as below. Every confirmed
+general finding of the audit is closed below, recorded as an owner question,
+parked, already fixed or declined under D163.
+
+- **B636, the guest registry broker.** Findings pull-broker-1 to pull-broker-6.
+  An expired bearer answers an RFC 6750 `invalid_token` challenge, so the broker
+  authenticates once more; a blob or config redirect with status 301, 302, 303,
+  307 or 308 is followed for one delivery hop; the connect budget divides across
+  the resolved addresses; teardown never replaces the native failure and always
+  removes the broker's setup files; the native client receives an empty
+  signature-lookaside configuration. No trust boundary widens: the redirect
+  hop, the credentials and the lookaside stay confined as before.
+- **B637, native diagnostics.** Findings adapter-diagnostics-2 to
+  adapter-diagnostics-4. Redaction removes credential values only: the registry
+  URL and username are not secrets at the broker, the discovery and the host
+  pull sites, a sha256 digest and an absolute path survive opaque-material
+  redaction, and the producer emits only characters the Go runner's tables
+  accept, so a native failure keeps its named refusal.
+- **B618**, moved from the backlog's parked table to M2 on 2026-10-19 under
+  D163 and delivered here (finding milestones-docs-5). A bounded native cause
+  keeps its head and the terminal tail of a long traceback inside the existing
+  public ceiling. B615's clause that native failures preserve their useful
+  cause is met by this item.
+- **B638, capacity and its guard.** Findings adapter-diagnostics-1,
+  storage-preflight-2, storage-preflight-3 and guards-contracts-1. Capacity
+  admission runs only while a libvirt Machine block may still start (the
+  settled B649 below); a Machine whose runtime proof fails keeps its proved disk
+  credit, and a deficit that an unproved credit could explain is reported
+  unknown, not failed; libvirt domain files are read under one 1 MiB bound and
+  a failing file is named; the architecture suite confines `preflightlocal` to
+  read-only members.
+- **B639, Ceph finalization and the dashboard.** Findings
+  ceph-bootstrap-licensing-2, ceph-bootstrap-licensing-3,
+  gap1-cross-build-continuation-4-3, gap2-gap2-release-matrix-nati-2-4 and
+  ceph-services-dashboard-1 to ceph-services-dashboard-4. An attempted
+  `enable-call-home` is reissued once before acceptance, because the native
+  command only sets state a repeat sets again; the dashboard port repair takes
+  its holds before it writes an intent, fails the active MGR over only when a
+  standby is registered and at most once per target, and resubmits once per
+  apply; the redeploy wait tolerates MGR churn; the MGR container and plan
+  refusals carry their own `dashboard-manager` token and remedy; the storage
+  spec and knowledge state the repeat rules, the license readiness predicate,
+  its limit on an enrolling continuation and the md5 source difference.
+- **B640, coordinates and packages.** Findings ceph-coordinates-go-1 to
+  ceph-coordinates-go-3 and gap1-test-weakening-2-4. Go admission refuses what
+  the guest refuses: C1 controls, U+2028, U+2029 and invalid UTF-8 in a native
+  version string; a `ceph.packageRepository` of more than 1798 bytes, or with a
+  backslash or dot segment; and an image base that is only the registry host.
+  The guest's staging bound for a `cephadm` package version equals the bound
+  admission applies. The cluster worker checks the
+  installed `cephadm` and `ceph-common` against the frozen package decision
+  instead of the authored version string.
+- **B641, tests, remedies and retained state.** Findings
+  gap1-cross-build-continuation-4-1, ceph-ssh-runtime-3,
+  gap1-test-weakening-2-2, gap1-test-weakening-2-3,
+  gap2-gap2-package-signer-trus-1-4 and gap2-gap2-ceph-destroy-observ-3-1.
+  Another build's refusal offers the take-back only when this build can plan the
+  removal destroy would plan; the Ceph services and transport tests assert what
+  production sends; the publisher-key tests refuse an extra key and a RHEL
+  signer on a foreign platform; the host release impact names the retained
+  host runtime and package records; the dead `installed_cephadm` is gone and its
+  tests prove independence from the host package.
+- **B642, specs, knowledge and the runbook.** Findings
+  gap1-cross-build-continuation-4-4, ceph-coordinates-go-4,
+  gap1-test-weakening-2-5, milestones-docs-7, ceph-ssh-runtime-2,
+  examples-reorg-1, cli-output-contract-7, process-compliance-1, D163-A6 and
+  gap1-package-resolution-matri-3-2. The storage specs, knowledge, the Ceph
+  runbook and the acceptance ledger state core request v6, operator-selected
+  images, the redirect, lookaside, capacity, retained-state and dashboard rules
+  above, and no per-release screening or version-combination wording (D163).
+  The audit's claim that IBM Storage Ceph 9.9.0.x requires a RHEL release is
+  declined under D163 as a component version rule.
+
+**Settled under D163's approval, for the owner to revise.** The orchestrating
+session settled two owner questions of the audit, recorded here as delivered
+and not as open items. **B648**, an exhausted image-pull journal that refused
+every later apply: option (a), a per-invocation budget. Each host preparation
+run makes up to three bounded attempts numbered 1 to 3 again, rewriting a
+retained pull-attempt record is the same-content write, and the retained-budget
+refusal is gone; the digest pin, platform proof, signature policy, broker
+confinement and per-attempt cap are unchanged. A block that the same apply
+retries after observation is a new run and gets three more attempts. The
+image-pull remedy ("apply again; host preparation resumes from its journal") is
+now true, and a pull fix continues after an automation-only rebuild; a build
+from before this slice still refuses an exhausted journal. **B649**, capacity
+admission on a Ceph-only continuation: option (b), the gate runs only while a
+libvirt Machine block remains to start or resolve, because a domain's vCPU and
+memory sizes are fixed when it is defined, the spec places the gate before a
+claim, and the refusal's remedies cannot be followed while an operation is
+incomplete. The earlier reading of B638 that also gated managed Ceph blocks is
+withdrawn.
+
+**Operator-visible effects:**
+
+- A registry blob served through a 301, 302, 303, 307 or 308 redirect pulls,
+  and an expired token re-authenticates once; a pull to a registry with one
+  dead address no longer spends the whole connect budget on it.
+- A failed native step keeps its coordinates, digests and absolute paths in
+  the public cause, and its long traceback keeps the terminal exception.
+- A continuation whose libvirt Machines are done and whose Ceph blocks remain
+  no longer re-proves host capacity; an apply that starts only an artifact
+  server does not either. A Machine whose runtime proof fails reports unknown
+  capacity and the repeat remedy instead of "increase available capacity".
+- A lost `enable-call-home` reply, a dashboard port repair interrupted after
+  its intent, and an MGR that restarts during the redeploy recover by the next
+  apply instead of refusing `partial-cluster` or timing out. A dashboard MGR
+  refusal names `dashboard-manager`, not the dashboard admin user.
+- A package repository, version string or image base that the guest would
+  refuse is refused at planning; a plan with `cephadm.packageVersion` in a form
+  DNF accepts no longer stops the cluster phase after it changed the host.
+- A refusal from another build offers `bootwright destroy` as the take-back
+  only when this build can plan it, and otherwise names installing the
+  registering build and running `bootwright setup`.
+
+**Digest effects:** no request, record or plan-digest version moved, and no
+contract golden changed. The Ceph automation digest moved, and the Go changes
+(stricter admission, the lifecycle gate, the preflight facts and a destroy
+impact that plan comparison excludes) move no version or pin. A live operation
+therefore continues after a rebuild, `setup` and an apply, as
+[a fix to a failed step](../../.agents/knowledge/continuation-after-a-fix.md)
+states; a step that already wrote an attempt record and failed natively still
+refuses `partial-cluster`.
+
+**Post-completion Ceph corrections.** Four commits landed after M2b's
+acceptance of 2026-10-17 without a slice record, and this slice names them
+(process-compliance-1): d9e67eb11, the RHEL 10 container repository selection;
+125f31c03, the removal of the AsyncSSH exact-version refusal so the route proof
+runs; 5dbf06288, licensing and Call Home finalization after protected
+enrollment; and ce190446a, address reuse for the route probe's listeners. Their
+bodies state that no live retry or apply ran, and that no real-image route
+qualification ran; the pending release runs belong to [B626](m2.md#b626).
+Whether M2b stays done after the dashboard repair and core request v6 is the
+owner's question [B653](m2.md#b653).
+
+**Audit findings not fixed here.** Fixed earlier: ceph-bootstrap-licensing-1,
+gap2-gap2-release-matrix-nati-2-1 and gap2-gap2-release-matrix-nati-2-2 by
+fe3e4f715 (X101); gap1-package-resolution-matri-3-3 by fe3e4f715's runbook
+forms and ce9767849's example; guards-contracts-3 by 082ae7cfa. Declined under
+D163 as component version rules: gap1-package-resolution-matri-3-2 (a RHEL
+release requirement), gap1-package-resolution-matri-3-4 (binding the license to
+a Ceph release) and gap1-test-weakening-2-1 (an OS gate; its residual
+diagnostic is parked). Owner questions: [B650](m2.md#b650), [B652](m2.md#b652),
+[B653](m2.md#b653) and [B654](m2.md#b654) on M2, and the audit's M1 questions on
+M1. Parked: [B657](backlog.md#b657) to [B664](backlog.md#b664),
+[B674](backlog.md#b674), [B675](backlog.md#b675), [B677](backlog.md#b677),
+[B678](backlog.md#b678) and [B679](backlog.md#b679). The audit also noted that
+the numbering of the peer branch `m2c` against the ids on main
+(milestones-docs-1) is the peer's to reconcile above D164, B679 and X103; this
+slice edits nothing of it.
+
+**Review:** each of the 33 sub-items was reviewed by two lenses, brief
+conformance with test adequacy, and its correctness against the production
+path. Of 66 verdicts, 61 approved and 5 blocked. Four of the five found a guard
+no test failed without (the broker's per-address handshake share, the path
+exemption's padding and depth limits in diagnostics, the capacity gate's
+unproved-block term and the production fallback that reads the package
+decision), and each is fixed with a test that fails when the guard is reverted.
+The fifth found a runbook sentence that read as if a Ceph-only apply re-proves
+capacity, contrary to the settled B649, and the runbook is corrected. The
+adversarial review of the integrated diff raised nine findings. Five were real,
+in scope and non-blocking, and are fixed: a lone surrogate in a text cause
+crashed redaction instead of keeping the named failure, the take-back judged
+the whole frozen plan, the active-MGR failover had no cap, Go admitted package
+repositories the guest cannot fetch, and one review-spec sentence contradicted
+the secret-leaf refusal. Four were not real or out of scope. Three
+repair-and-check rounds followed. The checks found redaction hardening for a
+value and a secret that reach it in different undecodable-text forms (a lone
+surrogate, an invalid byte, U+FFFD); no known path reaches any of them, and the
+orchestrator's final fix compares every such run as one space. They also found
+two `canTakeBack` branches with no test, the removal subset that mirrors
+`RemainingSubset` and an empty owned set on a failed apply, both recorded in
+B679. An integration fix
+made a Unicode-table test conditional on the interpreter after the host-floor
+Python 3.9 run failed it. No finding remains open.
+
+**Gates:** the integrated lanes and each repair head passed `make check-offline
+tidy-check modules-check vulncheck docs-check race`, `./scripts/ansible-check`
+with all suites, `./scripts/check-commits` and `git diff --check`; the first
+integrated `ansible-check` failed the Unicode-table test on the floor
+interpreter, fixed as above. Each behaviour-changing sub-item names a mutation
+that failed its test; the documentation-only sub-items (ceph-6, lex-3 and
+spec-1 to spec-4) name none, and docs-check is their gate. The results on the
+squashed commit are in its body. No live host ran: the
+broker, the dashboard repair and the reissue are qualified in-tree only, and
+their first real run is the owner's.
+
+**Constraints left behind:** the 3-attempt pull budget is per host preparation
+run, so a block retried in the same apply gets three more. Capacity admission
+no longer guards a Ceph-only continuation, so a foreign domain defined mid
+operation is the operator's to prevent. The first real-registry run confirms
+the expired-token and redirect behaviour, which the tests model from RFC 6750
+and the native client. Follow-ups: [B679](backlog.md#b679) holds the edges the
+lanes left. The 2026-10-19 flake of
+`test_vendor_defaults_allow_completion_replay_and_owned_removal_without_global_writes`
+on Python 3.9, which this slice does not touch, is recorded in
+[B633](backlog.md#b633).

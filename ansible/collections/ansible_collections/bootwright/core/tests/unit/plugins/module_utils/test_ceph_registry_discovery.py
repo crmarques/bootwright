@@ -712,3 +712,98 @@ def test_native_registry_failure_keeps_selection_and_redacts_credentials():
     assert caught.value.native_error["coordinate"] == request["image"]
     assert "MANIFEST_UNKNOWN" in caught.value.native_error["cause"]
     assert "synthetic-secret" not in str(caught.value.native_error)
+
+
+DELIVERY = "delivery.example.test"
+SIGNED = "https://" + DELIVERY + "/object?signature=private-delivery-capability"
+
+
+def dns_row(ip="8.8.8.8", family=socket.AF_INET):
+    return [family, socket.SOCK_STREAM, socket.IPPROTO_TCP, [ip, 443] + ([0, 0] if family == socket.AF_INET6 else [])]
+
+
+def delegation(redirect=307, location=SIGNED, rows=None, delivered=None):
+    """A real Registry whose registry GETs and delivery socket are synthetic; the hop logic is production code."""
+    client = Client(indexed=False, authenticated=True)
+    selected = sha(raw(client.manifest))
+    request = dict(GOLDEN["request"], tag="", image=REPOSITORY + "@" + selected)
+    client.rows.append((redirect, {"location": location, "set-cookie": "synthetic-cookie"}, b""))
+    context = SimpleNamespace(check_hostname=True)
+    registry = discovery.Registry(context, request)
+    registry.get = client.get
+    resolved, connections = [], []
+
+    def resolver(host):
+        resolved.append(host)
+        return json.dumps(rows or [dns_row()]).encode()
+
+    class Connection:
+        def __init__(self, host, **options):
+            assert options["context"] is context and options["port"] == 443 and 0 < options["timeout"] <= 30
+            self.host, self.options = host, options
+            connections.append(self)
+
+        def request(self, method, path, headers):
+            self.sent = (method, path, headers)
+
+        def getresponse(self):
+            status, headers, body = delivered or (200, [("Content-Type", "application/octet-stream")], raw(client.config))
+            return SimpleNamespace(status=status, getheaders=lambda: headers, read=lambda limit: body[:limit])
+
+        def close(self):
+            self.closed = True
+
+    registry.resolver, registry.delivery = resolver, Connection
+    return client, registry, request, selected, resolved, connections
+
+
+@pytest.mark.parametrize("redirect", [307, 302])
+def test_authored_digest_follows_one_config_delegation_without_credentials(redirect):
+    client, registry, request, selected, resolved, connections = delegation(redirect)
+    assert discovery.resolve("Basic synthetic-secret", registry, request) == selected
+    assert client.rows == [] and client.calls[-1][1] == "Bearer synthetic-token"
+    assert resolved == [DELIVERY] and len(connections) == 1 and connections[0].host == DELIVERY
+    assert connections[0].options["addresses"] == [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("8.8.8.8", 443))]
+    method, path, headers = connections[0].sent
+    assert method == "GET" and path == "/object?signature=private-delivery-capability" and connections[0].closed
+    assert not {"authorization", "cookie", "referer", "proxy-authorization"} & {name.lower() for name in headers}
+    assert all("synthetic" not in value for value in headers.values())
+
+
+def test_delegated_config_bytes_must_match_descriptor():
+    unused, registry, request, *unused_rest = delegation(delivered=(200, [], raw({"architecture": "amd64", "os": "linux"})))
+    with pytest.raises(discovery.DiscoveryRefusal, match="^discovery$"):
+        discovery.resolve("Basic synthetic-secret", registry, request)
+
+
+@pytest.mark.parametrize("change", ["http", "userinfo", "port", "private", "mixed", "second-hop"])
+def test_config_delegation_refuses_bad_location_private_answer_and_second_hop(change):
+    location = {"http": "http://" + DELIVERY + "/object", "userinfo": "https://user:secret@" + DELIVERY + "/object",
+                "port": "https://" + DELIVERY + ":444/object"}.get(change, SIGNED)
+    rows = {"private": [dns_row("10.0.0.1")], "mixed": [dns_row(), dns_row("fd00::1", socket.AF_INET6)]}.get(change)
+    delivered = (307, [("Location", SIGNED)], b"") if change == "second-hop" else None
+    client, registry, request, unused, resolved, connections = delegation(location=location, rows=rows, delivered=delivered)
+    with pytest.raises(discovery.DiscoveryRefusal, match="^discovery$"):
+        discovery.resolve("Basic synthetic-secret", registry, request)
+    assert client.rows == []
+    assert resolved == ([] if change in ("http", "userinfo", "port") else [DELIVERY])
+    assert len(connections) == (1 if change == "second-hop" else 0)
+
+
+def test_config_delegation_never_reflects_location_in_native_error():
+    unused, registry, request, *unused_rest = delegation(delivered=(403, [("Location", SIGNED)], SIGNED.encode()))
+    with pytest.raises(discovery.DiscoveryRefusal) as caught:
+        discovery.resolve("Basic synthetic-secret", registry, request)
+    assert caught.value.native_error["cause"] == "config delivery answered HTTP 403"
+    assert "private-delivery-capability" not in str(caught.value.native_error) + str(caught.value)
+
+
+def test_refusal_keeps_coordinate_when_username_is_a_coordinate_segment():
+    coordinate = "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-27200"
+    blob = discovery.base64.b64encode(b"cp:pw").decode("ascii")
+    body = ("denied " + coordinate + " for pw with " + blob).encode()
+    with pytest.raises(discovery.DiscoveryRefusal) as caught:
+        discovery.http_success(401, body, coordinate, ("Basic " + blob,))
+    assert caught.value.native_error["coordinate"] == coordinate
+    assert coordinate in caught.value.native_error["cause"]
+    assert "pw" not in caught.value.native_error["cause"] and blob not in str(caught.value.native_error)

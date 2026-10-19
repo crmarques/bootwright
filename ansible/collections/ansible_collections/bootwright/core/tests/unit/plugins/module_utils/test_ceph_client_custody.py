@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 
 
 class Markers:
@@ -481,14 +482,15 @@ def test_generator_requires_exact_package_owner_and_pins_only_binary_identity(cl
 
     def command(argv, **kwargs):
         calls.append((argv, kwargs))
-        return b"ceph-common 20.2.1-405.el9cp"
+        return b"ceph-common 2 20.2.2 349.el9cp x86_64"
 
     native.command = command
+    native.packages = tunnel_native.Decided("20.2.1-405.el9cp")
     ceph_native.Worker.verify_client_generator(native)
-    assert calls == [(["/usr/bin/rpm", "-qf", "--qf", "%{NAME} %{VERSION}-%{RELEASE}", "/usr/bin/ceph-authtool"], {"json_result": False})]
+    assert calls == [(["/usr/bin/rpm", "-qf", "--qf", "%{NAME} " + tunnel_native.PACKAGE_QUERY, "/usr/bin/ceph-authtool"], {"json_result": False})]
     record = client.markers.records["client-generator.json"]
     assert record == {"path": "/usr/bin/ceph-authtool", "packageVersion": "20.2.1-405.el9cp",
                       "sha256": hashlib.sha256(b"synthetic-authtool-binary").hexdigest()}
-    native.command = lambda *args, **kwargs: b"foreign-package 20.2.1-405.el9cp"
+    native.command = lambda *args, **kwargs: b"foreign-package 2 20.2.2 349.el9cp x86_64"
     with pytest.raises(ceph_native.Refusal, match="artifact"):
         ceph_native.Worker.verify_client_generator(native)

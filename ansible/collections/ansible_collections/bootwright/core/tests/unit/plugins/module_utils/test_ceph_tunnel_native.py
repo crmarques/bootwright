@@ -1559,12 +1559,173 @@ def test_the_image_source_reads_the_payload_only_after_the_profile_binds_the_hel
     assert proofs == []
 
 
-def test_the_host_source_keeps_the_bytes_verify_tool_proved_and_verifies_once(cluster_request, tmp_path, monkeypatch):
-    package = cluster_request["cephadm"]["packageVersion"].encode()
+PACKAGE_QUERY = "%{EPOCHNUM} %{VERSION} %{RELEASE} %{ARCH}"
+SIGNED = {"cephadm": (2, "20.2.2", "349.el9cp", "noarch"), "ceph-common": (2, "20.2.2", "349.el9cp", "x86_64")}
+
+
+class Decided:
+    """The host package phase's frozen records, shaped as ceph_packages.prepare writes decision.json and complete.json.
+
+    A plan root is {key, requested, package identity} (native_resolution.solve4) and the plan digest covers the plan without it
+    (native_resolution.validate_plan). The rpm answers model `rpm -q --qf` and `rpm -qf --qf`, which print the header tags with no newline.
+    """
+
+    def __init__(self, requested, packages=None, complete=True):
+        packages = SIGNED if packages is None else packages
+        roots = [{"key": "ceph", "requested": requested, "package": {"name": name, "epoch": epoch, "version": version, "release": release,
+                                                                     "architecture": architecture}}
+                 for name, (epoch, version, release, architecture) in sorted(packages.items())]
+        ansible = {"name": "cephadm-ansible", "epoch": 0, "version": "5.0.3", "release": "1.el9cp", "architecture": "noarch"}
+        roots.append({"key": "ansible", "requested": "synthetic-ansible", "package": ansible})
+        plan = {"format": "bootwright.native-plan-v1", "roots": roots, "packages": [], "actions": []}
+        plan["digest"] = hashlib.sha256(ceph_native.canonical(plan)).hexdigest()
+        self.records = {"decision.json": {"version": "ceph-package-decision-v1", "binding": "b" * 64, "plan": plan}}
+        if complete:
+            self.records["complete.json"] = {"version": "ceph-package-complete-v1", "binding": "b" * 64, "planDigest": plan["digest"]}
+        self.installed = dict(packages)
+
+    def read(self, name):
+        return copy.deepcopy(self.records.get(name))
+
+    def rpm(self, argv):
+        if argv[:3] == ["/usr/bin/rpm", "-q", "--qf"] and argv[3] == PACKAGE_QUERY:
+            return "{} {} {} {}".format(*self.installed[argv[4]]).encode()
+        if argv[:4] == ["/usr/bin/rpm", "-qf", "--qf", "%{NAME} " + PACKAGE_QUERY] and argv[4] == "/usr/bin/ceph-authtool":
+            return "ceph-common {} {} {} {}".format(*self.installed["ceph-common"]).encode()
+        assert argv[:3] == ["/usr/bin/rpm", "--verify", "--noscripts"], argv
+        return b""
+
+
+def decided_worker(cluster_request, tmp_path, monkeypatch, decided, requested):
+    cluster_request["cephadm"]["packageVersion"] = requested
     worker = ceph_native.Worker(cluster_request, cluster_request["bootstrap"], run=lambda *args, **kwargs: pytest.fail("uninjected command"),
                                 markers=Unclaimed(tmp_path / cluster_request["fsid"]))
+    worker.packages = decided
     commands = []
-    worker.command = lambda argv, **kwargs: commands.append(argv) or (package if "-q" in argv else b"")
+    worker.command = lambda argv, **kwargs: commands.append(argv) or decided.rpm(argv)
+    monkeypatch.setattr(ceph_native, "read_regular", lambda path, maximum: b"native " + path.encode())
+    return worker, commands
+
+
+@pytest.mark.parametrize("requested", ["2:20.2.2-349.el9cp", "20.2.2", "20.2.2-349.el9cp"])
+def test_installed_ceph_packages_are_the_frozen_decision_whatever_form_dnf_was_given(cluster_request, tmp_path, monkeypatch, requested):
+    decided = Decided(requested)
+    worker, commands = decided_worker(cluster_request, tmp_path, monkeypatch, decided, requested)
+    identity = worker.verify_tool()
+    assert set(identity) == {"sha256", "packageVersion", "clients"} and identity["packageVersion"] == requested
+    assert [argv for argv in commands if "-q" in argv] == [["/usr/bin/rpm", "-q", "--qf", PACKAGE_QUERY, name] for name in ("cephadm", "ceph-common")]
+    worker.verify_client_generator()
+    assert worker.markers.records["client-generator.json"]["packageVersion"] == requested
+    assert set(worker.markers.records["client-generator.json"]) == {"path", "packageVersion", "sha256"}
+
+
+@pytest.mark.parametrize("name", ["cephadm", "ceph-common"])
+@pytest.mark.parametrize("drift", [(2, "20.2.2", "350.el9cp", None), (0, "20.2.2", "349.el9cp", None), (2, "20.2.2", "349.el9cp", "aarch64")])
+def test_an_installed_ceph_package_other_than_the_decision_refuses_artifact(cluster_request, tmp_path, monkeypatch, name, drift):
+    decided = Decided("20.2.2")
+    epoch, version, release, architecture = drift
+    decided.installed[name] = (epoch, version, release, architecture or SIGNED[name][3])
+    worker, unused = decided_worker(cluster_request, tmp_path, monkeypatch, decided, "20.2.2")
+    with pytest.raises(ceph_native.Refusal, match="^artifact$"):
+        worker.verify_tool()
+    assert worker.markers.writes == []
+
+
+def test_the_client_generator_follows_the_frozen_ceph_common_identity(cluster_request, tmp_path, monkeypatch):
+    decided = Decided("20.2.2")
+    worker, unused = decided_worker(cluster_request, tmp_path, monkeypatch, decided, "20.2.2")
+    worker.verify_tool = lambda: None
+    decided.installed["ceph-common"] = (2, "20.2.2", "350.el9cp", "x86_64")
+    with pytest.raises(ceph_native.Refusal, match="^artifact$"):
+        worker.verify_client_generator()
+    decided.installed["ceph-common"] = SIGNED["ceph-common"]
+    original = decided.rpm
+    decided.rpm = lambda argv: original(argv).replace(b"ceph-common", b"ceph-base") if "-qf" in argv else original(argv)
+    with pytest.raises(ceph_native.Refusal, match="^artifact$"):
+        worker.verify_client_generator()
+    assert "client-generator.json" not in worker.markers.records
+    decided.rpm = original
+    worker.verify_client_generator()
+    assert worker.markers.records["client-generator.json"]["packageVersion"] == "20.2.2"
+
+
+def unfinished(decided):
+    del decided.records["complete.json"]
+
+
+def foreign_plan(decided):
+    decided.records["complete.json"]["planDigest"] = "c" * 64
+
+
+def other_binding(decided):
+    decided.records["complete.json"]["binding"] = "c" * 64
+
+
+def undecided(decided):
+    decided.records.clear()
+
+
+def tampered(decided):
+    decided.records["decision.json"]["plan"]["roots"][0]["package"]["release"] = "350.el9cp"
+    name = decided.records["decision.json"]["plan"]["roots"][0]["package"]["name"]
+    decided.installed[name] = decided.installed[name][:2] + ("350.el9cp",) + decided.installed[name][3:]
+
+
+def other_request(decided):
+    plan = decided.records["decision.json"]["plan"]
+    for root in plan["roots"]:
+        root["requested"] = "20.2.1" if root["key"] == "ceph" else root["requested"]
+    content = {key: value for key, value in plan.items() if key != "digest"}
+    plan["digest"] = decided.records["complete.json"]["planDigest"] = hashlib.sha256(ceph_native.canonical(content)).hexdigest()
+
+
+def missing_root(decided):
+    plan = decided.records["decision.json"]["plan"]
+    plan["roots"] = [root for root in plan["roots"] if root["package"]["name"] != "ceph-common"]
+    content = {key: value for key, value in plan.items() if key != "digest"}
+    plan["digest"] = decided.records["complete.json"]["planDigest"] = hashlib.sha256(ceph_native.canonical(content)).hexdigest()
+
+
+def malformed(decided):
+    decided.records["decision.json"]["plan"]["roots"] = "cephadm"
+
+
+@pytest.mark.parametrize("damage", [unfinished, foreign_plan, other_binding, undecided, tampered, other_request, missing_root, malformed])
+def test_an_unfinished_or_foreign_package_decision_refuses_artifact(cluster_request, tmp_path, monkeypatch, damage):
+    decided = Decided("20.2.2")
+    damage(decided)
+    worker, unused = decided_worker(cluster_request, tmp_path, monkeypatch, decided, "20.2.2")
+    with pytest.raises(ceph_native.Refusal, match="^artifact$"):
+        worker.verify_tool()
+    assert worker.markers.writes == []
+
+
+def test_an_uninjected_worker_reads_the_decision_the_package_phase_wrote(cluster_request, tmp_path, monkeypatch):
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_packages
+    assert ceph_host_runtime.PACKAGE_ROOT == ceph_packages.ROOT
+    decided = Decided(cluster_request["cephadm"]["packageVersion"])
+    worker = ceph_native.Worker(cluster_request, cluster_request["bootstrap"], run=lambda *args, **kwargs: pytest.fail("uninjected command"),
+                                markers=Unclaimed(tmp_path / cluster_request["fsid"]))
+    assert worker.packages is None
+    reads = []
+
+    def journal(path, maximum=None, private=False):
+        reads.append((path, private))
+        return json.dumps(decided.records[os.path.basename(path)]).encode()
+
+    monkeypatch.setattr(ceph_native, "read_regular", journal)
+    assert worker.decided_package("cephadm") == "{} {} {} {}".format(*SIGNED["cephadm"]).encode()
+    journal_dir = os.path.join(ceph_packages.ROOT, cluster_request["fsid"])
+    assert reads == [(os.path.join(journal_dir, "decision.json"), True), (os.path.join(journal_dir, "complete.json"), True)]
+
+
+def test_the_host_source_keeps_the_bytes_verify_tool_proved_and_verifies_once(cluster_request, tmp_path, monkeypatch):
+    decided = Decided(cluster_request["cephadm"]["packageVersion"])
+    worker = ceph_native.Worker(cluster_request, cluster_request["bootstrap"], run=lambda *args, **kwargs: pytest.fail("uninjected command"),
+                                markers=Unclaimed(tmp_path / cluster_request["fsid"]))
+    worker.packages = decided
+    commands = []
+    worker.command = lambda argv, **kwargs: commands.append(argv) or decided.rpm(argv)
     zipapp = specs.synthesized(CURRENT)
     monkeypatch.setattr(ceph_native, "read_regular", lambda path, maximum: zipapp if path == worker.tool else b"client " + path.encode())
     identity = worker.verify_tool()
@@ -1575,11 +1736,12 @@ def test_the_host_source_keeps_the_bytes_verify_tool_proved_and_verifies_once(cl
 
 
 def test_the_host_source_verifies_the_tool_when_no_proof_has_run(cluster_request, tmp_path, monkeypatch):
-    package = cluster_request["cephadm"]["packageVersion"].encode()
+    decided = Decided(cluster_request["cephadm"]["packageVersion"])
     worker = ceph_native.Worker(cluster_request, cluster_request["bootstrap"], run=lambda *args, **kwargs: pytest.fail("uninjected command"),
                                 markers=Unclaimed(tmp_path / cluster_request["fsid"]))
+    worker.packages = decided
     commands = []
-    worker.command = lambda argv, **kwargs: commands.append(argv) or (package if "-q" in argv else b"")
+    worker.command = lambda argv, **kwargs: commands.append(argv) or decided.rpm(argv)
     monkeypatch.setattr(ceph_native, "read_regular", lambda path, maximum: specs.synthesized(OLD) if path == worker.tool else b"client")
     assert worker.selection.variant("ceph.bootstrap.license-flag") == "omit" and len(commands) == 4
     assert worker.selection.declared("host-cephadm") == frozenset(specs.committed(OLD)["declared"]) and len(commands) == 4

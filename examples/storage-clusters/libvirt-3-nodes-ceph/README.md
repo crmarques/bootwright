@@ -2,7 +2,7 @@
 
 This example declares three managed RHEL guests, explicit virtual SSD data disks, native MON/MGR/OSD documents, a size-2/min-size-2 RBD pool and a pool-scoped client. Addresses and names are synthetic. Copy the input to an operator-owned directory before adjusting it; keep real inputs and credentials outside tracked files.
 
-The minimal virtual journey has operator acceptance; full Ceph feature and release qualification remain open in [M2](../../../specs/milestones/m2.md#m2b). The current lifecycle supports this core profile; other admitted storage declarations may refuse before effects. Storage preflight and standalone storage rendering are recognized but unavailable. This runbook uses validation and lifecycle plans.
+The minimal virtual journey has operator acceptance; full Ceph feature and release qualification remain open in [M2](../../../specs/milestones/m2.md#m2b). The current lifecycle supports this core profile; other admitted storage declarations may refuse before effects. Standalone storage rendering (`render storage`) is recognized but unavailable. This runbook uses validation and lifecycle plans.
 
 The generic budget is twelve vCPUs, 24 GiB guest RAM, three 60 GiB root disks and three 80 GiB data disks, plus services, media and package tree. Reserve at least four further GiB of available host memory and account for full sparse disk growth. Adjust resource sizing only in your operator-owned copy while preserving quorum and replication safety.
 
@@ -83,7 +83,7 @@ Replace `/path/to/adjusted/libvirt-3-nodes-ceph` below with your completed copy.
 
 ## Apply by stage
 
-A stage selection only gates which blocks an invocation starts; the plan stays complete. Each invocation below ends in a paused apply (`[OK] Apply paused`, `state: paused`) until the last one. Its `Next` line names `bootwright apply` without `--stage`, which would run every remaining stage at once, so repeat the command of the stage you mean.
+A stage selection only gates which blocks an invocation starts; the plan stays complete. Each invocation below ends in a paused apply (`✓ Apply paused`, `state: paused`) until the last one. Its `Next` line names `bootwright apply` without `--stage`, which would run every remaining stage at once, so repeat the command of the stage you mean.
 
 ```sh
 ./bin/bootwright apply --stage controller
@@ -115,11 +115,15 @@ Each guest downloads the whole image on its own, so allow bandwidth and disk cap
 
 `status` and `diff` without `--observe` read local records; `diff --observe` reads live targets without changing them. Repeating a completed apply with identical input settles from records and performs no repair.
 
-Run `./bin/bootwright preflight storage-cluster` after guest installation to
-inspect capacity and guest prerequisites. The provider's reserve values are
-example host headroom; set them deliberately for your host. Missing or unknown
-capacity cannot authorize managed Ceph apply. Preflight does not install or
-repair prerequisites. Version coordinates in this example are authored choices,
+After the machines stage and before `apply --stage clusters`, you can run
+`./bin/bootwright preflight storage-cluster` as an informative check of
+capacity and guest prerequisites. The provider's reserve values are example
+host headroom; set them deliberately for your host. Apply re-checks capacity
+itself while a libvirt Machine may still start, so the machines stage refuses
+on missing or unknown capacity. Once every Machine is done,
+`apply --stage clusters` does not re-prove host capacity, so run this
+preflight first if host load may have changed. Preflight
+does not install or repair prerequisites. Version coordinates in this example are authored choices,
 not the only accepted versions. Optional `ceph.nfsGanesha.packageVersion`
 selects its signed package without enabling NFS orchestration.
 

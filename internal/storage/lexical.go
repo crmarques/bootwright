@@ -4,6 +4,8 @@ import (
 	"math/big"
 	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
@@ -116,5 +118,5 @@ func (a *admission) osdLexical(osd api.Value, field string) {
 
 // NativeVersion bounds transport without interpreting a provider's version grammar.
 func NativeVersion(value string) bool {
-	return len(value) > 0 && len(value) <= 1024 && strings.IndexFunc(value, func(r rune) bool { return r < 32 || r == 127 }) < 0
+	return len(value) > 0 && len(value) <= 1024 && utf8.ValidString(value) && strings.IndexFunc(value, func(r rune) bool { return unicode.IsControl(r) || r == 0x2028 || r == 0x2029 }) < 0
 }

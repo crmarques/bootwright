@@ -1,8 +1,10 @@
 """Session-free resolution of the authored IBM Ceph image.
 
 The approved Python runtime talks only to the selected HTTPS registry authority.
-No redirect or ambient proxy is followed. Tags and direct digests select their
-own manifest; a manifest's config proves the platform where no index does.
+No ambient proxy is followed. Only the config blob read follows one delivery
+redirect, to a public HTTPS endpoint and without credentials; manifest and token
+redirects refuse. Tags and direct digests select their own manifest; a
+manifest's config proves the platform where no index does.
 Observation and removal read nothing remote, and continuation uses frozen evidence.
 """
 
@@ -16,12 +18,14 @@ import json
 import os
 import re
 import signal
+import socket
 import ssl
 import stat
 import time
+import types
 import urllib.parse
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_worker, native_diagnostics
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_worker, ceph_pull_broker, native_diagnostics
 
 PLATFORM = "linux/amd64"
 VERSION = "ceph-image-v2"
@@ -308,8 +312,13 @@ def token(raw):
     return "Bearer " + selected
 
 
+def delivery_answers(host):
+    rows = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM, proto=socket.IPPROTO_TCP)
+    return json.dumps([[family, kind, protocol, list(address)] for family, kind, protocol, unused_name, address in rows]).encode()
+
+
 class Registry:
-    """No generic URL, redirects, proxy or arbitrary request method constructor."""
+    """No generic URL, proxy or arbitrary request method constructor; one credential-free delivery hop."""
 
     def __init__(self, context, request, now=time.monotonic):
         self.request = validate_request(request)
@@ -318,6 +327,7 @@ class Registry:
         self.token_path = None
         self.context, self.now = context, now
         self.deadline = now() + TOTAL_SECONDS
+        self.resolver, self.delivery = delivery_answers, ceph_pull_broker.RegistryConnection
 
     def get(self, path, authorization=None, maximum=MAX_BODY):
         # Exact byte budgets exclude bool and float.
@@ -341,14 +351,32 @@ class Registry:
         remaining = self.deadline - self.now()
         require(remaining > 0, "timeout")
         connection = http.client.HTTPSConnection(self.registry, timeout=min(remaining, 30), context=self.context)
+        headers = {
+            "Accept": ACCEPT if path.startswith(manifest) else "application/json",
+            "Accept-Encoding": "identity",
+            "User-Agent": "bootwright-ceph-metadata-v1",
+        }
+        if authorization is not None:
+            headers["Authorization"] = authorization
+        return self.exchange(connection, path, headers, maximum)
+
+    def deliver(self, values):
+        """Follow one validated Location to public addresses only; its value never enters a refusal."""
+        remaining = self.deadline - self.now()
+        require(remaining > 0, "timeout")
         try:
-            headers = {
-                "Accept": ACCEPT if path.startswith(manifest) else "application/json",
-                "Accept-Encoding": "identity",
-                "User-Agent": "bootwright-ceph-metadata-v1",
-            }
-            if authorization is not None:
-                headers["Authorization"] = authorization
+            host, path = ceph_pull_broker.delivery_location(types.SimpleNamespace(getheaders=lambda: list(values.items())))
+            addresses = ceph_pull_broker.delivery_addresses(self.resolver(host))
+        except (ValueError, TypeError, OSError):
+            raise DiscoveryRefusal("discovery") from None
+        connection = self.delivery(host, addresses=addresses, deadline=time.monotonic() + remaining, port=443,
+                                   context=self.context, timeout=min(remaining, 30))
+        headers = {"Accept-Encoding": "identity", "User-Agent": "bootwright-ceph-metadata-v1"}
+        status, unused_values, raw = self.exchange(connection, path, headers, MAX_BODY)
+        return status, raw
+
+    def exchange(self, connection, path, headers, maximum):
+        try:
             connection.request("GET", path, headers=headers)
             response = connection.getresponse()
             rows = response.getheaders()
@@ -465,8 +493,9 @@ def http_success(status, raw, coordinate, secrets=()):
         private = list(secrets)
         for authorization in secrets:
             if isinstance(authorization, str) and authorization.startswith("Basic "):
+                private.append(authorization[6:])
                 try:
-                    private.extend(base64.b64decode(authorization[6:], validate=True).decode("utf-8").split(":", 1))
+                    private.append(base64.b64decode(authorization[6:], validate=True).decode("utf-8").split(":", 1)[-1])
                 except (ValueError, UnicodeError):
                     pass
             elif isinstance(authorization, str) and authorization.startswith("Bearer "):
@@ -482,6 +511,22 @@ def successful(client, path, authorization, expected=None, size=None):
     actual = "sha256:" + hashlib.sha256(raw).hexdigest()
     require("docker-content-digest" not in headers or headers["docker-content-digest"] == actual, "discovery")
     return verified(raw, actual if expected is None else expected, size), headers
+
+
+def configuration_blob(client, namespace, config, authorization):
+    """A registry may delegate the config blob once; delivery bytes still match the descriptor."""
+    path = "/v2/" + namespace + "/blobs/" + config["digest"]
+    status, headers, raw = client.get(path, authorization)
+    if status not in ceph_pull_broker.DELIVERY_REDIRECTS:
+        http_success(status, raw, path, (authorization,) if authorization else ())
+        require("docker-content-digest" not in headers or headers["docker-content-digest"] == "sha256:" + hashlib.sha256(raw).hexdigest(), "discovery")
+        return verified(raw, config["digest"], config["size"])
+    status, raw = client.deliver(headers)
+    if status != 200:
+        error = DiscoveryRefusal("discovery")
+        error.native_error = native_diagnostics.error_detail(path, "config delivery answered HTTP " + str(int(status)))
+        raise error
+    return verified(raw, config["digest"], config["size"])
 
 
 def resolve(basic, client, request):
@@ -523,7 +568,7 @@ def resolve(basic, client, request):
     image_layers(manifest.get("layers"))
     config = descriptor(manifest.get("config"), CONFIG_TYPES)
     if media in MANIFEST_TYPES:
-        configuration, unused_headers = successful(client, "/v2/" + namespace + "/blobs/" + config["digest"], authorization, config["digest"], config["size"])
+        configuration = configuration_blob(client, namespace, config, authorization)
         require(isinstance(configuration, dict) and configuration.get("os") == "linux" and configuration.get("architecture") == "amd64", "discovery")
     return selected["digest"]
 

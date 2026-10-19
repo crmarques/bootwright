@@ -100,9 +100,16 @@ The [native worker](../../ansible/collections/ansible_collections/bootwright/cor
 initializes missing Call Home state under its original configuration intent
 before accepting that enabled intent. Its native `enable_call_home` method
 sets the warning/option and enables the module without host inventory or SSH.
-An absent flag after an earlier acceptance attempt remains drift. An
-interrupted initialization completes only from the exact native result;
-missing results never permit a second initialization.
+An absent flag after an earlier acceptance attempt remains drift. The
+`20.2.2` source's `src/pybind/mgr/cephadm/module.py` makes `enable_call_home`
+(lines 5250-5275) a health-warning set, a `call_home_needs_acceptance` option
+set and a `call_home_agent` module enable, and `accept_license` (lines
+5235-5248) an image and license lookup, a store set and a warning removal: both
+are idempotent, so each repeats while the active manager restarts. An interrupted initialization
+completes from the exact native result; when that result is missing (no flag,
+or the flag set with the module disabled) and no Call Home acceptance or
+configured-tunnel record exists, a mutating apply reissues `enable-call-home`
+once. A cleared flag or any acceptance record still refuses.
 
 License acceptance runs after owned enrollment and current tunnel, cache and
 mount proofs. Its native command remains fallible. Readiness separately reads
@@ -113,6 +120,21 @@ from the full native version and exact English license text; its MD5 is a
 lookup suffix, not an artifact-authentication proof. The worker validates the
 key and payload without invoking native license extraction during observation.
 Missing acceptance is unfinished; malformed evidence refuses.
+
+The lookup key's MD5 is called differently across the two public builds.
+`20.2.1`'s `license_utils.py` (line 10) calls
+`hashlib.md5(str(license_text).encode('utf-8'))` without `usedforsecurity=False`
+(`cephadm-20.2.1-405.el9cp` RPM sha256
+`7acf50c99cf3263c64a103476dcf67a3fd93a7b918472db7df660541ea987287`, its
+`/usr/sbin/cephadm` zipapp sha256
+`027222324b11d1af53b72b4ebb17134f58e477f63c39e9d07be40ba1fc2aabc1`; the
+`20.2.1` source RPM's `src/python-common/ceph/cephadm/license_utils.py`, line
+10). `20.2.2-349` passes the flag in both its RHEL 9 and RHEL 10 executables and
+its source. Bootwright's own reader (`license_accepted` in `ceph_native.py`)
+already passes the flag, so observation is unaffected. The effect of the
+unflagged call on a FIPS-mode host is unverified: no Red Hat RHEL 9 FIPS
+`hashlib` documentation has been cited here. Declared FIPS is already refused
+at planning, and no specialization or gate is added for this difference.
 
 The native acceptance path is an effect: image-information lookup may invoke
 `cephadm pull`, and `command_display_license` unconditionally pulls before

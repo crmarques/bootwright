@@ -281,6 +281,19 @@ func TestStorageDistributionAndVendorNamespace(t *testing.T) {
 	}
 }
 
+func TestNativeReleaseRefusesC1ControlsAndLineSeparators(t *testing.T) {
+	catalog := fixtureCatalog()
+	cluster := find(t, catalog, api.StorageCluster, "storage")
+	for _, release := range []string{"19.2\u00851", "19.2 1", "19.2 1", "19.2\xff1"} {
+		bad := cluster.WithSpec(cluster.Spec().WithPath(api.StringValue(release), "ceph", "release"))
+		requireIssue(t, Validate(bad, replace(catalog, bad)), "$.spec.ceph.release")
+	}
+	good := cluster.WithSpec(cluster.Spec().WithPath(api.StringValue("19.2.1-é"), "ceph", "release"))
+	if issues := Validate(good, replace(catalog, good)); len(issues) != 0 {
+		t.Fatal(issues)
+	}
+}
+
 func TestDeferredStretchStillConstrainsProtection(t *testing.T) {
 	catalog := fixtureCatalog()
 	cluster := find(t, catalog, api.StorageCluster, "storage")

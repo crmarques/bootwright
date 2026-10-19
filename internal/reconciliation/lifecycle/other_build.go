@@ -18,7 +18,7 @@ func (s Service) otherBuild(operation operationstore.Operation) bool {
 	return operation.AutomationDigest != s.automation.CatalogDigest() || operation.Executable != current || s.options.Executable.Modified
 }
 
-func (s Service) proveSameBlocks(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan) sameBlocksProof {
+func (s Service) proveSameBlocks(ctx context.Context, view View, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) sameBlocksProof {
 	if !s.otherBuild(operation) {
 		return sameBlocksProof{proved: true}
 	}
@@ -26,7 +26,7 @@ func (s Service) proveSameBlocks(ctx context.Context, view View, operation opera
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return sameBlocksProof{refusal: ctxErr}
 	}
-	remediation := otherBuildRemediation(view, operation)
+	remediation := remediationFor(view, operation, s.canTakeBack(ctx, operation, frozen, states))
 	if err != nil {
 		detail := ""
 		if reported := diagnostics.Of(err); len(reported) != 0 {
@@ -57,9 +57,28 @@ func (s Service) replanned(ctx context.Context, view View, operation operationst
 	return plan, err
 }
 
+func (s Service) canTakeBack(ctx context.Context, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) bool {
+	if !supersedable(operation) {
+		return false
+	}
+	owned, startedNothing := reconciliation.RemainingSubset(frozen, states), false
+	if operation.Verb == reconciliation.Apply {
+		owned, startedNothing = reconciliation.OwnedSubset(frozen, states), mayHaveStartedNothing(operation)
+	}
+	if len(owned.Blocks) == 0 && !startedNothing {
+		return false
+	}
+	_, err := s.removalOf(ctx, owned, operation.Executable)
+	return err == nil
+}
+
 func otherBuildRemediation(view View, operation operationstore.Operation) string {
+	return remediationFor(view, operation, supersedable(operation))
+}
+
+func remediationFor(view View, operation operationstore.Operation, takeBack bool) string {
 	registered := registeredWith(operation.Executable)
-	if supersedable(operation) {
+	if takeBack {
 		return takeBackUnder(view.Identity().Name, "this executable") + ", or install " + registered + ", which registered it"
 	}
 	return "install " + registered + ", which registered this operation, and run bootwright setup"

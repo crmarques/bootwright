@@ -465,10 +465,9 @@ class HostRuntime:
             if current is not None:
                 durable.write("pulled.json", {"scope": self.scope(), "imageID": current["id"]})
                 return True
-        require(attempts < PULL_ATTEMPTS, "image-pull")
         ceph_native.registry_material(self.request, private)
         material = json.loads(private, object_pairs_hook=ceph_native.unique_object)
-        secrets = (material["username"], material["password"])
+        secrets = (material["password"],)
         broker = None
         try:
             with owned_scratch(durable.path, "pull-") as scratch, authfile(scratch) as auth, \
@@ -477,16 +476,18 @@ class HostRuntime:
                 ceph_native.private_write(policy, signature_policy(image))
                 argv = ["/usr/bin/podman", "pull", "--signature-policy", policy, "--tls-verify=true", "--authfile", auth,
                         "--cert-dir", broker.cert_directory, image]
+                # Each invocation has its own budget; the retained records only show that an attempt began.
+                tried = 0
                 while True:
                     seconds = min(PULL_SECONDS, deadline - self.clock() - PULL_RESERVE)
                     require(seconds >= PULL_MINIMUM, "image-pull")
-                    attempts += 1
-                    durable.write("pull-attempt-%d.json" % attempts, {"scope": self.scope(), "attempt": attempts})
+                    tried += 1
+                    durable.write("pull-attempt-%d.json" % tried, {"scope": self.scope(), "attempt": tried})
                     try:
                         self.command(argv, seconds, 256 << 10, "image-pull", environment=broker.environment, secrets=secrets)
                         break
                     except Refusal:
-                        if attempts >= PULL_ATTEMPTS:
+                        if tried >= PULL_ATTEMPTS:
                             raise
                         self.pause(PULL_PAUSE)
         except ceph_native.NativeFailure as error:
@@ -773,11 +774,6 @@ class HostRuntime:
                                        for value in retained_devices(self.request, self.host["name"], durable, profile["imageID"])]
             evidence["ready"] = bool(evidence["planDigest"] and evidence["route"] and identified)
         return evidence
-
-
-def installed_cephadm(request):
-    """The digest of the host's cephadm, which the signed package transaction installed and verified."""
-    return hashlib.sha256(ceph_native.read_regular(request["cephadm"]["path"], maximum=16 << 20)).hexdigest()
 
 
 def write_payload(durable, payload):

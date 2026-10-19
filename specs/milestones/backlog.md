@@ -198,15 +198,27 @@ Alias cell.
 | [B612](#b612) | new, 2026-10-15 (X93) | defect | Controller setup | The core-package note says install, not update, for a package the host lacks | Found in the owner run; wording only |
 | [B616](#b616) | new, 2026-10-16 | defect | Architecture and developer tooling | Source checks exclude unreadable ignored non-source directories | Found during integration verification; test tooling, no milestone gate |
 | [B617](#b617) | new, 2026-10-17 | defect | Storage | Registry socket publication serialized with close | Pre-existing connector race; separate cancellation follow-up, no new milestone gate |
-| [B618](#b618) | new, 2026-10-17 | defect | Storage and CLI | Bounded native traceback projection retains the terminal cause | Pre-existing diagnostic truncation; separate output follow-up, no new milestone gate |
 | [B622](#b622) | new, 2026-10-18 (D159; found while planning M2c) | defect | Container clusters | The agent-install projection keeps an authored `dns-resolver.config.server` | M3's agent-install journey is its first consumer and no milestone exit names it yet |
 | [B624](#b624) | new, 2026-10-18 (D159; found by the X55 checkpoint) | enabling | CLI and Managed OS | `diff --observe` shows a Machine's bounded network differences | Display only; the runbook reads the drifted value from the guest, and a projector is promoted with B576 |
 | [B630](#b630) | new, 2026-10-19 (X101) | safety | Storage | A proved-absent native rejection leaves a bootstrap or `set-user` attempt recoverable instead of `partial-cluster` | Found in X101; narrowing a safety refusal needs its own named slice and decision; X101's argv check before the attempt record already covers the bootstrap options |
 | [B631](#b631) | new, 2026-10-19 (X101) | enabling | Storage | A wrong `ceph.ibm.callHome` for the selected build is refused before any host block runs | Found in X101; Go has no planning-visible Call Home model fact, and D157 forbids gating on the release |
 | [B632](#b632) | new, 2026-10-19 (X101) | enabling | Storage | The unused `installed_cephadm` and the tests that patch it are removed | Found in X101; dead code with no effect |
-| [B633](#b633) | new, 2026-10-19 (X101) | defect | Architecture and developer tooling | One native-timeout unit test stops crashing its xdist worker under load | Found in X101; the file passes alone and the whole tree passed on rerun |
+| [B633](#b633) | new, 2026-10-19 (X101); widened 2026-10-19 (X102) | defect | Architecture and developer tooling | Two unit tests stop failing under load: the native-timeout test's xdist worker and the libvirt firewall readiness replay case | Found in X101 and X102; each file passes alone and the whole tree passed on rerun |
 | [B634](#b634) | new, 2026-10-19 (X101) | enabling | Storage | The libvirt three-node Ceph runbook validates the operator's selected coordinates, not only the tracked ones | Found in X101; documentation for the owner's runs, no gate |
 | [B635](#b635) | new, 2026-10-19 (X101) | enabling | Storage, with Container clusters | The edges X101's reviews left untested or unreconciled are tested or recorded | Found in X101; each is hardening of a path no signed build reaches today |
+| [B657](#b657) | new, 2026-10-19 (X102) | safety | Storage package resolution, with Security | Plan packages from the `broker` root must be RHEL-signed and sourced from the host's DVD tree | No trust break today: every package is verified under its repository's pinned signer, and no IBM repository ships `openssl` |
+| [B658](#b658) | new, 2026-10-19 (X102) | enabling | Storage preflight and State reconciliation | Cross-context capacity admission states its limit or holds a host-scoped reservation | No spec violation, a short window, and a reservation would be new durable cross-context state |
+| [B659](#b659) | new, 2026-10-19 (X102) | product | Ceph core lifecycle | An apply that stopped after enrollment continues from per-host receipts instead of refusing `partial-cluster` | Needs a new durable recovery protocol, and the native API spec declares it out of scope |
+| [B660](#b660) | new, 2026-10-19 (X102) | safety | Ceph host runtime route probe, with the future FIPS core profile | The route probe's synthetic keys follow the cluster key's type under FIPS | Declared FIPS is refused at planning; the probe key contract belongs to that profile |
+| [B661](#b661) | new, 2026-10-19 (X102) | enabling | Ceph host runtime image profile | The cephadm payload bound is raised or derived and an oversized payload refuses with its measured size | The largest current payload is 1,676,391 bytes; a future refusal, not a defect |
+| [B662](#b662) | new, 2026-10-19 (X102) | safety | Ceph lifecycle, Devices and destructive ownership | An intent-marked OSD device with partial LVM metadata refuses with a named token and a supported recovery | Nothing is adopted or zapped today; a real remedy needs an owned-zap design |
+| [B663](#b663) | new, 2026-10-19 (X102) | enabling | Storage adapter | Authored package candidates mark only the chosen root, keeping DNF's own no-match text | No wrong plan was observed; refusing glob characters would be a Bootwright version grammar |
+| [B664](#b664) | new, 2026-10-19 (X102) | product | the owner for scope, then Storage adapter | Mirror or disconnected IBM package sources are decided, with the publisher key location authored beside them | Fail-closed today, and it needs a scope decision |
+| [B674](#b674) | new, 2026-10-19 (X102) | safety | Ceph host lifecycle, with B491 | A release whose cluster block never started removes the owned host runtime tree and any broker scratch | A new destructive host effect needing its own removal proof |
+| [B675](#b675) | new, 2026-10-19 (X102) | product | Storage, Ceph Call Home | `ceph.ibm.callHome: disabled` passes the opt-out flag when the selected build declares it | Keyed on artifact facts, not a version label; a feature gap outside a defect slice |
+| [B677](#b677) | new, 2026-10-19 (X102) | enabling | Storage | The misnamed `unsupported-release` Ceph refusal token is renamed `unsupported-coordinates` | Cosmetic, and it collides with the closed reason lists the m2c lanes edit |
+| [B678](#b678) | new, 2026-10-19 (X102) | defect | Storage package resolution | A non-rhel host refuses `package-platform` naming the os-release ID, not a generic `package-resolution` | Fails closed before any effect; low value |
+| [B679](#b679) | new, 2026-10-19 (X102) | enabling | Storage and State reconciliation | The edges X102's lanes and reviews left untested, unmeasured or unreconciled are tested or recorded | Found in X102; each is hardening of a path no known input reaches |
 
 ### B82
 
@@ -1959,19 +1971,6 @@ injected cancellation at allocation, connect and TLS boundaries proves no late
 publication, lost socket or unhandled setup exception. Parked for separate
 cancellation work; it adds no M2b acceptance gate.
 
-### B618
-
-`native_diagnostics.redact` bounds a native cause by retaining its initial
-bytes. A synthetic long traceback with a warning and wrapper frames can use
-the entire allowance before the terminal exception, losing the most useful
-failure detail. This predates the bootstrap-initialization correction and is
-left unchanged by it. **Outcome:** retain a useful terminal native cause within
-the existing public byte ceiling, after complete bounded redaction, without
-publishing private material or changing execution and continuation behavior.
-**Exit evidence:** long and nested tracebacks, UTF-8 boundaries and secrets at
-projection cuts prove useful cause retention, the unchanged limit and no
-disclosure. Parked for separate diagnostic work; it adds no M2b acceptance gate.
-
 ### B622
 
 The agent-install projection overwrites an authored
@@ -2041,6 +2040,16 @@ load; the file passes alone and the whole tree passed on rerun. **Outcome:** the
 test is deterministic under parallel workers or its cause is recorded. **Requires:** none. **Definition:** `Specified`.
 **Exit evidence:** repeated narrowed parallel runs of the file with no crash.
 
+X102's second review gate found a second case: the libvirt firewall readiness
+unit test `test_vendor_defaults_allow_completion_replay_and_owned_removal_without_global_writes`
+(parametrized case `names0`) failed once on Python 3.9 and passed on an identical
+rerun and on every later run; no X102 commit touches it or its module. The test
+compares each vendor file's `stat()` before and after the reads it proves
+harmless, so an access-time update under load is the suspected cause,
+unconfirmed. **Outcome:** that test too is deterministic under concurrent gate
+runs or its cause is recorded. **Exit evidence:** repeated concurrent gate runs
+of the file with no mismatch.
+
 ### B634
 
 The runbook's validation text and its Dashboard and IBM Call Home rows assume
@@ -2073,6 +2082,200 @@ X101's reviews left these edges, none reached by a signed build today:
 reason it needs none. **Requires:** none. **Definition:** `Specified`.
 **Exit evidence:** the named tests, mutation-checked, and
 the reconciled page.
+
+### B657
+
+Package planning installs the `broker` root's packages (`openssl`) without
+binding them to the RHEL signer or to the host's DVD tree, as the crypto-policy
+package is bound. Found by the audit (`gap2-gap2-package-signer-trus-1-1`). No
+trust boundary is broken today: every package is verified under its
+repository's pinned signer, the IBM key is already trusted on the host after the
+key import, and no IBM repository ships `openssl`. **Outcome:** plan packages
+from the `broker` root must be RHEL-signed and sourced from the host's DVD tree,
+or the package phase refuses `package-signature`. **Why parked:** the check adds
+a new refusal without closing a demonstrated gap. **Requires:** none.
+**Definition:** `Specified`. **Exit evidence:** a package-resolution test that
+refuses an `openssl` candidate from a non-DVD repository.
+
+### B658
+
+Two contexts that share one libvirt host can both pass capacity admission
+before either defines its guests, and together overcommit the host. Found by
+the audit (`adapter-diagnostics-5`). **Outcome:** [storage](../storage.md)
+states the limit (admission is per context, and serializing concurrent applies
+to one host is the operator's job), or a host-scoped reservation is held from
+admission until the Machine blocks settle. **Why parked:** no spec requires more
+today, the window is short, and a reservation is new durable cross-context
+state. It joins M2 if pulled in. **Requires:** none. **Definition:**
+`Needs definition`. **Exit evidence:** the spec sentence, or a two-context
+admission test that refuses the second apply.
+
+### B659
+
+An apply that stopped after enrollment, with some host carrying daemons and
+the cluster not ready, refuses `partial-cluster` on every later apply. Found by
+the audit (`ceph-bootstrap-licensing-5`); its license-specific trigger is
+refuted. **Outcome:** such an apply continues from per-host enrollment receipts
+and service attempt and complete markers in `ceph_core.apply_tunnel_cluster`
+and the recovery stages. **Why parked:** it needs a new durable recovery
+protocol, and [the native API](../storage-native-api.md) declares it out of
+scope today. **Requires:** an owner decision on the protocol. **Definition:**
+`Needs definition`. **Exit evidence:** a continuation test from each recorded
+enrollment state, and a test that an unrecorded state still refuses.
+
+### B660
+
+When the FIPS core profile is implemented, the route probe's synthetic keys
+must follow the cluster key's type (RSA or ECDSA), and a FIPS-mode host with an
+ed25519 cluster key must refuse with a named key-type reason before
+preparation. Found by the audit (`ceph-ssh-runtime-1`). **Outcome:** the probe
+follows the cluster key's type, and the native fact (the 20.2.2 cephadm SSH
+module's key handling) is recorded in the
+[native SSH knowledge](../../.agents/knowledge/ibm-ceph-native-ssh.md).
+**Why parked:** declared FIPS is refused at planning, and changing the probe's
+key contract belongs to that profile. **Requires:** the FIPS core profile.
+**Definition:** `Candidate`. **Exit evidence:** a probe test per key type under
+a FIPS-mode fixture, and the named refusal for the ed25519 case.
+
+### B661
+
+The cephadm payload bound `MAX_PAYLOAD` (2 MiB) in the host runtime sits
+close to the largest current payload (1,676,391 bytes). Found by the audit
+(`gap2-gap2-release-matrix-nati-2-3`). **Outcome:** the bound is raised or
+derived (for example 8 MiB, below the 16 MiB host read bound), and an oversized
+payload refuses with a named size reason that states the measured size. It is a
+structural bound, not a version rule under D163. **Why parked:** a future
+refusal, not a defect today. **Requires:** none. **Definition:** `Specified`.
+**Exit evidence:** a host-runtime test of a payload over the old bound that
+passes and of one over the new bound that refuses with its size.
+
+### B662
+
+An intent-marked OSD device that holds LVM metadata without a complete tag
+set for this operation's cluster is neither adopted nor cleared. Found by the
+audit (`ceph-services-dashboard-5`). **Outcome:** it refuses with a named
+`lifecycle.unknown` token `osd-partial`, whose diagnostic says an interrupted
+OSD creation and a foreign write cannot be told apart and whose remedy names
+the supported recovery; optionally a bounded owned clear for a device that
+carries this operation's intent and only an untagged `ceph-volume` volume group
+and logical volume; the RHEL 9 LVM devices-file risk is checked live. **Why
+parked:** a real remedy needs an owned-zap design. **Requires:** an owner
+decision on the destructive path. **Definition:** `Needs definition`. **Exit
+evidence:** refusal tests per partial-metadata shape and, if the clear is
+chosen, its removal proof.
+
+### B663
+
+`authored_candidates` in `native_resolution.py` can leave extra goal jobs
+for a glob subject. Found by the audit (`gap1-package-resolution-matri-3-5`).
+**Outcome:** it marks only the chosen root (`package_install`) while still
+surfacing DNF's own no-match text, so a glob subject leaves no extra goal jobs.
+**Why parked:** the current outcomes are native DNF semantics or fail-closed
+refusals, and refusing glob characters would be a Bootwright version grammar,
+which D163 excludes. **Requires:** none. **Definition:** `Specified`. **Exit
+evidence:** a resolution test with a glob subject that leaves one goal job.
+
+### B664
+
+The publisher key is always fetched from IBM's public site, so a mirror or
+disconnected package source cannot supply it. Found by the audit
+(`gap2-gap2-package-signer-trus-1-2`). **Outcome:** decide whether mirror or
+disconnected IBM package sources are supported; if so, the publisher key
+location is authored beside `ceph.packageRepository` while the code-pinned IBM
+fingerprint stays the trust anchor, and the `el10cp` signer is recorded in
+[knowledge](../../.agents/knowledge/ibm-ceph-version-constraints.md) once an
+`el10cp` package is inspected. **Why parked:** it fails closed today and needs a
+scope decision. **Requires:** an owner decision. **Definition:**
+`Needs definition`. **Exit evidence:** a package-source test with an authored
+key location whose fingerprint differs from the pin and refuses.
+
+### B674
+
+Releasing a Ceph host whose cluster block never started retains the owned
+Bootwright host runtime tree for the cluster's fsid and any broker scratch a
+killed pull left. Found by the audit (`gap2-gap2-ceph-destroy-observ-3-1`);
+X102 fixes the impact text and the storage spec sentence, which now name what is
+retained. **Outcome:** such a release removes the owned tree and the scratch.
+**Why parked:** a new destructive host effect that needs its own removal proof.
+**Requires:** [B491](m2.md#b491)'s teardown contract. **Definition:**
+`Needs definition`. **Exit evidence:** a destroy test that removes only the
+owned tree, and one that refuses a tree it does not own.
+
+### B675
+
+When the selected build declares `--disable-ibm-call-home` (the
+`host-cephadm.call-home-opt-out` fact in `native_specializations.py`),
+`ceph.ibm.callHome: disabled` today refuses `call-home-unqualified` instead of
+passing the flag. Found by the D163 sweep. **Outcome:** the flag is passed,
+and the [storage API](../api/storage.md) states it. **Why parked:** the fact
+comes from the artifacts and not from a version label, so it is not a D163
+removal, and it is a feature gap outside a defect slice. **Requires:** none.
+**Definition:** `Specified`. **Exit evidence:** a seam test on a synthetic build
+that declares the option, and the existing refusal kept for a build that does
+not.
+
+### B677
+
+The `unsupported-release` refusal checks the verified-tunnel transport, a
+sha256 digest image and bounded control-free strings; it checks no version.
+Found by the D163 sweep. **Outcome:** the token is renamed
+`unsupported-coordinates` across `ceph_core.py`, `ceph_cluster_protocol.py`,
+`internal/storage/ceph/host.go` and `internal/storage/ceph/materials.go`. **Why
+parked:** cosmetic, and it collides with the closed reason lists that the m2c
+lanes edit; do it after m2c lands. **Requires:** m2c landed. **Definition:**
+`Specified`. **Exit evidence:** the refusal tests under the new token and a
+contract guard update if a content digest moves.
+
+### B678
+
+On a host whose os-release ID is not `rhel`, `native_resolution.db_path`
+raises a bare `ValueError` that surfaces as `package-resolution`. Found by the
+audit (`gap1-test-weakening-2-1`, residual); the OS gate itself is declined
+under D163. **Outcome:** it refuses `package-platform` and names the
+os-release ID. **Why parked:** it fails closed before any effect, and the value
+is low. **Requires:** none. **Definition:** `Specified`. **Exit evidence:** a
+resolution test on a non-rhel os-release that expects the named refusal.
+
+### B679
+
+X102's lanes and reviews left these edges, none reached by a known input:
+
+- the pull broker's challenge parser refuses quoted-pair escapes inside a
+  quoted string, so an `error_description` that a registry escapes would still
+  refuse; the live answer of IBM's registry for an expired bearer, and of
+  quay.io's redirect, are modelled from the RFC and the audit notes, not
+  observed;
+- native redaction now runs over the whole unbounded native output, and its
+  lazy quoted-value pattern may be quadratic on one long line with many
+  unclosed `password="` openers, where it ran on at most 64 KiB before; a
+  secret ending in a lone surrogate still redacts the same text followed by a
+  space, which over-redacts and fails safe;
+- capacity reports unknown whenever any Machine is unproved and the total
+  exceeds the available amount, even when the deficit is larger than the
+  unproved Machine's whole declared quantity; and a permanent definition-proof
+  failure (a foreign UUID, `nlink` other than 1, aliased disks, a disk on
+  another filesystem) reports unknown with the repeat remedy, which may never
+  resolve;
+- the continuation test for a Ceph-only apply calls the admission directly and
+  does not drive a whole lifecycle continuation through the real capabilities,
+  and the take-back remedy test fakes an unreadable frozen request instead of a
+  real older core request; `canTakeBack` still skips the contradiction check
+  that `supersede` runs, as it did before X102; the removal branch
+  (`RemainingSubset`) and the empty-owned-set branch of `canTakeBack` have no
+  test;
+- cephadm cannot redeploy the only MGR, so a repair with one declared MGR
+  refuses `dashboard-manager`, and the image check of `supported_transport` is
+  redundant after request validation on every dispatch path;
+- the effect of the unflagged `md5` call in the license source on a FIPS-mode
+  host is not documented, and the phrase "release-qualified" still names
+  mechanics qualification in several spec sentences and in the Go refusal text
+  of the native check, which D163 may want reworded.
+
+**Outcome:** each edge has a test that fails without its guard, a measurement,
+or a recorded reason it needs none. **Requires:** none. **Definition:**
+`Specified`. **Exit evidence:** the named tests, mutation-checked, and the
+recorded measurements.
+
 
 ## Retired
 

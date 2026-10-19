@@ -228,19 +228,59 @@ def test_pull_cert_directory_loads_native_client_identity(request_value, tmp_pat
     assert ("pulled.json" in markers.records) is (outcome == "ok")
 
 
-def test_pull_retries_stay_bounded_and_refuse_after_three_attempts(request_value, tmp_path):
-    podman = Podman(request_value, ["fail", "fail", "fail"])
+def test_pull_retries_stay_bounded_and_refuse_after_three_attempts_in_one_invocation(request_value, tmp_path):
+    podman = Podman(request_value, ["fail", "fail", "fail", "fail"])
     worker, markers, clock = host_runtime(request_value, tmp_path, podman)
     with pytest.raises(ceph_native.Refusal, match="^image-pull$"):
         with worker.journal(create=True) as durable:
             worker.pull(durable, registry(request_value), 4285)
     assert pull_argv_count(podman) == 3 and clock.pauses == [runtime.PULL_PAUSE] * 2
     assert [name for name in markers.writes if name.startswith("pull-attempt")] == ["pull-attempt-1.json", "pull-attempt-2.json", "pull-attempt-3.json"]
-    assert "pulled.json" not in markers.records
+    assert "pulled.json" not in markers.records and podman.outcomes == ["fail"]
+
+
+def exhausted_journal(request_value, markers):
+    for attempt in range(1, runtime.PULL_ATTEMPTS + 1):
+        markers.records["pull-attempt-%d.json" % attempt] = {"scope": runtime.scope(request_value, "node-1"), "attempt": attempt}
+
+
+@pytest.mark.parametrize("outcomes", [["ok"], ["fail", "ok"], ["fail", "fail", "ok"]])
+def test_an_exhausted_journal_from_an_earlier_invocation_lets_the_next_invocation_pull(request_value, tmp_path, outcomes):
+    podman = Podman(request_value, outcomes)
+    worker, markers, clock = host_runtime(request_value, tmp_path, podman)
+    exhausted_journal(request_value, markers)
+    with worker.journal(create=True) as durable:
+        assert worker.pull(durable, registry(request_value), 4285) is True
+    assert pull_argv_count(podman) == len(outcomes) and clock.pauses == [runtime.PULL_PAUSE] * (len(outcomes) - 1)
+    assert markers.records["pulled.json"] == {"scope": runtime.scope(request_value, "node-1"), "imageID": IMAGE_ID}
+    assert sorted(name for name in markers.records if name.startswith("pull-attempt")) == ["pull-attempt-1.json", "pull-attempt-2.json", "pull-attempt-3.json"]
+
+
+def test_three_failures_after_an_exhausted_journal_still_stop_the_invocation(request_value, tmp_path):
+    podman = Podman(request_value, ["fail"] * (runtime.PULL_ATTEMPTS + 1))
+    worker, markers, clock = host_runtime(request_value, tmp_path, podman)
+    exhausted_journal(request_value, markers)
     with pytest.raises(ceph_native.Refusal, match="^image-pull$"):
-        with worker.journal() as durable:
+        with worker.journal(create=True) as durable:
             worker.pull(durable, registry(request_value), 4285)
-    assert pull_argv_count(podman) == 3
+    assert pull_argv_count(podman) == runtime.PULL_ATTEMPTS and clock.pauses == [runtime.PULL_PAUSE] * (runtime.PULL_ATTEMPTS - 1)
+    assert "pulled.json" not in markers.records and podman.outcomes == ["fail"]
+    later, unused_markers, unused_clock = host_runtime(request_value, tmp_path / "later", Podman(request_value, ["ok"]))
+    later.markers = markers
+    with later.journal() as durable:
+        assert later.pull(durable, registry(request_value), 4285) is True
+    assert "pulled.json" in markers.records
+
+
+@pytest.mark.parametrize("present", [True, False])
+def test_a_crash_after_the_last_attempt_record_is_recoverable(request_value, tmp_path, present):
+    podman = Podman(request_value, ["ok"], present=present)
+    worker, markers, unused = host_runtime(request_value, tmp_path, podman)
+    exhausted_journal(request_value, markers)
+    with worker.journal(create=True) as durable:
+        assert worker.pull(durable, registry(request_value), 4285) is True
+    assert pull_argv_count(podman) == (0 if present else 1)
+    assert markers.records["pulled.json"]["imageID"] == IMAGE_ID
 
 
 def test_a_pull_attempt_timeout_is_bounded_by_the_call_and_never_exceeds_1200_seconds(request_value, tmp_path):
@@ -271,7 +311,8 @@ def test_an_interrupted_pull_resumes_from_its_retained_attempts(request_value, t
     with worker.journal(create=True) as durable:
         assert worker.pull(durable, registry(request_value), 4285) is True
     assert pull_argv_count(podman) == (0 if present else 1)
-    assert ("pull-attempt-2.json" in markers.records) is not present
+    assert sorted(name for name in markers.records if name.startswith("pull-attempt")) == ["pull-attempt-1.json"]
+    assert markers.writes.count("pull-attempt-1.json") == (0 if present else 1)
     assert markers.records["pulled.json"]["imageID"] == IMAGE_ID
 
 
@@ -327,7 +368,7 @@ def test_a_killed_pulls_authfile_is_discarded_before_the_next_attempt(request_va
 
 @pytest.mark.parametrize("exit_case", ["pulled", "resumed", "exhausted"])
 def test_every_pull_exit_discards_a_killed_pulls_authfile(request_value, tmp_path, exit_case):
-    podman = Podman(request_value, [], present=exit_case != "exhausted")
+    podman = Podman(request_value, ["fail"] * runtime.PULL_ATTEMPTS if exit_case == "exhausted" else [], present=exit_case != "exhausted")
     worker, markers, unused = host_runtime(request_value, tmp_path, podman)
     used = 3 if exit_case == "exhausted" else 1
     for attempt in range(1, used + 1):
@@ -344,7 +385,7 @@ def test_every_pull_exit_discards_a_killed_pulls_authfile(request_value, tmp_pat
             stack.enter_context(pytest.raises(ceph_native.Refusal, match="^image-pull$"))
         with worker.journal(create=True) as durable:
             assert worker.pull(durable, registry(request_value), 4285) is (exit_case == "resumed")
-    assert not os.path.exists(residue) and pull_argv_count(podman) == 0
+    assert not os.path.exists(residue) and pull_argv_count(podman) == (runtime.PULL_ATTEMPTS if exit_case == "exhausted" else 0)
 
 
 def test_a_failed_pull_keeps_no_credential_on_disk(request_value, tmp_path):
@@ -576,10 +617,39 @@ def probe_output(payload=PAYLOAD, **changes):
 
 
 @pytest.fixture
-def authenticated(monkeypatch):
-    digest = hashlib.sha256(PAYLOAD).hexdigest()
-    monkeypatch.setattr(runtime, "installed_cephadm", lambda request: digest)
-    return digest
+def authenticated():
+    return hashlib.sha256(PAYLOAD).hexdigest()
+
+
+@pytest.fixture
+def host_cephadm_sealed(request_value, monkeypatch):
+    host = request_value["cephadm"]["path"]
+    opened = []
+    reader, opener, stream = ceph_native.read_regular, os.open, io.open
+
+    def read_regular(path, *arguments, **options):
+        if os.fspath(path) == host:
+            opened.append(path)
+            raise AssertionError("the host cephadm was read")
+        return reader(path, *arguments, **options)
+
+    def guarded_open(path, *arguments, **options):
+        if os.fspath(path) == host:
+            opened.append(path)
+            raise AssertionError("the host cephadm was opened")
+        return opener(path, *arguments, **options)
+
+    def guarded_stream(path, *arguments, **options):
+        if not isinstance(path, int) and os.fspath(path) == host:
+            opened.append(path)
+            raise AssertionError("the host cephadm was opened")
+        return stream(path, *arguments, **options)
+
+    monkeypatch.setattr(ceph_native, "read_regular", read_regular)
+    monkeypatch.setattr(os, "open", guarded_open)
+    monkeypatch.setattr(io, "open", guarded_stream)
+    monkeypatch.setattr("builtins.open", guarded_stream)
+    return opened
 
 
 def test_facts_come_from_two_agreeing_probes_as_root_and_as_the_image_account(request_value, tmp_path, authenticated):
@@ -636,12 +706,11 @@ def test_profile_records_the_image_runtime_and_the_authenticated_payload(request
     assert pull_argv_count(podman) == 1
 
 
-def test_profile_authenticates_image_bytes_independently_of_installed_package(request_value, tmp_path, monkeypatch, authenticated):
-    del authenticated
-    monkeypatch.setattr(runtime, "installed_cephadm", lambda request: "f" * 64)
+def test_profile_authenticates_image_bytes_independently_of_installed_package(request_value, tmp_path, monkeypatch, host_cephadm_sealed):
     worker, markers, unused, unused_engine = profiled_runtime(request_value, tmp_path, monkeypatch, [probe_output(), probe_output()])
     assert worker.profile({"registryJSON": registry(request_value)}) == {"changed": True}
     assert markers.records[runtime.PROFILE]["cephadmSHA256"] == hashlib.sha256(PAYLOAD).hexdigest()
+    assert host_cephadm_sealed == []
 
 
 @pytest.mark.parametrize("private", [{}, {"registryJSON": "x", "extra": "y"}])
@@ -1020,12 +1089,12 @@ def test_the_shipped_sources_carry_no_fixture_session_or_qualification_authority
         assert not re.search(r"FixtureSession|fixture_runtime|qualif", text, re.IGNORECASE)
 
 
-def test_image_payload_identity_is_independent_of_host_package_payload(request_value, tmp_path, monkeypatch):
+def test_image_payload_identity_is_independent_of_host_package_payload(host_cephadm_sealed):
     image_payload = b"#!/usr/bin/python3\n# unrelated authenticated image build\n"
     output = json.loads(probe_output(image_payload)(["--user=0:0"]))
     # A selected image authenticates its own bytes, regardless of the host RPM.
-    monkeypatch.setattr(runtime, "installed_cephadm", lambda unused: "b" * 64)
     assert runtime.validate_probe(output, (0, 0))["artifacts"]["/usr/sbin/cephadm"]["sha256"] == hashlib.sha256(image_payload).hexdigest()
+    assert host_cephadm_sealed == []
 
 
 def test_final_pull_failure_retains_the_native_stderr(request_value, tmp_path):
@@ -1097,6 +1166,26 @@ def test_pull_http_cause_survives_redaction_and_truncation_without_cross_invocat
         assert pull_argv_count(podman) == runtime.PULL_ATTEMPTS
         assert "pulled.json" not in markers.records
     assert len(instances) == 2 and all(value.exited for value in instances)
+
+
+def test_pull_failure_redacts_the_password_but_keeps_a_username_shaped_coordinate(request_value, tmp_path):
+    podman = Podman(request_value, ["fail"] * runtime.PULL_ATTEMPTS)
+
+    def command(argv, timeout, limit):
+        code, output = podman(argv, timeout, limit)
+        if argv[:2] == ["/usr/bin/podman", "pull"]:
+            return code, ceph_native.NativeOutput(output, ("unauthorized pulling " + IMAGE + "; password=" + PASSWORD).encode())
+        return code, output
+
+    material = json.dumps({"url": request_value["registry"], "username": "cp", "password": PASSWORD})
+    worker, unused, unused_clock = host_runtime(request_value, tmp_path, command)
+    with pytest.raises(ceph_native.NativeFailure) as caught:
+        with worker.journal(create=True) as durable:
+            worker.pull(durable, material, 4285)
+    detail = caught.value.native_error
+    assert detail["coordinate"] == IMAGE
+    assert "unauthorized pulling cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:" in detail["cause"]
+    assert PASSWORD not in str(detail)
 
 
 def test_successful_pull_retry_does_not_project_an_earlier_broker_refusal(request_value, tmp_path, monkeypatch):

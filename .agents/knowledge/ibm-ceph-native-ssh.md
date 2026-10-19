@@ -21,7 +21,8 @@ downloaded, so no whole-RPM checksum result is claimed.
 
 The archive's `src/pybind/mgr/cephadm/ssh.py`, lines 179–180, passes
 `known_hosts=None` explicitly to `asyncssh.connect`. The extracted file's
-SHA-256 is `a07ee53ec6ca44d91738e92869fff5c236e392285379a227bd8ab3ee7933feb2`.
+SHA-256 is `a07ee53ec6ca44d91738e92869fff5c236e392285379a227bd8ab3ee7933feb2`
+(historical 9.9.1.2 inspection evidence, not a gate).
 [AsyncSSH's options contract](https://asyncssh.readthedocs.io/en/latest/api.html#asyncssh.SSHClientConnectionOptions)
 states that this disables verification and that explicit arguments take
 precedence over configuration. Supplying `StrictHostKeyChecking yes` through
@@ -30,7 +31,7 @@ the native configuration therefore does not prove manager-to-host verification.
 This is a concrete failure of the inspected source path, not a missing
 entitlement key alone. It does not qualify a running container, a workaround
 or a negative wrong-key test. Ordinary apply admits only `verified-tunnel`
-for the pinned release, and `native` stays refused (D143); the host block's
+for the operator-selected, digest-frozen image, and `native` stays refused (D143); the host block's
 route probe proves the provider's SSH class on each host before that release's
 cluster block starts.
 
@@ -43,7 +44,7 @@ qualification. Do not replace one unqualified assumption with another.
 
 The in-tree tunnel and staging helpers retain separate native/tunnel gates,
 and the host block's route probe exercises the provider's SSH class on
-synthetic loopback inside the pinned image on each host. A
+synthetic loopback inside the operator-selected, digest-frozen image on each host. A
 configuration-parser success alone does not prove refusal when the native
 config disappears, and rootless inventory or parser probes do not exercise
 live host authentication; neither qualifies guest policy or the complete MGR

@@ -5,11 +5,13 @@ import (
 	"errors"
 	"io"
 	"math"
+	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/sshlocal"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/storage/preflight"
 	"github.com/crmarques/bootwright/internal/storage/preflightlocal"
@@ -20,7 +22,7 @@ func wireStoragePreflight(state inventory.EffectiveState, reconciler lifecycle.S
 	return preflight.Service{Graph: effectiveGraph{state: state}, Ownership: machineOwnership{reconciler: reconciler}, Project: storageAllocations, Capacity: preflight.Budget{Observer: preflightlocal.Observer{}}, Guests: preflight.GuestChecks{Commands: preflightCommands(state, reconciler, deps)}, Selection: currentSelection(deps.Selection)}
 }
 
-func storageCapacityAdmission(ctx context.Context, contextName string, catalog api.Catalog, owned map[string]lifecycle.ObjectOwnership) error {
+func storageCapacityAdmission(ctx context.Context, contextName string, catalog api.Catalog, owned map[string]lifecycle.ObjectOwnership, starting []reconciliation.Block) error {
 	managed := false
 	for _, cluster := range catalog.OfKind(api.StorageCluster) {
 		managed = managed || cluster.Spec().Get("management").Text() == "managed"
@@ -31,6 +33,11 @@ func storageCapacityAdmission(ctx context.Context, contextName string, catalog a
 	allocations, err := storageAllocations(catalog, contextName)
 	if err != nil {
 		return err
+	}
+	if !slices.ContainsFunc(starting, func(block reconciliation.Block) bool {
+		return block.Kind == libvirt.MachineKind && slices.ContainsFunc(allocations, func(a preflight.Allocation) bool { return a.Machine == block.Object })
+	}) {
+		return nil
 	}
 	reserves := preflight.ReservesFromCatalog(catalog, allocations)
 	for i := range allocations {

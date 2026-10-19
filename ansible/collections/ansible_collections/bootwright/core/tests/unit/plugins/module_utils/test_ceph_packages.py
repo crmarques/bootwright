@@ -287,6 +287,27 @@ def test_publisher_keys_are_scoped_to_ibm_and_rhel(monkeypatch):
         native_signatures.key_for(grant, "f" * 40)
 
 
+def test_publisher_keys_refuse_an_extra_key_and_a_redhat_signer_on_a_foreign_platform(monkeypatch):
+    events = []
+    live_key_doubles(monkeypatch, events)
+    seen = []
+    read = native_signatures.read_key
+    monkeypatch.setattr(native_signatures, "read_key", lambda path: seen.append(path) or read(path))
+    extra = live_key_grant()
+    extra["publisherKeys"] = {native_signatures.IBM_CEPH_SIGNER: "/private/ibm-key", "e" * 40: "/private/extra-key"}
+    with pytest.raises(ValueError, match="Ceph publisher authority"):
+        native_signatures.key_for(extra, native_signatures.IBM_CEPH_SIGNER)
+    assert seen == []
+    with pytest.raises(ValueError, match="Ceph publisher authority"):
+        native_signatures.import_ceph_keys(extra)
+    assert seen == [] and not [event for event in events if event[0] == "import"]
+    foreign = live_key_grant()
+    foreign["platform"] = dict(foreign["platform"], os="centos")
+    with pytest.raises(ValueError, match="native publisher platform"):
+        native_signatures.key_for(foreign, native_signatures.RHEL_SIGNER)
+    assert seen == []
+
+
 @pytest.mark.parametrize("relative",
                          ["../escape", "/absolute", "https://foreign.example.test/file", "repodata/%2e%2e/escape", "repodata/file?token=value",
                           "repodata/file#fragment"])

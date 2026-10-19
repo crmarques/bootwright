@@ -134,7 +134,7 @@ source and pre-effect refusal; changing a supported row to deferred requires
 an explicit scope decision. A newly discovered supported service gets a
 bounded item before the release gate closes.
 
-M2 supports every cluster size IBM supports for the qualified release and
+M2 supports every cluster size the selected native tools accept for the
 deployment mode (D130). B472 records provider minima, documented maxima,
 per-site and per-role counts, failure-domain rules and each feature's resource
 requirements. Lab profiles do not define an allowed-size list or a product
@@ -218,8 +218,7 @@ real hardware; emulated results do not substitute for it.
 IBM's [stretch-mode contract](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=storage-stretch-mode)
 uses two data sites and a third tiebreaker site. The reference profile uses
 IBM's recommended five-MON arrangement: two MONs per data site and one
-tiebreaker. Other IBM-supported MON counts and placements follow the qualified
-release's topology rules; the reference count is not an admission ceiling.
+tiebreaker. Other MON counts and placements are the native tools' to judge; the reference count is not an admission ceiling.
 Data-site CRUSH weights are equal; the stretch rule places four replicas, two
 per data site, with healthy `size=4,min_size=2`. Native degraded stretch may
 temporarily lower `min_size` to 1; recovery must restore 2. This qualified

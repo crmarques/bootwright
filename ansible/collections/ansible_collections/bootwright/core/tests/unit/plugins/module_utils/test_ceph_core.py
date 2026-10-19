@@ -18,6 +18,7 @@ import yaml
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_host_worker, ceph_native, ceph_native_worker, ceph_tunnel_staging
 from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics, native_specializations
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_native_specializations as specs
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 
 PASSWORD = "Xq7-Lm2_Rv9.Tk4-Wz8_Hn3.Pb6-Jd5_"
 EMPTY_DASHBOARD = {"url": "", "certificateSHA256": "", "reachable": False}
@@ -222,26 +223,34 @@ def test_unqualified_or_unbounded_input_never_executes(core_request, change):
         ceph_native.validate(core_request)
 
 
+TAG_ONLY = "registry.example.test/ceph:v9.9.2"
+MALFORMED_DIGEST = "registry.example.test/ceph@sha256:" + "g" * 64
+UNSUPPORTED = [
+    pytest.param({}, "^unsupported-release$", id="native-transport"),
+    pytest.param({"clusterSSHTransport": "verified-tunnel", "image": TAG_ONLY}, "^(request|unsupported-release)$", id="tunnel-tag-only"),
+    pytest.param({"clusterSSHTransport": "verified-tunnel", "image": MALFORMED_DIGEST}, "^(request|unsupported-release)$", id="tunnel-malformed-digest"),
+]
+
+
 @pytest.mark.parametrize("operation", ["apply", "destroy"])
-@pytest.mark.parametrize("change", [
-    {}, {"clusterSSHTransport": "native"},
-])
-def test_an_unsupported_release_refuses_before_any_transport(core_request, operation, change):
+@pytest.mark.parametrize("change,reason", UNSUPPORTED)
+def test_an_unsupported_transport_or_image_refuses_before_any_transport(core_request, operation, change, reason):
     class NoTransport:
         def call(self, *args):
-            pytest.fail("an unsupported release performed a remote operation")
+            pytest.fail("an unsupported transport or image performed a remote operation")
 
         def packages(self, *args):
-            pytest.fail("an unsupported release staged packages")
+            pytest.fail("an unsupported transport or image staged packages")
 
-    core_request.update({"image": "registry.example.test/ceph" + "@sha256:" + "a" * 64, "registry": "registry.example.test"}, **change)
-    with pytest.raises(ceph_native.Refusal, match="^unsupported-release$"):
+    core_request.update(change)
+    with pytest.raises(ceph_native.Refusal, match=reason):
         ceph_core.execute(core_request, operation, "d" * 64, NoTransport())
 
 
-def test_remote_dispatch_cannot_bypass_the_pinned_release(core_request):
-    core_request.update(image="registry.example.test/ceph" + "@sha256:" + "a" * 64, registry="registry.example.test")
-    with pytest.raises(ceph_native.Refusal, match="^unsupported-release$"):
+@pytest.mark.parametrize("change,reason", UNSUPPORTED)
+def test_remote_dispatch_cannot_bypass_the_supported_transport(core_request, change, reason):
+    core_request.update(change)
+    with pytest.raises(ceph_native.Refusal, match=reason):
         ceph_native.dispatch({"request": core_request, "host": "node-1", "phase": "claim", "private": {}})
 
 
@@ -672,13 +681,15 @@ def test_native_reads_require_unchanged_artifacts_before_observation(core_reques
 
 
 def test_artifact_verification_refuses_drift_and_missing_owned_manifest(core_request, monkeypatch):
-    package = core_request["cephadm"]["packageVersion"].encode()
+    decided = tunnel_native.Decided(core_request["cephadm"]["packageVersion"])
     answers = {}
     for name in ("cephadm", "ceph-common"):
-        answers[("/usr/bin/rpm", "-q", "--qf", "%{VERSION}-%{RELEASE}", name)] = (0, package)
+        query = ("/usr/bin/rpm", "-q", "--qf", tunnel_native.PACKAGE_QUERY, name)
+        answers[query] = (0, decided.rpm(list(query)))
         answers[("/usr/bin/rpm", "--verify", "--noscripts", name)] = (0, b"")
     markers = Markers(owned=False)
     native, unused = worker(core_request, answers, markers)
+    native.packages = decided
     monkeypatch.setattr(ceph_native, "read_regular", lambda path, maximum: path.encode())
     identity = ceph_native.Worker.verify_tool(native)
     assert markers.writes == []
@@ -884,8 +895,10 @@ def test_services_preserve_native_mappings_as_separate_yaml_documents(core_reque
         del timeout
         command = argv[argv.index("--format") + 2:]
         if command == ["fsid"]:
+            assert not data
             return 0, json.dumps({"fsid": core_request["fsid"]}).encode()
         if command == ["orch", "ls", "--export"]:
+            assert not data
             return 0, json.dumps(list(observed.values())).encode()
         assert command == ["orch", "apply", "-i", "-"]
         documents = list(yaml.safe_load_all(data))
@@ -903,6 +916,17 @@ def test_services_preserve_native_mappings_as_separate_yaml_documents(core_reque
     assert native.services() == {"changed": True}
     assert len(received) == 5 and all(value.endswith(b"\n") for value in received)
     assert core_request == original
+    documents = [yaml.safe_load(value) for value in received]
+    sent = [value for value in documents if value["service_type"] != "osd"]
+    assert sorted(sent, key=lambda value: value["service_type"]) == sorted(
+        [value for value in original["services"] if value["service_type"] != "osd"], key=lambda value: value["service_type"])
+    children = sorted((value for value in documents if value["service_type"] == "osd"), key=lambda value: value["placement"]["hosts"])
+    expected = []
+    for host in ("node-1", "node-2", "node-3"):
+        suffix = hashlib.sha256(ceph_native.canonical(["data", host])).hexdigest()[:16]
+        expected.append({"service_type": "osd", "service_id": "data-" + suffix, "placement": {"hosts": [host]},
+                         "spec": {"data_devices": {"paths": ["/dev/disk/by-id/virtio-disk" + host[-1]]}}})
+    assert children == expected
 
 
 def test_owned_bootstrap_recovers_interrupted_call_home_acknowledgement(core_request, monkeypatch):

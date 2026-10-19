@@ -21,7 +21,7 @@ type Executable struct {
 
 // ApplyAdmission observes prerequisites outside pure planning, before claims.
 // It must not reopen lifecycle services while holding its snapshot.
-type ApplyAdmission func(context.Context, string, api.Catalog, map[string]ObjectOwnership) error
+type ApplyAdmission func(context.Context, string, api.Catalog, map[string]ObjectOwnership, []reconciliation.Block) error
 
 type Options struct {
 	BeginInvocation BeginInvocation

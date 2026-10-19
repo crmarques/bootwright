@@ -420,5 +420,5 @@ Native maps remain inert during desired-state compilation, except for the
 explicit [NMState composition subset](api/machines.md#nmstate-composition-subset)
 needed to validate Machine declarations. A native renderer composes references
 and Secrets in memory, projects only documented values and validates them
-against its pinned supported release. Upgrading a native dependency must never
+against the selected native release. Upgrading a native dependency must never
 silently reinterpret authored `bootwright.io/v1alpha1` state.

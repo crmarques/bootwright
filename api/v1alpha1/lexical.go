@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 var labelPattern = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
@@ -99,9 +101,9 @@ func ValidLexical(rule, value string) bool {
 		return validImage(value)
 	case "package-repository":
 		u, err := neturl.Parse(value)
-		return len(value) <= 4096 && validHTTPURL(value, true) && err == nil && u.Fragment == "" && u.RawQuery == ""
+		return len(value) <= 2048 && len(strings.TrimRight(value, "/")) <= packageRepositoryBase && validHTTPURL(value, true) && err == nil && u.Fragment == "" && u.RawQuery == "" && plainURLPath(u.Path)
 	case "native-version":
-		return len(value) > 0 && len(value) <= 1024 && strings.IndexFunc(value, func(r rune) bool { return r < 32 || r == 127 }) < 0
+		return len(value) > 0 && len(value) <= 1024 && utf8.ValidString(value) && strings.IndexFunc(value, func(r rune) bool { return unicode.IsControl(r) || r == 0x2028 || r == 0x2029 }) < 0
 	case "image-version":
 		return value != "latest" && (imageTagPattern.MatchString(value) || strings.HasPrefix(strings.ToLower(value), "sha256:") && digestPattern.MatchString(value))
 	case "cli-version":
@@ -126,6 +128,15 @@ func ValidLexical(rule, value string) bool {
 		return userPattern.MatchString(value)
 	}
 	return false
+}
+
+func plainURLPath(decoded string) bool {
+	for _, part := range strings.Split(decoded, "/") {
+		if part == "." || part == ".." {
+			return false
+		}
+	}
+	return !strings.Contains(decoded, "\\")
 }
 
 func validDNS(value string) bool {
@@ -161,6 +172,8 @@ func validHTTPURL(value string, secure bool) bool {
 // maxMirrorURLBytes bounds a download mirror, which a frozen controller
 // request carries.
 const maxMirrorURLBytes = 4096
+
+const packageRepositoryBase = 2048 - len("/repodata/") - 240
 
 // validMirrorURL is the one grammar of a download mirror, shared by admission
 // and the controller stage that fetches beneath it: an HTTPS base URL on the

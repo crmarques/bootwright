@@ -166,3 +166,91 @@ func TestFailedOrPartialMachineWithoutReuseProofUsesOnlyFreeCapacity(t *testing.
 		})
 	}
 }
+
+func TestUnprovedReuseMakesADeficitUnknownNotFailed(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		reusable map[string]Quantities
+		required Quantities
+		statuses map[string]string
+	}{
+		{"runtime-unproved-deficit", map[string]Quantities{"m1": {Disk: 900}}, Quantities{7, 91, 900}, map[string]string{"capacity.memory": Unknown, "capacity.disk": Passed}},
+		{"runtime-unproved-ample", map[string]Quantities{"m1": {Disk: 900}}, Quantities{7, 90, 900}, map[string]string{"capacity.memory": Passed, "capacity.disk": Passed}},
+		{"runtime-unproved-disk-deficit", map[string]Quantities{"m1": {Disk: 900}}, Quantities{7, 90, 1801}, map[string]string{"capacity.memory": Passed, "capacity.disk": Failed}},
+		{"config-unproved-deficit", nil, Quantities{7, 91, 901}, map[string]string{"capacity.memory": Unknown, "capacity.disk": Unknown}},
+		{"config-unproved-ample", nil, Quantities{7, 90, 900}, map[string]string{"capacity.memory": Passed, "capacity.disk": Passed}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			b := fixtureBudget()
+			b.Observer = observeFunc(func(context.Context, Target) (Facts, error) {
+				return Facts{Available: Quantities{8, 100, 1000}, CPUKnown: true, MemoryKnown: true, DiskKnown: true, DiskIdentity: "disk", Reusable: test.reusable, Unproved: map[string]string{"m1": "the runtime process changed during observation"}}, nil
+			})
+			rows, err := b.Check(context.Background(), []Allocation{{Machine: "m1", Host: "host", Pool: "/pool", Allocated: true, Quantities: test.required}}, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, row := range rows {
+				want, named := test.statuses[row.ID]
+				if !named {
+					continue
+				}
+				if row.Status != want {
+					t.Fatalf("%s: %+v", row.ID, row)
+				}
+				if want == Failed && (row.Capacity.Deficit != 1 || row.Next != "increase available capacity or reduce the declared guest budget") {
+					t.Fatalf("proved disk shortfall not refused: %+v", row)
+				}
+				if want == Unknown && (row.Reason != "live provider inventory has not proved Machine m1's reusable allocation: the runtime process changed during observation" || row.Next != "repeat once the Machine's domain and process are stable" || row.Capacity.Deficit != 0) {
+					t.Fatalf("unproved deficit reported as a capacity refusal: %+v", row)
+				}
+			}
+		})
+	}
+}
+
+func TestUnprovedReuseInALaterPoolMakesTheSharedDeficitUnknown(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		shared   bool
+		statuses map[string]string
+	}{
+		{"shared-filesystem", true, map[string]string{"host/capacity.memory": Unknown, "host:/a/capacity.disk": Unknown}},
+		{"separate-filesystems", false, map[string]string{"host/capacity.memory": Unknown, "host:/a/capacity.disk": Passed, "host:/b/capacity.disk": Unknown}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			b := fixtureBudget()
+			b.Observer = observeFunc(func(_ context.Context, target Target) (Facts, error) {
+				facts := Facts{Available: Quantities{8, 100, 1000}, CPUKnown: true, MemoryKnown: true, DiskKnown: true, DiskIdentity: "disk"}
+				if !test.shared {
+					facts.DiskIdentity = "disk" + target.Pool
+				}
+				if target.Pool == "/b" {
+					facts.Unproved = map[string]string{"m1": "the domain definition changed during observation"}
+				}
+				return facts, nil
+			})
+			allocations := []Allocation{{Machine: "m0", Host: "host", Pool: "/a", Quantities: Quantities{3, 50, 50}}, {Machine: "m1", Host: "host", Pool: "/b", Allocated: true, Quantities: Quantities{3, 41, 901}}}
+			rows, err := b.Check(context.Background(), allocations, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen := 0
+			for _, row := range rows {
+				want, named := test.statuses[row.Target+"/"+row.ID]
+				if !named {
+					continue
+				}
+				seen++
+				if row.Status != want {
+					t.Fatalf("%s %s: %+v", row.Target, row.ID, row)
+				}
+				if want == Unknown && (row.Reason != "live provider inventory has not proved Machine m1's reusable allocation: the domain definition changed during observation" || row.Next != "repeat once the Machine's domain and process are stable" || row.Capacity.Deficit != 0) {
+					t.Fatalf("unproved deficit reported as a capacity refusal: %+v", row)
+				}
+			}
+			if seen != len(test.statuses) {
+				t.Fatalf("rows: %+v", rows)
+			}
+		})
+	}
+}

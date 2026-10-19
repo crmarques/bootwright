@@ -883,6 +883,7 @@ type testCapability struct {
 	observeErr   error
 	removals     []string
 	removalErr   error
+	removalErrs  map[string]error
 	consumes     map[string][]string
 	// hold runs at the start of an attempt and released at its end, so a test
 	// can keep blocks in flight and observe exactly which of them overlap.
@@ -936,6 +937,9 @@ func (c *testCapability) Removal(_ context.Context, block reconciliation.Block) 
 	c.record(&c.removals, block.ID)
 	if c.removalErr != nil {
 		return Removal{}, c.removalErr
+	}
+	if err := c.removalErrs[block.ID]; err != nil {
+		return Removal{}, err
 	}
 	return Removal{
 		Description: "remove " + block.Object,

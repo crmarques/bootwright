@@ -113,15 +113,31 @@ Attempt fences precede native effects; original bootstrap configuration and
 administrator keyring enter protected custody before consumption. Lost replies
 allow only exact-result observation and completion of missing receipts. A
 missing result after an attempt, legacy incomplete ownership, changed scope or
-foreign daemon refuses. One version specialization adopts a native bootstrap
+foreign daemon refuses, except Call Home initialization: its
+`orch enable-call-home --raise-automation-warning` only sets values and enables
+a module, so when its attempt matches the current intent, no Call Home
+acceptance or configured-tunnel record exists and the needs-acceptance flag is
+absent, or set with `call_home_agent` disabled, a mutating apply reissues it
+once and then requires the flag and module as the first issue does;
+observation never issues it, and a cleared flag or any acceptance record still
+refuses. One version specialization adopts a native bootstrap
 failure: when the verified host cephadm's bootstrap makes the IBM license call,
 an exit whose private native output is exactly that call's zero-host refusal
 continues the attempted seed in the same apply, after the exact owned-seed proof
 the next apply would run
 ([catalog](../.agents/knowledge/version-specializations.md#ceph-bootstrap-license-call-continues));
 every other bootstrap failure keeps its attempt record and remains a native
-failure. Enrollment starts a separate durable fence; this
-protocol does not yet continue partial host enrollment, services or OSDs.
+failure. Tunnel configuration writes a Call Home initialization fence
+(`tunnel-config-attempt-call_home_initialize.json`) before its
+`orch enable-call-home` and a separate acceptance fence before the Call Home
+acceptance. Enrollment starts a separate durable fence and, once every host is
+enrolled and labelled, runs `orch accept-license --image` for the selected
+image at the end of the enroll step when the image carries the IBM license
+contract and the provider's MON acceptance entry is absent, then requires that
+entry. The enrolling stage continues enrollment and services while every other
+host has no daemons (`ceph_core.py` `apply_tunnel_cluster`; `ceph_native.py`
+`preparation_state`); once a non-bootstrap host carries a daemon, a cluster
+that is not ready refuses `partial-cluster` (parked B659).
 Candidate daemon inventory uses bounded direct filesystem, systemd and Podman
 inspection instead of `cephadm ls`, whose inspected logging initialization can
 create shared native files. It holds and re-proves protected directory and

@@ -257,6 +257,14 @@ func TestCanonicalImageLowercasesOnlyTheDigest(t *testing.T) {
 }
 
 func TestNativeVersionStringsAreBoundedWithoutProviderGrammar(t *testing.T) {
-	lexicalRows(t, "native-version", []string{"latest", "invalid version?", "--option-like", "1:other+build", "sha256:not-a-digest"}, []string{"", "bad\nversion", "bad\x00version", strings.Repeat("a", 1025)})
+	lexicalRows(t, "native-version", []string{"latest", "invalid version?", "--option-like", "1:other+build", "sha256:not-a-digest", "9.9.2.0-é"}, []string{"", "bad\nversion", "bad\x00version", strings.Repeat("a", 1025), "9.9\u00850", "9.9\u009f0", "9.9 0", "9.9 0", "9.9\xff0"})
 	lexicalRows(t, "package-repository", []string{"https://packages.example.test/ceph/other"}, []string{"http://packages.example.test/ceph", "https://user:secret@packages.example.test/ceph", "https://packages.example.test/ceph#fragment"})
+}
+
+func TestPackageRepositoryAdmitsOnlyWhatTheGuestAcquisitionFetches(t *testing.T) {
+	prefix := "https://packages.example.test/"
+	longest := prefix + strings.Repeat("a", 1798-len(prefix))
+	lexicalRows(t, "package-repository", []string{longest, longest + "/", "https://packages.example.test/ceph/.hidden/x", "https://packages.example.test/ceph/x..y"},
+		[]string{longest + "a", prefix + strings.Repeat("a", 2048-len(prefix)), "https://packages.example.test/ceph/../x", "https://packages.example.test/ceph/./x", "https://packages.example.test/ceph/%2e%2e/x",
+			"https://packages.example.test/ceph/%2E/x", "https://packages.example.test/ceph/..", "https://packages.example.test/ceph%5cx"})
 }

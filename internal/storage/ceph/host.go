@@ -180,7 +180,7 @@ func (c HostCapability) WithProofs(proofs DependencyProofs) HostCapability {
 
 func hostDescription(verb reconciliation.Verb, cluster, host string) (string, []string) {
 	if verb == reconciliation.Destroy {
-		return "release Ceph host preparation " + host + " of " + cluster, []string{"release-host " + host + " (packages and image retained)"}
+		return "release Ceph host preparation " + host + " of " + cluster, []string{"release-host " + host + " (packages, image and the Bootwright host runtime and package records retained)"}
 	}
 	return "prepare Ceph host " + host + " of " + cluster, []string{"prepare-host " + host + " packages, image, runtime, route and devices"}
 }

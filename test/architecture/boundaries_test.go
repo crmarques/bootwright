@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -466,12 +467,18 @@ func effectGrants() map[string][]string {
 		"internal/adapterprotocol":              {"io", "os", "os/exec", "syscall"},
 		"internal/controller/privilege":         {"io", "os", "os/exec", "os/signal", "syscall"},
 		"internal/controller/hostlinux":         {"golang.org/x/sys/unix", "io", "os"},
-		"internal/storage/preflightlocal":       {"golang.org/x/sys/unix", "io", "os"},
-		"internal/controller/bundlelocal":       {"io", "net.DNSError", "net.Dialer", "net/http", "os", "syscall"},
-		"internal/controller/ansiblelocal":      {"io", "os", "os/exec", "syscall"},
-		"internal/controller/hostdnf":           {"io", "os", "os/exec", "syscall"},
-		"internal/controller/venvlocal":         {"io", "net.Dialer", "net/http", "os", "os/exec", "syscall"},
-		"internal/controller/stagelocal":        {"golang.org/x/sys/unix", "io", "os", "syscall"},
+		"internal/storage/preflightlocal": {
+			"golang.org/x/sys/unix.CPUSet", "golang.org/x/sys/unix.Close", "golang.org/x/sys/unix.Fstat", "golang.org/x/sys/unix.Fstatfs",
+			"golang.org/x/sys/unix.O_CLOEXEC", "golang.org/x/sys/unix.O_DIRECTORY", "golang.org/x/sys/unix.O_NOFOLLOW",
+			"golang.org/x/sys/unix.O_NONBLOCK", "golang.org/x/sys/unix.O_RDONLY", "golang.org/x/sys/unix.Open", "golang.org/x/sys/unix.Openat",
+			"golang.org/x/sys/unix.SchedGetaffinity", "golang.org/x/sys/unix.S_IFMT", "golang.org/x/sys/unix.S_IFREG",
+			"golang.org/x/sys/unix.Statfs_t", "golang.org/x/sys/unix.Stat_t", "io", "os.File", "os.IsNotExist", "os.NewFile",
+		},
+		"internal/controller/bundlelocal":  {"io", "net.DNSError", "net.Dialer", "net/http", "os", "syscall"},
+		"internal/controller/ansiblelocal": {"io", "os", "os/exec", "syscall"},
+		"internal/controller/hostdnf":      {"io", "os", "os/exec", "syscall"},
+		"internal/controller/venvlocal":    {"io", "net.Dialer", "net/http", "os", "os/exec", "syscall"},
+		"internal/controller/stagelocal":   {"golang.org/x/sys/unix", "io", "os", "syscall"},
 		// The SSH session adapter runs the one pinned client as a child and
 		// hands it the operator's streams and its material descriptors. An
 		// offered key arrives as a descriptor from the invoking account's
@@ -531,8 +538,8 @@ func effectViolations(source sourceFile, held []string) []string {
 			return true
 		}
 		member := selector.Sel.Name
-		if name == "syscall" && slices.Contains(readOnlyAdapters(), source.owner) && (member == "O_WRONLY" || member == "O_RDWR" || member == "O_CREAT" || member == "O_TRUNC" || member == "Write" || member == "Unlink" || member == "Rename") {
-			violations = append(violations, fmt.Sprintf("%s grants input mutation through syscall.%s", source.path, member))
+		if slices.Contains(readOnlyAdapters(), source.owner) && mutatingMember(name, member) {
+			violations = append(violations, fmt.Sprintf("%s grants input mutation through %s.%s", source.path, path.Base(name), member))
 		}
 		if holds(name) || holds(name+"."+member) {
 			return true
@@ -550,6 +557,18 @@ func effectViolations(source sourceFile, held []string) []string {
 	return violations
 }
 
+// mutatingMember reports whether member of the kernel interface name opens a
+// file for writing or mutates one.
+func mutatingMember(name, member string) bool {
+	switch name {
+	case "syscall":
+		return slices.Contains([]string{"O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "Write", "Unlink", "Rename"}, member)
+	case "golang.org/x/sys/unix":
+		return slices.Contains([]string{"O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "Write", "Unlink", "Unlinkat", "Rename", "Renameat"}, member)
+	}
+	return false
+}
+
 // effectImport reports whether importing name reaches the filesystem, a
 // process, the network, the kernel, randomness or unchecked memory.
 func effectImport(name string) bool {
@@ -559,22 +578,25 @@ func effectImport(name string) bool {
 // TestEveryEffectClauseRefusesWhatItGuards proves each clause of
 // effectViolations by a fixture it refuses: (a) math/rand, (b) an effect
 // import, (c) a presentation or unrestricted I/O import, (d) mutation by a
-// read-only adapter, (e) networking, (f) presentation outside the CLI and (g)
-// a member beyond those held. A whole-import grant exempts its import under (b) or (c) and
-// every member; a member grant exempts only that member under (e), (f) or (g)
+// read-only adapter through syscall or golang.org/x/sys/unix, (e) networking,
+// (f) presentation outside the CLI and (g) a member beyond those held. A
+// whole-import grant exempts its import under (b) or (c) and every member; a member grant exempts only that member under (e), (f) or (g)
 // and admits its import under (b), never (c). Nothing exempts (a) or (d).
 func TestEveryEffectClauseRefusesWhatItGuards(t *testing.T) {
 	const (
-		fixture      = "internal/fixture"
-		cli          = "github.com/crmarques/bootwright/internal/cli"
-		random       = "package fixture\nimport (\n\t\"math/rand\"\n\trandv2 \"math/rand/v2\"\n)\nvar _, _ = rand.Intn, randv2.IntN\n"
-		effects      = "package fixture\nimport (\n\t_ \"crypto/rand\"\n\t_ \"golang.org/x/sys/unix\"\n\t_ \"net/http\"\n\t_ \"os\"\n\t_ \"os/exec\"\n\t_ \"syscall\"\n\t_ \"unsafe\"\n)\n"
-		oneEffect    = "package fixture\nimport (\n\t\"os\"\n\t\"os/exec\"\n)\nvar _, _ = os.Getpid, exec.Command\n"
-		presentation = "package fixture\nimport (\n\t_ \"io\"\n\t_ \"github.com/spf13/cobra\"\n\t_ \"" + cli + "\"\n)\n"
-		mutation     = "package inputfs\nimport \"syscall\"\nvar _ = []any{syscall.O_RDONLY, syscall.O_WRONLY, syscall.O_RDWR, syscall.O_CREAT, syscall.O_TRUNC, syscall.Write, syscall.Unlink, syscall.Rename}\n"
-		networking   = "package fixture\nimport \"net\"\nvar _ = []any{net.Dial, net.ParseIP}\n"
-		printing     = "package fixture\nimport \"fmt\"\nvar _ = []any{fmt.Println, fmt.Fprintln, fmt.Scanln, fmt.Fscanf, fmt.Sprintf, fmt.Sscan, fmt.Errorf}\n"
-		members      = "package fixture\nimport \"os\"\nvar _ = []any{os.Getpid, os.Remove}\n"
+		fixture        = "internal/fixture"
+		preflightLocal = "internal/storage/preflightlocal"
+		cli            = "github.com/crmarques/bootwright/internal/cli"
+		random         = "package fixture\nimport (\n\t\"math/rand\"\n\trandv2 \"math/rand/v2\"\n)\nvar _, _ = rand.Intn, randv2.IntN\n"
+		effects        = "package fixture\nimport (\n\t_ \"crypto/rand\"\n\t_ \"golang.org/x/sys/unix\"\n\t_ \"net/http\"\n\t_ \"os\"\n\t_ \"os/exec\"\n\t_ \"syscall\"\n\t_ \"unsafe\"\n)\n"
+		oneEffect      = "package fixture\nimport (\n\t\"os\"\n\t\"os/exec\"\n)\nvar _, _ = os.Getpid, exec.Command\n"
+		presentation   = "package fixture\nimport (\n\t_ \"io\"\n\t_ \"github.com/spf13/cobra\"\n\t_ \"" + cli + "\"\n)\n"
+		mutation       = "package inputfs\nimport \"syscall\"\nvar _ = []any{syscall.O_RDONLY, syscall.O_WRONLY, syscall.O_RDWR, syscall.O_CREAT, syscall.O_TRUNC, syscall.Write, syscall.Unlink, syscall.Rename}\n"
+		unixMutation   = "package preflightlocal\nimport \"golang.org/x/sys/unix\"\nvar _ = []any{unix.O_RDONLY, unix.O_WRONLY, unix.O_RDWR, unix.O_CREAT, unix.O_TRUNC, unix.Write, unix.Unlink, unix.Unlinkat, unix.Rename, unix.Renameat}\n"
+		storageWrite   = "package preflightlocal\nimport \"os\"\nvar _ = []any{os.IsNotExist, os.WriteFile}\n"
+		networking     = "package fixture\nimport \"net\"\nvar _ = []any{net.Dial, net.ParseIP}\n"
+		printing       = "package fixture\nimport \"fmt\"\nvar _ = []any{fmt.Println, fmt.Fprintln, fmt.Scanln, fmt.Fscanf, fmt.Sprintf, fmt.Sscan, fmt.Errorf}\n"
+		members        = "package fixture\nimport \"os\"\nvar _ = []any{os.Getpid, os.Remove}\n"
 	)
 	source := fixture + "/fixture.go"
 	mutating := []string{"O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "Write", "Unlink", "Rename"}
@@ -588,6 +610,12 @@ func TestEveryEffectClauseRefusesWhatItGuards(t *testing.T) {
 			found = append(found, owner+"/fixture.go grants input mutation through syscall."+member)
 		}
 		return found
+	}
+	unixMutating := []string{"O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "Write", "Unlink", "Unlinkat", "Rename", "Renameat"}
+	var unixGrants, unixFound []string
+	for _, member := range unixMutating {
+		unixGrants = append(unixGrants, "golang.org/x/sys/unix."+member)
+		unixFound = append(unixFound, preflightLocal+"/fixture.go grants input mutation through unix."+member)
 	}
 	unauthorized := func(path string, imports ...string) []string {
 		var found []string
@@ -623,12 +651,14 @@ func TestEveryEffectClauseRefusesWhatItGuards(t *testing.T) {
 		{"(c) exempt by no member", fixture, presentation, []string{"io.Reader", "github.com/spf13/cobra.Command", cli + ".Output"}, presentationImports},
 		{"(d) input mutation", readOnlyInput, mutation, append([]string{"syscall"}, mutationGrants...), mutations(readOnlyInput)},
 		{"(d) mutation by the invoking account's opener", invokerFiles, mutation, append([]string{"syscall"}, mutationGrants...), mutations(invokerFiles)},
+		{"(d) mutation through golang.org/x/sys/unix by the storage preflight", preflightLocal, unixMutation, append([]string{"golang.org/x/sys/unix.O_RDONLY"}, unixGrants...), unixFound},
 		{"(d) guards the read-only adapters alone", fixture, mutation, []string{"syscall"}, nil},
 		{"(e) networking", fixture, networking, nil, []string{source + " accesses networking through net.Dial", source + " accesses networking through net.ParseIP"}},
 		{"(e) exempt by its member alone", fixture, networking, []string{"net.ParseIP"}, []string{source + " accesses networking through net.Dial"}},
 		{"(f) presentation outside the CLI", fixture, printing, nil, printed("Println", "Fprintln", "Scanln", "Fscanf")},
 		{"(f) exempt by its member alone", fixture, printing, []string{"fmt.Fprintln"}, printed("Println", "Scanln", "Fscanf")},
 		{"(g) a member beyond those held", fixture, members, []string{"os.Getpid"}, []string{source + " names os.Remove beyond the members its package holds"}},
+		{"(g) the storage preflight names no os member beyond its own", preflightLocal, storageWrite, effectGrants()[preflightLocal], []string{preflightLocal + "/fixture.go names os.WriteFile beyond the members its package holds"}},
 		{"(g) exempt by its member", fixture, members, []string{"os.Getpid", "os.Remove"}, nil},
 		{"(g) exempt by its whole import", fixture, members, []string{"os"}, nil},
 	} {

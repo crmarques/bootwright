@@ -66,7 +66,7 @@ arrays and omission; a binding may supply a qualified reference or secret
 leaf, but cannot silently override authored data. A repeated non-secret native
 name must agree with its resolved reference. The
 [input grammar](api.md#compiler-boundary) still governs duplicate keys, nulls
-and aliases. Omitted native defaults are resolved from the qualified release
+and aliases. Omitted native defaults are resolved from the selected artifacts
 and frozen for execution; observation verifies the effective value. Unknown
 fields and unsupported combinations refuse, with no silently dropped options.
 

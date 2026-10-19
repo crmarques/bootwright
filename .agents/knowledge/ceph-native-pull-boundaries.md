@@ -83,6 +83,27 @@ an independent process session outside the remote supervisor's group. Synthetic
 tests must cover a stalled resolver, prohibited or mixed answers, hostname
 verification, private output and shutdown during resolution.
 
+- Blob and config delivery follow one 301, 302, 303, 307 or 308 hop without
+  credentials: quay.io answers a blob GET with 302, and the
+  [containers/image](https://raw.githubusercontent.com/containers/image/v5.34.3/docker/docker_client.go)
+  client follows all five through
+  [Go's HTTP client](https://pkg.go.dev/net/http#Client.Do). A broker or
+  resolver that admits only 307 and 308 fails every such blob.
+- The native client reads signature-lookaside configuration from
+  `$HOME/.config/containers/registries.d` when that directory exists, and
+  otherwise from `/etc/containers/registries.d`
+  ([registries_d.go:87-105](https://github.com/containers/image/blob/v5.34.3/docker/registries_d.go#L87-L105)).
+  containers-common there maps registry.redhat.io to an HTTPS lookaside. Every
+  copy reads source signatures
+  ([single.go:117](https://github.com/containers/image/blob/v5.34.3/copy/single.go#L117)),
+  and any lookaside response other than 404 or a successful fetch fails the pull
+  ([docker_image_src.go:540-566](https://github.com/containers/image/blob/v5.34.3/docker/docker_image_src.go#L540-L566)).
+  The broker admits only `/v2/` paths, so it gives the native client an empty
+  directory under its private HOME. The client then uses the root default
+  `file:///var/lib/containers/sigstore`
+  ([registries_d.go:195-201](https://github.com/containers/image/blob/v5.34.3/docker/registries_d.go#L195-L201)),
+  where a missing file means no signatures.
+
 ## Bootstrap container-engine initialization
 
 [X79](../../specs/milestones/delivered.md#x79--cephadm-bootstrap-reads-its-podman-version)
@@ -121,5 +142,8 @@ parent independently of child validation.
 [Storage](../../specs/storage.md) owns these credential and diagnostic
 boundaries. [Continuation after a fix](continuation-after-a-fix.md) explains why
 an automation correction can use a new build without setup when the runtime
-lock is unchanged. Each phase's retained attempt budget still applies; a
-rebuild does not replenish an exhausted image-pull journal.
+lock is unchanged. The image pull's budget is per preparation run: each run
+makes up to three bounded attempts, and the retained `pull-attempt-N` records
+only show that an attempt began, for crash diagnosis and recovery. A later
+apply whose image is still absent pulls again within its own three attempts,
+so a pull fix continues after an exhausted journal (B648).

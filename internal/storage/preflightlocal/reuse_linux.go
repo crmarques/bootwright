@@ -34,14 +34,25 @@ type domainStatusXML struct {
 	Domain domainXML `xml:"domain"`
 }
 
+type reuseProofs struct {
+	config        func(string, int64) ([]byte, error)
+	disk, runtime func(preflight.Allocation) (int64, error)
+}
+
 func reusable(ctx context.Context, allocation preflight.Allocation) (preflight.Quantities, error) {
+	return reuseProofs{config: readRootProof, disk: provedDisk, runtime: runtimeMemory}.reusable(ctx, allocation)
+}
+func (proofs reuseProofs) reusable(ctx context.Context, allocation preflight.Allocation) (preflight.Quantities, error) {
 	if !allocation.Allocated {
 		return preflight.Quantities{}, nil
 	}
 	if allocation.Domain == "" || filepath.Base(allocation.Domain) != allocation.Domain || allocation.UUID == "" || len(allocation.Disks) == 0 {
 		return preflight.Quantities{}, errors.New("missing projected domain identity")
 	}
-	config, err := readRootProof("/etc/libvirt/qemu/"+allocation.Domain+".xml", 1<<20)
+	config, err := proofs.config("/etc/libvirt/qemu/"+allocation.Domain+".xml", domainProofBound)
+	if os.IsNotExist(err) {
+		return preflight.Quantities{}, ctx.Err()
+	}
 	if err != nil {
 		return preflight.Quantities{}, err
 	}
@@ -49,30 +60,37 @@ func reusable(ctx context.Context, allocation preflight.Allocation) (preflight.Q
 	if err := xml.Unmarshal(config, &domain); err != nil || !domainMatches(domain, allocation) {
 		return preflight.Quantities{}, errors.New("the domain does not prove its projected identity and disks")
 	}
+	credit, err := proofs.disk(allocation)
+	if err != nil {
+		return preflight.Quantities{}, err
+	}
+	memory, err := proofs.runtime(allocation)
+	quantities, err := reuseCredit(allocation, credit, memory, err)
+	if err != nil {
+		return quantities, err
+	}
+	return quantities, ctx.Err()
+}
+func provedDisk(allocation preflight.Allocation) (int64, error) {
 	_, identity, err := availableDisk(allocation.Pool)
 	if err != nil {
-		return preflight.Quantities{}, err
+		return 0, err
 	}
-	credit, err := diskCredit(allocation.Disks, identity)
-	if err != nil {
-		return preflight.Quantities{}, err
-	}
-	runtime, err := readRootProof("/run/libvirt/qemu/"+allocation.Domain+".xml", 1<<20)
+	return diskCredit(allocation.Disks, identity)
+}
+func runtimeMemory(allocation preflight.Allocation) (int64, error) {
+	runtime, err := readRootProof("/run/libvirt/qemu/"+allocation.Domain+".xml", domainProofBound)
 	if os.IsNotExist(err) {
-		return preflight.Quantities{Disk: min(credit, allocation.Quantities.Disk)}, ctx.Err()
+		return 0, nil
 	}
 	if err != nil {
-		return preflight.Quantities{}, err
+		return 0, err
 	}
 	var status domainStatusXML
 	if err := xml.Unmarshal(runtime, &status); err != nil || status.PID <= 0 || !domainMatches(status.Domain, allocation) {
-		return preflight.Quantities{}, errors.New("the runtime domain identity is unproved")
+		return 0, errors.New("the runtime domain identity is unproved")
 	}
-	memory, err := processCredit(status.PID, allocation)
-	if err != nil {
-		return preflight.Quantities{}, err
-	}
-	return preflight.Quantities{Memory: min(memory, allocation.Quantities.Memory), Disk: min(credit, allocation.Quantities.Disk)}, ctx.Err()
+	return processCredit(status.PID, allocation)
 }
 func domainMatches(domain domainXML, allocation preflight.Allocation) bool {
 	if domain.Name != allocation.Domain || domain.UUID != allocation.UUID {
@@ -244,4 +262,15 @@ func readRootProof(path string, limit int64) ([]byte, error) {
 		return nil, errors.New("domain proof exceeds its byte bound")
 	}
 	return data, nil
+}
+
+type runtimeUnproved struct{ error }
+
+func reuseCredit(allocation preflight.Allocation, disk, memory int64, runtime error) (preflight.Quantities, error) {
+	credit := preflight.Quantities{Disk: min(disk, allocation.Quantities.Disk)}
+	if runtime != nil {
+		return credit, runtimeUnproved{runtime}
+	}
+	credit.Memory = min(memory, allocation.Quantities.Memory)
+	return credit, nil
 }

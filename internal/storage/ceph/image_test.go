@@ -161,7 +161,7 @@ func TestPrepareRefusesMissingAmbiguousOrForeignResolution(t *testing.T) {
 		"unpinned platform": func(e *lifecycle.Execution) {
 			e.ApplyProved[0].Evidence = bytes.Replace(e.ApplyProved[0].Evidence, []byte(PinnedPlatform), []byte("linux/arm64"), 1)
 		},
-		"index-shaped digest": func(e *lifecycle.Execution) {
+		"non-hex resolved digest": func(e *lifecycle.Execution) {
 			e.ApplyProved[0].Evidence = resolvedEvidence(t, e.ApplyProved[0].Block.RequestDigest, "sha256:"+strings.Repeat("g", 64))
 		},
 	} {
@@ -331,5 +331,18 @@ func TestRegistryLoanUsesTheSelectedRegistryWithoutSubstitution(t *testing.T) {
 	}
 	if value["url"] != "registry.example.test/selected" || value["username"] != "cp" || value["password"] != "entitlement-key" {
 		t.Fatal("selected registry material changed")
+	}
+}
+
+func TestAFrozenImageRequestWhoseBaseIsTheRegistryHostDoesNotDecode(t *testing.T) {
+	for base, refused := range map[string]bool{PinnedRegistry: true, PinnedRepository: false} {
+		request := ImageRequest{Version: ImageVersion, Cluster: "example", Controller: "controller", Release: PinnedRelease, Base: base, Tag: PinnedTag, Image: base + ":" + PinnedTag, Registry: PinnedRegistry, RegistryRef: "registry"}
+		canonical, err := request.Canonical()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := DecodeImageRequest(canonical); (err != nil) != refused {
+			t.Fatalf("base %q decoded with err=%v", base, err)
+		}
 	}
 }

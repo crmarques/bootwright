@@ -19,8 +19,33 @@ In
 [ceph_native.py](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py),
 the dashboard phase waits for publication before scheduling and checks every
 intended manager's refreshed deployment ports before completing. A bounded
-repair retains the exact manager/container plan and an intent for each target;
-losing a scheduling response never authorizes another targeted redeploy.
+repair retains the exact manager/container plan and an intent for each target.
+It writes an intent only inside the transport and cache holds, just before the
+native call, so a hold refusal leaves no intent.
+
+A target that still runs its recorded container without the port is requested
+again at most once per apply, after the publication proof, with standbys and
+then unattempted targets first. The orchestrator's
+[daemon_action](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py)
+(lines 3285-3357) only records and persists a scheduled action, and
+[schedule_daemon_action](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/inventory.py)
+(lines 2129-2145) merges a second redeploy into the pending one. A repeated
+request therefore restarts that manager at most once.
+
+The repair never asks cephadm to redeploy the active manager. For the active
+manager,
+[_daemon_action](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py)
+(lines 3214-3216) fails over first. The monitor's
+[drop_active](https://github.com/ceph/ceph/blob/v20.2.1/src/mon/MgrMonitor.cc)
+(line 930) clears the services map, so that redeploy can be prepared without
+the dashboard port. When a target is the active manager, the repair runs
+`ceph mgr fail` on it and waits for another active manager. It then proves
+publication and re-reads the containers before redeploying the former active,
+now a standby. It fails over only once every other missing manager is seen
+replaced: the serve loop's
+[_check_daemons](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/serve.py)
+(lines 1696-1708) runs a scheduled redeploy later, on whichever manager is then
+active, so a standby still pending at failover would become the active target.
 The [storage contract](../../specs/storage.md#bootstrap-identity-and-continuation)
 owns that behavior. The
 [dashboard regressions](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_ceph_dashboard.py)

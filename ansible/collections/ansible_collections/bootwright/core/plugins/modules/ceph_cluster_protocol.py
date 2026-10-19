@@ -25,7 +25,7 @@ options:
       package-timeout, package-platform, package-host, foreign-cluster, native-command, native-timeout, native-output, unknown, transport,
       remote-refusal, adapter-exception, cache-unproved, dashboard-identity, dashboard-drift, dashboard-policy, dashboard-verify, pool-identity,
       client-quiescence-unqualified, native-option-undeclared, call-home-unqualified, call-home-drift, config-drift, partial-cluster,
-      not-removed, cluster-unavailable, device]
+      not-removed, cluster-unavailable, device, dashboard-manager]
   detail:
     description: Non-secret refusal cause, a refusal name or an exception type and code site.
     type: str

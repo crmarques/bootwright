@@ -50,6 +50,7 @@ type Facts struct {
 	DiskIdentity                     string
 	Reason                           string
 	Reusable                         map[string]Quantities
+	Unproved                         map[string]string
 }
 type Observer interface {
 	Observe(context.Context, Target) (Facts, error)

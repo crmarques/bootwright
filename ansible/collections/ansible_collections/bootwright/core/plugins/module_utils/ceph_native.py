@@ -39,6 +39,7 @@ MAX_INPUT = 2 * 1024 * 1024
 MAX_OUTPUT = 1024 * 1024
 COMMAND_SESSION = True
 ROOT = "/var/lib/bootwright/ceph"
+PACKAGE_QUERY = "%{EPOCHNUM} %{VERSION} %{RELEASE} %{ARCH}"
 ROOT_UID = 0
 # Symbolic links one public root-only source may pass through: the crypto-policy back-ends sshd includes are one.
 SOURCE_LINKS = 8
@@ -976,6 +977,7 @@ class Worker:
         from ansible_collections.bootwright.core.plugins.module_utils import native_specializations
         self.selection = native_specializations.Selection({"host-cephadm": self.verified_tool, "image-cephadm": self.image_payload})
         self._tool_bytes = None
+        self.packages = None
 
     def native_coordinate(self):
         """The selected image and package, then as many applied specialization ids as the public bound leaves room for."""
@@ -1241,13 +1243,33 @@ class Worker:
             return
         require("call_home_agent" in enabled and "call_home_agent" not in selected["force_disabled_modules"], "call-home-drift")
 
+    def decided_package(self, name):
+        """The installed identity the host's completed package decision froze for one Ceph root, as rpm prints PACKAGE_QUERY."""
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime as runtime
+        packages = self.packages or Markers(self.request, root=runtime.PACKAGE_ROOT)
+        decision, complete = packages.read("decision.json"), packages.read("complete.json")
+        try:
+            plan = dict(decision["plan"])
+            planned = plan.pop("digest")
+            require(decision["version"] == "ceph-package-decision-v1" and digest(planned) and hashlib.sha256(canonical(plan)).hexdigest() == planned
+                    and complete == {"version": "ceph-package-complete-v1", "binding": decision["binding"], "planDigest": planned}, "artifact")
+            roots = [root for root in plan["roots"] if root["key"] == "ceph" and root["package"]["name"] == name]
+            require(len(roots) == 1 and roots[0]["requested"] == self.request["cephadm"]["packageVersion"], "artifact")
+            package = roots[0]["package"]
+            fields = (package["epoch"], package["version"], package["release"], package["architecture"])
+            require(type(fields[0]) is int and fields[0] >= 0
+                    and all(isinstance(value, str) and re.fullmatch(r"[!-~]{1,128}", value) for value in fields[1:]), "artifact")
+        except (TypeError, KeyError, AttributeError, ValueError):
+            raise Refusal("artifact") from None
+        return "{} {} {} {}".format(*fields).encode("ascii")
+
     def verify_tool(self):
         content = read_regular(self.tool, maximum=16 * 1024 * 1024)
-        installed = self.command(["/usr/bin/rpm", "-q", "--qf", "%{VERSION}-%{RELEASE}", "cephadm"], json_result=False)
-        require(installed.decode("ascii") == self.request["cephadm"]["packageVersion"], "artifact")
+        installed = self.command(["/usr/bin/rpm", "-q", "--qf", PACKAGE_QUERY, "cephadm"], json_result=False)
+        require(installed == self.decided_package("cephadm"), "artifact")
         self.command(["/usr/bin/rpm", "--verify", "--noscripts", "cephadm"], json_result=False)
-        clients = self.command(["/usr/bin/rpm", "-q", "--qf", "%{VERSION}-%{RELEASE}", "ceph-common"], json_result=False)
-        require(clients.decode("ascii") == self.request["cephadm"]["packageVersion"], "artifact")
+        clients = self.command(["/usr/bin/rpm", "-q", "--qf", PACKAGE_QUERY, "ceph-common"], json_result=False)
+        require(clients == self.decided_package("ceph-common"), "artifact")
         self.command(["/usr/bin/rpm", "--verify", "--noscripts", "ceph-common"], json_result=False)
         binaries = {path: hashlib.sha256(read_regular(path, maximum=64 * 1024 * 1024)).hexdigest()
                     for path in ("/usr/bin/ceph", "/usr/bin/ceph-authtool", "/usr/bin/rbd", "/usr/bin/rados")}
@@ -2171,6 +2193,21 @@ class Worker:
         require(isinstance(value, str) and value.lower() in ("true", "false"), "call-home-drift")
         return value.lower() == "true"
 
+    def call_home_reissuable(self, needed):
+        """An attempted enable-call-home only sets values and enables a module: before any acceptance, a missing result repeats it."""
+        if needed is False or any(self.markers.read(name) is not None for name in (
+                "tunnel-config-attempt-call_home.json", "tunnel-config-complete-call_home.json", "call-home-accepted.json", "tunnel-configured.json")):
+            return False
+        if needed is None:
+            return True
+        try:
+            self.call_home_state()
+        except Refusal as error:
+            if type(error) is not Refusal or str(error) != "call-home-drift":
+                raise
+            return True
+        return False
+
     def initialize_call_home(self, mutate):
         """Finish the native seed's missing Call Home initialization without re-bootstrapping."""
         if not self.call_home_applicable():
@@ -2199,6 +2236,11 @@ class Worker:
             require(needed, "call-home-drift")
             changed = True
         else:
+            if mutate and self.call_home_reissuable(needed):
+                self.manager_retry(self.tunnel_effect, "orch", "enable-call-home", "--raise-automation-warning", json_result=False)
+                needed = self.call_home_acceptance()
+                require(needed, "call-home-drift")
+                changed = True
             require(needed is not None, "partial-cluster")
             acceptance = dict(self.configuration_intent(), step="call_home")
             require(needed or canonical(self.markers.read("tunnel-config-attempt-call_home.json")) == canonical(acceptance), "call-home-drift")
@@ -3056,8 +3098,8 @@ class Worker:
     def verify_client_generator(self):
         self.verify_tool()
         path = "/usr/bin/ceph-authtool"
-        owned = self.command(["/usr/bin/rpm", "-qf", "--qf", "%{NAME} %{VERSION}-%{RELEASE}", path], json_result=False)
-        require(owned == ("ceph-common " + self.request["cephadm"]["packageVersion"]).encode("ascii"), "artifact")
+        owned = self.command(["/usr/bin/rpm", "-qf", "--qf", "%{NAME} " + PACKAGE_QUERY, path], json_result=False)
+        require(owned == b"ceph-common " + self.decided_package("ceph-common"), "artifact")
         content = read_regular(path, maximum=64 * 1024 * 1024)
         identity = {"path": path, "packageVersion": self.request["cephadm"]["packageVersion"], "sha256": hashlib.sha256(content).hexdigest()}
         self.markers.write("client-generator.json", identity)
@@ -3204,19 +3246,24 @@ class Worker:
             self.pause(DASHBOARD_INTERVAL)
 
     def dashboard_schedule_redeploy(self, record, count, deadline):
+        """Schedule once every declared MGR runs its recorded container; a container that left the record schedules nothing."""
         while True:
             self.dashboard_wait_publication(deadline)
             running = self.manager_retry(self.manager_containers)
-            require(len(running) == count and all(container and up and container in record["containers"]
-                                                  for container, up, unused_port in running.values()), "dashboard-identity")
-            if self.dashboard_published():
+            if any(container and container not in record["containers"] for container, unused_up, unused_port in running.values()):
+                return False
+            ready = len(running) == count and all(container and up for container, up, unused_port in running.values())
+            if ready and self.dashboard_published():
                 require(self.clock() < deadline, "native-timeout")
                 self.tunnel_effect("orch", "redeploy", "mgr", json_result=False)
-                return
+                return True
             self.pause(DASHBOARD_INTERVAL)
 
     def dashboard_repair_ports(self, scope, running, count, deadline):
-        """One frozen repair pass; ambiguous attempted targets are observed, never resubmitted."""
+        """One frozen repair pass. A target still running its recorded container without the port is requested at most once per
+        call, standbys and then unattempted targets first: cephadm coalesces a pending redeploy, so a repeat restarts it at most once.
+        The active MGR is failed over first, since cephadm would prepare its redeploy from the services map its failover clears, and
+        only once every other missing MGR is seen replaced: cephadm runs a scheduled redeploy later, on whichever MGR is then active."""
         name = "dashboard-port-repair.json"
         record = self.markers.read(name)
         if record is None:
@@ -3232,8 +3279,8 @@ class Worker:
                 and len(set(record["containers"].values())) == count
                 and isinstance(record["missing"], list) and record["missing"]
                 and all(isinstance(daemon, str) and daemon in record["containers"] for daemon in record["missing"])
-                and len(set(record["missing"])) == len(record["missing"]), "dashboard-identity")
-        changed = False
+                and len(set(record["missing"])) == len(record["missing"]), "dashboard-manager")
+        changed, submitted, failed_over = False, set(), set()
         while True:
             intents = {}
             for daemon in record["missing"]:
@@ -3241,29 +3288,49 @@ class Worker:
                           "daemon": daemon, "container": record["containers"][daemon]}
                 filename = "dashboard-port-" + hashlib.sha256(daemon.encode()).hexdigest() + ".json"
                 attempted = self.markers.read(filename)
-                require(attempted is None or canonical(attempted) == canonical(target), "dashboard-identity")
+                require(attempted is None or canonical(attempted) == canonical(target), "dashboard-manager")
                 intents[daemon] = (filename, target, attempted)
             self.dashboard_wait_publication(deadline)
             try:
                 running = self.manager_containers()
             except ManagerRefusal:
                 running = {}
-            require(set(running) <= set(record["containers"]), "dashboard-identity")
+            require(set(running) <= set(record["containers"]), "dashboard-manager")
             if not self.dashboard_published():
                 self.pause(DASHBOARD_INTERVAL)
                 continue
             if len(running) == count and all(container and up for container, up, unused_port in running.values()):
                 missing = {daemon for daemon, row in running.items() if not row[2]}
-                require(missing <= set(record["missing"]), "dashboard-identity")
-                require(all(running[daemon][0] == record["containers"][daemon] for daemon in missing), "dashboard-identity")
+                require(missing <= set(record["missing"]), "dashboard-manager")
+                require(all(running[daemon][0] == record["containers"][daemon] for daemon in missing), "dashboard-manager")
                 if not missing:
                     return changed
-                target = next((daemon for daemon in sorted(missing) if intents[daemon][2] is None), None)
-                if target is not None:
-                    filename, intent, unused_attempt = intents[target]
+                manager = self.ceph("mgr", "dump")
+                require(isinstance(manager, dict) and isinstance(manager.get("active_name"), str)
+                        and type(manager.get("active_gid")) is int, "native-output")
+                active = manager["active_name"]
+                targets = sorted(missing - submitted, key=lambda daemon: (daemon == active, intents[daemon][2] is not None, daemon))
+                if targets and (targets[0] != active or missing == {active}):
+                    target = targets[0]
                     require(self.clock() < deadline, "native-timeout")
-                    self.markers.write(filename, intent)
-                    self.tunnel_effect("orch", "daemon", "redeploy", "mgr." + target, json_result=False)
+                    if target == active:
+                        require(count >= 2, "dashboard-manager")
+                        standbys = manager.get("standbys")
+                        require(isinstance(standbys, list) and all(isinstance(item, dict) for item in standbys), "native-output")
+                        if target not in failed_over and any(item.get("name") in record["containers"] for item in standbys):
+                            failed_over.add(target)
+                            self.ceph("mgr", "fail", target, json_result=False)
+                            self.manager_wait(previous=manager["active_gid"])
+                            changed = True
+                            continue
+                        self.pause(DASHBOARD_INTERVAL)
+                        continue
+                    filename, intent, unused_attempt = intents[target]
+                    submitted.add(target)
+                    proof = self.transport_hold() if self.request["clusterSSHTransport"] == "verified-tunnel" else contextlib.nullcontext()
+                    with proof, self.cache_hold():
+                        self.markers.write(filename, intent)
+                        self.ceph("orch", "daemon", "redeploy", "mgr." + target, json_result=False)
                     changed = True
                     continue
             require(self.clock() < deadline, "native-timeout")
@@ -3282,15 +3349,15 @@ class Worker:
             record = {"version": "ceph-dashboard-redeploy-v1", "scope": scope,
                       "containers": sorted(container for container, unused_up, unused_port in running.values())}
             self.markers.write(name, record)
-            self.dashboard_schedule_redeploy(record, count, deadline)
+            require(self.dashboard_schedule_redeploy(record, count, deadline), "dashboard-manager")
             changed = True
         require(isinstance(record, dict) and set(record) == {"version", "scope", "containers"} and record["version"] == "ceph-dashboard-redeploy-v1"
                 and canonical(record["scope"]) == canonical(scope) and isinstance(record["containers"], list)
                 and len(record["containers"]) == count
                 and all(isinstance(container, str) and re.fullmatch(r"[0-9a-f]{12,64}", container) for container in record["containers"])
-                and len(set(record["containers"])) == count, "dashboard-identity")
+                and len(set(record["containers"])) == count, "dashboard-manager")
         completed = self.markers.read(done)
-        require(completed is None or canonical(completed) == canonical(record), "dashboard-identity")
+        require(completed is None or canonical(completed) == canonical(record), "dashboard-manager")
         reissued = changed
         while True:
             try:
@@ -3307,9 +3374,9 @@ class Worker:
             unchanged = running and all(container in record["containers"] for container, unused_up, unused_port in running.values())
             if completed is None and not reissued and unchanged:
                 # A lost response before the scheduling left every MGR unreplaced;
-                # a redeploy restarts them and is safe to schedule again.
-                self.dashboard_schedule_redeploy(record, count, deadline)
-                reissued = changed = True
+                # a redeploy restarts them and is safe to schedule again. One replaced meanwhile shows the lost one running.
+                scheduled = self.dashboard_schedule_redeploy(record, count, deadline)
+                reissued, changed = True, changed or scheduled
             require(self.clock() < deadline, "native-timeout")
             self.pause(DASHBOARD_INTERVAL)
         self.markers.write(done, record)

@@ -402,3 +402,25 @@ func TestProvedHostReadsOnlyTheOriginalPreparationOfThatMachine(t *testing.T) {
 		})
 	}
 }
+
+func TestHostReleaseImpactNamesTheRetainedRuntimeAndPackageRecords(t *testing.T) {
+	catalog := pinnedCatalog(t, nil)
+	input := lifecycle.PlanInput{Verb: reconciliation.Destroy, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+	plan, err := NewHost(&recordingRunner{}).Plan(context.Background(), input)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	if len(plan.Definitions) == 0 {
+		t.Fatal("no host release was planned")
+	}
+	for _, definition := range plan.Definitions {
+		if len(definition.Impacts) != 1 || !strings.HasPrefix(definition.Impacts[0], "release-host ") {
+			t.Fatalf("%s impacts %q", definition.ID, definition.Impacts)
+		}
+		for _, want := range []string{"packages", "image", "host runtime and package records retained"} {
+			if !strings.Contains(definition.Impacts[0], want) {
+				t.Fatalf("%s impact %q does not name %q", definition.ID, definition.Impacts[0], want)
+			}
+		}
+	}
+}

@@ -42,7 +42,7 @@ func DecodeImageRequest(data []byte) (ImageRequest, error) {
 		return ImageRequest{}, err
 	}
 	validSelection := storage.NativeVersion(r.Tag) && r.Image == r.Base+":"+r.Tag || r.Tag == "" && strings.HasPrefix(r.Image, r.Base+"@") && ValidImageDigest(strings.TrimPrefix(r.Image, r.Base+"@"))
-	if r.Cluster == "" || r.Controller == "" || r.RegistryRef == "" || !(r.Base == r.Registry || strings.HasPrefix(r.Base, r.Registry+"/")) || !storage.NativeVersion(r.Release) || r.Base == "" || !validSelection {
+	if r.Cluster == "" || r.Controller == "" || r.RegistryRef == "" || !strings.HasPrefix(r.Base, r.Registry+"/") || !storage.NativeVersion(r.Release) || r.Base == "" || !validSelection {
 		return ImageRequest{}, failure("lifecycle.state", "the frozen Ceph image request has inconsistent coordinates", "")
 	}
 	return r, nil

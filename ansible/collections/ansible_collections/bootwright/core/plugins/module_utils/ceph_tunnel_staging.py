@@ -60,7 +60,7 @@ def bindings(request):
     tool = request.get("cephadm")
     require(isinstance(tool, dict) and set(tool) == {"path", "packageVersion"})
     require(tool["path"] in ("/usr/sbin/cephadm", "/usr/bin/cephadm"))
-    require(isinstance(tool["packageVersion"], str) and 0 < len(tool["packageVersion"].encode()) <= 512 and "\x00" not in tool["packageVersion"])
+    require(isinstance(tool["packageVersion"], str) and 0 < len(tool["packageVersion"].encode()) <= 1024 and "\x00" not in tool["packageVersion"])
     hosts = request.get("hosts")
     require(isinstance(hosts, list) and 1 <= len(hosts) <= 256)
     result, names, machines, addresses, stems = [], set(), set(), set(), set()

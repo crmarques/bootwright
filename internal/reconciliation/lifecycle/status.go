@@ -377,7 +377,7 @@ func (s Service) continuation(ctx context.Context, view View, operation operatio
 		}
 		return []string{command}
 	}
-	if err := s.recordedRefusal(view, operation, s.proveSameBlocks(ctx, view, operation, frozen)); err != nil {
+	if err := s.recordedRefusal(view, operation, s.proveSameBlocks(ctx, view, operation, frozen, states)); err != nil {
 		return refusalExit(view, err)
 	}
 	if s.setupGates(ctx, view) {

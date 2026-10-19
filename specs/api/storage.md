@@ -46,7 +46,8 @@ Optional `ceph.nfsGanesha.packageVersion` selects the NFS-Ganesha RPM without
 admitting NFS orchestration. These strings are nonempty, bounded to 1024 UTF-8
 bytes and control-free; native tools interpret their contents.
 `ceph.packageRepository` optionally selects an HTTPS RPM repository without
-userinfo or fragment. Omission uses
+userinfo or fragment, of at most 1798 bytes without trailing slashes, so
+every metadata path the host fetches stays within 2048 bytes. Omission uses
 `https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64` as a
 source default, not a release catalog. Independent publisher signatures remain
 required for its selected RPMs.
@@ -79,9 +80,9 @@ this field grants no exception to host-key verification. The three-node
 example selects `verified-tunnel` explicitly; its protected mounts and staged
 bootstrap remain subject to
 [release qualification](../storage-coverage.md#release-qualification).
-Core request v5, image request v2 and package decision v2 refuse continuation
-of older operations; finish or remove old
-contexts with their original applying build.
+Core request v6, image request v2 and package request v2 refuse continuation
+of older operations; finish or remove old contexts with their original
+applying build.
 
 The existing native-section config map admits explicit fixed-memory and
 pool-default pairs for the minimal core configuration:

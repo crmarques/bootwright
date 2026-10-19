@@ -91,7 +91,10 @@ def dashboard(tmp_path, monkeypatch):
     monkeypatch.setattr(ceph_native.os, "fchown", lambda fd, uid, gid: ceph_native.require(uid == gid == 0))
     state = SimpleNamespace(calls=[], modules=[], config={}, keys=[], users={}, unloaded=0, generated=0, redeploys=0, scheduled=False, polls=0,
                             settle=0, creates=0, create_code=0, lose_create=False, crypt=True, imports=0, containers=["a1" * 6, "b2" * 6],
-                            publication_delay=0, published=True, last_publication=False, ports={}, repairs=[], repaired={})
+                            publication_delay=0, published=True, last_publication=False, ports={}, repairs=[], repaired={},
+                            active="node-2.ghijkl", gid=1, ignored=set(), ignored_calls=[], events=[],
+                            managers=2, deferred=0, pending=[], unavailable=0, orchestrating=0, served=True, starting=set(),
+                            standbys=True, promotes=True)
     markers = Markers(request)
 
     def manager_rows():
@@ -100,9 +103,28 @@ def dashboard(tmp_path, monkeypatch):
         else:
             containers = list(state.containers)
         return [{"daemon_type": "mgr", "daemon_id": host + "." + suffix, "hostname": host,
-                 "container_id": state.repaired.get(host + "." + suffix, container), "status": 1,
+                 "container_id": state.repaired.get(host + "." + suffix, container),
+                 # orchestrator/_interface.py:1270-1275 DaemonDescriptionStatus: running is 1, starting is 2.
+                 "status": 2 if host + "." + suffix in state.starting else 1,
                  "ports": state.ports.get(host + "." + suffix, [8443, 8765])}
-                for host, suffix, container in zip(("node-1", "node-2"), ("abcdef", "ghijkl"), containers)]
+                for host, suffix, container in zip(("node-1", "node-2")[:state.managers], ("abcdef", "ghijkl"), containers)]
+
+    def redeploy(daemon):
+        if daemon == state.active:
+            # cephadm module.py:3214-3216 fails the active MGR over itself and prepares the redeploy from an empty services map.
+            pytest.fail("redeploy of the active manager " + daemon)
+        state.events.append(("redeployed", daemon))
+        assert daemon not in state.repairs
+        state.repairs.append(daemon)
+        state.repaired[daemon] = ("e5" if daemon.startswith("node-1.") else "f6") * 6
+        state.ports[daemon] = [8443, 8765]
+
+    def execute_pending():
+        # serve.py:1696-1708 runs a scheduled redeploy in a later serve-loop pass, on whichever MGR is active by then.
+        due = [daemon for daemon, poll in state.pending if poll <= state.polls]
+        state.pending = [(daemon, poll) for daemon, poll in state.pending if poll > state.polls]
+        for daemon in due:
+            redeploy(daemon)
 
     def run(argv, data=b"", timeout=60):
         del timeout
@@ -150,6 +172,7 @@ def dashboard(tmp_path, monkeypatch):
             return 0, b"Self-signed certificate created\n"
         elif args == ["orch", "ps", "--daemon_type", "mgr", "--refresh"]:
             state.polls += 1
+            execute_pending()
             value = manager_rows()
         elif args == ["orch", "redeploy", "mgr"]:
             assert state.last_publication, "redeploy raced dashboard endpoint publication"
@@ -163,15 +186,44 @@ def dashboard(tmp_path, monkeypatch):
             assert state.last_publication
             attempt = "dashboard-port-" + hashlib.sha256(daemon.encode()).hexdigest() + ".json"
             assert attempt in markers.records
-            assert daemon not in state.repairs
-            state.repairs.append(daemon)
-            state.repaired[daemon] = ("e5" if daemon.startswith("node-1.") else "f6") * 6
-            state.ports[daemon] = [8443, 8765]
+            assert state.unavailable <= 0 and state.served, "redeploy before the new active orchestrator serves"
+            state.events.append(("repair", daemon))
+            if daemon in state.ignored:
+                state.ignored_calls.append(daemon)
+                assert len(state.ignored_calls) <= 4, "repeated repair submissions"
+                return 0, b"Scheduled daemon redeploy"
+            if state.deferred:
+                state.pending.append((daemon, state.polls + state.deferred))
+            else:
+                redeploy(daemon)
             return 0, b"Scheduled daemon redeploy"
         elif args == ["mgr", "services"]:
             state.last_publication = state.published and state.publication_delay <= 0
             state.publication_delay -= 1
             value = {"dashboard": URL} if state.last_publication else {}
+            state.events.append(("services", state.last_publication))
+        elif args == ["mgr", "dump"] and state.unavailable > 0:
+            # MgrMonitor.cc:924-929 drop_active empties the active name and gid and marks the map unavailable until a standby takes over.
+            state.unavailable -= 1
+            value = {"available": False, "active_name": "", "active_gid": 0, "standbys": []}
+        elif args == ["mgr", "dump"]:
+            value = {"available": True, "active_name": state.active, "active_gid": state.gid,
+                     "standbys": [{"name": name} for name in ("node-1.abcdef", "node-2.ghijkl") if name != state.active and state.standbys]}
+        elif args[:2] == ["mgr", "fail"]:
+            # MgrMonitor.cc:930 drop_active clears the services map until the new active publishes its endpoints again.
+            assert args[2:] == [state.active]
+            state.events.append(("fail", state.active))
+            if state.promotes:
+                state.active = "node-1.abcdef" if state.active == "node-2.ghijkl" else "node-2.ghijkl"
+            state.gid += 1
+            state.publication_delay = 2
+            state.unavailable, state.orchestrating, state.served = 2, 1, False
+            return 0, b""
+        elif args == ["orch", "status"]:
+            state.served = state.orchestrating <= 0
+            state.orchestrating -= 1
+            value = {"available": state.served, "backend": "cephadm"}
+            state.events.append(("orch-status", value["available"]))
         elif args == ["dashboard", "ac-user-show"]:
             value = sorted(state.users)
         elif args == ["dashboard", "ac-user-show", "admin"]:
@@ -225,7 +277,8 @@ def commands(world):
 
 def mutations(world):
     reads = (["fsid"], ["mgr", "module", "ls"], ["config", "dump"], ["config-key", "ls"], ["config-key", "get", "mgr/dashboard/crt"],
-             ["orch", "ps", "--daemon_type", "mgr", "--refresh"], ["mgr", "services"], ["dashboard", "ac-user-show"], ["dashboard", "ac-user-show", "admin"])
+             ["orch", "ps", "--daemon_type", "mgr", "--refresh"], ["mgr", "services"], ["dashboard", "ac-user-show"], ["dashboard", "ac-user-show", "admin"],
+             ["mgr", "dump"], ["orch", "status"])
     return [args for args in commands(world) if [a for a in args if a not in ("--format", "json")] not in reads]
 
 
@@ -333,6 +386,69 @@ def test_an_unscheduled_redeploy_after_a_lost_response_is_scheduled_again(dashbo
         dashboard.native.dashboard()
     assert lost and dashboard.state.redeploys == 0 and "dashboard-redeploy.json" in dashboard.markers.records
     dashboard.native.dashboard()
+    assert dashboard.state.redeploys == 1 and "dashboard-redeployed.json" in dashboard.markers.records
+
+
+def test_a_lost_redeploy_response_tolerates_replacement_during_the_publication_wait(dashboard):
+    effect = dashboard.native.tunnel_effect
+    lost = []
+
+    def lose_reply(*arguments, **options):
+        result = effect(*arguments, **options)
+        if arguments == ("orch", "redeploy", "mgr") and not lost:
+            # cephadm accepted the scheduling and has not run it yet; only its reply is lost.
+            lost.append(arguments)
+            dashboard.state.settle = 10 ** 6
+            raise ceph_native.Refusal("native-timeout")
+        return result
+
+    dashboard.native.tunnel_effect = lose_reply
+    with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):
+        dashboard.native.dashboard()
+    assert lost and dashboard.state.redeploys == 1 and "dashboard-redeployed.json" not in dashboard.markers.records
+    pause = dashboard.native.pause
+    replacing = [MANAGER_ONE, MANAGER_TWO]
+
+    def replace(seconds):
+        pause(seconds)
+        if replacing:
+            # serve.py:1696-1708 runs the accepted redeploy one daemon per serve-loop pass.
+            daemon = replacing.pop(0)
+            dashboard.state.repaired[daemon] = ("e5" if daemon == MANAGER_ONE else "f6") * 6
+            dashboard.state.events.append(("replaced", daemon))
+
+    dashboard.state.publication_delay = 2
+    dashboard.native.pause = replace
+    dashboard.native.dashboard()
+    assert replacing == [] and ("replaced", MANAGER_TWO) in dashboard.state.events
+    assert dashboard.state.redeploys == 1 and "dashboard-redeployed.json" in dashboard.markers.records
+    assert dashboard.state.creates == 1
+
+
+@pytest.mark.parametrize("absence", ["starting", "missing"])
+def test_a_manager_not_running_during_the_initial_schedule_wait_is_waited_out(dashboard, absence):
+    def restart(name, unused_value):
+        if name == "dashboard-redeploy.json":
+            if absence == "starting":
+                dashboard.state.starting = {MANAGER_ONE}
+            else:
+                # orch ps lists fewer MGRs than declared for one poll: a missing row is waited out like a starting one.
+                dashboard.state.managers = 1
+
+    pause = dashboard.native.pause
+
+    def started(seconds):
+        pause(seconds)
+        dashboard.state.starting = set()
+        dashboard.state.managers = 2
+
+    dashboard.markers.after = restart
+    dashboard.native.pause = started
+    dashboard.native.dashboard()
+    calls = [args[2:] if args[:2] == ["--format", "json"] else args for args in commands(dashboard)]
+    scheduled = calls.index(["orch", "redeploy", "mgr"])
+    assert dashboard.clock.pauses == [ceph_native.DASHBOARD_INTERVAL] * 3
+    assert calls[:scheduled].count(["orch", "ps", "--daemon_type", "mgr", "--refresh"]) == 3
     assert dashboard.state.redeploys == 1 and "dashboard-redeployed.json" in dashboard.markers.records
 
 
@@ -661,7 +777,7 @@ def test_completed_legacy_redeploy_requires_ports_on_every_manager_before_accept
 
 def test_a_replacement_without_the_dashboard_port_cannot_spend_a_second_repair_pass(dashboard):
     dashboard.state.ports[MANAGER_ONE] = [8765]
-    effect = dashboard.native.tunnel_effect
+    effect = dashboard.native.ceph
 
     def still_missing(*args, **options):
         result = effect(*args, **options)
@@ -669,28 +785,28 @@ def test_a_replacement_without_the_dashboard_port_cannot_spend_a_second_repair_p
             dashboard.state.ports[MANAGER_ONE] = [8765]
         return result
 
-    dashboard.native.tunnel_effect = still_missing
-    with pytest.raises(ceph_native.Refusal, match="^dashboard-identity$"):
+    dashboard.native.ceph = still_missing
+    with pytest.raises(ceph_native.Refusal, match="^dashboard-manager$"):
         dashboard.native.dashboard()
     assert dashboard.state.repairs == [MANAGER_ONE]
     assert "dashboard-redeployed.json" not in dashboard.markers.records
-    with pytest.raises(ceph_native.Refusal, match="^dashboard-identity$"):
+    with pytest.raises(ceph_native.Refusal, match="^dashboard-manager$"):
         dashboard.native.dashboard()
     assert dashboard.state.repairs == [MANAGER_ONE]
 
 
 @pytest.mark.parametrize("after_effect", [False, True])
-def test_lost_repair_response_observes_before_mutation_and_never_resubmits_attempt(dashboard, after_effect):
+def test_lost_repair_response_observes_before_mutation_and_resubmits_once_per_apply(dashboard, after_effect):
     dashboard.state.ports = {MANAGER_ONE: [8765], MANAGER_TWO: [8765]}
     if after_effect:
-        effect = dashboard.native.tunnel_effect
+        effect = dashboard.native.ceph
 
         def lose(*args, **options):
             result = effect(*args, **options)
             if args == ("orch", "daemon", "redeploy", "mgr." + MANAGER_ONE):
                 raise ceph_native.Refusal("native-timeout")
             return result
-        dashboard.native.tunnel_effect = lose
+        dashboard.native.ceph = lose
     else:
         def interrupted(name, unused_value):
             if name == repair_attempt(MANAGER_ONE):
@@ -699,18 +815,90 @@ def test_lost_repair_response_observes_before_mutation_and_never_resubmits_attem
     with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):
         dashboard.native.dashboard()
     dashboard.markers.after = lambda *args: None
+    dashboard.clock.value = 0
     if after_effect:
-        dashboard.native.tunnel_effect = effect
+        dashboard.native.ceph = effect
         dashboard.native.dashboard()
         assert dashboard.state.repairs == [MANAGER_ONE, MANAGER_TWO]
-        assert "dashboard-redeployed.json" in dashboard.markers.records
     else:
-        dashboard.clock.value = 0
-        with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):
-            dashboard.native.dashboard()
-        # The unsubmitted peer is repaired, but the ambiguous first intent is never reissued.
-        assert dashboard.state.repairs == [MANAGER_TWO]
-        assert "dashboard-redeployed.json" not in dashboard.markers.records
+        assert repair_attempt(MANAGER_ONE) in dashboard.markers.records and dashboard.state.repairs == []
+        dashboard.native.dashboard()
+        # The standby's intent left unchanged by the earlier apply is requested once more before the active MGR fails over.
+        assert dashboard.state.repairs == [MANAGER_ONE, MANAGER_TWO]
+        assert dashboard.state.events.index(("redeployed", MANAGER_ONE)) < dashboard.state.events.index(("fail", MANAGER_TWO))
+    assert "dashboard-redeployed.json" in dashboard.markers.records
+
+
+@pytest.mark.parametrize("hold", ["transport_hold", "cache_hold"])
+def test_a_hold_refusal_on_a_repair_leaves_no_intent_and_the_next_apply_submits_it(dashboard, hold):
+    dashboard.request["clusterSSHTransport"] = "verified-tunnel"
+    dashboard.state.ports[MANAGER_ONE] = [8765]
+    refused = []
+
+    @contextlib.contextmanager
+    def refusing():
+        if dashboard.state.redeploys and not refused:
+            refused.append(hold)
+            raise ceph_native.Refusal("native-tunnel-unproved")
+        yield
+
+    dashboard.native.transport_hold = contextlib.nullcontext
+    dashboard.native.cache_hold = contextlib.nullcontext
+    setattr(dashboard.native, hold, refusing)
+    dashboard.native.verify_transport_bundle = lambda: None
+    dashboard.native.verify_tunnel_configuration = lambda: None
+    dashboard.native.daemons = lambda: [{"name": "mgr." + MANAGER_ONE}]
+    dashboard.native.verify_manager_mounts = lambda daemons: None
+    with pytest.raises(ceph_native.Refusal, match="^native-tunnel-unproved$"):
+        dashboard.native.dashboard()
+    assert refused == [hold] and dashboard.state.redeploys == 1
+    assert repair_attempt(MANAGER_ONE) not in dashboard.markers.records and dashboard.state.repairs == []
+    dashboard.native.dashboard()
+    assert dashboard.state.repairs == [MANAGER_ONE] and "dashboard-redeployed.json" in dashboard.markers.records
+
+
+def test_an_acknowledged_repair_that_never_replaces_the_manager_is_submitted_once_per_apply(dashboard):
+    dashboard.state.ports[MANAGER_ONE] = [8765]
+    dashboard.state.ignored = {MANAGER_ONE}
+    with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):
+        dashboard.native.dashboard()
+    assert dashboard.state.ignored_calls == [MANAGER_ONE]
+    dashboard.clock.value = 0
+    with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):
+        dashboard.native.dashboard()
+    assert dashboard.state.ignored_calls == [MANAGER_ONE, MANAGER_ONE]
+    assert "dashboard-redeployed.json" not in dashboard.markers.records
+
+
+def test_repairing_the_active_manager_fails_over_and_waits_for_publication_first(dashboard):
+    dashboard.state.active = MANAGER_ONE
+    dashboard.state.ports = {MANAGER_ONE: [8765], MANAGER_TWO: [8765]}
+    dashboard.state.deferred = 2
+    dashboard.native.dashboard()
+    events = dashboard.state.events
+    failed = events.index(("fail", MANAGER_ONE))
+    repaired = events.index(("repair", MANAGER_ONE))
+    assert events.index(("repair", MANAGER_TWO)) < events.index(("redeployed", MANAGER_TWO)) < failed < repaired
+    assert repaired < events.index(("redeployed", MANAGER_ONE))
+    assert ("orch-status", False) in events[failed:repaired] and ("orch-status", True) in events[failed:repaired]
+    assert ("services", False) in events[failed:repaired] and ("services", True) in events[failed:repaired]
+    assert events.count(("fail", MANAGER_ONE)) == 1 and dashboard.state.active == MANAGER_TWO
+    assert dashboard.state.repairs == [MANAGER_TWO, MANAGER_ONE]
+    assert dashboard.state.ports == {MANAGER_ONE: [8443, 8765], MANAGER_TWO: [8443, 8765]}
+    assert "dashboard-redeployed.json" in dashboard.markers.records
+
+
+def test_a_single_declared_manager_missing_the_port_refuses_without_failing_it_over(dashboard):
+    dashboard.request["services"][1]["placement"]["count"] = 1
+    dashboard.state.managers = 1
+    dashboard.state.active = MANAGER_ONE
+    dashboard.state.ports = {MANAGER_ONE: [8765]}
+    with pytest.raises(ceph_native.Refusal, match="^dashboard-manager$"):
+        dashboard.native.dashboard()
+    assert dashboard.state.redeploys == 1 and "dashboard-port-repair.json" in dashboard.markers.records
+    assert not any(event[0] == "fail" for event in dashboard.state.events)
+    assert not any(args[:2] == ["mgr", "fail"] for args in mutations(dashboard))
+    assert repair_attempt(MANAGER_ONE) not in dashboard.markers.records and dashboard.state.repairs == []
 
 
 def test_interruption_after_plan_before_any_intent_allows_only_frozen_targets(dashboard):
@@ -735,7 +923,7 @@ def test_malformed_peer_attempt_blocks_all_repair_effects(dashboard):
         if name == "dashboard-port-repair.json":
             dashboard.markers.records[repair_attempt(MANAGER_TWO)] = {"version": "foreign"}
     dashboard.markers.after = corrupt_peer
-    with pytest.raises(ceph_native.Refusal, match="^dashboard-identity$"):
+    with pytest.raises(ceph_native.Refusal, match="^dashboard-manager$"):
         dashboard.native.dashboard()
     assert dashboard.state.repairs == []
 
@@ -765,9 +953,24 @@ def test_repair_plan_scope_and_exact_targets_refuse_drift_before_effects(dashboa
     if drift == "scope":
         with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):
             dashboard.native.dashboard()
-    with pytest.raises(ceph_native.Refusal, match="^dashboard-identity$"):
+    with pytest.raises(ceph_native.Refusal, match="^dashboard-manager$"):
         dashboard.native.dashboard()
     assert dashboard.state.repairs == []
+
+
+@pytest.mark.parametrize("drift", ["scheduled", "plan", "completion"])
+def test_manager_drift_from_the_recorded_redeploy_refuses_as_manager_drift(dashboard, drift):
+    if drift == "scheduled":
+        def replaced(name, unused_value):
+            if name == "dashboard-redeploy.json":
+                dashboard.state.containers = ["e5" * 6, "f6" * 6]
+        dashboard.markers.after = replaced
+    else:
+        dashboard.native.dashboard()
+        name = "dashboard-redeploy.json" if drift == "plan" else "dashboard-redeployed.json"
+        dashboard.markers.records[name]["containers"] = ["e5" * 6, "f6" * 6, "a1" * 6][:2 if drift == "completion" else 3]
+    with pytest.raises(ceph_native.Refusal, match="^dashboard-manager$"):
+        dashboard.native.dashboard()
 
 
 @pytest.mark.parametrize("ports", [[True], ["8443"], [-1], [65536], None])
@@ -824,3 +1027,22 @@ def test_incomplete_declared_manager_set_cannot_create_initial_attempt(dashboard
         dashboard.native.dashboard()
     assert "dashboard-redeploy.json" not in dashboard.markers.records
     assert dashboard.state.redeploys == 0
+
+
+def test_the_active_manager_is_not_failed_over_while_no_standby_is_registered(dashboard):
+    dashboard.state.active = MANAGER_ONE
+    dashboard.state.ports = {MANAGER_ONE: [8765]}
+    dashboard.state.standbys = False
+    with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):
+        dashboard.native.dashboard()
+    assert not any(event[0] == "fail" for event in dashboard.state.events)
+    assert not any(args[:2] == ["mgr", "fail"] for args in mutations(dashboard))
+
+
+def test_the_active_manager_is_failed_over_at_most_once_per_apply(dashboard):
+    dashboard.state.active = MANAGER_ONE
+    dashboard.state.ports = {MANAGER_ONE: [8765]}
+    dashboard.state.promotes = False
+    with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):
+        dashboard.native.dashboard()
+    assert dashboard.state.events.count(("fail", MANAGER_ONE)) == 1

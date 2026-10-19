@@ -313,6 +313,14 @@ def test_staging_accepts_authored_package_coordinate_without_catalog(stage_reque
     assert "--skip-prepare-host" not in staging.bootstrap_argv(stage_request, scratch(stage_request), chosen())
 
 
+def test_staging_admits_the_same_package_coordinate_bound_as_the_cluster_request(stage_request):
+    stage_request["cephadm"]["packageVersion"] = "a" * 1024
+    staging.stage_intent(stage_request)
+    stage_request["cephadm"]["packageVersion"] = "a" * 1025
+    with pytest.raises(staging.StageRefusal, match="^native-tunnel-stage-unproved$"):
+        staging.stage_intent(stage_request)
+
+
 def license_call(request, image=None, command=" orch accept-license --image "):
     """cephadm's CephContainer run of the bootstrap's cli() helper, as build_run_cmd joins it (20.2.2-349 container_types.py:160-166)."""
     image = image or request["image"]

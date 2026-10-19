@@ -121,6 +121,14 @@ func TestAnotherBuildRefusesToContinueABlockItWouldFreezeDifferently(t *testing.
 		{"plan fails", reconciliation.Apply, failedApply, func(h *harness) {
 			h.capability.planErr = failure("lifecycle.state", "the planner refused", "")
 		}, unplannable + "the planner refused", take},
+		{"moved content digest and a frozen request this build cannot read", reconciliation.Apply, failedApply, func(h *harness) {
+			h.capability.definitions[0].ContentDigest = strings.Repeat("8", 64)
+			h.capability.removalErr = failure("lifecycle.state", "the frozen request has an unsupported version", "")
+		}, differently, install},
+		{"plan fails and a frozen request this build cannot read", reconciliation.Apply, failedApply, func(h *harness) {
+			h.capability.planErr = failure("lifecycle.state", "the planner refused", "")
+			h.capability.removalErr = failure("lifecycle.state", "the frozen request has an unsupported version", "")
+		}, unplannable + "the planner refused", install},
 		{"removal consumes more", reconciliation.Destroy, unknownRemoval, func(h *harness) {
 			h.capability.consumes = map[string][]string{"artifact-server-lab": {reconciliation.AuthorizationDataLoss}}
 		}, differently, install},
@@ -427,4 +435,72 @@ func TestAnotherBuildResolvesAnUnknownApplyThenRetriesIt(t *testing.T) {
 func differingBlock(frozen, fresh reconciliation.Plan) (string, bool) {
 	change, differs := reconciliation.Compare(frozen, fresh).First()
 	return change.Block, differs
+}
+
+// The take-back a refusal offers is the one bootwright destroy would plan: over
+// the blocks the apply started, so a pending block this build cannot read does
+// not withdraw it.
+func TestTheTakeBackIsOfferedWhenOnlyAnUnstartedBlockIsUnreadable(t *testing.T) {
+	const take = "take back what this operation owns under this executable with bootwright destroy --context lab, or install bootwright devel (abcdef1), which registered it"
+	const differently = "this executable would freeze the block first differently from the plan this operation froze"
+	second := definition("second")
+	second.Dependencies = []string{"first"}
+	h := newPlannedHarness(t, []reconciliation.BlockDefinition{definition("first"), second})
+	failedApply(t, h)
+	h.service.automation = testAutomation{digest: strings.Repeat("9", 64)}
+	h.capability.definitions[0].ContentDigest = strings.Repeat("8", 64)
+	h.capability.removalErrs = map[string]error{"second": failure("lifecycle.state", "the frozen request has an unsupported version", "")}
+	refusedUnchanged(t, h, reconciliation.Apply, differently, take)
+}
+
+// canTakeBack mirrors supersede: an empty owned set is offered only to an apply
+// whose own state admits it started nothing, and a removal is judged over what
+// it has not yet proved gone.
+func TestTheTakeBackMirrorsTheSubsetDestroyWouldPlan(t *testing.T) {
+	h := newHarness(t, "first")
+	applied, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{definition("first")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	removal, err := reconciliation.NewPlan(reconciliation.Destroy, []reconciliation.BlockDefinition{definition("first")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name       string
+		verb       reconciliation.Verb
+		state      reconciliation.OperationState
+		block      reconciliation.BlockState
+		unreadable bool
+		want       bool
+	}{
+		{"a failed apply that started its block", reconciliation.Apply, reconciliation.OperationFailed, reconciliation.BlockFailed, false, true},
+		{"a failed apply that records no started block", reconciliation.Apply, reconciliation.OperationFailed, reconciliation.BlockPending, false, false},
+		{"an unknown apply that records no started block", reconciliation.Apply, reconciliation.OperationUnknown, reconciliation.BlockPending, false, false},
+		{"a running apply that started nothing", reconciliation.Apply, reconciliation.OperationRunning, reconciliation.BlockPending, false, true},
+		{"a paused apply that started nothing", reconciliation.Apply, reconciliation.OperationPaused, reconciliation.BlockPending, false, true},
+		{"a completed apply", reconciliation.Apply, reconciliation.OperationDone, reconciliation.BlockDone, false, false},
+		{"a failed apply whose started block is unreadable", reconciliation.Apply, reconciliation.OperationFailed, reconciliation.BlockFailed, true, false},
+		{"a failed removal with a block left", reconciliation.Destroy, reconciliation.OperationFailed, reconciliation.BlockFailed, false, true},
+		{"a failed removal with nothing left", reconciliation.Destroy, reconciliation.OperationFailed, reconciliation.BlockDone, false, false},
+		{"a failed removal whose block left is unreadable", reconciliation.Destroy, reconciliation.OperationFailed, reconciliation.BlockFailed, true, false},
+		{"an unknown removal", reconciliation.Destroy, reconciliation.OperationUnknown, reconciliation.BlockFailed, false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h.capability.removalErrs = nil
+			if tc.unreadable {
+				h.capability.removalErrs = map[string]error{"first": failure("lifecycle.state", "the frozen request has an unsupported version", "")}
+			}
+			frozen := applied
+			if tc.verb == reconciliation.Destroy {
+				frozen = removal
+			}
+			operation := operationstore.Operation{Verb: tc.verb, State: tc.state}
+			states := map[string]reconciliation.BlockState{"first": tc.block}
+			if got := h.service.canTakeBack(context.Background(), operation, frozen, states); got != tc.want {
+				t.Fatalf("canTakeBack = %t, want %t", got, tc.want)
+			}
+		})
+	}
 }

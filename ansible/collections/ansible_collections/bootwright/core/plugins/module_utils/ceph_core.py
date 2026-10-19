@@ -42,6 +42,7 @@ HOST_REASONS = (
 CLUSTER_REASONS = (
     "unsupported-release", "runtime-profile", "device-identity", "cache-unproved", "dashboard-identity", "dashboard-drift", "dashboard-policy",
     "dashboard-verify", "pool-identity", "client-quiescence-unqualified", "native-option-undeclared", "call-home-unqualified",
+    "dashboard-manager",
     "request", "artifact", "ownership", "evidence", "material", "packages", "package-artifact", "package-drift", "package-journal", "package-license",
     "package-limit", "package-timeout", "package-platform", "package-host", "call-home-drift", "config-drift", "partial-cluster", "not-ready",
     "not-removed", "cluster-unavailable", "device", "foreign-cluster", "native-command", "native-timeout", "native-output", "unknown", "transport",

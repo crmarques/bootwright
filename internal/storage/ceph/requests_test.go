@@ -267,3 +267,33 @@ func TestDisabledCallHomePlansAndChangesOnlyItsOwnField(t *testing.T) {
 		}
 	}
 }
+
+func TestAnImageBaseThatIsOnlyTheRegistryHostRefusesAtPlanning(t *testing.T) {
+	for base, refused := range map[string]bool{"registry.example.test": true, "registry.example.test/ceph": false} {
+		objects := poolRequestCatalog(3, 3).Objects()
+		for i, object := range objects {
+			switch object.Kind() {
+			case api.Entitlement:
+				objects[i] = object.WithSpec(object.Spec().WithPath(api.StringValue("registry.example.test"), "registry", "url"))
+			case api.StorageCluster:
+				objects[i] = object.WithSpec(object.Spec().WithPath(api.StringValue(base), "ceph", "image", "base"))
+			}
+		}
+		catalog := api.NewCatalog(objects)
+		cluster, _ := catalog.Find(api.StorageCluster, "example")
+		_, err := baseRequest(catalog, cluster, "synthetic")
+		if !refused {
+			if err != nil {
+				t.Fatalf("base %q refused: %v", base, err)
+			}
+			continue
+		}
+		d := diagnostics.Of(err)
+		if len(d) != 1 || d[0].Code != "lifecycle.unsupported" {
+			t.Fatalf("base %q planned as %+v", base, d)
+		}
+		if !strings.Contains(d[0].Remediation, "ceph.image.base") || strings.Contains(d[0].Remediation, "registry.url") || strings.Contains(d[0].Message, "does not match") {
+			t.Fatalf("base %q refusal does not direct the operator to ceph.image.base: %+v", base, d[0])
+		}
+	}
+}

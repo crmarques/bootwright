@@ -83,6 +83,19 @@ func TestAClusterRefusalReachesTheOperatorWithItsRemedy(t *testing.T) {
 	}
 }
 
+func TestADashboardManagerRefusalNamesTheManagerContainerNotTheAdminUser(t *testing.T) {
+	r := coreRequest()
+	e := withMaterial(executionFor(t, r), r)
+	runner := &refusingRunner{reason: "dashboard-manager"}
+	observation, err := New(api.StorageCluster, runner).Observe(context.Background(), e)
+	d := diagnostics.Of(err)
+	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+		d[0].Message != "a Ceph MGR's container or dashboard port no longer matches the deployment this operation recorded" ||
+		!strings.Contains(d[0].Remediation, "ceph orch ps --daemon_type mgr") || strings.Contains(d[0].Message, "admin") {
+		t.Fatalf("a dashboard-manager refusal reached the operator as %+v %+v", observation, d)
+	}
+}
+
 func TestACallHomeUnqualifiedRefusalReachesTheOperatorAsUnsupportedWithItsRemedy(t *testing.T) {
 	r := coreRequest()
 	e := withMaterial(executionFor(t, r), r)

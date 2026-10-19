@@ -5,8 +5,10 @@ from __future__ import annotations
 import base64
 import io
 import json
+import os
 import socket
 import ssl
+import stat
 import subprocess
 import sys
 import threading
@@ -101,8 +103,8 @@ def test_registry_authentication_is_owned_by_broker_and_never_forwarded():
 
 @pytest.mark.parametrize("request_class,status", [
     (kind, status) for kind in ("registry", "manifest", "blob")
-    for status in (301, 302, 307, 308, 401, 403, 404, 429, 500, 502, 503)
-    if kind != "blob" or status not in (307, 308)
+    for status in (301, 302, 303, 307, 308, 401, 403, 404, 429, 500, 502, 503)
+    if kind != "blob" or status not in (301, 302, 303, 307, 308)
 ])
 def test_final_http_failure_retains_only_bounded_class_and_status(request_class, status):
     rows = [Response(status, b"private upstream body", {"Location": "https://foreign.example.test/?token=" + TOKEN})]
@@ -144,6 +146,73 @@ def test_wrong_token_realm_receives_neither_basic_nor_bearer(realm):
     with pytest.raises(broker.BrokerError):
         up.fetch("GET", "/v2/", lambda unused: pytest.fail("unproved response"))
     assert len(connections.calls) == 1 and "Authorization" not in connections.calls[0][3]
+
+
+EXPIRED = CHALLENGE + ',error="invalid_token",error_description="The access token expired"'
+
+
+def test_expired_bearer_challenge_reauthenticates_once():
+    """RFC 6750 section 3 lets a Bearer challenge carry error attributes for an expired token."""
+    up, connections = upstream([
+        Response(401, headers={"WWW-Authenticate": EXPIRED}), Response(body=json.dumps({"token": TOKEN}).encode()),
+        Response(body=b"manifest", headers={"Content-Type": "application/json"}),
+    ])
+    up.bearer = "Bearer stale-registry-token"
+    output = io.BytesIO()
+    value = boundary(up)
+    up.fetch("GET", "/v2/vendor/ceph/manifests/sha256:" + DIGEST, lambda response: value.response(output, response, "GET", 1024, "manifest"))
+    basic = "Basic " + base64.b64encode(b"operator:" + PASSWORD.encode()).decode()
+    assert len(connections.calls) == 3
+    assert connections.calls[0][3]["Authorization"] == "Bearer stale-registry-token"
+    assert connections.calls[1][3]["Authorization"] == basic and connections.calls[1][2].startswith("/token?")
+    assert connections.calls[2][3]["Authorization"] == "Bearer " + TOKEN
+    assert [call for call in connections.calls if call[3].get("Authorization") == basic] == [connections.calls[1]]
+    assert output.getvalue().endswith(b"manifest") and value.failure_cause == ""
+
+
+@pytest.mark.parametrize("challenge", [
+    EXPIRED.replace("repository:vendor/ceph:pull", "repository:vendor/other:pull"),
+    EXPIRED.replace("https://registry.example.test/token", "https://foreign.example.test/token"),
+    EXPIRED + ',unknown="value"',
+    EXPIRED + ',error="invalid_token"',
+    CHALLENGE + ',error_uri="https://foreign.example.test/",error_uri="https://foreign.example.test/"',
+    'Bearer error="invalid_token",service="registry",scope="repository:vendor/ceph:pull"',
+])
+def test_challenge_error_attributes_do_not_relax_scope_or_realm(challenge):
+    up, connections = upstream([Response(401, headers={"WWW-Authenticate": challenge})])
+    up.bearer = "Bearer stale-registry-token"
+    with pytest.raises(broker.BrokerError):
+        up.fetch("GET", "/v2/", lambda unused: pytest.fail("unproved response"))
+    assert len(connections.calls) == 1
+
+
+def test_token_endpoint_refusal_is_retained_as_status_only(tmp_path):
+    private_body = b"private token refusal for operator " + PASSWORD.encode()
+    up, connections = upstream([Response(401, headers={"WWW-Authenticate": EXPIRED}), Response(401, private_body)])
+    request = {"registry": REGISTRY, "image": REPOSITORY + "@sha256:" + DIGEST}
+
+    def command(argv, timeout, limit):
+        result = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                timeout=timeout, check=True, env={"PATH": "/usr/bin:/bin", "LANG": "C"})
+        assert len(result.stdout) + len(result.stderr) <= limit
+        return result.stdout
+
+    with broker.Broker(str(tmp_path), request, json.dumps(MATERIAL), time.monotonic() + 60, command, upstream=up) as service:
+        port = int(service.environment["HTTPS_PROXY"].rsplit(":", 1)[1])
+        connection = socket.create_connection(("127.0.0.1", port), timeout=5)
+        connection.sendall(("CONNECT " + REGISTRY + ":443 HTTP/1.1\r\n\r\n").encode())
+        assert connection.recv(4096) == b"HTTP/1.1 200 Connection Established\r\n\r\n"
+        context = ssl.create_default_context(cafile=service.cert_directory + "/ca.crt")
+        context.load_cert_chain(service.cert_directory + "/client.cert", service.cert_directory + "/client.key")
+        with context.wrap_socket(connection, server_hostname=REGISTRY) as secured:
+            secured.sendall(("GET /v2/vendor/ceph/manifests/sha256:" + DIGEST + " HTTP/1.1\r\nHost: " + REGISTRY + "\r\n\r\n").encode())
+            with secured.makefile("rb") as stream:
+                assert stream.read() == b""
+    cause = service.failure_cause
+    assert cause == "broker observed token upstream HTTP 401"
+    basic = base64.b64encode(b"operator:" + PASSWORD.encode()).decode()
+    assert all(secret not in cause for secret in (PASSWORD, basic, "private token refusal", "operator", "invalid_token"))
+    assert len(connections.calls) == 2
 
 
 def test_redirect_is_not_followed_and_private_error_is_redacted():
@@ -216,6 +285,7 @@ def test_native_tls_client_uses_exact_reference_without_receiving_credentials(tm
 
     with broker.Broker(str(tmp_path), request, json.dumps(MATERIAL), time.monotonic() + 60, command, upstream=up) as service:
         environment = service.environment
+        assert sorted(os.listdir(os.path.join(environment["HOME"], ".config", "containers", "registries.d"))) == []
         assert PASSWORD not in str(environment) and TOKEN not in str(environment)
         assert environment["NO_PROXY"] == environment["no_proxy"] == ""
         port = int(environment["HTTPS_PROXY"].rsplit(":", 1)[1])
@@ -253,6 +323,22 @@ def test_native_tls_client_uses_exact_reference_without_receiving_credentials(tm
     assert not service.thread.is_alive() and all(not worker.is_alive() for worker in service.workers)
     assert all(PASSWORD.encode() not in path.read_bytes() for path in tmp_path.iterdir() if path.is_file())
     assert len(calls) == 1
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_native_environment_has_empty_lookaside_configuration(tmp_path):
+    """containers/image v5.34.3 docker/registries_d.go:93-105 prefers $HOME/.config/containers/registries.d when it exists."""
+    up, unused = upstream([])
+    request = {"registry": REGISTRY, "image": REPOSITORY + "@sha256:" + DIGEST}
+    with broker.Broker(str(tmp_path), request, json.dumps(MATERIAL), time.monotonic() + 60,
+                       lambda *args: pytest.fail("certificate effect"), upstream=up, tls=object()) as service:
+        home = service.environment["HOME"]
+        for relative in (".config", ".config/containers", ".config/containers/registries.d"):
+            info = os.stat(os.path.join(home, relative), follow_symlinks=False)
+            assert stat.S_ISDIR(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o700
+        assert os.listdir(os.path.join(home, ".config", "containers", "registries.d")) == []
+        assert os.listdir(os.path.join(home, ".config", "containers")) == ["registries.d"]
+    assert not os.path.exists(home)
     assert list(tmp_path.iterdir()) == []
 
 
@@ -335,7 +421,7 @@ def delivery_setup(monkeypatch, status=200, method="GET", redirect=307):
 
 
 @pytest.mark.parametrize("method", ["GET", "HEAD"])
-@pytest.mark.parametrize("redirect", [307, 308])
+@pytest.mark.parametrize("redirect", [301, 302, 303, 307, 308])
 def test_blob_delivery_is_one_hop_without_registry_credentials(monkeypatch, method, redirect):
     up, registry, delivered, calls, resolved = delivery_setup(monkeypatch, method=method, redirect=redirect)
     output = io.BytesIO()
@@ -504,6 +590,134 @@ def test_numeric_connection_pins_address_and_preserves_tls_name(monkeypatch):
     assert calls == [("8.8.8.8", 443), "handshake"]
 
 
+def test_connect_splits_budget_so_a_black_holed_first_address_falls_back(monkeypatch):
+    now, timeouts, attempts = [100.0], [], []
+
+    class Clock:
+        @staticmethod
+        def monotonic():
+            return now[0]
+
+    class Socket:
+        def __init__(self, family):
+            self.family, self.timeout = family, None
+
+        def settimeout(self, value):
+            self.timeout = value
+            timeouts.append((self.family, value))
+
+        def connect(self, address):
+            attempts.append(address)
+            if self.family == socket.AF_INET6:
+                now[0] += self.timeout
+                raise socket.timeout("black-holed")
+
+        def do_handshake(self):
+            attempts.append("handshake")
+
+        def close(self):
+            pass
+
+    class TLS:
+        def wrap_socket(self, sock, *, server_hostname, do_handshake_on_connect):
+            return sock
+
+    addresses = [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2001:db8::1", 443, 0, 0)),
+                 (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.1", 443))]
+    monkeypatch.setattr(broker, "time", Clock)
+    monkeypatch.setattr(socket, "socket", lambda family, kind, protocol: Socket(family))
+    connection = broker.RegistryConnection(REGISTRY, addresses=addresses, deadline=130.0, port=443, timeout=30)
+    connection._context = TLS()
+    connection.connect()
+    assert timeouts[0][0] == socket.AF_INET6 and timeouts[0][1] <= 15
+    assert attempts[:2] == [("2001:db8::1", 443, 0, 0), ("192.0.2.1", 443)] and attempts[-1] == "handshake"
+    assert all(row[1] > 0 for row in timeouts)
+
+
+def test_connect_split_bounds_a_stalled_handshake_so_the_next_address_is_tried(monkeypatch):
+    now, handshakes, attempts = [100.0], [], []
+
+    class Clock:
+        @staticmethod
+        def monotonic():
+            return now[0]
+
+    class Socket:
+        def __init__(self, family):
+            self.family, self.timeout = family, None
+
+        def settimeout(self, value):
+            self.timeout = value
+
+        def connect(self, address):
+            attempts.append(address)
+
+        def do_handshake(self):
+            handshakes.append((self.family, self.timeout))
+            if self.family == socket.AF_INET6:
+                now[0] += self.timeout
+                raise socket.timeout("stalled TLS server")
+
+        def close(self):
+            pass
+
+    class TLS:
+        def wrap_socket(self, sock, *, server_hostname, do_handshake_on_connect):
+            return sock
+
+    addresses = [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2001:db8::1", 443, 0, 0)),
+                 (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.1", 443))]
+    monkeypatch.setattr(broker, "time", Clock)
+    monkeypatch.setattr(socket, "socket", lambda family, kind, protocol: Socket(family))
+    connection = broker.RegistryConnection(REGISTRY, addresses=addresses, deadline=130.0, port=443, timeout=30)
+    connection._context = TLS()
+    connection.connect()
+    assert handshakes[0][0] == socket.AF_INET6 and handshakes[0][1] <= 15
+    assert attempts == [("2001:db8::1", 443, 0, 0), ("192.0.2.1", 443)]
+    assert [row[0] for row in handshakes] == [socket.AF_INET6, socket.AF_INET] and connection.sock.family == socket.AF_INET
+
+
+@pytest.mark.parametrize("black_holed", [0, 3])
+def test_connect_share_bounds_only_connect_and_handshake(monkeypatch, black_holed):
+    now = [100.0]
+
+    class Clock:
+        @staticmethod
+        def monotonic():
+            return now[0]
+
+    class Socket:
+        timeout = None
+
+        def settimeout(self, value):
+            self.timeout = value
+
+        def connect(self, address):
+            if address[1] < black_holed:
+                now[0] += self.timeout
+                raise socket.timeout("black-holed")
+            now[0] += 0.5
+
+        def do_handshake(self):
+            now[0] += 0.5
+
+        def close(self):
+            pass
+
+    class TLS:
+        def wrap_socket(self, sock, *, server_hostname, do_handshake_on_connect):
+            return sock
+
+    addresses = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.1", port)) for port in range(8)]
+    monkeypatch.setattr(broker, "time", Clock)
+    monkeypatch.setattr(socket, "socket", lambda family, kind, protocol: Socket())
+    connection = broker.RegistryConnection(REGISTRY, addresses=addresses, deadline=200.0, port=443, timeout=30)
+    connection._context = TLS()
+    connection.connect()
+    assert connection.sock.timeout == pytest.approx(130.0 - now[0])
+    assert connection.sock.timeout > 30.0 / 8
+
+
 @pytest.mark.parametrize("result", [(1, b"private resolver failure"), (0, b"not JSON"), (0, b" " * 8193)])
 def test_resolver_failure_is_closed_and_private(monkeypatch, result):
     up, unused = upstream([Response(307, headers={"Location": SIGNED})])
@@ -580,3 +794,70 @@ def test_delegated_stream_still_obeys_total_budget(monkeypatch):
     with pytest.raises(broker.BrokerError):
         up.fetch("GET", BLOB_PATH, lambda response: value.response(io.BytesIO(), response, "GET", broker.MAX_BLOB, "blob"))
     assert not up.connections
+
+
+class StuckWorker(threading.Thread):
+    def __init__(self, release):
+        super().__init__(target=release.wait, daemon=True)
+
+    def join(self, timeout=None):
+        super().join(min(timeout or 0, 0.05))
+
+
+SETUP_FILES = ("ca.crt", "broker.key", "native-certs/client.key", "native-certs/ca.crt", "registries.conf")
+
+
+def stuck_broker(tmp_path, release):
+    up, unused = upstream([])
+    request = {"registry": REGISTRY, "image": REPOSITORY + "@sha256:" + DIGEST}
+    service = broker.Broker(str(tmp_path), request, json.dumps(MATERIAL), time.monotonic() + 60,
+                            lambda *args: pytest.fail("certificate effect"), upstream=up, tls=object())
+    (tmp_path / "native-certs").mkdir(mode=0o700)
+    for name in SETUP_FILES:
+        if not (tmp_path / name).exists():
+            (tmp_path / name).write_bytes(b"private setup material")
+    worker = StuckWorker(release)
+    worker.start()
+    service.workers.append(worker)
+    return service
+
+
+def test_stuck_worker_does_not_mask_native_failure_and_cleans_setup_files(tmp_path):
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
+    release = threading.Event()
+    service = stuck_broker(tmp_path, release)
+    try:
+        with pytest.raises(ceph_native.NativeFailure):
+            with service:
+                raise ceph_native.NativeFailure("native-command", "synthetic image", b"synthetic pull refusal")
+        assert all(not (tmp_path / name).exists() for name in SETUP_FILES)
+        assert not (tmp_path / "home").exists() and not (tmp_path / "native-certs").exists()
+    finally:
+        release.set()
+
+
+def test_stuck_worker_still_refuses_teardown_without_inflight_error(tmp_path):
+    release = threading.Event()
+    service = stuck_broker(tmp_path, release)
+    try:
+        with pytest.raises(broker.BrokerError):
+            with service:
+                pass
+        assert all(not (tmp_path / name).exists() for name in SETUP_FILES)
+        assert not (tmp_path / "home").exists() and not (tmp_path / "native-certs").exists()
+    finally:
+        release.set()
+
+
+def test_refusal_message_keeps_coordinate_when_username_is_a_coordinate_segment():
+    registry, password = "cp.icr.io", "synthetic-entitlement-key"
+    up = broker.Upstream(registry, registry + "/cp/ibm-ceph/ceph-9-rhel9", {"url": registry, "username": "cp", "password": password},
+                         time.monotonic() + 60, connection=lambda host, **options: pytest.fail("no upstream call"),
+                         context=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT))
+    value = boundary(up)
+    coordinate = registry + "/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-27200"
+    output = io.BytesIO()
+    value.response(output, Response(404, ("manifest unknown " + coordinate + " for " + password).encode()), "GET", 1024, "manifest")
+    assert coordinate.encode() in output.getvalue()
+    assert password.encode() not in output.getvalue() and up.basic[6:].encode() not in output.getvalue()
+    assert value.failure_cause == "broker observed manifest upstream HTTP 404"

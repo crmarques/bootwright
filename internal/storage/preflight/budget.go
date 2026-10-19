@@ -1,6 +1,7 @@
 package preflight
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -48,6 +49,7 @@ type observation struct {
 	facts    Facts
 	reserve  Reserve
 	credit   Quantities
+	unproved struct{ memory, disk string }
 }
 
 func (b Budget) Check(ctx context.Context, allocations []Allocation, dryRun bool) ([]Check, error) {
@@ -153,6 +155,13 @@ func (b Budget) observeGroup(ctx context.Context, group *budgetGroup, dryRun boo
 			continue
 		}
 		credit, proved := row.facts.Reusable[allocation.Machine]
+		if reason, unproved := row.facts.Unproved[allocation.Machine]; unproved {
+			reason = "live provider inventory has not proved Machine " + allocation.Machine + "'s reusable allocation: " + reason
+			row.unproved.memory = cmp.Or(row.unproved.memory, reason)
+			if !proved {
+				row.unproved.disk = cmp.Or(row.unproved.disk, reason)
+			}
+		}
 		if !proved {
 			continue
 		}
@@ -193,6 +202,7 @@ func groupObservations(rows []observation) (map[string]observation, map[string]o
 			if err != nil {
 				return nil, nil, err
 			}
+			host.unproved.memory = cmp.Or(host.unproved.memory, row.unproved.memory)
 			host.facts.CPUKnown = host.facts.CPUKnown && row.facts.CPUKnown
 			host.facts.MemoryKnown = host.facts.MemoryKnown && row.facts.MemoryKnown
 			host.facts.Available.CPU = min(host.facts.Available.CPU, row.facts.Available.CPU)
@@ -221,6 +231,7 @@ func groupObservations(rows []observation) (map[string]observation, map[string]o
 			if err != nil {
 				return nil, nil, err
 			}
+			disk.unproved.disk = cmp.Or(disk.unproved.disk, row.unproved.disk)
 			disk.facts.DiskKnown = disk.facts.DiskKnown && row.facts.DiskKnown
 			disk.facts.Available.Disk = min(disk.facts.Available.Disk, row.facts.Available.Disk)
 			disk.reserve.Configured = disk.reserve.Configured && row.reserve.Configured && disk.reserve.Quantities.Disk == row.reserve.Quantities.Disk
@@ -240,7 +251,7 @@ func budgetChecks(hostGroups, diskGroups map[string]observation) ([]Check, error
 				return nil, err
 			}
 		}
-		checks = append(checks, capacityCheck(row.target.Host, "cpu", "logical CPUs", row.required.CPU, row.facts.Available.CPU, row.reserve.Quantities.CPU, row.facts.CPUKnown, row.reserve.Configured, row.facts.Reason), capacityCheck(row.target.Host, "memory", "bytes", row.required.Memory, row.facts.Available.Memory, row.reserve.Quantities.Memory, row.facts.MemoryKnown, row.reserve.Configured, row.facts.Reason))
+		checks = append(checks, capacityCheck(row.target.Host, "cpu", "logical CPUs", row.required.CPU, row.facts.Available.CPU, row.reserve.Quantities.CPU, row.facts.CPUKnown, row.reserve.Configured, row.facts.Reason, ""), capacityCheck(row.target.Host, "memory", "bytes", row.required.Memory, row.facts.Available.Memory, row.reserve.Quantities.Memory, row.facts.MemoryKnown, row.reserve.Configured, row.facts.Reason, row.unproved.memory))
 	}
 	for _, row := range diskGroups {
 		var err error
@@ -250,13 +261,13 @@ func budgetChecks(hostGroups, diskGroups map[string]observation) ([]Check, error
 				return nil, err
 			}
 		}
-		checks = append(checks, capacityCheck(row.target.Host+":"+row.target.Pool, "disk", "bytes", row.required.Disk, row.facts.Available.Disk, row.reserve.Quantities.Disk, row.facts.DiskKnown, row.reserve.Configured, row.facts.Reason))
+		checks = append(checks, capacityCheck(row.target.Host+":"+row.target.Pool, "disk", "bytes", row.required.Disk, row.facts.Available.Disk, row.reserve.Quantities.Disk, row.facts.DiskKnown, row.reserve.Configured, row.facts.Reason, row.unproved.disk))
 	}
 	slices.SortFunc(checks, func(a, b Check) int { return strings.Compare(a.Target+"/"+a.ID, b.Target+"/"+b.ID) })
 	return checks, nil
 }
 
-func capacityCheck(target, resource, unit string, required, available, reserve int64, known, configured bool, reason string) Check {
+func capacityCheck(target, resource, unit string, required, available, reserve int64, known, configured bool, reason, unproved string) Check {
 	result := Check{ID: "capacity." + resource, Target: target, Status: Unknown, Next: "provide a complete resource observation and configured controller/provider reserve", Capacity: &Capacity{Resource: resource, Unit: unit, Required: required, Available: available, Reserve: reserve, Observed: known}}
 	total, err := add(required, reserve)
 	switch {
@@ -270,6 +281,9 @@ func capacityCheck(target, resource, unit string, required, available, reserve i
 		if result.Reason == "" {
 			result.Reason = "the resource observation is unavailable or contradictory"
 		}
+	case total > available && unproved != "":
+		result.Reason = unproved
+		result.Next = "repeat once the Machine's domain and process are stable"
 	case total > available:
 		result.Status = Failed
 		result.Capacity.Deficit = total - available

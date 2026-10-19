@@ -34,6 +34,8 @@ MAX_TOTAL = 32 << 30
 MAX_CONNECTIONS = 512
 MAX_WORKERS = 8
 HEX = re.compile(r"[0-9a-f]{64}\Z")
+# The native client (Go net/http) follows each of these; a delegated blob GET or HEAD keeps its method.
+DELIVERY_REDIRECTS = frozenset({301, 302, 303, 307, 308})
 
 
 # A fresh exec owns potentially blocking libc/NSS resolution. No Python work
@@ -121,6 +123,14 @@ class DeliveryResponse:
 
 class BrokerError(ValueError):
     """No private value is included in the exception text."""
+
+
+class TokenRefused(BrokerError):
+    """The token endpoint refused; only the integer status is retained."""
+
+    def __init__(self, status):
+        super().__init__("registry token refused")
+        self.status = status
 
 
 def require(value):
@@ -211,14 +221,20 @@ class RegistryConnection(http.client.HTTPSConnection):
         require(not self._tunnel_host)
         last = None
         deadline = min(self.deadline, time.monotonic() + self.timeout)
-        for family, kind, protocol, unused_name, address in self.addresses:
+        for index, (family, kind, protocol, unused_name, address) in enumerate(self.addresses):
             require(not self.cancelled.is_set() and time.monotonic() < deadline)
+            # Each remaining address gets an equal share, so a black-holed first
+            # family cannot consume the budget before the next one is tried.
+            share = min(deadline, time.monotonic() + (deadline - time.monotonic()) / (len(self.addresses) - index))
             try:
                 self.sock = socket.socket(family, kind, protocol)
-                self.sock.settimeout(max(0.01, deadline - time.monotonic()))
+                self.sock.settimeout(max(0.01, share - time.monotonic()))
                 self.sock.connect(address)
                 self.sock = self._context.wrap_socket(self.sock, server_hostname=self.host, do_handshake_on_connect=False)
+                self.sock.settimeout(max(0.01, share - time.monotonic()))
                 self.sock.do_handshake()
+                # The share bounds only connect and handshake; request I/O keeps the remaining budget.
+                self.sock.settimeout(max(0.01, deadline - time.monotonic()))
                 return
             except OSError as error:
                 last = error
@@ -256,7 +272,7 @@ class Upstream:
         user, password = credential["username"], credential["password"]
         require(all(isinstance(value, str) and 0 < len(value.encode()) <= 32768 and not any(char in value for char in "\x00\r\n")
                     for value in (user, password)) and ":" not in user)
-        self.private = [user, password]
+        self.private = [password]
         self.basic = "Basic " + base64.b64encode((user + ":" + password).encode()).decode("ascii")
         self.private.append(self.basic)
         self.bearer = None
@@ -319,7 +335,7 @@ class Upstream:
     def consume(self, method, path, response, consume):
         prefix = "/v2/" + self.namespace + "/blobs/sha256:"
         if (method in ("GET", "HEAD") and path.startswith(prefix) and HEX.fullmatch(path[len(prefix):]) is not None
-                and response.status in (307, 308)):
+                and response.status in DELIVERY_REDIRECTS):
             return self.deliver(method, response, consume)
         return consume(response)
 
@@ -342,7 +358,9 @@ class Upstream:
             fields[match[1]] = match[2]
             remaining = remaining[match.end():]
         scope = "repository:" + self.namespace + ":pull"
-        require({"realm", "service"} <= set(fields) <= {"realm", "service", "scope"} and fields.get("scope", scope) == scope)
+        # RFC 6750 section 3 error attributes (an expired bearer) are admitted; their values are ignored.
+        admitted = {"realm", "service", "scope", "error", "error_description", "error_uri"}
+        require({"realm", "service"} <= set(fields) <= admitted and fields.get("scope", scope) == scope)
         realm = urllib.parse.urlsplit(fields["realm"])
         require(realm.scheme == "https" and realm.netloc == self.registry and realm.username is None and realm.password is None
                 and realm.path.startswith("/") and not realm.query and not realm.fragment)
@@ -352,7 +370,8 @@ class Upstream:
         path = self.token_path(challenge)
         with self.lock:
             with self.request("GET", path, self.basic) as response:
-                require(response.status == 200)
+                if response.status != 200:
+                    raise TokenRefused(int(response.status))
                 raw = response.read(65537)
                 require(len(raw) <= 65536)
                 value = json.loads(raw)
@@ -388,6 +407,9 @@ class Broker:
         self.tls = tls or certificate(directory, self.cert_directory, self.authority, command)
         self.home = os.path.join(directory, "home")
         os.mkdir(self.home, 0o700)
+        self.lookaside = (".config", ".config/containers", ".config/containers/registries.d")
+        for relative in self.lookaside:
+            os.mkdir(os.path.join(self.home, relative), 0o700)
         self.registries = os.path.join(directory, "registries.conf")
         with open(self.registries, "x", encoding="ascii") as stream:
             stream.write('unqualified-search-registries = []\ncredential-helpers = ["containers-auth.json"]\n')
@@ -476,6 +498,9 @@ class Broker:
                 maximum = self.path(method, path)
                 request_class = "registry" if path == "/v2/" else "blob" if maximum == MAX_BLOB else "manifest"
                 self.upstream.fetch(method, path, lambda response: self.response(stream, response, method, maximum, request_class))
+        except TokenRefused as error:
+            with self.lock:
+                self.failure = ("token", error.status)
         except (BrokerError, OSError, ValueError, http.client.HTTPException):
             # A closed connection is a native pull error. No exception text or
             # authentication challenge can cross the downstream boundary.
@@ -529,20 +554,28 @@ class Broker:
         return {"HTTPS_PROXY": proxy, "HTTP_PROXY": proxy, "NO_PROXY": "", "https_proxy": proxy, "http_proxy": proxy, "no_proxy": "",
                 "CONTAINERS_REGISTRIES_CONF": self.registries, "DOCKER_CONFIG": self.home, "HOME": self.home}
 
-    def __exit__(self, unused_type, unused_value, unused_traceback):
-        self.stopping.set()
-        self.listener.close()
-        self.thread.join(timeout=1)
-        with self.lock:
-            connections = list(self.connections)
-        for connection in connections:
-            with contextlib.suppress(OSError):
-                connection.shutdown(socket.SHUT_RDWR)
-        self.upstream.close()
-        deadline = time.monotonic() + 31
-        for worker in self.workers:
-            worker.join(timeout=max(0, deadline - time.monotonic()))
-        require(not self.thread.is_alive() and all(not worker.is_alive() for worker in self.workers))
+    def __exit__(self, exc_type, unused_value, unused_traceback):
+        try:
+            self.stopping.set()
+            self.listener.close()
+            self.thread.join(timeout=1)
+            with self.lock:
+                connections = list(self.connections)
+            for connection in connections:
+                with contextlib.suppress(OSError):
+                    connection.shutdown(socket.SHUT_RDWR)
+            self.upstream.close()
+            deadline = time.monotonic() + 31
+            for worker in self.workers:
+                worker.join(timeout=max(0, deadline - time.monotonic()))
+            joined = not self.thread.is_alive() and all(not worker.is_alive() for worker in self.workers)
+        finally:
+            self.remove_setup_files()
+        require(joined or exc_type is not None)
+        return False
+
+    def remove_setup_files(self):
+        """The native client has exited and workers hold the TLS context in memory, so files go even if one is stuck."""
         for name in ("ca.crt", "client.cert", "client.key"):
             with contextlib.suppress(FileNotFoundError):
                 os.unlink(os.path.join(self.cert_directory, name))
@@ -551,4 +584,7 @@ class Broker:
         for name in ("openssl.cnf", "broker.key", "ca.crt", "registries.conf"):
             with contextlib.suppress(FileNotFoundError):
                 os.unlink(os.path.join(self.directory, name))
+        for relative in reversed(self.lookaside):
+            with contextlib.suppress(FileNotFoundError):
+                os.rmdir(os.path.join(self.home, relative))
         os.rmdir(self.home)

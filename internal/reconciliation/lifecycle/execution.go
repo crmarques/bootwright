@@ -247,12 +247,17 @@ func (s Service) admitApplyView(ctx context.Context, view View, decided transiti
 		return err
 	}
 	owned := map[string]ObjectOwnership{}
+	starting := []reconciliation.Block{}
 	for _, block := range decided.plan.Blocks {
-		if current := decided.states[block.ID]; current != "" && current != reconciliation.BlockPending {
+		current := decided.states[block.ID]
+		if current != "" && current != reconciliation.BlockPending {
 			recordOwnership(owned, block, reconciliation.Apply, current)
 		}
+		if current != reconciliation.BlockDone && (unproved(current) || decided.selection.Selects(block.Stage)) {
+			starting = append(starting, block)
+		}
 	}
-	return s.options.ApplyAdmission(ctx, view.Identity().Name, state.Effective(), owned)
+	return s.options.ApplyAdmission(ctx, view.Identity().Name, state.Effective(), owned, starting)
 }
 
 // decideShared takes one decision from durable state read under the shared
@@ -418,7 +423,7 @@ func (s Service) decideOver(ctx context.Context, view View, store OperationStore
 			}
 			decided.release = applied.Bindings
 		}
-		decided.sameBlocks = s.proveSameBlocks(ctx, view, operation, frozen)
+		decided.sameBlocks = s.proveSameBlocks(ctx, view, operation, frozen, states)
 		return plannedFrom(decided, operation, states, attempts), nil
 	}
 	if operation.Verb == reconciliation.Apply {
@@ -467,7 +472,7 @@ func (s Service) refuseOver(ctx context.Context, view View, operation operations
 	case next == string(reconciliation.Destroy):
 		proof = s.verifyRemovalHost(ctx, view)
 	case pendingRemains(frozen, states):
-		proof = s.verifyContinuation(ctx, view, operation, s.proveSameBlocks(ctx, view, operation, frozen), nil)
+		proof = s.verifyContinuation(ctx, view, operation, s.proveSameBlocks(ctx, view, operation, frozen, states), nil)
 	}
 	refused := diagnostics.Of(proof)
 	if proof != nil && len(refused) == 0 {

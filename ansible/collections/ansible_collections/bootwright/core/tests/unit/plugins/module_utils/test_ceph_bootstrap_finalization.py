@@ -52,7 +52,7 @@ def test_failed_native_bootstrap_keeps_attempt_and_never_repeats(native, private
 def call_home(native):
     native.markers.records["transport-ready.json"] = {"custodyID": "synthetic-custody"}
     native.markers.records["bootstrap-scope.json"] = staging.recovery_scope(native.request)
-    state = {"flag": None, "enabled": False, "lost": False, "publish": True}
+    state = {"flag": None, "enabled": False, "lost": 0, "publish": True, "refuse": 0}
     effects = []
 
     def ceph(*args, **kwargs):
@@ -69,10 +69,14 @@ def call_home(native):
         intent = dict(native.configuration_intent(), step="call_home_initialize")
         assert native.markers.read("tunnel-config-attempt-call_home_initialize.json") == intent
         assert native.markers.read("tunnel-config-complete-call_home_initialize.json") is None
+        if state["refuse"]:
+            state["refuse"] -= 1
+            raise ceph_native.Refusal("native-tunnel-unproved")
         effects.append(args)
         if state["publish"]:
             state.update(flag=True, enabled=True)
         if state["lost"]:
+            state["lost"] -= 1
             raise ceph_native.NativeFailure("native-command", "synthetic image", b"synthetic lost reply")
 
     native.ceph, native.tunnel_effect = ceph, effect
@@ -172,9 +176,28 @@ def test_call_home_initialization_refuses_mismatched_receipts(native, call_home,
     assert effects == [] and native.markers.writes == []
 
 
-def test_lost_enable_reply_completes_from_native_module_and_flag_without_reissue(native, call_home):
+def manager_clock(native):
+    now = [0.0]
+    native.clock = lambda: now[0]
+    native.pause = lambda seconds: now.__setitem__(0, now[0] + seconds)
+    native.horizon = None
+    return now
+
+
+def test_lost_enable_reply_repeats_the_idempotent_enable_while_the_manager_restarts(native, call_home):
     state, effects = call_home
-    state["lost"] = True
+    manager_clock(native)
+    state["lost"] = 1
+    assert native.initialize_call_home(True) == (True, True)
+    intent = dict(native.configuration_intent(), step="call_home_initialize")
+    assert native.markers.read("tunnel-config-complete-call_home_initialize.json") == intent and len(effects) == 2
+    assert native.markers.writes.count("tunnel-config-complete-call_home_initialize.json") == 1
+    assert native.markers.writes.count("tunnel-config-attempt-call_home_initialize.json") == 1
+
+
+def test_lost_enable_reply_after_the_manager_wait_completes_from_native_module_and_flag(native, call_home):
+    state, effects = call_home
+    state["lost"] = 1
     native.horizon = native.clock()
     with pytest.raises(ceph_native.NativeFailure):
         native.initialize_call_home(True)
@@ -184,14 +207,61 @@ def test_lost_enable_reply_completes_from_native_module_and_flag_without_reissue
     assert native.markers.read("tunnel-config-complete-call_home_initialize.json") is not None and len(effects) == 1
 
 
-@pytest.mark.parametrize("flag,enabled", [(None, False), (True, False), (False, True)])
-def test_attempted_initialization_without_exact_native_result_refuses(native, call_home, flag, enabled):
+def attempted_initialization(native):
+    intent = dict(native.configuration_intent(), step="call_home_initialize")
+    native.markers.records["tunnel-config-attempt-call_home_initialize.json"] = intent
+    return intent
+
+
+@pytest.mark.parametrize("flag,enabled", [(None, False), (True, False)])
+def test_attempted_initialization_without_its_native_result_reissues_the_idempotent_enable(native, call_home, flag, enabled):
     state, effects = call_home
     state.update(flag=flag, enabled=enabled)
-    native.markers.records["tunnel-config-attempt-call_home_initialize.json"] = dict(native.configuration_intent(), step="call_home_initialize")
+    intent = attempted_initialization(native)
+    assert native.initialize_call_home(True) == (True, True)
+    assert len(effects) == 1 and state["flag"] is True and state["enabled"]
+    assert native.markers.read("tunnel-config-complete-call_home_initialize.json") == intent
+    assert native.markers.writes == ["tunnel-config-complete-call_home_initialize.json"]
+    assert native.initialize_call_home(True) == (True, False) and len(effects) == 1
+
+
+@pytest.mark.parametrize("flag,enabled", [(None, False), (True, False)])
+def test_attempted_initialization_observation_never_reissues(native, call_home, flag, enabled):
+    state, effects = call_home
+    state.update(flag=flag, enabled=enabled)
+    attempted_initialization(native)
+    with pytest.raises(ceph_native.Refusal):
+        native.initialize_call_home(False)
+    assert effects == [] and native.markers.writes == []
+
+
+@pytest.mark.parametrize("flag,enabled,marker", [
+    (False, True, None), (False, False, None),
+    (None, False, "tunnel-config-attempt-call_home.json"), (None, False, "tunnel-config-complete-call_home.json"),
+    (None, False, "call-home-accepted.json"), (None, False, "tunnel-configured.json"),
+    (True, False, "tunnel-config-attempt-call_home.json"), (True, False, "call-home-accepted.json"),
+])
+def test_attempted_initialization_after_acceptance_never_reissues(native, call_home, flag, enabled, marker):
+    state, effects = call_home
+    state.update(flag=flag, enabled=enabled)
+    attempted_initialization(native)
+    if marker is not None:
+        native.markers.records[marker] = {"synthetic": "existing acceptance evidence"}
     with pytest.raises(ceph_native.Refusal):
         native.initialize_call_home(True)
     assert effects == [] and native.markers.writes == []
+
+
+def test_enable_refused_before_the_native_command_is_reissued_by_the_next_apply(native, call_home):
+    state, effects = call_home
+    state["refuse"] = 1
+    with pytest.raises(ceph_native.Refusal, match="^native-tunnel-unproved$"):
+        native.initialize_call_home(True)
+    intent = dict(native.configuration_intent(), step="call_home_initialize")
+    assert effects == [] and native.markers.read("tunnel-config-attempt-call_home_initialize.json") == intent
+    assert native.markers.read("tunnel-config-complete-call_home_initialize.json") is None
+    assert native.initialize_call_home(True) == (True, True)
+    assert len(effects) == 1 and native.markers.read("tunnel-config-complete-call_home_initialize.json") == intent
 
 
 def test_enable_success_without_observed_flag_cannot_publish_completion(native, call_home):
@@ -358,6 +428,20 @@ def test_enrollment_never_accepts_license_when_tunnel_proof_refuses(native, proo
     with pytest.raises(ceph_native.Refusal, match="^native-tunnel-unproved$"):
         native.enroll()
     assert "accept-license" not in events and native.markers.read("bootstrap-enrollment.json") is None
+
+
+def test_transient_license_failure_repeats_until_the_license_record_reads_back(native):
+    state, unused, events = enrollment(native)
+    manager_clock(native)
+
+    def recover(*args, **kwargs):
+        del args, kwargs
+        state["fail"] = False
+
+    native.pause = recover
+    state["fail"] = True
+    assert native.enroll() == {"changed": True} and state["accepted"] and events.count("accept-license") == 2
+    assert native.enroll() == {"changed": False} and events.count("accept-license") == 2
 
 
 def test_late_license_native_failure_propagates_and_readback_is_required(native):

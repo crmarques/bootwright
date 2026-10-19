@@ -51,6 +51,17 @@ lock continues with no `setup`.
   natively (bootstrap's `bootstrap-attempt.json`, a tunnel setting's attempt
   marker) still refuses `partial-cluster`, so such a specialization must land
   before the run that needs it.
+- The licensing and Call Home finalization of 5dbf06288 (the
+  `tunnel-config-attempt-call_home_initialize.json` and
+  `tunnel-config-complete-call_home_initialize.json` markers, the enroll-time
+  `orch accept-license` and the persisted-acceptance readiness read) touched
+  no Go file: its markers enter no intent, request or digest, so a build with
+  it continues an earlier build's live operation without a version move.
+- An exhausted image pull continues too: each host preparation run makes up
+  to three bounded pull attempts of its own, and the retained `pull-attempt-N`
+  records serve crash diagnosis and recovery only (B648, X102). A build from
+  before X102 refuses `image-pull` on every apply once a host's three retained
+  attempts are spent; the build with this fix continues that operation.
 - A destroy is needed when the fix moves a version or a pin, which moves the
   content digest: the continuation then refuses naming the first block that
   differs. The contract guard in `cmd/bootwright` fails the build when a request
