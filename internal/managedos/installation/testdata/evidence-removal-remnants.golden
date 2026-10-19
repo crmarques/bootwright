@@ -14,6 +14,7 @@
   "private": false,
   "reachable": false,
   "request": "1111111111111111111111111111111111111111111111111111111111111111",
+  "rootEncryption": false,
   "tree": false,
   "treeContent": false,
   "treeIdentity": "",

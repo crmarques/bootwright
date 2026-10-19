@@ -839,7 +839,7 @@ referenced install profile in the `machines` stage. It realizes the
 `MachineInstallProfile` publication under implementation and request version
 `os-package-tree-v1`; each machine installation requires that profile
 publication alongside its own Machine realization and referenced services.
-An installation uses request version `os-install-anaconda-v11`. Profiles using
+An installation uses request version `os-install-anaconda-v12`. Profiles using
 a URL package source contribute no publication block.
 
 The request freezes only context and profile identity, artifact-server

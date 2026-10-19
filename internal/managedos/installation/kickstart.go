@@ -12,7 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const kickstartVersion = "kickstart-anaconda-v8"
+const kickstartVersion = "kickstart-anaconda-v9"
 
 // guestHostKeys are the keys a guest-agent installation generates here rather
 // than at first boot, so the republished copy is the key sshd presents. Each
@@ -86,6 +86,7 @@ type Installation struct {
 	BondOptions      []string
 	BondPorts        []string
 	DisabledServices []string
+	DiskEncryption   *KickstartEncryption
 	EnabledServices  []string
 	ExcludeDocs      bool
 	Firewall         string
@@ -164,12 +165,14 @@ func RenderKickstart(input Installation) (string, error) {
 		"",
 	}
 	lines = append(lines, targetProofLines(input)...)
+	lines = append(lines, encryptionPreLines(input)...)
 	lines = append(lines, storageLines(input)...)
 	lines = append(lines, "")
 	lines = append(lines, securityLines(input)...)
 	lines = append(lines, "", servicesLine(input), "")
 	lines = append(lines, packagesSection(input)...)
 	lines = append(lines, "")
+	lines = append(lines, encryptionPostLines(input)...)
 	lines = append(lines, postSection(input)...)
 	return strings.Join(compact(lines), "\n") + "\n", nil
 }
@@ -206,6 +209,8 @@ var kickstartFields = []struct {
 	{"the VLAN base interface", "vlan.base-iface of the install interface in the Machine's NMState network configuration", kickstartToken, func(i Installation) []string { return []string{i.VLANBase} }},
 	{"a bond port", "link-aggregation.port of the install bond in the Machine's NMState network configuration", kickstartListElement, func(i Installation) []string { return i.BondPorts }},
 	{"a bond option", "link-aggregation of the install bond in the Machine's NMState network configuration", kickstartToken, func(i Installation) []string { return i.BondOptions }},
+	{"the TPM2 PCR bank", "spec.customizations.security.diskEncryption.unlock.tpm2.pcrBank of the install profile", kickstartToken, encryptionValue(func(e KickstartEncryption) string { return e.PCRBank })},
+	{"the LUKS key derivation", "spec.customizations.security.fips.enabled of the install profile", kickstartToken, encryptionValue(func(e KickstartEncryption) string { return e.PBKDF })},
 	{"a disabled service", "spec.customizations.services.disabled of the install profile", kickstartListElement, func(i Installation) []string { return i.DisabledServices }},
 	{"an enabled service", "spec.customizations.services.enabled of the install profile", kickstartListElement, func(i Installation) []string { return i.EnabledServices }},
 	{"the firewall choice", "spec.customizations.security.firewall.enabled of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Firewall} }},
@@ -407,14 +412,18 @@ func timezoneLine(input Installation) string {
 // storageLines clear and partition exactly the named device, or leave the
 // installer to choose when a Machine its substrate created names none.
 func storageLines(input Installation) []string {
+	autopart := "autopart --type=lvm"
+	if input.DiskEncryption != nil {
+		autopart = "%include " + storageInclude
+	}
 	if input.RootDevice == "" {
-		return []string{"clearpart --all --initlabel", "autopart --type=lvm"}
+		return []string{"clearpart --all --initlabel", autopart}
 	}
 	device := strings.TrimPrefix(input.RootDevice, "/dev/")
 	return []string{
 		"ignoredisk --only-use=" + device,
 		"clearpart --all --initlabel --drives=" + device,
-		"autopart --type=lvm",
+		autopart,
 	}
 }
 

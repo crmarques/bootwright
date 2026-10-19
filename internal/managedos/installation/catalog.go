@@ -18,7 +18,7 @@ const Implementation = "os-install-anaconda-v1"
 // same kind through another implementation, so a block resolves by both.
 const Kind = "Machine"
 
-const requestVersion = "os-install-anaconda-v11"
+const requestVersion = "os-install-anaconda-v12"
 
 // installationBudgets are the waits every installation this build plans
 // freezes. The installer takes minutes to write a disk; a physical server adds
@@ -75,6 +75,9 @@ const privatePrefix = "private"
 // IdentityFile is the name the delivered host key pair is published under,
 // inside the attempt's own unguessable directory.
 const IdentityFile = "identity"
+
+// RecoveryFile is the name a recovery passphrase is published under beside it.
+const RecoveryFile = "recovery"
 
 // MarkerPath is where a completed installation leaves its proof, and
 // HostKeyPath is where it republishes the guest's own SSH host public key.

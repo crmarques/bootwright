@@ -50,6 +50,25 @@ func fipsEnabled(profile api.Object) bool {
 	return profile.Spec().Get("customizations", "security", "fips", "enabled").Bool()
 }
 
+func diskEncryption(profile api.Object) api.Value {
+	return profile.Spec().Get("customizations", "security", "diskEncryption")
+}
+
+func requestEncryption(profile api.Object) *DiskEncryption {
+	if selected := diskEncryption(profile); selected.Present() {
+		return &DiskEncryption{RecoveryPassphraseRef: selected.Get("recoveryPassphraseRef").Text()}
+	}
+	return nil
+}
+
+func privateInstallation(catalog api.Catalog, machine api.Object, channel string) bool {
+	if channel == substrate.ChannelDeliveredKey {
+		return true
+	}
+	profile, ok := catalog.Find(api.MachineInstallProfile, machine.Spec().Get("os", "installProfileRef").Text())
+	return ok && diskEncryption(profile).Present()
+}
+
 // refusedFIPS says why a FIPS-mode installation of a Machine cannot proceed:
 // a physical target, or a fleet key generated as Ed25519, the generated
 // default, which a FIPS-mode machine refuses.
@@ -88,7 +107,7 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 		derived, err := substrate.TargetFor(catalog, machine, "", controllerMachine)
 		derivedOK := err == nil
 		if derivedOK {
-			if reason, remediation := refusedTarget(machine, derived); reason != "" {
+			if reason, remediation := refusedTarget(machine, derived, privateInstallation(catalog, machine, derived.Identity.Channel)); reason != "" {
 				found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
 				continue
 			}
@@ -195,7 +214,7 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 		return Request{}, Requirements{}, err
 	}
 	imageServer, image, private, certificate, err := installerPublication(catalog,
-		anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), target, contextName, name, profile.Identity())
+		anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), privateInstallation(catalog, machine, target.Channel), contextName, name, profile.Identity())
 	if err != nil {
 		return Request{}, Requirements{}, err
 	}
@@ -205,18 +224,21 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	}
 	needs := Requirements{ArtifactServers: []string{imageServer.Name()}, Machine: name}
 	request := Request{
-		Address:     "",
-		BootMedia:   boot,
-		Budgets:     installationBudgets,
-		FleetKeyRef: fleetKeyRef(catalog),
-		HostKeyPath: HostKeyPath,
-		Identity:    Identity{Block: BlockID(name), Context: contextName, Object: name, Profile: profile.Name()},
-		Image:       image,
-		MarkerPath:  MarkerPath,
-		Placement:   placement,
-		Target:      target,
-		User:        installUser,
-		Version:     requestVersion,
+		Address:           "",
+		BootMedia:         boot,
+		Budgets:           installationBudgets,
+		DiskEncryption:    requestEncryption(profile),
+		FleetKeyRef:       fleetKeyRef(catalog),
+		HostKeyPath:       HostKeyPath,
+		Identity:          Identity{Block: BlockID(name), Context: contextName, Object: name, Profile: profile.Name()},
+		Image:             image,
+		MarkerPath:        MarkerPath,
+		Placement:         placement,
+		Private:           private,
+		Target:            target,
+		TLSCertificateRef: certificate,
+		User:              installUser,
+		Version:           requestVersion,
 	}
 	if request.FleetKeyRef == "" {
 		return Request{}, Requirements{}, refusal("api.required", "the Environment declares no fleet access key", "set spec.remoteMachinesAccessKey.keyRef")
@@ -226,17 +248,12 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	}
 	// A machine proved by a key this installation delivers needs that key, and
 	// the key travels only beneath the private subtree.
-	if private != nil {
-		if target.HostKeyRef == "" {
-			return Request{}, Requirements{}, refusal("api.required", "the Machine declares no SSH host key for its installation to deliver",
-				"set spec.os.install.hostKeyRef on "+machine.Identity())
-		}
+	if target.Channel == substrate.ChannelDeliveredKey {
 		keyType, err := hostKeyType(catalog, machine, target.HostKeyRef)
 		if err != nil {
 			return Request{}, Requirements{}, err
 		}
 		request.Target.HostKeyType = keyType
-		request.Private, request.TLSCertificateRef = private, certificate
 	}
 	if err := mediaTrustRefusal(machine, request); err != nil {
 		return Request{}, Requirements{}, err
@@ -419,12 +436,12 @@ func treeFor(catalog api.Catalog, source api.Value, contextName string, profile 
 // served root, in the shape that server's publication contract fixes.
 // installerPublication is where one Machine's installer image is published:
 // the server it is published through, and either the public image or the
-// private subtree with the certificate its fetch verifies. A machine proved
-// by a key this installation delivers boots an image whose Kickstart names
-// the private URL of that key, so the image itself is published only beneath
-// the private subtree and never publicly.
-func installerPublication(catalog api.Catalog, selection api.Value, target Target, contextName, name, identity string) (api.Object, *Publication, *Publication, string, error) {
-	if target.Channel != substrate.ChannelDeliveredKey {
+// private subtree with the certificate its fetch verifies. A private
+// installation boots an image whose Kickstart names the private URL of its
+// material, so the image itself is published only beneath the private subtree
+// and never publicly.
+func installerPublication(catalog api.Catalog, selection api.Value, private bool, contextName, name, identity string) (api.Object, *Publication, *Publication, string, error) {
+	if !private {
 		server, public, err := publicationFor(catalog, selection, contextName, name, "install.iso", identity)
 		if err != nil {
 			return api.Object{}, nil, nil, "", err
@@ -472,7 +489,7 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 	if err != nil {
 		return Target{}, err
 	}
-	if reason, remediation := refusedTarget(machine, derived); reason != "" {
+	if reason, remediation := refusedTarget(machine, derived, privateInstallation(catalog, machine, derived.Identity.Channel)); reason != "" {
 		return Target{}, refusal("lifecycle.unsupported", reason, remediation)
 	}
 	target := Target{
@@ -511,7 +528,7 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 // refusedTarget says why this contract cannot install onto a Machine's
 // realized target, or nothing when it can. It is the one statement of that
 // refusal, so Unsupported and the request builder never disagree about it.
-func refusedTarget(machine api.Object, target substrate.Target) (reason, remediation string) {
+func refusedTarget(machine api.Object, target substrate.Target, private bool) (reason, remediation string) {
 	// A physical machine already holds whatever it holds, and an installation
 	// that names no disk leaves the installer to clear every one. A wwn is
 	// admitted as a selector but not yet derived into a device the installer
@@ -534,9 +551,9 @@ func refusedTarget(machine api.Object, target substrate.Target) (reason, remedia
 	}
 	// A controller that fetches without verifying the artifact server boots
 	// whatever image answers, and the installer it boots is what receives the
-	// delivered key. Only a delivered-key target publishes privately, so this
-	// is exactly the private consumer the exception is refused for.
-	if target.Identity.Channel == substrate.ChannelDeliveredKey && target.Controller.VirtualMedia.Trust == substrate.TrustDisableVerification {
+	// private material, so the exception is refused for every private
+	// installation.
+	if private && target.Controller.VirtualMedia.Trust == substrate.TrustDisableVerification {
 		return "a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server",
 			"declare hardware.management.bmc.virtualMedia.tls.trust: import-certificate on " + machine.Identity() + ", or established when its controller already trusts the server"
 	}
@@ -544,7 +561,7 @@ func refusedTarget(machine api.Object, target substrate.Target) (reason, remedia
 	// image, so whoever answers or reads the controller leg holds the token.
 	// A trust bundle implies verification, so https with verification is the
 	// whole test.
-	if target.Identity.Channel == substrate.ChannelDeliveredKey &&
+	if private &&
 		(!strings.HasPrefix(target.Controller.Endpoint, "https://") || !target.Controller.TLSVerify) {
 		return "a Machine whose installation delivers private material hands its controller the private installer image URL, so the controller must be reached over https with its certificate verified",
 			"address the controller of " + machine.Identity() + " with an https:// spec.hardware.management.bmc.address and remove the tls.verify opt-out on " +
@@ -560,6 +577,10 @@ func refusedTarget(machine api.Object, target substrate.Target) (reason, remedia
 // before the material exists, so a key of any other source refuses here,
 // before registration, rather than at the installer.
 func hostKeyType(catalog api.Catalog, machine api.Object, reference string) (string, error) {
+	if reference == "" {
+		return "", refusal("api.required", "the Machine declares no SSH host key for its installation to deliver",
+			"set spec.os.install.hostKeyRef on "+machine.Identity())
+	}
 	secret, ok := catalog.Find(api.Secret, reference)
 	if !ok {
 		return "", refusal("api.reference", "the Machine's SSH host key Secret is not in the selected graph",

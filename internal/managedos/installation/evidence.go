@@ -41,6 +41,8 @@ type Evidence struct {
 	// does, so one rule governs both paths.
 	Reachable bool   `json:"reachable"`
 	Request   string `json:"request"`
+	// RootEncryption is the root filesystem on a LUKS device bound to the TPM.
+	RootEncryption bool `json:"rootEncryption"`
 	// Tree fields observe the immutable profile dependency, never owned effects.
 	Tree        bool `json:"tree"`
 	TreeContent bool `json:"treeContent"`
@@ -94,6 +96,9 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 	}
 	if request.fips() && !evidence.FIPS {
 		return refusal("lifecycle.state", "the installed machine does not report the FIPS mode its installation enabled", "")
+	}
+	if request.DiskEncryption != nil && !evidence.RootEncryption {
+		return refusal("lifecycle.state", "the installed machine's root filesystem is not on the LUKS device with a TPM2 binding its installation encrypted", "")
 	}
 	if evidence.Media != "" {
 		return refusal("lifecycle.state", "the installation left its virtual media inserted", "")

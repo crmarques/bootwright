@@ -60,6 +60,22 @@ func kickstartStrings(t *testing.T) []kickstartString {
 					t.Fatalf("Repository.%s is a %s the Kickstart guard does not know", repository.Field(inner).Name, repository.Field(inner).Type)
 				}
 			}
+		case field.Type == reflect.TypeFor[*KickstartEncryption]():
+			encryption := reflect.TypeFor[KickstartEncryption]()
+			for inner := range encryption.NumField() {
+				switch {
+				case encryption.Field(inner).Type.Kind() == reflect.String:
+					found = append(found, kickstartString{field.Name + "." + encryption.Field(inner).Name, func(input *Installation, value string) {
+						if input.DiskEncryption == nil {
+							input.DiskEncryption = &KickstartEncryption{}
+						}
+						reflect.ValueOf(input.DiskEncryption).Elem().Field(inner).SetString(value)
+					}})
+				case encryption.Field(inner).Type == reflect.TypeFor[[]int]():
+				default:
+					t.Fatalf("KickstartEncryption.%s is a %s the Kickstart guard does not know", encryption.Field(inner).Name, encryption.Field(inner).Type)
+				}
+			}
 		case field.Type.Kind() == reflect.Bool || field.Type.Kind() == reflect.Int:
 		default:
 			t.Fatalf("Installation.%s is a %s the Kickstart guard does not know", field.Name, field.Type)

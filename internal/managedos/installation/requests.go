@@ -151,6 +151,9 @@ type Request struct {
 	// Budgets are the waits the adapter performs, which the run's deadline
 	// is derived from.
 	Budgets Budgets `json:"budgets"`
+	// DiskEncryption names the Secret whose value is the recovery passphrase
+	// of an encrypted root disk. The value reaches only the private subtree.
+	DiskEncryption *DiskEncryption `json:"diskEncryption,omitempty"`
 	// FleetKeyRef names the Secret whose public half the installation
 	// authorizes for the product-owned account. Only that half ever leaves the
 	// binding, and it reaches the adapter at execution rather than in the plan.
@@ -160,8 +163,8 @@ type Request struct {
 	Identity    Identity `json:"identity"`
 	// Image is the publicly served installer image of a Machine proved
 	// through its guest agent. Exactly one of Image and Private is set: a
-	// delivered-key Machine's image names the private URL in its Kickstart,
-	// so it is published beneath Private instead.
+	// delivered-key or encrypting Machine's image names the private URL in its
+	// Kickstart, so it is published beneath Private instead.
 	Image *Publication `json:"image,omitempty"`
 	// InstallerArguments pin each available ethernet interface's name to its
 	// MAC with dracut ifname=, in composed order, then fips=1 for FIPS.
@@ -171,7 +174,8 @@ type Request struct {
 	Network            Network              `json:"network"`
 	Placement          machineref.Placement `json:"placement"`
 	// Private is the subtree this block owns for material only the installing
-	// machine may read: the delivered key pair and the installer image. The
+	// machine may read: the delivered key pair or the recovery passphrase, and
+	// the installer image. The
 	// attempt mints the unguessable final segment, so this names the parent
 	// it owns and never the path itself.
 	Private *Publication `json:"private,omitempty"`
@@ -184,6 +188,11 @@ type Request struct {
 	TreeMedia         *Media       `json:"treeMedia,omitempty"`
 	User              string       `json:"user"`
 	Version           string       `json:"version"`
+}
+
+// DiskEncryption names the recovery passphrase; the Kickstart freezes the rest.
+type DiskEncryption struct {
+	RecoveryPassphraseRef string `json:"recoveryPassphraseRef"`
 }
 
 const fipsArgument = "fips=1"
@@ -283,6 +292,9 @@ func (r Request) SecretReferences() []string {
 	}
 	if r.TLSCertificateRef != "" {
 		references = append(references, r.TLSCertificateRef)
+	}
+	if r.DiskEncryption != nil {
+		references = append(references, r.DiskEncryption.RecoveryPassphraseRef)
 	}
 	if r.Image != nil {
 		references = append(references, r.Image.CertificateRef)

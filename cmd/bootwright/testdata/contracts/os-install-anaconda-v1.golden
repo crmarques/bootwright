@@ -1,5 +1,5 @@
 implementation: os-install-anaconda-v1
-content-digest: aa848e398689336d19b285a4bfe5ea8ae616a31d8170871aea3a40eaa8688e05
+content-digest: f078e86a512ffc43217c6244c2c182f55d30ef22a5f7e64cfa2fe92dad43a556
 automation-formats: none
 request-schema:
   address string
@@ -26,6 +26,8 @@ request-schema:
   budgets.reboot struct installation.Budget
   budgets.reboot.attempts int
   budgets.reboot.delaySeconds int
+  diskEncryption *struct installation.DiskEncryption omitempty
+  diskEncryption.recoveryPassphraseRef string
   fleetKeyRef string
   hostKeyPath string
   hostname string
@@ -107,6 +109,7 @@ evidence-schema:
   private bool
   reachable bool
   request string
+  rootEncryption bool
   tree bool
   treeContent bool
   treeIdentity string

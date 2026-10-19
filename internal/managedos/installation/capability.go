@@ -445,6 +445,9 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 			}
 			refusals["fips-not-enabled"] = fipsNotEnabled(execution.Context, request)
 		}
+		if err := encryptionRefusals(execution, request, refusals); err != nil {
+			return lifecycle.RunResult{}, err
+		}
 		if request.Target.Channel == substrate.ChannelGuestAgent {
 			algorithm, err := generatedHostKeyType(execution.Context, request)
 			if err != nil {
@@ -483,8 +486,8 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		materials = append(materials,
 			lifecycle.MaterialFile{Name: "bmc-ca", Part: secrets.CertificatePart, Secret: request.Target.Controller.TrustBundleRef, Variable: "controllerCA"})
 	}
-	// The private publication carries the key pair itself.
-	if request.Private != nil {
+	// The private publication carries the delivered key pair itself.
+	if request.Target.Channel == substrate.ChannelDeliveredKey {
 		materials = append(materials,
 			lifecycle.MaterialFile{Name: "host-key", Part: secrets.PrivateKeyPart, Secret: request.Target.HostKeyRef, Variable: "hostIdentity"},
 			lifecycle.MaterialFile{Name: "host-key.pub", Part: secrets.PublicKeyPart, Secret: request.Target.HostKeyRef, Variable: "hostIdentityPublic"})
@@ -501,6 +504,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	if operation == "apply" {
 		materials = append(materials, publicationCertificates(request)...)
 	}
+	materials = append(materials, recoveryMaterial(operation, request)...)
 	// The deadline follows the budgets this request froze, not this build's.
 	if operation == "apply" {
 		maps.Copy(refusals, keyPolicyRefusals(request, values))
