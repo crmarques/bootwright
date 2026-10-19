@@ -1,4 +1,4 @@
-.PHONY: build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check quick race check-offline check
+.PHONY: build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check focus quick race check-offline check
 
 GO := ./scripts/go
 VULNDB ?= https://vuln.go.dev
@@ -52,6 +52,11 @@ ansible-check:
 # operator guide lists for a proxied network.
 docs-check:
 	$(GO) test -count=1 -run '^(TestDocs|TestDiagnosticCodesMatchOutputSpec|TestDocumentedBoundsMatchCode|TestCommandCatalogMatchesSpec|TestTransitionTablesMatchSpec|TestUnclaimedObjectTableMatchesTheEngine|Test[A-Za-z]*RefusalTableMatchesUnsupported|Test[A-Za-z]*ObservableFieldTableMatchesProjector)' ./test/architecture ./internal/cli ./internal/reconciliation/lifecycle ./internal/controller/bundlelocal ./internal/containercluster/agentinstall ./internal/controller/clients ./internal/infrastructureservices/artifactserver ./internal/managedos/installation ./internal/substrate/libvirt
+
+# The probe tier: the narrowest checks of each file this branch changed, which
+# stop at the first failure. It is no gate; make check is.
+focus:
+	python3 -I scripts/tools/focus.py
 
 # The inner-loop tier: formatting, vet, the architecture suite and the packages
 # this branch changed together with their dependents.

@@ -1051,7 +1051,29 @@ reviewers retain semantic judgments that source checks cannot prove.
   a changed file or reading test whose path Git quotes even with
   `core.quotePath` off, because it holds a double quote, a backslash or a
   control character, tests everything; a selected package the default build
-  omits is named and left to its own gate.
+  omits is named and left to its own gate. A change is what the branch changed
+  since its merge base with `main` or `origin/main`, whichever is nearer, with
+  untracked files: a local `main` ahead of its unpushed remote is the
+  destination, so its own commits are no change.
+- `make focus` is the inner loop and no gate. From the same change it runs, in
+  concurrent lanes that each stop at their first failure: `git diff --check`;
+  `docs-check` when a Markdown file or a file under `specs/`, `docs/`,
+  `.agents/` or `.claude/` changed; gofmt of the changed Go files and vet of
+  every package `make quick` would test whenever a Go file or a module file
+  changed, a deleted one included, which type-checks each dependent and its
+  tests without running them; the tests of each changed package and each
+  reader `make quick` selects, except a reader of a changed Markdown file, and
+  never a dependent or, unless selected so, the architecture suite. For the
+  collection, it lints its changed YAML files, syntax-checks its changed
+  playbooks and runs sanity over its changed files; it runs the unit tests that
+  import a changed Python file, directly or through other collection files, or
+  name its stem as a word, every test that lists the plugins tree when that
+  file is no test, and the whole unit tree for any other changed file but the
+  collection's README and changelog. A change to the Ansible configuration,
+  the harness wrapper, its bootstrap or a lock it verifies runs lint, syntax
+  and sanity unnarrowed and the whole unit tree; the harness's own tests run
+  when it changes. The shared Ansible environment is prepared before the lanes
+  start, and a lane that ends without a verdict fails the run.
 
 Unit or fake-adapter success never qualifies a remote implementation. Every
 supported substrate/component/product/version combination needs its named

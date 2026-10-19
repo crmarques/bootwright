@@ -98,5 +98,53 @@ class CheckAreaTest(unittest.TestCase):
                     self.assertNotEqual(syntax_warnings(area), [])
 
 
+class SelectionTest(unittest.TestCase):
+    def test_no_argument_selects_every_suite_unnarrowed(self):
+        self.assertEqual(
+            ansible_check.selected_suites([]), (set(ansible_check.SUITES), [])
+        )
+
+    def test_a_suite_runs_alone_or_narrowed_to_paths(self):
+        self.assertEqual(
+            ansible_check.selected_suites(["--suite", "integration"]),
+            ({"integration"}, []),
+        )
+        for suite in ansible_check.NARROWED:
+            with self.subTest(suite=suite):
+                self.assertEqual(
+                    ansible_check.selected_suites(["--suite", suite, "a", "b"]),
+                    ({suite}, ["a", "b"]),
+                )
+
+    def test_integration_and_unknown_forms_refuse(self):
+        for arguments in (
+            ["--suite", "integration", "a"],
+            ["--suite", "everything"],
+            ["--suite"],
+            ["a"],
+        ):
+            with self.subTest(arguments=arguments):
+                with self.assertRaises(SystemExit):
+                    ansible_check.selected_suites(arguments)
+
+    def test_targets_are_named_from_the_collection_and_stay_inside_it(self):
+        with ansible_check.check_area() as temporary:
+            collection = Path(temporary) / "collection"
+            (collection / "tests/unit").mkdir(parents=True)
+            (collection / "tests/unit/test_a.py").write_text("", encoding="utf-8")
+            outside = Path(temporary) / "outside.py"
+            outside.write_text("", encoding="utf-8")
+            self.assertEqual(
+                ansible_check.collection_targets(
+                    collection, [str(collection / "tests/unit/test_a.py")]
+                ),
+                ["tests/unit/test_a.py"],
+            )
+            for path in (outside, collection / "missing.py", collection / ".."):
+                with self.subTest(path=str(path)):
+                    with self.assertRaises(SystemExit):
+                        ansible_check.collection_targets(collection, [str(path)])
+
+
 if __name__ == "__main__":
     unittest.main()

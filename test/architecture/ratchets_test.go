@@ -184,6 +184,79 @@ func TestQuickTestSelectsThePackagesWhoseTestsReadAChangedFile(t *testing.T) {
 	}
 }
 
+// The focused inner loop tests a changed package and a reader of a changed
+// file that is not Markdown, never a dependent, and lists what it selects.
+func TestQuickTestFocusTestsChangesWithoutTheirDependents(t *testing.T) {
+	root := ratchetQuickTestFixture(t)
+	stdout, stderr, err := ratchetQuickTest(root, "--focus")
+	if err != nil || stdout != "" || stderr != "quick-test: no Go package selected\n" {
+		t.Fatalf("quick-test --focus without a change: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	for _, step := range []struct{ change, want string }{
+		{"a/a.go", "example.test/fixture/a"},
+		{"specs/r.md", "example.test/fixture/a"},
+		{"examples/demo/new.yaml", "example.test/fixture/a example.test/fixture/s"},
+		{"go.mod", "./..."},
+	} {
+		ratchetWrite(t, root, step.change, "package a\n\nconst changed = true\n", 0o644)
+		stdout, stderr, err := ratchetQuickTest(root, "--focus")
+		if err != nil || stdout != "test "+step.want+"\n" || stderr != "" {
+			t.Fatalf("quick-test --focus after changing %s: %v\nstdout:\n%s\nstderr:\n%s", step.change, err, stdout, stderr)
+		}
+		stdout, stderr, err = ratchetQuickTest(root, "--focus", "--list")
+		if want := strings.ReplaceAll(step.want, " ", "\n") + "\n"; err != nil || stdout != want || stderr != "" {
+			t.Fatalf("quick-test --focus --list after changing %s: %v\nstdout:\n%s\nstderr:\n%s", step.change, err, stdout, stderr)
+		}
+	}
+	if _, _, err := ratchetQuickTest(root, "--everything"); err == nil {
+		t.Fatal("quick-test accepted an unknown option")
+	}
+}
+
+func TestQuickTestListsWhatItWouldTest(t *testing.T) {
+	root := ratchetQuickTestFixture(t)
+	stdout, stderr, err := ratchetQuickTest(root, "--list")
+	if err != nil || stdout != "./test/architecture/...\n" || stderr != "" {
+		t.Fatalf("quick-test --list without a change: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	ratchetWrite(t, root, "a/a.go", "package a\n\nconst changed = true\n", 0o644)
+	stdout, stderr, err = ratchetQuickTest(root, "--list")
+	if err != nil || stdout != "./test/architecture/...\nexample.test/fixture/a\nexample.test/fixture/b\nexample.test/fixture/d\n" || stderr != "" {
+		t.Fatalf("quick-test --list: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+}
+
+// A branch is compared with the nearer of main and origin/main, so a local
+// main ahead of an unpushed remote does not count its own commits as changes.
+func TestQuickTestComparesWithTheNearerMain(t *testing.T) {
+	root := ratchetQuickTestFixture(t)
+	pushed := strings.TrimSpace(ratchetGit(t, root, "rev-parse", "HEAD"))
+	ratchetGit(t, root, "update-ref", "refs/remotes/origin/main", pushed)
+	ratchetWrite(t, root, "a/a.go", "package a\n\nconst unpushed = true\n", 0o644)
+	ratchetGit(t, root, "commit", "-q", "-a", "-m", "unpushed")
+	unpushed := strings.TrimSpace(ratchetGit(t, root, "rev-parse", "HEAD"))
+	ratchetGit(t, root, "switch", "-q", "-c", "task")
+	ratchetWrite(t, root, "c/c.go", "package c\n\nconst task = true\n", 0o644)
+	ratchetGit(t, root, "commit", "-q", "-a", "-m", "task")
+	if stdout, stderr, err := ratchetQuickTest(root, "--base"); err != nil || stdout != unpushed+"\n" {
+		t.Fatalf("quick-test --base before main was pushed: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	ratchetGit(t, root, "update-ref", "refs/remotes/origin/main", "HEAD")
+	ratchetGit(t, root, "update-ref", "refs/heads/main", pushed)
+	if stdout, stderr, err := ratchetQuickTest(root, "--base"); err != nil || stdout != ratchetGit(t, root, "rev-parse", "HEAD") {
+		t.Fatalf("quick-test --base behind a newer remote: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+}
+
+// The focused inner loop's own unit tests run with the offline gates, since
+// only Go tests run there.
+func TestTheFocusSelectionUnitsPass(t *testing.T) {
+	command := exec.Command("python3", "-I", "-B", filepath.Join("..", "..", "scripts", "tools", "focus_test.py"))
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("focus_test.py failed: %v\n%s", err, output)
+	}
+}
+
 // A go:embed directory pattern descends into every subdirectory, one holding
 // another package included, and stops only at a module boundary
 // (https://github.com/golang/go/blob/go1.26.8/src/cmd/go/internal/load/pkg.go#L2247-L2251),
@@ -314,9 +387,9 @@ func ratchetGit(t *testing.T, root string, arguments ...string) string {
 	return string(output)
 }
 
-func ratchetQuickTest(root string) (string, string, error) {
+func ratchetQuickTest(root string, arguments ...string) (string, string, error) {
 	var stdout, stderr bytes.Buffer
-	command := exec.Command(filepath.Join(root, "scripts", "quick-test"))
+	command := exec.Command(filepath.Join(root, "scripts", "quick-test"), arguments...)
 	command.Dir = root
 	command.Env = ratchetEnvironment()
 	command.Stdout, command.Stderr = &stdout, &stderr

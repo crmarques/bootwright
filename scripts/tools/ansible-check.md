@@ -44,8 +44,16 @@ plain loop is `pytest ansible_collections/bootwright/core/tests/unit` run from
 environment's pytest.
 
 `./scripts/ansible-check --suite syntax|lint|sanity|units|integration` runs
-one of those suites for a local inner loop. It is never a substitute for the
-argument-free gate, which `make check` and CI run.
+one of those suites for a local inner loop. Paths after the suite narrow it to
+files and directories of the collection: syntax checks the shipped playbooks at
+or under them, lint lints them, sanity runs every sanity test over them and the
+floor import test as usual, and units runs only the plain pytest loop over
+them, skipping the harness's own tests, ansible-test and the floor. One test
+file runs serially; more, or a directory, run across pytest-xdist workers, and
+the tests that fail there run again serially, which decides. A worker's
+threads take process-directed signals, so a test that signals itself can fail
+only in parallel. Neither form is a substitute for the argument-free gate,
+which `make check` and CI run.
 
 One target is excluded by default because it needs the dnf4 backend of a RHEL 9
 host: `native_transaction` builds a fixture RPM and drives the package manager

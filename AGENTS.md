@@ -33,9 +33,10 @@ push, release, or additional product scope.
 
 Commands (always through the pinned wrappers, never a bare `go`):
 
+- `make focus`: the narrowest checks of this branch's diff; the inner loop.
 - `make quick`: formatting, vet, the architecture suite and the changed packages.
 - `make docs-check`: guidance links, cited paths and tests, command lines, and
   the spec tables checked against code.
 - `./scripts/go test ./internal/<package>/...`: one package's tests.
-- `./scripts/ansible-check --suite units`: collection unit tests.
-- `make check`: every gate; CI runs it on each push and pull request.
+- `./scripts/ansible-check --suite units [PATH...]`: collection unit tests.
+- `make check`: every gate, once before integrating; CI runs it on each push.

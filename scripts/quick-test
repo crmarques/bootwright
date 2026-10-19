@@ -8,12 +8,50 @@
 # compare against, tests everything. A selected directory the default build
 # does not list, such as a package behind a build tag, is named and left to its
 # own gate.
+#
+# --focus narrows the inner loop: no dependent, no architecture suite unless
+# selected, and no reader of a changed Markdown file, which docs-check covers.
+# --list prints the selection, one package or pattern per line, instead of
+# testing it; --base prints the commit the branch is compared against.
 set -eu
+focus=false
+list=false
+show=false
+for argument in "$@"; do
+    case $argument in
+    --focus) focus=true ;;
+    --list) list=true ;;
+    --base) show=true ;;
+    *) echo 'usage: scripts/quick-test [--focus] [--list] [--base]' >&2; exit 2 ;;
+    esac
+done
+run() {
+    if $list; then
+        if test $# -gt 0; then printf '%s\n' "$@"; fi
+        exit 0
+    fi
+    if test $# -eq 0; then
+        echo 'quick-test: no Go package selected' >&2
+        exit 0
+    fi
+    exec ./scripts/go test "$@"
+}
 repository=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repository"
-base=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || true)
+# The branch left main where it last met the nearer of the local main and the
+# remote one: a local main ahead of an unpushed remote is the destination.
+remote=$(git merge-base HEAD origin/main 2>/dev/null || true)
+own=$(git merge-base HEAD main 2>/dev/null || true)
+base=${remote:-$own}
+if test -n "$remote" && test -n "$own" && git merge-base --is-ancestor "$remote" "$own"; then
+    base=$own
+fi
+if $show; then
+    if test -n "$base"; then printf '%s\n' "$base"; fi
+    exit 0
+fi
 if test -z "$base"; then
-    exec ./scripts/go test ./...
+    run ./...
 fi
 # Without rename detection a moved file names both the directory it left and
 # the one it entered; with it, the name-only listing gives only the new path.
@@ -24,7 +62,7 @@ changed=$({
     git -c core.quotePath=false ls-files --others --exclude-standard
 } | sort -u)
 if printf '%s\n' "$changed" | grep -Eq '^(go\.mod|go\.sum)$'; then
-    exec ./scripts/go test ./...
+    run ./...
 fi
 module=$(./scripts/go list -m)
 directories=$(printf '%s\n' "$changed" | grep '\.go$' | while IFS= read -r file; do
@@ -37,7 +75,7 @@ done | sort -u)
 # is taken on its own so that its failure stops the run; exit status 1, no name
 # found, is not a failure.
 others=$(printf '%s\n' "$changed" | grep -v -e '\.go$' -e '^$' | sort -u)
-roots=$(printf '%s\n' "$others" | cut -d / -f 1 | sort -u)
+roots=$(printf '%s\n' "$others" | if $focus; then grep -v '\.md$' || test $? -eq 1; else cat; fi | cut -d / -f 1 | sort -u)
 set --
 while IFS= read -r root; do
     if test -n "$root"; then
@@ -53,11 +91,12 @@ fi
 # Off, Git still quotes a path holding a double quote, a backslash or a control
 # character: a changed file or a reading test with such a path tests everything.
 if printf '%s\n%s\n' "$changed" "$named" | grep -q '^"'; then
-    exec ./scripts/go test ./...
+    run ./...
 fi
 readers=$(printf '%s\n' "$named" | grep '\.go$' | while IFS= read -r file; do dirname -- "$file"; done | sort -u)
 if test -z "$directories$readers$others"; then
-    exec ./scripts/go test ./test/architecture/...
+    if $focus; then run; fi
+    run ./test/architecture/...
 fi
 # The listing is taken on its own so that its failure stops the run: piped into
 # the selection, a failed listing left out every package it could not list.
@@ -87,8 +126,9 @@ targets=$({ printf '%s\n' "$directories" | sed "s|^\.$|$module|; s|^\([^/].*\)$|
 readers=$(printf '%s\n' "$readers" | sed "s|^\.$|$module|; s|^\([^/].*\)$|$module/\1|" | sort -u)
 # A package is affected when it or one of its dependencies is a target; it is
 # tested when it is affected, when its tests import an affected package, or
-# when its tests read a changed file.
-packages=$(printf '%s\n' "$graph" | awk -F '\t' -v targets="$targets" -v readers="$readers" '
+# when its tests read a changed file. With --focus, only a target or a reader
+# is tested.
+packages=$(printf '%s\n' "$graph" | awk -F '\t' -v targets="$targets" -v readers="$readers" -v focus="$focus" '
     BEGIN {
         n = split(targets, list, "\n"); for (i = 1; i <= n; i++) wanted[list[i]] = 1
         n = split(readers, list, "\n"); for (i = 1; i <= n; i++) reads[list[i]] = 1
@@ -100,10 +140,17 @@ packages=$(printf '%s\n' "$graph" | awk -F '\t' -v targets="$targets" -v readers
     }
     END {
         for (line = 1; line <= NR; line++) {
+            if (focus == "true") {
+                if ((path[line] in wanted) || (path[line] in reads)) print path[line]
+                continue
+            }
             selected = (path[line] in affected) || (path[line] in reads)
             n = split(tests[line], imports, " ")
             for (i = 1; i <= n && !selected; i++) selected = (imports[i] in affected)
             if (selected) print path[line]
         }
     }')
-exec ./scripts/go test ./test/architecture/... $packages
+if $focus; then
+    run $packages
+fi
+run ./test/architecture/... $packages

@@ -41,17 +41,77 @@ def check_area() -> tempfile.TemporaryDirectory:
     return tempfile.TemporaryDirectory(prefix=AREA_PREFIX)
 
 
-def selected_suites(arguments: list[str]) -> set[str]:
-    """Return the suites to run: all of them, or the one --suite names.
+# The suites a list of paths can narrow; integration targets are not paths.
+NARROWED = ("syntax", "lint", "sanity", "units")
 
-    A partial run serves an agent's inner loop; the complete gate is the
-    argument-free form that CI and make check run.
+
+def selected_suites(arguments: list[str]) -> tuple[set[str], list[str]]:
+    """Return the suites to run and the paths that narrow them.
+
+    A partial run serves an agent's inner loop: one suite, or one suite over
+    the named files and directories of the collection. The complete gate is
+    the argument-free form that CI and make check run.
     """
     if not arguments:
-        return set(SUITES)
-    if len(arguments) == 2 and arguments[0] == "--suite" and arguments[1] in SUITES:
-        return {arguments[1]}
-    raise SystemExit("Usage: scripts/ansible-check [--suite " + "|".join(SUITES) + "]")
+        return set(SUITES), []
+    if len(arguments) >= 2 and arguments[0] == "--suite" and arguments[1] in SUITES:
+        if len(arguments) == 2 or arguments[1] in NARROWED:
+            return {arguments[1]}, arguments[2:]
+    raise SystemExit(
+        "Usage: scripts/ansible-check [--suite "
+        + "|".join(SUITES)
+        + "] or [--suite "
+        + "|".join(NARROWED)
+        + " PATH...]"
+    )
+
+
+def collection_targets(collection: Path, paths: list[str]) -> list[str]:
+    """Return each path relative to the collection, refusing one outside it.
+
+    A relative path is read from the working directory, as a shell names it.
+    """
+    targets = []
+    for path in paths:
+        resolved = Path(path).resolve()
+        if not resolved.exists():
+            raise SystemExit(f"{path} does not exist")
+        if not resolved.is_relative_to(collection.resolve()):
+            raise SystemExit(f"{path} is outside the collection {collection}")
+        targets.append(str(resolved.relative_to(collection.resolve())))
+    return targets
+
+
+def narrowed_units(
+    pytest: list[str], collection: Path, targets: list[str], environment: dict
+) -> int:
+    """Run the plain unit loop over the targets and return its status.
+
+    One file runs serially, as the gate runs it. More, or a directory, run
+    across pytest-xdist workers, and any test that fails there runs again
+    serially, which gives its verdict: a worker's threads take
+    process-directed signals and make every fork a test performs one that may
+    deadlock, so a test that signals itself, as the route probe's alarm tests
+    do, fails there alone.
+    """
+    collections = collection.parents[2]
+    paths = [str(collection.relative_to(collections) / target) for target in targets]
+    if len(targets) == 1 and (collection / targets[0]).is_file():
+        return subprocess.run(
+            pytest + paths, cwd=collections, env=environment, check=False
+        ).returncode
+    parallel = subprocess.run(
+        pytest + ["-n", "auto"] + paths, cwd=collections, env=environment, check=False
+    )
+    if parallel.returncode != 1:
+        return parallel.returncode
+    print("Rerunning the tests that failed in parallel serially; that run decides.")
+    return subprocess.run(
+        pytest + ["--last-failed", "--last-failed-no-failures", "none"] + paths,
+        cwd=collections,
+        env=environment,
+        check=False,
+    ).returncode
 
 
 def floor_interpreter(root: Path, fixtures: Path, area: Path) -> tuple[str, Path]:
@@ -149,7 +209,7 @@ def main() -> int:
         raise SystemExit(
             "Ansible checks require the pinned CPython 3.13.16 interpreter."
         )
-    selected = selected_suites(sys.argv[1:])
+    selected, paths = selected_suites(sys.argv[1:])
 
     root = Path(__file__).resolve().parents[2]
     requirements = root / "scripts/tools/ansible-requirements.txt"
@@ -173,6 +233,7 @@ def main() -> int:
     executable = Path(sys.executable)
     automation = root / "ansible"
     collection = automation / "collections/ansible_collections/bootwright/core"
+    targets = collection_targets(collection, paths)
     fixtures = Path(
         os.environ.get(
             "BOOTWRIGHT_ANSIBLE_TEST_ARTIFACTS",
@@ -217,6 +278,18 @@ def main() -> int:
             raise SystemExit(
                 "No shipped Ansible playbooks were found for syntax checking."
             )
+        if targets and "syntax" in selected:
+            # Narrowed, syntax checks the shipped playbooks at or under a target.
+            playbooks = [
+                playbook
+                for playbook in playbooks
+                if any(
+                    playbook.relative_to(collection).is_relative_to(target)
+                    for target in targets
+                )
+            ]
+            if not playbooks:
+                raise SystemExit("No shipped playbook is at or under " + " ".join(paths))
         if "syntax" in selected:
             for playbook in playbooks:
                 subprocess.run(
@@ -244,13 +317,13 @@ def main() -> int:
                     "--offline",
                     "--project-dir",
                     str(automation),
-                    str(automation),
-                ],
+                ]
+                + ([str(collection / target) for target in targets] or [str(automation)]),
                 cwd=root,
                 env=environment,
                 check=True,
             )
-        if "units" in selected:
+        if "units" in selected and not targets:
             # The harness's own tests; -B keeps bytecode out of the checkout.
             # AREA_VARIABLE names this run's area, so they parse the area that
             # every process here takes as its HOME.
@@ -308,7 +381,7 @@ def main() -> int:
         )
         ansible_test = [str(executable), "-I", str(executable.parent / "ansible-test")]
         suites = [
-            ["sanity"],
+            ["sanity", *targets],
             ["units", "--num-workers", "0"],
             ["integration", "controller_tool"],
             ["integration", "controller_supervisor"],
@@ -323,7 +396,8 @@ def main() -> int:
         if os.environ.get("BOOTWRIGHT_ANSIBLE_CONTROLLER_TARGET") == "1":
             suites.append(["integration", "controller_prerequisites"])
         for arguments in suites:
-            if arguments[0] not in selected:
+            # Narrowed, units is the plain loop below alone.
+            if arguments[0] not in selected or (targets and arguments[0] == "units"):
                 continue
             subprocess.run(
                 ansible_test
@@ -339,19 +413,17 @@ def main() -> int:
             # with the collections directory on PYTHONPATH, where the
             # collection's conftest.py installs that loader instead. -P and -s
             # keep the working directory and the user site off the path, as
-            # -I does, while PYTHONPATH is still read.
+            # -I does, while PYTHONPATH is still read. Narrowed, it runs the
+            # targets alone, and nothing else of the suite runs.
             collections = area / "collections"
+            pytest = [str(executable), "-P", "-s", "-m", "pytest"]
+            plain = dict(environment, PYTHONPATH=str(collections))
+            if targets:
+                return narrowed_units(pytest, test_collection, targets, plain)
             subprocess.run(
-                [
-                    str(executable),
-                    "-P",
-                    "-s",
-                    "-m",
-                    "pytest",
-                    str(test_collection.relative_to(collections) / "tests/unit"),
-                ],
+                pytest + [str(test_collection.relative_to(collections) / "tests/unit")],
                 cwd=collections,
-                env=dict(environment, PYTHONPATH=str(collections)),
+                env=plain,
                 check=True,
             )
         if not selected & {"sanity", "units"}:

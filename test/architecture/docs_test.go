@@ -28,7 +28,7 @@ func docsByteBudgets() map[string]int {
 		"specs/index.md":      4656,
 		"specs/milestones.md": 8192,
 		".agents/skills/code-implementation/SKILL.md": 3072,
-		".claude/rules/ansible.md":                    491,
+		".claude/rules/ansible.md":                    440,
 		".claude/rules/go.md":                         564,
 		".claude/rules/guidance.md":                   484,
 	}

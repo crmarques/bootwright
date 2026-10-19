@@ -82,6 +82,7 @@ says what a lock change requires.
 | Command | Result |
 | --- | --- |
 | `make build` | Build `bin/bootwright`, stamped with the version, commit and source state of the checkout it was built from. |
+| `make focus` | Probe tier: the narrowest checks of the branch's diff in concurrent lanes, stopping each at its first failure: gofmt of the changed Go files, vet of every affected package, the changed packages' tests, the collection tests that import or name a changed plugin, narrowed lint, syntax and sanity, and docs-check for guidance. It is no gate; [the tiers](../.agents/skills/code-implementation/references/verification.md) say what it leaves to `make check`. |
 | `make quick` | Inner loop: formatting, vet, the architecture suite, and the packages a change on this branch reaches, whether to Go source, an embedded asset or test data, as [architecture verification](../specs/architecture.md#architecture-verification) selects them. |
 | `make docs-check` | Check guidance links, anchors, cited paths and tests, documented command lines, skill frontmatter and byte budgets over the files Git tracks, every capability's refusal table and the engine's table of unclaimed objects against the code that refuses, beside the working-tree walks [architecture verification](../specs/architecture.md#architecture-verification) names, and hold the pages to the [milestone rules](../specs/milestones.md) (`TestDocsMilestonePagesAgreeWithTheirStatus`): each milestone's Status Delivery agrees with its page and its Next names only open work; a done milestone keeps no item or planned slice and requires only done milestones; every item has one row of a known Kind, one detail section and no delivered record, and leaves its page when it completes; each planned slice has one row of a known Kind naming only its page's items; and an item's Delivery names a planned slice exactly when that slice's row lists the item, with no empty slice suffix. |
 | `make test` | Run all package tests. |
@@ -92,7 +93,7 @@ says what a lock change requires.
 | `make completion-test` | Source and exercise the Bash integration, and the Zsh, Fish and PowerShell integrations with `BOOTWRIGHT_TEST_ALL_SHELLS=1`. |
 | `make race` | Run the race detector over the concurrent lifecycle, privilege and composition packages. |
 | `make vulncheck` | Scan for known reachable vulnerabilities. |
-| `make ansible-check` | Run pinned Ansible syntax, lint, collection sanity, unit and safe integration checks; `./scripts/ansible-check --suite <name>` runs one suite locally. |
+| `make ansible-check` | Run pinned Ansible syntax, lint, collection sanity, unit and safe integration checks; `./scripts/ansible-check --suite <name>` runs one suite locally, and `--suite syntax\|lint\|sanity\|units PATH...` narrows one to collection paths. |
 | `make check-offline` | Run every gate that needs no network once caches are warm, and name the gates it left unrun. |
 | `make check` | Run all verification gates, including completion. CI runs it, and `make race` beside it as its own job, on every push and pull request. |
 

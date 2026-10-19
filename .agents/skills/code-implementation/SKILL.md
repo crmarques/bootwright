@@ -29,16 +29,12 @@ It never authorizes a push, a release or product scope.
   together. Add a regression test for a defect. Test public contracts and effect
   boundaries, not incidental implementation; size committed tests like their
   neighbours, and do not keep scratch checks. Prefer targeted edits to rewrites.
-- Run the gate of every class the change touches:
-
-| Class | Paths | Gate |
-| --- | --- | --- |
-| Docs | `specs/`, `docs/`, `.agents/`, `.claude/`, other Markdown | `make docs-check` |
-| Go | `internal/`, `cmd/`, `api/`, `test/` | `make quick` |
-| Ansible | `ansible/` | `./scripts/ansible-check --suite units` and `--suite lint` |
-| Safety | substrate, managed OS, container cluster, lifecycle and contextfs code or their roles | `make check` and `make race`, plus an independent review of the diff |
-| Integration | any | `make check`, which CI runs |
-
+- Verify in [tiers](references/verification.md), cheapest first: a probe of
+  the changed behavior after each edit, and `make focus` before each
+  intermediate commit or handoff. Run the full gate once, before the commit
+  that integrates into main: `make check`, which CI runs, plus, for a safety
+  change (substrate, managed OS, container cluster, lifecycle and contextfs
+  code or their roles), `make race` and an independent review of the diff.
 - Record exact commands and results. Failed, skipped, flaky, unavailable and
   unrun gates are not passes.
 - Before committing, review the complete diff and run `git diff --cached --check`.
