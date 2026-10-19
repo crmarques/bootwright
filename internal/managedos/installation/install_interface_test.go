@@ -295,7 +295,7 @@ func bondRefusalOf(row, bond, detail string) (string, string) {
 			"set link-aggregation.mode of " + bond + " to one of balance-rr, active-backup, balance-xor, broadcast, 802.3ad, balance-tlb or balance-alb in the network of Machine/rhel-01"
 	case "libvirt":
 		return "a libvirt bridge qualifies only active-backup bonding, and bond " + bond + " of Machine/rhel-01 declares mode " + detail,
-			"set link-aggregation.mode of " + bond + " on Machine/rhel-01 to active-backup; the other modes are qualified on physical hosts in M2d (B78)"
+			"set link-aggregation.mode of " + bond + " on Machine/rhel-01 to active-backup; the other modes are qualified on physical hosts (B78)"
 	}
 	return "the installer receives bond options as one option list, and link-aggregation.options." + detail + " of " + bond + " on Machine/rhel-01 cannot be written into it",
 		"remove link-aggregation.options." + detail + " from " + bond + " in the network of Machine/rhel-01, or give it a plain value"

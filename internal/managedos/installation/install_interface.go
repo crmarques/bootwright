@@ -172,7 +172,7 @@ func bondRefusal(template, bond api.Value, identity string, host installHost) (r
 	}
 	if host.Known && host.Libvirt && mode.Text() != "active-backup" {
 		return "a libvirt bridge qualifies only active-backup bonding, and bond " + name + " of " + identity + " declares mode " + mode.Text(),
-			"set link-aggregation.mode of " + name + " on " + identity + " to active-backup; the other modes are qualified on physical hosts in M2d (B78)"
+			"set link-aggregation.mode of " + name + " on " + identity + " to active-backup; the other modes are qualified on physical hosts (B78)"
 	}
 	if option := uncarriedBondOption(aggregation.Get("options")); option != "" {
 		return "the installer receives bond options as one option list, and link-aggregation.options." + option + " of " + name + " on " + identity + " cannot be written into it",
