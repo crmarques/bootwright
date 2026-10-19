@@ -19,6 +19,7 @@ const (
 type Evidence struct {
 	Absent  bool   `json:"absent"`
 	Address string `json:"address"`
+	FIPS    bool   `json:"fips"`
 	HostKey string `json:"hostKey"`
 	// Image is the installer image still published, publicly or beneath the
 	// private subtree. A completed private installation has withdrawn it.
@@ -90,6 +91,9 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 	}
 	if !evidence.Network || !evidence.NetworkReboot || len(evidence.NetworkDifferences) != 0 {
 		return refusal("lifecycle.state", "the installed machine's network does not match its declaration after a reboot", "")
+	}
+	if request.fips() && !evidence.FIPS {
+		return refusal("lifecycle.state", "the installed machine does not report the FIPS mode its installation enabled", "")
 	}
 	if evidence.Media != "" {
 		return refusal("lifecycle.state", "the installation left its virtual media inserted", "")

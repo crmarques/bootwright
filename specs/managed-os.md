@@ -779,7 +779,7 @@ referenced install profile in the `machines` stage. It realizes the
 `MachineInstallProfile` publication under implementation and request version
 `os-package-tree-v1`; each machine installation requires that profile
 publication alongside its own Machine realization and referenced services.
-An installation uses request version `os-install-anaconda-v10`. Profiles using
+An installation uses request version `os-install-anaconda-v11`. Profiles using
 a URL package source contribute no publication block.
 
 The request freezes only context and profile identity, artifact-server
@@ -946,6 +946,8 @@ VLAN's `vlan.id`.
 `<server>` is the selected `ArtifactServer` and `<server host>` the Machine its
 `spec.machineRef` names; `<provider>` is the Machine's `InfraProvider` and
 `<provider host>` the Machine its `spec.libvirt.machineRef` names.
+`<secret>` is the Secret the Environment's `spec.remoteMachinesAccessKey.keyRef`
+names, as `Secret/<name>`.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
@@ -971,7 +973,8 @@ VLAN's `vlan.id`.
 | An initial password | a profile's `spec.customizations.ssh.initialPassword` | `the install profile selects spec.customizations.ssh.initialPassword, which carries secret bytes or effects this executable does not prove` | `remove spec.customizations.ssh.initialPassword from <profile>` |
 | Disk encryption | a profile's `spec.customizations.security.diskEncryption` | `the install profile selects spec.customizations.security.diskEncryption, which carries secret bytes or effects this executable does not prove` | `remove spec.customizations.security.diskEncryption from <profile>` |
 | Password authentication | a profile's `spec.customizations.ssh.passwordAuthentication: true` | `the install profile enables spec.customizations.ssh.passwordAuthentication, but no password can be set while spec.customizations.ssh.initialPassword is refused` | `set spec.customizations.ssh.passwordAuthentication to false on <profile>` |
-| FIPS | a profile's `spec.customizations.security.fips.enabled: true` | `the install profile enables FIPS, which carries effects this executable does not prove` | `disable spec.customizations.security.fips on <profile>` |
+| FIPS on a physical Machine | a profile's `spec.customizations.security.fips.enabled: true` selected by a Machine on a `baremetal` provider, whose installation is proved by a delivered key | `the FIPS profile arm is qualified only on virtual Machines, and <machine> is physical; physical qualification is B78` | `install <machine> with a profile that does not enable spec.customizations.security.fips, or disable spec.customizations.security.fips on <profile>` |
+| An Ed25519 fleet key under FIPS | a profile's `spec.customizations.security.fips.enabled: true` while the Environment's `spec.remoteMachinesAccessKey.keyRef` names a Secret whose `spec.source.generated.keyType` is `ed25519`, the default included | `a FIPS-mode installation refuses Ed25519 keys, and the fleet key <secret> generates one` | `declare spec.source.generated.keyType as ecdsa-p256, ecdsa-p384, ecdsa-p521 or rsa on <secret>` |
 | A credentialed proxy | a Machine's effective `spec.proxy` naming a Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, while its profile configures a repository | `the installed system's repositories would reach <proxy> through a credential or private trust anchor, which an installation cannot carry` | `select direct: {} or an external Proxy without spec.connection.auth and spec.connection.trustBundleRef in spec.proxy of <machine> or of <profile>` |
 | An installer image server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation builds and publishes its installer image on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
 | A package tree server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation extracts and publishes its package tree on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint on <profile>` |

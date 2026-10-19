@@ -1,6 +1,7 @@
 {
   "absent": true,
   "address": "",
+  "fips": false,
   "hostKey": "",
   "image": false,
   "marker": "",

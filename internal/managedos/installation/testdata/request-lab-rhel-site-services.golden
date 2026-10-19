@@ -110,6 +110,7 @@
       }
     },
     "domain": "bootwright-lab-rhel-01",
+    "hostKeyType": "ed25519",
     "physical": false,
     "substrate": "libvirt",
     "uri": "qemu:///system"
@@ -124,5 +125,5 @@
     "size": 13107200000
   },
   "user": "bootwright",
-  "version": "os-install-anaconda-v10"
+  "version": "os-install-anaconda-v11"
 }

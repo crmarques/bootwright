@@ -409,6 +409,7 @@
           }
         },
         "domain": "bootwright-lab-nv-bond",
+        "hostKeyType": "ed25519",
         "physical": false,
         "substrate": "libvirt",
         "uri": "qemu:///system"
@@ -423,7 +424,7 @@
         "size": 13107200000
       },
       "user": "bootwright",
-      "version": "os-install-anaconda-v10"
+      "version": "os-install-anaconda-v11"
     },
     {
       "address": "198.51.100.71",
@@ -600,6 +601,7 @@
           }
         },
         "domain": "bootwright-lab-nv-vlan",
+        "hostKeyType": "ed25519",
         "physical": false,
         "substrate": "libvirt",
         "uri": "qemu:///system"
@@ -614,7 +616,7 @@
         "size": 13107200000
       },
       "user": "bootwright",
-      "version": "os-install-anaconda-v10"
+      "version": "os-install-anaconda-v11"
     },
     {
       "address": "198.51.100.141",
@@ -834,6 +836,7 @@
           }
         },
         "domain": "bootwright-lab-nv-vlan-bond",
+        "hostKeyType": "ed25519",
         "physical": false,
         "substrate": "libvirt",
         "uri": "qemu:///system"
@@ -848,7 +851,7 @@
         "size": 13107200000
       },
       "user": "bootwright",
-      "version": "os-install-anaconda-v10"
+      "version": "os-install-anaconda-v11"
     }
   ]
 }

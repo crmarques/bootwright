@@ -439,6 +439,19 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		}
 		values["authorizedKey"] = key
 		values["fleetKeyType"] = strings.Fields(key)[0]
+		if request.fips() {
+			if err := fipsFleetKey(request, key); err != nil {
+				return lifecycle.RunResult{}, err
+			}
+			refusals["fips-not-enabled"] = fipsNotEnabled(execution.Context, request)
+		}
+		if request.Target.Channel == substrate.ChannelGuestAgent {
+			algorithm, err := generatedHostKeyType(execution.Context, request)
+			if err != nil {
+				return lifecycle.RunResult{}, err
+			}
+			values["generatedHostKeyType"] = algorithm
+		}
 		pin, err := c.pinValues(execution, request)
 		if err != nil {
 			return lifecycle.RunResult{}, err

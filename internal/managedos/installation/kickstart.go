@@ -12,13 +12,20 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const kickstartVersion = "kickstart-anaconda-v7"
+const kickstartVersion = "kickstart-anaconda-v8"
 
-// hostKeySource is the key a guest-agent installation republishes. Ed25519 is
-// the type its identity operation binds, and generating it here rather than at
-// first boot means the published copy is the key sshd will actually present. A
-// delivered key is installed at its own type's path instead.
-const hostKeySource = "/etc/ssh/ssh_host_ed25519_key.pub"
+// guestHostKeys are the keys a guest-agent installation generates here rather
+// than at first boot, so the republished copy is the key sshd presents. Each
+// names the ssh-keygen arguments that generate it explicitly, none when
+// ssh-keygen -A does; a FIPS-mode system refuses Ed25519 and gets ECDSA.
+var guestHostKeys = map[string]string{"ed25519": "", "ecdsa-p256": "-t ecdsa -b 256"}
+
+func guestHostKeyType(fips bool) string {
+	if fips {
+		return "ecdsa-p256"
+	}
+	return "ed25519"
+}
 
 // agentFilter is the guest agent's RPC filter, and identityRPCs are the
 // commands the identity operation reads a bounded guest file through. RHEL
@@ -85,8 +92,8 @@ type Installation struct {
 	Formats          string
 	Gateway          string
 	HostKeyPath      string
-	// HostKeyType is the generated keyType of a delivered key, which decides
-	// the path it is installed at and the type it is proved to be.
+	// HostKeyType is the keyType of the delivered or guest-generated key, which
+	// decides the path it is installed at and the type it is proved to be.
 	HostKeyType   string
 	Hostname      string
 	Interface     string
@@ -128,6 +135,10 @@ func RenderKickstart(input Installation) (string, error) {
 	}
 	if _, known := deliveredHostKeys[input.HostKeyType]; input.Channel == substrate.ChannelDeliveredKey && !known {
 		return "", refusal("lifecycle.state", "the delivered SSH host key type "+input.HostKeyType+" has no installed path",
+			"plan the installation again with this release")
+	}
+	if _, known := guestHostKeys[input.HostKeyType]; input.Channel == substrate.ChannelGuestAgent && !known {
+		return "", refusal("lifecycle.state", "the guest-agent SSH host key type "+input.HostKeyType+" has no generated path",
 			"plan the installation again with this release")
 	}
 	network, err := networkLine(input)
@@ -541,11 +552,20 @@ func identityLines(input Installation) []string {
 	if input.Channel != substrate.ChannelGuestAgent {
 		return nil
 	}
-	return append([]string{
+	key := deliveredHostKeys[input.HostKeyType]
+	var lines []string
+	if generation := guestHostKeys[input.HostKeyType]; generation != "" {
+		lines = append(lines, "test -e "+key.path+" || /usr/bin/ssh-keygen -q "+generation+" -N '' -f "+key.path)
+	}
+	lines = append(lines,
 		"/usr/bin/ssh-keygen -A",
-		"install -m 0444 " + hostKeySource + " " + input.HostKeyPath,
-		"test -s " + input.HostKeyPath,
-	}, agentFilterLines()...)
+		"install -m 0444 "+key.path+".pub "+input.HostKeyPath,
+		"test -s "+input.HostKeyPath,
+	)
+	if guestHostKeys[input.HostKeyType] != "" {
+		lines = append(lines, `test "$(cut -d' ' -f1 `+input.HostKeyPath+`)" = '`+key.algorithm+`'`)
+	}
+	return append(lines, agentFilterLines()...)
 }
 
 // deliveredHostKey is where sshd reads a host key of one generated type, and

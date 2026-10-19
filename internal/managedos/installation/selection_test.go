@@ -201,12 +201,6 @@ func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 		"disk encryption": {installProfile(field("customizations", customizations.With("security", api.MapValue(
 			field("diskEncryption", api.MapValue(text("recoveryPassphraseRef", "luks"))),
 		)))), selected("spec.customizations.security.diskEncryption")},
-		"fips": {installProfile(field("customizations", customizations.With("security", api.MapValue(
-			field("fips", api.MapValue(field("enabled", api.BoolValue(true)))),
-		)))), [2]string{
-			"the install profile enables FIPS, which carries effects this executable does not prove",
-			"disable spec.customizations.security.fips on MachineInstallProfile/rhel-9-8",
-		}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			unsupported := lifecycle.Identities(Refusals(labCatalog(test.profile)))
@@ -229,6 +223,9 @@ func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 	))))
 	if unsupported := lifecycle.Identities(Refusals(labCatalog(disabled))); len(unsupported) != 0 {
 		t.Fatalf("a disabled FIPS declaration reported %v", unsupported)
+	}
+	if unsupported := lifecycle.Identities(Refusals(labCatalog(fipsProfile()))); len(unsupported) != 0 {
+		t.Fatalf("an enabled FIPS declaration on a virtual Machine reported %v", unsupported)
 	}
 }
 
@@ -599,7 +596,7 @@ func TestTheMarkerNamesTheRequestItProves(t *testing.T) {
 // Every version but the one this build writes refuses, and the refusal names
 // it so the remedy is the executable that registered the operation.
 func TestAFrozenRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"os-install-anaconda-v1", "os-install-anaconda-v2", "os-install-anaconda-v3", "os-install-anaconda-v4", "os-install-anaconda-v5", "os-install-anaconda-v6", "os-install-anaconda-v7", "os-install-anaconda-v8", "os-install-anaconda-v9", "os-install-anaconda-v11"} {
+	for _, version := range []string{"os-install-anaconda-v1", "os-install-anaconda-v2", "os-install-anaconda-v3", "os-install-anaconda-v4", "os-install-anaconda-v5", "os-install-anaconda-v6", "os-install-anaconda-v7", "os-install-anaconda-v8", "os-install-anaconda-v9", "os-install-anaconda-v10", "os-install-anaconda-v12"} {
 		_, err := DecodeRequest([]byte(`{"version":"` + version + `"}`))
 		if err == nil {
 			t.Fatalf("version %q was accepted", version)

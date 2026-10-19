@@ -25,10 +25,7 @@ var unsupportedSelections = [][]string{
 }
 
 // refusedProfile says why a profile selects what this contract cannot
-// install, or nothing when it can. FIPS is read rather than detected, because
-// a profile that declares it disabled has selected nothing, while one that
-// enables it would otherwise install a machine that is not in the mode it
-// asked for.
+// install, or nothing when it can.
 func refusedProfile(profile api.Object) (reason, remediation string) {
 	spec := profile.Spec()
 	if !spec.Has("installer", "anaconda") {
@@ -46,11 +43,33 @@ func refusedProfile(profile api.Object) (reason, remediation string) {
 		return "the install profile enables spec.customizations.ssh.passwordAuthentication, but no password can be set while spec.customizations.ssh.initialPassword is refused",
 			"set spec.customizations.ssh.passwordAuthentication to false on " + profile.Identity()
 	}
-	if spec.Get("customizations", "security", "fips", "enabled").Bool() {
-		return "the install profile enables FIPS, which carries effects this executable does not prove",
-			"disable spec.customizations.security.fips on " + profile.Identity()
-	}
 	return "", ""
+}
+
+func fipsEnabled(profile api.Object) bool {
+	return profile.Spec().Get("customizations", "security", "fips", "enabled").Bool()
+}
+
+// refusedFIPS says why a FIPS-mode installation of a Machine cannot proceed:
+// a physical target, or a fleet key generated as Ed25519, the generated
+// default, which a FIPS-mode machine refuses.
+func refusedFIPS(catalog api.Catalog, machine, profile api.Object, derived substrate.Target, derivedOK bool) (reason, remediation string) {
+	if !fipsEnabled(profile) {
+		return "", ""
+	}
+	if derivedOK && derived.Identity.Channel == substrate.ChannelDeliveredKey {
+		return "the FIPS profile arm is qualified only on virtual Machines, and " + machine.Identity() + " is physical; physical qualification is B78",
+			"install " + machine.Identity() + " with a profile that does not enable spec.customizations.security.fips, or disable spec.customizations.security.fips on " + profile.Identity()
+	}
+	fleet, found := catalog.Find(api.Secret, fleetKeyRef(catalog))
+	if !found || !fleet.Spec().Has("source", "generated") {
+		return "", ""
+	}
+	if keyType := fleet.Spec().Get("source", "generated", "keyType").Text(); keyType != "" && keyType != "ed25519" {
+		return "", ""
+	}
+	return "a FIPS-mode installation refuses Ed25519 keys, and the fleet key " + fleet.Identity() + " generates one",
+		"declare spec.source.generated.keyType as ecdsa-p256, ecdsa-p384, ecdsa-p521 or rsa on " + fleet.Identity()
 }
 
 // Refusals refuses every installation this contract cannot realize. A target,
@@ -88,6 +107,10 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 			}
 		}
 		if reason, remediation := refusedProfile(profile); reason != "" {
+			found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
+			continue
+		}
+		if reason, remediation := refusedFIPS(catalog, machine, profile, derived, derivedOK); reason != "" {
 			found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
 			continue
 		}
@@ -198,6 +221,9 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	if request.FleetKeyRef == "" {
 		return Request{}, Requirements{}, refusal("api.required", "the Environment declares no fleet access key", "set spec.remoteMachinesAccessKey.keyRef")
 	}
+	if target.Channel == substrate.ChannelGuestAgent {
+		request.Target.HostKeyType = guestHostKeyType(fipsEnabled(profile))
+	}
 	// A machine proved by a key this installation delivers needs that key, and
 	// the key travels only beneath the private subtree.
 	if private != nil {
@@ -230,6 +256,9 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	request.Address, request.Hostname = install.Address, install.Hostname
 	if request.InstallerArguments, err = installerArguments(catalog, machine, request); err != nil {
 		return Request{}, Requirements{}, err
+	}
+	if fipsEnabled(profile) {
+		request.InstallerArguments = append(request.InstallerArguments, fipsArgument)
 	}
 	if request.Network, err = networkFor(catalog, machine, install); err != nil {
 		return Request{}, Requirements{}, err

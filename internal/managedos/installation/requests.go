@@ -91,9 +91,9 @@ type Target struct {
 	// HostKeyRef names the key pair a delivered-key installation installs as
 	// the machine's own, and is absent on every other channel.
 	HostKeyRef string `json:"hostKeyRef,omitempty"`
-	// HostKeyType is the generated keyType of the Secret HostKeyRef names, one
-	// of ed25519, rsa, ecdsa-p256, ecdsa-p384 or ecdsa-p521, and is absent on
-	// every other channel.
+	// HostKeyType is the generated keyType of the Secret HostKeyRef names, or
+	// the key a guest-agent installation generates: ed25519, or ecdsa-p256
+	// when the profile enables FIPS.
 	HostKeyType string `json:"hostKeyType,omitempty"`
 	// Physical is operator-owned hardware: what it already held is what this
 	// installation erases, and its removal retains it.
@@ -164,7 +164,7 @@ type Request struct {
 	// so it is published beneath Private instead.
 	Image *Publication `json:"image,omitempty"`
 	// InstallerArguments pin each available ethernet interface's name to its
-	// hardware address with dracut ifname=, in composed order.
+	// MAC with dracut ifname=, in composed order, then fips=1 for FIPS.
 	InstallerArguments []string             `json:"installerArguments"`
 	Kickstart          string               `json:"kickstart"`
 	MarkerPath         string               `json:"markerPath"`
@@ -185,6 +185,10 @@ type Request struct {
 	User              string       `json:"user"`
 	Version           string       `json:"version"`
 }
+
+const fipsArgument = "fips=1"
+
+func (r Request) fips() bool { return slices.Contains(r.InstallerArguments, fipsArgument) }
 
 // Deadline bounds every run of this request: its budgets back to back, and
 // the margin for everything else an apply does.
