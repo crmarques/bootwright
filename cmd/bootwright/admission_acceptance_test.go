@@ -108,7 +108,7 @@ func expandedExampleSources(t *testing.T) desiredstate.Sources {
 // admission refuses until their later slices (storage family refusals): the
 // admissible projection cannot carry one, and no other kind may be missing
 // from it.
-var refusedKinds = []api.Kind{api.StorageExport, api.StorageNFSExport}
+var refusedKinds = []api.Kind{api.StorageExport}
 
 const (
 	fusionAddOn           = "fusion-data-foundation"
@@ -190,8 +190,8 @@ func admissibleExtras(t *testing.T) []byte {
 		}
 		kept = append(kept, document)
 	}
-	if removed != 2 {
-		t.Fatalf("the extras hold %d refused documents, want the NFS export and the external export", removed)
+	if removed != 1 {
+		t.Fatalf("the extras hold %d refused documents, want the external export", removed)
 	}
 	return []byte(strings.Join(kept, "\n---\n"))
 }
@@ -280,11 +280,10 @@ func referenceRefusals() []diagnosticTuple {
 }
 
 // expandedRefusals adds what the acceptance extras contribute to the
-// reference's: two more refused storage families, and the warning every
+// reference's: one more refused storage family, and the warning every
 // CustomPlaybook raises because it cannot execute.
 func expandedRefusals() []diagnosticTuple {
 	return append(referenceRefusals(),
-		diagnosticTuple{"api.invariant", "StorageNFSExport", "acceptance-nfs", laterServiceRefusal},
 		diagnosticTuple{"api.invariant", "StorageExport", "acceptance-external-export", laterServiceRefusal},
 		diagnosticTuple{"api.deferred", "CustomPlaybook", "acceptance-playbook", laterServiceRefusal},
 	)
@@ -366,7 +365,7 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 			t.Errorf("kind %s has no full-wiring positive admission coverage", kind)
 		}
 	}
-	if report.Counts != (compilation.Counts{FilesSeen: 92, ObjectsDecoded: 120}) {
+	if report.Counts != (compilation.Counts{FilesSeen: 92, ObjectsDecoded: 121}) {
 		t.Errorf("projection counts: %#v", report.Counts)
 	}
 	if len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "api.deferred" || report.Diagnostics[0].Object == nil || report.Diagnostics[0].Object.Name != "acceptance-playbook" {

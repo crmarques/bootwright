@@ -17,16 +17,6 @@ func storagePlacement() *Shape {
 	return record(field("hosts", set(nonempty())), field("sites", set(name())), field("countPerHost", integer("0", "")))
 }
 
-func storageTLS() *Shape { return record(required("secretRef", secret("tlsCertificate"))) }
-
-func storageIngress(withTLS bool) *Shape {
-	s := record(required("name", nonempty()), required("address", ip()), required("prefixLength", integer("0", "128")), field("virtualInterfaceNetworks", set(cidr())), field("placement", storagePlacement()), field("firstVirtualRouterID", integer("0", "255")))
-	if withTLS {
-		s.Fields = append(s.Fields, field("tls", storageTLS()))
-	}
-	return s
-}
-
 func storageReplicated() *Shape {
 	return record(field("size", integer("0", "")), field("minSize", integer("0", "")))
 }
@@ -113,9 +103,17 @@ func storageObjectGatewaySchema() *Shape {
 }
 
 func storageNFSExportSchema() *Shape {
-	exports := array(record(required("pseudo", lexical("absolute-path")), field("filesystemRef", ref(StorageFilesystem)), field("path", lexical("absolute-path")), field("bucket", nonempty()), field("accessType", enumeration("RW", "RO", "NONE")), field("squash", nonempty()), field("clients", set(nonempty()))))
-	exports.NameKey = "pseudo"
-	return record(required("clusterRef", ref(StorageCluster)), required("serviceID", nonempty()), field("port", integer("0", "65535")), required("placement", storagePlacement()), field("ingresses", named(storageIngress(true))), field("exports", exports))
+	return record(required("clusterRef", ref(StorageCluster)), required("serviceID", nonempty()), field("filesystemRef", ref(StorageFilesystem)), field("subvolumeRef", ref(StorageSubvolume)), required("native", native()))
+}
+
+func StorageNFSExportNativeSchema() *Shape {
+	access := func() *Shape { return enumeration("RW", "RO", "NONE") }
+	squash := func() *Shape {
+		return enumeration("root", "root_squash", "rootsquash", "rootid", "root_id_squash", "rootidsquash", "all", "all_squash", "allsquash", "all_anomnymous", "allanonymous", "no_root_squash", "none", "noidsquash")
+	}
+	fsal := record(required("name", enumeration("CEPH", "RGW")), field("fs_name", nonempty()), field("cmount_path", nonempty()))
+	client := record(required("addresses", set(nonempty())), required("access_type", access()), required("squash", squash()))
+	return record(required("pseudo", nonempty()), field("path", nonempty()), field("access_type", access()), field("squash", squash()), field("security_label", boolean()), field("protocols", set(integer("3", "4"))), field("transports", set(enumeration("TCP", "UDP"))), field("sectype", set(enumeration("sys", "krb5", "krb5i", "krb5p"))), required("fsal", fsal), field("clients", array(client)))
 }
 
 func storageExportSchema() *Shape {

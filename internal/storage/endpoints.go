@@ -7,85 +7,6 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-type endpointIdentity struct {
-	owner    string
-	field    string
-	id       string
-	address  netip.Addr
-	port     int64
-	hosts    []string
-	networks []netip.Prefix
-	vrrp     int64
-}
-
-func placementNames(cluster api.Object, placement api.Value, role string) []string {
-	out := []string{}
-	hosts, sites := placement.Get("hosts").Strings(), placement.Get("sites").Strings()
-	for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
-		if len(hosts) > 0 && !slices.Contains(hosts, textOf(node, "name")) {
-			continue
-		}
-		if len(sites) > 0 && !slices.Contains(sites, textOf(node, "site")) {
-			continue
-		}
-		if role != "" && !hasRole(node, role) {
-			continue
-		}
-		out = append(out, textOf(node, "name"))
-	}
-	return out
-}
-func defaultPort(value api.Value, fallback int64) int64 {
-	if n, ok := value.Int64(); ok && n > 0 {
-		return n
-	}
-	return fallback
-}
-func ingressIdentity(owner, field string, ingress api.Value, cluster api.Object, port int64) endpointIdentity {
-	ip, _ := netip.ParseAddr(textOf(ingress, "address"))
-	vrrp, _ := ingress.Get("firstVirtualRouterID").Int64()
-	out := endpointIdentity{owner: owner, field: field, id: textOf(ingress, "name"), address: ip, port: port, hosts: placementNames(cluster, ingress.Get("placement"), "ingress"), vrrp: vrrp}
-	for _, value := range ingress.Get("virtualInterfaceNetworks").Items() {
-		if prefix, err := netip.ParsePrefix(value.Text()); err == nil {
-			out.networks = append(out.networks, prefix.Masked())
-		}
-	}
-	if len(out.networks) == 0 && ip.IsValid() {
-		if prefix, ok := ingress.Get("prefixLength").Int64(); ok && prefix >= 0 && prefix <= int64(ip.BitLen()) {
-			out.networks = append(out.networks, netip.PrefixFrom(ip, int(prefix)).Masked())
-		}
-	}
-	return out
-}
-func legacyEndpointIdentities(cluster api.Object, catalog api.Catalog) []endpointIdentity {
-	out := []endpointIdentity{}
-	for _, object := range catalog.Objects() {
-		spec := object.Spec()
-		if textOf(spec, "clusterRef") != cluster.Name() {
-			continue
-		}
-		switch object.Kind() {
-		case api.StorageNFSExport:
-			port := int64(2049)
-			if spec.Get("ingresses").Len() > 0 {
-				port = 12049
-			}
-			out = append(out, endpointIdentity{owner: object.Identity(), field: "$.spec.serviceID", id: textOf(spec, "serviceID"), port: defaultPort(spec.Get("port"), port), hosts: placementNames(cluster, spec.Get("placement"), "")})
-			for i, ingress := range spec.Get("ingresses").Items() {
-				out = append(out, ingressIdentity(object.Identity(), indexed("$.spec.ingresses", i), ingress, cluster, 2049))
-			}
-		}
-	}
-	return out
-}
-func hostsOverlap(left, right []string) bool {
-	for _, name := range left {
-		if slices.Contains(right, name) {
-			return true
-		}
-	}
-	return false
-}
 func networksOverlap(left, right []netip.Prefix) bool {
 	for _, l := range left {
 		for _, r := range right {
@@ -97,29 +18,6 @@ func networksOverlap(left, right []netip.Prefix) bool {
 	return false
 }
 func (a *admission) sharedServiceIdentities(cluster api.Object) {
-	entries := legacyEndpointIdentities(cluster, a.catalog)
-	for i, left := range entries {
-		if left.owner != a.object.Identity() {
-			continue
-		}
-		for j, right := range entries {
-			if i == j || (left.owner == right.owner && j < i) {
-				continue
-			}
-			if left.id != "" && left.id == right.id {
-				a.invalid(left.field, "service and ingress IDs must be unique within the storage cluster")
-			}
-			if left.address.IsValid() && left.address == right.address {
-				a.invalid(left.field, "ingress VIPs must be unique within the storage cluster")
-			}
-			if left.vrrp > 0 && left.vrrp == right.vrrp && networksOverlap(left.networks, right.networks) {
-				a.invalid(left.field+".firstVirtualRouterID", "VRRP IDs must differ on overlapping ingress networks")
-			}
-			if left.port > 0 && left.port == right.port && hostsOverlap(left.hosts, right.hosts) && (!left.address.IsValid() || !right.address.IsValid() || left.address == right.address) {
-				a.invalid(left.field, "service listener ports overlap on declared placement hosts")
-			}
-		}
-	}
 	if a.object.Kind() == api.StorageCluster && a.object.Identity() == cluster.Identity() {
 		a.listenerConflicts(cluster)
 		a.routerIDConflicts(cluster)

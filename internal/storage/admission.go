@@ -141,7 +141,7 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 		a.invalid("$.spec.clusterRef", "this storage child requires a managed cluster")
 		return a.issues
 	}
-	if item, ok := map[api.Kind]string{api.StorageNFSExport: "B478", api.StorageExport: "B489"}[object.Kind()]; ok {
+	if item, ok := map[api.Kind]string{api.StorageExport: "B489"}[object.Kind()]; ok {
 		if !managed {
 			item = "parked item B107"
 		}
@@ -159,7 +159,7 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 	case api.StorageObjectGateway:
 		a.gateway(owner)
 	case api.StorageNFSExport:
-		a.nfs(owner)
+		a.nfsExport(owner)
 	case api.StorageExport:
 		a.export(owner, managed)
 	case api.StorageRBDImage:
@@ -173,9 +173,6 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 		if access := textOf(object.Spec(), "access"); access != "read-only" && access != "read-write" {
 			a.invalid("$.spec.access", "client access must be read-only or read-write")
 		}
-	}
-	if managed {
-		a.sharedServiceIdentities(owner)
 	}
 	return a.issues
 }

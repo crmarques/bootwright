@@ -561,6 +561,12 @@ var retiredResourceFields = map[api.Kind]map[string]string{
 		"$.spec.endpoint.tls":       gatewayIngressReplacement,
 		"$.spec.endpoint.ingresses": gatewayIngressReplacement,
 	},
+	api.StorageNFSExport: {
+		"$.spec.port":      "spec.port of the nfs service that spec.serviceID names",
+		"$.spec.placement": "the placement of the nfs service that spec.serviceID names",
+		"$.spec.ingresses": "an ingress service in its StorageCluster's spec.ceph.services whose spec.backend_service is the nfs service that spec.serviceID names",
+		"$.spec.exports":   "one StorageNFSExport per export entry, each binding spec.filesystemRef or spec.subvolumeRef and holding that entry's native export under spec.native",
+	},
 }
 
 const gatewayIngressReplacement = "an ingress service in its StorageCluster's spec.ceph.services whose spec.backend_service is the rgw service that spec.serviceRef names, with /spec/ssl_cert and /spec/ssl_key bound in spec.ceph.serviceBindings"

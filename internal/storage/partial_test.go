@@ -101,12 +101,11 @@ func TestPartialValidationIssuesAlsoRefuseTheCompleteObject(t *testing.T) {
 		{"gateway pool roles share one pool", edit(api.StorageObjectGateway, "objects", func(s api.Value) api.Value {
 			return s.With("pools", m("indexPoolRef", "block", "dataPoolRef", "block"))
 		})},
-		{"NFS ingress backend port", edit(api.StorageNFSExport, "nfs", func(s api.Value) api.Value {
-			return s.With("ingresses", api.ListValue(m("name", "nfs-ingress", "address", "192.0.2.60", "prefixLength", 24))).With("port", api.IntegerValue("2049"))
+		{"NFS export backing", edit(api.StorageNFSExport, "nfs", func(s api.Value) api.Value { return s.With("subvolumeRef", api.StringValue("docs")) })},
+		{"NFS export UDP transport", edit(api.StorageNFSExport, "nfs", func(s api.Value) api.Value {
+			return s.WithPath(api.StringList("UDP"), "native", "transports")
 		})},
-		{"NFS export backing", edit(api.StorageNFSExport, "nfs", func(s api.Value) api.Value {
-			return s.With("exports", api.ListValue(m("pseudo", "/files", "filesystemRef", "files", "bucket", "also")))
-		})},
+		{"NFS export generated ID", edit(api.StorageNFSExport, "nfs", func(s api.Value) api.Value { return s.WithPath(api.IntegerValue("7"), "native", "export_id") })},
 		{"export modes", edit(api.StorageExport, "export", func(s api.Value) api.Value { return s.With("externalDetails", m("fromSecretRef", "details")) })},
 		{"IBM license", entitlement},
 		{"external RHSM", object(api.Entitlement, "rhsm", m("type", "redhat-ceph", "registry", m("credentialsRef", "registry"), "rhsm", m("management", "external", "organizationRef", "org")))},

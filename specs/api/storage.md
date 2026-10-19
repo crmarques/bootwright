@@ -36,9 +36,12 @@ implicit administrator capability is granted. `StoragePlacementPolicy` and
 `StorageObjectGateway` is admitted under its
 [field record](../storage-resources.md#storageobjectgateway-field-record);
 execution still refuses every selected gateway until the gateway block lands.
+`StorageNFSExport` is admitted under its
+[field record](../storage-resources.md#storagenfsexport); execution still
+refuses every selected export until the NFS export block lands.
 Other P2 resource additions remain target contracts, not admitted kinds.
-Future NFS export and storage export feature families are refused by current
-pure admission.
+Future storage export feature families are refused by current pure
+admission.
 Their historical field tables in [field detail](../deferred/storage-api.md)
 are retained only for the later owning slices.
 
@@ -152,7 +155,7 @@ provider sizing and measured resource acceptance remain separate.
 | `StorageFilesystem` | One CephFS filesystem: a same-cluster `cephfs-metadata` pool, one or more ordered `cephfs-data` pools (the default replicated), its rank and standby policy, subvolume groups, and the native MDS service it binds through `mdsServiceRef`. |
 | `StorageSubvolume` | One CephFS subvolume in a same-cluster `filesystemRef`, optionally in one of its declared groups, with an optional quota, layout pool, owner and mode. |
 | `StorageObjectGateway` | One logical object gateway bound to one declared rgw service through `serviceRef`: its realm, zone group and zone, its zone placement pools and its optional endpoint FQDN. Placement, frontend and ingress belong to the native services. |
-| `StorageNFSExport` | One NFS-Ganesha service and zero or more exports; there is no separate `StorageNFSService` kind. |
+| `StorageNFSExport` | One NFS export of one declared nfs service, backed by a same-cluster StorageFilesystem or StorageSubvolume, with its native export under `native`. Daemon placement, ports and ingress belong to the native services. |
 | `StorageExport` | One downstream storage surface: the `dataFoundation` arm for a managed cluster, `externalDetails` for an external one. |
 
 ## References
@@ -169,9 +172,10 @@ on the already selected Machine.
 | `filesystemRef` | `StorageFilesystem` |
 | `mdsServiceRef` | native service registry, exactly `mds.<filesystem>` |
 | `serviceRef` | native service registry, exactly one rgw service |
+| `serviceID` (StorageNFSExport) | native service registry, exactly `nfs.<serviceID>` |
+| `subvolumeRef` | `StorageSubvolume` |
 | `objectGatewayRef` | `StorageObjectGateway` |
 | `machineRef` | `Machine` |
-| `tls.secretRef` | `Secret` |
 | entitlement refs | `Entitlement` |
 | key, certificate, password, client-secret, cookie-secret, and external-detail refs | `Secret` |
 
@@ -420,7 +424,12 @@ checks:
   its cluster; realm, zone group and zone are unique per cluster across
   gateways; zone pool roles and the derived-pool host rule hold; and endpoint
   FQDNs are unique across storage node hostnames and gateways
-  ([field record](../storage-resources.md#storageobjectgateway-field-record)); and
+  ([field record](../storage-resources.md#storageobjectgateway-field-record));
+- each NFS export binds exactly one same-cluster filesystem or subvolume and
+  one declared nfs service, its pseudo path is unique among the exports of
+  that service, and its native record is closed and serves NFSv4 over TCP
+  with `sys` security only
+  ([field record](../storage-resources.md#storagenfsexport)); and
 - an NFS service's mode follows its ingress, and the HAProxy mode that hides
   client addresses refuses
   ([NFS modes](../storage-native-api.md#rgw-ingress-and-nfs-records)).

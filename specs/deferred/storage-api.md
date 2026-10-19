@@ -63,8 +63,8 @@ role-owned placement follows the eligible role membership.
 
 `StorageIngress` is a shared nested shape for a service-owned VIP, not a
 resource kind. It does not choose a backend or share service ownership. The
-management gateway and NFS service retain their own transport, TLS,
-authentication, and lifecycle rules.
+management gateway retains its own transport, TLS, authentication, and
+lifecycle rules.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
@@ -256,8 +256,14 @@ is invalid. Explicit HTTP rejects a TLS block even when it is empty.
 
 ## StorageNFSExport
 
-This kind owns one NFS-Ganesha service and zero or more export entries; there
-is no separate `StorageNFSService` kind.
+Historical: this table describes the retired service-plus-exports shape. The
+current contract is the
+[StorageNFSExport field record](../storage-resources.md#storagenfsexport),
+which owns one export of a declared nfs service and refuses each service field
+below that it retired with its replacement.
+
+This kind owned one NFS-Ganesha service and zero or more export entries; there
+was no separate `StorageNFSService` kind.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
@@ -328,13 +334,16 @@ defaults and normalizes these values:
 - for a present object-gateway endpoint without `fqdn`, the FQDN
   `<gateway>.<cluster>.<storage domain>`
   ([field record](../storage-resources.md#storageobjectgateway-field-record));
-- NFS backend port `2049` or `12049` according to ingress presence; and
+- an NFS export's native `access_type: RO`, `squash: no_root_squash`,
+  `security_label: true`, `transports: [TCP]`, `path: /` for a filesystem
+  binding, and for a CephFS FSAL `cmount_path: /` and the bound filesystem's
+  `fs_name`, with canonical client addresses
+  ([field record](../storage-resources.md#storagenfsexport)); and
 - `StorageExport.spec.type: dataFoundation` when that arm is authored.
 
 Implicit defaults owned by Ceph or a native renderer remain absent from
 effective state. Apart from the canonicalizations above, authored values are
 preserved; in particular, the sole CephFS data pool becomes `default: true`
 even if `false` was authored. Defaults left implicit include role-derived
-placement, inferred pool application, NFS export
-path/access defaults, monitoring enablement when merely implicit, and native
-service defaults.
+placement, inferred pool application, monitoring enablement when merely
+implicit, and native service defaults.

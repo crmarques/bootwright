@@ -45,9 +45,47 @@ func TestStorageWireShapesAreClosedAndVariantsAreExplicit(t *testing.T) {
 	if len(endpoint.Shape.Fields) != 1 || endpoint.Shape.Fields[0].Name != "fqdn" {
 		t.Fatal("object gateway endpoint must carry only its FQDN")
 	}
-	nfs, _ := Schema(StorageNFSExport).Field("ingresses")
-	if _, ok := nfs.Shape.Element.Field("tls"); !ok {
-		t.Fatal("NFS ingress must preserve its TLS arm")
+}
+
+func TestNFSExportSchemaShape(t *testing.T) {
+	schema := Schema(StorageNFSExport)
+	names := []string{}
+	for _, field := range schema.Fields {
+		names = append(names, field.Name)
+	}
+	if !slices.Equal(names, []string{"clusterRef", "serviceID", "filesystemRef", "subvolumeRef", "native"}) {
+		t.Fatalf("StorageNFSExport fields = %v", names)
+	}
+	for name, required := range map[string]bool{"serviceID": true, "native": true, "filesystemRef": false, "subvolumeRef": false} {
+		if field, _ := schema.Field(name); field.Required != required {
+			t.Fatalf("StorageNFSExport %s required = %t", name, field.Required)
+		}
+	}
+	if native, _ := schema.Field("native"); !native.Shape.Open || !native.Shape.Atomic {
+		t.Fatal("native must be an open atomic mapping checked by admission")
+	}
+	for name, kind := range map[string]Kind{"filesystemRef": StorageFilesystem, "subvolumeRef": StorageSubvolume} {
+		if field, _ := schema.Field(name); !slices.Equal(field.Shape.Reference, []Kind{kind}) {
+			t.Fatalf("%s must reference %s", name, kind)
+		}
+	}
+	record := StorageNFSExportNativeSchema()
+	if record.Open {
+		t.Fatal("the native export record must be closed")
+	}
+	checkStorageShape(t, record)
+	fsal, _ := record.Field("fsal")
+	for at, refused := range map[*Shape][]string{record: {"export_id", "cluster_id"}, fsal.Shape: {"user_id", "cephx_key", "sec_label_xattr", "access_key_id", "secret_access_key"}} {
+		for _, name := range refused {
+			if _, ok := at.Field(name); ok {
+				t.Fatalf("the native export record admits refused member %s", name)
+			}
+		}
+	}
+	protocols, _ := record.Field("protocols")
+	squash, _ := record.Field("squash")
+	if protocols.Shape.Element.Minimum != "3" || protocols.Shape.Element.Maximum != "4" || len(squash.Shape.Enums) != 14 || !slices.Contains(squash.Shape.Enums, "all_anomnymous") {
+		t.Fatal("protocols and squash must follow the native validation lists")
 	}
 }
 

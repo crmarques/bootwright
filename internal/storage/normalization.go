@@ -37,24 +37,7 @@ func Normalize(object api.Object, catalog api.Catalog) (api.Object, []api.Issue)
 			spec = spec.With("endpoint", endpoint.With("fqdn", api.StringValue(object.Name()+"."+cluster+"."+domain)))
 		}
 	case api.StorageNFSExport:
-		if !spec.Has("port") || (spec.Get("port").Type() == api.Integer && numeric(spec.Get("port")).Sign() == 0) {
-			port := "2049"
-			if spec.Get("ingresses").Len() != 0 {
-				port = "12049"
-			}
-			spec = spec.With("port", api.IntegerValue(port))
-		}
-		spec = normalizeIngresses(spec, "ingresses")
-		if spec.Has("exports") {
-			entries := spec.Get("exports").Items()
-			for i, entry := range entries {
-				if entry.Has("clients") {
-					entry = entry.With("clients", normalizeCIDRs(entry.Get("clients")))
-				}
-				entries[i] = entry
-			}
-			spec = spec.With("exports", api.ListValue(entries...))
-		}
+		spec = normalizeNFSExport(spec, catalog)
 	case api.StorageExport:
 		if spec.Has("dataFoundation") {
 			spec = spec.Default("type", api.StringValue("dataFoundation"))
@@ -173,22 +156,34 @@ func normalizeCIDRs(value api.Value) api.Value {
 	}
 	return api.ListValue(items...)
 }
-func normalizeIngress(value api.Value) api.Value {
-	if ip, err := netip.ParseAddr(textOf(value, "address")); err == nil {
-		value = value.With("address", api.StringValue(ip.String()))
+
+func normalizeNFSExport(spec api.Value, catalog api.Catalog) api.Value {
+	native := spec.Get("native")
+	if native.Type() != api.Mapping {
+		return spec
 	}
-	if value.Has("virtualInterfaceNetworks") {
-		value = value.With("virtualInterfaceNetworks", normalizeCIDRs(value.Get("virtualInterfaceNetworks")))
+	native = native.Default("access_type", api.StringValue("RO")).Default("squash", api.StringValue("no_root_squash")).Default("security_label", api.BoolValue(true)).Default("transports", api.StringList("TCP"))
+	filesystem := textOf(spec, "filesystemRef")
+	if spec.Has("filesystemRef") && !spec.Has("subvolumeRef") {
+		native = native.Default("path", api.StringValue("/"))
+	} else if subvolume, ok := catalog.Find(api.StorageSubvolume, textOf(spec, "subvolumeRef")); ok && !spec.Has("filesystemRef") {
+		filesystem = textOf(subvolume.Spec(), "filesystemRef")
 	}
-	return value
-}
-func normalizeIngresses(value api.Value, field string) api.Value {
-	if !value.Has(field) {
-		return value
+	if fsal := native.Get("fsal"); fsal.Type() == api.Mapping && textOf(fsal, "name") == "CEPH" {
+		fsal = fsal.Default("cmount_path", api.StringValue("/"))
+		if filesystem != "" {
+			fsal = fsal.Default("fs_name", api.StringValue(filesystem))
+		}
+		native = native.With("fsal", fsal)
 	}
-	items := value.Get(field).Items()
-	for i, item := range items {
-		items[i] = normalizeIngress(item)
+	if clients := native.Get("clients"); clients.Type() == api.Sequence {
+		entries := clients.Items()
+		for i, entry := range entries {
+			if entry.Get("addresses").Type() == api.Sequence {
+				entries[i] = entry.With("addresses", normalizeCIDRs(entry.Get("addresses")))
+			}
+		}
+		native = native.With("clients", api.ListValue(entries...))
 	}
-	return value.With(field, api.ListValue(items...))
+	return spec.With("native", native)
 }

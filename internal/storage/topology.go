@@ -208,56 +208,6 @@ func declaredDataDevices(osd api.Value) int {
 	return osd.Get("dataDevices", "paths").Len() + osd.Get("dataDevices", "pathSpecs").Len()
 }
 
-func (a *admission) placement(cluster api.Object, placement api.Value, field, role string, explicit bool) []api.Value {
-	hosts, sites := placement.Get("hosts").Strings(), placement.Get("sites").Strings()
-	if explicit && len(hosts) == 0 && len(sites) == 0 {
-		a.invalid(field, "this service requires explicit hosts or sites")
-		return nil
-	}
-	selected := []api.Value{}
-	if cluster.Spec().Get("ceph", "topology", "nodes").Len() == 0 {
-		return selected
-	}
-	for _, name := range hosts {
-		if _, ok := lookupNode(cluster, name); !ok {
-			a.invalid(field+".hosts", "placement host must resolve to a storage topology node")
-		}
-	}
-	for _, site := range sites {
-		found := false
-		for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
-			if textOf(node, "site") == site {
-				found = true
-			}
-		}
-		if !found {
-			a.invalid(field+".sites", "placement site must contain a storage topology node")
-		}
-	}
-	for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
-		if len(hosts) > 0 && !slices.Contains(hosts, textOf(node, "name")) {
-			continue
-		}
-		if len(sites) > 0 && !slices.Contains(sites, textOf(node, "site")) {
-			if len(hosts) > 0 {
-				a.invalid(field, "every explicit placement host must belong to a selected site")
-			}
-			continue
-		}
-		if role != "" && !hasRole(node, role) {
-			if len(hosts) > 0 {
-				a.invalid(field+".hosts", "placement host does not have the service's required role")
-			}
-			continue
-		}
-		selected = append(selected, node)
-	}
-	if role != "" && len(selected) == 0 {
-		a.invalid(field, "no topology node has the service's required placement role")
-	}
-	return selected
-}
-
 func (a *admission) stretch(ceph api.Value) {
 	stretch := ceph.Get("topology", "stretch")
 	if !stretch.Present() {

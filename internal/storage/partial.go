@@ -74,14 +74,7 @@ func (a *admission) intrinsic() {
 	case api.StorageObjectGateway:
 		a.gatewayPoolRoles(spec.Get("pools"))
 	case api.StorageNFSExport:
-		if spec.Get("ingresses").Len() > 0 && numeric(spec.Get("port")).Cmp(numeric(api.IntegerValue("2049"))) == 0 {
-			a.invalid("$.spec.port", "ingress-fronted NFS cannot use backend port 2049")
-		}
-		for i, export := range spec.Get("exports").Items() {
-			if export.Has("filesystemRef") && export.Has("bucket") {
-				a.invalid(indexed("$.spec.exports", i), "an NFS export requires exactly one filesystem or bucket")
-			}
-		}
+		a.nfsExportIntrinsic()
 	case api.StorageExport:
 		if spec.Has("dataFoundation") && spec.Has("externalDetails") {
 			a.invalid("$.spec", "storage export ownership modes are mutually exclusive")

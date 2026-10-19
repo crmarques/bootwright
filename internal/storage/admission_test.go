@@ -52,7 +52,7 @@ func fixtureCatalog() api.Catalog {
 		object(api.StoragePool, "block", m("clusterRef", "storage", "role", "rbd")),
 		object(api.StorageFilesystem, "files", m("clusterRef", "storage", "mdsServiceRef", "mds.files", "metadataPoolRef", "metadata", "dataPoolRefs", api.StringList("data"))),
 		object(api.StorageObjectGateway, "objects", m("clusterRef", "storage", "serviceRef", "rgw.objects", "realm", "realm", "zoneGroup", "group", "zone", "zone")),
-		object(api.StorageNFSExport, "nfs", m("clusterRef", "storage", "serviceID", "nfs", "placement", m("hosts", api.StringList("node-2")), "exports", []api.Value{m("pseudo", "/files", "filesystemRef", "files", "clients", api.StringList("192.0.2.0/24"))})),
+		object(api.StorageNFSExport, "nfs", m("clusterRef", "storage", "serviceID", "files", "filesystemRef", "files", "native", m("pseudo", "/files", "protocols", []api.Value{v(4)}, "fsal", m("name", "CEPH"), "clients", []api.Value{m("addresses", api.StringList("192.0.2.0/24"), "access_type", "RW", "squash", "root_squash")}))),
 		object(api.StorageExport, "export", m("clusterRef", "storage", "dataFoundation", m("rbdPoolRef", "block", "filesystemRef", "files", "objectGatewayRef", "objects"))),
 	)
 	return normalizeCatalog(api.NewCatalog(objects))
@@ -97,11 +97,11 @@ func requireIssue(t *testing.T, issues []api.Issue, field string) {
 
 func TestAllStorageKindsAdmitAndNormalizeWithoutMutatingInput(t *testing.T) {
 	_, catalog := withMDSService(t, fixtureCatalog(), mdsService("files"))
-	_, catalog = withGraph(t, catalog, []api.Value{rgwService(qualifiedRGWSpec())})
+	_, catalog = withGraph(t, catalog, []api.Value{rgwService(qualifiedRGWSpec()), nfsService(m())})
 	for _, object := range catalog.Objects() {
 		before := object.Spec()
 		issues := Validate(object, catalog)
-		if slices.Contains([]api.Kind{api.StorageNFSExport, api.StorageExport}, object.Kind()) {
+		if object.Kind() == api.StorageExport {
 			requireIssue(t, issues, "$.spec")
 		} else if len(issues) != 0 {
 			t.Errorf("%s: %#v", object.Identity(), issues)
@@ -302,29 +302,9 @@ func TestDeferredStretchStillConstrainsProtection(t *testing.T) {
 
 func TestVRRPNetworkOverlapAndNetworkReachability(t *testing.T) {
 	catalog := fixtureCatalog()
-	nfs := find(t, catalog, api.StorageNFSExport, "nfs")
-	catalog = replace(catalog, nfs.WithSpec(nfs.Spec().With("ingresses", api.ListValue(m("name", "nfs-ingress", "address", "192.0.2.50", "prefixLength", 24, "firstVirtualRouterID", 1)))))
-	other := object(api.StorageNFSExport, "second", nfs.Spec().With("serviceID", api.StringValue("second")).With("placement", m("hosts", api.StringList("node-3"))).Without("exports").With("ingresses", api.ListValue(m("name", "second-ingress", "address", "192.0.2.51", "prefixLength", 24, "firstVirtualRouterID", 1))))
-	catalog = replace(catalog, other)
-	requireIssue(t, validateFutureFamily(other, catalog), "$.spec.ingresses[0].firstVirtualRouterID")
-	other = other.WithSpec(other.Spec().With("ingresses", api.ListValue(m("name", "second-ingress", "address", "198.51.100.51", "prefixLength", 24))))
-	requireIssue(t, validateFutureFamily(other, replace(catalog, other)), "$.spec.ingresses[0].address")
 	cluster := find(t, catalog, api.StorageCluster, "storage")
 	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.StringList("192.0.2.128/25"), "ceph", "networks", "clusterCIDRs"))
 	requireIssue(t, Validate(cluster, replace(catalog, cluster)), "$.spec.ceph.networks")
-}
-
-func TestNFSDefaultsAndExportChoice(t *testing.T) {
-	catalog := fixtureCatalog()
-	nfs := find(t, catalog, api.StorageNFSExport, "nfs")
-	nfs = nfs.WithSpec(nfs.Spec().Without("port").With("ingresses", api.ListValue(m("name", "nfs-ingress", "address", "192.0.2.60", "prefixLength", 24))).With("exports", api.ListValue(m("pseudo", "/files", "filesystemRef", "files", "bucket", "also-a-bucket"))))
-	normalized, _ := Normalize(nfs, catalog)
-	if textOf(normalized.Spec(), "port") != "12049" {
-		t.Fatal("NFS ingress backend default")
-	}
-	requireIssue(t, validateFutureFamily(normalized, replace(catalog, normalized)), "$.spec.exports[0]")
-	nfs = nfs.WithSpec(nfs.Spec().With("port", api.IntegerValue("2049")))
-	requireIssue(t, validateFutureFamily(nfs, replace(catalog, nfs)), "$.spec.port")
 }
 
 func TestStorageIssueBoundAndSafeDiagnosticText(t *testing.T) {
@@ -383,7 +363,7 @@ func TestDeferredScopeRefusalsNameTheDeliveringItem(t *testing.T) {
 		}
 		t.Fatalf("missing %s remediation %q: %#v", field, remediation, issues)
 	}
-	for kind, item := range map[api.Kind]string{api.StorageNFSExport: "B478", api.StorageExport: "B489"} {
+	for kind, item := range map[api.Kind]string{api.StorageExport: "B489"} {
 		candidates := catalog.OfKind(kind)
 		if len(candidates) == 0 {
 			t.Fatalf("fixture has no %s", kind)
@@ -404,23 +384,4 @@ func TestDeferredScopeRefusalsNameTheDeliveringItem(t *testing.T) {
 
 func coreServices() api.Value {
 	return api.ListValue(m("service_type", "mon", "placement", m("label", "mon", "count", 3)), m("service_type", "mgr", "placement", m("label", "mgr", "count", 2)), m("service_type", "osd", "service_id", "data", "placement", m("label", "storage"), "spec", m("data_devices", m("paths", api.StringList("/dev/vdb")))))
-}
-
-// The future family admission primitives retain their unit proof while public
-// admission refuses their lifecycle until the owning family migration lands.
-func validateFutureFamily(object api.Object, catalog api.Catalog) []api.Issue {
-	cluster, _ := catalog.Find(api.StorageCluster, textOf(object.Spec(), "clusterRef"))
-	nodes := cluster.Spec().Get("ceph", "topology", "nodes").Items()
-	for i, node := range nodes {
-		nodes[i] = node.With("roles", api.StringList("mds", "rgw", "ingress"))
-	}
-	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(nodes...), "ceph", "topology", "nodes"))
-	catalog = replace(catalog, cluster)
-	a := admission{object: object, catalog: catalog}
-	a.intrinsic()
-	if object.Kind() == api.StorageNFSExport {
-		a.nfs(cluster)
-	}
-	a.sharedServiceIdentities(cluster)
-	return a.issues
 }

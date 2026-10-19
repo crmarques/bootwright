@@ -1,24 +1,4 @@
 apiVersion: bootwright.io/v1alpha1
-kind: StorageNFSExport
-metadata:
-  name: acceptance-nfs
-
-spec:
-  clusterRef: ceph-multidc-01
-  serviceID: acceptance-nfs
-
-  placement:
-    hosts:
-      - node-01
-
-  exports:
-    - pseudo: /acceptance
-      filesystemRef: odf-cephfs
-      clients:
-        - 192.0.2.123/24
-
----
-apiVersion: bootwright.io/v1alpha1
 kind: CustomPlaybook
 metadata:
   name: acceptance-playbook

@@ -2810,6 +2810,11 @@ spec:
           rgw_realm: objects
           rgw_zone: objects
           rgw_zonegroup: objects
+      - service_type: nfs
+        service_id: acceptance-nfs
+        placement:
+          label: ceph-core
+          count: 1
     topology:
       nodes:
         - name: node-01
@@ -2948,6 +2953,34 @@ spec:
     dataPoolRef: objects-data
   endpoint:
     fqdn: objects.ceph-multidc-01.clusters.example.com
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageNFSExport
+metadata:
+  name: acceptance-nfs
+spec:
+  clusterRef: ceph-multidc-01
+  serviceID: acceptance-nfs
+  filesystemRef: odf-cephfs
+  native:
+    access_type: RO
+    clients:
+      - access_type: RW
+        addresses:
+          - 192.0.2.0/24
+        squash: root_squash
+    fsal:
+      cmount_path: /
+      fs_name: odf-cephfs
+      name: CEPH
+    path: /
+    protocols:
+      - 4
+    pseudo: /acceptance
+    security_label: true
+    squash: no_root_squash
+    transports:
+      - TCP
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddon

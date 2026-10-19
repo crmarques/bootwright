@@ -9,8 +9,9 @@ custody. [Provider coverage](storage-coverage.md) owns release qualification.
 **Current:** `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage`,
 `StorageFilesystem`, `StorageSubvolume` and minimal `StorageClient` are
 admitted and realized. Native
-effects remain artifact-gated. **Not yet met:** later P2 kinds, NFS ownership
-migration and their qualified lifecycles. [Storage admission](api/storage.md)
+effects remain artifact-gated. `StorageNFSExport` is admitted under its
+[field record](#storagenfsexport) but not executed. **Not yet met:** later P2
+kinds and their qualified lifecycles. [Storage admission](api/storage.md)
 states current refusals.
 The target additions and migrations below belong to
 [B80](milestones/m2.md#b80), [B81](milestones/m2.md#b81),
@@ -541,48 +542,11 @@ parked by D160 (OD26 (a)); normalization and case sensitivity are
 
 ## StorageNFSExport
 
-The target kind owns exactly one export, not an NFS daemon plus an export
-array. [B478](milestones/m2.md#b478) owns the export contract and qualified
-lifecycle; B474 delivers the existing kind's common shape migration with
-explicit diagnostics. It does not accept both ownership models simultaneously.
-
-| Field | Target rule |
-| --- | --- |
-| `clusterRef` | Required managed cluster reference. |
-| `serviceID` | Required native NFS service ID; resolves `nfs.<serviceID>` in that cluster. |
-| `filesystemRef` | CephFS backing alternative: export a path within this owned filesystem. |
-| `subvolumeRef` | CephFS backing alternative: export within this owned subvolume, deriving filesystem and native root path. |
-| `bucketRef` | Object backing alternative: resolve a B477-owned bucket and its gateway/identity dependencies. |
-| `native` | Required mapping in the qualified native NFS export JSON shape; exactly one export. |
-
-Exactly one backing alternative is required. The wrapper supplies ownership;
-the native mapping keeps `pseudo`, `path`, `access_type`, `squash`, `protocols`,
-`transports`, FSAL and client-block semantics. Native field completeness and
-defaults follow the frozen provider schema. The `pseudo` identifies the export
-within the NFS service and must be a clean absolute path. For a filesystem
-binding, `path` is an absolute path in that filesystem. A subvolume binding
-supplies the observed native root when `path` is omitted. An authored `path`
-retains its native filesystem-absolute meaning and must resolve within that
-proved subvolume; it is never silently reinterpreted as subvolume-relative.
-B478 freezes the resolved path and refuses escape from the bound subvolume.
-
-CephFS binding supplies `fsal.fs_name`; a repeated authored value must agree.
-It validates `cmount_path` against the selected backing and native path. RGW
-binding supplies only the release-qualified FSAL leaves from the owned bucket
-and principal, never an ambiguous bare bucket name. B478 records these exact
-bindings before promotion. No author-supplied CephFS `fsal.user_id` or secret
-key may replace NFS manager-generated authentication. Native-generated export
-IDs are captured once, and observation/retry uses that recorded identity.
-
-The execution artifact is JSON, following the
-[native export interface](https://docs.ceph.com/en/tentacle/mgr/nfs/#create-or-update-export-via-json-specification).
-A structured mapping inside Bootwright YAML does not create a native NFS YAML
-format. Copying an observed export must omit generated IDs and credentials;
-binding mismatches refuse rather than silently selecting another filesystem.
-Inline client addresses remain native declarative restrictions; when an export
-uses authenticated principals, their identity/custody must have a declared or
-derived owner. Ingress modes and client recovery follow B478's qualified
-contract, not an assumption that every VIP provides transparent failover.
+One object owns exactly one export of one declared nfs service.
+[B478](milestones/m2.md#b478) owns this record. Admission is current;
+execution still refuses every selected StorageNFSExport until the export block
+lands, and per-resource removal is [B491](milestones/m2.md#b491)'s. Daemon
+placement, ports and ingress belong to the [native services](storage-native-api.md).
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -600,7 +564,6 @@ spec:
     access_type: RW
     squash: root_squash
     protocols: [4]
-    transports: [TCP]
     fsal:
       name: CEPH
     clients:
@@ -608,6 +571,72 @@ spec:
         access_type: RO
         squash: root_squash
 ```
+
+| Field | Contract |
+| --- | --- |
+| `clusterRef` | Required managed StorageCluster. |
+| `serviceID` | Required service ID of one declared nfs service of that cluster; it resolves `nfs.<serviceID>` by full-name equality, so an rgw or other service with the same ID never satisfies it. |
+| `filesystemRef` | CephFS backing: a StorageFilesystem of the same cluster. |
+| `subvolumeRef` | CephFS backing: a StorageSubvolume of the same cluster; its filesystem is the subvolume's `filesystemRef`. |
+| `native` | Required mapping holding the export in the native export JSON shape, checked against the closed member table below. |
+
+Exactly one of `filesystemRef` and `subvolumeRef` is required; both, or
+neither, refuse. Object backing is not admitted yet, and there is no
+`spec.secrets`: an export declaration carries no credential.
+
+The `native` mapping follows the
+[native export interface](https://docs.ceph.com/en/tentacle/mgr/nfs/#create-or-update-export-via-json-specification)
+and keeps cephadm's snake_case spelling. Its members are closed:
+
+| Member | Contract | Frozen default |
+| --- | --- | --- |
+| `pseudo` | Required clean absolute path other than `/`; unique among the exports of one nfs service. | None. |
+| `path` | Clean absolute path in the bound filesystem. | `/` for a `filesystemRef` binding; none for a subvolume binding. |
+| `access_type` | `RW`, `RO` or `NONE`. | `RO`. |
+| `squash` | One of the native squash tokens `root`, `root_squash`, `rootsquash`, `rootid`, `root_id_squash`, `rootidsquash`, `all`, `all_squash`, `allsquash`, `all_anomnymous`, `allanonymous`, `no_root_squash`, `none` and `noidsquash`. | `no_root_squash`. |
+| `security_label` | Boolean. | `true`. |
+| `protocols` | Required in complete input and exactly `[4]`; NFSv3 refuses. | None: an omitted list would serve NFSv3 and NFSv4, so omission refuses. |
+| `transports` | `[TCP]`; UDP refuses as an incompatible transport for NFSv4. | `[TCP]`. |
+| `sectype` | `[sys]` when present; Kerberos (`krb5`, `krb5i`, `krb5p`) refuses and native `none` is not a supported option. | None. |
+| `fsal.name` | Required `CEPH`; `RGW` refuses because object backing is not admitted yet. | None. |
+| `fsal.fs_name` | Name of the bound filesystem; an authored value must agree with the binding. | The bound filesystem. |
+| `fsal.cmount_path` | Clean absolute path that is `/`, equal to `path`, or an ancestor directory of `path`. | `/`. |
+| `clients[]` | Each entry requires a non-empty `addresses` set of literal IP addresses or CIDRs, plus `access_type` and `squash` with the export-level tokens. | Addresses take their canonical form (masked prefix or bare address). |
+
+Bootwright narrows native in three explicit restrictions. The cmount rule is
+an ancestor-directory rule, stricter than native's substring test, so a
+cmount of `/a` never covers a path `/ab`. Access and squash tokens take the
+exact spelling above, although native accepts any case. A client address is
+unique within the export after canonicalization, because NFS-Ganesha applies
+the first client block that matches and a repeat would be a silent no-op.
+Normalization freezes the defaults into effective state, keeps authored
+values and is idempotent; `protocols`, `sectype` and a subvolume
+binding's `path` are never added.
+
+Refused members name the field, the reason and the next step: `export_id`
+(the NFS manager generates the export ID, which Bootwright records),
+`cluster_id` (the NFS cluster is the service `spec.serviceID` names),
+`fsal.user_id` (the NFS manager derives the CephFS principal),
+`fsal.cephx_key`, `fsal.access_key_id` and `fsal.secret_access_key` (an export
+declaration carries no key) and `fsal.sec_label_xattr` (no qualified effect
+contract). No refusal echoes a member's value.
+
+Retired fields refuse at decode with their replacement: `spec.port` and
+`spec.placement` become the `spec.port` and placement of the nfs service
+`spec.serviceID` names; `spec.ingresses` becomes an ingress service whose
+`spec.backend_service` is that nfs service; `spec.exports` becomes one
+StorageNFSExport per export entry, each binding `spec.filesystemRef` or
+`spec.subvolumeRef` and holding that entry's native export under
+`spec.native`.
+
+The export block resolves at execution what admission cannot prove: a
+subvolume binding's `path` comes from the proved subvolume when omitted, an
+authored one must resolve within that subvolume and is never reinterpreted as
+subvolume-relative, and the cmount check then runs against that resolved path.
+The resolved path and the generated export ID are recorded once, and
+observation and retry use that record. The execution artifact is JSON; a
+structured mapping inside Bootwright YAML does not create a native NFS YAML
+format.
 
 ## StorageSMBResource
 

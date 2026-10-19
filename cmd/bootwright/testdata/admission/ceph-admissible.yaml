@@ -114,6 +114,12 @@ spec:
           rgw_zone: objects
           rgw_frontend_port: 8080
 
+      - service_type: nfs
+        service_id: acceptance-nfs
+        placement:
+          count: 1
+          label: ceph-core
+
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: StoragePlacementPolicy
@@ -218,3 +224,24 @@ spec:
 
   pools:
     dataPoolRef: objects-data
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageNFSExport
+metadata:
+  name: acceptance-nfs
+
+spec:
+  clusterRef: ceph-multidc-01
+  serviceID: acceptance-nfs
+  filesystemRef: odf-cephfs
+
+  native:
+    pseudo: /acceptance
+    protocols: [4]
+    fsal:
+      name: CEPH
+    clients:
+      - addresses: [192.0.2.123/24]
+        access_type: RW
+        squash: root_squash
