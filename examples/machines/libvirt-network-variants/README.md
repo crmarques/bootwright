@@ -281,4 +281,5 @@ converges and clean up:
 ## Record
 
 Each row's outcome goes to the [acceptance ledger](../../../docs/acceptance.md) as
-part of [B484](../../../specs/milestones/m2.md#b484)'s run.
+the emulated rehearsal of [B74](../../../specs/milestones/m1.md#b74) and
+[B326](../../../specs/milestones/m1.md#b326) under X55.
