@@ -480,15 +480,18 @@
 # The inspect step restarted nothing: the marker names this request and an
 # earlier boot, so the network was committed and restarted by an earlier
 # attempt, and what differs now either changed on the machine since or does not
-# hold across a restart. Only the second is a declaration to correct.
+# hold across a restart. Only the second is a declaration to correct; a reboot
+# undoes only a runtime change, and the stored declaration undoes a saved one.
 - name: Stop at a running network that drifted from its declaration
   ansible.builtin.fail:
     msg: >-
       the network of Machine {{ bootwright_os_install_request.identity.object }} differs from
       its declaration, though an earlier attempt of this apply committed it and restarted the machine:
       {{ managedos_install_anaconda_network_compared.differences | default([]) | join('; ') }};
-      if it was changed on {{ bootwright_os_install_request.identity.object }} since, reboot
-      {{ bootwright_os_install_request.identity.object }} so it returns to its committed network,
+      if it was changed on {{ bootwright_os_install_request.identity.object }} since, restore its
+      committed network on {{ bootwright_os_install_request.identity.object }}: reboot it to undo a
+      change made at runtime, or run nmstatectl apply {{ bootwright_os_install_request.network.documentPath }}
+      as root to reapply its stored declaration over a change saved in NetworkManager,
       then run bootwright apply; if the declared network does not hold across a restart,
       {{ managedos_install_anaconda_network_recovery }},
       correct the network of {{ bootwright_os_install_request.identity.object }},

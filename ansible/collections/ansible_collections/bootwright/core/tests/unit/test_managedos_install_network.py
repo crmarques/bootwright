@@ -660,15 +660,18 @@ def test_a_declaration_that_differs_after_the_restart_is_refused():
 
 def test_a_difference_the_inspect_step_finds_names_both_ways_back():
     """The inspect step restarts nothing, so its refusal never says a restart
-    produced the difference and offers the reboot that returns a network changed
-    on the machine, beside the declaration correction."""
+    produced the difference and offers the ways that return a network changed on
+    the machine, at runtime or saved in NetworkManager, beside the declaration
+    correction."""
     guest = Guest(converging(guest_read(marker=marker_of(EARLIER_BOOT_ID))), matched=False).run("network.yml")
     drifted = "Stop at a running network that drifted from its declaration"
     assert guest.fired == [drifted] and guest.ran == ["wait", "read", "show"]
     task = next(task for task in flattened("network.yml") if task.get("name") == drifted)
     message = Templar(loader=LOADER, variables=guest.scope).template(trust_as_template(task[FAIL]["msg"]))
     assert "after a restart" not in message and "bond0 is down, declared up" in message, message
-    assert "reboot %s so it returns to its committed network, then run bootwright apply" % MACHINE in message, message
+    assert ("restore its committed network on %s: reboot it to undo a change made at runtime, or run nmstatectl"
+            " apply /etc/bootwright/network.yml as root to reapply its stored declaration over a change saved in"
+            " NetworkManager, then run bootwright apply" % MACHINE) in message, message
     assert "run bootwright destroy, which erases the Machines this context installed, correct the network of %s" % MACHINE in message
     assert message.isprintable(), message
 

@@ -702,8 +702,10 @@ stays reachable from the controller, then run bootwright apply`; a running netwo
 its declaration after the restart ends with the same text without the
 reachability clause. A difference the inspect step finds, which restarted
 nothing because an earlier attempt of this apply committed and restarted the
-machine, names the differences and both ways back: `reboot <m> so it returns to
-its committed network, then run bootwright apply`, when the network changed on
+machine, names the differences and both ways back: `restore its committed
+network on <m>: reboot it to undo a change made at runtime, or run nmstatectl
+apply <documentPath> as root to reapply its stored declaration over a change
+saved in NetworkManager, then run bootwright apply`, when the network changed on
 <m> since, and `<recovery>, correct the network of <m>, then run bootwright
 apply`, when the declared network does not hold across a restart. A connection that does not come back says `its state is
 unknown: repeat bootwright apply, and if <m> stays unreachable, restore its
