@@ -6744,8 +6744,7 @@ the rule. This slice delivers:
   release minor, so 4.22 and later plan and the installer judges the release
   (D162 clause (c)). No per-minor record exists yet.
 - The [runbook](../../examples/storage-clusters/libvirt-3-nodes-ceph/README.md)
-  for the owner's first runs of IBM Storage Ceph 9.9.0.3 on RHEL 9.7, 9.9.1.2 and
-  9.9.2.0 on RHEL 9.8.
+  for the owner's first runs of IBM Storage Ceph 9.9.0.3, 9.9.1.2 and 9.9.2.0.
 
 **Decision D162 and its provenance:** the owner asked on 2026-10-18 for this
 architecture and for readiness for IBM Storage Ceph 9.9.0.x to current,
@@ -6754,6 +6753,10 @@ current. Clauses (b) to (d) are the design's recommendations taken under that
 request, which the owner may revise. Clause (d) records provider OS and version
 pairings, and Fusion, Data Foundation and OpenShift compatibility, as
 dependency rows of the catalog that Bootwright does not gate on (D157).
+
+Revised on 2026-10-19 under D163: the catalog's Dependencies table, the RHEL
+pairing note and the runbook's release-to-OS table were removed; Bootwright
+records no component version pairing or compatibility rule.
 
 **Operator-visible effects:**
 

@@ -7,6 +7,8 @@ cases deliberately kept general. The rule is owned by
 where the general flow is known to fail on an artifact that lacks or has a
 provable capability. Rows are tested scope, never approved versions
 ([release qualification](../../specs/storage-coverage.md#release-qualification)).
+The catalog records no version pairing or compatibility rule between
+components, and choosing versions is the operator's responsibility (D163).
 A registry and this page are kept equal by `TestDocsVersionSpecializationCatalogMatchesRegistries` in
 `test/architecture`, which `make docs-check` runs.
 
@@ -127,28 +129,6 @@ page that owns its reasoning.
 | Auxiliary image selection is not a version specialization; its contract belongs to B479 | [B479](../../specs/milestones/m2.md#b479) |
 | The default package repository `rhel9`, a source default | [Storage API](../../specs/api/storage.md) |
 | Native transport stays refused; no specialization lifts it | [Release qualification](../../specs/storage-coverage.md#release-qualification) |
-
-## Dependencies
-
-Provider pairings and compatibility edges. They have no code and are not
-gates (D162 clause (d), D157): native tools judge
-installability, and these rows only tell an operator what the provider
-documents.
-
-| Pairing or edge | Provider statement | Provider link | code |
-| --- | --- | --- | --- |
-| IBM Storage Ceph 9.9.0.x on RHEL 9.7 | The 9.9.0 compatibility matrix lists RHEL 9.6, 9.7, 10 and 10.1. | [9.9.0 compatibility matrix](https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=compatibility-matrix) | none |
-| IBM Storage Ceph 9.9.1.x on RHEL 9.8 | The 9.9.1 matrix lists RHEL 9.8 and 10.2 only. | [9.9.1 compatibility matrix](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=compatibility-matrix) | none |
-| IBM Storage Ceph 9.9.2.x on RHEL 9.8 | The 9.9.2 matrix lists 9.4, 9.6, 9.8 and 10.2, and warns that `ceph-common` can fail to install on 9.4 and 9.6 for a missing OpenSSL dependency. | [9.9.2 compatibility matrix](https://www.ibm.com/docs/en/storage-ceph/9.9.2?topic=compatibility-matrix) | none |
-| `el9cp` package floor | Every 9.9.x `el9cp` set needs `libcrypto.so.3(OPENSSL_3.4.0)`, which RHEL 9.6 lacks and 9.7 and 9.8 provide, so DNF judges the floor natively. The "9.9.0.x requires 9.7" rule is support prose no native tool enforces. | [IBM RHEL 9 repository](https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/) | none |
-| IBM Fusion 2.13.x | Supports OpenShift up to 4.21 and Fusion Data Foundation 4.21. | [Fusion support matrix](https://www.ibm.com/support/pages/support-matrix-ibm-fusion-sds-versions) | none |
-| IBM Fusion 2.14.0 | Adds OpenShift 4.22 and Fusion Data Foundation 4.22. | [Fusion 2.14.0 readme](https://www.ibm.com/support/pages/readme-ibm-fusion-2140) | none |
-| OpenShift 4.21 to 4.22 | 4.22 is the current generally available minor; 4.23 is pre-GA with an empty stable channel. | [Red Hat OpenShift life cycle](https://access.redhat.com/product-life-cycles/api/v1/products?name=OpenShift%20Container%20Platform%204) | none |
-| ODF 4.22 with IBM Storage Ceph | The ODF 4.22 release notes warn not to deploy or upgrade to "RHCS 9.1z1" in external mode. Which IBM Storage Ceph 9.9.x build corresponds to it is not published. | [ODF 4.22 release notes](https://docs.redhat.com/en/documentation/red_hat_openshift_data_foundation/4.22/html/4.22_release_notes/overview) | none |
-| ODF z-stream upgrade defects | Upgrades to 4.21.1 through 4.21.6 and to 4.22.0 and 4.22.1 fail or are unsupported; they do not affect day 0. | [ODF 4.21 release notes](https://docs.redhat.com/en/documentation/red_hat_openshift_data_foundation/4.21/html/4.21_release_notes/overview) | none |
-
-The ODF rows were read through a summarizing tool, not from the page text:
-re-read the cited page before encoding any of them as behavior.
 
 ## Adding a specialization
 

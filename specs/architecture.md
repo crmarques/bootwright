@@ -926,7 +926,9 @@ code. A specialization never changes a block's intent, ordering, authorization
 or ownership proofs, and never removes a trust refusal. Specialization
 identities never enter step intents or content digests. A specialization may
 ship without a version move only when the general flow cannot have completed
-the step on any build it matches.
+the step on any build it matches. A specialization never encodes a version
+pairing or compatibility rule between components; Bootwright registers and
+enforces none, and choosing versions is the operator's responsibility (D163).
 
 Each implementation declares an immutable identity, capability, supported
 target and version constraints, content identity, and execution dependencies.

@@ -29,7 +29,7 @@ Bootwright preserves those selections through native package, container and
 Ceph commands, including malformed or nonexistent versions and incompatible combinations,
 and reports native failures with their cause and selected coordinate, subject
 to secret redaction. It neither checks version existence, vendor support or
-mutual compatibility nor maintains IBM's release table, an approved-version
+mutual compatibility (D157, D163) nor maintains IBM's release table, an approved-version
 catalog or per-release profiles. A tested example imposes no version allowlist.
 Structural input validation and independent trust, authorization and immutable
 artifact requirements still apply; version syntax is interpreted by native

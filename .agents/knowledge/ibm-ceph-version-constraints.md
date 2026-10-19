@@ -26,7 +26,7 @@ are the owners of these selections as of 2026-10-18:
 The signed [RHEL 9 cephadm RPM](https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/cephadm-20.2.2-349.el9cp.noarch.rpm)
 names the RHEL 10 image repository in its embedded
 `cephadmlib/constants.py`. Container base, guest OS and native RPM build are
-separate coordinates; that default does not require RHEL 10 guests. A release
+separate coordinates; that default names an image repository only. A release
 table tag is not evidence that a repository/tag pair exists. Follow the
 runbook's authenticated metadata check and operator-owned immutable selection;
 the public alias and its eventual frozen digest do not qualify a release.
@@ -161,11 +161,6 @@ Every `.py` member of the `20.2.2-349.el10cp` cephadm zipapp (sha256
 Python 3.9. Its `.pyc` members carry another magic number, so zipimport uses
 the `.py` sources on a RHEL 9 host. Runtime behavior on Python 3.9 is still a
 first-run watch item.
-
-IBM documents 9.9.0.x on RHEL 9.6 and 9.7 and 9.9.1.x and later on 9.8. Every
-9.9.x `el9cp` set needs OpenSSL 3.4 symbols, which RHEL 9.6 lacks, so DNF
-judges that floor natively. The rest is support prose that D157 keeps out of
-code; the catalog records it as dependency rows.
 
 ## Route older and adjacent findings to their owners
 

@@ -203,7 +203,7 @@ Alias cell.
 | [B631](#b631) | new, 2026-10-19 (X101) | enabling | Storage | A wrong `ceph.ibm.callHome` for the selected build is refused before any host block runs | Found in X101; Go has no planning-visible Call Home model fact, and D157 forbids gating on the release |
 | [B632](#b632) | new, 2026-10-19 (X101) | enabling | Storage | The unused `installed_cephadm` and the tests that patch it are removed | Found in X101; dead code with no effect |
 | [B633](#b633) | new, 2026-10-19 (X101) | defect | Architecture and developer tooling | One native-timeout unit test stops crashing its xdist worker under load | Found in X101; the file passes alone and the whole tree passed on rerun |
-| [B634](#b634) | new, 2026-10-19 (X101) | enabling | Storage | The libvirt three-node Ceph runbook validates each selected release, not one | Found in X101; documentation for the owner's runs, no gate |
+| [B634](#b634) | new, 2026-10-19 (X101) | enabling | Storage | The libvirt three-node Ceph runbook validates the operator's selected coordinates, not only the tracked ones | Found in X101; documentation for the owner's runs, no gate |
 | [B635](#b635) | new, 2026-10-19 (X101) | enabling | Storage, with Container clusters | The edges X101's reviews left untested or unreconciled are tested or recorded | Found in X101; each is hardening of a path no signed build reaches today |
 
 ### B82
@@ -2016,10 +2016,13 @@ test is deterministic under parallel workers or its cause is recorded. **Require
 ### B634
 
 The runbook's validation text and its Dashboard and IBM Call Home rows assume
-`callHome` enabled and `20.2.2-349.el9cp`, and the RHEL 9.7 steps do not say to
-rename `metadata.name` in the two copied profile files. **Outcome:** the
-runbook states, per release, the validation values and the Call Home check
-(`call_home_agent` not enabled on 9.9.0.3), and names the profile renames. **Requires:** none. **Definition:** `Specified`.
+the tracked `callHome: enabled` and `20.2.2-349.el9cp`, and the guide for guests
+of another RHEL minor does not say to rename `metadata.name` in the two copied
+profile files. **Outcome:** the validation steps compare against the operator's
+own selected coordinates and the Call Home intent the selected build realizes
+(`call_home_agent` enabled, or not enabled for `disabled`), with no per-release
+table (D163), and the guide names every field to change in the copied profile
+files, including `metadata.name`. **Requires:** none. **Definition:** `Specified`.
 **Exit evidence:** a docs-check pass and the owner's three runs reading it.
 
 ### B635
@@ -2523,3 +2526,15 @@ Requires cell as `owner decision: <question>`.
   slice, with its 9.9.0.x first wave. It authorizes no M3 node-role work, no M4
   add-on work and no evidence-format move. The evidence member rides the next
   coordinated Ceph contract move.
+  D163 supersedes clause (d).
+- **D163** (2026-10-19, the owner): Bootwright registers and enforces no
+  component version rule: no pairing or compatibility rule between component
+  versions, such as an IBM Storage Ceph release requiring a RHEL release, and
+  no Fusion, Data Foundation, OpenShift or Ceph compatibility rule. Neither
+  code nor repository knowledge records such rules; choosing versions is the
+  operator's responsibility. This extends D157 to every component and
+  supersedes D162 clause (d). Version specializations stay: they adapt native
+  mechanics to capabilities of the selected artifacts and never approve,
+  refuse or recommend a version. The owner also authorizes the defect work for
+  the confirmed general findings of the 2026-10-18 audit of main
+  fcff2f58f..ce190446a, planned as X102.
