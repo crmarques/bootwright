@@ -37,7 +37,8 @@
       {
         "name": "ceph-01",
         "kind": "StorageCluster",
-        "status": "unsupported"
+        "status": "unsupported",
+        "resources": []
       }
     ],
     "shared": [

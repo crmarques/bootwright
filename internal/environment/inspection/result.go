@@ -24,6 +24,12 @@ const (
 	DashboardUnproved = "unproved"
 	DashboardActive   = "active"
 	DashboardStandby  = "standby"
+
+	ResourceUnsupported = "unsupported"
+	ResourcePending     = "pending"
+	ResourceDone        = "done"
+	ResourceFailed      = "failed"
+	ResourceUnknown     = "unknown"
 )
 
 type ClusterRef struct {
@@ -90,6 +96,14 @@ type ManagedCeph struct {
 	Reason      string
 	Remedy      string
 	Dashboard   *Dashboard
+	Resources   []Resource
+}
+
+type Resource struct {
+	Kind   string
+	Name   string
+	Status string
+	Scope  string
 }
 
 type StorageEntry struct {

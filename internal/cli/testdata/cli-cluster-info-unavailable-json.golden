@@ -137,7 +137,14 @@
         "adminNode": "rhel-01",
         "status": "unavailable",
         "reason": "no apply of this context's current operation has completed the cluster's bootstrap",
-        "remedy": "bootwright apply --context lab --stage clusters"
+        "remedy": "bootwright apply --context lab --stage clusters",
+        "resources": [
+          {
+            "kind": "StoragePool",
+            "name": "rbd-data",
+            "status": "pending"
+          }
+        ]
       }
     ]
   },

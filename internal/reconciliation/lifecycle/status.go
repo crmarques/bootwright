@@ -193,7 +193,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 		}
 		claimed, refused := s.capabilityKinds(), Identities(s.unsupportedRefusals(state))
 		result.Clusters = clusterSummaries(catalog, api.ContainerCluster, claimed, refused)
-		result.StorageClusters = clusterSummaries(catalog, api.StorageCluster, claimed, refused)
+		result.StorageClusters = storageSummaries(catalog, claimed, refused)
 		result.Shared = refusedServices(serviceSummaries(catalog, claimed), refused)
 		result.Secrets = SecretSummary{Declared: len(catalog.OfKind(api.Secret))}
 	}
@@ -256,7 +256,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 		return nil, err
 	}
 	result.Clusters = realizedClusters(result.Clusters, realized)
-	result.StorageClusters = realizedClusters(result.StorageClusters, realized)
+	result.StorageClusters = realizedStorage(result.StorageClusters, realized)
 	result.Shared = realizedServices(result.Shared, realized)
 	if result.NextSteps, err = s.offered(ctx, view, store, operation, plan, states, summary.Next, result.Contradictions); err != nil {
 		return nil, err
@@ -453,11 +453,7 @@ func setupChecks(view View, operated bool) []SetupCheck {
 func clusterSummaries(catalog api.Catalog, kind api.Kind, claimed, refused []string) []ClusterSummary {
 	out := []ClusterSummary{}
 	for _, object := range catalog.OfKind(kind) {
-		status := RealizationPending
-		if !slices.Contains(claimed, string(kind)) || slices.Contains(refused, object.Identity()) {
-			status = RealizationUnsupported
-		}
-		out = append(out, ClusterSummary{Name: object.Name(), Kind: string(kind), Status: status})
+		out = append(out, ClusterSummary{Name: object.Name(), Kind: string(kind), Status: declaredStatus(kind, object, claimed, refused)})
 	}
 	slices.SortFunc(out, func(x, y ClusterSummary) int { return strings.Compare(x.Name, y.Name) })
 	return out

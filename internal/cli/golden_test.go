@@ -276,11 +276,14 @@ func cliGoldens() []cliGolden {
 			attempted[index].Attempts = attempts
 		}
 		return &lifecycle.StatusResult{
-			Context:         lifecycle.ContextIdentity{Name: "lab", Revision: revision, Mode: "ready"},
-			SetupChecks:     []lifecycle.SetupCheck{{ID: "controller-binding", Status: "ready"}, {ID: "execution-bundle", Status: "ready"}},
-			Desired:         lifecycle.DesiredSummary{Revision: revision, Environment: "lab-rhel", Files: 14, Objects: 14},
-			Clusters:        []lifecycle.ClusterSummary{{Name: "ocp-01", Kind: "ContainerCluster", Status: lifecycle.RealizationPending}},
-			StorageClusters: []lifecycle.ClusterSummary{{Name: "ceph-01", Kind: "StorageCluster", Status: lifecycle.RealizationUnsupported}},
+			Context:     lifecycle.ContextIdentity{Name: "lab", Revision: revision, Mode: "ready"},
+			SetupChecks: []lifecycle.SetupCheck{{ID: "controller-binding", Status: "ready"}, {ID: "execution-bundle", Status: "ready"}},
+			Desired:     lifecycle.DesiredSummary{Revision: revision, Environment: "lab-rhel", Files: 14, Objects: 14},
+			Clusters:    []lifecycle.ClusterSummary{{Name: "ocp-01", Kind: "ContainerCluster", Status: lifecycle.RealizationPending}},
+			StorageClusters: []lifecycle.ClusterSummary{{Name: "ceph-01", Kind: "StorageCluster", Status: lifecycle.RealizationUnsupported, Resources: []lifecycle.ResourceSummary{
+				{Kind: "StoragePool", Name: "rbd", Status: lifecycle.RealizationUnsupported},
+				{Kind: "StorageClient", Name: "rbd-client", Status: lifecycle.RealizationUnsupported},
+			}}},
 			Shared: []lifecycle.ServiceSummary{
 				{Kind: "ArtifactServer", Name: "lab-artifacts", Machine: "controller", Status: lifecycle.RealizationDone},
 				{Kind: "DNSServer", Name: "lab-dns", Machine: "controller", Status: lifecycle.RealizationUnsupported},

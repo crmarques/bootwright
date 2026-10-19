@@ -67,3 +67,5 @@
       Reason  no apply of this context's current operation has completed the cluster's
               bootstrap
       Next    bootwright apply --context lab --stage clusters
+    Resources
+      StoragePool/rbd-data  pending

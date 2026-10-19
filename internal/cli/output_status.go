@@ -8,16 +8,16 @@ import (
 )
 
 type statusResult struct {
-	Context         resultContext    `json:"context"`
-	SetupChecks     []statusCheck    `json:"setupChecks"`
-	Desired         statusDesired    `json:"desired"`
-	Clusters        []statusCluster  `json:"clusters"`
-	StorageClusters []statusCluster  `json:"storageClusters"`
-	Shared          []statusService  `json:"shared"`
-	Secrets         statusSecrets    `json:"secrets"`
-	NextSteps       []string         `json:"nextSteps"`
-	Lifecycle       *statusLifecycle `json:"lifecycle"`
-	Contradictions  []string         `json:"contradictions"`
+	Context         resultContext          `json:"context"`
+	SetupChecks     []statusCheck          `json:"setupChecks"`
+	Desired         statusDesired          `json:"desired"`
+	Clusters        []statusCluster        `json:"clusters"`
+	StorageClusters []statusStorageCluster `json:"storageClusters"`
+	Shared          []statusService        `json:"shared"`
+	Secrets         statusSecrets          `json:"secrets"`
+	NextSteps       []string               `json:"nextSteps"`
+	Lifecycle       *statusLifecycle       `json:"lifecycle"`
+	Contradictions  []string               `json:"contradictions"`
 }
 
 func (statusResult) documentedResult() {}
@@ -36,6 +36,19 @@ type statusDesired struct {
 type statusCluster struct {
 	Name   string `json:"name"`
 	Kind   string `json:"kind"`
+	Status string `json:"status"`
+}
+
+type statusStorageCluster struct {
+	Name      string           `json:"name"`
+	Kind      string           `json:"kind"`
+	Status    string           `json:"status"`
+	Resources []statusResource `json:"resources"`
+}
+
+type statusResource struct {
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
 	Status string `json:"status"`
 }
 
@@ -86,7 +99,7 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 			Counts: admissionCounts{FilesSeen: result.Desired.Files, ObjectsDecoded: result.Desired.Objects},
 		},
 		Clusters:        displayStatusClusters(result.Clusters),
-		StorageClusters: displayStatusClusters(result.StorageClusters),
+		StorageClusters: displayStatusStorageClusters(result.StorageClusters),
 		Shared:          make([]statusService, 0, len(result.Shared)),
 		Secrets:         statusSecrets{Declared: result.Secrets.Declared, Bindings: result.Secrets.Bindings},
 		NextSteps:       displayLines(result.NextSteps),
@@ -132,6 +145,20 @@ func displayStatusClusters(clusters []lifecycle.ClusterSummary) []statusCluster 
 	return out
 }
 
+func displayStatusStorageClusters(clusters []lifecycle.ClusterSummary) []statusStorageCluster {
+	out := make([]statusStorageCluster, 0, len(clusters))
+	for _, cluster := range clusters {
+		resources := make([]statusResource, 0, len(cluster.Resources))
+		for _, r := range cluster.Resources {
+			resources = append(resources, statusResource{Kind: escapeDisplayLine(r.Kind), Name: escapeDisplayLine(r.Name), Status: escapeDisplayLine(string(r.Status))})
+		}
+		out = append(out, statusStorageCluster{
+			Name: escapeDisplayLine(cluster.Name), Kind: escapeDisplayLine(cluster.Kind), Status: escapeDisplayLine(string(cluster.Status)), Resources: resources,
+		})
+	}
+	return out
+}
+
 // writeLifecycleStatus presents the JSON membership in the JSON order. The
 // human text passes raw values, because display escapes each one it writes.
 func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMode bool) error {
@@ -149,6 +176,7 @@ func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMod
 	writeStatusDesired(&text, result.Desired)
 	writeStatusClusters(&text, "Clusters", result.Clusters)
 	writeStatusClusters(&text, "Storage clusters", result.StorageClusters)
+	writeStatusResources(&text, result.StorageClusters)
 	writeStatusShared(&text, result.Shared)
 	text.section("Secrets")
 	text.fields(
@@ -205,6 +233,20 @@ func writeStatusClusters(text *display, title string, clusters []lifecycle.Clust
 		rows = append(rows, []string{serviceStatusToken(cluster.Status), cluster.Kind + "/" + cluster.Name})
 	}
 	text.resourceTable([]string{"State", "Cluster"}, rows, tableStyle{Kind: "cluster", Identity: 1, States: []int{0}})
+}
+
+func writeStatusResources(text *display, clusters []lifecycle.ClusterSummary) {
+	var rows [][]string
+	for _, cluster := range clusters {
+		for _, r := range cluster.Resources {
+			rows = append(rows, []string{serviceStatusToken(r.Status), r.Kind + "/" + r.Name, cluster.Name})
+		}
+	}
+	if len(rows) == 0 {
+		return
+	}
+	text.section("Storage resources")
+	text.resourceTable([]string{"State", "Resource", "Cluster"}, rows, tableStyle{Kind: "resource", Identity: 1, States: []int{0}})
 }
 
 func writeStatusShared(text *display, services []lifecycle.ServiceSummary) {

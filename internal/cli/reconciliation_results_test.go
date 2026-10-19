@@ -522,13 +522,14 @@ func TestStatusTextEscapesOnce(t *testing.T) {
 	raw := func(label string) string { return label + `\x` }
 	shown := func(label string) string { return label + `\\x` }
 	result := &lifecycle.StatusResult{
-		Context:         lifecycle.ContextIdentity{Name: raw("ctx"), Revision: raw("rev"), Mode: raw("mode")},
-		SetupChecks:     []lifecycle.SetupCheck{{ID: raw("check"), Status: raw("readiness")}},
-		Desired:         lifecycle.DesiredSummary{Revision: raw("rev"), Environment: raw("env")},
-		Clusters:        []lifecycle.ClusterSummary{{Name: raw("cname"), Kind: raw("ckind"), Status: lifecycle.RealizationStatus(raw("cstatus"))}},
-		StorageClusters: []lifecycle.ClusterSummary{{Name: raw("sname"), Kind: raw("skind"), Status: lifecycle.RealizationStatus(raw("sstatus"))}},
-		Shared:          []lifecycle.ServiceSummary{{Kind: raw("vkind"), Name: raw("vname"), Machine: raw("machine"), Status: lifecycle.RealizationStatus(raw("vstatus"))}},
-		NextSteps:       []string{raw("step")},
+		Context:     lifecycle.ContextIdentity{Name: raw("ctx"), Revision: raw("rev"), Mode: raw("mode")},
+		SetupChecks: []lifecycle.SetupCheck{{ID: raw("check"), Status: raw("readiness")}},
+		Desired:     lifecycle.DesiredSummary{Revision: raw("rev"), Environment: raw("env")},
+		Clusters:    []lifecycle.ClusterSummary{{Name: raw("cname"), Kind: raw("ckind"), Status: lifecycle.RealizationStatus(raw("cstatus"))}},
+		StorageClusters: []lifecycle.ClusterSummary{{Name: raw("sname"), Kind: raw("skind"), Status: lifecycle.RealizationStatus(raw("sstatus")),
+			Resources: []lifecycle.ResourceSummary{{Kind: raw("rkind"), Name: raw("rname"), Status: lifecycle.RealizationStatus(raw("rstatus"))}}}},
+		Shared:    []lifecycle.ServiceSummary{{Kind: raw("vkind"), Name: raw("vname"), Machine: raw("machine"), Status: lifecycle.RealizationStatus(raw("vstatus"))}},
+		NextSteps: []string{raw("step")},
 		Lifecycle: &lifecycle.LifecycleSummary{
 			Operation: raw("operation"), Verb: raw("verb"), State: raw("opstate"), Next: raw("next"),
 			Blocks: []lifecycle.BlockResult{{
@@ -553,6 +554,7 @@ func TestStatusTextEscapesOnce(t *testing.T) {
 		"  Revision         " + shown("rev") + "\n", "  Environment      " + shown("env") + "\n",
 		"  [UNKNOWN]   " + shown("ckind") + "/" + shown("cname") + "\n", "  [UNKNOWN]   " + shown("skind") + "/" + shown("sname") + "\n",
 		"  [UNKNOWN]   " + shown("vkind") + "/" + shown("vname") + "   " + shown("machine") + "\n", "  " + shown("step") + "\n",
+		"  [UNKNOWN]   " + shown("rkind") + "/" + shown("rname") + "   " + shown("sname") + "\n",
 		"  Operation  " + shown("operation") + "\n", "  Verb       " + shown("verb") + "\n",
 		"  State      " + shown("opstate") + "\n", "  Next       " + shown("next") + "\n",
 		"    [FAIL] " + shown("description") + "\n",
@@ -586,6 +588,7 @@ func TestStatusTextEscapesOnce(t *testing.T) {
 		"desired.revision": "rev", "desired.environment": "env",
 		"clusters[0].name": "cname", "clusters[0].kind": "ckind", "clusters[0].status": "cstatus",
 		"storageClusters[0].name": "sname", "storageClusters[0].kind": "skind", "storageClusters[0].status": "sstatus",
+		"storageClusters[0].resources[0].kind": "rkind", "storageClusters[0].resources[0].name": "rname", "storageClusters[0].resources[0].status": "rstatus",
 		"shared[0].kind": "vkind", "shared[0].name": "vname", "shared[0].machine": "machine", "shared[0].status": "vstatus",
 		"nextSteps[0]":        "step",
 		"lifecycle.operation": "operation", "lifecycle.verb": "verb", "lifecycle.state": "opstate", "lifecycle.next": "next",

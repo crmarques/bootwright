@@ -2,6 +2,7 @@ package ceph
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -181,4 +182,131 @@ func inspectMonitors(catalog api.Catalog, cluster api.Object, names []string, ad
 	}
 	slices.SortFunc(monitors, func(a, b MonitorInspection) int { return strings.Compare(a.Host, b.Host) })
 	return monitors, ""
+}
+
+var scopeRows = map[api.Kind]func(api.Catalog, string, []reconciliation.Block) string{
+	api.StoragePlacementPolicy: frozenScope(api.StoragePlacementPolicy, "policy", policyScopeText),
+	api.StoragePool:            frozenScope(api.StoragePool, "pool", poolScopeText),
+	api.StorageRBDImage:        frozenScope(api.StorageRBDImage, "rbd", rbdScopeText),
+	api.StorageClient:          frozenScope(api.StorageClient, "client", clientScopeText),
+	api.StorageFilesystem:      frozenScope(api.StorageFilesystem, "filesystem", filesystemScopeText),
+	api.StorageSubvolume:       frozenScope(api.StorageSubvolume, "subvolume", subvolumeScopeText),
+	api.StorageObjectGateway: declaredScope(api.StorageObjectGateway, func(spec api.Value) string {
+		return "zone " + spec.Get("realm").Text() + "/" + spec.Get("zoneGroup").Text() + "/" + spec.Get("zone").Text()
+	}),
+	api.StorageNFSExport: declaredScope(api.StorageNFSExport, func(spec api.Value) string {
+		return "export " + spec.Get("native", "pseudo").Text() + " on nfs." + spec.Get("serviceID").Text()
+	}),
+	api.StorageExport: declaredScope(api.StorageExport, exportScopeText),
+}
+
+func ResourceScope(catalog api.Catalog, kind api.Kind, name string, frozen []reconciliation.Block) string {
+	row, found := scopeRows[kind]
+	if !found {
+		return ""
+	}
+	return row(catalog, name, frozen)
+}
+
+func frozenScope(kind api.Kind, action string, render func(Request) string) func(api.Catalog, string, []reconciliation.Block) string {
+	return func(_ api.Catalog, name string, frozen []reconciliation.Block) string {
+		var matched []reconciliation.Block
+		for _, block := range frozen {
+			if block.Kind == string(kind) && block.Object == name && block.Implementation == Implementation {
+				matched = append(matched, block)
+			}
+		}
+		if len(matched) != 1 {
+			return ""
+		}
+		r, err := DecodeRequest(matched[0].Request)
+		if err != nil || r.Action != action {
+			return ""
+		}
+		return render(r)
+	}
+}
+
+func declaredScope(kind api.Kind, render func(api.Value) string) func(api.Catalog, string, []reconciliation.Block) string {
+	return func(catalog api.Catalog, name string, _ []reconciliation.Block) string {
+		object, found := catalog.Find(kind, name)
+		if !found {
+			return ""
+		}
+		return render(object.Spec())
+	}
+}
+
+func policyScopeText(r Request) string {
+	if r.Policy == nil {
+		return ""
+	}
+	scope := "rule " + r.Policy.Rule + ", failure domain " + r.Policy.FailureDomain
+	if r.Policy.DeviceClass != "" {
+		scope += ", device class " + r.Policy.DeviceClass
+	}
+	return scope
+}
+
+func poolScopeText(r Request) string {
+	p := r.Pool
+	if p == nil {
+		return ""
+	}
+	if p.Erasure == nil {
+		return "replicated size " + strconv.Itoa(p.Size) + "/min " + strconv.Itoa(p.MinSize) + ", application " + p.Application
+	}
+	scope := "erasure k=" + strconv.Itoa(p.Erasure.DataChunks) + " m=" + strconv.Itoa(p.Erasure.CodingChunks) + ", application " + p.Application
+	if p.Overwrites {
+		scope += ", overwrites"
+	}
+	return scope
+}
+
+func rbdScopeText(r Request) string {
+	if r.RBD == nil {
+		return ""
+	}
+	scope := "image " + r.RBD.Pool + "/" + r.RBD.Name + ", " + strconv.FormatInt(r.RBD.SizeBytes, 10) + " bytes"
+	if r.RBD.DataPool != "" {
+		scope += ", data pool " + r.RBD.DataPool
+	}
+	return scope
+}
+
+func clientScopeText(r Request) string {
+	if r.Client == nil {
+		return ""
+	}
+	return "client." + r.Client.Name + " " + r.Client.Access + " on pool " + r.Client.Pool
+}
+
+func filesystemScopeText(r Request) string {
+	if r.Filesystem == nil {
+		return ""
+	}
+	return "filesystem " + r.Filesystem.Name + ", metadata " + r.Filesystem.MetadataPool + ", data " + strings.Join(r.Filesystem.DataPools, " ")
+}
+
+func subvolumeScopeText(r Request) string {
+	if r.Subvolume == nil {
+		return ""
+	}
+	group := r.Subvolume.Group
+	if group == "" {
+		group = "_nogroup"
+	}
+	return "subvolume " + r.Subvolume.Filesystem + "/" + group + "/" + r.Subvolume.Name
+}
+
+func exportScopeText(spec api.Value) string {
+	foundation := spec.Get("dataFoundation")
+	if !foundation.Present() {
+		return "export"
+	}
+	scope := "export of pool " + foundation.Get("rbdPoolRef").Text() + ", filesystem " + foundation.Get("filesystemRef").Text()
+	if gateway := foundation.Get("objectGatewayRef").Text(); gateway != "" {
+		scope += ", object gateway " + gateway
+	}
+	return scope
 }

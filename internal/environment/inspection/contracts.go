@@ -32,6 +32,7 @@ type DashboardCustody interface {
 
 type CephEvidence interface {
 	ManagedCeph(ctx context.Context, contextName string, catalog api.Catalog, cluster api.Object) (CephProof, error)
+	Resources(ctx context.Context, contextName string, catalog api.Catalog) (map[string][]Resource, error)
 }
 
 type InstallEvidence interface {

@@ -60,6 +60,14 @@ type managedCephPresentation struct {
 	Reason      string                 `json:"reason,omitempty"`
 	Remedy      string                 `json:"remedy,omitempty"`
 	Dashboard   *dashboardPresentation `json:"dashboard,omitempty"`
+	Resources   []resourcePresentation `json:"resources"`
+}
+
+type resourcePresentation struct {
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Scope  string `json:"scope,omitempty"`
 }
 
 type dashboardPresentation struct {
@@ -140,6 +148,9 @@ func validManagedCeph(ceph *inspection.ManagedCeph) bool {
 	if ceph.Dashboard != nil && !validDashboard(ceph.Dashboard) {
 		return false
 	}
+	if !validResources(ceph.Resources) {
+		return false
+	}
 	switch ceph.Status {
 	case inspection.StatusReady:
 		return ceph.FSID != "" && ceph.Image != nil && len(ceph.Monitors) != 0 && ceph.AdminNode != "" && ceph.CephCommand != "" && ceph.Reason == "" && ceph.Remedy == "" &&
@@ -149,6 +160,14 @@ func validManagedCeph(ceph *inspection.ManagedCeph) bool {
 			(ceph.Dashboard == nil || ceph.Dashboard.Revealed)
 	}
 	return false
+}
+
+var resourceStatuses = []string{inspection.ResourceUnsupported, inspection.ResourcePending, inspection.ResourceDone, inspection.ResourceFailed, inspection.ResourceUnknown}
+
+func validResources(resources []inspection.Resource) bool {
+	return !slices.ContainsFunc(resources, func(r inspection.Resource) bool {
+		return r.Kind == "" || r.Name == "" || !slices.Contains(resourceStatuses, r.Status)
+	})
 }
 
 func validDashboard(d *inspection.Dashboard) bool {
@@ -233,7 +252,12 @@ func displayManagedCeph(ceph *inspection.ManagedCeph) *managedCephPresentation {
 		Management: escapeDisplayLine(ceph.Management), Release: escapeDisplayLine(ceph.Release), FSID: escapeDisplayLine(ceph.FSID),
 		AdminNode: escapeDisplayLine(ceph.AdminNode), CephCommand: escapeDisplayLine(ceph.CephCommand),
 		Status: escapeDisplayLine(ceph.Status), Reason: escapeDisplayLine(ceph.Reason), Remedy: escapeDisplayLine(ceph.Remedy),
-		Dashboard: displayDashboard(ceph.Dashboard),
+		Dashboard: displayDashboard(ceph.Dashboard), Resources: make([]resourcePresentation, 0, len(ceph.Resources)),
+	}
+	for _, r := range ceph.Resources {
+		shown.Resources = append(shown.Resources, resourcePresentation{
+			Kind: escapeDisplayLine(r.Kind), Name: escapeDisplayLine(r.Name), Status: escapeDisplayLine(r.Status), Scope: escapeDisplayLine(r.Scope),
+		})
 	}
 	if ceph.Image != nil {
 		shown.Image = &imagePresentation{
@@ -392,6 +416,7 @@ func writeManagedCeph(text *display, contextName, cluster string, ceph *inspecti
 			field{Label: "Digest", Value: ceph.Image.Digest}, field{Label: "Platform", Value: ceph.Image.Platform})
 	}
 	text.mutedFields(fields...)
+	writeResources(text, ceph.Resources, full)
 	if ceph.Dashboard != nil {
 		d := ceph.Dashboard
 		password := "hidden; rerun with --secrets --name " + cluster
@@ -403,6 +428,22 @@ func writeManagedCeph(text *display, contextName, cluster string, ceph *inspecti
 		text.subsection("Custody")
 		text.mutedFields(field{Label: "User", Value: d.User}, field{Label: "Password", Value: password})
 	}
+}
+
+func writeResources(text *display, resources []inspection.Resource, full bool) {
+	if len(resources) == 0 {
+		return
+	}
+	text.subsection("Resources")
+	rows := make([]field, 0, len(resources))
+	for _, r := range resources {
+		value := r.Status
+		if full && r.Scope != "" {
+			value += "  " + r.Scope
+		}
+		rows = append(rows, field{Label: r.Kind + "/" + r.Name, Value: value})
+	}
+	text.mutedFields(rows...)
 }
 
 func dashboardAccessFields(d *inspection.Dashboard) []field {

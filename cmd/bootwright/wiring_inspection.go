@@ -20,6 +20,11 @@ type evidenceReader interface {
 	Evidence(ctx context.Context, contextName, kind, object string) ([]lifecycle.BlockEvidence, error)
 }
 
+type cephReader interface {
+	evidenceReader
+	StorageResources(ctx context.Context, contextName string) (*lifecycle.StorageResourcesResult, error)
+}
+
 type hostKeyReader interface {
 	HostKey(ctx context.Context, contextName, name string) (machine.HostKeyEvidence, bool, error)
 }
@@ -40,7 +45,28 @@ func (d dashboardCustody) DashboardPassword(ctx context.Context, contextName, cl
 	return inspection.Custodied{Material: read.Material, Unproved: read.Unproved}, found, err
 }
 
-type cephInspection struct{ reconciler evidenceReader }
+type cephInspection struct{ reconciler cephReader }
+
+func (c cephInspection) Resources(ctx context.Context, contextName string, catalog api.Catalog) (map[string][]inspection.Resource, error) {
+	found, err := c.reconciler.StorageResources(ctx, contextName)
+	if err != nil {
+		return nil, err
+	}
+	rows := map[string][]inspection.Resource{}
+	for _, cluster := range found.Clusters {
+		declared, ok := catalog.Find(api.StorageCluster, cluster.Name)
+		if management := declared.Spec().Get("management").Text(); cluster.Kind != string(api.StorageCluster) || !ok || management != "" && management != inspection.ManagementManaged {
+			continue
+		}
+		resources := make([]inspection.Resource, 0, len(cluster.Resources))
+		for _, r := range cluster.Resources {
+			resources = append(resources, inspection.Resource{Kind: r.Kind, Name: r.Name, Status: string(r.Status),
+				Scope: ceph.ResourceScope(catalog, api.Kind(r.Kind), r.Name, found.Frozen)})
+		}
+		rows[cluster.Name] = resources
+	}
+	return rows, nil
+}
 
 func (c cephInspection) ManagedCeph(ctx context.Context, contextName string, catalog api.Catalog, cluster api.Object) (inspection.CephProof, error) {
 	proofs, err := c.reconciler.Evidence(ctx, contextName, string(api.StorageCluster), cluster.Name())

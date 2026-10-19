@@ -466,8 +466,8 @@ record could be read, the size and digest that record stated.
 ## Cluster discovery
 
 `cluster list` and `cluster info` read only validated desired state, durable
-block evidence and custody presence. They contact no host and read no
-credential bytes unless `--secrets` asks.
+block evidence, the current operation's frozen plan and custody presence. They
+contact no host and read no credential bytes unless `--secrets` asks.
 
 `cluster list` returns one `clusters` array containing both cluster kinds in
 ascending bytewise order of cluster name. Every entry identifies `name` and
@@ -498,6 +498,20 @@ A managed Ceph StorageCluster entry adds these fields, in this order, after its
 | `cephCommand` | The exact prefix that runs the Ceph CLI as the administrator through `cluster exec`: `bootwright cluster exec --context <context> --name <cluster> --node <adminNode> -- sudo -n ceph --conf /var/lib/bootwright/ceph/<fsid>/ceph.conf --keyring /var/lib/bootwright/ceph/<fsid>/ceph.client.admin.keyring`. The operator appends the Ceph arguments. |
 | `status` | `ready`, or `unavailable` with a `reason` and the remedy `bootwright apply --context <context> --stage clusters` when the evidence above is missing; an unavailable entry omits the fields that evidence would carry. |
 | `dashboard` | `{status, user, urls, certificateSHA256}`: `status` is `ready`, or `unproved` with a `reason` when the apply could not reach the dashboard; `user` is the administrator account; `urls` and `certificateSHA256` are those the apply proved. |
+| `resources` | `[{kind, name, status, scope}]`: the rows `status` reports under this cluster, in the same order with the same `status`, on a ready and an unavailable entry alike. `scope` is a one-line redacted statement of the object in the spellings below, built from the request the current operation froze for it; it is omitted when no request of this build froze the object. StorageObjectGateway, StorageNFSExport and StorageExport, which no capability realizes, take it from their declaration. No `scope` carries a key, password, Secret reference or other Secret material. |
+
+| Kind | `scope` |
+| --- | --- |
+| StoragePlacementPolicy | `rule <rule>, failure domain <failureDomain>`, then `, device class <deviceClass>` when one is set |
+| StoragePool, replicated | `replicated size <size>/min <minSize>, application <application>` |
+| StoragePool, erasure | `erasure k=<dataChunks> m=<codingChunks>, application <application>`, then `, overwrites` when overwrites are enabled |
+| StorageRBDImage | `image <pool>/<name>, <sizeBytes> bytes`, then `, data pool <dataPool>` when one is set |
+| StorageClient | `client.<name> <access> on pool <pool>` |
+| StorageFilesystem | `filesystem <name>, metadata <metadataPool>, data <dataPools separated by spaces>` |
+| StorageSubvolume | `subvolume <filesystem>/<group>/<name>`, with `_nogroup`, cephadm's default group, when no group is set |
+| StorageObjectGateway | `zone <realm>/<zoneGroup>/<zone>` |
+| StorageNFSExport | `export <native.pseudo> on nfs.<serviceID>`, cephadm's service name |
+| StorageExport | `export of pool <rbdPoolRef>, filesystem <filesystemRef>`, then `, object gateway <objectGatewayRef>` when set; `export` without `dataFoundation` |
 
 `--secrets --name <cluster>` adds `passwordValue` to `dashboard`, the only
 field that carries a secret. Its contract, refusals and warning are the
@@ -537,10 +551,12 @@ performs no live probes to populate these fields. Secret declarations alone do
 not prove that access material is available. Sensitive `cluster info --secrets`
 retains its separate explicit disclosure boundary.
 
-Human `cluster info` groups available Topology, Access, Evidence and Custody
-facts. Full detail includes verbose frozen evidence and access templates; compact
-detail retains statuses, actionable reasons, ready access and the dashboard
-certificate fingerprint, the evidence for the browser's self-signed warning.
+Human `cluster info` groups available Topology, Access, Evidence, Resources
+and Custody facts. Resources lists each row as `<Kind>/<name>` with its
+status; full detail appends its scope. Full detail includes verbose frozen
+evidence and access templates; compact detail retains statuses, actionable
+reasons, ready access and the dashboard certificate fingerprint, the evidence
+for the browser's self-signed warning.
 It identifies the default
 SSH node, and gives context- and cluster-qualified invocation templates for
 applicable commands, including `--node` for SSH and `-- <command>...` for a
@@ -634,16 +650,17 @@ probe. Its result orders these fields:
 | `context` | `name`, `mode` of the resolved context. `mode` is the context record's mode, which a lifecycle read admits only as `ready`. |
 | `setupChecks` | `{id, status}` rows derived from stored controller evidence alone, without host probes: `controller-binding`, then `execution-bundle` (shown to humans as "Controller setup"), the identities [controller readiness](../controller.md#results-and-qualification) gives the same prerequisites. `execution-bundle` is `ready` when the setup subtree holds a receipt and no interrupted setup, which is what an apply needs before it claims the host, and `not-ready` otherwise. `controller-binding` is `ready` when that record binds this context, `pending` when it does not and the context holds no operation, because the first apply publishes it, and `not-ready` when it does not while an operation exists. Readiness itself never reports `pending`. |
 | `desired` | `revision`, `environment` and admission `counts` of the selected immutable input. `counts` holds `filesSeen` and `objectsDecoded`, and an input that does not compile fails `status` with its diagnostics, so `desired` is always an object. |
-| `clusters`, `storageClusters` | Ordered `{name, kind, status}` rows for selected cluster roots, `status` in the realization vocabulary below. |
+| `clusters` | Ordered `{name, kind, status}` rows for selected ContainerCluster roots, `status` in the realization vocabulary below. |
+| `storageClusters` | Ordered `{name, kind, status, resources}` rows for selected StorageClusters. `resources` holds one `{kind, name, status}` row for each selected storage child object (a kind whose `clusterRef` names a StorageCluster) whose `clusterRef` names this cluster, ordered by API kind order then name, `status` in the realization vocabulary below; it is `[]` for an external StorageCluster and for one with no such object. |
 | `shared` | Ordered `{kind, name, machine, status}` rows for selected managed shared services, `status` in the realization vocabulary below. |
 | `secrets` | `declared`, the Secret objects the selected input declares, and `bindings`, the Secret bindings the current operation's record holds: one per operation however many Secrets it covers, and 0 beside no operation and once a completed removal finalized, which its pristine evidence proves without reading the keyring. |
 | `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. |
 | `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, `anotherBuild` (boolean: the build in hand is not the one that registered the operation, by the rule of [another build](../state-reconciliation.md#dependency-safety-during-recovery)), ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe paths relative to the state root, in the order and form the envelope's [`logs`](#private-operation-logs) list them. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does, which for a block no resolution observed is the exact command, with `--context` and the frozen plan's `--authorize` tokens, that observes it, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
 | `contradictions` | Ordered strings naming what the context's durable records contradict, each worded as the [refusal](../state-reconciliation.md#continuation-and-removal) over those records names it, and last an operation whose continuation or removal reopens a frozen Secret binding the context's keyring no longer lists, or whose keyring listing fails reporting the material corrupt or undecryptable; empty when nothing does. |
 
-The cluster and shared rows share one realization vocabulary. Each object the
-current operation's frozen plan names reads what all of that object's blocks
-prove, whatever its declaration now says:
+The cluster, resource and shared rows share one realization vocabulary. Each
+object the current operation's frozen plan names reads what all of that
+object's blocks prove, whatever its declaration now says:
 
 - `unsupported`: no capability of this executable claims the kind, its
   capability refuses the object, or it is a managed service retained
@@ -676,11 +693,14 @@ presents them as `[SKIPPED]`, `[PENDING]`, `[OK]`, `[FAIL]` and `[UNKNOWN]`,
 and any other value as `[UNKNOWN]`.
 
 Rows sort by their documented key: checks in the order above, blocks in frozen
-order, contradictions in the order their refusal names them, everything else
-in ascending bytewise name order. Human `status` presents the same membership
-and order, omitting empty sections. Its Setup rows name each check by the
-label controller readiness gives it, and a `pending` controller binding adds
-`bound by the first apply`.
+order, contradictions in the order their refusal names them, resources in API
+kind order then name, everything else in ascending bytewise name order. Human
+`status` presents the same membership and order, omitting empty sections. Its
+Setup rows name each check by the label controller readiness gives it, and a
+`pending` controller binding adds `bound by the first apply`. A `Storage
+resources` section follows `Storage clusters`, with `State`, `Resource`
+(`<Kind>/<name>`) and `Cluster` columns in JSON order, and is omitted when no
+resource row exists.
 Its Lifecycle section also names the build that registered the operation, as
 `version` spells it, `<version> (<commit>)`, or `devel (<commit>)` for a build
 stamped with no version, followed by `, another build than this one` when

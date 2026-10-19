@@ -73,6 +73,10 @@
                            (self-signed; compare before accepting the browser warning)
     Evidence
       Status  ready
+    Resources
+      StoragePool/rbd-data          done
+      StorageClient/rbd-canary      done
+      StorageObjectGateway/objects  unsupported
     Custody
       User      admin
       Password  hidden; rerun with --secrets --name storage

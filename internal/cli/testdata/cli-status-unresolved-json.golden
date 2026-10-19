@@ -37,7 +37,19 @@
       {
         "name": "ceph-01",
         "kind": "StorageCluster",
-        "status": "unsupported"
+        "status": "unsupported",
+        "resources": [
+          {
+            "kind": "StoragePool",
+            "name": "rbd",
+            "status": "unsupported"
+          },
+          {
+            "kind": "StorageClient",
+            "name": "rbd-client",
+            "status": "unsupported"
+          }
+        ]
       }
     ],
     "shared": [

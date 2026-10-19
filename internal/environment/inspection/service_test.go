@@ -36,6 +36,9 @@ type fixture struct {
 	passwords map[string]Custodied
 	custody   []string
 	readError error
+	rows      map[string][]Resource
+	rowCalls  int
+	rowError  error
 }
 
 func text(value string) api.Value { return api.StringValue(value) }
@@ -100,6 +103,11 @@ func (f *fixture) ManagedCeph(_ context.Context, _ string, _ api.Catalog, cluste
 	return proof, nil
 }
 
+func (f *fixture) Resources(_ context.Context, _ string, _ api.Catalog) (map[string][]Resource, error) {
+	f.rowCalls++
+	return f.rows, f.rowError
+}
+
 func (f *fixture) Installed(_ context.Context, _, cluster string) (bool, error) {
 	f.installs++
 	return f.installed[cluster], nil
@@ -122,8 +130,8 @@ func (f *fixture) service(current string) Service {
 
 func (f *fixture) untouched() {
 	f.t.Helper()
-	if f.cephCalls != 0 || f.installs != 0 || f.keyReads != 0 || len(f.custody) != 0 {
-		f.t.Fatalf("a refusal read evidence: ceph %d, installs %d, host keys %d, custody %v", f.cephCalls, f.installs, f.keyReads, f.custody)
+	if f.cephCalls != 0 || f.rowCalls != 0 || f.installs != 0 || f.keyReads != 0 || len(f.custody) != 0 {
+		f.t.Fatalf("a refusal read evidence: ceph %d, resources %d, installs %d, host keys %d, custody %v", f.cephCalls, f.rowCalls, f.installs, f.keyReads, f.custody)
 	}
 }
 
@@ -219,6 +227,7 @@ func TestClusterInfoReportsEachKindFromDesiredStateAndEvidence(t *testing.T) {
 		Image:     &Image{Reference: "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074", Digest: "sha256:" + strings.Repeat("a", 64), Platform: "linux/amd64"},
 		Monitors:  []Monitor{{Host: "rhel-01", FQDN: "rhel-01.lab.test", Address: "192.0.2.11"}},
 		Dashboard: &Dashboard{Status: DashboardReady, User: "admin", CertificateSHA256: strings.Repeat("c", 64), URLs: testDashboard().URLs},
+		Resources: []Resource{},
 	}
 	if !reflect.DeepEqual(*managed.Ceph, want) {
 		t.Fatalf("ceph = %+v, want %+v", *managed.Ceph, want)

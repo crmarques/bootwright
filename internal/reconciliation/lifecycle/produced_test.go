@@ -3,6 +3,8 @@ package lifecycle
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -442,5 +444,71 @@ func TestAKeepRunsReadOnly(t *testing.T) {
 	}
 	if len(keeper.executions) != 1 || !keeper.executions[0].ReadOnly || !RunFor(keeper.executions[0], Invocation{}).ReadOnly {
 		t.Fatalf("the keeper was handed %+v", keeper.executions)
+	}
+}
+
+const clientCanary = "[client.rbd-canary]\n\tkey = AQBx57l5Y2FuYXJ5LWNsaWVudC1rZXk9PQ==\n"
+
+func encodedForms(values ...string) []string {
+	var forms []string
+	for _, value := range values {
+		raw := []byte(value)
+		forms = append(forms, value, base64.StdEncoding.EncodeToString(raw), base64.RawStdEncoding.EncodeToString(raw),
+			base64.URLEncoding.EncodeToString(raw), hex.EncodeToString(raw), strings.ToUpper(hex.EncodeToString(raw)))
+	}
+	return forms
+}
+
+func carriesForm(data []byte, forms []string) string {
+	for _, form := range forms {
+		if bytes.Contains(data, []byte(form)) {
+			return form
+		}
+	}
+	return ""
+}
+
+// The receipt, every record and log of the operation and its runs, the
+// evidence, the progress and the diagnostics carry no form of produced
+// material, encoded or not.
+func TestApplyReceiptAndRunLogCarryNoProducedMaterial(t *testing.T) {
+	h := newHarness(t, "install")
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeChanged, Evidence: json.RawMessage(`{"ok":true}`),
+		Produced: []Produced{{Name: "client", Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(clientCanary)})}}}}
+	progress := &testProgress{}
+	h.service.options.Progress = progress
+	result, err := apply(h)
+	if err != nil || !slices.Equal(kept(h), []string{"install/client=" + clientCanary}) {
+		t.Fatalf("apply = %v with custody %v", err, kept(h))
+	}
+	forms := encodedForms(clientCanary, "AQBx57l5Y2FuYXJ5LWNsaWVudC1rZXk9PQ==")
+	receipt, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if form := carriesForm(receipt, forms); form != "" {
+		t.Fatalf("the receipt carries %q", form)
+	}
+	logs := 0
+	for _, area := range []*memoryArea{h.workspace.area, h.workspace.runArea} {
+		for name, data := range area.clone().files {
+			if strings.Contains(name, "/logs/") {
+				logs++
+			}
+			if form := carriesForm(data, forms); form != "" {
+				t.Fatalf("%s carries %q", name, form)
+			}
+		}
+	}
+	if logs == 0 {
+		t.Fatal("the operation wrote no log, so the scan proves nothing about it")
+	}
+	if form := carriesForm(append(h.workspace.evidence, strings.Join(progress.reported(), "\n")...), forms); form != "" {
+		t.Fatalf("the evidence or the progress carries %q", form)
+	}
+	for _, reported := range diagnostics.Of(err) {
+		if form := carriesForm([]byte(reported.Message+reported.Remediation), forms); form != "" {
+			t.Fatalf("a diagnostic carries %q", form)
+		}
 	}
 }

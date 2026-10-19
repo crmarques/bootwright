@@ -20,6 +20,11 @@
   State       Cluster
   [SKIPPED]   StorageCluster/ceph-01
 
+  Storage resources
+  State       Resource                   Cluster
+  [SKIPPED]   StoragePool/rbd            ceph-01
+  [SKIPPED]   StorageClient/rbd-client   ceph-01
+
   Shared services
   State       Service                        Machine
   [OK]        ArtifactServer/lab-artifacts   controller

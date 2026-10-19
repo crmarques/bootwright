@@ -89,6 +89,11 @@ func readyCeph() *inspection.ManagedCeph {
 				{Host: "rhel-02", URL: "https://rhel-02.lab.test:8443/", Role: inspection.DashboardStandby},
 			},
 		},
+		Resources: []inspection.Resource{
+			{Kind: "StoragePool", Name: "rbd-data", Status: inspection.ResourceDone, Scope: "replicated size 2/min 2, application rbd"},
+			{Kind: "StorageClient", Name: "rbd-canary", Status: inspection.ResourceDone, Scope: "client.rbd-canary read-write on pool rbd-data"},
+			{Kind: "StorageObjectGateway", Name: "objects", Status: inspection.ResourceUnsupported, Scope: "zone lab/lab/lab-a"},
+		},
 	}
 }
 
@@ -112,8 +117,9 @@ func storageOnly(ceph *inspection.ManagedCeph) *inspection.InfoResult {
 func unavailableCeph() *inspection.ManagedCeph {
 	return &inspection.ManagedCeph{
 		Management: inspection.ManagementManaged, Release: "9.9.1.2", AdminNode: "rhel-01", Status: inspection.StatusUnavailable,
-		Reason: "no apply of this context's current operation has completed the cluster's bootstrap",
-		Remedy: "bootwright apply --context lab --stage clusters",
+		Reason:    "no apply of this context's current operation has completed the cluster's bootstrap",
+		Remedy:    "bootwright apply --context lab --stage clusters",
+		Resources: []inspection.Resource{{Kind: "StoragePool", Name: "rbd-data", Status: inspection.ResourcePending}},
 	}
 }
 
@@ -151,6 +157,7 @@ func clusterGoldens() []cliGolden {
 		{golden: "cli-cluster-list-json", args: "cluster list --output json", record: list},
 		{golden: "cli-cluster-info", args: "cluster info", record: ready},
 		{golden: "cli-cluster-info-json", args: "cluster info --output json", record: ready},
+		{golden: "cli-cluster-info-full", args: "cluster info --detail full", record: ready},
 		{golden: "cli-cluster-info-unavailable", args: "cluster info", record: missing},
 		{golden: "cli-cluster-info-unavailable-json", args: "cluster info --output json", record: missing},
 		{golden: "cli-cluster-info-secrets", args: "cluster info --name storage --secrets", record: revealed},

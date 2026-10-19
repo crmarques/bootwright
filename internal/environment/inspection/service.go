@@ -77,8 +77,12 @@ func (s Service) ClusterInfo(ctx context.Context, request ClusterInfoRequest) (*
 		}
 		result.Clusters = append(result.Clusters, entry)
 	}
+	resources, err := s.resources(ctx, selected, catalog, storages)
+	if err != nil {
+		return nil, err
+	}
 	for _, cluster := range storages {
-		entry, err := s.storageEntry(ctx, selected, catalog, cluster)
+		entry, err := s.storageEntry(ctx, selected, catalog, cluster, resources[cluster.Name()])
 		if err != nil {
 			return nil, err
 		}
@@ -234,7 +238,14 @@ func (s Service) containerEntry(ctx context.Context, selected string, cluster ap
 	}}, nil
 }
 
-func (s Service) storageEntry(ctx context.Context, selected string, catalog api.Catalog, cluster api.Object) (StorageEntry, error) {
+func (s Service) resources(ctx context.Context, selected string, catalog api.Catalog, storages []api.Object) (map[string][]Resource, error) {
+	if !slices.ContainsFunc(storages, func(cluster api.Object) bool { return !external(cluster) }) {
+		return nil, nil
+	}
+	return s.ceph.Resources(ctx, selected, catalog)
+}
+
+func (s Service) storageEntry(ctx context.Context, selected string, catalog api.Catalog, cluster api.Object, resources []Resource) (StorageEntry, error) {
 	containerOnly := "applies to OpenShift and OKD ContainerClusters only"
 	if external(cluster) {
 		roster := "the external StorageCluster " + cluster.Name() + " declares no node roster; sessions apply to managed Ceph StorageClusters"
@@ -252,7 +263,7 @@ func (s Service) storageEntry(ctx context.Context, selected string, catalog api.
 	}
 	exec, rsh := session, session
 	exec.Command, rsh.Command = CommandExec, CommandRsh
-	ceph, err := s.cephEntry(ctx, selected, catalog, cluster)
+	ceph, err := s.cephEntry(ctx, selected, catalog, cluster, resources)
 	if err != nil {
 		return StorageEntry{}, err
 	}
@@ -285,11 +296,14 @@ func (s Service) sessionAccess(ctx context.Context, selected string, cluster api
 	return AccessCommand{Status: StatusReady, Node: node}, nil
 }
 
-func (s Service) cephEntry(ctx context.Context, selected string, catalog api.Catalog, cluster api.Object) (ManagedCeph, error) {
+func (s Service) cephEntry(ctx context.Context, selected string, catalog api.Catalog, cluster api.Object, resources []Resource) (ManagedCeph, error) {
 	ceph := cluster.Spec().Get("ceph")
 	entry := ManagedCeph{
 		Management: ManagementManaged, Release: ceph.Get("release").Text(),
-		AdminNode: ceph.Get("cephadm", "bootstrap", "node").Text(),
+		AdminNode: ceph.Get("cephadm", "bootstrap", "node").Text(), Resources: []Resource{},
+	}
+	if resources != nil {
+		entry.Resources = resources
 	}
 	proof, err := s.ceph.ManagedCeph(ctx, selected, catalog, cluster)
 	if err != nil {

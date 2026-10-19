@@ -113,9 +113,15 @@ func TestClusterInfoRefusesAnUnselectedNameAndNonApplicableSecretsWithoutReading
 }
 
 type readerFake struct {
-	proofs map[string][]lifecycle.BlockEvidence
-	failed error
-	reads  []string
+	proofs    map[string][]lifecycle.BlockEvidence
+	resources *lifecycle.StorageResourcesResult
+	failed    error
+	reads     []string
+}
+
+func (r *readerFake) StorageResources(_ context.Context, contextName string) (*lifecycle.StorageResourcesResult, error) {
+	r.reads = append(r.reads, "resources/"+contextName)
+	return r.resources, r.failed
 }
 
 func (r *readerFake) Evidence(_ context.Context, _, kind, object string) ([]lifecycle.BlockEvidence, error) {
@@ -162,6 +168,10 @@ func TestInspectionWiringMapsEvidenceReadersToProofs(t *testing.T) {
 	if _, err := (cephInspection{reconciler: &readerFake{failed: failure}}).ManagedCeph(ctx, "lab", api.Catalog{}, api.Object{}); !errors.Is(err, failure) {
 		t.Fatalf("ceph evidence failure = %v", err)
 	}
+	if _, err := (cephInspection{reconciler: &readerFake{failed: failure}}).Resources(ctx, "lab", api.Catalog{}); !errors.Is(err, failure) {
+		t.Fatalf("storage resources failure = %v", err)
+	}
+	inspectedResourceRows(t)
 	if found, err := (hostKeyProofs{keys: keyFake{found: true}}).HostKeyProved(ctx, "lab", "m1"); err != nil || !found {
 		t.Fatalf("proved host key = %t (%v)", found, err)
 	}
@@ -242,5 +252,40 @@ func TestDashboardCustodyReadsTheClusterBlocksDashboardEntry(t *testing.T) {
 	failure := errors.New("the custody store is unreadable")
 	if _, _, err := (dashboardCustody{reader: &producedFake{failed: failure}}).DashboardPassword(context.Background(), "lab", "storage"); !errors.Is(err, failure) {
 		t.Fatalf("custody failure = %v", err)
+	}
+}
+
+func inspectedResourceRows(t *testing.T) {
+	t.Helper()
+	text := func(name, value string) api.FieldValue {
+		return api.FieldValue{Name: name, Value: api.StringValue(value)}
+	}
+	catalog := api.NewCatalog([]api.Object{
+		api.NewObject(api.StorageCluster, "ceph", api.Value{}, api.MapValue(text("management", "managed"))),
+		api.NewObject(api.StorageCluster, "archive", api.Value{}, api.MapValue(text("management", "external"))),
+		api.NewObject(api.StoragePool, "rbd-data", api.Value{}, api.MapValue(text("clusterRef", "ceph"))),
+		api.NewObject(api.StorageObjectGateway, "objects", api.Value{}, api.MapValue(text("clusterRef", "ceph"), text("realm", "lab"), text("zoneGroup", "lab"), text("zone", "lab-a"))),
+	})
+	request, err := ceph.Request{Version: ceph.Version, Action: "pool", Pool: &ceph.Pool{Name: "rbd-data", Size: 2, MinSize: 2, Application: "rbd"}}.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := &readerFake{resources: &lifecycle.StorageResourcesResult{
+		Clusters: []lifecycle.ClusterSummary{
+			{Name: "archive", Kind: "StorageCluster", Status: lifecycle.RealizationPending, Resources: []lifecycle.ResourceSummary{}},
+			{Name: "ceph", Kind: "StorageCluster", Status: lifecycle.RealizationDone, Resources: []lifecycle.ResourceSummary{
+				{Kind: "StoragePool", Name: "rbd-data", Status: lifecycle.RealizationDone},
+				{Kind: "StorageObjectGateway", Name: "objects", Status: lifecycle.RealizationUnsupported},
+			}},
+		},
+		Frozen: []reconciliation.Block{{BlockDefinition: reconciliation.BlockDefinition{Kind: "StoragePool", Object: "rbd-data", Implementation: ceph.Implementation, Request: request}}},
+	}}
+	rows, err := (cephInspection{reconciler: reader}).Resources(context.Background(), "lab", catalog)
+	want := map[string][]inspection.Resource{"ceph": {
+		{Kind: "StoragePool", Name: "rbd-data", Status: "done", Scope: "replicated size 2/min 2, application rbd"},
+		{Kind: "StorageObjectGateway", Name: "objects", Status: "unsupported", Scope: "zone lab/lab/lab-a"},
+	}}
+	if err != nil || !reflect.DeepEqual(rows, want) || !slices.Equal(reader.reads, []string{"resources/lab"}) {
+		t.Fatalf("resources = %+v (%v) after reads %v, want %+v", rows, err, reader.reads, want)
 	}
 }

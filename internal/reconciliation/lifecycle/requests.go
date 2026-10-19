@@ -3,6 +3,7 @@ package lifecycle
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 type PlanRequest struct {
@@ -302,9 +303,21 @@ const (
 )
 
 type ClusterSummary struct {
-	Name   string
+	Name      string
+	Kind      string
+	Status    RealizationStatus
+	Resources []ResourceSummary
+}
+
+type ResourceSummary struct {
 	Kind   string
+	Name   string
 	Status RealizationStatus
+}
+
+type StorageResourcesResult struct {
+	Clusters []ClusterSummary
+	Frozen   []reconciliation.Block
 }
 
 type ServiceSummary struct {
