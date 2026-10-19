@@ -163,6 +163,10 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 		if message := validateClusterNames(flags, path); message != "" {
 			return message
 		}
+	case "machine info", "secret info":
+		if message := validateInfoNames(flags, path); message != "" {
+			return message
+		}
 	}
 	switch path {
 	case "context init", "context update":

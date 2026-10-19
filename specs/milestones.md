@@ -28,10 +28,9 @@ remain delivered.
 
 - **Next for agents:** [M2c](milestones/m2.md#m2c)'s lanes under D159 on the
   local branch `m2c`, with M1c's X55/X60 as its foundation gaps, each offered
-  to main at its checkpoint (D164). M1f/M1g are not blanket prerequisites.
-- **Next for operator:** review D159 to D164 (D164 answers M2c's OD28 to
-  OD31), B650 to B656. Other provider and cluster gates keep their
-  acceptance.
+  to main at its checkpoint (D164).
+- **Next for operator:** review D159 to D165. Other provider and cluster
+  gates keep their acceptance.
 
 ## Scope rules
 
@@ -77,10 +76,11 @@ remain delivered.
   host-independent (no package manager, network, privilege, second OS or
   virtual machine) and qualify contracts, refusals and recovery, never an
   executed native installer.
-- An **operator-run gate** records date, build commit and source stamp, command
-  sequence, outcome and operation-log digest in the
+- An **operator-run gate** records a summary row (date, build commit, command
+  sequence, outcome) and the private archive's operation-log digest in the
   [acceptance ledger](../docs/acceptance.md), and completes its item only on
-  an owner-accepted row that matches the item's acceptance baseline.
+  an owner-accepted row that matches the item's acceptance baseline. An agent
+  may record an acceptance the owner states explicitly (D165).
   [Development](../docs/development.md) lists the harnesses.
 - Qualification tiers are in-tree, emulated rehearsal and real hardware; each
   destructive path names its tier, and each milestone page its exit tier.

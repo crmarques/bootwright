@@ -3145,3 +3145,27 @@ Requires cell as `owner decision: <question>`.
   that decision. The four answers gate no lane any longer; the gated lanes
   still start only after the decision-free program has landed (D159 clause 14).
   The brackets in D159, D160 and D161 that name these questions are history.
+- **D165** (2026-10-19, the owner): the owner answered the seven questions that
+  X102 and X103 left open (B650 to B656). (1) B650: the libvirt-3-nodes-ceph
+  example authors the build tag `v9.9.2-26729`, which the owner confirmed
+  exists in the entitlement, instead of the alias `v9.9.2`. (2) B651:
+  `machine info --name` and `secret info --name` refuse an explicitly named
+  unknown resource with `access.target`, like `cluster info`, instead of
+  selecting no rows; an omitted `--name` still lists all, and a separator-only
+  list is a usage error. (3) B652: public acceptance evidence in the
+  [acceptance ledger](../../docs/acceptance.md) is a summary row (date, build
+  commit, command sequence, outcome) plus the operation-log digest of the
+  private evidence archive, and an agent may record an acceptance the owner
+  states explicitly. (4) B653: the owner confirms authorizing B615's
+  implementation on 2026-10-16 and accepting B615 and M2b on 2026-10-17; M2b
+  stays done, and the fixes after its acceptance (named in X102) are
+  post-completion corrections. (5) B654: slices X47 and X52 to X54 return to
+  `not started`, carrying their full-M2 remainder; D134's M2b-only WIP
+  exception is not extended. (6) B655: the owner authorized commit 2dc470bff,
+  the shared CLI output presentation, including the
+  `github.com/charmbracelet/x/ansi` dependency; it is recorded as delivered
+  under M1 (M1b) in [X104](delivered.md#x104--owner-answers-of-2026-10-19).
+  (7) B656: the controller's `controller.untested-release` warning (the runtime
+  lock's `tested` list, warning only) is an explicit exception to D163, because
+  it concerns Bootwright's own host and never refuses; the
+  [controller spec](../controller.md#supported-hosts) records it.

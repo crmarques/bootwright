@@ -6977,7 +6977,7 @@ enrollment; and ce190446a, address reuse for the route probe's listeners. Their
 bodies state that no live retry or apply ran, and that no real-image route
 qualification ran; the pending release runs belong to [B626](m2.md#b626).
 Whether M2b stays done after the dashboard repair and core request v6 is the
-owner's question [B653](m2.md#b653).
+owner's question B653, which D165 answered: M2b stays done ([X104](#x104--owner-answers-of-2026-10-19)).
 
 **Audit findings not fixed here.** Fixed earlier: ceph-bootstrap-licensing-1,
 gap2-gap2-release-matrix-nati-2-1 and gap2-gap2-release-matrix-nati-2-2 by
@@ -6986,9 +6986,9 @@ forms and ce9767849's example; guards-contracts-3 by 082ae7cfa. Declined under
 D163 as component version rules: gap1-package-resolution-matri-3-2 (a RHEL
 release requirement), gap1-package-resolution-matri-3-4 (binding the license to
 a Ceph release) and gap1-test-weakening-2-1 (an OS gate; its residual
-diagnostic is parked). Owner questions: [B650](m2.md#b650), [B652](m2.md#b652),
-[B653](m2.md#b653) and [B654](m2.md#b654) on M2, and [B651](m1.md#b651),
-[B655](m1.md#b655) and [B656](m1.md#b656) on M1. Parked: [B657](backlog.md#b657) to [B664](backlog.md#b664),
+diagnostic is parked). Owner questions B650 to B656, answered by
+[D165](backlog.md#decisions) and closed in
+[X104](#x104--owner-answers-of-2026-10-19). Parked: [B657](backlog.md#b657) to [B664](backlog.md#b664),
 [B674](backlog.md#b674), [B675](backlog.md#b675), [B677](backlog.md#b677),
 [B678](backlog.md#b678) and [B679](backlog.md#b679). The audit also noted that
 the numbering of the peer branch `m2c` against the ids on main
@@ -7155,7 +7155,59 @@ owner's.
 
 **Constraints left behind:** `latest` still resolves a stable release only. A
 rescue declaration is still refused. Follow-ups: owner questions
-[B651](m1.md#b651), [B655](m1.md#b655) and [B656](m1.md#b656); parked
+B651, B655 and B656, closed in [X104](#x104--owner-answers-of-2026-10-19); parked
 [B665](backlog.md#b665) to [B673](backlog.md#b673), [B676](backlog.md#b676),
 [B680](backlog.md#b680) and [B681](backlog.md#b681), which holds the edges the
 lanes left.
+
+### X104 — Owner answers of 2026-10-19
+
+**Owner:** the owner, with CLI, Controller, Storage and Docs. An enabling slice
+delivered as one commit under [D165](backlog.md#decisions), which records the
+owner's answers of 2026-10-19 to the seven questions that
+[X102](#x102--audit-defects-for-full-ibm-ceph-m2) and
+[X103](#x103--audit-defects-and-d163-screens-for-foundations-m1) left open. It
+spans [M1](m1.md) and [M2](m2.md), so it carries no planned slice. **Items:**
+B650 to B656, all closed and removed from their pages.
+
+- **B650, the example's build tag.** `libvirt-3-nodes-ceph` authors
+  `ceph-9-rhel10:v9.9.2-26729`, which the owner confirmed exists in the
+  entitlement. The cluster declaration, its runbook, the effective-state golden
+  and the version-constraints knowledge page follow. The effective-state golden pins the
+  tag.
+- **B651, unknown names in `machine info` and `secret info`.** A name the
+  context does not hold refuses `access.target` with exit status 1, naming every
+  such member and the list command, like `cluster info`; a separator-only
+  `--name` is a usage error and an omitted one still lists all. The CLI spec,
+  the command table and the output spec follow. Tests: an unknown name refuses
+  for each command with a known name beside it, a known name selects its row, and
+  a separator-only list exits 2; each fails when its check is removed.
+- **B652, public acceptance evidence.** The milestones rule, the ledger header
+  and the operator guide agree: a summary row (date, build commit, command
+  sequence, outcome) plus the operation-log digest of the private archive, and an
+  agent may record an acceptance the owner states explicitly. Existing rows are
+  not rewritten.
+- **B653, B615 and M2b.** The owner confirms authorizing B615 on 2026-10-16 and
+  accepting B615 and M2b on 2026-10-17. M2b stays done; the corrections named in
+  X102 are post-completion corrections, and their pending release runs stay with
+  [B626](m2.md#b626).
+- **B654, the WIP limit.** X47 and X52 to X54, with the items they list, return to
+  `not started`; D134's M2b-only exception is not extended, so X101 to X103 and
+  later slices count against the limit of two.
+- **B655, the CLI presentation migration (M1b).** Commit 2dc470bff, authored by
+  the CLI tool and not rewritten, adopted the shared output presentation: semantic
+  blocks with injected terminal capabilities, `machine info` and `secret info`,
+  `-o yaml` and the inherited `-o`, and the `--color`, `--progress`, `--detail`,
+  `--ascii` and `--width` flags. The owner authorized it, including the direct
+  dependency `github.com/charmbracelet/x/ansi` (v0.11.7) and its indirect modules
+  `clipperhouse/displaywidth`, `clipperhouse/uax29/v2`,
+  `lucasb-eyer/go-colorful` and `mattn/go-runewidth`. The dependency is described
+  in [development](../../docs/development.md) and the presentation in the
+  [output spec](../cli/output.md).
+- **B656, the untested-release warning.** `controller.untested-release` stays,
+  with the table suffix and the lock's `tested` field, as an explicit exception
+  to D163: it concerns Bootwright's own host and never refuses. The
+  [controller spec](../controller.md#supported-hosts) records the exception.
+
+**Constraints left behind:** none. No product behavior other than B651's
+refusal changed.

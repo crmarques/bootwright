@@ -53,7 +53,10 @@ releases a build was tested on, and [development](../docs/development.md#lock-re
 records it. A release outside it is admitted with the informational
 `controller.untested-release` line, for example "Fedora 45 is newer than the
 releases this build was tested on (43, 44); setup checks its floors and
-continues", which never changes readiness, the plan or the next command.
+continues", which never changes readiness, the plan or the next command. This
+warning is an explicit exception to [D163](milestones/backlog.md#decisions)
+under [D165](milestones/backlog.md#decisions): it concerns Bootwright's own
+host, never refuses and is not a component version rule.
 
 A non-empty `/etc/ld.so.preload` is reported as the informational
 `controller.loader-preload` line, for example "/etc/ld.so.preload is not empty,

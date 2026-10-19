@@ -15,18 +15,22 @@ walks a run from a prepared host to a row.
 | Host OS | Distribution, release and architecture of the controller host. |
 | Example | The example directory the journey ran, and any local edits beyond its lab conventions. |
 | Commands | The `bootwright` command sequence, in order, as it was run. |
-| Outcome | The final `status` of each operation and every refusal met on the way. |
-| Log digest | SHA-256 of each operation's log directory, computed as below. |
+| Outcome | A summary of the final `status` of each operation and every refusal met on the way. |
+| Log digest | SHA-256 of each operation's log directory in the private evidence archive, computed as below. |
 | Accepted by | The human owner who accepted the row and the item it accepts, or `observation, not acceptance`. |
 
 Each item with an operator gate records an acceptance baseline commit in its
 section of its [milestone page](../specs/milestones.md#status). A row matches
 that item when its build descends from the baseline and its source stamp is
 `clean`; any other row, including one run before the item records a baseline,
-is an observation. Only the human owner accepts a row; an agent may record
-that explicit acceptance but cannot supply it. Confidential environment fields,
-command history, exact outcomes and log digests are retained locally; the public
-row records the accepted qualification and its build. For the log digest, set
+is an observation. Only the human owner accepts a row; an agent may record an
+acceptance the owner states explicitly but cannot supply one
+([D165](../specs/milestones/backlog.md#decisions)). The public row is a
+summary: date, full build commit, command sequence and outcome, plus the
+operation-log digest of the private evidence archive. Host and example details,
+confidential environment fields, the command history, exact outcomes and the
+logs stay in that archive, and a row may name them `Retained locally`; rows
+recorded before D165 keep their cells as written. For the log digest, set
 `LOGS` to the directory the human result names as `Logs` and run as root:
 
 ```sh

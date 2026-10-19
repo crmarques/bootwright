@@ -37,3 +37,15 @@ func validateClusterNames(flags *pflag.FlagSet, path string) string {
 	normalizeScalar(flags, "node", strings.Join(nodes, ","))
 	return ""
 }
+
+func validateInfoNames(flags *pflag.FlagSet, path string) string {
+	if !flags.Changed("name") {
+		return ""
+	}
+	names := normalizeNames(stringValue(flags, "name"))
+	if len(names) == 0 {
+		return "--name must name at least one " + strings.TrimSuffix(path, " info")
+	}
+	normalizeScalar(flags, "name", strings.Join(names, ","))
+	return ""
+}

@@ -177,7 +177,14 @@ preserve these command-specific compatibility rules:
   `--node` of `cluster exec`, must likewise resolve to at least one member, so
   a comma-only value is a usage error. `cluster rsh` opens one interactive
   session, so a comma in its `--name` or `--node` is a usage error; and
-- `machine info` and `secret info` omit `--name` to select all metadata rows; supplied names match exactly after list normalization. Unknown names and separator-only lists select no rows. An explicitly empty scalar occurrence still fails under the general rule above; and
+- `machine info` and `secret info` omit `--name` to select all metadata rows;
+  supplied names match exactly after list normalization. A supplied `--name`
+  must likewise resolve to at least one member, so a comma-only value is a
+  usage error, and a member naming no Machine or Secret the context holds
+  fails `access.target` with exit status 1, naming every such member and the
+  list command that shows the resources the context selects, as `cluster info`
+  does ([D165](milestones/backlog.md#decisions)). An explicitly empty scalar
+  occurrence still fails under the general rule above; and
 - `cluster info --secrets` requires `--name` to name exactly one cluster after
   normalization, so a list of several is a usage error.
 
@@ -804,12 +811,13 @@ completion never reveal.
 `machine info [--name <list>]` reads the same local inventory service as
 `machine list`, with power reads disabled. It filters exact names at the CLI
 boundary after the service returns, retaining an independent copy of selected
-rows. Human output groups available Placement, Access and Evidence facts;
+rows, and refuses a name the listing lacks before showing any row. Human output groups available Placement, Access and Evidence facts;
 full detail adds declared addresses and provider identity. No host, management
 controller, trust probe or credential is contacted or read. Its structured
 result has the same fields as the machine listing, with its own command name.
 
-`secret info [--name <list>]` similarly filters the existing metadata listing.
+`secret info [--name <list>]` similarly filters the existing metadata listing
+and refuses a name it lacks.
 It groups Identity and Custody facts without checking availability, decrypting
 material, invoking reveal, or inventing usage metadata. The
 [Secrets contract](secrets.md#acquisition-and-commands) owns its metadata scope.

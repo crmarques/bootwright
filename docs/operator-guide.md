@@ -634,6 +634,8 @@ row. To record a run:
    refusal met.
 5. For each operation, compute the log digest over the directory its human
    result names as `Logs`, with the command the row format gives.
-6. Add the row to the [ledger](acceptance.md#ledger). Its last cell is
-   `observation, not acceptance` unless the human owner accepts it there for a
-   item it matches; an agent records only observations.
+6. Add the row to the [ledger](acceptance.md#ledger) as a summary: date, full
+   build commit, command sequence, outcome and the log digest of the private
+   evidence archive. Its last cell is `observation, not acceptance` unless the
+   human owner accepts it there for an item it matches; an agent records an
+   acceptance only when the owner states it explicitly.

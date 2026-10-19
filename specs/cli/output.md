@@ -359,7 +359,7 @@ or base64 content recovers exactly the requested bytes.
 ### Machine results
 
 `machine info` uses the same inventory row shape as `machine list`, after its
-optional exact-name selection, and always requests no power read. No info
+optional exact-name selection (an unknown name refuses, as in the CLI spec), and always requests no power read. No info
 field claims a live observation that the list service did not make.
 
 Each `machines` entry of `machine list` orders its fields as follows:

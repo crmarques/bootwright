@@ -68,8 +68,7 @@ func TestResourceInfoNameSelectionIsOptionalExactAndNormalized(t *testing.T) {
 	}{
 		{want: []string{"alpha", "alpha-two"}},
 		{selector: " alpha , alpha , ", supplied: true, want: []string{"alpha"}},
-		{selector: "alp", supplied: true, want: []string{}},
-		{selector: " , ", supplied: true, want: []string{}},
+		{selector: "alpha-two", supplied: true, want: []string{"alpha-two"}},
 	} {
 		for _, kind := range []string{"machine", "secret"} {
 			t.Run(kind+"/"+test.selector, func(t *testing.T) {
@@ -104,6 +103,43 @@ func TestResourceInfoNameSelectionIsOptionalExactAndNormalized(t *testing.T) {
 					t.Fatal("selection changed service-owned results")
 				}
 			})
+		}
+	}
+}
+
+func TestResourceInfoRefusesAnExplicitlyNamedUnknownResource(t *testing.T) {
+	for _, test := range []struct {
+		kind, selector, subject string
+	}{
+		{"machine", "alp", "no Machine named alp"},
+		{"secret", "alpha, typo , alp", "no Secrets named typo, alp"},
+		{"machine", "alpha,alp", "no Machine named alp"},
+	} {
+		t.Run(test.kind+"/"+test.selector, func(t *testing.T) {
+			machines := &inventory.ListResult{Context: "example", Machines: []inventory.MachineRow{{Name: "alpha", Lifecycle: "applied"}, {Name: "alpha-two", Lifecycle: "not-applied"}}}
+			record := &dispatchRecord{result: commandResult{machines: machines, secretList: infoSecrets()}}
+			code, stdout, stderr := runSecretResult([]string{test.kind, "info", "--name", test.selector}, record)
+			text := strings.Join(strings.Fields(stdout+stderr), " ")
+			if code != 1 || record.calls != 1 {
+				t.Fatalf("code=%d calls=%d stdout=%q stderr=%q", code, record.calls, stdout, stderr)
+			}
+			for _, want := range []string{"access.target", "the context example selects " + test.subject, "bootwright " + test.kind + " list --context example"} {
+				if !strings.Contains(text, want) {
+					t.Fatalf("missing %q in stdout=%q stderr=%q", want, stdout, stderr)
+				}
+			}
+			if strings.Contains(text, "alpha-two") {
+				t.Fatalf("a refusal listed a resource: %q", text)
+			}
+		})
+	}
+}
+
+func TestResourceInfoSeparatorOnlyNamesAreAUsageError(t *testing.T) {
+	for _, kind := range []string{"machine", "secret"} {
+		code, _, stderr, record := runRecorded([]string{kind, "info", "--name", " , "})
+		if code != 2 || record.calls != 0 || !strings.Contains(stderr, "--name must name at least one "+kind) {
+			t.Fatalf("%s: code=%d calls=%d stderr=%q", kind, code, record.calls, stderr)
 		}
 	}
 }

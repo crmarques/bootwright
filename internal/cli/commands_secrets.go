@@ -75,6 +75,11 @@ func (s Services) invokeSecrets(ctx context.Context, path string, values *reques
 		if err != nil {
 			return commandResult{}, err
 		}
+		if result != nil {
+			if err := refuseUnknownInfo("Secret", result.Context.Name, names, secretInfoNames(result)); err != nil {
+				return commandResult{}, err
+			}
+		}
 		return commandResult{secretList: selectSecretInfo(result, names)}, nil
 	case "secret show":
 		result, err := invokeResult(ctx, values, custody.ShowRequest{

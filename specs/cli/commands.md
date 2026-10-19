@@ -68,7 +68,7 @@ process or network access. “Mutate” permits only the named, planned effects.
 | `bootwright secret generate` | optional `--name`; `--renew` false | changed and unchanged Secret names | atomic selected generated-material batch |
 | `bootwright secret check` | none | declared availability/type checks | bounded material reads; no values emitted |
 | `bootwright secret list` | none | context secret identities, types, parts, and availability | read confidential-store metadata |
-| `bootwright secret info` | `--name <list>` default all | selected secret identity, parts, state, version and binding metadata | read confidential-store metadata only; no material read or availability check |
+| `bootwright secret info` | `--name <list>` default all; an unknown name refuses | selected secret identity, parts, state, version and binding metadata | read confidential-store metadata only; no material read or availability check |
 | `bootwright secret show` | required `--name` and `--part value\|username\|password\|certificate\|private-key\|public-key` | exact selected sensitive bytes | read and reveal current declared part |
 | `bootwright secret delete` | required `--name <name>`; `--yes` false | deleted identity, or nothing deleted | local logical deletion, preserving bound versions |
 | `bootwright secret encryption init` | none | configured implementation and active key | idempotent initialization using Context configuration |
@@ -110,7 +110,7 @@ The three `media` commands follow the host-wide
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
 | `bootwright machine list` | `--clusters <list>` default all; `--power-status` false; `--silent` false | Machines with their declared contact and addresses and the evidence-backed lifecycle position each reached, their controller-reported power with `--power-status`, or sorted names with `--silent` | read local state; with `--power-status`, read each machine's power through its management controller |
-| `bootwright machine info` | `--name <list>` default all | selected machine placement, contact, addresses, and recorded lifecycle evidence | read local inventory only; no host or power contact |
+| `bootwright machine info` | `--name <list>` default all; an unknown name refuses | selected machine placement, contact, addresses, and recorded lifecycle evidence | read local inventory only; no host or power contact |
 | `bootwright machine rsh` | required `--name <machine>` | an interactive SSH session on the exact Machine as its resolved identity; the client's exit status is the result | read state, open the session's credential for its duration, read or record host trust, run one pinned SSH client |
 | `bootwright machine exec` | required `--name <list>` and `<command>...` | the exact argument vector runs on the Machine, or on every listed Machine at once with [each line prefixed by its Machine](../cli.md#machine-ssh-sessions); the remote command's exit status is the result, the highest of them for several | same |
 | `bootwright machine trust` | `--machines <list>` default all; `--replace <list>` default none; `--dry-run` false; `--yes` false | exact host-key trust plan, and the recorded result unless dry-run | bounded SSH host-key observation of the selected Machines; context trust-store write unless dry-run |
