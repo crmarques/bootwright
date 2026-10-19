@@ -103,7 +103,7 @@ The three `media` commands follow the host-wide
 | `bootwright render installer` | `--clusters <list>` default all ContainerClusters; `--sensitive` false | installer artifact manifest | local placeholder files and optional sensitive files |
 | `bootwright render storage` | `--clusters <list>` default all StorageClusters | storage artifact manifest | local native files or scripts only; never execution |
 | `bootwright apply` | repeatable `--authorize <token>[,<token>...]`; `--stage <list>` default all stages; `--yes` false | completed full apply, a pause at the selected stage boundary, exact continued state, or a settled result when the declared state is already realized | complete planned mutation, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) |
-| `bootwright destroy` | repeatable `--authorize <token>[,<token>...]`; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
+| `bootwright destroy` | repeatable `--authorize <token>[,<token>...]`; repeatable `--unregistered <machine>[,<machine>...]`; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
 
 ### Resource, access, and general commands
 
@@ -328,6 +328,20 @@ confirmation authority either: it neither replaces nor implies
 requires the token, what it acknowledges and the refusal of a token it does not
 require are owned by
 [state reconciliation](../state-reconciliation.md#confirmation-and-authorization).
+
+`--unregistered` names a Machine whose subscription consumer the operator
+removed with the subscription service's own tools, and is accepted only on
+`destroy`. On that invocation the Machine's installation neither reads nor
+unregisters its guest and records no registration, as
+[managed OS](../managed-os.md#registration) states; nothing persists the name,
+and no next step carries it. A name whose installation the destroy plan does
+not unregister refuses `lifecycle.authorization` before confirmation and
+registration: `this destroy removes no subscription registration from
+Machine/<name>, so --unregistered <name> acknowledges nothing`, remedied by
+`repeat <command> without --unregistered <name>`, where `<command>` is the
+destroy with the tokens its plan requires. An empty occurrence or an empty
+comma-separated member is a usage error; whitespace around members is ignored.
+It grants no confirmation authority either.
 
 A changed SSH host key always fails. `machine trust --replace` is the only
 interface for a deliberately changed key, and every replacement name must also

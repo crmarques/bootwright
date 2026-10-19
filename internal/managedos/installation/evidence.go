@@ -179,11 +179,17 @@ func ValidateAbsence(data []byte, digest string) error {
 	return nil
 }
 
-// ValidateReleased accepts evidence only when it proves the machine holds no subscription registration this installation created.
-func ValidateReleased(data []byte, request Request, digest string) error {
+// ValidateReleased accepts evidence only when it proves the machine holds no registration this installation created, or, unread, when the removal does not unregister.
+func ValidateReleased(data []byte, request Request, digest string, unregisters bool) error {
 	evidence, err := decodeEvidence(data, digest)
 	if err != nil || request.Registration == nil {
 		return err
+	}
+	if !unregisters {
+		if evidence.Registration.State == "" {
+			return nil
+		}
+		return refusal("lifecycle.state", "the installation removal read a subscription registration on a Machine it was not to read", "")
 	}
 	switch evidence.Registration.State {
 	case registrationUnregistered, registrationAbsent, registrationRetained, registrationForeign:

@@ -1827,7 +1827,11 @@ and repeating destroy after the operator stops them continues it without
 repeating a completed pre-stop inverse. A failed pre-stop inverse fails the
 removal before any other inverse runs. Pre-stop deferral never defers a host
 for retirement: a storage effect retired with its hosts stays retired and its
-retirement runs after the stop proof.
+retirement runs after the stop proof. A destroy may name, with
+`--unregistered`, Machines whose guest-side pre-stop removal the operator
+performed outside Bootwright; for that invocation only, the pre-stop inverse of
+those Machines' blocks removes nothing from their guest
+([managed OS](managed-os.md#registration)).
 
 Every execution and quiescence probe carries its immutable owning apply
 identity. `ApplyProved` supplies detached frozen blocks and durable completion

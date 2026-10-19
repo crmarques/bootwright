@@ -285,7 +285,10 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 	if operation == "apply" {
 		err = ValidatePresence(result.Evidence, request, digest, string(marker))
 	} else if err = ValidateAbsence(result.Evidence, digest); err == nil {
-		err = ValidateReleased(result.Evidence, request, digest)
+		var unregister bool
+		if unregister, err = unregisters(execution, request, marker); err == nil {
+			err = ValidateReleased(result.Evidence, request, digest, unregister)
+		}
 	}
 	if err != nil {
 		return unknown, err
@@ -323,8 +326,21 @@ func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Exec
 // effect is unknown, and the refusal that decided it comes back with it: the
 // presence check's for an apply, the unfinished withdrawal's for a removal.
 func installationEffect(verb reconciliation.Verb, evidence []byte, request Request, digest, marker string) (reconciliation.EffectState, error) {
+	return decidedEffect(verb, evidence, request, digest, marker, true)
+}
+
+// unregisters is whether a removal reads its guest: its apply proved the marker before registering, and no --unregistered names it.
+func unregisters(execution lifecycle.Execution, request Request, marker []byte) (bool, error) {
+	if request.Registration == nil {
+		return false, nil
+	}
+	registered, err := registeredBefore(execution.Context, request.Identity.Object, execution.ApplyPreparations, marker)
+	return registered && !execution.Released, err
+}
+
+func decidedEffect(verb reconciliation.Verb, evidence []byte, request Request, digest, marker string, unregister bool) (reconciliation.EffectState, error) {
 	if verb == reconciliation.Destroy {
-		return removalEffect(evidence, request, digest, marker)
+		return removalEffect(evidence, request, digest, marker, unregister)
 	}
 	presence := ValidatePresence(evidence, request, digest, marker)
 	switch {
@@ -341,9 +357,9 @@ func installationEffect(verb reconciliation.Verb, evidence []byte, request Reque
 	return reconciliation.EffectUnknown, presence
 }
 
-func removalEffect(evidence []byte, request Request, digest, marker string) (reconciliation.EffectState, error) {
+func removalEffect(evidence []byte, request Request, digest, marker string, unregister bool) (reconciliation.EffectState, error) {
 	withdrawn := ValidateWithdrawn(evidence, digest) == nil
-	released := ValidateReleased(evidence, request, digest) == nil
+	released := ValidateReleased(evidence, request, digest, unregister) == nil
 	switch {
 	case withdrawn && released:
 		return reconciliation.EffectCompleted, nil
@@ -375,11 +391,15 @@ func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, 
 	if verb == reconciliation.Destroy {
 		observes = observesRemoval
 	}
+	unregister, err := unregisters(execution, request, marker)
+	if err != nil {
+		return unknown, err
+	}
 	result, err := c.run(ctx, execution, "observe", request, marker, observes)
 	if err != nil {
 		return unknown, err
 	}
-	effect, _ := installationEffect(verb, result.Evidence, request, execution.Block.RequestDigest, string(marker))
+	effect, _ := decidedEffect(verb, result.Evidence, request, execution.Block.RequestDigest, string(marker), unregister)
 	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence}, nil
 }
 
@@ -466,6 +486,13 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	}
 	if operation == "destroy" {
 		refusals = unregistrationRefusals(execution.Context, request)
+	}
+	if request.Registration != nil && (operation == "destroy" || observes == observesRemoval) {
+		unregister, err := unregisters(execution, request, marker)
+		if err != nil {
+			return lifecycle.RunResult{}, err
+		}
+		values["unregister"] = map[bool]string{true: "guest", false: "skip"}[unregister]
 	}
 	// A machine proved by a delivered key is read over a connection pinned to
 	// exactly that key, so the public half reaches every operation, not only

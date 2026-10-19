@@ -108,7 +108,8 @@ def scope(registering=True, **extra):
         "bootwright_os_install_digest": DIGEST,
         "bootwright_os_install_material": {"fleetIdentity": "/run/material/fleet-id",
                                            "rhsmOrganization": "/run/material/rhsm-organization",
-                                           "rhsmActivationKey": "/run/material/rhsm-activation-key"},
+                                           "rhsmActivationKey": "/run/material/rhsm-activation-key",
+                                           "unregister": "guest"},
     })
     values.update(extra)
     return values
@@ -321,6 +322,7 @@ def test_registration_observe_only_inspects():
 
 
 UNREGISTRATION = "managedos_install_anaconda_unregistration_result"
+UNREGISTERS = "managedos_install_anaconda_unregisters | bool"
 REMOVAL = "managedos_install_anaconda_observes_removal | bool"
 MARKER = '{"request":"%s"}' % DIGEST
 
@@ -340,7 +342,7 @@ def guest(answered=True, marker=MARKER, host_key="ssh-ed25519 AAAAGUEST", **extr
         "managedos_install_anaconda_answered": answered,
         "managedos_install_anaconda_marker": marker,
         "managedos_install_anaconda_host_key": host_key,
-        "bootwright_os_install_material": {"fleetIdentity": "/run/material/fleet-id", "marker": MARKER},
+        "bootwright_os_install_material": {"fleetIdentity": "/run/material/fleet-id", "marker": MARKER, "unregister": "guest"},
     })
     values.update(extra)
     return values
@@ -358,8 +360,8 @@ def test_destroy_unregisters_before_withdrawing_content():
     reported = only(tasks, lambda task: task.get("name") == "Report published content removal", "report the content removal")
     removals = [index for index, task in enumerate(tasks) if FILE in task]
     assert removals and identity < unregistered < reported < min(removals)
-    assert tasks[identity]["when"] == [REGISTERING]
-    assert tasks[unregistered]["when"] == [REGISTERING, "managedos_install_anaconda_ours | bool"]
+    assert tasks[identity]["when"] == [REGISTERING, UNREGISTERS]
+    assert tasks[unregistered]["when"] == [REGISTERING, UNREGISTERS, "managedos_install_anaconda_ours | bool"]
     assert holds(tasks[identity]["when"]) and not holds(tasks[identity]["when"], False)
 
 
@@ -449,7 +451,7 @@ def test_unregistration_refusals_are_named_and_the_failure_is_closed(result, mes
 
 def test_removal_observation_reads_the_guest_only_for_a_registering_request():
     removal = block("observe.yml", "Read the registration a removal takes back")
-    assert removal["when"] == [REMOVAL, REGISTERING]
+    assert removal["when"] == [REMOVAL, REGISTERING, UNREGISTERS]
     observed = flattened("observe.yml")
     identity = only(observed, lambda task: included("identity.yml")(task) and REMOVAL in task["when"], "read the identity for a removal")
     read = only(observed, lambda task: included("registration_observe.yml")(task) and REMOVAL in task["when"],
@@ -461,3 +463,45 @@ def test_removal_observation_reads_the_guest_only_for_a_registering_request():
     assert not holds(observed[read]["when"], **dict(variables, managedos_install_anaconda_observes_removal=False))
     for other in (guest(answered=False), guest(marker=""), guest(host_key="")):
         assert not holds(observed[read]["when"], **dict(other, managedos_install_anaconda_observes_removal=True))
+    skipped = dict(variables, bootwright_os_install_material=dict(variables["bootwright_os_install_material"], unregister="skip"))
+    assert not holds(observed[identity]["when"], **skipped) and not holds(observed[read]["when"], **skipped)
+
+
+def destroy_validated(variables):
+    """Whether destroy.yml's request validation of the removal decision holds."""
+    checks = LOADER.load_from_file(str(ROLE / "tasks" / "destroy.yml"), trusted_as_template=True)[0]["ansible.builtin.assert"]["that"]
+    templar = Templar(loader=LOADER, variables=variables)
+    return all(templar.evaluate_conditional(trust_as_template(check)) for check in checks if "unregister" in check)
+
+
+# The capability decides whether a registering removal reads the guest. One told
+# to skip it, because its apply never recorded the marker proof that precedes
+# registration or because the operator unregistered the Machine outside
+# Bootwright, never reads, connects to or names the guest and publishes no
+# registration; one told nothing fails its validation before any effect.
+@pytest.mark.parametrize("unregister", ["guest", "skip", None], ids=["guest", "skip", "missing"])
+def test_destroy_skips_the_guest_unless_told_to_unregister(unregister):
+    material = {"fleetIdentity": "/run/material/fleet-id", "marker": MARKER}
+    if unregister is not None:
+        material["unregister"] = unregister
+    variables = dict(guest(), bootwright_os_install_material=material)
+    assert destroy_validated(scope(**variables)) is (unregister is not None)
+    assert destroy_validated(scope(False, bootwright_os_install_material={}))
+    assert render(trust_as_template("{{ managedos_install_anaconda_unregisters }}"), **variables) is (unregister == "guest")
+    if unregister is None:
+        return
+    guest_reads = [task for task in flattened("destroy.yml")
+                   if included("identity.yml")(task) or included("unregister.yml")(task)
+                   or ("bootwright.core.lifecycle_scratch" in task and task["bootwright.core.lifecycle_scratch"].get("state", "present") == "present")]
+    assert len(guest_reads) == 3
+    for task in guest_reads:
+        assert holds(task["when"], **variables) is (unregister == "guest"), task["name"]
+    arguments = completion("destroy.yml")
+    assert render(arguments["registrationRequired"], **variables) is (unregister == "guest")
+    if unregister == "skip":
+        evidence, refused = protocol.completion({
+            "digest": DIGEST, "removed": True, "observation": {},
+            "registration": Templar(loader=LOADER, variables={}).template(arguments["registration"]),
+            "registrationRequired": render(arguments["registrationRequired"], **variables),
+        })
+        assert refused is None and evidence["postcondition"] is True and evidence["registration"] == {"consumer": "", "state": ""}

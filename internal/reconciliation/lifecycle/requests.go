@@ -71,6 +71,7 @@ type ApplyRequest struct {
 type DestroyRequest struct {
 	ContextName      string
 	Authorizations   []string
+	Unregistered     []string
 	SkipConfirmation bool
 	SSH              machine.SSHOptions
 }

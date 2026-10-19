@@ -132,8 +132,9 @@ the scalar comma-list flags `--clusters`, `--machines`, `--replace`, `--stage`,
 the `--name` that names several Machines and the `--name` and `--node` that name
 several clusters and nodes.
 Collection flags aggregate in command-line order only where this contract says
-they are repeatable. `validate -f` is repeatable. `--authorize` is repeatable
-and each occurrence may also contain commas. Supplying an empty required value
+they are repeatable. `validate -f` is repeatable. `--authorize` and
+`destroy --unregistered` are repeatable and each occurrence may also contain
+commas. Supplying an empty required value
 is a usage error.
 
 An explicitly supplied empty scalar value is also a usage error unless this

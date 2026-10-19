@@ -184,13 +184,9 @@ func TestFromSubscriptionStillRefusesWithItsReason(t *testing.T) {
 	}
 }
 
-func TestSubscriptionStaysRefusedUntilAnUnansweredRemovalIsSettled(t *testing.T) {
-	want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01",
-		Reason:      "the install profile selects spec.subscription, which carries secret bytes or effects this executable does not prove",
-		Remediation: "remove spec.subscription from MachineInstallProfile/rhel-9-8",
-	}}
-	if refused := Refusals(labCatalog(registeringProfile(), rhelEntitlement())); !slices.Equal(refused, want) {
-		t.Fatalf("refusals = %+v, want %+v", refused, want)
+func TestSubscriptionIsAdmittedOnAVirtualMachine(t *testing.T) {
+	if refused := Refusals(labCatalog(registeringProfile(), rhelEntitlement())); len(refused) != 0 {
+		t.Fatalf("refusals = %+v, want none", refused)
 	}
 }
 

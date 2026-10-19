@@ -18,7 +18,6 @@ import (
 // registration rather than installing part of what was declared.
 var unsupportedSelections = [][]string{
 	{"installer", "anaconda", "packageSource", "mirror"},
-	{"subscription"},
 	{"customizations", "ssh", "initialPassword"},
 }
 

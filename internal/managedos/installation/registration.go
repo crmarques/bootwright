@@ -200,8 +200,11 @@ func unregistrationRefusals(contextName string, request Request) map[string]erro
 	again := "then run bootwright destroy --context " + contextName + " again"
 	refused := machineRefusal(request)
 	return map[string]error{
-		"registration-unreachable": refused(machine+" did not answer through its identity channel or its pinned connection, so the subscription registration its installation created was not removed",
-			"start "+machine+" with bootwright machine start --context "+contextName+" --name "+request.Identity.Object+", "+again),
+		"registration-unreachable": refused("the apply of "+machine+" proved its install marker before it registered, and "+machine+
+			" did not answer through its identity channel or its pinned connection, so its subscription registration cannot be read and was not removed",
+			"start "+machine+" with bootwright machine start --context "+contextName+" --name "+request.Identity.Object+", "+again+
+				"; if "+machine+" cannot answer again, remove its consumer with the subscription service's own tools, then run bootwright destroy --context "+
+				contextName+" --unregistered "+request.Identity.Object),
 		"registration-unavailable": refused("the subscription service, or the registration tooling on "+machine+", did not complete the removal of the subscription consumer its installation created",
 			"restore the route from "+machine+" to the subscription service, "+again),
 	}

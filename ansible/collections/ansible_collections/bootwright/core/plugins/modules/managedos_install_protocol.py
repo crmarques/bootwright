@@ -59,7 +59,9 @@ options:
         subscription service did not accept.
       - C(registration-unreachable) names an installed system a removal could
         not read through its identity channel or its pinned connection, so
-        the registration its installation created was not removed.
+        the registration its installation created was not removed. It is
+        reached only for a Machine whose apply proved its install marker,
+        which precedes registration.
     type: str
     required: false
   outcome:
@@ -143,8 +145,10 @@ options:
   registrationRequired:
     description:
       - Whether the frozen request registers the installed system, so a
-        completion proves an owned registration and a removal proves one
-        C(unregistered), C(absent) or C(retained).
+        completion proves an owned registration, or a removal that
+        unregisters proves one C(unregistered), C(absent) or C(retained). A
+        removal that does not unregister reads no registration and sets it
+        false.
     type: bool
     required: false
   privateDelivery:

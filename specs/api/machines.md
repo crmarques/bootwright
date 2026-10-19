@@ -571,7 +571,7 @@ optional. Validation is lexical only.
 | `spec.os.architecture` | string | yes | `x86_64`. |
 | `spec.installer.anaconda` | object | union | Anaconda arm below. |
 | `spec.installer.templateClone` | object | union | A [refused arm](#refused-arms). |
-| `spec.subscription.entitlementRef` | string | no | Global `Entitlement` of type `redhat-rhel`; refused at installation until a destroy can settle a Machine that never answered; then registers the installed system with the hosted subscription service and unregisters it on destroy ([managed OS](../managed-os.md#registration)). |
+| `spec.subscription.entitlementRef` | string | no | Global `Entitlement` of type `redhat-rhel`; registers the installed system with the hosted subscription service and unregisters it on destroy ([managed OS](../managed-os.md#registration)). |
 | `spec.proxy` | choice object | no | External Proxy choice; omission uses direct access. |
 | `spec.ntp` | array of selections | no | NTPServer selections; omission leaves the native OS default. |
 | `spec.customizations` | object | no | Closed customization groups below. |

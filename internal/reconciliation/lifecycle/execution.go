@@ -28,13 +28,13 @@ func (s Service) Apply(ctx context.Context, request ApplyRequest) (*OperationRes
 	if err != nil {
 		return nil, err
 	}
-	return s.mutate(ctx, reconciliation.Apply, request.ContextName, selection, request.Authorizations, request.SkipConfirmation, request.SSH.Borrowed())
+	return s.mutate(ctx, reconciliation.Apply, request.ContextName, selection, request.Authorizations, nil, request.SkipConfirmation, request.SSH.Borrowed())
 }
 
 // Destroy removes what an apply recorded as owned. It accepts no stage
 // selection: a removal covers exactly the effects that exist.
 func (s Service) Destroy(ctx context.Context, request DestroyRequest) (*OperationResult, error) {
-	return s.mutate(ctx, reconciliation.Destroy, request.ContextName, nil, request.Authorizations, request.SkipConfirmation, request.SSH.Borrowed())
+	return s.mutate(ctx, reconciliation.Destroy, request.ContextName, nil, request.Authorizations, request.Unregistered, request.SkipConfirmation, request.SSH.Borrowed())
 }
 
 // transition is the single legal next step the durable state permits. A noop
@@ -129,7 +129,7 @@ func (b basis) describe() string {
 	return "operation " + b.operation + " (" + string(b.state) + ")"
 }
 
-func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextName string, selection reconciliation.StageSelection, authorizations []string, skipConfirmation, borrowed bool) (*OperationResult, error) {
+func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextName string, selection reconciliation.StageSelection, authorizations, unregistered []string, skipConfirmation, borrowed bool) (*OperationResult, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
@@ -215,7 +215,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	if err := s.present(ctx, name, decided); err != nil {
 		return nil, err
 	}
-	if err := authorize(name, decided.verb, decided.selection, decided.plan, authorizations); err != nil {
+	if err := s.authorized(name, decided, authorizations, unregistered); err != nil {
 		return nil, err
 	}
 	if !skipConfirmation {
@@ -226,7 +226,14 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 			return nil, err
 		}
 	}
-	return s.execute(ctx, name, decided)
+	return s.execute(releasing(ctx, unregistered), name, decided)
+}
+
+func (s Service) authorized(name string, decided transition, authorizations, unregistered []string) error {
+	if err := authorize(name, decided.verb, decided.selection, decided.plan, authorizations); err != nil {
+		return err
+	}
+	return s.acknowledgedReleases(name, decided.plan, unregistered)
 }
 
 func (s Service) admitApply(ctx context.Context, name string, decided transition) error {

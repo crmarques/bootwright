@@ -121,6 +121,16 @@ func (v *requestValues) authorizations() []string {
 	return tokens
 }
 
+func (v *requestValues) unregistered() []string {
+	var names []string
+	for _, value := range v.strings("unregistered") {
+		for name := range strings.SplitSeq(value, ",") {
+			names = append(names, strings.TrimSpace(name))
+		}
+	}
+	return names
+}
+
 func (v *requestValues) ssh() machine.SSHOptions {
 	return machine.SSHOptions{
 		IdentityFile:       v.text("ssh-id-file"),

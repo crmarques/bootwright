@@ -2,6 +2,8 @@ package installation
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"slices"
 	"testing"
 
@@ -21,21 +23,37 @@ func registeringBlock(t *testing.T, request Request) reconciliation.Block {
 	return reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: request.Identity.Block, Object: request.Identity.Object, Request: canonical}, RequestDigest: "digest"}
 }
 
+// proving hands the execution the preparation its apply records when it proved
+// the frozen marker before it registered.
+func proving(t *testing.T, execution lifecycle.Execution, request Request) lifecycle.Execution {
+	t.Helper()
+	marker, err := MarkerFor(request, execution.Block.RequestDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	quoted, _ := json.Marshal(string(marker))
+	execution.ApplyPreparations = []json.RawMessage{json.RawMessage(`{"marker":` + string(quoted) + `}`)}
+	return execution
+}
+
+func removalRunner(t *testing.T, registration RegistrationEvidence) *fakeRunner {
+	return &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: encode(t, Evidence{Absent: true, Postcondition: true, Registration: registration, Request: "digest"})}}
+}
+
 func TestUnreachableRegisteredGuestFailsClosedNamingTheStart(t *testing.T) {
 	request := pinnedRequest(t, labCatalog(registeringProfile(), rhelEntitlement()))
-	released := RegistrationEvidence{}
-	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: encode(t, Evidence{Absent: true, Postcondition: true, Registration: released, Request: "digest"})}}
-	result, err := New(runner).Destroy(context.Background(), encryptionExecution(t, request, nil))
+	runner := removalRunner(t, RegistrationEvidence{})
+	result, err := New(runner).Destroy(context.Background(), proving(t, encryptionExecution(t, request, nil), request))
 	if reported := diagnostics.Of(err); result.Outcome != reconciliation.OutcomeUnknown || len(reported) != 1 || reported[0].Message != releasedRefusal {
 		t.Fatalf("a removal proving no release = %+v, %#v", result, reported)
 	}
-	if len(runner.requests) != 1 {
-		t.Fatalf("the destroy reached the adapter %d times", len(runner.requests))
+	if len(runner.requests) != 1 || runner.requests[0].MaterialValues["unregister"] != "guest" {
+		t.Fatalf("the destroy reached the adapter as %+v", runner.requests)
 	}
 	want := map[string][2]string{
 		"registration-unreachable": {
-			"Machine/rhel-01 did not answer through its identity channel or its pinned connection, so the subscription registration its installation created was not removed",
-			"start Machine/rhel-01 with bootwright machine start --context lab --name rhel-01, then run bootwright destroy --context lab again",
+			"the apply of Machine/rhel-01 proved its install marker before it registered, and Machine/rhel-01 did not answer through its identity channel or its pinned connection, so its subscription registration cannot be read and was not removed",
+			"start Machine/rhel-01 with bootwright machine start --context lab --name rhel-01, then run bootwright destroy --context lab again; if Machine/rhel-01 cannot answer again, remove its consumer with the subscription service's own tools, then run bootwright destroy --context lab --unregistered rhel-01",
 		},
 		"registration-unavailable": {
 			"the subscription service, or the registration tooling on Machine/rhel-01, did not complete the removal of the subscription consumer its installation created",
@@ -53,10 +71,103 @@ func TestUnreachableRegisteredGuestFailsClosedNamingTheStart(t *testing.T) {
 			t.Fatalf("%s = %#v", reason, reported)
 		}
 	}
-	plain := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: encode(t, Evidence{Absent: true, Postcondition: true, Request: "digest"})}}
+	plain := removalRunner(t, RegistrationEvidence{})
 	result, err = New(plain).Destroy(context.Background(), encryptionExecution(t, pinnedRequest(t, labCatalog()), nil))
 	if err != nil || result.Outcome != reconciliation.OutcomeChanged || len(plain.requests) != 1 || len(plain.requests[0].Refusals) != 0 {
 		t.Fatalf("a non-registering destroy = %+v (%v), refusals %v", result, diagnostics.Of(err), plain.requests)
+	}
+	if _, decided := plain.requests[0].MaterialValues["unregister"]; decided {
+		t.Fatalf("a non-registering destroy is told %q", plain.requests[0].MaterialValues["unregister"])
+	}
+}
+
+func TestProvedMarkerWithUnreadableRegistrationRefusesWithTheManualPath(t *testing.T) {
+	request := pinnedRequest(t, labCatalog(registeringProfile(), rhelEntitlement()))
+	runner := &fakeRunner{err: errors.New("unreachable")}
+	_, _ = New(runner).Destroy(context.Background(), proving(t, encryptionExecution(t, request, nil), request))
+	if len(runner.requests) != 1 {
+		t.Fatalf("the destroy reached the adapter %d times", len(runner.requests))
+	}
+	reported := diagnostics.Of(runner.requests[0].Refusals["registration-unreachable"])
+	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Object == nil || reported[0].Object.Kind != "Machine" || reported[0].Object.Name != "rhel-01" ||
+		reported[0].Message != "the apply of Machine/rhel-01 proved its install marker before it registered, and Machine/rhel-01 did not answer through its identity channel or its pinned connection, so its subscription registration cannot be read and was not removed" ||
+		reported[0].Remediation != "start Machine/rhel-01 with bootwright machine start --context lab --name rhel-01, then run bootwright destroy --context lab again; if Machine/rhel-01 cannot answer again, remove its consumer with the subscription service's own tools, then run bootwright destroy --context lab --unregistered rhel-01" {
+		t.Fatalf("registration-unreachable = %#v", reported)
+	}
+}
+
+func TestNeverPreparedRegistrationIsDestroyedWithoutUnregistration(t *testing.T) {
+	request := pinnedRequest(t, labCatalog(registeringProfile(), rhelEntitlement()))
+	runner := removalRunner(t, RegistrationEvidence{})
+	result, err := New(runner).Destroy(context.Background(), encryptionExecution(t, request, nil))
+	if err != nil || result.Outcome != reconciliation.OutcomeChanged {
+		t.Fatalf("a never-prepared destroy = %+v (%v)", result, diagnostics.Of(err))
+	}
+	if len(runner.requests) != 1 || runner.requests[0].MaterialValues["unregister"] != "skip" || len(runner.requests[0].Refusals) != 2 {
+		t.Fatalf("the destroy reached the adapter as %+v", runner.requests)
+	}
+	evidence := encode(t, Evidence{Absent: true, Postcondition: true, Request: "digest"})
+	if err := ValidateAbsence(evidence, "digest"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateReleased(evidence, request, "digest", false); err != nil {
+		t.Fatalf("an unread registration of a never-registered installation = %v", diagnostics.Of(err))
+	}
+	read := removalRunner(t, RegistrationEvidence{State: "absent"})
+	if _, err := New(read).Destroy(context.Background(), encryptionExecution(t, request, nil)); err == nil {
+		t.Fatal("a removal told to skip the guest accepted a registration it read")
+	}
+}
+
+func TestProvedMarkerWithReadableRegistrationUnregisters(t *testing.T) {
+	request := pinnedRequest(t, labCatalog(registeringProfile(), rhelEntitlement()))
+	runner := removalRunner(t, RegistrationEvidence{Consumer: ownedConsumer, State: "unregistered"})
+	result, err := New(runner).Destroy(context.Background(), proving(t, encryptionExecution(t, request, nil), request))
+	if err != nil || result.Outcome != reconciliation.OutcomeChanged || len(runner.requests) != 1 || runner.requests[0].MaterialValues["unregister"] != "guest" {
+		t.Fatalf("a proved destroy = %+v (%v), adapter %+v", result, diagnostics.Of(err), runner.requests)
+	}
+	unread := removalRunner(t, RegistrationEvidence{})
+	result, err = New(unread).Destroy(context.Background(), proving(t, encryptionExecution(t, request, nil), request))
+	if reported := diagnostics.Of(err); result.Outcome != reconciliation.OutcomeUnknown || len(reported) != 1 || reported[0].Message != releasedRefusal {
+		t.Fatalf("a proved destroy that read nothing = %+v, %#v", result, reported)
+	}
+}
+
+func TestReleasedMachineSkipsTheGuest(t *testing.T) {
+	request := pinnedRequest(t, labCatalog(registeringProfile(), rhelEntitlement()))
+	execution := proving(t, encryptionExecution(t, request, nil), request)
+	execution.Released = true
+	runner := removalRunner(t, RegistrationEvidence{})
+	result, err := New(runner).Destroy(context.Background(), execution)
+	if err != nil || result.Outcome != reconciliation.OutcomeChanged || len(runner.requests) != 1 || runner.requests[0].MaterialValues["unregister"] != "skip" {
+		t.Fatalf("a released destroy = %+v (%v), adapter %+v", result, diagnostics.Of(err), runner.requests)
+	}
+	observer := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, Evidence{Request: "digest"})}}
+	observation, err := New(observer).ObserveRemoval(context.Background(), execution)
+	if err != nil || observation.Effect != reconciliation.EffectCompleted || observer.requests[0].MaterialValues["unregister"] != "skip" {
+		t.Fatalf("a released removal observation = %+v (%v), adapter %+v", observation, err, observer.requests)
+	}
+}
+
+func TestForeignPreparationRefusesBeforeTheRun(t *testing.T) {
+	request := pinnedRequest(t, labCatalog(registeringProfile(), rhelEntitlement()))
+	for name, observe := range map[string]bool{"destroy": false, "removal observation": true} {
+		t.Run(name, func(t *testing.T) {
+			execution := encryptionExecution(t, request, nil)
+			execution.ApplyPreparations = []json.RawMessage{json.RawMessage(`{"marker":"another"}`)}
+			runner := removalRunner(t, RegistrationEvidence{})
+			var err error
+			if observe {
+				_, err = New(runner).ObserveRemoval(context.Background(), execution)
+			} else {
+				_, err = New(runner).Destroy(context.Background(), execution)
+			}
+			reported := diagnostics.Of(err)
+			if len(runner.requests) != 0 || len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+				reported[0].Message != "the apply records of Machine/rhel-01 hold a before-state this executable cannot read" {
+				t.Fatalf("a foreign preparation = %#v, adapter %+v", reported, runner.requests)
+			}
+		})
 	}
 }
 
@@ -84,7 +195,8 @@ func TestRemovalResolutionReadsTheGuestOnlyWhenRegistrationIsFrozen(t *testing.T
 				test.evidence.Request = "digest"
 			}
 			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, test.evidence)}}
-			observation, err := New(runner).ObserveRemoval(context.Background(), registrationExecution(t, test.request, []byte(organizationSentinel), []byte(activationSentinel)))
+			execution := proving(t, registrationExecution(t, test.request, []byte(organizationSentinel), []byte(activationSentinel)), test.request)
+			observation, err := New(runner).ObserveRemoval(context.Background(), execution)
 			if err != nil || observation.Effect != test.want {
 				t.Fatalf("removal observation = %+v (%v), want %s", observation, err, test.want)
 			}

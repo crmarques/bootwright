@@ -184,11 +184,12 @@ set, names a `caBundle` Secret. `contentBaseURL`, when set, is an absolute
 HTTP(S) URL; omission derives
 `https://<hostname>/pulp/content` during normalization.
 
-Both RHSM management postures are declarations only. A lifecycle planner must
-refuse remote registration until it can bind, re-prove, unregister, and
-positively prove absence of one immutable remote consumer identity
-([managed OS](../managed-os.md#registration) states the removal it performs
-once admitted).
+`management: managed` registers each Bootwright-installed virtual Machine whose
+install profile selects the Entitlement in `spec.subscription`, proving and
+removing only the consumer its installation created
+([managed OS](../managed-os.md#registration)); `management: external` is a
+declaration and runs no registration. `satellite` and `connectToInsights: true`
+refuse at installation.
 
 ### Registry and license
 

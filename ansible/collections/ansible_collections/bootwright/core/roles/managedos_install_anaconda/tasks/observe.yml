@@ -12,6 +12,9 @@
       - bootwright_os_install_request.network.markerPath == '/etc/bootwright/network-marker.json'
       - bootwright_os_install_request.network.checkpointSeconds | int > 0
       - bootwright_os_install_request.network.document is mapping
+      - bootwright_os_install_request.registration is not defined
+        or not (managedos_install_anaconda_observes_removal | bool)
+        or bootwright_os_install_material.unregister | default('') in ['guest', 'skip']
     quiet: true
   no_log: true
 
@@ -94,11 +97,13 @@
 # A registering removal also takes back the consumer its installation created.
 # A Machine holding this installation's marker is inspected as an apply proves
 # it; one answering with another marker or none holds nothing of this
-# installation; one that does not answer leaves the registration unread.
+# installation; one that does not answer leaves the registration unread. A
+# removal that does not unregister reads nothing of the guest.
 - name: Read the registration a removal takes back
   when:
     - managedos_install_anaconda_observes_removal | bool
     - bootwright_os_install_request.registration is defined
+    - managedos_install_anaconda_unregisters | bool
   vars:
     managedos_install_anaconda_ours: >-
       {{ managedos_install_anaconda_marker | default('') == bootwright_os_install_material.marker }}
@@ -178,5 +183,7 @@
     rootEncryption: '{{ managedos_install_anaconda_root_encryption | default(false) }}'
     rootEncryptionRequired: "{{ bootwright_os_install_request.diskEncryption is defined }}"
     registration: '{{ managedos_install_anaconda_registration | default({}) }}'
-    registrationRequired: "{{ bootwright_os_install_request.registration is defined }}"
+    registrationRequired: >-
+      {{ bootwright_os_install_request.registration is defined
+         and (not (managedos_install_anaconda_observes_removal | bool) or managedos_install_anaconda_unregisters | bool) }}
   no_log: true

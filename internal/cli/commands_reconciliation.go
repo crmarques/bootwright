@@ -3,7 +3,9 @@ package cli
 import (
 	"context"
 	"errors"
+	"slices"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -18,7 +20,7 @@ func lifecycleInspectionCommands() []commandSpec {
 func lifecycleMutationCommands() []commandSpec {
 	return []commandSpec{
 		available(commandSpec{path: "apply", short: "Apply the complete selected lifecycle unit", flags: []flagSpec{authorizationFlag(), stageFlag(), confirmationFlag()}, long: "Realize the complete selected Environment, or continue the exact operation an interruption left behind. The plan is always complete; --stage only gates which blocks this invocation starts, and the operation pauses at that boundary. Review the plan before confirming; --yes skips ordinary confirmation."}),
-		available(commandSpec{path: "destroy", short: "Destroy the complete selected lifecycle unit", flags: []flagSpec{authorizationFlag(), confirmationFlag()}, long: "Remove what this context's apply owns, whether that apply completed or not, proving each removal before it registers; a failed destroy is replaced by a fresh removal. Follow the plan's Stop first and Stop after online cleanup lists (bootwright machine stop): online cleanup, such as storage cleanup, needs its Machines running, and destroy pauses for their stop after it. A plan that deletes disks needs --authorize data-loss. Review the plan before confirming; --yes skips ordinary confirmation."}),
+		available(commandSpec{path: "destroy", short: "Destroy the complete selected lifecycle unit", flags: []flagSpec{authorizationFlag(), unregisteredFlag(), confirmationFlag()}, long: "Remove what this context's apply owns, whether that apply completed or not, proving each removal before it registers; a failed destroy is replaced by a fresh removal. Follow the plan's Stop first and Stop after online cleanup lists (bootwright machine stop): online cleanup, such as storage cleanup or a subscription unregistration, needs its Machines running, and destroy pauses for their stop after it. A plan that deletes disks needs --authorize data-loss. A Machine whose subscription registration cannot be read and that you unregistered with the subscription service's own tools is named with --unregistered. Review the plan before confirming; --yes skips ordinary confirmation."}),
 	}
 }
 
@@ -60,9 +62,14 @@ func (s Services) invokeLifecycle(ctx context.Context, path string, values *requ
 			SSH:              values.ssh(),
 		}, s.Lifecycle.Apply)
 	case "destroy":
+		unregistered := values.unregistered()
+		if slices.Contains(unregistered, "") {
+			return commandResult{}, emptyUnregistered()
+		}
 		result.lifecycleOperation, err = invokeResult(ctx, values, lifecycle.DestroyRequest{
 			ContextName:      values.text("context"),
 			Authorizations:   values.authorizations(),
+			Unregistered:     unregistered,
 			SkipConfirmation: values.boolean("yes"),
 			SSH:              values.ssh(),
 		}, s.Lifecycle.Destroy)
@@ -70,4 +77,11 @@ func (s Services) invokeLifecycle(ctx context.Context, path string, values *requ
 		return commandResult{}, errors.New("command has no application dispatch")
 	}
 	return result, err
+}
+
+func emptyUnregistered() error {
+	return &diagnostics.Failure{Usage: true, Diagnostics: []diagnostics.Diagnostic{{
+		Severity: "error", Code: "cli.usage", Message: "--unregistered must not contain an empty member",
+		Remediation: "name each Machine once in --unregistered, separated by commas",
+	}}}
 }

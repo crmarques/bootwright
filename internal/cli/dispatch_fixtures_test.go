@@ -372,5 +372,6 @@ func dispatchFlags() *pflag.FlagSet {
 	flags.Bool("value-stdin", false, "")
 	flags.StringArray("file", []string{"inputs"}, "")
 	flags.StringArray("authorize", []string{"data-loss"}, "")
+	flags.StringArray("unregistered", []string{"rhel-01, rhel-02", "rhel-03"}, "")
 	return flags
 }

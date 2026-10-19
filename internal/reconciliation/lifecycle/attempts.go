@@ -327,6 +327,50 @@ func removalEffect(observed reconciliation.EffectState) reconciliation.EffectSta
 	return reconciliation.EffectUnknown
 }
 
+type releasedNames struct{}
+
+func releasing(ctx context.Context, names []string) context.Context {
+	if len(names) == 0 {
+		return ctx
+	}
+	set := map[string]bool{}
+	for _, name := range names {
+		set[name] = true
+	}
+	return context.WithValue(ctx, releasedNames{}, set)
+}
+
+func (s Service) released(ctx context.Context, block reconciliation.Block) bool {
+	if names, _ := ctx.Value(releasedNames{}).(map[string]bool); !names[block.Object] {
+		return false
+	}
+	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
+	removal, opts := capability.(PreStopRemoval)
+	return ok && opts && removal.RequiresPreStopRemoval(block)
+}
+
+func (s Service) acknowledgedReleases(contextName string, plan reconciliation.Plan, names []string) error {
+	if len(names) == 0 {
+		return nil
+	}
+	preStop := s.onlineRemoval(plan).preStop
+	objects := map[string]bool{}
+	for _, block := range plan.Blocks {
+		if preStop[block.ID] {
+			objects[block.Object] = true
+		}
+	}
+	passing := contextCommand(contextName, string(plan.Verb), authorizing(requiredTokens(plan))...)
+	for _, name := range slices.Compact(slices.Sorted(slices.Values(names))) {
+		if !objects[name] {
+			return failure("lifecycle.authorization",
+				"this destroy removes no subscription registration from Machine/"+name+", so --unregistered "+name+" acknowledges nothing",
+				"repeat "+passing+" without --unregistered "+name)
+		}
+	}
+	return nil
+}
+
 // invoke runs the capability inside the controller runtime. The approved
 // runtime is the operation's own, located once before its first effect.
 func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, approved approved, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, proved, applyProved []BlockEvidence, preparations []json.RawMessage, log *operationstore.Log, attempt, resolution, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
@@ -376,8 +420,7 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 				},
 			}
 		}
-		// Only an apply's own attempt names the command that continues it: a
-		// destroy's next command depends on what the whole run settles.
+		// Only an apply's own attempt names its continuation: a destroy's next command depends on what the whole run settles.
 		continuation := ""
 		var prepare func(context.Context, json.RawMessage) error
 		if operation.Verb == reconciliation.Apply && resolution == 0 {
@@ -390,7 +433,7 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 		}
 		execution := Execution{
 			Operation: operation.ID, Context: tx.Identity().Name, Continuation: continuation, Attempt: attempt, Resolution: resolution, Block: block,
-			ApplyOperation: owningApply(operation), ApplyProved: applyProved, ApplyPreparations: clonedPreparations(preparations), Prepare: prepare,
+			ApplyOperation: owningApply(operation), ApplyProved: applyProved, ApplyPreparations: clonedPreparations(preparations), Prepare: prepare, Released: s.released(ctx, block),
 			Launch: launch, Material: material, Proved: proved,
 			LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
 				return s.locateTool(inner, store, view, tx.Identity().Name, operation, plan, tool)

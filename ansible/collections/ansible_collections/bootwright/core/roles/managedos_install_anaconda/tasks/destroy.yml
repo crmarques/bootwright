@@ -11,6 +11,8 @@
       - (bootwright_os_install_request.image.path if bootwright_os_install_request.image is defined
          else bootwright_os_install_request.private.path).startswith('/var/lib/bootwright-services/')
       - bootwright_os_install_digest is match('[0-9a-f]{64}')
+      - bootwright_os_install_request.registration is not defined
+        or bootwright_os_install_material.unregister | default('') in ['guest', 'skip']
     quiet: true
   no_log: true
 
@@ -34,9 +36,13 @@
 # anything it published is withdrawn: a Machine holding this installation's
 # marker has its consumer removed by the worker, one answering with another
 # marker or none holds nothing of this installation, and one that does not
-# answer refuses, so a failed removal leaves the content to repeat it with.
+# answer refuses, so a failed removal leaves the content to repeat it with. An
+# installation the capability says never registered, or whose consumer the
+# operator removed, is not read at all.
 - name: Unregister the machine this installation registered
-  when: bootwright_os_install_request.registration is defined
+  when:
+    - bootwright_os_install_request.registration is defined
+    - managedos_install_anaconda_unregisters | bool
   vars:
     managedos_install_anaconda_ours: >-
       {{ managedos_install_anaconda_marker | default('') == bootwright_os_install_material.marker }}
@@ -290,5 +296,5 @@
     observation: '{{ managedos_install_anaconda_after.observation }}'
     removed: true
     registration: '{{ managedos_install_anaconda_registration | default({}) }}'
-    registrationRequired: "{{ bootwright_os_install_request.registration is defined }}"
+    registrationRequired: "{{ bootwright_os_install_request.registration is defined and managedos_install_anaconda_unregisters | bool }}"
   no_log: true

@@ -24,18 +24,35 @@ type registeringRunner struct {
 	machines *fleetMachines
 	request  installation.Request
 	runs     []string
+	// unprepared fails the apply before it records its marker proof, as an
+	// installation that never reached registration does.
+	unprepared bool
+	probed     *probedMachines
 }
 
-func (r *registeringRunner) Run(_ context.Context, run lifecycle.RunRequest) (lifecycle.RunResult, error) {
+func (r *registeringRunner) Run(ctx context.Context, run lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	r.machines.mutex.Lock()
 	running := r.machines.running
 	r.machines.mutex.Unlock()
-	r.runs = append(r.runs, run.Operation+":"+map[bool]string{true: "running", false: "stopped"}[running])
+	seen := run.Operation + ":" + map[bool]string{true: "running", false: "stopped"}[running]
+	if decided, ok := run.MaterialValues["unregister"]; ok {
+		seen += ":" + decided
+	}
+	r.runs = append(r.runs, seen)
 	evidence := installation.Evidence{Absent: true, NetworkDifferences: []string{}, Postcondition: true, Request: run.Digest}
 	switch run.Operation {
 	case "apply":
+		if r.request.Registration != nil && r.unprepared {
+			return lifecycle.RunResult{}, run.Refusals["registration-refused"]
+		}
+		if r.request.Registration != nil {
+			marker, _ := json.Marshal(map[string]string{"marker": run.MaterialValues["marker"]})
+			if err := run.Prepare(ctx, marker); err != nil {
+				return lifecycle.RunResult{}, err
+			}
+		}
 		evidence = installation.Evidence{
 			Address: r.request.Address, HostKey: "ssh-ed25519 AAAAGUEST", Image: true, Marker: run.MaterialValues["marker"], Network: true, NetworkDifferences: []string{},
 			NetworkReboot: true, Postcondition: true, Power: "On", Reachable: true, Request: run.Digest, Tree: true, TreeIdentity: r.request.TreeMedia.SHA256,
@@ -44,6 +61,9 @@ func (r *registeringRunner) Run(_ context.Context, run lifecycle.RunRequest) (li
 			evidence.Registration = installation.RegistrationEvidence{Consumer: registeredConsumer, State: "owned"}
 		}
 	case "destroy":
+		if run.MaterialValues["unregister"] == "skip" {
+			break
+		}
 		if !running && r.request.Registration != nil {
 			return lifecycle.RunResult{}, run.Refusals["registration-unreachable"]
 		}
@@ -55,6 +75,25 @@ func (r *registeringRunner) Run(_ context.Context, run lifecycle.RunRequest) (li
 	return lifecycle.RunResult{Outcome: "changed", Evidence: data}, err
 }
 
+// probedMachines counts the stop proofs the engine asks of the Machine.
+type probedMachines struct {
+	*fleetMachines
+	probes int
+}
+
+func (m *probedMachines) Quiescent(ctx context.Context, probe lifecycle.Probe) (lifecycle.Quiescence, error) {
+	m.mutex.Lock()
+	m.probes++
+	m.mutex.Unlock()
+	return m.fleetMachines.Quiescent(ctx, probe)
+}
+
+func (m *probedMachines) probed() int {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	return m.probes
+}
+
 func (r *registeringRunner) took() []string {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
@@ -64,6 +103,19 @@ func (r *registeringRunner) took() []string {
 }
 
 func installationJourney(t *testing.T, golden string) (*lifecycle.CapabilityJourney, *registeringRunner, *fleetMachines) {
+	t.Helper()
+	journey, runner, machines := boundInstallation(t, golden, false, "rhel-01")
+	result, err := journey.Service.Apply(context.Background(), lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true})
+	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("the apply = %+v, %+v (%v)", result, diagnostics.Of(err), err)
+	}
+	if runs := runner.took(); !slices.Equal(runs, []string{"apply:running"}) {
+		t.Fatalf("the apply ran %v", runs)
+	}
+	return journey, runner, machines
+}
+
+func boundInstallation(t *testing.T, golden string, unprepared bool, objects ...string) (*lifecycle.CapabilityJourney, *registeringRunner, *fleetMachines) {
 	t.Helper()
 	data, err := os.ReadFile("../../managedos/installation/testdata/" + golden)
 	if err != nil {
@@ -77,27 +129,23 @@ func installationJourney(t *testing.T, golden string) (*lifecycle.CapabilityJour
 	if err != nil {
 		t.Fatal(err)
 	}
-	machines := &fleetMachines{running: true}
-	runner := &registeringRunner{machines: machines, request: request}
-	definitions := []reconciliation.BlockDefinition{
-		{ID: "machine-rhel-01", Description: "create the Machine rhel-01", Stage: reconciliation.StageMachines, Impacts: []string{"create-machine rhel-01"}, Consumes: []string{},
-			Kind: string(api.Machine), Object: "rhel-01", Implementation: fleetMachineImplementation, ContentDigest: strings.Repeat("c", 64), Request: json.RawMessage(`{"name":"rhel-01"}`)},
-		{ID: installation.BlockID("rhel-01"), Description: "install the operating system of rhel-01", Stage: reconciliation.StageMachines, Dependencies: []string{"machine-rhel-01"},
-			Impacts: []string{"install-operating-system rhel-01"}, Consumes: []string{}, Kind: installation.Kind, Object: "rhel-01", Implementation: installation.Implementation,
-			ContentDigest: installation.ContentDigest(), Request: canonical},
+	probed := &probedMachines{fleetMachines: &fleetMachines{running: true}}
+	machines := probed.fleetMachines
+	runner := &registeringRunner{machines: machines, request: request, unprepared: unprepared, probed: probed}
+	definitions := []reconciliation.BlockDefinition{}
+	for _, object := range objects {
+		definitions = append(definitions,
+			reconciliation.BlockDefinition{ID: "machine-" + object, Description: "create the Machine " + object, Stage: reconciliation.StageMachines, Impacts: []string{"create-machine " + object}, Consumes: []string{},
+				Kind: string(api.Machine), Object: object, Implementation: fleetMachineImplementation, ContentDigest: strings.Repeat("c", 64), Request: json.RawMessage(`{"name":"` + object + `"}`)},
+			reconciliation.BlockDefinition{ID: installation.BlockID(object), Description: "install the operating system of " + object, Stage: reconciliation.StageMachines, Dependencies: []string{"machine-" + object},
+				Impacts: []string{"install-operating-system " + object}, Consumes: []string{}, Kind: installation.Kind, Object: object, Implementation: installation.Implementation,
+				ContentDigest: installation.ContentDigest(), Request: canonical})
 	}
 	journey := lifecycle.NewBoundJourney(t, []lifecycle.BoundCapability{
-		{Binding: lifecycle.CapabilityBinding{Kind: string(api.Machine), Implementation: fleetMachineImplementation}, Capability: machines},
+		{Binding: lifecycle.CapabilityBinding{Kind: string(api.Machine), Implementation: fleetMachineImplementation}, Capability: probed},
 		{Binding: lifecycle.CapabilityBinding{Kind: installation.Kind, Implementation: installation.Implementation}, Capability: installation.New(runner)},
 	}, lifecycle.CapabilityPlan{Definitions: definitions, Secrets: request.SecretReferences()})
 	holdInstallationSecrets(journey, request)
-	result, err := journey.Service.Apply(context.Background(), lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true})
-	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) {
-		t.Fatalf("the apply = %+v, %+v (%v)", result, diagnostics.Of(err), err)
-	}
-	if runs := runner.took(); !slices.Equal(runs, []string{"apply:running"}) {
-		t.Fatalf("the apply ran %v", runs)
-	}
 	return journey, runner, machines
 }
 
@@ -131,7 +179,7 @@ func TestRegisteredInstallationUnregistersBeforeItsMachineStops(t *testing.T) {
 		if len(reported) == 0 || reported[0].Code != "lifecycle.live" || !strings.Contains(reported[0].Remediation, stop) {
 			t.Fatalf("the first destroy = %+v (%v), want lifecycle.live naming the stop", reported, err)
 		}
-		if runs := runner.took(); !slices.Equal(runs, []string{"destroy:running"}) || len(machines.removed) != 0 {
+		if runs := runner.took(); !slices.Equal(runs, []string{"destroy:running:guest"}) || len(machines.removed) != 0 {
 			t.Fatalf("the first destroy ran %v and removed %v", runs, machines.removed)
 		}
 		setRunning(machines, false)
@@ -158,17 +206,104 @@ func TestRegisteredInstallationUnregistersBeforeItsMachineStops(t *testing.T) {
 			t.Fatalf("the refused destroy ran %v and removed %v", runs, machines.removed)
 		}
 	})
-	t.Run("stopped first", func(t *testing.T) {
-		journey, runner, machines := installationJourney(t, "request-lab-rhel-registered.golden")
-		setRunning(machines, false)
-		_, err := journey.Service.Destroy(context.Background(), destroy)
-		reported := diagnostics.Of(err)
-		if len(reported) == 0 || !strings.Contains(reported[0].Remediation, "bootwright machine start --context "+lifecycle.JourneyContext+" --name rhel-01") ||
-			!strings.Contains(reported[0].Message, "did not answer through its identity channel") {
-			t.Fatalf("the destroy of a stopped registered Machine = %+v (%v)", reported, err)
-		}
-		if runs := runner.took(); !slices.Equal(runs, []string{"destroy:stopped"}) || len(machines.removed) != 0 {
-			t.Fatalf("the destroy ran %v and removed %v", runs, machines.removed)
-		}
-	})
+}
+
+const unreachableMessage = "the apply of Machine/rhel-01 proved its install marker before it registered, and Machine/rhel-01 did not answer through its identity channel or its pinned connection, so its subscription registration cannot be read and was not removed"
+
+func TestUnreadableProvedRegistrationRefusesBeforeAnyInverse(t *testing.T) {
+	journey, runner, machines := installationJourney(t, "request-lab-rhel-registered.golden")
+	setRunning(machines, false)
+	probes := runner.probed.probed()
+	_, err := journey.Service.Destroy(context.Background(), lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true})
+	if !slices.ContainsFunc(diagnostics.Of(err), func(reported diagnostics.Diagnostic) bool {
+		return reported.Code == "lifecycle.state" && reported.Message == unreachableMessage && reported.Object != nil && reported.Object.Name == "rhel-01" &&
+			strings.HasSuffix(reported.Remediation, "then run bootwright destroy --context "+lifecycle.JourneyContext+" --unregistered rhel-01")
+	}) {
+		t.Fatalf("the destroy of a stopped registered Machine = %+v (%v)", diagnostics.Of(err), err)
+	}
+	if runs := runner.took(); !slices.Equal(runs, []string{"destroy:stopped:guest"}) || len(machines.removed) != 0 || runner.probed.probed() != probes {
+		t.Fatalf("the destroy ran %v, removed %v and proved the stop %d times", runs, machines.removed, runner.probed.probed()-probes)
+	}
+}
+
+func TestNeverRegisteredInstallationIsDestroyedWithoutTheGuest(t *testing.T) {
+	journey, runner, machines := boundInstallation(t, "request-lab-rhel-registered.golden", true, "rhel-01")
+	if _, err := journey.Service.Apply(context.Background(), lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}); err == nil {
+		t.Fatal("an apply that failed before its marker proof completed")
+	}
+	if runs := runner.took(); !slices.Equal(runs, []string{"apply:running"}) {
+		t.Fatalf("the apply ran %v", runs)
+	}
+	setRunning(machines, false)
+	holdInstallationSecrets(journey, runner.request)
+	result, err := journey.Service.Destroy(context.Background(), lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true})
+	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("the destroy = %+v, %+v (%v)", result, diagnostics.Of(err), err)
+	}
+	if runs := runner.took(); !slices.Contains(runs, "destroy:stopped:skip") || slices.Contains(runs, "destroy:stopped:guest") || !slices.Equal(machines.removed, []string{"rhel-01"}) {
+		t.Fatalf("the destroy ran %v and removed %v", runs, machines.removed)
+	}
+}
+
+func TestUnregisteredFlagLetsTheRerunProceed(t *testing.T) {
+	journey, runner, machines := installationJourney(t, "request-lab-rhel-registered.golden")
+	setRunning(machines, false)
+	destroy := lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}
+	if _, err := journey.Service.Destroy(context.Background(), destroy); err == nil {
+		t.Fatal("the destroy of an unanswering registered Machine completed")
+	}
+	if runs := runner.took(); !slices.Equal(runs, []string{"destroy:stopped:guest"}) {
+		t.Fatalf("the refused destroy ran %v", runs)
+	}
+	holdInstallationSecrets(journey, runner.request)
+	destroy.Unregistered = []string{"rhel-01"}
+	result, err := journey.Service.Destroy(context.Background(), destroy)
+	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) {
+		t.Fatalf("the acknowledged destroy = %+v, %+v (%v)", result, diagnostics.Of(err), err)
+	}
+	if runs := runner.took(); len(runs) == 0 || slices.ContainsFunc(runs, func(run string) bool { return !strings.HasSuffix(run, ":skip") }) ||
+		!slices.Equal(machines.removed, []string{"rhel-01"}) {
+		t.Fatalf("the acknowledged destroy ran %v and removed %v", runs, machines.removed)
+	}
+}
+
+func TestUnregisteredFlagRefusesAMachineThePlanDoesNotUnregister(t *testing.T) {
+	for name, golden := range map[string]string{"registered": "request-lab-rhel-registered.golden", "not registered": "request-lab-rhel.golden"} {
+		t.Run(name, func(t *testing.T) {
+			journey, runner, machines := installationJourney(t, golden)
+			setRunning(machines, false)
+			unknown := "rhel-02"
+			if name == "not registered" {
+				unknown = "rhel-01"
+			}
+			_, err := journey.Service.Destroy(context.Background(), lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, Unregistered: []string{unknown}})
+			reported := diagnostics.Of(err)
+			if len(reported) != 1 || reported[0].Code != "lifecycle.authorization" ||
+				reported[0].Message != "this destroy removes no subscription registration from Machine/"+unknown+", so --unregistered "+unknown+" acknowledges nothing" ||
+				reported[0].Remediation != "repeat bootwright destroy --context "+lifecycle.JourneyContext+" without --unregistered "+unknown {
+				t.Fatalf("the destroy naming %s = %#v (%v)", unknown, reported, err)
+			}
+			if journey.Confirmations() != 0 || len(runner.took()) != 0 || len(machines.removed) != 0 {
+				t.Fatalf("the refused destroy asked %d confirmations, ran the adapter or removed %v", journey.Confirmations(), machines.removed)
+			}
+			if operation := journey.Operation(t); operation.Verb != reconciliation.Apply {
+				t.Fatalf("the refused destroy registered operation %+v", operation)
+			}
+		})
+	}
+}
+
+func TestUnregisteredFlagReleasesOnlyTheNamedMachine(t *testing.T) {
+	journey, runner, _ := boundInstallation(t, "request-lab-rhel-registered.golden", false, "rhel-01", "rhel-02")
+	if _, err := journey.Service.Apply(context.Background(), lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}); err != nil {
+		t.Fatalf("the apply = %+v (%v)", diagnostics.Of(err), err)
+	}
+	runner.took()
+	holdInstallationSecrets(journey, runner.request)
+	_, _ = journey.Service.Destroy(context.Background(), lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, Unregistered: []string{"rhel-02"}, SkipConfirmation: true})
+	runs := runner.took()
+	slices.Sort(runs)
+	if !slices.Equal(runs, []string{"destroy:running:guest", "destroy:running:skip"}) {
+		t.Fatalf("the destroy naming rhel-02 ran %v", runs)
+	}
 }

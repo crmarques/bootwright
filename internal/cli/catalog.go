@@ -174,6 +174,12 @@ func authorizationFlag() flagSpec {
 	return flag
 }
 
+func unregisteredFlag() flagSpec {
+	flag := stringFlag("unregistered", "Name a Machine whose subscription registration you removed with the subscription service's own tools")
+	flag.kind = "stringArray"
+	return flag
+}
+
 func trustFlag() flagSpec {
 	flag := boolFlag("trust-on-first-use", "Observe unknown SSH keys without accepting them")
 	flag.defaultValue = "true"

@@ -56,6 +56,12 @@ managedos_install_anaconda_installed: >-
 # only the content the removal takes back.
 managedos_install_anaconda_observes_removal: >-
   {{ bootwright_os_install_material.observes | default('') == 'removal' }}
+# Whether a registering removal reads and unregisters its Machine's guest. The
+# capability decides it from the apply's own records: an installation that
+# never recorded its marker proof never registered, and a Machine the operator
+# unregistered outside Bootwright is not read. Anything else reads nothing.
+managedos_install_anaconda_unregisters: >-
+  {{ bootwright_os_install_material.unregister | default('') == 'guest' }}
 # The realized target every substrate-composed task file reads. Each substrate
 # proves its own target and reads its own identity channel; the installation
 # supplies the terms and never learns which substrate answered.
