@@ -160,9 +160,6 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	if r.ClusterSSHUser == "" || r.ClusterKeyRef == "" || r.RegistryRef == "" || spec.Has("topology", "stretch") || spec.Get("security", "fips", "enabled").Bool() || spec.Get("security", "cephx", "keyType").Present() && spec.Get("security", "cephx", "keyType").Text() != "aes" {
 		return Request{}, failure("lifecycle.unsupported", "the requested Ceph trust or topology profile is not implemented by the core adapter", "declare the cluster SSH key, registry entitlement and a non-stretch CephX core profile")
 	}
-	if r.CallHome != "enabled" {
-		return Request{}, failure("lifecycle.unsupported", "disabling IBM Call Home before bootstrap is not yet qualified", "qualify the provider's pre-bootstrap disable path before selecting disabled")
-	}
 	if len(r.PublicNetworks) == 0 {
 		return Request{}, failure("api.required", "core Ceph requires an explicit public network", "declare ceph.networks.publicCIDRs")
 	}

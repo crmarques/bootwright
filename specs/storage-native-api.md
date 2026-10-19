@@ -113,7 +113,14 @@ Attempt fences precede native effects; original bootstrap configuration and
 administrator keyring enter protected custody before consumption. Lost replies
 allow only exact-result observation and completion of missing receipts. A
 missing result after an attempt, legacy incomplete ownership, changed scope or
-foreign daemon refuses. Enrollment starts a separate durable fence; this
+foreign daemon refuses. One version specialization adopts a native bootstrap
+failure: when the verified host cephadm's bootstrap makes the IBM license call,
+an exit whose private native output is exactly that call's zero-host refusal
+continues the attempted seed in the same apply, after the exact owned-seed proof
+the next apply would run
+([catalog](../.agents/knowledge/version-specializations.md#ceph-bootstrap-license-call-continues));
+every other bootstrap failure keeps its attempt record and remains a native
+failure. Enrollment starts a separate durable fence; this
 protocol does not yet continue partial host enrollment, services or OSDs.
 Candidate daemon inventory uses bounded direct filesystem, systemd and Podman
 inspection instead of `cephadm ls`, whose inspected logging initialization can

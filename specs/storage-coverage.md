@@ -23,7 +23,10 @@ Bootwright does not register this table or maintain per-release profiles.
 B472 records the artifacts, host/runtime, native schemas, defaults and observed
 constraints of tested adapter and feature journeys. These records establish
 the scope of that evidence; they do not approve version combinations or gate
-an authored selection. B476's accepted minimal journey is recorded in its
+an authored selection. The
+[version-specialization catalog](../.agents/knowledge/version-specializations.md)
+records the mechanics each tested build needed and the evidence for them; its
+rows are tested scope, not approved versions. B476's accepted minimal journey is recorded in its
 owner-accepted ledger row; it certifies no other version or feature.
 
 Authored versions now select native acquisition without release/artifact pins.

@@ -973,12 +973,26 @@ class Worker:
         self.pause = time.sleep
         self.horizon = None
         self.blocking = []
+        from ansible_collections.bootwright.core.plugins.module_utils import native_specializations
+        self.selection = native_specializations.Selection({"host-cephadm": self.verified_tool, "image-cephadm": self.image_payload})
+        self._tool_bytes = None
 
-    def command(self, argv, data=b"", timeout=60, json_result=True):
+    def native_coordinate(self):
+        """The selected image and package, then as many applied specialization ids as the public bound leaves room for."""
+        from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics
+        base = self.request["image"] + "; host package " + self.request["cephadm"]["packageVersion"]
+        room, kept = native_diagnostics.MAX_COORDINATE - len((base + "; specializations ").encode()), ""
+        for name in sorted(self.selection.applied):
+            candidate = kept + ("," if kept else "") + name
+            if len(candidate.encode()) > room:
+                break
+            kept = candidate
+        return base + "; specializations " + kept if kept else base
+
+    def command(self, argv, data=b"", timeout=60, json_result=True, recover=None):
         code, output = self.run(argv, data=data, timeout=timeout)
-        if code != 0:
-            coordinate = self.request["image"] + "; host package " + self.request["cephadm"]["packageVersion"]
-            raise NativeFailure("native-command", coordinate, getattr(output, "stderr", b"") or output, secrets=(data,))
+        if code != 0 and (recover is None or not recover(code, output)):
+            raise NativeFailure("native-command", self.native_coordinate(), getattr(output, "stderr", b"") or output, secrets=(data,))
         if not json_result:
             return output
         try:
@@ -1210,7 +1224,8 @@ class Worker:
 
     def call_home_state(self):
         """A completion record never replaces current native module proof."""
-        if self.request["callHome"] != "enabled":
+        opt_in = self.request["callHome"] != "enabled" and self.selection.variant("ceph.call-home-model") == "opt-in"
+        if self.request["callHome"] != "enabled" and not opt_in:
             return
         modules = self.ceph("mgr", "module", "ls")
         require(isinstance(modules, dict), "native-output")
@@ -1221,6 +1236,9 @@ class Worker:
             require(len(set(value)) == len(value), "native-output")
             selected[field] = set(value)
         enabled = selected["enabled_modules"] | selected["always_on_modules"]
+        if opt_in:
+            require("call_home_agent" not in enabled, "call-home-drift")
+            return
         require("call_home_agent" in enabled and "call_home_agent" not in selected["force_disabled_modules"], "call-home-drift")
 
     def verify_tool(self):
@@ -1237,7 +1255,40 @@ class Worker:
         recorded = self.markers.read("artifact.json")
         require(recorded is not None or not self.markers.owned(), "artifact")
         require(recorded is None or recorded == identity, "artifact")
+        self._tool_bytes = content
         return identity
+
+    def verified_tool(self):
+        """The host cephadm bytes verify_tool proved in this worker run."""
+        if self._tool_bytes is None:
+            self.verify_tool()
+        return self._tool_bytes
+
+    def image_payload(self):
+        """The image's cephadm payload, read only after the runtime profile binds it to the held image."""
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime as runtime
+        self.runtime_profile()
+        return runtime.cephadm_payload(self.host_preparation())
+
+    def require_call_home_path(self):
+        model = self.selection.variant("ceph.call-home-model")
+        require(self.request["callHome"] == ("enabled" if model == "opt-out" else "disabled"), "call-home-unqualified")
+
+    def call_home_applicable(self):
+        """Opt-in Call Home left disabled has no step; every other path keeps the enabled-only guard."""
+        if self.request["callHome"] == "disabled" and self.selection.variant("ceph.call-home-model") == "opt-in":
+            return False
+        require(self.request["callHome"] == "enabled", "call-home-unqualified")
+        return True
+
+    def require_declared_options(self, argv):
+        """An anchored host parser must declare every option; an unanchored one leaves cephadm's argparse to judge."""
+        names = self.selection.declared("host-cephadm")
+        if names is None:
+            return
+        missing = sorted({token for token in argv if token.startswith("--") and token not in names})
+        if missing:
+            raise NativeFailure("native-option-undeclared", self.native_coordinate(), ", ".join(missing))
 
     def daemons(self):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_observe
@@ -1303,6 +1354,8 @@ class Worker:
         owned = self.markers.owned()
         require(owned or not existing, "foreign-cluster")
         identity = self.verify_tool()
+        if not owned:
+            self.require_call_home_path()
         self.markers.create()
         self.markers.write("artifact.json", identity)
         if self.request["clusterSSHTransport"] == "verified-tunnel":
@@ -1926,10 +1979,26 @@ class Worker:
                 require(helper.public_key(private["clusterPublicKey"]) == json.loads(original["manifest.json"])["identityPublicKey"], "ownership")
                 # A refusal here leaves no attempt record, so the bootstrap may still be retried.
                 self.prove_inert_host_preparation()
+                argv = staging.bootstrap_argv(self.request, scratch, self.selection)
+                self.require_call_home_path()
+                self.require_declared_options(argv)
                 self.markers.write("bootstrap-attempt.json", scope)
-                self.command(staging.bootstrap_argv(self.request, scratch), timeout=BOOTSTRAP_TIMEOUT, json_result=False)
+                self.command(argv, timeout=BOOTSTRAP_TIMEOUT, json_result=False, recover=self.license_call_continues)
         self.capture_bootstrap_outputs()
         return {"changed": True}
+
+    def license_call_continues(self, code, output):
+        """Only an IBM build's own zero-host license-call refusal, with the exact owned seed in place, continues bootstrap."""
+        unused, staging = tunnel_helpers()
+        if not staging.license_call_refusal(self.request, code, output):
+            return False
+        if self.selection.variant("ceph.bootstrap.license-call-refusal") != "continue-seed":
+            return False
+        try:
+            self.prove_seed(self.daemons())
+        except (ValueError, OSError):
+            return False
+        return True
 
     def prove_inert_host_preparation(self):
         """Prove host preparation inert before invoking the selected provider's host check."""
@@ -2104,7 +2173,9 @@ class Worker:
 
     def initialize_call_home(self, mutate):
         """Finish the native seed's missing Call Home initialization without re-bootstrapping."""
-        require(self.request["callHome"] == "enabled", "call-home-unqualified")
+        if not self.call_home_applicable():
+            self.call_home_state()
+            return True, False
         intent = dict(self.configuration_intent(), step="call_home_initialize")
         prefix = "tunnel-config-"
         attempted = self.markers.read(prefix + "attempt-call_home_initialize.json")
@@ -2137,6 +2208,8 @@ class Worker:
         return True, changed
 
     def configure_call_home(self, mutate):
+        if not self.call_home_applicable():
+            return True, False
         intent = dict(self.configuration_intent(), step="call_home")
         attempted = self.markers.read("tunnel-config-attempt-call_home.json")
         completed = self.markers.read("tunnel-config-complete-call_home.json")
@@ -2166,12 +2239,13 @@ class Worker:
                         and option.get("value") not in ("", None) for option in options), "native-tunnel-unproved")
         config = helper.native_configuration(helper.targets(self.request))
         changed, complete = False, True
+        pre_steps = ("--skip-pre-steps",) if self.selection.variant("ceph.mgr.set-user-pre-steps") == "skip" else ()
         with self.transport_hold() as original:
             public = json.loads(original["manifest.json"])["identityPublicKey"].encode()
             values = (("ssh_identity_key", original["identity"], ("cephadm", "set-priv-key", "-i", "-")),
                       ("ssh_identity_pub", public, ("cephadm", "set-pub-key", "-i", "-")),
                       ("ssh_config", config, ("cephadm", "set-ssh-config", "-i", "-")),
-                      ("ssh_user", self.request["clusterSSHUser"].encode(), ("cephadm", "set-user", self.request["clusterSSHUser"], "--skip-pre-steps")))
+                      ("ssh_user", self.request["clusterSSHUser"].encode(), ("cephadm", "set-user", self.request["clusterSSHUser"]) + pre_steps))
             for name, wanted, command in values:
                 proved, effect = self.configure_setting(name, wanted, command, mutate)
                 complete, changed = complete and proved, changed or effect
@@ -2187,7 +2261,7 @@ class Worker:
         intent = self.configuration_intent()
         require(canonical(self.markers.read("tunnel-config-intent.json")) == canonical(intent), "ownership")
         require(canonical(self.markers.read("tunnel-configured.json")) == canonical(intent), "ownership")
-        for name in ("ssh_identity_key", "ssh_identity_pub", "ssh_config", "ssh_user", "call_home"):
+        for name in ("ssh_identity_key", "ssh_identity_pub", "ssh_config", "ssh_user") + (("call_home",) if self.call_home_applicable() else ()):
             require(canonical(self.markers.read("tunnel-config-complete-" + name + ".json")) == canonical(dict(intent, step=name)), "ownership")
         return self.configure_values(False)[0]
 
@@ -2464,7 +2538,8 @@ class Worker:
 
     def accept_call_home(self):
         """Acknowledge only the frozen enabled intent after owned FSID proof."""
-        require(self.request["callHome"] == "enabled", "call-home-unqualified")
+        if not self.call_home_applicable():
+            return False
         record = {"callHome": "enabled"}
         name = "call-home-accepted.json"
         accepted = self.markers.read(name)
@@ -2579,7 +2654,7 @@ class Worker:
             require(current is not None and set(current.get("labels", [])) == set(spec["labels"]), "not-ready")
             if complete is None:
                 self.markers.write(prefix + "-complete.json", intent)
-        if not self.license_accepted():
+        if not self.license_accepted() and self.selection.variant("ceph.mgr.license-contract") == "ibm":
             self.manager_retry(self.tunnel_effect, "orch", "accept-license", "--image", self.request["image"], json_result=False)
             require(self.license_accepted(), "not-ready")
             changed = True
@@ -3392,7 +3467,7 @@ class Worker:
         require(isinstance(status, dict) and status.get("fsid") == self.request["fsid"], "native-output")
         require(isinstance(status.get("health"), dict), "native-output")
         evidence["health"], healthy = self.readiness_health(status["health"])
-        license_ready = self.request["action"] != "cluster" or self.license_accepted()
+        license_ready = self.request["action"] != "cluster" or self.license_accepted() or self.selection.variant("ceph.mgr.license-contract") == "absent"
         if not license_ready:
             self.blocking = sorted(set(self.blocking) | {"IBM_LICENSE_NOT_ACCEPTED"})[:16]
         pg_ready = placement_groups_ready(status, self.request["action"])

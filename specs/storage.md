@@ -75,7 +75,10 @@ weaken TLS verification, and a supplied digest does not substitute for required
 publisher trust. FIPS, CephX, encryption and call-home choices retain their
 independent API, trust and authorization requirements. Native tools determine
 whether the selected versions can realize those choices; Bootwright does not
-screen their version compatibility.
+screen their version compatibility. Adapter
+[version specializations](architecture.md#implementations-and-version-variation)
+adapt native mechanics to capabilities read from the frozen, authenticated
+artifacts; they neither screen nor approve a selection.
 
 Bootwright acquires provider artifacts using the selected Entitlement's bound
 Secret and the cluster's release/source intent. Operators import credentials;
@@ -307,14 +310,19 @@ worker whose token is outside that worker's closed set is published as
 and execution failures additionally carry the bounded redacted `nativeError`
 projection defined by the adapter protocol, so the diagnostic retains the
 requested coordinate and useful native cause without reflecting raw output.
+The coordinate may end with the ids of the
+[version specializations](architecture.md#implementations-and-version-variation)
+applied in that run; within its bound, that suffix is truncated before the
+image and package part.
 
 A named refusal ends the attempt with its entry's code. An entry coded
 `lifecycle.unknown` leaves the block's attempt outcome unknown rather than
 failed, so the next apply observes that block first and resolves it from the
 observed evidence, a host block through its preparation evidence. Only the
 entries coded `lifecycle.unsupported` (`unsupported-release`,
-`package-license`, `package-platform`, `dashboard-verify` and
-`client-quiescence-unqualified`) leave it failed. A censored failure that names
+`package-license`, `package-platform`, `dashboard-verify`,
+`client-quiescence-unqualified`, `call-home-unqualified` and
+`native-option-undeclared`) leave it failed. A censored failure that names
 no refusal stays the generic adapter failure, which fails the attempt.
 
 ## Devices and destructive ownership
@@ -403,7 +411,9 @@ hostname and pinned image. Short-name collisions refuse before effects;
 quorum alone does not replace the running MON daemon proof. OSD metadata and
 daemon rows must agree on the same numeric OSD identity, owned host and exact
 declared disk identity. Declared enabled IBM Call Home requires current native module
-state as well as frozen consent. Expected manager-cache lag and OSDs still
+state as well as frozen consent; declared disabled Call Home is realized as
+[storage API](api/storage.md) states. IBM license readiness applies only
+where the selected image carries the IBM license contract. Expected manager-cache lag and OSDs still
 starting yield partial evidence, including an OSD the map holds that has not
 booted and so reports no device identity; effective daemon configuration is
 checked only after the selected OSD is running, up and in. Apply may repeat

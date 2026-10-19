@@ -16,6 +16,8 @@ import pytest
 import yaml
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_host_worker, ceph_native, ceph_native_worker, ceph_tunnel_staging
+from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics, native_specializations
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_native_specializations as specs
 
 PASSWORD = "Xq7-Lm2_Rv9.Tk4-Wz8_Hn3.Pb6-Jd5_"
 EMPTY_DASHBOARD = {"url": "", "certificateSHA256": "", "reachable": False}
@@ -105,6 +107,7 @@ def worker(core_request, answers, markers=None):
     # Phase snapshots explicitly assume the selected image's license was
     # accepted; test_ceph_bootstrap_finalization exercises the real MON reader.
     native.license_accepted = lambda: True
+    native.selection = specs.selection(specs.synthesized(core_request["cephadm"]["packageVersion"]))
     return native, calls
 
 
@@ -120,6 +123,41 @@ def observation(core_request, ready=False):
             "owned": True, "exists": ready, "ready": ready, "removed": not ready, "partial": False, "health": "HEALTH_OK" if ready else "",
             "hosts": [h["name"] for h in core_request["hosts"]] if ready else [], "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [],
             "osds": [], "poolID": -1, "client": "", "dashboard": dict(EMPTY_DASHBOARD)}
+
+
+def failing_command(core_request, applied):
+    native, unused = worker(core_request, {})
+    native.run = lambda argv, data=b"", timeout=60: (1, b"synthetic native failure")
+    native.selection.applied = set(applied)
+    with pytest.raises(ceph_native.NativeFailure, match="^native-command$") as caught:
+        native.command(["/usr/bin/ceph", "status"])
+    return caught.value.native_error
+
+
+def test_a_general_flow_refusal_names_only_the_image_and_package(core_request):
+    detail = failing_command(core_request, ())
+    assert detail["coordinate"] == core_request["image"] + "; host package " + core_request["cephadm"]["packageVersion"]
+    assert detail["cause"] == "synthetic native failure"
+
+
+def test_a_refusal_after_a_matched_seam_names_the_applied_ids_in_order(core_request):
+    detail = failing_command(core_request, {"ceph-call-home-opt-in", "ceph-bootstrap-without-license-flag"})
+    assert detail["coordinate"] == (core_request["image"] + "; host package " + core_request["cephadm"]["packageVersion"]
+                                    + "; specializations ceph-bootstrap-without-license-flag,ceph-call-home-opt-in")
+
+
+def test_the_applied_ids_are_truncated_before_the_image_and_package(core_request):
+    base = core_request["image"] + "; host package " + core_request["cephadm"]["packageVersion"]
+    ids = ["spec-" + str(i).zfill(3) + "-" + "x" * 30 for i in range(40)]
+    detail = failing_command(core_request, ids)
+    coordinate = detail["coordinate"]
+    assert len(coordinate.encode()) <= 512 and coordinate.startswith(base + "; specializations spec-000-")
+    kept = coordinate[len(base + "; specializations "):].split(",")
+    assert 0 < len(kept) < len(ids) and kept == ids[:len(kept)]
+    assert native_diagnostics.valid(detail)
+    core_request["image"] = "registry.example.test/" + "r" * 600 + "@sha256:" + "a" * 64
+    detail = failing_command(core_request, ids)
+    assert detail["coordinate"] == (core_request["image"] + "; host package " + core_request["cephadm"]["packageVersion"]).encode()[:512].decode()
 
 
 def test_native_count_preserves_candidate_hosts(core_request):
@@ -289,7 +327,8 @@ def test_private_input_is_opened_without_links_and_not_in_argv(core_request, tmp
         assert set(envelope) == {"sources", "payload", "budget"}
         assert envelope["payload"]["private"] == {"registryJSON": "REGISTRY-SECRET-SENTINEL"}
         assert set(envelope["sources"]) == {"ceph_native", "ceph_native_observe", "ceph_tunnel", "ceph_tunnel_staging", "ceph_tunnel_custody",
-                                            "ceph_host_route_probe", "ceph_host_runtime", "native_diagnostics", "ceph_pull_broker"}
+                                            "ceph_host_route_probe", "ceph_host_runtime", "native_diagnostics", "native_specializations",
+                                            "ceph_pull_broker"}
         assert 0 < envelope["budget"] <= min(640, timeout - 1)
         return 0, b'{"ok":true,"result":{"changed":false}}'
 
@@ -1291,6 +1330,63 @@ def test_native_readiness_refuses_declared_module_or_image_drift(core_request, c
     with pytest.raises(ceph_native.Refusal, match="^" + reason + "$"):
         native.observe()
     assert native.markers.writes == []
+
+
+QUIET_MANAGER = {"enabled_modules": ["iostat", "nfs"], "always_on_modules": ["cephadm"], "force_disabled_modules": []}
+
+
+def twenty_one_observation(core_request, modules=None, health=None):
+    """A 20.1.0-221 cluster: no IBM license records (research ceph-mgr D2) and Call Home left at its opt-in default (D3)."""
+    core_request["config"] = memory_config()
+    core_request["callHome"] = "disabled"
+    answers = memory_observation_answers(core_request)
+    answers[("mgr", "module", "ls")] = copy.deepcopy(QUIET_MANAGER if modules is None else modules)
+    if health is not None:
+        answers[("status",)]["health"] = health
+    native, calls = worker(core_request, answers)
+    native.selection = specs.selection(specs.synthesized("20.1.0-221.el9cp"))
+    native.license_accepted = ceph_native.Worker.license_accepted.__get__(native)
+    return native, calls
+
+
+def test_a_manager_without_the_license_contract_is_ready_without_license_keys(core_request):
+    native, calls = twenty_one_observation(core_request)
+    assert native.observe()["ready"] is True
+    assert "IBM_LICENSE_NOT_ACCEPTED" not in native.blocking and native.markers.writes == []
+    assert native.selection.applied == {"ceph-mgr-without-license-contract", "ceph-call-home-opt-in"}
+    assert all("accept-license" not in argv and "enable-call-home" not in argv for argv in calls)
+
+
+@pytest.mark.parametrize("field", ["enabled_modules", "always_on_modules"])
+def test_an_enabled_call_home_agent_on_an_opt_in_cluster_is_drift(core_request, field):
+    native, unused = twenty_one_observation(core_request, dict(QUIET_MANAGER, **{field: QUIET_MANAGER[field] + ["call_home_agent"]}))
+    with pytest.raises(ceph_native.Refusal, match="^call-home-drift$"):
+        native.observe()
+
+
+@pytest.mark.parametrize("modules", [{}, dict(QUIET_MANAGER, enabled_modules=[True]), dict(QUIET_MANAGER, enabled_modules=["nfs", "nfs"])])
+def test_an_opt_in_cluster_keeps_the_module_list_shape_checks(core_request, modules):
+    native, unused = twenty_one_observation(core_request, modules)
+    with pytest.raises(ceph_native.Refusal, match="^native-output$"):
+        native.observe()
+
+
+def test_the_managers_own_license_check_still_blocks_a_cluster_without_the_contract(core_request):
+    health = {"status": "HEALTH_WARN", "checks": {"IBM_LICENSE_NOT_ACCEPTED": {"severity": "HEALTH_WARN"}}}
+    native, unused = twenty_one_observation(core_request, health=health)
+    result = native.observe()
+    assert result["ready"] is False and native.blocking == ["IBM_LICENSE_NOT_ACCEPTED"]
+
+
+def test_a_cluster_without_host_preparation_refuses_runtime_profile_instead_of_naming_the_license(core_request):
+    native, calls = twenty_one_observation(core_request)
+    old = specs.synthesized("20.1.0-221.el9cp")
+    native.selection = native_specializations.Selection({"host-cephadm": lambda: old, "image-cephadm": native.image_payload})
+    native.host_preparation = lambda: None
+    with pytest.raises(ceph_native.Refusal, match="^runtime-profile$"):
+        native.observe()
+    assert "IBM_LICENSE_NOT_ACCEPTED" not in native.blocking and native.selection.applied == set()
+    assert all("inspect" not in argv for argv in calls)
 
 
 class ReadinessClock:

@@ -902,6 +902,32 @@ explicit typed variant in its owning domain. Vendor, substrate, component,
 transport, and release mechanics remain in a concrete adapter or renderer
 behind the capability port.
 
+Within one implementation, each component has one general flow, and a release
+difference in its mechanics is a version specialization (D162). Whatever the
+language, a specialization is a record with an id, a declared seam of the
+general flow, one of that seam's declared variants, and a condition over
+facts; it has a row in the
+[version-specialization catalog](../.agents/knowledge/version-specializations.md),
+and `TestDocsVersionSpecializationCatalogMatchesRegistries` holds each registry
+and the catalog equal. This shape is required of
+every registry, including add-on drivers. Facts are what pure detectors derive
+from the bytes of the operation's frozen, authenticated artifacts; a function
+of such bytes is a frozen input, not an ambient or gathered fact. Only when no
+artifact feature shows the difference may a condition use a proved coordinate,
+ordered by the component's own comparator. A release label or a tag never keys
+a specialization. A detector that cannot read or recognize its artifact
+reports the fact unknown, and an unknown fact or an unparseable version
+matches nothing, so the general variant applies. Each registry's tests prove
+that no assignment of facts selects two variants at one seam. Variants are
+reviewed code at their call sites, and a record carries none. A variant may
+skip a step or a proof only when a fact positively proves the native mechanism
+absent. Seams never sit in trust, host-key, signature, redaction or credential
+code. A specialization never changes a block's intent, ordering, authorization
+or ownership proofs, and never removes a trust refusal. Specialization
+identities never enter step intents or content digests. A specialization may
+ship without a version move only when the general flow cannot have completed
+the step on any build it matches.
+
 Each implementation declares an immutable identity, capability, supported
 target and version constraints, content identity, and execution dependencies.
 An allowlisted registry resolves from explicit validated state:

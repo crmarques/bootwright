@@ -8,7 +8,10 @@ import re
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_tunnel_staging as staging
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_tunnel_staging as staging
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_native_specializations as specs
+
+CURRENT = "20.2.1-405.el9cp"
 
 
 @pytest.fixture
@@ -40,6 +43,43 @@ def scratch(stage_request):
     return staging.ROOT + "/" + stage_request["fsid"] + "/.bootstrap-fixture"
 
 
+def chosen(build=CURRENT):
+    """The seams a host cephadm built from a signed build's declared names answers."""
+    return specs.selection(specs.synthesized(build))
+
+
+def todays_argv(stage_request):
+    intent = staging.stage_intent(stage_request)
+    return ["/usr/sbin/cephadm", "--image", stage_request["image"], "bootstrap", "--fsid", stage_request["fsid"],
+            "--mon-id", "node-1", "--mgr-id", intent["mgrID"], "--mon-ip", "192.0.2.1",
+            "--output-dir", staging.ROOT + "/" + stage_request["fsid"], "--skip-ssh", "--skip-monitoring-stack", "--skip-dashboard",
+            "--skip-admin-label", "--allow-fqdn-hostname", "--no-cleanup-on-failure",
+            "--config", scratch(stage_request) + "/ceph.conf", "--automatically-accept-license"]
+
+
+@pytest.mark.parametrize("build", sorted(build for build, current in specs.BUILDS.items() if current))
+def test_every_twenty_two_build_keeps_todays_bootstrap_argv(stage_request, build):
+    selection = chosen(build)
+    assert staging.bootstrap_argv(stage_request, scratch(stage_request), selection) == todays_argv(stage_request)
+    stage_request["clusterNetworks"] = ["198.51.100.0/24"]
+    assert staging.bootstrap_argv(stage_request, scratch(stage_request), selection) == todays_argv(stage_request) + ["--cluster-network", "198.51.100.0/24"]
+    assert selection.applied == set()
+
+
+def test_a_twenty_one_host_cephadm_bootstraps_without_the_license_flag(stage_request):
+    selection = chosen("20.1.0-221.el9cp")
+    argv = staging.bootstrap_argv(stage_request, scratch(stage_request), selection)
+    assert argv == todays_argv(stage_request)[:-1] and "--skip-prepare-host" not in argv
+    assert selection.applied == {"ceph-bootstrap-without-license-flag"}
+
+
+@pytest.mark.parametrize("shape", sorted(specs.UNREADABLE))
+def test_an_unanchored_host_cephadm_keeps_the_general_license_flag(stage_request, shape):
+    selection = specs.selection(specs.UNREADABLE[shape]())
+    assert staging.bootstrap_argv(stage_request, scratch(stage_request), selection) == todays_argv(stage_request)
+    assert selection.applied == set()
+
+
 def test_bootstrap_names_are_stable_and_match_provider_format(stage_request):
     original = staging.stage_intent(stage_request)
     stage_request["hosts"].reverse()
@@ -51,7 +91,7 @@ def test_bootstrap_names_are_stable_and_match_provider_format(stage_request):
 
 
 def test_bootstrap_has_no_native_ssh_or_host_enrollment_path(stage_request):
-    argv = staging.bootstrap_argv(stage_request, scratch(stage_request))
+    argv = staging.bootstrap_argv(stage_request, scratch(stage_request), chosen())
     assert "--skip-ssh" in argv and "--no-cleanup-on-failure" in argv
     assert "--skip-prepare-host" not in argv
     assert "--mon-id" in argv and "--mgr-id" in argv
@@ -60,7 +100,7 @@ def test_bootstrap_has_no_native_ssh_or_host_enrollment_path(stage_request):
     assert not any("registryJSON" in argument for argument in argv)
     assert "--skip-admin-label" in argv and "--skip-monitoring-stack" in argv and "--skip-dashboard" in argv
     stage_request["clusterNetworks"] = ["198.51.100.0/24"]
-    assert staging.bootstrap_argv(stage_request, scratch(stage_request))[-2:] == ["--cluster-network", "198.51.100.0/24"]
+    assert staging.bootstrap_argv(stage_request, scratch(stage_request), chosen())[-2:] == ["--cluster-network", "198.51.100.0/24"]
 
 
 @pytest.mark.parametrize("field,value", [("version", "ceph-core-v2"), ("clusterSSHTransport", "native"),
@@ -69,7 +109,7 @@ def test_bootstrap_has_no_native_ssh_or_host_enrollment_path(stage_request):
 def test_invalid_request_never_produces_staging_argv(stage_request, field, value):
     stage_request[field] = value
     with pytest.raises(staging.StageRefusal, match="^native-tunnel-stage-unproved$"):
-        staging.bootstrap_argv(stage_request, scratch(stage_request))
+        staging.bootstrap_argv(stage_request, scratch(stage_request), chosen())
 
 
 @pytest.mark.parametrize("mutate", [lambda hosts: hosts.append(copy.deepcopy(hosts[0])),
@@ -90,14 +130,14 @@ def test_ambiguous_bindings_refuse_before_native_effect(stage_request, mutate):
                                   "/var/lib/bootwright/ceph/{fsid}/arbitrary"])
 def test_private_material_paths_cannot_be_redirected(stage_request, path):
     with pytest.raises(staging.StageRefusal):
-        staging.bootstrap_argv(stage_request, path.format(fsid=stage_request["fsid"]))
+        staging.bootstrap_argv(stage_request, path.format(fsid=stage_request["fsid"]), chosen())
 
 
 @pytest.mark.parametrize("value", [["198.51.100.1/24"], ["198.51.100.0/24\n--ssh-user"], [False], "198.51.100.0/24"])
 def test_cluster_networks_are_closed_literals(stage_request, value):
     stage_request["clusterNetworks"] = value
     with pytest.raises(staging.StageRefusal):
-        staging.bootstrap_argv(stage_request, scratch(stage_request))
+        staging.bootstrap_argv(stage_request, scratch(stage_request), chosen())
 
 
 def test_paths_derive_from_frozen_identity_without_operator_path_input(stage_request):
@@ -194,13 +234,14 @@ def test_no_initial_redeploy_after_any_host_enrollment(stage_request, inventory)
 def test_staging_does_not_extend_to_uninspected_provider_tools(stage_request, field, value):
     stage_request["cephadm"][field] = value
     with pytest.raises(staging.StageRefusal):
-        staging.bootstrap_argv(stage_request, scratch(stage_request))
+        staging.bootstrap_argv(stage_request, scratch(stage_request), chosen())
 
 
-def test_staging_keeps_call_home_disabled_intent_unqualified(stage_request):
+@pytest.mark.parametrize("build", sorted(specs.BUILDS))
+def test_the_bootstrap_argv_leaves_the_call_home_path_to_the_worker(stage_request, build):
+    enabled = staging.bootstrap_argv(stage_request, scratch(stage_request), chosen(build))
     stage_request["callHome"] = "disabled"
-    with pytest.raises(staging.StageRefusal):
-        staging.bootstrap_argv(stage_request, scratch(stage_request))
+    assert staging.bootstrap_argv(stage_request, scratch(stage_request), chosen(build)) == enabled
 
 
 def test_sshd_include_tree_is_closed_without_effects():
@@ -269,4 +310,71 @@ def test_observed_seed_contradiction_still_refuses(stage_request, field, value):
 
 def test_staging_accepts_authored_package_coordinate_without_catalog(stage_request):
     stage_request["cephadm"]["packageVersion"] = "synthetic+native-coordinate"
-    assert "--skip-prepare-host" not in staging.bootstrap_argv(stage_request, scratch(stage_request))
+    assert "--skip-prepare-host" not in staging.bootstrap_argv(stage_request, scratch(stage_request), chosen())
+
+
+def license_call(request, image=None, command=" orch accept-license --image "):
+    """cephadm's CephContainer run of the bootstrap's cli() helper, as build_run_cmd joins it (20.2.2-349 container_types.py:160-166)."""
+    image = image or request["image"]
+    return ("/usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/bin/ceph --init -e CONTAINER_IMAGE=" + image +
+            " -e NODE_NAME=node-1 -v /var/log/ceph/" + request["fsid"] + ":/var/log/ceph:z " + image + command + image)
+
+
+def license_call_output(request, *, code=1, inner=22, refusal="Error EINVAL: no hosts defined", call=None, logged=None, raised="RuntimeError: ",
+                        pair=True, between=(), stdout_tail=(), stderr_tail=(), garbled=False):
+    """The bootstrap's private output when the MGR refuses the IBM license call on the zero-host seed (signed 20.2.x zipapps): call()
+    logs the inner exit and the ceph CLI's stderr at INFO on stdout (call_wrappers.py:280-292, logging.py:118-160), and call_throws'
+    uncaught RuntimeError ends stderr with a traceback while cephadm exits 1 (call_wrappers.py:303-310, __main__.py main())."""
+    call = call or license_call(request)
+    stdout = ["Verifying podman|docker is present...", "Non-zero exit code 1 from /usr/bin/podman run --rm " + request["image"] + " mgr stat",
+              "/usr/bin/ceph: stderr Error ENOENT: synthetic"]
+    if pair:
+        stdout += ["Non-zero exit code %d from %s" % (inner, logged or call)] + list(between) + ["/usr/bin/ceph: stderr " + refusal]
+    stdout += ["", "\t***************", "\tCephadm hit an issue during cluster installation. Current cluster files will NOT BE DELETED automatically."]
+    stdout += list(stdout_tail)
+    frame = b'  File "/usr/sbin/cephadm/__main__.py", line 3535, in command_bootstrap' + (b"\xff" if garbled else b"")
+    stderr = [b"Traceback (most recent call last):", frame, (raised + "Failed command: " + call + ": " + refusal).encode(), b""]
+    stderr += [line.encode() for line in stderr_tail]
+    return code, ceph_native.NativeOutput(("\n".join(stdout) + "\n").encode(), b"\n".join(stderr) + b"\n")
+
+
+def test_the_ibm_license_call_refusal_is_recognized_exactly(stage_request):
+    assert staging.license_call_refusal(stage_request, *license_call_output(stage_request)) is True
+
+
+OTHER_IMAGE = "registry.example.test/ceph@sha256:" + "b" * 64
+UNRECOGNIZED = {
+    "exit-0": {"code": 0}, "exit-2": {"code": 2}, "exit-22": {"code": 22}, "signal": {"code": -9},
+    "inner-exit-1": {"inner": 1},
+    "another-errno": {"refusal": "Error ENOENT: no hosts defined"}, "another-text": {"refusal": "Error EINVAL: no host defined"},
+    "another-image": {"other-image": True}, "another-command": {"command": " orch host ls"},
+    "logged-call-differs": {"logged-node": True},
+    "later-stderr-failure": {"stderr_tail": ("ERROR: later failure",)},
+    "prefixed-raise": {"raised": "WARNING: RuntimeError: "},
+    "later-exit-pair": {"stdout_tail": ("Non-zero exit code 1 from /x", "/usr/bin/ceph: stderr y")},
+    "split-pair": {"between": ("/usr/bin/ceph: stdout synthetic",)},
+    "no-pair": {"pair": False},
+    "undecodable-stderr": {"garbled": True},
+    "relative-command": {"relative": True},
+}
+
+
+@pytest.mark.parametrize("case", sorted(UNRECOGNIZED))
+def test_any_other_bootstrap_failure_is_not_the_license_call_refusal(stage_request, case):
+    changes = dict(UNRECOGNIZED[case])
+    if changes.pop("other-image", False):
+        changes["call"] = license_call(stage_request, OTHER_IMAGE)
+    if "command" in changes:
+        changes["call"] = license_call(stage_request, command=changes.pop("command"))
+    if changes.pop("logged-node", False):
+        changes["logged"] = license_call(stage_request).replace("NODE_NAME=node-1", "NODE_NAME=node-2")
+    if changes.pop("relative", False):
+        changes["call"] = license_call(stage_request)[len("/usr/bin/"):]
+    assert staging.license_call_refusal(stage_request, *license_call_output(stage_request, **changes)) is False
+
+
+def test_output_without_its_private_stderr_is_not_the_license_call_refusal(stage_request):
+    code, output = license_call_output(stage_request)
+    assert staging.license_call_refusal(stage_request, code, bytes(output)) is False
+    assert staging.license_call_refusal(stage_request, code, bytes(output) + output.stderr) is False
+    assert staging.license_call_refusal(stage_request, code, ceph_native.NativeOutput(bytes(output), output.stderr.decode())) is False

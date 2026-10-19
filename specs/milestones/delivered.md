@@ -6695,3 +6695,139 @@ reuse resolved artifacts without refreshing tags or substituting versions.
 An operator-run M2b journey demonstrates authored artifact acquisition and
 execution plus an invalid selection's native error; it does not certify every
 version or combination. Update the owning specs and examples with delivery.
+
+### X101 — Version specializations and IBM Storage Ceph 9.9.0.x readiness
+
+**Owner:** Storage, with Container clusters. An enabling slice of
+[M2](m2.md), delivered on the owner's request of 2026-10-18 as one commit.
+**Item:** [B626](m2.md#b626), whose in-tree gates pass; its operator gate is
+the owner's three runs, so its row stays on M2 with Delivery `awaiting operator
+acceptance`; the slice leaves the Planned slices table, as a delivered slice does. **Decision:** [D162](backlog.md#decisions), under D157.
+
+**Outcome:** each component keeps one general flow, and a release difference in
+native mechanics is a registered specialization selected from facts that pure
+detectors read from the bytes of the operation's frozen, authenticated
+artifacts. An unknown fact selects the general flow; a specialization never
+approves, screens or substitutes a version, and never weakens a trust check.
+[Architecture](../architecture.md#implementations-and-version-variation) owns
+the rule. This slice delivers:
+
+- The registry and its five records. Four describe IBM Storage Ceph
+  `20.1.0-221`, which is not an IBM licensing build: the bootstrap without
+  `--automatically-accept-license`, the MGR without the IBM license contract,
+  opt-in Call Home, and `set-user` without `--skip-pre-steps`. The fifth is the
+  `20.2.x` bootstrap license call. Committed per-build parser name lists back
+  the detectors, and the registry ships in the guest bundle.
+- The seams in the general flow: the bootstrap license flag, the license
+  contract at enrollment and readiness, the Call Home model, the `set-user`
+  pre-steps and the license-call refusal. The code asks a seam and never
+  branches on a version.
+- The [catalog](../../.agents/knowledge/version-specializations.md) of every
+  record, its evidence, its seam and its test, the cases kept general, and the
+  dependency rows that no code reads. `TestDocsVersionSpecializationCatalogMatchesRegistries`
+  holds each registry and the catalog equal in both directions, and `make
+  docs-check` runs it.
+- Call Home checked at the cluster's claim against the selected build's model,
+  and `ceph.ibm.callHome: disabled` admitted by planning (D162 clause (b)). The
+  named `call-home-unqualified` and `native-option-undeclared` refusals are
+  `lifecycle.unsupported`, and a refusal's coordinate may end with the ids of
+  the specializations applied in that run.
+- The bootstrap options checked against the anchored host parser before the
+  attempt record is written, so a parser that lacks an option refuses before
+  the native bootstrap runs; the host preparation, the cluster claim and the
+  host authorizations remain for the operation's destroy to take back.
+- The same-apply continuation of the `20.2.x` license-call refusal: the worker
+  recognizes exactly that refusal in the private native output, proves the owned
+  seed as the next apply would, and runs the general capture. Any other failure
+  keeps its attempt record and the failed command.
+- One general OpenShift control-plane roster of 1, 3, 4 and 5 masters for every
+  release minor, so 4.22 and later plan and the installer judges the release
+  (D162 clause (c)). No per-minor record exists yet.
+- The [runbook](../../examples/storage-clusters/libvirt-3-nodes-ceph/README.md)
+  for the owner's first runs of IBM Storage Ceph 9.9.0.3 on RHEL 9.7, 9.9.1.2 and
+  9.9.2.0 on RHEL 9.8.
+
+**Decision D162 and its provenance:** the owner asked on 2026-10-18 for this
+architecture and for readiness for IBM Storage Ceph 9.9.0.x to current,
+OpenShift 4.21 to current, IBM Fusion 2.13 and Fusion Data Foundation 4.21 to
+current. Clauses (b) to (d) are the design's recommendations taken under that
+request, which the owner may revise. Clause (d) records provider OS and version
+pairings, and Fusion, Data Foundation and OpenShift compatibility, as
+dependency rows of the catalog that Bootwright does not gate on (D157).
+
+**Operator-visible effects:**
+
+- `ceph.ibm.callHome` now follows the selected build. 9.9.0.3 (`20.1.0-221`, opt-in
+  Call Home) takes `disabled`, its native default, and the IBM Call Home check
+  expects `call_home_agent` not enabled; 9.9.1.2 and 9.9.2.0 (`20.2.x`) take
+  `enabled`. The other value refuses `call-home-unqualified` at the claim, after
+  host preparation, so a correction needs `bootwright destroy`, `context
+  update` and a fresh apply. The refusal's remedy and the
+  [storage API](../api/storage.md) say so. An earlier refusal is
+  [B631](backlog.md#b631).
+- A host parser that lacks a bootstrap option refuses `native-option-undeclared`
+  before the attempt record, with the same destroy-first remedy.
+- One apply is expected to complete 9.9.1.2 and 9.9.2.0. The byte shape of the
+  `20.2.x` refusal is read from the signed packages and is unconfirmed on a
+  guest; if it differs, the recognizer returns false and the next apply
+  continues the seed as before.
+- OpenShift 4.22 and later minors plan; 4.21 behaves as before.
+
+**Digest effects:** no content digest, request version or contract golden moved.
+The Ceph automation digest moved, and the Go changes (a request that admits one
+more value, the topology rule) move no version or pin. A live operation therefore
+continues after a rebuild and an apply, as
+[a fix to a failed step](../../.agents/knowledge/continuation-after-a-fix.md)
+states; a step that already wrote an attempt record and failed natively still
+refuses `partial-cluster`. The specializations evidence member and its `cluster
+info` line ride the next coordinated Ceph contract move ([B627](m2.md#b627)).
+
+**Review:** the nine lane items were each reviewed by two lenses, spec and
+design conformance with test adequacy, and durability, continuation, digest
+stability and fail-closed refusal. Sixteen verdicts approved; both lenses on
+the Call Home admission blocked it, and its fix recorded a landing constraint
+that the adapter lane then met. The adversarial review of the integrated diff
+raised seven findings. Four were confirmed in scope, two of them blocking, all
+on one false claim: that a corrected `callHome` continues the failed apply, when
+the lifecycle refuses an input change over an incomplete operation. They are
+fixed in the repair round by correcting the refusal remedies, the storage API,
+the catalog note, the runbook and D162 clause (b), with a test for each remedy
+that fails on the earlier text. Two findings had also proposed an earlier
+refusal, which Go cannot decide without a planning-visible Call Home fact and
+D157 forbids deciding from the release; it is [B631](backlog.md#b631). Of the
+other three findings, the remedy of `native-option-undeclared` was a wording gap
+that strands no operation and was corrected in the same round, the catalog
+evidence cell listed the Call Home registrations beside the `orch accept-license`
+line and is corrected, and the detector's compiled-module and package
+forms are recorded in [B635](backlog.md#b635). A completeness round found no
+gaps.
+
+**Gates:** on the integrated lanes at their head, `make check-offline
+tidy-check modules-check vulncheck docs-check race` passed with no
+vulnerabilities, so did `./scripts/ansible-check` with all suites (2418 unit
+tests passed, 1 skipped), `./scripts/check-commits` and `git diff --check`; the
+review's repair head passed the same commands. The catalog parity test was
+failure-injected twice, by renaming a record id and by adding a variant, and
+both failed naming the differing lists. The results on the squashed commit are
+in its body. No live host ran: the specializations on a real `20.1.0-221` or
+`20.2.x` cluster are the owner's three runs.
+
+**Constraints left behind:** the three runs accept [B626](m2.md#b626). First-run
+watch items are the image holding the `20.1.0-221` MGR facts, which come from
+the signed source archive and not an entitled image; the observation of a
+configured seed now reading the image payload for the `set-user` seam; and the
+image tags of the runbook, taken from the design and not confirmed against an
+authenticated registry. Follow-ups: [B627](m2.md#b627) the evidence member,
+[B628](m2.md#b628) the CephX key type, [B629](m2.md#b629) the provider bootstrap
+tail on a continued seed, [B630](backlog.md#b630) narrowing `partial-cluster`
+for a proved-absent rejection, [B631](backlog.md#b631) an earlier Call Home
+refusal, [B632](backlog.md#b632) the unused `installed_cephadm`,
+[B633](backlog.md#b633) a flaky parallel test, [B634](backlog.md#b634) the
+runbook per release and [B635](backlog.md#b635) the review's untested edges. The
+multidc example still cannot plan because of `cephadm.workarounds`;
+[B479](m2.md#b479) owns that migration. The comment ceiling of
+`internal/containercluster` fell from 29 to 23, a one-line touchpoint for a peer
+branch that rebases, and the line of module names in the Ceph native worker is
+now 157 columns wide, which that branch re-wraps when it adds a module. Auxiliary
+image selection is not a version specialization, and its contract stays with
+B479.

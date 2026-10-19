@@ -18,6 +18,8 @@ from types import SimpleNamespace
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime, ceph_native, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody
+from ansible_collections.bootwright.core.plugins.module_utils import native_specializations
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_native_specializations as specs
 
 
 def public_key():
@@ -91,6 +93,7 @@ def native(cluster_request, tmp_path, monkeypatch):
     # Actual authfile custody is exercised by test_ceph_registry.py.
     worker.prove_registry = lambda wanted=None: None
     worker.provider_registry_absent = lambda: None
+    worker.selection = built(cluster_request["cephadm"]["packageVersion"])
     return worker
 
 
@@ -123,8 +126,15 @@ def metadata(kind):
                                   "memory_request": None, "memory_limit": None})
 
 
+def built(host_build, image_build=None):
+    """Seams answered by synthetic zipapps holding a signed build's declared names; the sources' own proofs are exercised below."""
+    host, image = (specs.synthesized(value) if isinstance(value, str) else value for value in (host_build, image_build or host_build))
+    return native_specializations.Selection({"host-cephadm": lambda: host, "image-cephadm": lambda: image})
+
+
 def prepared_bootstrap(native, private):
     native.markers.records["bootstrap-scope.json"] = ceph_tunnel_staging.recovery_scope(native.request)
+    native.selection = built(native.request["cephadm"]["packageVersion"])
     native.prove_preparation = lambda: None
     native.prove_bootstrap_absence = lambda: None
     native.prove_inert_host_preparation = lambda: None
@@ -525,6 +535,7 @@ def test_bootstrap_accepts_the_controllers_known_hosts_in_the_form_the_bundle_ho
     assert len(calls) == 1
 
 
+@pytest.mark.usefixtures("fact_set")
 def test_bootstrap_refuses_known_hosts_naming_fewer_hosts_than_the_bundle(native, private):
     native.daemons = lambda: []
     prepared_bootstrap(native, private)
@@ -536,6 +547,7 @@ def test_bootstrap_refuses_known_hosts_naming_fewer_hosts_than_the_bundle(native
     assert native.markers.read("bootstrap-attempt.json") is None
 
 
+@pytest.mark.usefixtures("fact_set")
 def test_partial_staged_cluster_has_no_bootstrap_retry_or_direct_fallback(native, private):
     native.daemons = lambda: initial_daemons(native)
     with pytest.raises(ceph_native.Refusal, match="partial-cluster"):
@@ -1359,3 +1371,321 @@ def test_selected_native_host_check_failure_has_no_preparation_fallback(native, 
                      ["/usr/bin/systemctl", "is-active", "chronyd.service"],
                      [native.tool, "check-host", "--expect-hostname", native.host["name"]]]
     assert native.markers.read("bootstrap-attempt.json") is None
+
+
+OLD, CURRENT = "20.1.0-221.el9cp", "20.2.1-405.el9cp"
+
+
+def bootstrap_world(native, private, call_home="enabled"):
+    native.request["callHome"] = call_home
+    native.daemons = lambda: []
+    prepared_bootstrap(native, private)
+    native.markers.records["transport-ready.json"] = {"fixture": True}
+    calls, captured = [], []
+    native.command = lambda argv, **kwargs: calls.append(argv)
+    native.capture_bootstrap_outputs = lambda: captured.append(native.markers.read("bootstrap-attempt.json"))
+    return calls, captured
+
+
+def general_argv(native, scratch):
+    intent = ceph_tunnel_staging.stage_intent(native.request)
+    return [native.tool, "--image", native.request["image"], "bootstrap", "--fsid", native.request["fsid"], "--mon-id", intent["monID"],
+            "--mgr-id", intent["mgrID"], "--mon-ip", native.request["monIP"], "--output-dir", native.markers.path, "--skip-ssh",
+            "--skip-monitoring-stack", "--skip-dashboard", "--skip-admin-label", "--allow-fqdn-hostname", "--no-cleanup-on-failure",
+            "--config", os.path.join(scratch, "ceph.conf"), "--automatically-accept-license"]
+
+
+def scratch_of(argv):
+    return os.path.dirname(argv[argv.index("--config") + 1])
+
+
+def test_a_twenty_two_host_cephadm_bootstraps_with_todays_argv(native, private):
+    calls, captured = bootstrap_world(native, private)
+    assert native.tunnel_bootstrap(ssh_material(private)) == {"changed": True}
+    assert calls == [general_argv(native, scratch_of(calls[0]))] and len(captured) == 1
+    assert native.selection.applied == set()
+
+
+def test_a_twenty_one_host_cephadm_bootstraps_without_the_license_flag_and_continues_to_capture(native, private):
+    calls, captured = bootstrap_world(native, private, call_home="disabled")
+    native.selection = built(OLD)
+    assert native.tunnel_bootstrap(ssh_material(private)) == {"changed": True}
+    assert calls == [general_argv(native, scratch_of(calls[0]))[:-1]] and "--skip-prepare-host" not in calls[0]
+    assert captured == [ceph_tunnel_staging.recovery_scope(native.request)]
+    assert native.selection.applied == {"ceph-bootstrap-without-license-flag", "ceph-call-home-opt-in"}
+    recorded = json.dumps(native.markers.records, sort_keys=True)
+    assert not any(record.id in recorded for record in native_specializations.SPECIALIZATIONS)
+
+
+@pytest.mark.parametrize("shape", sorted(specs.UNREADABLE))
+def test_an_unanchored_host_parser_keeps_the_flag_and_leaves_its_options_to_cephadm(native, private, shape):
+    calls, captured = bootstrap_world(native, private)
+    native.selection = built(specs.UNREADABLE[shape](), CURRENT)
+    assert native.tunnel_bootstrap(ssh_material(private)) == {"changed": True}
+    assert calls == [general_argv(native, scratch_of(calls[0]))] and len(captured) == 1
+
+
+@pytest.mark.parametrize("option", ["--no-cleanup-on-failure", "--skip-admin-label", "--cluster-network"])
+def test_an_anchored_parser_missing_a_bootstrap_option_refuses_before_the_attempt_record(native, private, option):
+    native.request["clusterNetworks"] = ["198.51.100.0/24"]
+    calls, captured = bootstrap_world(native, private)
+    names = [name for name in specs.committed(CURRENT)["declared"] if name != option]
+    native.selection = built(specs.zipapp(names, specs.IBM_OVERRIDE))
+    with pytest.raises(ceph_native.NativeFailure, match="^native-option-undeclared$") as caught:
+        native.tunnel_bootstrap(ssh_material(private))
+    assert caught.value.native_error["cause"] == option and CURRENT in caught.value.native_error["coordinate"]
+    assert calls == [] and captured == [] and native.markers.read("bootstrap-attempt.json") is None
+
+
+def test_every_undeclared_option_is_named_once_in_order(native, private):
+    calls, unused = bootstrap_world(native, private)
+    names = [name for name in specs.committed(CURRENT)["declared"] if name not in ("--skip-ssh", "--mon-id")]
+    native.selection = built(specs.zipapp(names, specs.IBM_OVERRIDE))
+    with pytest.raises(ceph_native.NativeFailure, match="^native-option-undeclared$") as caught:
+        native.tunnel_bootstrap(ssh_material(private))
+    assert caught.value.native_error["cause"] == "--mon-id, --skip-ssh" and calls == []
+
+
+def test_an_undeclared_option_refusal_after_matched_seams_carries_the_applied_ids(native, private):
+    calls, unused = bootstrap_world(native, private, call_home="disabled")
+    names = [name for name in specs.committed(OLD)["declared"] if name != "--mon-id"]
+    native.selection = built(specs.zipapp(names, main=specs.parser_source(names)), OLD)
+    with pytest.raises(ceph_native.NativeFailure, match="^native-option-undeclared$") as caught:
+        native.tunnel_bootstrap(ssh_material(private))
+    coordinate = caught.value.native_error["coordinate"]
+    assert coordinate == native.native_coordinate() and native.request["image"] in coordinate and calls == []
+    assert coordinate.endswith("; specializations ceph-bootstrap-without-license-flag,ceph-call-home-opt-in")
+
+
+@pytest.mark.parametrize("host,image,call_home", [(CURRENT, CURRENT, "disabled"), (OLD, OLD, "enabled")])
+def test_bootstrap_repeats_the_call_home_path_check_before_the_attempt_record(native, private, host, image, call_home):
+    calls, captured = bootstrap_world(native, private, call_home=call_home)
+    native.selection = built(host, image)
+    with pytest.raises(ceph_native.Refusal, match="^call-home-unqualified$"):
+        native.tunnel_bootstrap(ssh_material(private))
+    assert calls == [] and captured == [] and native.markers.read("bootstrap-attempt.json") is None
+
+
+class Unclaimed(Markers):
+    is_owned = False
+
+    def owned(self):
+        return self.is_owned
+
+    def create(self):
+        self.is_owned = True
+        self.write("owner.json", {"fixture": "owner"})
+
+
+class Prepared:
+    """A prepared host's retained payload and the profile that authenticates it."""
+
+    def __init__(self, path, payload):
+        path.mkdir(mode=0o700)
+        self.path = str(path)
+        ceph_native.private_write(os.path.join(self.path, ceph_host_runtime.PAYLOAD), payload)
+        self.profile = {"version": ceph_host_runtime.PROFILE_VERSION, "cephadmSHA256": hashlib.sha256(payload).hexdigest()}
+
+    def read(self, name):
+        return copy.deepcopy(self.profile) if name == ceph_host_runtime.PROFILE else None
+
+
+def claiming(request, markers, tmp_path, host, image, call_home):
+    request = dict(request, callHome=call_home)
+    worker = ceph_native.Worker(request, request["bootstrap"], run=lambda *args, **kwargs: pytest.fail("uninjected command"), markers=markers)
+    worker.daemons = lambda: []
+    proofs, host_bytes = [], specs.synthesized(host)
+
+    def verify():
+        proofs.append("tool")
+        worker._tool_bytes = host_bytes
+        return {"fixture": "identity"}
+
+    durable = Prepared(tmp_path / ("host-" + call_home + "-" + str(len(os.listdir(tmp_path)))), specs.synthesized(image))
+    worker.verify_tool = verify
+    worker.runtime_profile = lambda: proofs.append("profile")
+    worker.host_preparation = lambda: durable
+    return worker, proofs
+
+
+@pytest.mark.parametrize("host,image,wrong,right,proofs", [
+    (CURRENT, CURRENT, "disabled", "enabled", ["tool"]),
+    (OLD, CURRENT, "disabled", "enabled", ["tool", "profile"]),
+    (OLD, OLD, "enabled", "disabled", ["tool", "profile"]),
+])
+def test_claim_refuses_an_unqualified_call_home_path_before_any_cluster_marker(cluster_request, tmp_path, host, image, wrong, right, proofs):
+    markers = Unclaimed(tmp_path / cluster_request["fsid"])
+    worker, seen = claiming(cluster_request, markers, tmp_path, host, image, wrong)
+    with pytest.raises(ceph_native.Refusal, match="^call-home-unqualified$"):
+        worker.claim()
+    assert markers.records == {} and not markers.owned() and seen == proofs
+    worker, seen = claiming(cluster_request, markers, tmp_path, host, image, right)
+    assert worker.claim() == {"changed": True}
+    assert markers.writes == ["owner.json", "artifact.json", "bootstrap-scope.json"] and seen == proofs
+    assert markers.records["bootstrap-scope.json"]["cluster"]["callHome"] == right
+
+
+def test_an_owned_cluster_claim_leaves_its_bound_call_home_to_the_recovery_scope(cluster_request, tmp_path):
+    markers = Unclaimed(tmp_path / cluster_request["fsid"])
+    markers.is_owned = True
+    worker, seen = claiming(cluster_request, markers, tmp_path, OLD, OLD, "enabled")
+    assert worker.claim() == {"changed": False} and seen == ["tool"]
+
+
+@pytest.mark.parametrize("changes", [{"image": "registry.example.test/other@sha256:" + "b" * 64}, {"imageID": "f" * 64}])
+def test_an_image_payload_bound_to_another_image_refuses_runtime_profile_and_selects_nothing(cluster_request, tmp_path, changes):
+    markers = Unclaimed(tmp_path / cluster_request["fsid"])
+    worker, unused = claiming(cluster_request, markers, tmp_path, OLD, OLD, "disabled")
+    del worker.runtime_profile
+    worker.host_preparation = lambda: ceph_native.Worker.host_preparation(worker)
+    worker.host_markers = HostMarkers({"scope.json": ceph_host_runtime.scope(worker.request, "node-1"),
+                                       ceph_host_runtime.PROFILE: host_profile(worker.request, "node-1", **changes)})
+    worker.command = lambda argv, **kwargs: image_inspection(worker.request)
+    with pytest.raises(ceph_native.Refusal, match="^runtime-profile$"):
+        worker.claim()
+    assert worker.selection.applied == set() and markers.records == {}
+
+
+def test_the_image_source_reads_the_payload_only_after_the_profile_binds_the_held_image(cluster_request, tmp_path):
+    worker, proofs = claiming(cluster_request, Unclaimed(tmp_path / cluster_request["fsid"]), tmp_path, OLD, OLD, "disabled")
+    durable = worker.host_preparation()
+    order = []
+    worker.runtime_profile = lambda: order.append("profile")
+    worker.host_preparation = lambda: order.append("preparation") or durable
+    assert ceph_native.Worker.image_payload(worker) == specs.synthesized(OLD) and order == ["profile", "preparation"]
+    worker.runtime_profile = lambda: ceph_native.require(False, "runtime-profile")
+    with pytest.raises(ceph_native.Refusal, match="^runtime-profile$"):
+        ceph_native.Worker.image_payload(worker)
+    assert proofs == []
+
+
+def test_the_host_source_keeps_the_bytes_verify_tool_proved_and_verifies_once(cluster_request, tmp_path, monkeypatch):
+    package = cluster_request["cephadm"]["packageVersion"].encode()
+    worker = ceph_native.Worker(cluster_request, cluster_request["bootstrap"], run=lambda *args, **kwargs: pytest.fail("uninjected command"),
+                                markers=Unclaimed(tmp_path / cluster_request["fsid"]))
+    commands = []
+    worker.command = lambda argv, **kwargs: commands.append(argv) or (package if "-q" in argv else b"")
+    zipapp = specs.synthesized(CURRENT)
+    monkeypatch.setattr(ceph_native, "read_regular", lambda path, maximum: zipapp if path == worker.tool else b"client " + path.encode())
+    identity = worker.verify_tool()
+    assert identity["sha256"] == hashlib.sha256(zipapp).hexdigest() and set(identity) == {"sha256", "packageVersion", "clients"}
+    assert len(commands) == 4
+    assert worker.verified_tool() is zipapp and worker.verified_tool() is zipapp and len(commands) == 4
+    assert worker.selection.variant("ceph.bootstrap.license-flag") == "pass" and len(commands) == 4
+
+
+def test_the_host_source_verifies_the_tool_when_no_proof_has_run(cluster_request, tmp_path, monkeypatch):
+    package = cluster_request["cephadm"]["packageVersion"].encode()
+    worker = ceph_native.Worker(cluster_request, cluster_request["bootstrap"], run=lambda *args, **kwargs: pytest.fail("uninjected command"),
+                                markers=Unclaimed(tmp_path / cluster_request["fsid"]))
+    commands = []
+    worker.command = lambda argv, **kwargs: commands.append(argv) or (package if "-q" in argv else b"")
+    monkeypatch.setattr(ceph_native, "read_regular", lambda path, maximum: specs.synthesized(OLD) if path == worker.tool else b"client")
+    assert worker.selection.variant("ceph.bootstrap.license-flag") == "omit" and len(commands) == 4
+    assert worker.selection.declared("host-cephadm") == frozenset(specs.committed(OLD)["declared"]) and len(commands) == 4
+
+
+FACT_SETS = {"20.2.x": (CURRENT, "enabled"), "20.1.0": (OLD, "disabled")}
+
+
+@pytest.fixture(params=sorted(FACT_SETS))
+def fact_set(request, native):
+    """A negative safety test runs under a 20.2.x-shaped and a 20.1.0-shaped host and image, each with its qualified Call Home intent."""
+    build, call_home = FACT_SETS[request.param]
+    native.request["cephadm"]["packageVersion"] = build
+    native.request["callHome"] = call_home
+    native.selection = built(build)
+    return build
+
+
+def twenty_one_manager(native, modules):
+    """The 20.1.0-221 MGR as its signed changes archive reads (research ceph-mgr D2-D4): set_ssh_user(user) declares no --skip-pre-steps
+    (cephadm/module.py:1353-1355), orchestrator/module.py has no accept-license, enable-call-home or accept call-home-enabled, the MGR has
+    no call_home_needs_acceptance option, and call_home_agent is not always on (MgrMonitor.cc:73-98)."""
+    general = native.ceph
+
+    def ceph(*args, **kwargs):
+        if args == ("mgr", "module", "ls"):
+            return copy.deepcopy(modules)
+        if args == ("config", "dump"):
+            return []
+        if args[:2] in (("orch", "accept-license"), ("orch", "enable-call-home"), ("orch", "accept")) or "--skip-pre-steps" in args:
+            raise ceph_native.NativeFailure("native-command", "synthetic 20.1.0 manager", b"EINVAL: invalid command")
+        return general(*args, **kwargs)
+
+    native.ceph = ceph
+
+
+QUIET = {"enabled_modules": ["iostat", "nfs"], "always_on_modules": ["cephadm"], "force_disabled_modules": []}
+
+
+@pytest.mark.parametrize("build", [CURRENT, "20.2.2-349.el9cp", "20.2.2-349.el10cp"])
+def test_a_twenty_two_manager_receives_set_user_with_skip_pre_steps(native, private, build):
+    native.request["cephadm"]["packageVersion"] = build
+    unused, calls = configuration_fixture(native, private)
+    assert native.tunnel_configure(ssh_material(private)) == {"changed": True}
+    effects = [args for args, unused in calls if args[0] == "cephadm" or args[:2] in (("orch", "accept"), ("orch", "enable-call-home"))]
+    assert effects[3] == ("cephadm", "set-user", "operator", "--skip-pre-steps") and ("orch", "accept", "call-home-enabled") in effects
+    assert native.markers.read("call-home-accepted.json") == {"callHome": "enabled"} and native.selection.applied == set()
+
+
+def test_a_twenty_one_manager_is_configured_without_pre_steps_or_any_call_home_step(native, private):
+    native.request["cephadm"]["packageVersion"], native.request["callHome"] = OLD, "disabled"
+    unused, calls = configuration_fixture(native, private)
+    twenty_one_manager(native, QUIET)
+    assert native.tunnel_configure(ssh_material(private)) == {"changed": True}
+    effects = [args for args, unused in calls if args[0] == "cephadm" or args[:2] in (("orch", "accept"), ("orch", "enable-call-home"))]
+    assert effects == [("cephadm", "set-priv-key", "-i", "-"), ("cephadm", "set-pub-key", "-i", "-"), ("cephadm", "set-ssh-config", "-i", "-"),
+                       ("cephadm", "set-user", "operator")]
+    assert not any("call_home" in name or "call-home" in name for name in native.markers.records)
+    assert native.selection.applied == {"ceph-call-home-opt-in", "ceph-set-user-without-pre-steps"}
+    assert native.configuration_complete() is True
+    recorded = json.dumps(native.markers.records, sort_keys=True)
+    assert not any(record.id in recorded for record in native_specializations.SPECIALIZATIONS)
+
+
+@pytest.mark.parametrize("field", ["enabled_modules", "always_on_modules"])
+def test_an_enabled_call_home_agent_on_an_opt_in_manager_is_drift(native, private, field):
+    native.request["cephadm"]["packageVersion"], native.request["callHome"] = OLD, "disabled"
+    unused, calls = configuration_fixture(native, private)
+    twenty_one_manager(native, dict(QUIET, **{field: QUIET[field] + ["call_home_agent"]}))
+    with pytest.raises(ceph_native.Refusal, match="^call-home-drift$"):
+        native.tunnel_configure(ssh_material(private))
+    assert native.markers.read("tunnel-configured.json") is None
+
+
+@pytest.mark.parametrize("shape", sorted(specs.UNREADABLE))
+def test_an_unanchored_image_payload_keeps_skip_pre_steps(native, private, shape):
+    unused, calls = configuration_fixture(native, private)
+    native.selection = built(CURRENT, specs.UNREADABLE[shape]())
+    assert native.tunnel_configure(ssh_material(private)) == {"changed": True}
+    assert ("cephadm", "set-user", "operator", "--skip-pre-steps") in [args for args, unused in calls]
+
+
+def test_secrets_reach_the_manager_only_on_stdin_under_each_fact_set(native, private, fact_set):
+    unused, calls = configuration_fixture(native, private)
+    if fact_set == OLD:
+        twenty_one_manager(native, QUIET)
+    assert native.tunnel_configure(ssh_material(private)) == {"changed": True}
+    effects = [(args, kwargs) for args, kwargs in calls if args[0] == "cephadm"]
+    assert effects[0][1]["data"] == private["clusterPrivateKey"].encode() and effects[1][1]["data"] == public_key().encode()
+    secrets = (private["clusterPrivateKey"], private["registryJSON"], "fixture-password")
+    assert all(not any(secret in str(argument) for secret in secrets for argument in args) for args, unused in calls)
+    assert not any(secret in json.dumps(native.markers.records) for secret in secrets)
+
+
+@pytest.mark.usefixtures("fact_set")
+def test_a_foreign_bound_setting_refuses_ownership_under_each_fact_set(native, private):
+    state, calls = configuration_fixture(native, private)
+    state["values"]["ssh_user"] = b"operator"
+    with pytest.raises(ceph_native.Refusal, match="^ownership$"):
+        native.tunnel_configure(ssh_material(private))
+    assert not any(args[0] == "cephadm" and args[1] == "set-user" for args, unused in calls)
+
+
+@pytest.mark.usefixtures("fact_set")
+def test_a_wrong_cluster_key_refuses_bootstrap_before_any_attempt_under_each_fact_set(native, private):
+    calls, captured = bootstrap_world(native, private, call_home=native.request["callHome"])
+    with pytest.raises(ceph_native.Refusal, match="^ownership$"):
+        native.tunnel_bootstrap(ssh_material(dict(private, clusterPrivateKey="different private fixture")))
+    assert calls == [] and captured == [] and native.markers.read("bootstrap-attempt.json") is None

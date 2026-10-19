@@ -2,12 +2,17 @@ package ceph
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 func TestCoreConfigIsFrozenAcrossClusterChildrenAndChangedIntent(t *testing.T) {
@@ -199,5 +204,66 @@ func TestCorePoolUsesProviderReplicationCapacityAndDefaults(t *testing.T) {
 				t.Fatalf("pool request=%+v err=%v", request.Pool, err)
 			}
 		})
+	}
+}
+
+func TestDisabledCallHomePlansAndChangesOnlyItsOwnField(t *testing.T) {
+	type planner func(context.Context, lifecycle.PlanInput) (lifecycle.CapabilityPlan, error)
+	plan := func(callHome string) (Request, map[string][]byte, []byte) {
+		catalog := pinnedCatalog(t, func(spec api.Value) api.Value {
+			return spec.WithPath(api.StringValue(callHome), "ceph", "ibm", "callHome")
+		})
+		input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+		blocks := map[string][]byte{}
+		for name, plan := range map[string]planner{"cluster": New(api.StorageCluster, nil).Plan, "host": NewHost(nil).Plan, "image": NewImage(nil).Plan} {
+			planned, err := plan(context.Background(), input)
+			if err != nil || len(planned.Definitions) == 0 {
+				t.Fatalf("%s did not plan with callHome %s: %+v %v", name, callHome, planned, err)
+			}
+			for _, definition := range planned.Definitions {
+				blocks[name+"/"+definition.ID] = definition.Request
+			}
+		}
+		object, _ := catalog.Find(api.StorageCluster, "example")
+		cluster, err := baseRequest(catalog, object, "synthetic")
+		if err != nil {
+			t.Fatal(err)
+		}
+		sources, err := packageSources(catalog, cluster, "synthetic")
+		if err != nil {
+			t.Fatal(err)
+		}
+		packages, err := json.Marshal(sources)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cluster, blocks, packages
+	}
+	disabled, disabledBlocks, disabledPackages := plan("disabled")
+	enabled, enabledBlocks, enabledPackages := plan("enabled")
+	if disabled.CallHome != "disabled" || enabled.CallHome != "enabled" {
+		t.Fatalf("frozen callHome: disabled=%q enabled=%q", disabled.CallHome, enabled.CallHome)
+	}
+	if !bytes.Equal(disabledPackages, enabledPackages) {
+		t.Fatal("package request moved with callHome")
+	}
+	if len(disabledBlocks) != len(enabledBlocks) || len(disabledBlocks) < 3 {
+		t.Fatalf("block sets differ: %d vs %d", len(disabledBlocks), len(enabledBlocks))
+	}
+	want, have := []byte(`"callHome":"enabled"`), []byte(`"callHome":"disabled"`)
+	for id, request := range disabledBlocks {
+		other, ok := enabledBlocks[id]
+		if !ok {
+			t.Fatalf("block %s missing when enabled", id)
+		}
+		if strings.HasPrefix(id, "image/") {
+			if !bytes.Equal(request, other) {
+				t.Fatalf("%s request moved with callHome", id)
+			}
+			continue
+		}
+		if bytes.Count(request, have) != 1 || bytes.Count(other, want) != 1 || !bytes.Equal(bytes.Replace(request, have, want, 1), other) {
+			t.Fatalf("%s differs beyond its single callHome field", id)
+		}
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -480,22 +481,23 @@ func TestTopologyRefusesComputeBesideOneMaster(t *testing.T) {
 	}
 }
 
-func TestTopologyRefusesAReleaseTheTableDoesNotQualify(t *testing.T) {
-	for version, minor := range map[string]string{"4.20.3": "4.20", "4.22.0": "4.22", "5.0.1": "5.0", "latest": "latest"} {
+func TestTopologyAppliesTheGeneralRuleToEveryReleaseMinor(t *testing.T) {
+	for version, minor := range map[string]string{"4.20.3": "4.20", "4.22.18": "4.22", "4.23.0": "4.23", "5.0.1": "5.0", "latest": "latest"} {
 		t.Run(version, func(t *testing.T) {
-			o, c := roster("libvirt", []string{"master", "master"}, func(spec api.Value) api.Value {
+			release := func(spec api.Value) api.Value {
+				spec = spec.WithPath(api.StringValue("stable-"+minor), "distribution", "release", "channel")
 				return spec.WithPath(api.StringValue(version), "distribution", "release", "version")
-			})
-			issues := Validate(o, c)
-			if !hasIssue(issues, "$.spec.distribution.release.version", "the topology table qualifies no release "+minor) {
-				t.Fatal("an unqualified release admitted", issues)
+			}
+			if issues := Validate(roster("libvirt", []string{"master", "master", "master"}, release)); len(issues) > 0 {
+				t.Fatal("three masters refused under the general rule", issues)
+			}
+			issues := Validate(roster("libvirt", []string{"master", "master"}, release))
+			if !hasIssue(issues, "$.spec.nodes", fmt.Sprintf("release %s accepts 1, 3, 4 or 5 master nodes, not 2", minor)) {
+				t.Fatal("two masters admitted under the general rule", issues)
 			}
 			for _, issue := range issues {
-				if strings.Contains(issue.Message, "topology table") && !strings.Contains(issue.Remediation, "qualifies: 4.21") {
-					t.Fatal("the remedy names no qualified release", issue)
-				}
-				if issue.Field == "$.spec.nodes" {
-					t.Fatal("a release with no row judged its control plane", issue)
+				if issue.Field == "$.spec.distribution.release.version" {
+					t.Fatal("a release minor refused at admission instead of taking the general rule", issue)
 				}
 			}
 		})
@@ -544,8 +546,8 @@ func TestTopologyRefusesInstallerOwnedEndpointsOnAMultiNodePlatformNone(t *testi
 	}
 }
 
-// TestEveryExampleReleaseHasATopologyRow makes a release bump in an example
-// review the topology table first.
+// TestEveryExampleReleaseHasATopologyRow makes a release or roster bump in an
+// example review the topology rule that release takes first.
 func TestEveryExampleReleaseHasATopologyRow(t *testing.T) {
 	clusters := 0
 	err := filepath.WalkDir(filepath.Join("..", "..", "examples"), func(path string, entry fs.DirEntry, err error) error {
@@ -579,13 +581,20 @@ func TestEveryExampleReleaseHasATopologyRow(t *testing.T) {
 			clusters++
 			var spec struct {
 				Distribution struct{ Release struct{ Version string } }
+				Nodes        []struct{ Role string }
 			}
 			if err := document.Spec.Decode(&spec); err != nil {
 				return fmt.Errorf("%s: %w", path, err)
 			}
 			version := spec.Distribution.Release.Version
-			if minor, ok := releaseMinor(version); !ok || releaseTopologies[minor].controlPlane == nil {
-				t.Errorf("%s declares release %q, whose minor has no row in releaseTopologies; read its installer branch and add the row first", path, version)
+			masters := 0
+			for _, node := range spec.Nodes {
+				if node.Role == "master" {
+					masters++
+				}
+			}
+			if _, ok := releaseMinor(version); !ok || !slices.Contains(topologyFor(version).controlPlane, masters) {
+				t.Errorf("%s declares release %q with %d masters, which its topology rule does not accept", path, version, masters)
 			}
 		}
 	})
@@ -597,43 +606,34 @@ func TestEveryExampleReleaseHasATopologyRow(t *testing.T) {
 	}
 }
 
-// TestTopologyTableMatchesSpec keeps the spec's table and the code's rows one
-// table: each row states its minor, its counts and every upstream source.
+// TestTopologyTableMatchesSpec keeps the spec's table and the code's rule one
+// table: the general row states its counts and exactly the upstream sources.
 func TestTopologyTableMatchesSpec(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "specs", "api", "container-clusters.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := 0
+	counts := make([]string, len(generalTopology.controlPlane))
+	for i, count := range generalTopology.controlPlane {
+		counts[i] = fmt.Sprint(count)
+	}
+	prefix := fmt.Sprintf("| general | %s |", strings.Join(counts, ", "))
+	link := regexp.MustCompile(`\]\((https://github\.com/openshift/installer/[^)]+)\)`)
+	rows := []string{}
 	for _, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(line, "| `") && strings.Contains(line, "openshift/installer/blob/release-") {
-			rows++
+		if strings.HasPrefix(line, "| ") && strings.Contains(line, "openshift/installer/blob/release-") {
+			rows = append(rows, line)
 		}
 	}
-	if rows != len(releaseTopologies) {
-		t.Fatalf("the spec lists %d topology rows, the code %d", rows, len(releaseTopologies))
+	if len(rows) != 1 || !strings.HasPrefix(rows[0], prefix) {
+		t.Fatalf("the spec's topology table must be the one row %q, not %q", prefix, rows)
 	}
-	for minor, row := range releaseTopologies {
-		counts := make([]string, len(row.controlPlane))
-		for i, count := range row.controlPlane {
-			counts[i] = fmt.Sprint(count)
-		}
-		prefix := fmt.Sprintf("| `%s` | %s |", minor, strings.Join(counts, ", "))
-		found := false
-		for _, line := range strings.Split(string(data), "\n") {
-			if !strings.HasPrefix(line, prefix) {
-				continue
-			}
-			found = true
-			for _, source := range row.sources {
-				if !strings.Contains(line, "("+source+")") {
-					t.Errorf("the spec row for %s does not cite %s", minor, source)
-				}
-			}
-		}
-		if !found || len(row.sources) == 0 {
-			t.Errorf("the spec has no row %q, or the code row cites no source", prefix)
-		}
+	cited := []string{}
+	for _, match := range link.FindAllStringSubmatch(rows[0], -1) {
+		cited = append(cited, match[1])
+	}
+	if len(generalTopology.sources) == 0 || !slices.Equal(cited, generalTopology.sources) {
+		t.Fatalf("the spec's general row cites %q, the code %q", cited, generalTopology.sources)
 	}
 }
 

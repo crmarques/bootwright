@@ -156,17 +156,18 @@ def scratch_path(request, scratch):
     return scratch
 
 
-def bootstrap_argv(request, scratch):
+def bootstrap_argv(request, scratch, selection):
     """Stage zero-host bootstrap without the provider's unverified SSH checks."""
     intent = stage_intent(request)
     scratch_path(request, scratch)
-    require(request.get("callHome") == "enabled")
     argv = [request["cephadm"]["path"], "--image", request["image"], "bootstrap",
             "--fsid", request["fsid"], "--mon-id", intent["monID"], "--mgr-id", intent["mgrID"],
             "--mon-ip", request["monIP"], "--output-dir", marker_path(request),
             "--skip-ssh", "--skip-monitoring-stack", "--skip-dashboard",
             "--skip-admin-label", "--allow-fqdn-hostname", "--no-cleanup-on-failure",
-            "--config", os.path.join(scratch, "ceph.conf"), "--automatically-accept-license"]
+            "--config", os.path.join(scratch, "ceph.conf")]
+    if selection.variant("ceph.bootstrap.license-flag") == "pass":
+        argv.append("--automatically-accept-license")
     networks = request.get("clusterNetworks")
     require(networks is None or isinstance(networks, list) and len(networks) <= 8)
     for network in networks or []:
@@ -177,6 +178,30 @@ def bootstrap_argv(request, scratch):
     if networks:
         argv.extend(["--cluster-network", ",".join(networks)])
     return argv
+
+
+LICENSE_REFUSAL = "Error EINVAL: no hosts defined"
+
+
+def license_call_refusal(request, code, output):
+    """Exactly the IBM bootstrap's own ``orch accept-license --image`` of the frozen image refused for the zero-host seed: cephadm's
+    uncaught wrapper error ends its stderr and its call log on stdout names the same command, exit code 22 and that refusal."""
+    stderr = getattr(output, "stderr", None)
+    if code != 1 or not isinstance(output, bytes) or not isinstance(stderr, bytes):
+        return False
+    try:
+        logged = bytes(output).decode("utf-8").splitlines()
+        raised = [line for line in stderr.decode("utf-8").splitlines() if line.strip()]
+    except UnicodeError:
+        return False
+    head, end = "RuntimeError: Failed command: ", ": " + LICENSE_REFUSAL
+    tail = " " + request["image"] + " orch accept-license --image " + request["image"] + end
+    if not raised or not raised[-1].startswith(head) or not raised[-1].endswith(tail) or len(raised[-1]) <= len(head) + len(tail):
+        return False
+    command = raised[-1][len(head):-len(end)]
+    exits = [index for index, line in enumerate(logged) if line.startswith("Non-zero exit code ")]
+    return (command.startswith("/") and bool(exits)
+            and logged[exits[-1]:exits[-1] + 2] == ["Non-zero exit code 22 from " + command, "/usr/bin/ceph: stderr " + LICENSE_REFUSAL])
 
 
 def initial_files(request):

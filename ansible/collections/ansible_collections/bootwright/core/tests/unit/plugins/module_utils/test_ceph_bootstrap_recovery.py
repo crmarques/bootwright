@@ -106,6 +106,30 @@ def test_each_attempt_fence_precedes_effect_and_publication_failure_stops_it(nat
     assert not any(item.startswith(".bootstrap-") for item in os.listdir(native.markers.path))
 
 
+@pytest.mark.parametrize("refused", ["native-option-undeclared", "call-home-unqualified"])
+def test_a_refusal_before_the_attempt_record_continues_under_a_corrected_selection(native, private, refused):
+    calls, captured = fixtures.bootstrap_world(native, private)
+    if refused == "native-option-undeclared":
+        names = [name for name in fixtures.specs.committed(fixtures.CURRENT)["declared"] if name != "--allow-fqdn-hostname"]
+        native.selection = fixtures.built(fixtures.specs.zipapp(names, fixtures.specs.IBM_OVERRIDE))
+    else:
+        native.selection = fixtures.built(fixtures.OLD)
+    with pytest.raises(ceph_native.Refusal, match="^" + refused + "$"):
+        native.tunnel_bootstrap(fixtures.ssh_material(private))
+    scope = staging.recovery_scope(native.request)
+    assert native.markers.read("bootstrap-attempt.json") is None and native.markers.read("bootstrap-protocol.json") == scope and calls == []
+    native.selection = fixtures.built(fixtures.CURRENT)
+    assert native.tunnel_bootstrap(fixtures.ssh_material(private)) == {"changed": True}
+    assert len(calls) == 1 and captured == [scope] and native.markers.read("bootstrap-attempt.json") == scope
+
+
+def test_the_cluster_block_names_an_undeclared_option_with_its_native_cause():
+    error = ceph_native.NativeFailure("native-option-undeclared", "synthetic image; host package synthetic", "--allow-fqdn-hostname")
+    reason, detail = ceph_core.refusal(error, ceph_core.CLUSTER_REASONS)
+    assert reason == "native-option-undeclared" and detail.startswith("native-option-undeclared")
+    assert error.native_error["cause"] == "--allow-fqdn-hostname"
+
+
 def test_complete_seed_can_be_observed_before_original_capture_without_reading_or_writing(native):
     protocol(native)
     sources(native)

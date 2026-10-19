@@ -14,11 +14,12 @@ import time
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_host_worker, ceph_native_worker, native_diagnostics
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_host_worker, ceph_native_worker, native_diagnostics, native_specializations
 
 
 def source_bundle():
-    return {"native_diagnostics": inspect.getsource(native_diagnostics), "ceph_pull_broker": '"""Fixed fixture."""\n',
+    return {"native_diagnostics": inspect.getsource(native_diagnostics), "native_specializations": inspect.getsource(native_specializations),
+            "ceph_pull_broker": '"""Fixed fixture."""\n',
             "ceph_tunnel": '"""Fixed fixture."""\n', "ceph_tunnel_staging": '"""Fixed fixture."""\n', "ceph_tunnel_custody": '"""Fixed fixture."""\n',
             "ceph_native_observe": '"""Fixed fixture."""\n', "ceph_host_route_probe": '"""Fixed fixture."""\n', "ceph_host_runtime": '"""Fixed fixture."""\n',
             "ceph_native": ('class Refusal(ValueError): pass\nCOMMAND_SESSION = True\ndef dispatch(value):\n'
@@ -32,6 +33,13 @@ def test_native_sources_and_names_are_closed_before_any_module_load():
                     dict(bundle, ceph_native="a" * (ceph_native_worker.MAX_SOURCE + 1))):
         with pytest.raises(ValueError, match="^fixed native worker$"):
             ceph_native_worker.load(invalid)
+
+
+def test_specialization_registry_ships_in_the_closed_bundle_after_diagnostics():
+    names = ceph_native_worker.MODULES
+    assert names.index("native_specializations") == names.index("native_diagnostics") + 1
+    sources = ceph_core.Transport.native_sources()
+    assert tuple(sources) == names and sources["native_specializations"] == inspect.getsource(native_specializations)
 
 
 def test_isolated_loader_binds_fixed_source_and_keeps_commands_in_owned_group():

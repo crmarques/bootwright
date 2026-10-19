@@ -33,7 +33,10 @@ mutual compatibility nor maintains IBM's release table, an approved-version
 catalog or per-release profiles. A tested example imposes no version allowlist.
 Structural input validation and independent trust, authorization and immutable
 artifact requirements still apply; version syntax is interpreted by native
-tools rather than a Bootwright semantic-version grammar.
+tools rather than a Bootwright semantic-version grammar. The adapter adapts its
+mechanics to capabilities the selected artifacts provably have or lack
+([version specializations](../architecture.md#implementations-and-version-variation));
+that adaptation neither approves nor refuses a selection.
 
 Ordinary apply realizes the core cluster, replicated RBD pool and client over
 `verified-tunnel`. `ceph.release` is the operator's release label;
@@ -47,6 +50,17 @@ userinfo or fragment. Omission uses
 `https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64` as a
 source default, not a release catalog. Independent publisher signatures remain
 required for its selected RPMs.
+
+`ceph.ibm.callHome` is `enabled` or `disabled`. `enabled` keeps the
+provider's Call Home reporting active after bootstrap; `disabled` leaves it
+inactive. The selected build decides how an intent is realized: on a build
+whose Call Home is opt-in, `disabled` is the native default and requires the
+`call_home_agent` module not enabled, and `enabled` refuses
+`call-home-unqualified`; on a build whose Call Home is automatic, `disabled`
+refuses `call-home-unqualified`. Either refusal comes before the cluster is
+claimed but after the ceph-host blocks ran from the frozen input, so a corrected
+`callHome` is an input change: `bootwright destroy` takes back what the apply
+owns, then `context update` and a fresh apply carry it (D162).
 
 `ceph.image.base` names the repository and `ceph.image.version` supplies the
 authored tag or SHA-256 digest. The Entitlement registry namespace must contain

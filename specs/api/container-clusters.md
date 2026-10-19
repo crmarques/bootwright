@@ -59,12 +59,12 @@ spec:
 An authored image wins as the exact release payload. Declaration validity
 claims no renderer support for that release.
 
-The major and minor of `release.version` must have a row in the
-[topology table](#topology); a version whose minor has none, or that names no
-numeric minor, refuses at `spec.distribution.release.version`. A release pinned
-by image alone declares no minor, so only the release-independent topology
-rules apply to it, and [selection](../container-clusters.md#selection-and-refusal)
-refuses it.
+The [topology](#topology) rules for `release.version` are the general rule
+unless a per-minor specialization names its major and minor. A version that
+names no numeric minor takes the general rule, and the installer judges the
+release (D162). A release pinned by image alone declares no minor, so only the
+release-independent topology rules apply to it, and
+[selection](../container-clusters.md#selection-and-refusal) refuses it.
 
 ## Install selection
 
@@ -349,27 +349,30 @@ Network and root-device input comes only from that Machine. The common
 ### Topology
 
 At least one node is a `master`, and the number of `master` nodes is one the
-declared release's row below accepts. The release's install-config validation
-refuses only zero control-plane replicas; its agent installer narrows that to
-the listed counts. Two install upstream only beside an arbiter pool, which
-[needs a feature gate](https://github.com/openshift/installer/blob/release-4.21/pkg/types/validation/installconfig.go#L138-L144),
-and no node role is an arbiter, so no row accepts two. Whatever the release, a
-cluster with one `master` declares no `worker` or `infra` node, because every
-row's agent installer refuses compute replicas beside a single control-plane
-replica. Each of these refusals is an `api.invariant` at `spec.nodes`. A
-release minor with no row refuses at `spec.distribution.release.version`, as
-[distribution and release](#distribution-and-release) states, with a
-remediation naming the qualified minors.
+rule below accepts for the declared release. Agent installers refuse other
+control-plane counts. Two install upstream only beside an arbiter pool or
+fencing credentials, and no node role is an arbiter or carries fencing, so no
+rule accepts two. Whatever the release, a cluster with one `master` declares
+no `worker` or `infra` node, because the agent installer refuses compute
+replicas beside a single control-plane replica. Each of these refusals is an
+`api.invariant` at `spec.nodes`.
 
-| Release minor | Master counts | Read from `openshift/installer` |
+The general rule applies to every release minor without a specialization
+(D162); the installer judges the release itself. A per-minor specialization
+replaces it only where an installer accepts a different roster.
+
+| Rule | Master counts | Read from `openshift/installer` |
 | --- | --- | --- |
-| `4.21` | 1, 3, 4, 5 | [agent control plane](https://github.com/openshift/installer/blob/release-4.21/pkg/asset/agent/installconfig.go#L217-L232), [agent single node](https://github.com/openshift/installer/blob/release-4.21/pkg/asset/agent/installconfig.go#L234-L263), [install-config control plane](https://github.com/openshift/installer/blob/release-4.21/pkg/types/validation/installconfig.go#L758-L771) |
+| general | 1, 3, 4, 5 | 4.21 [agent control plane](https://github.com/openshift/installer/blob/release-4.21/pkg/asset/agent/installconfig.go#L217-L232), [agent single node](https://github.com/openshift/installer/blob/release-4.21/pkg/asset/agent/installconfig.go#L234-L263), [install-config control plane](https://github.com/openshift/installer/blob/release-4.21/pkg/types/validation/installconfig.go#L758-L771); 4.22 [agent control plane](https://github.com/openshift/installer/blob/release-4.22/pkg/asset/agent/installconfig.go#L220-L305), [agent single node](https://github.com/openshift/installer/blob/release-4.22/pkg/asset/agent/installconfig.go#L307-L336), [install-config two nodes](https://github.com/openshift/installer/blob/release-4.22/pkg/types/validation/installconfig.go#L1731-L1753); 4.23 [agent control plane](https://github.com/openshift/installer/blob/release-4.23/pkg/asset/agent/installconfig.go#L220-L305), [agent single node](https://github.com/openshift/installer/blob/release-4.23/pkg/asset/agent/installconfig.go#L307-L336), [install-config two nodes](https://github.com/openshift/installer/blob/release-4.23/pkg/types/validation/installconfig.go#L1803-L1825) |
 
-The rows are `releaseTopologies` in `internal/containercluster/topology.go`.
-Qualifying a minor means reading its installer branch and adding its row to
-both tables: `TestTopologyTableMatchesSpec` keeps them one, and
-`TestEveryExampleReleaseHasATopologyRow` holds every example to a qualified
-minor, so an example's release bump reviews the table.
+There is no per-minor specialization. The rule is `generalTopology` in
+`internal/containercluster/topology.go`; a per-minor specialization, when an
+installer first differs, is a record there with its own row in this table and a
+row of the
+[version-specialization catalog](../../.agents/knowledge/version-specializations.md).
+`TestTopologyTableMatchesSpec` keeps this table and the code one, and
+`TestDocsVersionSpecializationCatalogMatchesRegistries` keeps the code and the
+catalog one.
 
 ## Cross-object invariants
 

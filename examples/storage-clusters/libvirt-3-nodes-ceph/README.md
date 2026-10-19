@@ -53,6 +53,24 @@ Apply resolves the tag through the Entitlement and freezes the linux/amd64 child
 
 Run `secret set` with the key on standard input from a terminal or a protected file. Never place the entitlement key in YAML, a shell variable or an argument.
 
+## Other IBM Storage Ceph releases
+
+Edit only your operator-owned copy. The tracked input authors 9.9.2.0. These are operator selections, not an allowlist: Bootwright does not gate on a release or on its operating system pairing (D157), and the native tools judge installability. Provider pairings are dependency rows of the [version-specialization catalog](../../../.agents/knowledge/version-specializations.md#dependencies). Four fields move together: `ceph.release`, `ceph.packageVersion`, `ceph.cephadm.ansible.packageVersion` and the image `base` with its `version`; 9.9.0.3 also moves `ceph.ibm.callHome`.
+
+| Release | `ceph.packageVersion` | `cephadm.ansible.packageVersion` | Image `base` and `version` | Guest OS |
+| --- | --- | --- | --- | --- |
+| 9.9.0.3 | `20.1.0-221.el9cp` | `5.0.2-1.el9cp` | `cp.icr.io/cp/ibm-ceph/ceph-9-rhel9`, `v9.0-20201` | RHEL 9.7 |
+| 9.9.1.2 | `20.2.1-405.el9cp` | `5.0.3-1.el9cp` | `cp.icr.io/cp/ibm-ceph/ceph-9-rhel9`, `v9.9.1-27200` | RHEL 9.8 |
+| 9.9.2.0 | `20.2.2-349.el9cp` | `5.0.3-1.el9cp` | `cp.icr.io/cp/ibm-ceph/ceph-9-rhel10`, `v9.9.2-26729` | RHEL 9.8 |
+
+- Select the build tag from [IBM's release table](https://www.ibm.com/support/pages/what-are-red-hat-and-ibm-storage-ceph-releases-and-corresponding-ceph-package-versions) rather than a moving alias such as `v9.9.2` for a reproducible input. Verify each repository and tag pair with authenticated registry metadata; IBM pages also show `v9.0-19201` for 9.9.0.3, so confirm which tag your entitlement holds.
+- Select the full package release, such as `5.0.3-1.el9cp` for `cephadm-ansible`. A shortened version does not name the signed package.
+- On RHEL 9 guests select the `el9cp` package build, even where the table lists only the `el10cp` build for a release (9.9.2.0); `20.2.2-349.el9cp` is the RHEL 9 twin of the table's `el10cp` entry.
+- 9.9.0.3 packages Ceph 20.1.0, whose Call Home is opt-in. Author `ceph.ibm.callHome: disabled`, the native default for that build: apply neither initializes nor enables Call Home, and the IBM Call Home check below expects `call_home_agent` not to be enabled instead of enabled. `enabled` refuses `call-home-unqualified` before the cluster is claimed, and the 20.2.x builds refuse `disabled` the same way. That refusal comes after the hosts are prepared from the frozen input, so author `callHome` for the selected build before the first apply: correcting it later needs `bootwright destroy`, then `context update` and a fresh apply. The [catalog](../../../.agents/knowledge/version-specializations.md#ceph-call-home-opt-in) owns the reason.
+- One apply completes 9.9.1.2 and 9.9.2.0. Their bootstraps fail at the provider's license call on the zero-host seed (`no hosts defined`); Bootwright recognizes exactly that refusal and continues the same owned seed in the same apply, so no second apply is needed. The output shape of that refusal is read from the signed packages and is not yet confirmed on a live run: if an apply still ends at that bootstrap failure, apply again, because the next apply continues the seed. Any other bootstrap failure is a real failure. The [catalog](../../../.agents/knowledge/version-specializations.md#ceph-bootstrap-license-call-continues) owns the reason. 9.9.0.3 does not make that call.
+- 9.9.0.3 runs on RHEL 9.7 guests. Copy `infra/os/rhel-9-8.yaml` and `infra/os/rhel-9-8-boot.yaml` to `rhel-9-7` names in your copy, set the profile's `os.version` to `'9.7'`, `imageRef` to the new image, `bootMedia` and `fromMedia` to the 9.7 boot and DVD ISOs, and `installProfileRef` of each machine to `rhel-9-7`. Import the media first with `./bin/bootwright media add --name rhel-9.7-x86_64-boot.iso --from-file /path/to/rhel-9.7-x86_64-boot.iso` and the same for `rhel-9.7-x86_64-dvd.iso`. This tracked example carries no RHEL 9.7 files; keep them in your own copy.
+- The validation below expects `20.2.2-349.el9cp` and `5.0.3-1.el9cp`; compare against your selected values instead.
+
 ## Create the context
 
 Replace `/path/to/adjusted/libvirt-3-nodes-ceph` below with your completed copy. Validation checks declarations and references, not host reachability or live readiness. The first staged apply freezes the whole plan, including the Storage objects and the Secrets they bind, so finish the input and set `ibm-registry` before the first apply. The guard refuses a `context update` that would invalidate a paused apply.

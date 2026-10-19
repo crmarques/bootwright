@@ -4,8 +4,11 @@ Use this page to route version-specific investigation and later compatibility
 work. It records public artifact findings and existing corrections, not a
 release allowlist. [Storage](../../specs/storage.md#frozen-release-and-trust)
 owns release and trust requirements; [B472](../../specs/milestones/m2.md#b472)
-owns remaining adapter and feature qualification. No version dispatcher,
-schema or catalog follows from this inventory alone.
+owns remaining adapter and feature qualification. A finding that needs a
+different native mechanic becomes a row of the
+[version-specialization catalog](version-specializations.md), keyed on a
+capability of the selected artifact, never on a release; this page stays the
+evidence inventory.
 
 ## Current authored example
 
@@ -84,9 +87,14 @@ With `--skip-ssh`, this precondition conflicts with the deliberately empty
 inventory of [verified-tunnel staging](../../specs/storage-native-api.md#verified-native-orchestration-transport).
 The native error occurs after the output configuration, administrator keyring
 and seed MON/MGR exist, but before `apply_call_home_settings` and the final
-Call Home acceptance flag are initialized. A failed bootstrap is still a
-failed native command; the existing continuation proves its exact owned seed
-instead of restarting bootstrap or enrolling hosts before the tunnel mount.
+Call Home acceptance flag are initialized. When the verified host
+cephadm's bootstrap makes this call, the worker recognizes exactly this refusal
+in the bootstrap's private native output, proves the exact owned seed and
+continues it in the same apply
+([`ceph-bootstrap-license-call-continues`](version-specializations.md#ceph-bootstrap-license-call-continues)).
+Any other failure is still a failed native command; the next apply's
+continuation proves the same seed instead of restarting bootstrap or enrolling
+hosts before the tunnel mount.
 
 The [native worker](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py)
 initializes missing Call Home state under its original configuration intent
@@ -129,6 +137,35 @@ truncated outer container argv or `Failed command` wrapper cannot establish
 which inner CLI command failed or why. The [pull and diagnostic owner](ceph-native-pull-boundaries.md)
 covers retained causes and isolated result validation; [live output retention](adapter-output-live-retention.md)
 covers when private logs become visible.
+
+## 20.1.0-221 (IBM Storage Ceph 9.9.0.3)
+
+The `20.1.0-221` cephadm and MGR are not an IBM licensing build. Four
+differences follow from that one cause, and each is a catalog row that alone
+holds its URLs, sha256 values and line evidence:
+
+- Bootstrap declares no `--automatically-accept-license`:
+  [ceph-bootstrap-without-license-flag](version-specializations.md#ceph-bootstrap-without-license-flag).
+- No license-acceptance contract, so `orch accept-license` is invalid and
+  `IBM_LICENSE_NOT_ACCEPTED` never exists:
+  [ceph-mgr-without-license-contract](version-specializations.md#ceph-mgr-without-license-contract).
+- Call Home is opt-in rather than opt-out:
+  [ceph-call-home-opt-in](version-specializations.md#ceph-call-home-opt-in).
+- `cephadm set-user` has no `--skip-pre-steps`:
+  [ceph-set-user-without-pre-steps](version-specializations.md#ceph-set-user-without-pre-steps).
+
+Every `.py` member of the `20.2.2-349.el10cp` cephadm zipapp (sha256
+`65dd6256563a314d01a2b1b6d9f462b025ec35093c1c0b709338fdc5b6101661`, from
+`rhel10/x86_64/cephadm-20.2.2-349.el10cp.noarch.rpm`, sha256
+`4d9191a9edb2aa38ea3bc54ecb54f472422b188392910fab4b037d31e5a24ff0`) parses as
+Python 3.9. Its `.pyc` members carry another magic number, so zipimport uses
+the `.py` sources on a RHEL 9 host. Runtime behavior on Python 3.9 is still a
+first-run watch item.
+
+IBM documents 9.9.0.x on RHEL 9.6 and 9.7 and 9.9.1.x and later on 9.8. Every
+9.9.x `el9cp` set needs OpenSSL 3.4 symbols, which RHEL 9.6 lacks, so DNF
+judges that floor natively. The rest is support prose that D157 keeps out of
+code; the catalog records it as dependency rows.
 
 ## Route older and adjacent findings to their owners
 

@@ -44,6 +44,13 @@ lock continues with no `setup`.
   the same apply retries it and runs its dependents (D146, X82). Before X82 that
   apply stopped and the next one retried it, so recovery took two applies; a
   build from before X82 still behaves that way.
+- A new [version specialization](version-specializations.md) is an automation
+  fix: its identity enters no intent or digest, so it continues a live
+  operation at every step not yet attempted and at every step whose failure
+  left no attempt record. A step that wrote an attempt record before failing
+  natively (bootstrap's `bootstrap-attempt.json`, a tunnel setting's attempt
+  marker) still refuses `partial-cluster`, so such a specialization must land
+  before the run that needs it.
 - A destroy is needed when the fix moves a version or a pin, which moves the
   content digest: the continuation then refuses naming the first block that
   differs. The contract guard in `cmd/bootwright` fails the build when a request

@@ -199,6 +199,12 @@ Alias cell.
 | [B616](#b616) | new, 2026-10-16 | defect | Architecture and developer tooling | Source checks exclude unreadable ignored non-source directories | Found during integration verification; test tooling, no milestone gate |
 | [B617](#b617) | new, 2026-10-17 | defect | Storage | Registry socket publication serialized with close | Pre-existing connector race; separate cancellation follow-up, no new milestone gate |
 | [B618](#b618) | new, 2026-10-17 | defect | Storage and CLI | Bounded native traceback projection retains the terminal cause | Pre-existing diagnostic truncation; separate output follow-up, no new milestone gate |
+| [B630](#b630) | new, 2026-10-19 (X101) | safety | Storage | A proved-absent native rejection leaves a bootstrap or `set-user` attempt recoverable instead of `partial-cluster` | Found in X101; narrowing a safety refusal needs its own named slice and decision; X101's argv check before the attempt record already covers the bootstrap options |
+| [B631](#b631) | new, 2026-10-19 (X101) | enabling | Storage | A wrong `ceph.ibm.callHome` for the selected build is refused before any host block runs | Found in X101; Go has no planning-visible Call Home model fact, and D157 forbids gating on the release |
+| [B632](#b632) | new, 2026-10-19 (X101) | enabling | Storage | The unused `installed_cephadm` and the tests that patch it are removed | Found in X101; dead code with no effect |
+| [B633](#b633) | new, 2026-10-19 (X101) | defect | Architecture and developer tooling | One native-timeout unit test stops crashing its xdist worker under load | Found in X101; the file passes alone and the whole tree passed on rerun |
+| [B634](#b634) | new, 2026-10-19 (X101) | enabling | Storage | The libvirt three-node Ceph runbook validates each selected release, not one | Found in X101; documentation for the owner's runs, no gate |
+| [B635](#b635) | new, 2026-10-19 (X101) | enabling | Storage, with Container clusters | The edges X101's reviews left untested or unreconciled are tested or recorded | Found in X101; each is hardening of a path no signed build reaches today |
 
 ### B82
 
@@ -1961,6 +1967,82 @@ publishing private material or changing execution and continuation behavior.
 projection cuts prove useful cause retention, the unchanged limit and no
 disclosure. Parked for separate diagnostic work; it adds no M2b acceptance gate.
 
+### B630
+
+A bootstrap or MGR `set-user` that the native tool rejects at argument level,
+with an exit 2 or an `EINVAL` and a complete proof that nothing changed, still
+leaves an attempt record, so every later apply refuses `partial-cluster` and
+the operation's destroy is the only way out. X101 checks the bootstrap options
+against the anchored host parser before the record, which covers that one
+case; the `set-user` case has no static parser to check against. **Outcome:**
+a named slice narrows `partial-cluster` for a proved-absent native rejection
+only, with the proof, the refusal that stays and the destroy-only cases
+specified. **Requires:** a named safety slice and an owner decision, as the
+[scope rules](../milestones.md#scope-rules) require for narrowing a safety
+refusal. **Definition:** `Needs definition`. **Exit evidence:** a test that a
+proved-absent rejection continues and one that every other attempted state
+still refuses.
+
+### B631
+
+A wrong `ceph.ibm.callHome` for the selected build is refused at the cluster's
+claim, after the ceph-host blocks ran from the frozen input, so correcting it
+costs the operation's destroy and a fresh apply (D162 clause (b)). The refusal
+cannot come earlier while Go cannot see the build's Call Home model, and D157
+forbids deciding it from the release label. **Outcome:** once the frozen,
+authenticated artifacts expose that model to planning or to the first host
+block, the wrong value is refused before any host effect. **Requires:** a
+planning-visible Call Home model fact. **Definition:** `Needs definition`.
+**Exit evidence:** a refusal test with no host block run, and the existing claim
+refusal kept as the backstop.
+
+### B632
+
+`installed_cephadm` in the Ceph host runtime compares the host and image
+cephadm and has no caller. Three tests in the host runtime unit file patch it.
+**Outcome:** the function and its patches are deleted, or a caller is added
+with a stated reason. **Requires:** none. **Definition:** `Specified`.
+**Exit evidence:** the collection unit and sanity suites
+pass without it.
+
+### B633
+
+An xdist worker crashed on `test_native_timeout_is_bounded_and_sanitized` in the
+SSH key policy unit file during the first whole-tree unit run of X101, under
+load; the file passes alone and the whole tree passed on rerun. **Outcome:** the
+test is deterministic under parallel workers or its cause is recorded. **Requires:** none. **Definition:** `Specified`.
+**Exit evidence:** repeated narrowed parallel runs of the file with no crash.
+
+### B634
+
+The runbook's validation text and its Dashboard and IBM Call Home rows assume
+`callHome` enabled and `20.2.2-349.el9cp`, and the RHEL 9.7 steps do not say to
+rename `metadata.name` in the two copied profile files. **Outcome:** the
+runbook states, per release, the validation values and the Call Home check
+(`call_home_agent` not enabled on 9.9.0.3), and names the profile renames. **Requires:** none. **Definition:** `Specified`.
+**Exit evidence:** a docs-check pass and the owner's three runs reading it.
+
+### B635
+
+X101's reviews left these edges, none reached by a signed build today:
+
+- the `ibm_build` detector reads `IBM_BUILD` only from `override_vars.py`, so a
+  zipapp that ships it as a compiled module or a package reads as absent where
+  unknown would keep the strict flow;
+- the seam-call test credits a call to the innermost function only, and the
+  license-call refusal's tie to the image has a surviving mutation;
+- `verify_tool` runs more than once per worker run, as before X101;
+- the image-only guard in the OpenShift topology rule and the version parameter
+  that rule ignores have no test that fails without them;
+- the constraints page does not reconcile the 2026-10-13 run of 20.2.1, where
+  the bootstrap apparently completed, with the 20.2.1 source, which predicts the
+  license-call refusal.
+
+**Outcome:** each edge has a test that fails without its guard, or a recorded
+reason it needs none. **Requires:** none. **Definition:** `Specified`.
+**Exit evidence:** the named tests, mutation-checked, and
+the reconciled page.
+
 ## Retired
 
 Historical IDs no longer issued in their original meanings. D131 reuses
@@ -2388,3 +2470,56 @@ Requires cell as `owner decision: <question>`.
   gates, safety refusals and operator acceptance requirements remain. This
   request authorizes roadmap and ownership changes only, with no new active
   slice or substrate implementation.
+
+- **D162** (2026-10-18, the owner requests this architecture and readiness
+  for the listed versions; clauses (b) to (d) are the design's recommendations
+  taken under that request, which the owner may revise): adopt version
+  specializations as defined in
+  [architecture](../architecture.md#implementations-and-version-variation),
+  after the owner asked to "design and implement a general architecture and
+  code structure" in which code has one general flow, the default for any
+  component version, and a small specialized flow for a given version handles a
+  known issue or dependency and then returns to the general flow, with the
+  specifics in code and in repository knowledge with references, and to be
+  ready for the provider-supported versions from OpenShift 4.21, IBM Storage
+  Ceph 9.9.0.x, IBM Fusion 2.13 and Fusion Data Foundation 4.21 to current. It
+  refines D157 and does not reverse it.
+  (a) Each component keeps one general flow. Within one implementation, an
+  adapter or driver may deviate from it only through a registered
+  specialization: a record with an id, a declared seam of that flow, a declared
+  variant, and a condition over facts that pure detectors derive from the bytes
+  of the operation's frozen, authenticated artifacts. Only when no artifact
+  feature exposes the difference may the condition use a proved coordinate,
+  ordered by the component's own comparator. An unknown fact or an unparseable
+  version selects the general flow and is never by itself a refusal. A
+  specialization adapts how a step reaches its declared outcome, and the flow
+  then returns to the general flow. It never approves, screens, refuses,
+  selects or substitutes a version or an artifact. It never changes a block's
+  intent, ordering or authorization. It never weakens trust, host-key
+  verification, publisher signatures, redaction, an ownership proof or a trust
+  refusal. Each specialization has a row with evidence in the
+  [version-specialization catalog](../../.agents/knowledge/version-specializations.md),
+  and a test keeps each registry and the catalog equal. This shape applies to
+  every registry, whatever its language, including later add-on drivers.
+  Specializations are not per-release profiles or a release catalog. They key
+  on observed capability, exist only where the general flow is known to fail,
+  and gate no selection.
+  (b) `ceph.ibm.callHome: disabled` is admitted by planning, and the selected
+  build decides how it is realized, as [storage API](../api/storage.md) states.
+  Every refusal of a Call Home intent comes before the cluster is claimed but
+  after host preparation, so correcting it is an input change that needs the
+  operation's destroy and a fresh apply; planning no longer refuses it first.
+  (c) D157's non-screening extends to OpenShift release minors. The agent
+  installer's accepted control-plane counts are a general rule for every
+  minor, with per-minor specializations only where an installer differs. A
+  minor with no specialization takes the general rule, and the installer
+  judges the release. This narrows the per-minor refusal of
+  [container clusters](../api/container-clusters.md#topology).
+  (d) Provider OS and version pairings, such as IBM Storage Ceph 9.9.0.x on
+  RHEL 9.7, and Fusion, Data Foundation and OpenShift compatibility are
+  recorded as dependency rows of the catalog; Bootwright does not gate on them
+  (D157), and native tools judge installability.
+  This request authorizes the specification and the version-specialization
+  slice, with its 9.9.0.x first wave. It authorizes no M3 node-role work, no M4
+  add-on work and no evidence-format move. The evidence member rides the next
+  coordinated Ceph contract move.

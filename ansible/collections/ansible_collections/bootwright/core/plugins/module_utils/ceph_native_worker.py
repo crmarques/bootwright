@@ -27,7 +27,7 @@ if globals().get("__package__"):
     from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics
 
 PREFIX = "ansible_collections.bootwright.core.plugins.module_utils"
-MODULES = ("native_diagnostics", "ceph_tunnel", "ceph_tunnel_staging", "ceph_tunnel_custody", "ceph_native_observe", "ceph_native",
+MODULES = ("native_diagnostics", "native_specializations", "ceph_tunnel", "ceph_tunnel_staging", "ceph_tunnel_custody", "ceph_native_observe", "ceph_native",
            "ceph_host_route_probe", "ceph_pull_broker", "ceph_host_runtime")
 MAX_INPUT = 2 << 20
 MAX_SOURCE = 1 << 20

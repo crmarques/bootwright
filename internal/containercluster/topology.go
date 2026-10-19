@@ -15,29 +15,31 @@ import (
 // agent installer narrows that to the counts listed here.
 type releaseTopology struct {
 	// controlPlane lists the master counts the agent installer accepts. Two
-	// is accepted upstream only beside an arbiter pool, which needs a feature
-	// gate (pkg/types/validation/installconfig.go#L138-L144 on release-4.21),
-	// and a node role here is never an arbiter, so no row lists it.
+	// is accepted upstream only beside an arbiter pool or, from release-4.22,
+	// two fencing credentials, and a node role here is never an arbiter and
+	// carries no fencing, so no rule lists it.
 	controlPlane []int
-	// sources are the upstream files and lines the row was read from.
+	// sources are the upstream files and lines the rule was read from.
 	sources []string
 }
 
-// releaseTopologies holds one row per release minor Bootwright qualifies a
-// topology for. A release with no row refuses at admission, so qualifying a
-// new minor means reading its branch and adding its row here and in the spec.
-// Every row's installer also refuses a compute node beside a single master,
-// which validateTopology applies to every release. The 4.21 lines were read
-// from the release-4.21 branch on 2026-09-27.
-var releaseTopologies = map[string]releaseTopology{
-	"4.21": {
-		controlPlane: []int{1, 3, 4, 5},
-		sources: []string{
-			"https://github.com/openshift/installer/blob/release-4.21/pkg/asset/agent/installconfig.go#L217-L232",
-			"https://github.com/openshift/installer/blob/release-4.21/pkg/asset/agent/installconfig.go#L234-L263",
-			"https://github.com/openshift/installer/blob/release-4.21/pkg/types/validation/installconfig.go#L758-L771",
-		},
+var generalTopology = releaseTopology{
+	controlPlane: []int{1, 3, 4, 5},
+	sources: []string{
+		"https://github.com/openshift/installer/blob/release-4.21/pkg/asset/agent/installconfig.go#L217-L232",
+		"https://github.com/openshift/installer/blob/release-4.21/pkg/asset/agent/installconfig.go#L234-L263",
+		"https://github.com/openshift/installer/blob/release-4.21/pkg/types/validation/installconfig.go#L758-L771",
+		"https://github.com/openshift/installer/blob/release-4.22/pkg/asset/agent/installconfig.go#L220-L305",
+		"https://github.com/openshift/installer/blob/release-4.22/pkg/asset/agent/installconfig.go#L307-L336",
+		"https://github.com/openshift/installer/blob/release-4.22/pkg/types/validation/installconfig.go#L1731-L1753",
+		"https://github.com/openshift/installer/blob/release-4.23/pkg/asset/agent/installconfig.go#L220-L305",
+		"https://github.com/openshift/installer/blob/release-4.23/pkg/asset/agent/installconfig.go#L307-L336",
+		"https://github.com/openshift/installer/blob/release-4.23/pkg/types/validation/installconfig.go#L1803-L1825",
 	},
+}
+
+func topologyFor(version string) releaseTopology {
+	return generalTopology
 }
 
 // validateTopology checks the node roster and endpoint ownership against what
@@ -55,12 +57,7 @@ func validateTopology(s api.Value, partial bool) []api.Issue {
 	}
 	// A release pinned by image alone declares no minor to look up; the
 	// container-cluster selection refuses it before anything is planned.
-	row, qualified := releaseTopologies[minor]
-	if version != "" && !qualified {
-		issue := invariant("$.spec.distribution.release.version", "the topology table qualifies no release "+minor)
-		issue.Remediation = "declare a release version in a minor the topology table qualifies: " + strings.Join(qualifiedMinors(), ", ")
-		issues = add(issues, issue)
-	}
+	row := topologyFor(version)
 	nodes := s.Get("nodes").Items()
 	if len(nodes) == 0 {
 		return issues
@@ -77,7 +74,7 @@ func validateTopology(s api.Value, partial bool) []api.Issue {
 	if masters == 0 {
 		return add(issues, invariant("$.spec.nodes", "a container cluster requires at least one master node"))
 	}
-	if qualified && !slices.Contains(row.controlPlane, masters) {
+	if version != "" && !slices.Contains(row.controlPlane, masters) {
 		accepted := countList(row.controlPlane)
 		issue := invariant("$.spec.nodes", fmt.Sprintf("release %s accepts %s master nodes, not %d", minor, accepted, masters))
 		issue.Remediation = "declare " + accepted + " master nodes"
@@ -109,15 +106,6 @@ func releaseMinor(version string) (string, bool) {
 		return "", false
 	}
 	return parts[0] + "." + parts[1], true
-}
-
-func qualifiedMinors() []string {
-	minors := make([]string, 0, len(releaseTopologies))
-	for minor := range releaseTopologies {
-		minors = append(minors, minor)
-	}
-	slices.Sort(minors)
-	return minors
 }
 
 // countList renders counts as a sentence list: 1, 3, 4 or 5.

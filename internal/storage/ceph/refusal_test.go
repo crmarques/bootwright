@@ -83,6 +83,32 @@ func TestAClusterRefusalReachesTheOperatorWithItsRemedy(t *testing.T) {
 	}
 }
 
+func TestACallHomeUnqualifiedRefusalReachesTheOperatorAsUnsupportedWithItsRemedy(t *testing.T) {
+	r := coreRequest()
+	e := withMaterial(executionFor(t, r), r)
+	runner := &refusingRunner{reason: "call-home-unqualified"}
+	_, err := New(api.StorageCluster, runner).Observe(context.Background(), e)
+	d := diagnostics.Of(err)
+	if len(d) != 1 || d[0].Code != "lifecycle.unsupported" || d[0].Message != "IBM Call Home intent has no qualified path on the selected Ceph build" ||
+		d[0].Remediation != "the apply froze this input, so take back what it owns with bootwright destroy --context <context>, "+
+			"correct ceph.ibm.callHome for the selected build with bootwright context update, then apply; see .agents/knowledge/version-specializations.md" {
+		t.Fatalf("a call-home-unqualified refusal reached the operator as %+v", d)
+	}
+}
+
+func TestANativeOptionUndeclaredRefusalNamesTheDestroyItsInputChangeNeeds(t *testing.T) {
+	r := coreRequest()
+	e := withMaterial(executionFor(t, r), r)
+	runner := &refusingRunner{reason: "native-option-undeclared"}
+	_, err := New(api.StorageCluster, runner).Observe(context.Background(), e)
+	d := diagnostics.Of(err)
+	if len(d) != 1 || d[0].Code != "lifecycle.unsupported" ||
+		!strings.HasPrefix(d[0].Remediation, "the apply froze this input, so take back what it owns with bootwright destroy --context <context>, ") ||
+		!strings.Contains(d[0].Remediation, "with bootwright context update, then apply") {
+		t.Fatalf("a native-option-undeclared refusal reached the operator as %+v", d)
+	}
+}
+
 // The module publishes only a reason its block names, and a token the block
 // does not name as unknown with the token in its detail, so each table names
 // exactly what ceph_core.py may publish for its block, unknown among them.

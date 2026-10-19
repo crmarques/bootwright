@@ -7,7 +7,8 @@ trust requirements and [B472](../../specs/milestones/m2.md#b472) owns promotion.
 IBM's [release mapping](https://www.ibm.com/support/pages/what-are-red-hat-and-ibm-storage-ceph-releases-and-corresponding-ceph-package-versions)
 then selected Storage Ceph 9.9.1.2, package 20.2.1-405.el9cp and container tag
 v9.9.1-25074. That public source inspection did not acquire or execute an
-entitled container.
+entitled container. As of 2026-10-18 the same table lists v9.9.1-27200 as the
+newer 9.9.1 tag.
 
 The public [downstream source RPM](https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/source/ceph-20.2.1-405.el9cp.src.rpm)
 contains a signed header verified against the official

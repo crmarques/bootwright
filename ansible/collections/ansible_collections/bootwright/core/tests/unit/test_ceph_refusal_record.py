@@ -134,6 +134,8 @@ def test_an_exception_names_its_type_and_site_and_never_its_text(monkeypatch):
     ("native-refusal:image-pull@ceph_host_runtime.pull_image:410", ceph_core.CLUSTER_REASONS, "remote-refusal"),
     ("native-refusal:dashboard-drift@ceph_native.dashboard:12", ceph_core.CLUSTER_REASONS, "dashboard-drift"),
     ("native-refusal:host-time@ceph_native.time:12", ceph_core.CLUSTER_REASONS, "remote-refusal"),
+    ("native-refusal:call-home-unqualified@ceph_native.tunnel_bootstrap:12", ceph_core.CLUSTER_REASONS, "call-home-unqualified"),
+    ("native-refusal:call-home-unqualified@ceph_native.tunnel_bootstrap:12", ceph_core.HOST_REASONS, "remote-refusal"),
     ("native-unknown:KeyError@ceph_native.dispatch:9", ceph_core.HOST_REASONS, "remote-refusal"),
     ("native-unknown:image-pull@ceph_native.dispatch:9", ceph_core.HOST_REASONS, "remote-refusal"),
     ("native-timeout", ceph_core.HOST_REASONS, "native-timeout"),
@@ -147,6 +149,12 @@ def test_a_local_refusal_outside_the_block_is_unknown_with_its_token_kept():
     assert ceph_core.refusal(ceph_native.Refusal("transport"), ceph_core.HOST_REASONS) == ("transport", "transport")
     assert ceph_core.refusal(ceph_native.Refusal("dashboard-drift"), ceph_core.HOST_REASONS) == ("unknown", "dashboard-drift")
     assert ceph_core.refusal(ValueError(SECRET), ceph_core.HOST_REASONS) == ("adapter-exception", "ValueError@unknown.frame:0")
+
+
+def test_a_local_call_home_unqualified_refusal_is_named_by_the_cluster_block_only():
+    error = ceph_native.Refusal("call-home-unqualified")
+    assert ceph_core.refusal(error, ceph_core.CLUSTER_REASONS) == ("call-home-unqualified", "call-home-unqualified")
+    assert ceph_core.refusal(error, ceph_core.HOST_REASONS) == ("unknown", "call-home-unqualified")
 
 
 def test_the_protocol_names_only_the_blocks_closed_reasons_and_a_value_free_detail():

@@ -19,7 +19,7 @@ import time
 from ansible_collections.bootwright.core.plugins.module_utils import (
     adapter_protocol, ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_observe, ceph_native_worker,
     ceph_package_sources, ceph_package_worker, ceph_packages, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody,
-    native_apply, native_diagnostics, native_resolution, native_signatures, ceph_pull_broker,
+    native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
 )
 
 READINESS_TIMEOUT = 900
@@ -41,7 +41,7 @@ HOST_REASONS = (
 )
 CLUSTER_REASONS = (
     "unsupported-release", "runtime-profile", "device-identity", "cache-unproved", "dashboard-identity", "dashboard-drift", "dashboard-policy",
-    "dashboard-verify", "pool-identity", "client-quiescence-unqualified",
+    "dashboard-verify", "pool-identity", "client-quiescence-unqualified", "native-option-undeclared", "call-home-unqualified",
     "request", "artifact", "ownership", "evidence", "material", "packages", "package-artifact", "package-drift", "package-journal", "package-license",
     "package-limit", "package-timeout", "package-platform", "package-host", "call-home-drift", "config-drift", "partial-cluster", "not-ready",
     "not-removed", "cluster-unavailable", "device", "foreign-cluster", "native-command", "native-timeout", "native-output", "unknown", "transport",
@@ -288,8 +288,8 @@ class Transport:
 
     @staticmethod
     def native_sources():
-        modules = (native_diagnostics, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native, ceph_host_route_probe,
-                   ceph_pull_broker, ceph_host_runtime)
+        modules = (native_diagnostics, native_specializations, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
+                   ceph_host_route_probe, ceph_pull_broker, ceph_host_runtime)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
         ceph_native.require(tuple(sources) == ceph_native_worker.MODULES, "transport")
         return sources
