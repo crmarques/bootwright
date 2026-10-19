@@ -155,8 +155,8 @@ type PlanResult struct {
 	// before it registers, so the plan says what to stop before it is
 	// confirmed.
 	Stops []string
-	// StopsAfterOnline names Machines whose stop proof follows durable online
-	// service removal. They must remain reachable until that boundary.
+	// StopsAfterOnline names Machines whose stop proof follows durable online cleanup:
+	// online service removal or a pre-stop inverse. They must remain reachable until then.
 	StopsAfterOnline []string
 	Receipt          Receipt
 }

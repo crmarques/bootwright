@@ -234,6 +234,13 @@ type OnlineRemoval interface {
 	RequiresOnlineRemoval(reconciliation.Block) bool
 }
 
+// PreStopRemoval runs an inverse before every other inverse of a removal and the stop proof
+// of the Machines following it. A capability opts in only an inverse that touches its own
+// Machine's guest and published content and that no other block's inverse or retirement reads.
+type PreStopRemoval interface {
+	RequiresPreStopRemoval(reconciliation.Block) bool
+}
+
 type HostBound interface {
 	HostMachines(reconciliation.Block) ([]string, error)
 }

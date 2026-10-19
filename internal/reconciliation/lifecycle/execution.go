@@ -847,9 +847,9 @@ func (s Service) freshDestroy(ctx context.Context, contextName string, frozenBy 
 // they run, so the plan says what to stop before the operator confirms it.
 func (s Service) stops(plan reconciliation.Plan) []string {
 	var named []string
-	deferred := s.onlineRemoval(plan).machines
+	boundary := s.onlineRemoval(plan)
 	for _, block := range plan.Blocks {
-		if deferred[block.ID] {
+		if boundary.machines[block.ID] || boundary.preStopMachines[block.ID] {
 			continue
 		}
 		capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
@@ -1109,10 +1109,10 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 	}
 	store := s.store(tx)
 	// A removal proves every effect's outcome and quiescence before registering.
-	// Only Machines supporting explicitly opted-in online removal defer their
-	// stop proof until those services are durably absent. Unrelated capabilities
-	// keep the original all-or-nothing gate. The proofs, the registration and
-	// every attempt share one located runtime, whose closure it freezes.
+	// Only Machines following opted-in online or pre-stop removal defer their stop
+	// proof until those effects are durably absent. Unrelated capabilities keep
+	// the all-or-nothing gate. The proofs, the registration and every attempt
+	// share one located runtime, whose closure it freezes.
 	if decided.fresh && decided.verb == reconciliation.Destroy {
 		// The host is proved before anything is resolved, probed or
 		// registered, so no removal touches a context from a host its
@@ -1129,7 +1129,10 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 		if err := s.proveRemovable(ctx, tx, store, located, decided, material); err != nil {
 			return nil, err
 		}
-		if err := s.proveQuiescent(ctx, store, tx.Identity().Name, located, decided.plan, material, decided.source, s.onlineRemoval(decided.plan).machines); err != nil {
+		boundary := s.onlineRemoval(decided.plan)
+		skip := maps.Clone(boundary.machines)
+		maps.Copy(skip, boundary.preStopMachines)
+		if err := s.proveQuiescent(ctx, store, tx.Identity().Name, located, decided.plan, material, decided.source, skip); err != nil {
 			return nil, err
 		}
 	}

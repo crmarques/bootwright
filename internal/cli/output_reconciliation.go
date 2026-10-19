@@ -162,7 +162,7 @@ func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
 		closing = append(closing, field{Label: "Stop first", Value: strings.Join(result.Stops, ", ")})
 	}
 	if len(result.StopsAfterOnline) != 0 {
-		closing = append(closing, field{Label: "Stop after storage cleanup", Value: strings.Join(result.StopsAfterOnline, ", ")})
+		closing = append(closing, field{Label: "Stop after online cleanup", Value: strings.Join(result.StopsAfterOnline, ", ")})
 	}
 	// A finalization runs no block, so the apply that completes it consumes,
 	// and requires, no authorization.

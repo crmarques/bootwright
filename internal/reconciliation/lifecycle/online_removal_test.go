@@ -13,12 +13,17 @@ import (
 type onlineTestCapability struct {
 	*testCapability
 	online  map[string]bool
+	preStop map[string]bool
 	probed  []Probe
 	onProbe func(Probe)
 }
 
 func (c *onlineTestCapability) RequiresOnlineRemoval(block reconciliation.Block) bool {
 	return c.online[block.ID]
+}
+
+func (c *onlineTestCapability) RequiresPreStopRemoval(block reconciliation.Block) bool {
+	return c.preStop[block.ID]
 }
 
 func (*onlineTestCapability) ProbesQuiescence() bool { return true }

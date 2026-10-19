@@ -73,6 +73,7 @@ type scheduler struct {
 	online        onlineRemoval
 	onlineProved  bool
 	onlineBlocked bool
+	preStopProved bool
 }
 
 // converge runs the operation's blocks until nothing more may start, and
@@ -153,21 +154,19 @@ func (c *scheduler) admit(ctx context.Context) {
 		if !ok {
 			return
 		}
-		if !c.proveOnlineBoundary(ctx, block) {
+		if !c.provePreStopBoundary(ctx, block) || !c.proveOnlineBoundary(ctx, block) {
 			return
 		}
 		c.start(ctx, block, position)
 	}
 }
 
-// next chooses the one block admission may start now. An unproved effect is
-// observed before anything else and admits nothing beside another observation,
-// because no retry, dependent block or removal may start while an effect's
-// outcome is unproved. Otherwise the first block admission takes in frozen
-// order runs, a retry exactly as a first attempt, provided nothing already
-// running holds a resource it needs to itself and this invocation has not
-// already worked it: a worked block still pending is one whose attempt never
-// ran, and admitting it again would only meet the same refusal.
+// next chooses the one block admission may start now. An unproved effect is observed before anything
+// else and admits nothing beside another observation, because no retry, dependent block or removal may
+// start while an effect's outcome is unproved. Then pre-stop inverses alone run until each is done.
+// Otherwise the first block admission takes in frozen order runs, a retry exactly as a first attempt,
+// provided nothing running holds a resource it needs to itself and this invocation has not worked it:
+// a worked block still pending is one whose attempt never ran, and admitting it again meets the same refusal.
 func (c *scheduler) next() (reconciliation.Block, int, bool) {
 	kind, admitted := firstAdmission(c.plan, c.states, c.selection, c.observed, c.worked, c.running)
 	switch {
@@ -180,6 +179,8 @@ func (c *scheduler) next() (reconciliation.Block, int, bool) {
 		return reconciliation.Block{}, 0, false
 	case c.observeOnly:
 		return reconciliation.Block{}, 0, false
+	case !c.online.preStopDone(c.states):
+		return c.nextPreStop()
 	}
 	for _, index := range admitted {
 		block := c.plan.Blocks[index]
@@ -187,6 +188,16 @@ func (c *scheduler) next() (reconciliation.Block, int, bool) {
 			continue
 		}
 		if !c.running[block.ID] && !c.worked[block.ID] && c.free(block) {
+			return block, index, true
+		}
+	}
+	return reconciliation.Block{}, 0, false
+}
+
+func (c *scheduler) nextPreStop() (reconciliation.Block, int, bool) {
+	for index, block := range c.plan.Blocks {
+		state := c.states[block.ID]
+		if c.online.preStop[block.ID] && (state == reconciliation.BlockPending || state == reconciliation.BlockFailed) && !c.running[block.ID] && !c.worked[block.ID] && c.free(block) {
 			return block, index, true
 		}
 	}

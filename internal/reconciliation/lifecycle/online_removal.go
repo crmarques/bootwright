@@ -19,14 +19,16 @@ func owningApply(operation operationstore.Operation) string {
 
 // onlineRemoval follows frozen dependencies and capability opt-in, never kind alone.
 type onlineRemoval struct {
-	effects  map[string]bool
-	machines map[string]bool
-	retired  map[string]bool
+	effects         map[string]bool
+	machines        map[string]bool
+	retired         map[string]bool
+	preStop         map[string]bool
+	preStopMachines map[string]bool
 }
 
 func (s Service) onlineRemoval(plan reconciliation.Plan) onlineRemoval {
 	if plan.Verb != reconciliation.Destroy {
-		return onlineRemoval{effects: map[string]bool{}, machines: map[string]bool{}, retired: map[string]bool{}}
+		return onlineRemoval{effects: map[string]bool{}, machines: map[string]bool{}, retired: map[string]bool{}, preStop: map[string]bool{}, preStopMachines: map[string]bool{}}
 	}
 	retired := s.retiredWithHosts(plan)
 	for {
@@ -40,7 +42,32 @@ func (s Service) onlineRemoval(plan reconciliation.Plan) onlineRemoval {
 			}
 		}
 		if !unretired {
+			s.preStopRemoval(plan, &boundary)
 			return boundary
+		}
+	}
+}
+
+func (s Service) preStopRemoval(plan reconciliation.Plan, boundary *onlineRemoval) {
+	boundary.preStop, boundary.preStopMachines = map[string]bool{}, map[string]bool{}
+	for _, block := range plan.Blocks {
+		capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
+		if removal, opts := capability.(PreStopRemoval); ok && opts && removal.RequiresPreStopRemoval(block) {
+			boundary.preStop[block.ID] = true
+		}
+	}
+	after := map[string]bool{}
+	for _, block := range plan.Blocks {
+		after[block.ID] = boundary.preStop[block.ID]
+		for _, dependency := range block.Dependencies {
+			after[block.ID] = after[block.ID] || after[dependency]
+		}
+		if block.Stage != reconciliation.StageMachines || !after[block.ID] || boundary.preStop[block.ID] || boundary.machines[block.ID] {
+			continue
+		}
+		capability, _ := s.capabilities.Resolve(block.Kind, block.Implementation)
+		if prober, ok := capability.(QuiescenceProber); ok && prober.ProbesQuiescence() {
+			boundary.preStopMachines[block.ID] = true
 		}
 	}
 }
@@ -135,20 +162,28 @@ func (b onlineRemoval) complete(states map[string]reconciliation.BlockState) boo
 	return true
 }
 
+func (b onlineRemoval) preStopDone(states map[string]reconciliation.BlockState) bool {
+	for id := range b.preStop {
+		if states[id] != reconciliation.BlockDone {
+			return false
+		}
+	}
+	return true
+}
+
 func (s Service) stopsAfterOnline(plan reconciliation.Plan, states map[string]reconciliation.BlockState) []string {
 	boundary := s.onlineRemoval(plan)
 	var names []string
 	for _, block := range plan.Blocks {
-		if boundary.machines[block.ID] && states[block.ID] != reconciliation.BlockDone && !slices.Contains(names, block.Object) {
+		if (boundary.machines[block.ID] || boundary.preStopMachines[block.ID]) && states[block.ID] != reconciliation.BlockDone && !slices.Contains(names, block.Object) {
 			names = append(names, block.Object)
 		}
 	}
 	return names
 }
 
-// proveOnlineBoundary runs only once all online effects have durable absence
-// proof and no adapter is in flight. Failure records no Machine attempt: its
-// pending block and the completed online blocks are the resumable boundary.
+// proveOnlineBoundary runs only once all online effects have durable absence proof and no adapter is
+// in flight. Failure records no Machine attempt: its pending block and the completed online blocks resume.
 func (c *scheduler) proveOnlineBoundary(ctx context.Context, block reconciliation.Block) bool {
 	if c.operation.Verb != reconciliation.Destroy || !c.online.machines[block.ID] || unproved(c.states[block.ID]) || c.onlineProved {
 		return true
@@ -169,5 +204,33 @@ func (c *scheduler) proveOnlineBoundary(ctx context.Context, block reconciliatio
 		return false
 	}
 	c.onlineProved = true
+	return true
+}
+
+func (c *scheduler) provePreStopBoundary(ctx context.Context, block reconciliation.Block) bool {
+	if c.operation.Verb != reconciliation.Destroy || c.preStopProved || c.online.preStop[block.ID] || unproved(c.states[block.ID]) {
+		return true
+	}
+	skip, pending := map[string]bool{}, false
+	for _, candidate := range c.plan.Blocks {
+		if !c.online.preStopMachines[candidate.ID] || c.states[candidate.ID] == reconciliation.BlockDone {
+			skip[candidate.ID] = true
+			continue
+		}
+		pending = true
+	}
+	if !pending {
+		c.preStopProved = true
+		return true
+	}
+	if len(c.running) != 0 {
+		return false
+	}
+	if err := c.service.proveQuiescent(ctx, c.store, c.tx.Identity().Name, c.approved, c.plan, c.material, owningApply(c.operation), skip); err != nil {
+		c.onlineBlocked = true
+		c.causes[block.ID] = err
+		return false
+	}
+	c.preStopProved = true
 	return true
 }

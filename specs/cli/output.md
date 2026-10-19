@@ -613,11 +613,12 @@ token and names the block description and its outcome; its
 [presentation groups](#multi-machine-presentation) are never result rows. A
 preview and a refusal have no progress, result rows or log reference.
 
-A removal with online storage dependencies also names `Stop after storage
-cleanup`: those Machines stay reachable for storage cleanup, then destroy
-pauses with their stop commands before deleting any of their disks. Repeating
-destroy after the operator stops them resumes the registered removal. The
-field is absent when no such boundary exists.
+A removal with online cleanup also names `Stop after online cleanup`: those
+Machines stay reachable for online storage cleanup or for an installation's
+unregistration from its subscription service, then destroy pauses with their
+stop commands before deleting any of their disks. Repeating destroy after the
+operator stops them resumes the registered removal. The field is absent when
+no such boundary exists.
 
 `status` is the machine-readable view of the same durable state and performs no
 probe. Its result orders these fields:

@@ -1800,13 +1800,30 @@ immediately before removing it.
 An `OnlineRemoval` capability requires its effects removed while their Machines
 remain reachable. Only Machine blocks whose inverse dependency closure contains
 such an effect defer the initial stop proof. The plan lists them under
-`Stop after storage cleanup`; unrelated Machines retain `Stop first`. The
+`Stop after online cleanup`; unrelated Machines retain `Stop first`. The
 engine durably completes every required online effect before probing all
 remaining deferred Machines. A live or unproved target pauses the registered
 removal before any deferred Machine inverse. After the operator stops those
 Machines, repeating destroy continues the same removal. It never repeats an
 online effect already durably completed. Unknown or failed online cleanup
 cannot admit Machine or substrate deletion.
+
+A `PreStopRemoval` capability opts a block into the pre-stop phase of a
+removal. It does so only for an inverse that touches its own Machine's guest
+and its own published content and that no other block's inverse or retirement
+reads, such as an installation's unregistration from its subscription service.
+Machine blocks whose inverse dependency closure contains such a block, and
+that no online effect already defers, skip the initial stop proof and are
+listed under `Stop after online cleanup`. Once the removal registers and every
+unproved effect is resolved, the engine runs every pre-stop inverse first,
+ahead of dependency order, and starts nothing else until each has durably
+completed. It then proves those Machines stopped before any other inverse: a
+live or unproved target pauses the registered removal with the stop commands,
+and repeating destroy after the operator stops them continues it without
+repeating a completed pre-stop inverse. A failed pre-stop inverse fails the
+removal before any other inverse runs. Pre-stop deferral never defers a host
+for retirement: a storage effect retired with its hosts stays retired and its
+retirement runs after the stop proof.
 
 Every execution and quiescence probe carries its immutable owning apply
 identity. `ApplyProved` supplies detached frozen blocks and durable completion

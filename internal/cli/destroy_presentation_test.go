@@ -35,7 +35,7 @@ func TestADestroyPlanTextNamesTheMachinesToStopFirst(t *testing.T) {
 	}
 }
 
-func TestDestroyNamesTheOnlineCleanupStopBoundary(t *testing.T) {
+func TestDestroyPlanNamesStopAfterOnlineCleanup(t *testing.T) {
 	result := previewResult()
 	result.Verb = "destroy"
 	result.StopsAfterOnline = []string{"rhel-01", "rhel-02", "rhel-03"}
@@ -43,7 +43,8 @@ func TestDestroyNamesTheOnlineCleanupStopBoundary(t *testing.T) {
 	if err := writeLifecyclePlan(&out, result); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "Stop after storage cleanup") || strings.Contains(out.String(), "Stop first") {
+	text := out.String()
+	if !strings.Contains(text, "Stop after online cleanup") || !strings.Contains(text, "rhel-01, rhel-02, rhel-03") || strings.Contains(text, "storage cleanup") || strings.Contains(text, "Stop first") {
 		t.Fatalf("wrong stop boundary: %s", out.String())
 	}
 }
@@ -55,7 +56,7 @@ func TestDestroyHelpStatesWhatItRemovesAndItsPrerequisites(t *testing.T) {
 	for _, args := range [][]string{{"help", "destroy"}, {"destroy", "--help"}} {
 		code, out, errOut, _ := runRecorded(args)
 		help := strings.Join(strings.Fields(out), " ")
-		for _, want := range []string{"whether that apply completed or not", "a failed destroy is replaced by a fresh removal", "bootwright machine stop", "--authorize data-loss"} {
+		for _, want := range []string{"whether that apply completed or not", "a failed destroy is replaced by a fresh removal", "bootwright machine stop", "Stop after online cleanup", "--authorize data-loss"} {
 			if code != 0 || errOut != "" || !strings.Contains(help, want) {
 				t.Fatalf("%v = %d, stderr %q; help %q lacks %q", args, code, errOut, out, want)
 			}
