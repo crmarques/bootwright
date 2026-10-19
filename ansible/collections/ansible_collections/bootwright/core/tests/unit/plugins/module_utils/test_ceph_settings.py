@@ -139,6 +139,21 @@ def test_settings_refuses_foreign_image_value_without_overwrite(name):
     assert ("mgr", "module", "ls") not in monitor.log
 
 
+class ForeignMarkers(Markers):
+    @staticmethod
+    def owned():
+        return False
+
+
+def test_settings_refuses_a_cluster_this_operation_does_not_own_before_any_read_or_write():
+    monitor = Monitor()
+    native = ceph_native_resources.ResourceWorker(settings_request(), "node-1", run=monitor.run, markers=ForeignMarkers())
+    with pytest.raises(ceph_native.Refusal, match="^ownership$"):
+        native.settings()
+    assert monitor.log == []
+    assert monitor.mutations == []
+
+
 def test_settings_refusal_names_every_foreign_key_and_no_value():
     monitor = Monitor([entry(KEEPALIVED_KEY, "x", section="global"), entry(HAPROXY_KEY, "y")])
     with pytest.raises(ceph_native.NativeFailure, match="^foreign-image$") as caught:
