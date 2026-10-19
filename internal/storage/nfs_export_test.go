@@ -144,6 +144,11 @@ func TestNFSExportBackingExactlyOne(t *testing.T) {
 		return spec.With("filesystemRef", api.StringValue("foreign")).With("native", spec.Get("native").With("fsal", m("name", "CEPH")))
 	})
 	exactIssue(t, Validate(foreign, changed), "api.invariant", "$.spec.filesystemRef", "referenced storage child belongs to a different cluster", "")
+	catalog = replace(catalog, object(api.StorageSubvolume, "foreign-docs", m("clusterRef", "elsewhere", "filesystemRef", "foreign")))
+	foreignSubvolume, changed := nfsExportWith(t, catalog, func(spec api.Value) api.Value {
+		return spec.Without("filesystemRef").With("subvolumeRef", api.StringValue("foreign-docs")).With("native", spec.Get("native").With("fsal", m("name", "CEPH")))
+	})
+	exactIssue(t, Validate(foreignSubvolume, changed), "api.invariant", "$.spec.subvolumeRef", "referenced storage child belongs to a different cluster", "")
 }
 
 func TestNFSExportCmountPrefixOfPath(t *testing.T) {
