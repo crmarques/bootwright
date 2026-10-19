@@ -178,3 +178,27 @@ func TestPreStopRemovalRetriesAResolvedFailedInverse(t *testing.T) {
 		t.Fatalf("retried pre-stop started other inverses: %v", h.capability.destroys)
 	}
 }
+
+func TestPreStopRemovalLeavesOnlineDeferredMachinesToTheOnlineBoundary(t *testing.T) {
+	h, capability := onlineHarness(t, false)
+	capability.preStop = map[string]bool{"installation": true}
+	h.capability.outcomeFor = map[string]Result{"storage": changedWithKubeconfig()}
+	completeApply(t, h)
+	h.capability.quiescence = map[string]Quiescence{"machine": {State: Live, Reason: "its domain is running", Stop: preStopMachineStop}}
+	preview, err := h.service.Plan(context.Background(), PlanRequest{ContextName: testContextName})
+	if err != nil || slices.Contains(preview.Stops, "machine") || !slices.Equal(preview.StopsAfterOnline, []string{"machine"}) {
+		t.Fatalf("pre-stop online preview = %+v (%v)", preview, err)
+	}
+	result, err := destroy(h)
+	if firstCode(err) != "lifecycle.live" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) {
+		t.Fatalf("pre-stop online boundary = %+v (%v)", result, err)
+	}
+	if !slices.Equal(h.capability.destroys, []string{"installation", "storage"}) || blockState(t, h, "machine") != reconciliation.BlockPending {
+		t.Fatalf("online cleanup before the stop proof removed %v", h.capability.destroys)
+	}
+	h.capability.quiescence["machine"] = Quiescence{State: Quiescent}
+	result, err = destroy(h)
+	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) || !slices.Equal(h.capability.destroys, []string{"installation", "storage", "machine", "host"}) {
+		t.Fatalf("after operator stop = %+v, removed %v (%v)", result, h.capability.destroys, err)
+	}
+}
