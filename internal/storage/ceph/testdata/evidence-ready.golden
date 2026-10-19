@@ -1,6 +1,7 @@
 {
   "action": "cluster",
   "client": "",
+  "daemons": [],
   "dashboard": {
     "certificateSHA256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "reachable": true,
@@ -67,5 +68,5 @@
     "id": "",
     "path": ""
   },
-  "version": "ceph-core-evidence-v3"
+  "version": "ceph-core-evidence-v4"
 }

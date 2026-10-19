@@ -126,8 +126,9 @@ def evidence(value, request_digest, request=None):
     if isinstance(value, dict) and value.get("version") == ceph_host_runtime.EVIDENCE_VERSION:
         return host_evidence(value, request_digest, request)
     fields = {"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs",
-              "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard"}
+              "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "daemons"}
     ceph_native.require(isinstance(value, dict) and set(value) == fields, "evidence")
+    ceph_native.require(value["daemons"] == [], "evidence")
     ceph_native.require(value["version"] == ceph_native.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
                         "evidence")
     dashboard_evidence(value)

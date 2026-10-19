@@ -96,6 +96,8 @@ argument_specs:
             type: list
             elements: dict
             required: true
+          service:
+            type: dict
           settings:
             type: dict
           subvolume:
@@ -103,7 +105,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [ceph-core-v13]
+            choices: [ceph-core-v14]
       bootwright_ceph_digest:
         type: str
         required: true

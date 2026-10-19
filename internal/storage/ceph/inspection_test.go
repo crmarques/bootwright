@@ -45,7 +45,7 @@ func inspectedClusterEvidence(t *testing.T, edit func(*Evidence)) json.RawMessag
 	e := Evidence{
 		Version: EvidenceVersion, Request: "digest", Action: "cluster", Owner: "apply", FSID: inspectedFSID, Owned: true, Exists: true, Ready: true,
 		Health: "HEALTH_OK", Hosts: []string{"rhel-01.lab.test"}, Monitors: []string{"rhel-03", "rhel-01.lab.test", "rhel-02.lab.test"},
-		MGRActive: "rhel-01.lab.test", MGRStandbys: []string{"rhel-03"}, OSDs: []OSDEvidence{},
+		MGRActive: "rhel-01.lab.test", MGRStandbys: []string{"rhel-03"}, OSDs: []OSDEvidence{}, Daemons: []UnitDaemon{},
 		MonAddrs:  []MonitorAddress{{Host: "rhel-02.lab.test", Address: "198.51.100.12"}},
 		Dashboard: DashboardEvidence{URL: "https://rhel-01.lab.test:8443/", CertificateSHA256: inspectedCertificate, Reachable: true},
 	}
@@ -116,6 +116,22 @@ func TestInspectIgnoresTheSettingsBlockEvidence(t *testing.T) {
 	got, reason := Inspect(catalog, cluster, append(provedPair(t), inspectedProof(Implementation, reconciliation.Apply, reconciliation.BlockDone, settings)))
 	if reason != "" || !reflect.DeepEqual(got, want) {
 		t.Fatalf("a completed settings block makes the inspection %+v (%q), want %+v", got, reason, want)
+	}
+}
+
+func TestInspectIgnoresTheUnitBlockEvidence(t *testing.T) {
+	catalog, cluster := inspectedCluster()
+	want, reason := Inspect(catalog, cluster, provedPair(t))
+	if reason != "" {
+		t.Fatalf("the proved pair inspects as %q", reason)
+	}
+	unit := inspectedClusterEvidence(t, func(e *Evidence) {
+		e.Action, e.MonAddrs, e.Dashboard = "service", []MonitorAddress{}, DashboardEvidence{}
+		e.Daemons = []UnitDaemon{{Host: "rhel-01.lab.test", Name: "nfs.files.0.0.rhel-01.abcdef", Service: "nfs.files"}}
+	})
+	got, reason := Inspect(catalog, cluster, append(provedPair(t), inspectedProof(Implementation, reconciliation.Apply, reconciliation.BlockDone, unit)))
+	if reason != "" || !reflect.DeepEqual(got, want) {
+		t.Fatalf("a completed unit block makes the inspection %+v (%q), want %+v", got, reason, want)
 	}
 }
 

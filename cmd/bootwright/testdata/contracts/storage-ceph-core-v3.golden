@@ -1,5 +1,5 @@
 implementation: storage-ceph-core-v3
-content-digest: bba586b6f7b8f760fe6f663626715eb5a800d0aaf76dee11c7c4062323de8e69
+content-digest: 899fda36716bd69fde671132f7efba9135ba28d9f4b2bdd2c3c0a10d5fe3874b
 automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v1, ceph-dashboard-port-attempt-v1, ceph-dashboard-port-repair-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-user-v1, ceph-device-identities-v1, ceph-filesystem-attempt-v1, ceph-host-cache-v1, ceph-native-teardown-v1, ceph-osd-device-intent-v1, ceph-policy-attempt-v1, ceph-pool-attempt-v2, ceph-rbd-image-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v3, ceph-service-inputs-v1, ceph-subvolume-attempt-v1, ceph-subvolume-group-attempt-v1, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v2
 request-schema:
   action string
@@ -130,6 +130,10 @@ request-schema:
   registry string
   registryRef string
   release string
+  service *struct ceph.ServiceUnit omitempty
+  service.documents []opaque
+  service.id string
+  service.type string
   services []opaque
   settings *struct ceph.Settings omitempty
   settings.modules []string
@@ -146,6 +150,10 @@ request-schema:
 evidence-schema:
   action string
   client string
+  daemons []struct ceph.UnitDaemon
+  daemons[].host string
+  daemons[].name string
+  daemons[].service string
   dashboard struct ceph.DashboardEvidence
   dashboard.certificateSHA256 string
   dashboard.reachable bool

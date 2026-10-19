@@ -284,7 +284,7 @@ func TestSettingsBlockInsertsWithoutReorderingRemoval(t *testing.T) {
 		t.Fatal(err)
 	}
 	drop := func(ids []string) []string {
-		return slices.DeleteFunc(ids, func(id string) bool { return id == "ceph-settings-example" })
+		return slices.DeleteFunc(ids, func(id string) bool { return id == "ceph-settings-example" || id == "ceph-service-example-nfs-files" })
 	}
 	if got, want := drop(cephIDs(with)), cephIDs(without); !slices.Equal(got, want) {
 		t.Fatalf("the settings block reorders the apply: %v, want %v", got, want)

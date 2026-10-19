@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-const EvidenceVersion = "ceph-core-evidence-v3"
+const EvidenceVersion = "ceph-core-evidence-v4"
 
 const DashboardPort = "8443"
 
@@ -18,6 +18,7 @@ var dashboardURL = regexp.MustCompile(`\Ahttps://(?:[A-Za-z0-9.-]{1,253}|\[[0-9A
 var certificateDigest = regexp.MustCompile(`\A[0-9a-f]{64}\z`)
 var resourceID = regexp.MustCompile(`\A(?:0|[1-9][0-9]{0,18})\z`)
 var rbdImageID = regexp.MustCompile(`\A[0-9a-f]{1,14}\z`)
+var unitDaemonName = regexp.MustCompile(`\A[a-z][a-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\z`)
 var subvolumeUUID = regexp.MustCompile(`\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z`)
 
 func subvolumePath(s *Subvolume, id string) string {
@@ -55,9 +56,16 @@ type ResourceEvidence struct {
 	Path string `json:"path"`
 }
 
+type UnitDaemon struct {
+	Host    string `json:"host"`
+	Name    string `json:"name"`
+	Service string `json:"service"`
+}
+
 type Evidence struct {
 	Action      string            `json:"action"`
 	Client      string            `json:"client"`
+	Daemons     []UnitDaemon      `json:"daemons"`
 	Dashboard   DashboardEvidence `json:"dashboard"`
 	Exists      bool              `json:"exists"`
 	FSID        string            `json:"fsid"`
@@ -88,10 +96,10 @@ func decodeEvidence(data []byte) (Evidence, error) {
 		return e, err
 	}
 	fields, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](data, 60*1024, "Ceph members")
-	if err != nil || len(fields) != 20 {
+	if err != nil || len(fields) != 21 {
 		return Evidence{}, evidenceFailure()
 	}
-	required := []string{"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs", "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard"}
+	required := []string{"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs", "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "daemons"}
 	for _, key := range required {
 		v, ok := fields[key]
 		if !ok || string(v) == "null" {
@@ -116,6 +124,15 @@ func decodeEvidence(data []byte) (Evidence, error) {
 	}
 	for _, address := range addresses {
 		if !closedMembers(address, "host", "address") {
+			return Evidence{}, evidenceFailure()
+		}
+	}
+	daemons, err := reconciliation.DecodeEvidence[[]map[string]json.RawMessage](fields["daemons"], 60*1024, "Ceph unit daemon members")
+	if err != nil {
+		return Evidence{}, evidenceFailure()
+	}
+	for _, daemon := range daemons {
+		if !closedMembers(daemon, "host", "name", "service") {
 			return Evidence{}, evidenceFailure()
 		}
 	}
@@ -227,8 +244,49 @@ func validOSDs(e Evidence, r Request, complete bool) bool {
 	return !complete || len(expected) > 0 && len(seen) == len(expected)
 }
 
+func unitDocuments(r Request) []unitDocument {
+	if r.Service == nil {
+		return nil
+	}
+	documents := []unitDocument{}
+	for _, raw := range r.Service.Documents {
+		document, err := reconciliation.DecodeEvidence[unitDocument](raw, 60*1024, "Ceph unit document")
+		if err != nil {
+			return nil
+		}
+		documents = append(documents, document)
+	}
+	return documents
+}
+
+func validDaemons(e Evidence, r Request) bool {
+	if r.Action != "service" {
+		return len(e.Daemons) == 0
+	}
+	documents := unitDocuments(r)
+	seen := map[string]bool{}
+	for _, d := range e.Daemons {
+		at := slices.IndexFunc(documents, func(s unitDocument) bool { return s.ServiceType+"."+s.ServiceID == d.Service })
+		if at < 0 || !slices.Contains(documents[at].Placement.Hosts, d.Host) || !unitDaemonName.MatchString(d.Name) || seen[d.Name] {
+			return false
+		}
+		seen[d.Name] = true
+	}
+	return true
+}
+
+func everyDocumentRuns(e Evidence, r Request) bool {
+	documents := unitDocuments(r)
+	for _, s := range documents {
+		if !slices.ContainsFunc(e.Daemons, func(d UnitDaemon) bool { return d.Service == s.ServiceType+"."+s.ServiceID }) {
+			return false
+		}
+	}
+	return len(documents) != 0
+}
+
 func validateScope(e Evidence, r Request) bool {
-	if !subsetNames(e.Hosts, hostNames(r)) || !validOSDs(e, r, false) {
+	if !subsetNames(e.Hosts, hostNames(r)) || !validOSDs(e, r, false) || !validDaemons(e, r) {
 		return false
 	}
 	mons, _ := servicePlacement(r, "mon")
@@ -252,7 +310,7 @@ func validateScope(e Evidence, r Request) bool {
 	if e.Client != "" {
 		return false
 	}
-	if (r.Action == "cluster" || r.Action == "settings") && e.Resource != (ResourceEvidence{}) {
+	if (r.Action == "cluster" || r.Action == "settings" || r.Action == "service") && e.Resource != (ResourceEvidence{}) {
 		return false
 	}
 	if (r.Action == "pool" || r.Action == "policy" || r.Action == "filesystem") && e.Resource.ID != "" && !resourceID.MatchString(e.Resource.ID) {
@@ -278,6 +336,8 @@ func validateReady(e Evidence, r Request) bool {
 		return true
 	case "settings":
 		return r.Settings != nil
+	case "service":
+		return r.Service != nil && everyDocumentRuns(e, r)
 	case "policy":
 		return r.Policy != nil && resourceID.MatchString(e.Resource.ID)
 	case "pool":
@@ -317,7 +377,7 @@ func EvaluateEvidence(data []byte, r Request, digest string, removal bool) (reco
 		if r.Action == "cluster" && (!sameNames(e.Hosts, hostNames(r)) || len(e.Monitors) != 0 || len(e.OSDs) != 0 || e.MGRActive != "" || len(e.MGRStandbys) != 0) {
 			return reconciliation.EffectUnknown, evidenceFailure()
 		}
-		if e.Resource != (ResourceEvidence{}) || e.Client != "" {
+		if e.Resource != (ResourceEvidence{}) || e.Client != "" || len(e.Daemons) != 0 {
 			return reconciliation.EffectUnknown, evidenceFailure()
 		}
 		if removal {

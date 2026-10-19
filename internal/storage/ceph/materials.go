@@ -110,6 +110,9 @@ const (
 )
 
 func cephDeadline(r Request, operation string) (time.Duration, error) {
+	if r.Action == "service" {
+		return unitDeadline(r, operation)
+	}
 	nativeCalls, waits := len(r.Hosts)+2, 0
 	if operation == "observe" && r.Action == "cluster" {
 		nativeCalls++

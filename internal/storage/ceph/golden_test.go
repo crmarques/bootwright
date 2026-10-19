@@ -78,9 +78,11 @@ func TestFrozenRequestGolden(t *testing.T) {
 		r.Hosts[i].Location = map[string]string{}
 		r.Hosts[i].KnownHosts = ""
 	}
-	for _, action := range []string{"cluster", "policy", "pool", "client", "rbd", "subvolume", "settings"} {
+	for _, action := range []string{"cluster", "policy", "pool", "client", "rbd", "subvolume", "settings", "service"} {
 		r.Action = action
 		r.Settings = nil
+		r.Service = nil
+		r.Delegated = nil
 		r.Auxiliary = nil
 		r.Policy = nil
 		r.Pool = nil
@@ -106,6 +108,13 @@ func TestFrozenRequestGolden(t *testing.T) {
 			r.Settings = &Settings{Modules: []string{"nfs"}}
 			r.Auxiliary = []AuxiliaryReference{{Name: "haproxy", Image: r.Registry + "/synthetic/haproxy@sha256:" + strings.Repeat("a", 64)}, {Name: "keepalived", Image: r.Registry + "/synthetic/keepalived@sha256:" + strings.Repeat("b", 64)}}
 		}
+		if action == "service" {
+			r.Service = &ServiceUnit{Type: "nfs", ID: "files", Documents: []json.RawMessage{
+				json.RawMessage(`{"placement":{"count":2,"hosts":["node-1","node-2"]},"service_id":"nfs.files","service_type":"ingress","spec":{"backend_service":"nfs.files","enable_haproxy_protocol":true,"frontend_port":2049,"monitor_port":9049,"virtual_ip":"192.0.2.50/24"}}`),
+				json.RawMessage(`{"placement":{"count":2,"hosts":["node-1","node-2"]},"service_id":"files","service_type":"nfs","spec":{"enable_haproxy_protocol":true,"port":12049}}`)}}
+			r.Delegated = []DelegatedService{{Name: "ingress.nfs.files", Hosts: []string{"node-1", "node-2"}}, {Name: "nfs.files", Hosts: []string{"node-1", "node-2"}}}
+			r.Auxiliary = frozenAuxiliaryReferences()
+		}
 		data, err := r.Canonical()
 		if err != nil {
 			t.Fatal(err)
@@ -120,7 +129,7 @@ func TestFrozenRequestGolden(t *testing.T) {
 			t.Fatal("frozen request did not round-trip")
 		}
 	}
-	r.Action, r.Subvolume, r.Settings, r.Auxiliary = "cluster", nil, nil, nil
+	r.Action, r.Subvolume, r.Settings, r.Service, r.Auxiliary = "cluster", nil, nil, nil, nil
 	r.Delegated = []DelegatedService{{Name: "ingress.rgw.objects", Hosts: []string{"node-1", "node-2"}}, {Name: "rgw.objects", Hosts: []string{"node-1", "node-2"}}}
 	data, err := r.Canonical()
 	if err != nil {

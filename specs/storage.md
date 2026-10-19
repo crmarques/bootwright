@@ -188,11 +188,18 @@ them:
 - Pools precede their filesystems; filesystem/MDS or object storage prerequisites
   precede their NFS exports; gateways precede their ingress endpoints. An export
   for a downstream consumer waits for all resources and material it describes.
-- Every child block of a cluster (its settings block, placement policies,
-  pools, clients, RBD images, filesystems and subvolumes) depends on the cluster
-  block by its block identity, never through the StorageCluster API identity
-  that the cluster's image, host and settings blocks share; a client still
-  follows its pool through the StoragePool it names.
+- Every child block of a cluster (its settings block, its service-unit blocks,
+  placement policies, pools, clients, RBD images, filesystems and subvolumes)
+  depends on the cluster block by its block identity, never through the
+  StorageCluster API identity that the cluster's image, host, settings and
+  service-unit blocks share; a client still follows its pool through the
+  StoragePool it names.
+- A service-unit block `ceph-service-<cluster>-<type>[-<id>]` (Kind
+  StorageCluster, exclusive `ceph/<cluster>`) applies the native documents of
+  one unit type (for NFS, one `nfs` service with the ingress that fronts it)
+  and depends on the cluster, image and settings blocks by ID plus any blocks
+  its type names; its deadline is fixed per type and does not grow with the
+  host count.
 
 Before an apply that selects managed Ceph claims an operation or binds secrets,
 it observes aggregate declared libvirt CPU, memory and backing-filesystem disk

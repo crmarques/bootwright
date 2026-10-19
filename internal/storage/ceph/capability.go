@@ -64,6 +64,11 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			if settings, needed := settingsRequest(request, object); needed {
 				requests = append(requests, settings)
 			}
+			units, err := serviceUnitRequests(request, object)
+			if err != nil {
+				return plan, err
+			}
+			requests = append(requests, units...)
 		}
 		for _, r := range requests {
 			definition, err := c.definition(input.Verb, object, r)
@@ -93,14 +98,18 @@ func (c Capability) definition(verb reconciliation.Verb, object api.Object, requ
 	if err != nil {
 		return reconciliation.BlockDefinition{}, err
 	}
-	impacts := []string{"realize Ceph " + request.Action + " " + object.Name()}
+	impacts := []string{"realize Ceph " + subjectOf(request, object.Name())}
 	consumes := []string{}
 	if verb == reconciliation.Destroy {
-		impacts = []string{"remove Ceph " + request.Action + " " + object.Name()}
+		impacts = []string{"remove Ceph " + subjectOf(request, object.Name())}
 		consumes = []string{reconciliation.AuthorizationDataLoss}
 	}
 	requires, dependencies := placement(object, request)
-	return reconciliation.BlockDefinition{ID: "ceph-" + request.Action + "-" + object.Name(), Description: strings.Join(impacts, ""), Stage: reconciliation.StageClusters, Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph/" + request.Cluster}, Impacts: impacts, Consumes: consumes, Kind: string(c.kind), Object: object.Name(), Implementation: Implementation, ContentDigest: ContentDigest(), Request: canonical}, nil
+	id := "ceph-" + request.Action + "-" + object.Name()
+	if request.Service != nil {
+		id = ServiceUnitBlockID(request.Cluster, *request.Service)
+	}
+	return reconciliation.BlockDefinition{ID: id, Description: strings.Join(impacts, ""), Stage: reconciliation.StageClusters, Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph/" + request.Cluster}, Impacts: impacts, Consumes: consumes, Kind: string(c.kind), Object: object.Name(), Implementation: Implementation, ContentDigest: ContentDigest(), Request: canonical}, nil
 }
 
 func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, []string) {
@@ -119,6 +128,10 @@ func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, 
 		requires = slices.Compact(requires)
 	case "policy":
 		dependencies = []string{ClusterBlockID(request.Cluster)}
+	case "service":
+		if request.Service != nil {
+			dependencies = unitDependencies(request, object)
+		}
 	case "pool":
 		if ref := object.Spec().Get("placementPolicyRef").Text(); ref != "" {
 			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePlacementPolicy), Object: ref})
@@ -177,7 +190,15 @@ func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (li
 	if err != nil {
 		return lifecycle.Removal{}, err
 	}
-	return lifecycle.Removal{Description: "remove Ceph " + r.Action + " " + block.Object, Impacts: []string{"remove Ceph " + r.Action + " " + block.Object}, Consumes: []string{reconciliation.AuthorizationDataLoss}}, nil
+	subject := subjectOf(r, block.Object)
+	return lifecycle.Removal{Description: "remove Ceph " + subject, Impacts: []string{"remove Ceph " + subject}, Consumes: []string{reconciliation.AuthorizationDataLoss}}, nil
+}
+
+func subjectOf(r Request, object string) string {
+	if r.Service != nil {
+		return "service " + r.Service.name() + " of " + object
+	}
+	return r.Action + " " + object
 }
 func (Capability) RequiresOnlineRemoval(reconciliation.Block) bool { return true }
 
@@ -209,10 +230,10 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if r.Action == "subvolume" && r.Subvolume != nil {
 		object = r.Subvolume.Name
 	}
-	if c.kind == api.StorageCluster && r.Action == "settings" {
-		action = "settings"
+	if c.kind == api.StorageCluster && (r.Action == "settings" || r.Action == "service") {
+		action = r.Action
 	}
-	if action == "" || r.Action != action || (r.Action == "settings") != (r.Settings != nil) || e.Block.Kind != string(c.kind) || e.Block.Object != object {
+	if action == "" || r.Action != action || (r.Action == "settings") != (r.Settings != nil) || (r.Action == "service") != (r.Service != nil) || e.Block.Kind != string(c.kind) || e.Block.Object != object {
 		return Request{}, failure("lifecycle.state", "Ceph request does not match its frozen resource identity", "")
 	}
 	if r.Owner != "" || r.FSID != "" || e.ApplyOperation == "" {

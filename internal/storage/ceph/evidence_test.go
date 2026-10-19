@@ -10,7 +10,7 @@ import (
 )
 
 func readyEvidence(r Request) Evidence {
-	e := Evidence{Version: EvidenceVersion, Request: "digest", Action: r.Action, Owner: r.Owner, FSID: r.FSID, Owned: true, Exists: true, Ready: true, Health: "HEALTH_OK", Hosts: hostNames(r), Monitors: hostNames(r), MGRActive: "node-1", MGRStandbys: []string{"node-2"}, MonAddrs: []MonitorAddress{}, OSDs: []OSDEvidence{}}
+	e := Evidence{Version: EvidenceVersion, Request: "digest", Action: r.Action, Owner: r.Owner, FSID: r.FSID, Owned: true, Exists: true, Ready: true, Health: "HEALTH_OK", Hosts: hostNames(r), Monitors: hostNames(r), MGRActive: "node-1", MGRStandbys: []string{"node-2"}, MonAddrs: []MonitorAddress{}, OSDs: []OSDEvidence{}, Daemons: []UnitDaemon{}}
 	for i, h := range r.Hosts {
 		e.OSDs = append(e.OSDs, OSDEvidence{Host: h.Name, Path: "/dev/vdb", ID: i, UUID: "osd-" + h.Name})
 		if r.Action == "cluster" {
@@ -64,7 +64,7 @@ func TestEvidenceRequiresExactOwnedReadyServiceAndDiskScope(t *testing.T) {
 
 func TestDaemonAbsenceNeverProvesClusterCleanup(t *testing.T) {
 	r := runtimeRequest()
-	e := Evidence{Version: EvidenceVersion, Request: "digest", Action: r.Action, Owner: r.Owner, FSID: r.FSID, Owned: true, Removed: true, Hosts: hostNames(r), Monitors: []string{}, MGRStandbys: []string{}, MonAddrs: []MonitorAddress{}, OSDs: []OSDEvidence{}}
+	e := Evidence{Version: EvidenceVersion, Request: "digest", Action: r.Action, Owner: r.Owner, FSID: r.FSID, Owned: true, Removed: true, Hosts: hostNames(r), Monitors: []string{}, MGRStandbys: []string{}, MonAddrs: []MonitorAddress{}, OSDs: []OSDEvidence{}, Daemons: []UnitDaemon{}}
 	effect, err := EvaluateEvidence(evidenceBytes(t, e), r, "digest", true)
 	if err == nil || effect != reconciliation.EffectUnknown {
 		t.Fatalf("daemon absence claimed full disk/key cleanup: %s %v", effect, err)
