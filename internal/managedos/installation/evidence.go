@@ -1,6 +1,7 @@
 package installation
 
 import (
+	"regexp"
 	"unicode"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -12,6 +13,20 @@ const (
 	maxNetworkDifferences     = 16
 	maxNetworkDifferenceBytes = 200
 )
+
+const (
+	registrationOwned   = "owned"
+	registrationPending = "pending"
+	registrationAbsent  = "absent"
+	registrationForeign = "foreign"
+)
+
+var registrationConsumer = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+type RegistrationEvidence struct {
+	Consumer string `json:"consumer"`
+	State    string `json:"state"`
+}
 
 // Evidence is the only result shape the installation adapter may return. It
 // records what a later consumer needs — the marker digest, the guest's host key
@@ -39,8 +54,9 @@ type Evidence struct {
 	// reported. An installation whose machine cannot be logged in to is not a
 	// finished installation, and an observation proves it the same way an apply
 	// does, so one rule governs both paths.
-	Reachable bool   `json:"reachable"`
-	Request   string `json:"request"`
+	Reachable    bool                 `json:"reachable"`
+	Registration RegistrationEvidence `json:"registration"`
+	Request      string               `json:"request"`
 	// RootEncryption is the root filesystem on a LUKS device bound to the TPM.
 	RootEncryption bool `json:"rootEncryption"`
 	// Tree fields observe the immutable profile dependency, never owned effects.
@@ -99,6 +115,9 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 	}
 	if request.DiskEncryption != nil && !evidence.RootEncryption {
 		return refusal("lifecycle.state", "the installed machine's root filesystem is not on the LUKS device with a TPM2 binding its installation encrypted", "")
+	}
+	if request.Registration != nil && evidence.Registration.State != registrationOwned {
+		return refusal("lifecycle.state", "the installed machine is not registered with a subscription consumer this installation created", "")
 	}
 	if evidence.Media != "" {
 		return refusal("lifecycle.state", "the installation left its virtual media inserted", "")
@@ -230,6 +249,13 @@ func ValidatePartial(data []byte, digest, marker string) error {
 			return refusal("lifecycle.state", "the installation evidence reports nothing this operation published", "")
 		}
 	}
+	return foreignRegistration(evidence)
+}
+
+func foreignRegistration(evidence Evidence) error {
+	if evidence.Registration.State == registrationForeign {
+		return refusal("lifecycle.state", "the installed machine is registered with a subscription consumer this installation did not create", "")
+	}
 	return nil
 }
 
@@ -240,6 +266,9 @@ func decodeEvidence(data []byte, digest string) (Evidence, error) {
 	}
 	if err := boundedNetworkDifferences(evidence); err != nil {
 		return Evidence{}, err
+	}
+	if !wellFormedRegistration(evidence.Registration) {
+		return Evidence{}, refusal("lifecycle.state", "the installation evidence reports a malformed registration", "")
 	}
 	if evidence.Request != digest {
 		return Evidence{}, refusal("lifecycle.state", "the installation evidence names another request", "")
@@ -259,4 +288,14 @@ func boundedNetworkDifferences(evidence Evidence) error {
 		return refusal("lifecycle.state", "the installation evidence reports unbounded network differences", "")
 	}
 	return nil
+}
+
+func wellFormedRegistration(registration RegistrationEvidence) bool {
+	switch registration.State {
+	case registrationOwned, registrationPending:
+		return registrationConsumer.MatchString(registration.Consumer)
+	case "", registrationAbsent, registrationForeign:
+		return registration.Consumer == ""
+	}
+	return false
 }

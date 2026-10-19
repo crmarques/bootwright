@@ -25,7 +25,7 @@ func runDeadline(t *testing.T, request Request, operation string) time.Duration 
 			BlockDefinition: reconciliation.BlockDefinition{ID: request.Identity.Block, Request: canonical},
 			RequestDigest:   "digest",
 		},
-		Material: fleetMaterial(),
+		Material: rhsmMaterial(fleetMaterial(), []byte("org"), []byte("key")),
 	}
 	// The run itself is not under test: only the request it was handed.
 	runner := &fakeRunner{err: errors.New("stopped")}
@@ -226,6 +226,24 @@ func TestTheDeadlineCoversTheNetworkBudgets(t *testing.T) {
 			if got := runDeadline(t, frozen, operation); got-base != moved.moves {
 				t.Errorf("%s with %s moved by 7 runs under %s, %s past %s, want %s", operation, name, got, got-base, base, moved.moves)
 			}
+		}
+	}
+}
+
+func TestRegistrationDeadlineCountsTheRegistrationBound(t *testing.T) {
+	registering, _ := onlyRequest(t, labCatalog(registeringProfile(), rhelEntitlement()))
+	unregistered := registering
+	unregistered.Registration = nil
+	if registrationBound != 15*time.Minute || registering.Deadline()-unregistered.Deadline() != registrationBound {
+		t.Fatalf("a registration adds %s to the deadline, want %s", registering.Deadline()-unregistered.Deadline(), 15*time.Minute)
+	}
+	if got, want := registering.Deadline(), 5*time.Hour+5*time.Minute+50*time.Second; got != want {
+		t.Errorf("a registering lab-rhel installs under %s, want %s", got, want)
+	}
+	for _, operation := range []string{"apply", "observe", "observe-removal", "destroy"} {
+		deadline := runDeadline(t, registering, operation)
+		if deadline != registering.Deadline() || deadline > lifecycle.MaxDeadline {
+			t.Errorf("a registering %s states %s, want %s within %s", operation, deadline, registering.Deadline(), lifecycle.MaxDeadline)
 		}
 	}
 }

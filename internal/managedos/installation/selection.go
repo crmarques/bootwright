@@ -18,7 +18,6 @@ import (
 // registration rather than installing part of what was declared.
 var unsupportedSelections = [][]string{
 	{"installer", "anaconda", "packageSource", "mirror"},
-	{"installer", "anaconda", "packageSource", "fromSubscription"},
 	{"subscription"},
 	{"customizations", "ssh", "initialPassword"},
 }
@@ -30,6 +29,10 @@ func refusedProfile(profile api.Object) (reason, remediation string) {
 	if !spec.Has("installer", "anaconda") {
 		return "this executable installs an operating system only through the anaconda installer, which the install profile does not select",
 			"select spec.installer.anaconda on " + profile.Identity()
+	}
+	if spec.Has("installer", "anaconda", "packageSource", "fromSubscription") {
+		return "the install profile selects spec.installer.anaconda.packageSource.fromSubscription, which registers inside the installer, where a failed registration cannot be retried without installing again",
+			"remove spec.installer.anaconda.packageSource.fromSubscription from " + profile.Identity() + ", to install from its boot media or from spec.installer.anaconda.packageSource.hostedTree"
 	}
 	for _, path := range unsupportedSelections {
 		if spec.Has(path...) {
@@ -133,6 +136,10 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 			continue
 		}
 		if reason, remediation := refusedEncryption(catalog, machine, profile, derived, derivedOK); reason != "" {
+			found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
+			continue
+		}
+		if reason, remediation := refusedRegistration(catalog, machine, profile, derived, derivedOK); reason != "" {
 			found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
 			continue
 		}
@@ -245,6 +252,9 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	}
 	if request.FleetKeyRef == "" {
 		return Request{}, Requirements{}, refusal("api.required", "the Environment declares no fleet access key", "set spec.remoteMachinesAccessKey.keyRef")
+	}
+	if request.Registration, err = registrationFor(catalog, profile); err != nil {
+		return Request{}, Requirements{}, err
 	}
 	if target.Channel == substrate.ChannelGuestAgent {
 		request.Target.HostKeyType = guestHostKeyType(fipsEnabled(profile))

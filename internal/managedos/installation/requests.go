@@ -178,8 +178,9 @@ type Request struct {
 	// the installer image. The
 	// attempt mints the unguessable final segment, so this names the parent
 	// it owns and never the path itself.
-	Private *Publication `json:"private,omitempty"`
-	Target  Target       `json:"target"`
+	Private      *Publication  `json:"private,omitempty"`
+	Registration *Registration `json:"registration,omitempty"`
+	Target       Target        `json:"target"`
 	// TLSCertificateRef names the serving certificate the installing machine
 	// verifies the private fetch against. Only its public half is used, and it
 	// reaches the adapter at execution rather than in the plan.
@@ -195,6 +196,18 @@ type DiskEncryption struct {
 	RecoveryPassphraseRef string `json:"recoveryPassphraseRef"`
 }
 
+type Registration struct {
+	ActivationKeyRef string                   `json:"activationKeyRef"`
+	EntitlementRef   string                   `json:"entitlementRef"`
+	OrganizationRef  string                   `json:"organizationRef"`
+	Repositories     SubscriptionRepositories `json:"repositories"`
+}
+
+type SubscriptionRepositories struct {
+	Disable []string `json:"disable"`
+	Enable  []string `json:"enable"`
+}
+
 const fipsArgument = "fips=1"
 
 func (r Request) fips() bool { return slices.Contains(r.InstallerArguments, fipsArgument) }
@@ -202,7 +215,11 @@ func (r Request) fips() bool { return slices.Contains(r.InstallerArguments, fips
 // Deadline bounds every run of this request: its budgets back to back, and
 // the margin for everything else an apply does.
 func (r Request) Deadline() time.Duration {
-	return r.Budgets.total() + time.Duration(r.Network.CheckpointSeconds)*time.Second + networkRollbackGrace + mediaMargin
+	deadline := r.Budgets.total() + time.Duration(r.Network.CheckpointSeconds)*time.Second + networkRollbackGrace + mediaMargin
+	if r.Registration != nil {
+		deadline += registrationBound
+	}
+	return deadline
 }
 
 // Canonical encodes the request exactly as the plan digest and the adapter both
@@ -295,6 +312,9 @@ func (r Request) SecretReferences() []string {
 	}
 	if r.DiskEncryption != nil {
 		references = append(references, r.DiskEncryption.RecoveryPassphraseRef)
+	}
+	if r.Registration != nil {
+		references = append(references, r.Registration.OrganizationRef, r.Registration.ActivationKeyRef)
 	}
 	if r.Image != nil {
 		references = append(references, r.Image.CertificateRef)

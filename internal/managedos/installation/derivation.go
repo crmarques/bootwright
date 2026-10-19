@@ -98,6 +98,9 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 	if installation.DiskEncryption = kickstartEncryptionFor(profile); installation.DiskEncryption != nil {
 		installation.Packages = SortedUnique(append(installation.Packages, encryptionPackages...))
 	}
+	if request.Registration != nil {
+		installation.Packages = SortedUnique(append(installation.Packages, registrationPackages...))
+	}
 	if request.Target.Hardware != nil {
 		for _, declared := range request.Target.Hardware.Interfaces {
 			installation.ExpectedMACs = append(installation.ExpectedMACs, declared.MACAddress)

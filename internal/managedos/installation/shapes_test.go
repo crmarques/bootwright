@@ -328,7 +328,7 @@ func TestRequestRefusalsNameTheFieldThatDeclaresIt(t *testing.T) {
 // tooling list it once named must leave its input, and every frozen plan,
 // unchanged.
 func TestTheContentDigestIsPinned(t *testing.T) {
-	if digest := ContentDigest(); digest != "f078e86a512ffc43217c6244c2c182f55d30ef22a5f7e64cfa2fe92dad43a556" {
+	if digest := ContentDigest(); digest != "ee07f080ca8018a66d5f6f66f64e3ac2721de261c65b489899936ea8e5881053" {
 		t.Fatalf("content digest = %s", digest)
 	}
 }

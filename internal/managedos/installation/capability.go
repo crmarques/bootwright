@@ -191,6 +191,9 @@ func impacts(verb reconciliation.Verb, request Request) []string {
 			"configure-network "+request.Identity.Object,
 			"restart "+request.Identity.Object)
 	}
+	if verb != reconciliation.Destroy && request.Registration != nil {
+		impacts = append(impacts, "register-subscription "+request.Identity.Object)
+	}
 	slices.Sort(impacts)
 	return slices.Compact(impacts)
 }
@@ -327,6 +330,9 @@ func installationEffect(verb reconciliation.Verb, evidence []byte, request Reque
 	case ValidatePartial(evidence, digest, marker) == nil:
 		return reconciliation.EffectPartial, nil
 	}
+	if decoded, err := decodeEvidence(evidence, digest); err == nil && foreignRegistration(decoded) != nil {
+		return reconciliation.EffectUnknown, foreignRegistration(decoded)
+	}
 	return reconciliation.EffectUnknown, presence
 }
 
@@ -427,39 +433,9 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	}
 	var refusals map[string]error
 	if operation == "apply" {
-		// Only an apply proves its target before it boots it.
-		refusals = substrate.PreBootRefusals(request.Target.Substrate, execution.Context, execution.Continuation, request.Identity.Object, request.Target.Controller.Endpoint)
-		if refusals == nil {
-			refusals = map[string]error{}
-		}
-		maps.Copy(refusals, mediaRefusals(execution.Context, request))
-		key, err := authorizedKey(execution, request)
-		if err != nil {
+		if refusals, err = c.applyRefusals(execution, request, values); err != nil {
 			return lifecycle.RunResult{}, err
 		}
-		values["authorizedKey"] = key
-		values["fleetKeyType"] = strings.Fields(key)[0]
-		if request.fips() {
-			if err := fipsFleetKey(request, key); err != nil {
-				return lifecycle.RunResult{}, err
-			}
-			refusals["fips-not-enabled"] = fipsNotEnabled(execution.Context, request)
-		}
-		if err := encryptionRefusals(execution, request, refusals); err != nil {
-			return lifecycle.RunResult{}, err
-		}
-		if request.Target.Channel == substrate.ChannelGuestAgent {
-			algorithm, err := generatedHostKeyType(execution.Context, request)
-			if err != nil {
-				return lifecycle.RunResult{}, err
-			}
-			values["generatedHostKeyType"] = algorithm
-		}
-		pin, err := c.pinValues(execution, request)
-		if err != nil {
-			return lifecycle.RunResult{}, err
-		}
-		maps.Copy(values, pin)
 	}
 	// A machine proved by a delivered key is read over a connection pinned to
 	// exactly that key, so the public half reaches every operation, not only
@@ -505,6 +481,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		materials = append(materials, publicationCertificates(request)...)
 	}
 	materials = append(materials, recoveryMaterial(operation, request)...)
+	materials = append(materials, registrationMaterial(operation, request)...)
 	// The deadline follows the budgets this request froze, not this build's.
 	if operation == "apply" {
 		maps.Copy(refusals, keyPolicyRefusals(request, values))
@@ -514,6 +491,47 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
 		Refusals: refusals, Deadline: request.Deadline(),
 	}))
+}
+
+func (c Capability) applyRefusals(execution lifecycle.Execution, request Request, values map[string]string) (map[string]error, error) {
+	// Only an apply proves its target before it boots it.
+	refusals := substrate.PreBootRefusals(request.Target.Substrate, execution.Context, execution.Continuation, request.Identity.Object, request.Target.Controller.Endpoint)
+	if refusals == nil {
+		refusals = map[string]error{}
+	}
+	maps.Copy(refusals, mediaRefusals(execution.Context, request))
+	key, err := authorizedKey(execution, request)
+	if err != nil {
+		return nil, err
+	}
+	values["authorizedKey"] = key
+	values["fleetKeyType"] = strings.Fields(key)[0]
+	if request.fips() {
+		if err := fipsFleetKey(request, key); err != nil {
+			return nil, err
+		}
+		refusals["fips-not-enabled"] = fipsNotEnabled(execution.Context, request)
+	}
+	if err := encryptionRefusals(execution, request, refusals); err != nil {
+		return nil, err
+	}
+	if err := registrationValues(execution, request); err != nil {
+		return nil, err
+	}
+	maps.Copy(refusals, registrationRefusals(execution.Context, request))
+	if request.Target.Channel == substrate.ChannelGuestAgent {
+		algorithm, err := generatedHostKeyType(execution.Context, request)
+		if err != nil {
+			return nil, err
+		}
+		values["generatedHostKeyType"] = algorithm
+	}
+	pin, err := c.pinValues(execution, request)
+	if err != nil {
+		return nil, err
+	}
+	maps.Copy(values, pin)
+	return refusals, nil
 }
 
 func publicationCertificates(request Request) []lifecycle.MaterialFile {

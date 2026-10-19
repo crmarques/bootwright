@@ -1,5 +1,5 @@
 implementation: os-install-anaconda-v1
-content-digest: f078e86a512ffc43217c6244c2c182f55d30ef22a5f7e64cfa2fe92dad43a556
+content-digest: ee07f080ca8018a66d5f6f66f64e3ac2721de261c65b489899936ea8e5881053
 automation-formats: none
 request-schema:
   address string
@@ -60,6 +60,13 @@ request-schema:
   private.certificateRef string omitempty
   private.path string
   private.url string
+  registration *struct installation.Registration omitempty
+  registration.activationKeyRef string
+  registration.entitlementRef string
+  registration.organizationRef string
+  registration.repositories struct installation.SubscriptionRepositories
+  registration.repositories.disable []string
+  registration.repositories.enable []string
   target struct installation.Target
   target.channel string
   target.controller struct installation.Controller
@@ -108,6 +115,9 @@ evidence-schema:
   power string
   private bool
   reachable bool
+  registration struct installation.RegistrationEvidence
+  registration.consumer string
+  registration.state string
   request string
   rootEncryption bool
   tree bool
