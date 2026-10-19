@@ -335,6 +335,23 @@ def test_nfs_unit_replay_after_apply_before_readiness(tmp_path):
     assert evidence["owned"] and evidence["exists"] and len(evidence["daemons"]) == 6
 
 
+def test_nfs_unit_refuses_an_attempted_service_stored_with_another_spec(tmp_path):
+    """An attempt lost before its apply, then the service created outside with another spec: never completed, never adopted."""
+    request = unit_request("haproxy")
+    markers = markers_for(tmp_path, request)
+    seed_records(markers, request)
+    specs = {"nfs.files": dict(request["service"]["documents"][1], spec={"port": 2050})}
+    before = records(markers)
+    monitor = Monitor(request, specs=specs)
+    with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
+        worker(monitor, markers).unit()
+    native = worker(monitor, markers)
+    with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
+        native.observe_resource(native.empty_evidence(), True)
+    assert records(markers) == before and monitor.mutations == []
+    assert not any(name.endswith("-complete.json") for name in records(markers))
+
+
 class ForeignMarkers(ceph_native.Markers):
     def owned(self):
         return False
