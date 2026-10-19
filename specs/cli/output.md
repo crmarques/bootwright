@@ -48,6 +48,12 @@ privilege or any hidden read; provide it through a pipe or a file.
 Default raw exports remain byte-exact. Explicit structured credential and
 completion exports use `result.export` with `mediaType`, `encoding` (`utf-8`
 or `base64`) and `content`, preserving every original byte when decoded.
+Exported content is base64-encoded, in JSON and YAML alike, when it is not
+valid UTF-8 or contains a C0 control other than tab, line feed or carriage
+return, DEL, or a C1 control (U+0080-U+009F); every YAML string value is
+double-quoted, and so is every mapping key that is not a letter followed by
+letters, digits, `_`, `.`, `-` or `/`, or that a YAML 1.1 reader would read as
+a boolean or null. A YAML string keeps every character the JSON string holds.
 
 ## Human output
 
@@ -81,7 +87,8 @@ beneath the change that causes them.
 Widths measure terminal cells after display escaping, accounting for combining
 characters, wide glyphs and renderer-generated ANSI sequences. Untrusted values
 are escaped exactly once before layout. Tables and long fields wrap without
-losing facts. An explicit width is capped by an injected terminal width; the
+losing facts. Paths, identifiers and commands are never split and may exceed the
+width. An explicit width is capped by an injected terminal width; the
 renderer leaves the final terminal cell unused to avoid an accidental wrap.
 With no width or terminal capability, the default is 96 columns. No line ends
 in padding. The composition root supplies terminal, no-color and dumb-terminal
@@ -370,9 +377,10 @@ or no management controller answers for the Machine, and is distinct from
 `unknown`, a controller that was asked and gave no usable answer. What the
 contact, the addresses, the lifecycle position and the power reading mean is
 owned by [resource inspection](../cli.md#resource-inspection-and-explicit-access).
-The human table shows the same columns, `NAME`, `CONTACT`, `ADDRESSES`, `OS`,
-`PROVIDER`, `CLUSTERS`, `LIFECYCLE` and, only when a reading was taken,
-`POWER`, with `-` for an absent value.
+When the width holds them, the human table shows the same columns, `NAME`,
+`CONTACT`, `ADDRESSES`, `OS`, `PROVIDER`, `CLUSTERS`, `LIFECYCLE` and, only when
+a reading was taken, `POWER`, with `-` for an absent value; otherwise it shows
+stacked records with the same facts.
 
 `machine start`, `machine stop` and `machine restart` report `context`, `verb`
 and `machines`, whatever the number of Machines `--name` lists. `machines` holds
@@ -524,8 +532,9 @@ not prove that access material is available. Sensitive `cluster info --secrets`
 retains its separate explicit disclosure boundary.
 
 Human `cluster info` groups available Topology, Access, Evidence and Custody
-facts. Full detail includes verbose frozen evidence, certificates and access
-templates; compact detail retains statuses, actionable reasons and ready access.
+facts. Full detail includes verbose frozen evidence and access templates; compact
+detail retains statuses, actionable reasons, ready access and the dashboard
+certificate fingerprint, the evidence for the browser's self-signed warning.
 It identifies the default
 SSH node, and gives context- and cluster-qualified invocation templates for
 applicable commands, including `--node` for SSH and `-- <command>...` for a

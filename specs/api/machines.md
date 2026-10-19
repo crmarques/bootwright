@@ -567,7 +567,7 @@ optional. Validation is lexical only.
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
 | `spec.os.family` | string | yes | `rhel`, accepted case-insensitively and normalized to lowercase `rhel` in effective state. |
-| `spec.os.version` | string | yes | Non-empty; when it has a numeric major, the major is at least `9`. |
+| `spec.os.version` | string | yes | Non-empty. |
 | `spec.os.architecture` | string | yes | `x86_64`. |
 | `spec.installer.anaconda` | object | union | Anaconda arm below. |
 | `spec.installer.templateClone` | object | union | A [refused arm](#refused-arms). |

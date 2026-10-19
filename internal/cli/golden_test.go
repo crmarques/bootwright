@@ -1145,6 +1145,25 @@ func TestCommandOutputMatchesItsGoldens(t *testing.T) {
 	}
 }
 
+func TestSuccessfulValidateWritesExactlyOneSummaryLine(t *testing.T) {
+	for _, test := range cliGoldens() {
+		if test.golden != "cli-validate" {
+			continue
+		}
+		record := &dispatchRecord{}
+		test.record(record)
+		var out, errOut bytes.Buffer
+		record.out = &out
+		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), strings.Fields(test.args))
+		want := "  \u2713 Desired state is valid (files seen: 15, objects decoded: 15)\n"
+		if code != 0 || out.String() != want {
+			t.Fatalf("validate exited %d with standard output %q, want exactly %q", code, out.String(), want)
+		}
+		return
+	}
+	t.Fatal("no cli-validate case")
+}
+
 // An apply that did not complete closes with the exact command its records
 // call for, after its logs and before its receipt, whether it paused, failed,
 // lost an outcome or stopped running; a completed apply names none.

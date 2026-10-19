@@ -85,7 +85,6 @@ func refusalRows() []refusalRow {
 		{"controller without local access", environmentYAML, ""},
 		{"controller without the container-runtime capability", environmentYAML, ""},
 		{"a second local Machine", environmentYAML, "apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: probe}\nspec:\n  os: {provided: true}\n  access: {local: true}\n"},
-		{"rescue on another RHEL version", environmentYAML + "  lifecycle:\n    rescue:\n      imageRef: probe\n      os: {family: rhel, version: '8.10', architecture: x86_64}\n      artifactServerEndpoint: {serverRef: artifacts, endpointRef: http}\n", "apiVersion: bootwright.io/v1alpha1\nkind: MachineImage\nmetadata: {name: probe}\nspec:\n  bootMedia: local-media:rhel-8.10-x86_64-boot.iso\n"},
 	}
 }
 

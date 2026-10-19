@@ -177,6 +177,8 @@ failed work; a still-unknown observation refuses further effects. Correct the
 reported trust, inventory or network problem before retrying. Keep bound
 Secrets and media available. A failed installation can leave private material
 published until the next apply clears it or destroy removes it.
+An automation-only rebuild continues: run `make build` and the same apply;
+follow [changing the build between runs](../../../docs/operator-guide.md#changing-the-build-between-runs) rather than destroying.
 
 The artifact unit journal records completed request metadata without paths;
 a TLS failure before an HTTP request may require separate network diagnosis:

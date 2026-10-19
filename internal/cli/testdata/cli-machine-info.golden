@@ -6,7 +6,8 @@
       Contact  controller.lab.example.test
     Evidence
       Lifecycle  not-applied
-      Power  not read
+      Power      not read
+
   ○ machine | rhel-01 · applied
     Placement
       OS        installed
@@ -15,7 +16,8 @@
       Contact  rhel-01.lab.example.test
     Evidence
       Lifecycle  applied
-      Power  not read
+      Power      not read
+
   ○ machine | sno-01 · not-applied
     Placement
       OS        provided
@@ -24,4 +26,4 @@
       Contact  -
     Evidence
       Lifecycle  not-applied
-      Power  not read
+      Power      not read

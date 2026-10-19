@@ -92,9 +92,9 @@ func TestEveryEnvironmentRefusalNamesItsStep(t *testing.T) {
 		{"cluster node", env, []api.Object{controllerMachine(true, true, true), cluster}, controllerField,
 			"controller must remain outside cluster node membership; it is a node of ContainerCluster/apps",
 			"remove Machine/ctl from the nodes of ContainerCluster/apps, or set spec.controller.machineRef to a Machine outside cluster membership"},
-		{"rescue version", rescueEnvironment("8.10", api.Value{}), []api.Object{media("local-media:rhel-8.10-x86_64-boot.iso")}, "$.spec.lifecycle.rescue.os.version",
-			"rescue requires a RHEL 9 version",
-			"set spec.lifecycle.rescue.os.version to a RHEL 9 version, 9.<minor>"},
+		{"rescue on another RHEL version", rescueEnvironment("10.1", api.Value{}), []api.Object{media("local-media:rhel-10.1-x86_64-boot.iso")}, "$.spec.lifecycle.rescue",
+			"no rescue journey exists yet, so no lifecycle can use a rescue declaration",
+			"remove spec.lifecycle.rescue from Environment/lab"},
 		{"ephemeral artifact server", rescueEnvironment("", endpoint), []api.Object{media("local-media:rhel-9.8-x86_64-boot.iso"), artifactServer("ephemeral", "")},
 			"$.spec.lifecycle.rescue.artifactServerEndpoint.serverRef",
 			"rescue requires a persistent artifact server",
@@ -125,6 +125,16 @@ func TestEveryEnvironmentRefusalNamesItsStep(t *testing.T) {
 				t.Fatalf("no refusal %q at %s in %+v", row.message, row.field, issues)
 			}
 		})
+	}
+}
+
+func TestARescueVersionIsNotRefusedForItsRelease(t *testing.T) {
+	for _, version := range []string{"8.10", "10.1", "9.8"} {
+		env := rescueEnvironment(version, api.Value{})
+		issues := environment.Validate(env, api.NewCatalog([]api.Object{env}))
+		if slices.ContainsFunc(issues, func(issue api.Issue) bool { return issue.Field == "$.spec.lifecycle.rescue.os.version" }) {
+			t.Errorf("version %s: issues = %+v, want none at the rescue os.version", version, issues)
+		}
 	}
 }
 

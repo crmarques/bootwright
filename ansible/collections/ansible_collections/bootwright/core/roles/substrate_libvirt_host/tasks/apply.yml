@@ -282,6 +282,18 @@
       delay: 2
       until: (substrate_libvirt_host_firewall_state.rc | default(1)) == 0
       changed_when: false
+      failed_when: false
+      when: bootwright_substrate_host_request.firewallReadyUnit | length > 0
+
+    - name: Refuse when the host firewall did not answer
+      ansible.builtin.assert:
+        that:
+          - (substrate_libvirt_host_firewall_state.rc | default(1)) == 0
+        fail_msg: >-
+          the host firewall did not answer firewall-cmd --state in 31 attempts
+          two seconds apart; start firewalld.service, confirm firewall-cmd
+          --state reports running, then repeat the apply
+        quiet: true
       when: bootwright_substrate_host_request.firewallReadyUnit | length > 0
 
     - name: Start each managed network

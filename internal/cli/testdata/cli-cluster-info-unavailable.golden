@@ -16,6 +16,7 @@
       cluster rsh  not-implemented
       sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
       reached through bootwright cluster kubeconfig
+
   ○ cluster | okd-lab
     Topology
       Type  ContainerCluster
@@ -35,6 +36,7 @@
       cluster rsh  not-implemented
       sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
       reached through bootwright cluster kubeconfig
+
   ○ cluster | archive
     Topology
       Type  StorageCluster
@@ -44,9 +46,10 @@
       cluster kubectl  not-applicable
       cluster oc  not-applicable
       cluster rsh  not-applicable
+
   ○ cluster | storage · unavailable
     Topology
-      Type  StorageCluster
+      Type        StorageCluster
       Management  managed
       Release     9.9.1.2
     Access

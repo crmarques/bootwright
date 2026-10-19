@@ -114,7 +114,7 @@ func TestTheShippedMediaServiceReportsAndPresentsOnStdout(t *testing.T) {
 	if err != nil || len(listed.Media) != 1 || listed.Media[0].Verified != "ok" {
 		t.Fatalf("the shipped media list = %+v (%#v)", listed, diagnostics.Of(err))
 	}
-	checks := "\nChecks\n  [RUNNING]  [1/1] Verify demo.iso\n  [OK]       [1/1] Verify demo.iso: matches its record"
+	checks := "\n  Checks\n  [RUNNING]  [1/1] Verify demo.iso\n  [OK]       [1/1] Verify demo.iso: matches its record"
 	if !strings.HasPrefix(out.String(), checks) {
 		t.Fatalf("the shipped media list reported %q, want it to begin %q", out.String(), checks)
 	}

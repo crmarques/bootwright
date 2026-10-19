@@ -82,6 +82,8 @@ Use `status` and the [recovery rules](../lab-rhel/README.md#interrupting-an-appl
 after interruption or failure. Repeat apply with unchanged frozen input to
 observe unknown outcomes and retry failed work. Continue an interrupted
 destroy with destroy. Do not delete the context to retry installation.
+An automation-only rebuild continues: run `make build` and the same apply;
+follow [changing the build between runs](../../../docs/operator-guide.md#changing-the-build-between-runs) rather than destroying.
 
 Stop every realized guest before removal; an installer that cannot shut down
 normally may need `machine stop --name <name> --force`. Then:

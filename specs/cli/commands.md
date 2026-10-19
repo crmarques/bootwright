@@ -126,7 +126,7 @@ The three `media` commands follow the host-wide
 | `bootwright cluster kubectl` | required `--name <cluster>` and non-empty `<command>...` | bounded `kubectl` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubeconfig` | required `--name <cluster>` | kubeconfig through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
 | `bootwright version` | none | version, commit, source state, Go runtime and target, and embedded dependency-bundle identity | none |
-| `bootwright help [command ...]` | no local flags | human help for the exact resolved command | none |
+| `bootwright help [command ...]` | no local flags | help for the exact resolved command, human or structured | none |
 | `bootwright completion bash` | `--no-descriptions` false | Bash completion script | none |
 | `bootwright completion zsh` | `--no-descriptions` false | Zsh completion script | none |
 | `bootwright completion fish` | `--no-descriptions` false | Fish completion script | none |

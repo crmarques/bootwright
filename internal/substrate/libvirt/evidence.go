@@ -149,7 +149,8 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 		return err
 	}
 	if request.FirewallReadyUnit != "" && !evidence.FirewallReady.Ready {
-		return refusal("lifecycle.state", "the provider host firewall is not proved enabled and ready", "")
+		return refusal("lifecycle.state", "the provider host firewall is not proved enabled and ready",
+			"start firewalld.service, confirm firewall-cmd --state reports running, then repeat the apply")
 	}
 	if !evidence.URI {
 		return refusal("lifecycle.state", "the declared libvirt connection does not answer", "")
@@ -166,9 +167,15 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 	return matchNetworks(evidence.Networks, request.Networks)
 }
 
+const firewallUnitRemedy = "repeat the apply to restore the owned readiness unit; start firewalld first if it is not answering"
+
 func matchFirewallReady(observed FirewallReadyEvidence, name string) error {
 	if !observed.Answered || observed.Name != name {
-		return refusal("lifecycle.state", "the provider host evidence does not prove its frozen firewalld readiness unit", "")
+		remedy := firewallUnitRemedy
+		if name == "" {
+			remedy = ""
+		}
+		return refusal("lifecycle.state", "the provider host evidence does not prove its frozen firewalld readiness unit", remedy)
 	}
 	if name == "" {
 		if observed.Present || observed.Owned || observed.Enabled || observed.Ready || observed.State != "" {
@@ -177,7 +184,7 @@ func matchFirewallReady(observed FirewallReadyEvidence, name string) error {
 		return nil
 	}
 	if !observed.Present || !observed.Owned || !observed.Enabled || observed.State != "active" {
-		return refusal("lifecycle.state", "the provider's firewalld readiness unit is not owned, active and enabled", "")
+		return refusal("lifecycle.state", "the provider's firewalld readiness unit is not owned, active and enabled", firewallUnitRemedy)
 	}
 	return nil
 }
@@ -353,8 +360,21 @@ func decodeHostRemains(data []byte, digest string) (HostEvidence, error) {
 	return evidence, nil
 }
 
+func matchFirewallHeld(observed FirewallReadyEvidence, name string) error {
+	if name == "" {
+		return matchFirewallReady(observed, name)
+	}
+	if !observed.Answered || observed.Name != name {
+		return refusal("lifecycle.state", "the provider host evidence does not prove its frozen firewalld readiness unit", "")
+	}
+	if !observed.Present || !observed.Owned || !observed.Enabled {
+		return refusal("lifecycle.state", "the provider's firewalld readiness unit is not owned and enabled", "")
+	}
+	return nil
+}
+
 func unremoved(evidence HostEvidence, request HostRequest) error {
-	if err := matchFirewallReady(evidence.FirewallReady, request.FirewallReadyUnit); err != nil {
+	if err := matchFirewallHeld(evidence.FirewallReady, request.FirewallReadyUnit); err != nil {
 		return err
 	}
 	if !evidence.URI {

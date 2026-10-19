@@ -314,7 +314,7 @@ func writeLifecycleOperation(out io.Writer, result *lifecycle.OperationResult) e
 	}
 	if len(closing) != 0 {
 		text.section("")
-		text.fields(closing...)
+		text.verbatimFields(closing...)
 	}
 	if err := text.writeTo(out); err != nil {
 		return err

@@ -154,7 +154,8 @@ only certificates. Show never reveals superseded/bound versions or falls back.
 Validate/authenticate the complete part before output. Default text mode emits
 exact raw stdout without an added LF. Explicit JSON or YAML output uses the
 [structured export envelope](cli/output.md#streams-and-exit-status), with UTF-8
-content or base64 for non-UTF-8 bytes, under the same reveal authority. A
+content, or base64 when that section's rule says the bytes are not exportable
+as text, under the same reveal authority. A
 partial writer failure emits no secondary diagnostic.
 
 Bounds: 1 MiB/part, 2 MiB/version, 64 MiB referenced material, 4096 versions and

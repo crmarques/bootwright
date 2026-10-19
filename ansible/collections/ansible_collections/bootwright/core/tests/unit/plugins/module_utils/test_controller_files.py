@@ -413,8 +413,24 @@ class ControllerFilesTests(unittest.TestCase):
                 files.prepare_tool(self.location, tool(b"bytes"), EGRESS, DEADLINE)
         self.assertEqual(self.left(), [])
 
-    def test_frozen_tool_requires_exact_stable_release(self):
-        for version in ("latest", "v1.2.3-rc.1", "1.02.3", "1.2.3+build"):
+    def test_frozen_tool_projects_every_exact_publisher_tag(self):
+        for kind, compatibility, version in (
+            ("virtctl", "kubevirt", "v1.9.0-rc.0"),
+            ("virtctl", "kubevirt", "1.2.3+build"),
+            ("openshift-install", "openshift", "4.22.0-rc.1"),
+            ("helm", "", "v3.20.0-rc.1"),
+            ("govc", "", "v0.54"),
+        ):
+            with self.subTest(kind=kind, version=version):
+                definition = tool(b"bytes", kind, compatibility, version)
+                definition["archive"] = "binary" if kind == "virtctl" else "tar.gz"
+                if kind == "helm":
+                    path = "tools/helm/" + version + "/helm"
+                    definition["files"] = [{"member": "linux-amd64/helm", "path": path}]
+                self.assertEqual(files.tool_files(definition), definition["files"])
+
+    def test_frozen_tool_requires_an_exact_release_tag(self):
+        for version in ("latest", "", "-1.2.3", "v1.2 3", "1" * 97):
             with self.subTest(version=version):
                 definition = tool(b"bytes", "virtctl", "kubevirt", version)
                 with refuse_acquisition("invalid release read network"):

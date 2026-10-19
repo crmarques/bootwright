@@ -322,7 +322,12 @@ func writeClusterInfo(out, errOut io.Writer, command string, result *inspection.
 		return text.writeTo(out)
 	}
 	full := presentationFor(out).Detail == "full"
+	records := 0
 	for _, cluster := range result.Clusters {
+		if records > 0 {
+			text.separate()
+		}
+		records++
 		text.resourceHeading("cluster", cluster.Name, "")
 		text.subsection("Topology")
 		text.mutedFields(field{Label: "Type", Value: cluster.Kind})
@@ -333,9 +338,17 @@ func writeClusterInfo(out, errOut io.Writer, command string, result *inspection.
 		if cluster.Ceph != nil {
 			status = cluster.Ceph.Status
 		}
+		if records > 0 {
+			text.separate()
+		}
+		records++
 		text.resourceHeading("cluster", cluster.Name, status)
 		text.subsection("Topology")
-		text.mutedFields(field{Label: "Type", Value: cluster.Kind})
+		topology := []field{{Label: "Type", Value: cluster.Kind}}
+		if cluster.Ceph != nil {
+			topology = append(topology, managedCephTopology(cluster.Ceph)...)
+		}
+		text.mutedFields(topology...)
 		if cluster.Ceph != nil {
 			writeManagedCeph(&text, result.Context, cluster.Name, cluster.Ceph, cluster.AccessCommands, full)
 		} else {
@@ -345,28 +358,30 @@ func writeClusterInfo(out, errOut io.Writer, command string, result *inspection.
 	return text.writeTo(out)
 }
 
-func writeManagedCeph(text *display, contextName, cluster string, ceph *inspection.ManagedCeph, commands []inspection.AccessCommand, full bool) {
-	text.mutedFields(field{Label: "Management", Value: ceph.Management}, field{Label: "Release", Value: ceph.Release})
+func managedCephTopology(ceph *inspection.ManagedCeph) []field {
+	fields := []field{{Label: "Management", Value: ceph.Management}, {Label: "Release", Value: ceph.Release}}
 	if ceph.Status == inspection.StatusReady {
-		text.mutedFields(field{Label: "Admin node", Value: ceph.AdminNode})
+		fields = append(fields, field{Label: "Admin node", Value: ceph.AdminNode})
 	}
+	return fields
+}
+
+func writeManagedCeph(text *display, contextName, cluster string, ceph *inspection.ManagedCeph, commands []inspection.AccessCommand, full bool) {
 	writeAccessCommands(text, contextName, cluster, commands, full)
 	if ceph.Status == inspection.StatusReady {
+		monitors := make([]field, 0, len(ceph.Monitors))
 		for index, monitor := range ceph.Monitors {
 			label := ""
 			if index == 0 {
 				label = "Monitors"
 			}
-			text.mutedFields(field{Label: label, Value: monitor.Host + "  " + monitor.FQDN + "  " + monitor.Address})
+			monitors = append(monitors, field{Label: label, Value: monitor.Host + "  " + monitor.FQDN + "  " + monitor.Address})
 		}
-		text.mutedFields(field{Label: "Ceph command", Value: ceph.CephCommand})
+		text.mutedFields(monitors...)
+		text.mutedVerbatimFields(field{Label: "Ceph command", Value: ceph.CephCommand})
 	}
 	if ceph.Dashboard != nil {
-		fields := dashboardAccessFields(ceph.Dashboard)
-		if !full && ceph.Dashboard.CertificateSHA256 != "" {
-			fields = fields[:len(fields)-1]
-		}
-		text.mutedFields(fields...)
+		text.mutedFields(dashboardAccessFields(ceph.Dashboard)...)
 	}
 	text.subsection("Evidence")
 	fields := []field{{Label: "Status", Value: ceph.Status}}
@@ -427,7 +442,7 @@ func writeAccessCommands(text *display, contextName, cluster string, commands []
 		text.mutedFields(field{Label: command.Command, Value: command.Status})
 		switch command.Status {
 		case inspection.StatusReady:
-			text.mutedLines([]string{accessTemplate(contextName, cluster, command)})
+			text.mutedVerbatimLines([]string{accessTemplate(contextName, cluster, command)})
 		case inspection.StatusNotApplicable:
 			if full {
 				text.mutedLines([]string{command.Reason})
@@ -435,7 +450,7 @@ func writeAccessCommands(text *display, contextName, cluster string, commands []
 		default:
 			text.mutedLines([]string{command.Reason})
 			if full {
-				text.mutedLines([]string{"template (" + command.Status + "): " + accessTemplate(contextName, cluster, command)})
+				text.mutedVerbatimLines([]string{"template (" + command.Status + "): " + accessTemplate(contextName, cluster, command)})
 			}
 		}
 	}

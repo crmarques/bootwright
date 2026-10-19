@@ -40,9 +40,9 @@ release numbers or contact publishers.
 | Field | Dependency | Exact override |
 | --- | --- | --- |
 | `libvirt` | Native libvirt client, including `virsh` | `latest`; the grammar admits a distribution package version or `[EPOCH:]VERSION-RELEASE`, which the controller stage refuses. |
-| `helm` | Helm | Stable `MAJOR.MINOR.PATCH`, optionally prefixed by `v`. |
-| `govc` | vSphere client | Stable `MAJOR.MINOR.PATCH`, optionally prefixed by `v`. |
-| `virtctl` | Upstream KubeVirt client | Stable `MAJOR.MINOR.PATCH`, optionally prefixed by `v`. |
+| `helm` | Helm | `latest` or an exact publisher release tag, optionally prefixed by `v`. |
+| `govc` | vSphere client | `latest` or an exact publisher release tag, optionally prefixed by `v`. |
+| `virtctl` | Upstream KubeVirt client | `latest` or an exact publisher release tag, optionally prefixed by `v`. |
 
 The private interpreter, `ansible-core` and the baseline native packages have
 no field here. They are [host prerequisites](../controller.md): one prepared
@@ -56,9 +56,12 @@ installs whatever the host's own repositories provide, through the host's dnf,
 so a selected libvirt closure with any other `libvirt` value refuses at that
 stage, naming the Environment and the remedy of removing the field
 ([the controller stage](../controller.md#the-controller-stage)). Version
-ranges, wildcards, prereleases for generic clients, nulls and empty strings
-are invalid. Native values are at most 96 ASCII characters, start with an
-alphanumeric character, and otherwise contain only alphanumerics or `._+~^:-`.
+ranges, wildcards, nulls and empty strings are invalid. A client release tag,
+after its optional `v`, is at most 95 ASCII characters, starts with a digit,
+and otherwise contains only alphanumerics or `._+-`; any tag the publisher
+publishes, prereleases included, is a valid exact pin. Native values are at
+most 96 ASCII characters, start with an alphanumeric character, and otherwise
+contain only alphanumerics or `._+~^:-`.
 
 The selected desired-state graph determines which dependencies are needed.
 An override alone does not select an unused libvirt, Helm, govc or virtctl
@@ -475,8 +478,8 @@ contains exactly these required fields in order:
 
 | Field | Type | Rule |
 | --- | --- | --- |
-| `imageRef` | string | `MachineImage` containing RHEL 9 Anaconda boot media. |
-| `os` | object | Exact `{family: rhel, version: 9.<minor>[.<patch>...], architecture}` tuple. |
+| `imageRef` | string | `MachineImage` containing RHEL Anaconda boot media. |
+| `os` | object | Exact `{family: rhel, version: <non-empty>, architecture}` tuple. |
 | `artifactServerEndpoint` | object | Required `{serverRef, endpointRef}` selecting a persistent managed ArtifactServer directly; both references are required. |
 
 The selected artifact server must run on a Machine with `os.provided: true` so

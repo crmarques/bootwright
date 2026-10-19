@@ -201,11 +201,14 @@ def manage(runner, request, state, root=SYSTEMD, owner=0):
     if not name:
         return False
     before = observe(runner, request, root, owner)
-    if not before["answered"] or (before["present"] and not before["owned"]):
-        raise ValueError("the firewall readiness unit or its enablement is unknown or foreign")
     path = os.path.join(root, name)
     wants = os.path.join(root, "virtnetworkd.service.wants")
     link = os.path.join(wants, name)
+    if not before["answered"] or (before["present"] and not before["owned"]):
+        message = "the firewall readiness unit or its enablement is unknown or foreign"
+        if before["answered"] and before["state"] == "failed" and not os.path.lexists(path) and not os.path.lexists(link):
+            message += "; systemctl reset-failed %s clears a failed readiness unit whose files are gone; then repeat" % name
+        raise ValueError(message)
     changed = False
     if state == "present":
         code, output, _error = command(runner, [SYSTEMCTL, "is-enabled", "firewalld.service"])
@@ -249,4 +252,18 @@ def manage(runner, request, state, root=SYSTEMD, owner=0):
             changed = True
         # Reload even after an interrupted unlink, to discard stale loaded state.
         require(runner, [SYSTEMCTL, "daemon-reload"])
+        changed = reset_failed(runner, name) or changed
     return changed
+
+
+def reset_failed(runner, name):
+    """systemd keeps a failed unit loaded until reset-failed, which would read as foreign."""
+    code, output, _error = command(runner, [SYSTEMCTL, "show", "--property=ActiveState", "--value", name])
+    if code not in (0, 4):
+        raise ValueError("the firewall readiness operation failed; restore firewalld and repeat")
+    if output.strip() != "failed":
+        return False
+    code, _output, error = command(runner, [SYSTEMCTL, "reset-failed", name])
+    if code != 0 and "not loaded" not in error:
+        raise ValueError("the firewall readiness operation failed; restore firewalld and repeat")
+    return code == 0

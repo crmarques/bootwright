@@ -553,8 +553,11 @@ if any gate fails. A known reachable vulnerability on the pinned Go toolchain
 is not a pass. This command installs no controller packages and runs no lab
 effects.
 
-M1 also needs D59's extended [lab-rhel journey](../examples/machines/lab-rhel/README.md#run-it)
-on a clean committed build. A build at or after the setup v2 cut-over (X88)
+M1's closing operator gate, D59's extended lab-rhel journey, was accepted
+under D154 and D156 ([X98](../specs/milestones/delivered.md#x98--m1-owner-acceptance)).
+To repeat it, run the [lab-rhel runbook](../examples/machines/lab-rhel/README.md#run-it)
+and its [undo](../examples/machines/lab-rhel/README.md#undo) on a clean committed
+build, then the extended checks below. A build at or after the setup v2 cut-over (X88)
 first needs the [fresh install](#a-host-an-earlier-bootwright-build-manages) on
 a host an earlier build prepared; the
 [milestone status](../specs/milestones.md#status) names any other retirement a
@@ -574,11 +577,11 @@ waves and total runtime alone do not qualify the overlap. Repeat apply and
 safe destroy, proving all guests stopped and no sibling scratch, shared tree
 or managed units remain.
 
-Extended acceptance adds a running-disk size read, a destroy refused while
-the guest runs, then stop and destroy, a fresh apply, a host restart and
-guest start/stop/removal checks. The accepted three-node host-restart rerun
-is recorded under [B608](../specs/milestones/delivered.md#b608). These checks qualify the
-milestone beyond the ordinary example journey.
+The runbook does not list the extended checks: a running-disk size read, a
+destroy refused while the guest runs, then stop and destroy, a fresh apply, a
+host restart and guest start/stop/removal checks. The accepted three-node
+host-restart rerun is recorded under [B608](../specs/milestones/delivered.md#b608).
+These checks go beyond the ordinary example journey.
 
 Besides the runbook's time, machine-access, replay, restart and final-unit
 checks, run these JSON status cases after the
@@ -609,8 +612,9 @@ leaves its observation unrun.
 
 Record command results, build commit, clean source stamp and operation-log
 digests following [record a run](#record-a-run); the human owner accepts the
-[ledger row](acceptance.md#row-format). These host gates, B466's among them,
-remain requirements before the owner can declare M1 done.
+[ledger row](acceptance.md#row-format). The owner accepted these host gates,
+B466's among them, under D154 and D156; a repeat run is a re-qualification, not
+an open M1 requirement.
 
 ## Record a run
 

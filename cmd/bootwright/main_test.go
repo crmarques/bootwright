@@ -211,7 +211,7 @@ func TestComposedExplicitValidationIsContextFree(t *testing.T) {
 			if err := json.Unmarshal(out.Bytes(), &envelope); err != nil || !envelope.OK || envelope.Result.Counts.FilesSeen != 1 || envelope.Result.Counts.ObjectsDecoded != 2 || len(envelope.Diagnostics) != 0 {
 				t.Fatalf("complete compiler result %s: %v", out.String(), err)
 			}
-		} else if out.String() != "  ✓ Desired state is valid\n\n  Admission\n    Files seen       1\n    Objects decoded  2\n" {
+		} else if out.String() != "  ✓ Desired state is valid (files seen: 1, objects decoded: 2)\n" {
 			t.Fatal(out.String())
 		}
 	}

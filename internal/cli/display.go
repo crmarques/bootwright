@@ -3,8 +3,6 @@ package cli
 import (
 	"io"
 	"strings"
-
-	"github.com/charmbracelet/x/ansi"
 )
 
 const (
@@ -86,12 +84,12 @@ func (d *display) separate() { d.section("") }
 
 func (d *display) fields(values ...field) {
 	copy := append([]field(nil), values...)
-	d.custom(func(r *displayRenderer) { r.fields(copy, false) })
+	d.custom(func(r *displayRenderer) { r.fields(copy, false, false) })
 }
 
 func (d *display) mutedFields(values ...field) {
 	copy := append([]field(nil), values...)
-	d.custom(func(r *displayRenderer) { r.fields(copy, true) })
+	d.custom(func(r *displayRenderer) { r.fields(copy, true, false) })
 }
 
 func (d *display) rows(rows [][]string) {
@@ -127,6 +125,24 @@ func (d *display) lines(items []string) {
 			r.paragraph(item, "    ", "plain")
 		}
 	})
+}
+
+func (d *display) mutedVerbatimLines(items []string) {
+	d.custom(func(r *displayRenderer) {
+		for _, item := range items {
+			r.verbatimLine(escapeDisplayLine(item), "      ", "muted")
+		}
+	})
+}
+
+func (d *display) verbatimFields(values ...field) {
+	copy := append([]field(nil), values...)
+	d.custom(func(r *displayRenderer) { r.fields(copy, false, true) })
+}
+
+func (d *display) mutedVerbatimFields(values ...field) {
+	copy := append([]field(nil), values...)
+	d.custom(func(r *displayRenderer) { r.fields(copy, true, true) })
 }
 
 func (d *display) mutedLines(items []string) {
@@ -171,12 +187,24 @@ func (r *displayRenderer) gap() {
 	}
 }
 
-func (r *displayRenderer) line(value string) {
+func (r *displayRenderer) line(value string) { r.emit(value, true) }
+
+func (r *displayRenderer) wholeLine(value string) { r.emit(value, false) }
+
+func (r *displayRenderer) emit(value string, fit bool) {
 	if r.options.ASCII {
 		value = presentationASCII(value)
 	}
-	r.text.WriteString(fitDisplayRow(strings.TrimRight(value, " "), r.options.columns()))
+	value = strings.TrimRight(value, " ")
+	if fit {
+		value = fitDisplayRow(value, r.options.columns())
+	}
+	r.text.WriteString(value)
 	r.text.WriteByte('\n')
+}
+
+func (r *displayRenderer) verbatimLine(escaped, indent, tone string) {
+	r.wholeLine(indent + r.tone(escaped, tone))
 }
 
 func (r *displayRenderer) tone(value, tone string) string {
@@ -203,12 +231,12 @@ func (r *displayRenderer) styledParagraph(escaped, indent, tone string) {
 	}
 	width := max(1, r.options.columns()-displayCellWidth(indent))
 	for _, line := range wrapDisplayText(escaped, width) {
-		r.line(indent + r.tone(line, tone))
+		r.emit(indent+r.tone(line, tone), displayCellWidth(line) <= width)
 		indent = strings.Repeat(" ", displayCellWidth(indent))
 	}
 }
 
-func (r *displayRenderer) fields(values []field, muted bool) {
+func (r *displayRenderer) fields(values []field, muted, verbatim bool) {
 	labelWidth := 0
 	for _, value := range values {
 		labelWidth = max(labelWidth, displayCellWidth(escapeDisplayLine(value.Label)))
@@ -220,7 +248,7 @@ func (r *displayRenderer) fields(values []field, muted bool) {
 			indent, tone = "      ", "muted"
 		}
 		prefix := label + strings.Repeat(" ", labelWidth-displayCellWidth(label)+displayGap)
-		if r.options.columns()-displayCellWidth(indent+prefix) < 12 {
+		if !verbatim && r.options.columns()-displayCellWidth(indent+prefix) < 12 {
 			r.paragraph(value.Label+": "+value.Value, indent, tone)
 			continue
 		}
@@ -229,28 +257,33 @@ func (r *displayRenderer) fields(values []field, muted bool) {
 		if r.options.ASCII {
 			escaped = presentationASCII(escaped)
 		}
-		for n, line := range wrapDisplayText(escaped, width) {
+		lines := []string{escaped}
+		if !verbatim {
+			lines = wrapDisplayText(escaped, width)
+		}
+		for n, line := range lines {
+			fit := displayCellWidth(line) <= width
 			if n == 0 {
 				if muted {
-					r.line(indent + styleMuted(prefix+line, r.options))
+					r.emit(indent+styleMuted(prefix+line, r.options), fit)
 				} else {
-					r.line(indent + styleMuted(prefix, r.options) + line)
+					r.emit(indent+styleMuted(prefix, r.options)+line, fit)
 				}
 			} else {
-				r.line(indent + strings.Repeat(" ", displayCellWidth(prefix)) + r.tone(line, tone))
+				r.emit(indent+strings.Repeat(" ", displayCellWidth(prefix))+r.tone(line, tone), fit)
 			}
 		}
 	}
 }
 
-// Wrap at spaces; hard-wrap only tokens wider than a whole row.
+// Wrap at spaces; a token wider than a whole row keeps a line of its own, unsplit.
 func wrapDisplayText(value string, width int) []string {
 	width = max(1, width)
 	var lines []string
 	line := ""
 	for index, word := range strings.Split(value, " ") {
 		separator := ""
-		if index > 0 {
+		if index > 0 && (line != "" || len(lines) == 0) {
 			separator = " "
 		}
 		if displayCellWidth(line+separator+word) <= width {
@@ -261,13 +294,7 @@ func wrapDisplayText(value string, width int) []string {
 			lines = append(lines, strings.TrimRight(line, " "))
 			line = ""
 		}
-		if displayCellWidth(word) > width {
-			parts := strings.Split(ansi.Hardwrap(word, width, false), "\n")
-			lines = append(lines, parts[:len(parts)-1]...)
-			line = parts[len(parts)-1]
-		} else {
-			line = word
-		}
+		line = word
 	}
 	return append(lines, strings.TrimRight(line, " "))
 }
@@ -284,22 +311,18 @@ func (r *displayRenderer) resourceHeading(kind, name, state string) {
 	if r.options.ASCII {
 		name = presentationASCII(name)
 	}
-	parts := strings.Split(ansi.Hardwrap(name, max(1, r.options.columns()-displayCellWidth(prefix)), false), "\n")
-	for n, part := range parts {
-		line := prefix + styleIdentity(part, r.options)
-		if n == len(parts)-1 && state != "" {
-			suffix := styleMuted(" · ", r.options) + styleState(escapeDisplayLine(state), r.options)
-			if displayCellWidth(line+suffix) <= r.options.columns() {
-				line += suffix
-			} else {
-				r.line(line)
-				r.styledParagraph(escapeDisplayLine(state), "    ", "state")
-				return
-			}
+	line := prefix + styleIdentity(name, r.options)
+	if state != "" {
+		suffix := styleMuted(" · ", r.options) + styleState(escapeDisplayLine(state), r.options)
+		if displayCellWidth(line+suffix) <= r.options.columns() {
+			r.line(line + suffix)
+			return
 		}
-		r.line(line)
-		prefix = strings.Repeat(" ", displayCellWidth(prefix))
+		r.wholeLine(line)
+		r.styledParagraph(escapeDisplayLine(state), "    ", "state")
+		return
 	}
+	r.wholeLine(line)
 }
 
 func (r *displayRenderer) table(headers []string, rows [][]string, style tableStyle) {
@@ -353,7 +376,7 @@ func (r *displayRenderer) table(headers []string, rows [][]string, style tableSt
 				}
 				values = append(values, field{Label: headers[col], Value: value})
 			}
-			r.fields(values, true)
+			r.fields(values, true, false)
 		}
 		return
 	}

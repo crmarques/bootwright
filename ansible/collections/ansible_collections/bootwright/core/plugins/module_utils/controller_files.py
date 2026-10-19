@@ -992,15 +992,6 @@ def tool_files(tool):
     )
     if compatibility not in allowed:
         raise Refused("tool compatibility")
-    if (
-        compatibility != "okd"
-        and re.fullmatch(
-            r"v?(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})\.(?:0|[1-9][0-9]{0,8})",
-            version,
-        )
-        is None
-    ):
-        raise Refused("stable tool release")
     archive = "binary" if kind in ("kubectl", "virtctl") else "tar.gz"
     prefix = "/".join(part for part in ("tools", kind, compatibility, version) if part)
     files = [

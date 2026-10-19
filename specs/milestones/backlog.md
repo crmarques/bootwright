@@ -214,11 +214,23 @@ Alias cell.
 | [B662](#b662) | new, 2026-10-19 (X102) | safety | Ceph lifecycle, Devices and destructive ownership | An intent-marked OSD device with partial LVM metadata refuses with a named token and a supported recovery | Nothing is adopted or zapped today; a real remedy needs an owned-zap design |
 | [B663](#b663) | new, 2026-10-19 (X102) | enabling | Storage adapter | Authored package candidates mark only the chosen root, keeping DNF's own no-match text | No wrong plan was observed; refusing glob characters would be a Bootwright version grammar |
 | [B664](#b664) | new, 2026-10-19 (X102) | product | the owner for scope, then Storage adapter | Mirror or disconnected IBM package sources are decided, with the publisher key location authored beside them | Fail-closed today, and it needs a scope decision |
+| [B665](#b665) | new, 2026-10-19 (X103) | enabling | Developer tooling, with the code-implementation skill | Commits that change a trust anchor say so; `scripts/check-commits` resolves `Refs:` tokens, the subject length and attribution trailers; policy changes land apart from reformats | Process tooling; history stays as it is |
+| [B666](#b666) | new, 2026-10-19 (X103) | enabling | Infrastructure, substrate libvirt | The firewall readiness barrier reloads systemd only when something changed, and destroy removes its stale staging files | Each leftover is inert and the reload is harmless; fixing it adds durable creation state for no behavioural gain |
+| [B667](#b667) | new, 2026-10-19 (X103) | enabling | CLI presentation and help | Compact `cluster info` explains not-applicable access rows once, and `session` and `exec` help list the SSH flags | The output matches the spec today and the "More detail" pointer keeps the flags discoverable |
+| [B668](#b668) | new, 2026-10-19 (X103) | enabling | Privilege boundary and CLI | A refusal remedy repeats only what the operator typed, not the `--color=never` the privilege boundary adds | Cosmetic (the repeated command is valid), and the fix changes the privilege invocation contract |
+| [B669](#b669) | new, 2026-10-19 (X103) | enabling | Build and CLI | The CLI depends only on a width library, measured before styling | Documented and free of known vulnerabilities; no defect |
+| [B670](#b670) | new, 2026-10-19 (X103) | safety | CLI and Secrets | Structured exports are encoded into an owned buffer cleared after the write, or documented as transient copies | No spec requires clearing output copies, and Go strings make complete clearing impossible without a custom encoder |
+| [B671](#b671) | new, 2026-10-19 (X103) | enabling | Infrastructure components and `cmd/bootwright` tests | A plan test pins the block set of the `lab-services` apply and destroy plans | Test hardening; no defect shown |
+| [B672](#b672) | new, 2026-10-19 (X103) | enabling | Developer tooling | `make docs-check` runs the pinned yamllint over tracked example YAML, or the formatting reference records the omission | Gate hardening; no example fails today |
+| [B673](#b673) | new, 2026-10-19 (X103) | defect | Workspace contextfs tests | `TestAnInterruptedPublicationLeavesAUsableStoreAndItsRetryConverges` is deterministic under concurrent gate runs, or its cause is recorded | It does not reproduce cheaply |
 | [B674](#b674) | new, 2026-10-19 (X102) | safety | Ceph host lifecycle, with B491 | A release whose cluster block never started removes the owned host runtime tree and any broker scratch | A new destructive host effect needing its own removal proof |
 | [B675](#b675) | new, 2026-10-19 (X102) | product | Storage, Ceph Call Home | `ceph.ibm.callHome: disabled` passes the opt-out flag when the selected build declares it | Keyed on artifact facts, not a version label; a feature gap outside a defect slice |
+| [B676](#b676) | new, 2026-10-19 (X103) | product | Controller | `spec.dependencyVersions.libvirt` honours a NEVRA pin through host `dnf`, or the field leaves the grammar | Implementation scope, not a compatibility rule |
 | [B677](#b677) | new, 2026-10-19 (X102) | enabling | Storage | The misnamed `unsupported-release` Ceph refusal token is renamed `unsupported-coordinates` | Cosmetic, and it collides with the closed reason lists the m2c lanes edit |
 | [B678](#b678) | new, 2026-10-19 (X102) | defect | Storage package resolution | A non-rhel host refuses `package-platform` naming the os-release ID, not a generic `package-resolution` | Fails closed before any effect; low value |
 | [B679](#b679) | new, 2026-10-19 (X102) | enabling | Storage and State reconciliation | The edges X102's lanes and reviews left untested, unmeasured or unreconciled are tested or recorded | Found in X102; each is hardening of a path no known input reaches |
+| [B680](#b680) | new, 2026-10-19 (X103) | defect | Container clusters | OpenShift admission of `distribution.release.version` accepts an exact publisher release such as a release candidate, and any stable-only screen found is removed | Found by X103; unverified, because X103 changed only the CLI tool pins and the installer download |
+| [B681](#b681) | new, 2026-10-19 (X103) | enabling | CLI, Substrate and Docs | The edges X103's lanes and reviews left untested, unmeasured or unreconciled are tested or recorded | Found in X103; each is hardening of output or removal paths no known input breaks |
 
 ### B82
 
@@ -2046,7 +2058,8 @@ unit test `test_vendor_defaults_allow_completion_replay_and_owned_removal_withou
 rerun and on every later run; no X102 commit touches it or its module. The test
 compares each vendor file's `stat()` before and after the reads it proves
 harmless, so an access-time update under load is the suspected cause,
-unconfirmed. **Outcome:** that test too is deterministic under concurrent gate
+unconfirmed; ce9767849 reported the same test earlier, with only `st_atime`
+differing. **Outcome:** that test too is deterministic under concurrent gate
 runs or its cause is recorded. **Exit evidence:** repeated concurrent gate runs
 of the file with no mismatch.
 
@@ -2189,6 +2202,114 @@ scope decision. **Requires:** an owner decision. **Definition:**
 `Needs definition`. **Exit evidence:** a package-source test with an authored
 key location whose fingerprint differs from the pin and refuses.
 
+### B665
+
+A trust-anchor change and a policy change both reach main without a mark in the
+commit that carries them. Found by the audit (`gap2-gap2-package-signer-trus-1-3`,
+`process-compliance-5` and `process-compliance-7`). **Outcome:** (1) a commit
+that removes or changes a trust anchor (pinned digests, release pins, a fixed
+source) names that change in its body; (2) `scripts/check-commits` requires a
+`Refs:` line whose X, B and D tokens resolve under `specs/milestones` (or a
+user-request form the [code-implementation skill](../../.agents/skills/code-implementation/SKILL.md)
+defines), enforces the subject length and rejects attribution trailers, and a
+local make target runs it over the integration range; (3) the skill states that
+a policy or test-rule change lands in its own commit, apart from a mechanical
+reformat. **Why parked:** process tooling, and history stays as it is.
+**Requires:** none. **Definition:** `Specified`. **Exit evidence:** a
+`check-commits` test per rejected form and a passing run over the range.
+
+### B666
+
+The libvirt firewall readiness barrier's apply reloads systemd on every run, and
+destroy leaves some inert files behind. Found by the audit
+(`substrate-firewall-4`). **Outcome:** apply reloads systemd only when a file or
+link changed or the loaded unit is not the owned barrier; destroy removes stale
+`.bootwright-firewall-*` staging files in `/etc/systemd/system` and syncs the
+directory after a replace and a symlink; optionally destroy removes an empty
+`virtnetworkd.service.wants` directory that Bootwright recorded creating. **Why
+parked:** each leftover is inert and the reload is harmless, and fixing them adds
+durable creation state for no behavioural gain. **Requires:** none.
+**Definition:** `Specified`. **Exit evidence:** role unit tests for the
+unchanged-apply no-reload case and for the staging cleanup.
+
+### B667
+
+Compact `cluster info` shows rows that do not apply to a cluster without
+explaining them, and the `session` and `exec` help lists neither SSH flag. Found
+by the audit (`cli-presentation-code-5`, which also carries
+`cli-output-contract-6`). **Outcome:** compact `cluster info` shows one line,
+once per cluster, that explains the not-applicable access rows; `session` and
+`exec` compact help lists `--ssh-user` and `--ssh-id-file` and shows only the
+accepted `-o` values. **Why parked:** the output matches [the output
+spec](../cli/output.md) today, which has no help-placement clause, and the "More
+detail" pointer keeps the flags discoverable. **Requires:** none.
+**Definition:** `Specified`. **Exit evidence:** help and `cluster info` goldens.
+
+### B668
+
+`internal/cli/presentation_resolution.go` adds `--color=never` to the argv that a privilege handoff
+repeats, so a refusal remedy can show a flag the operator did not type. Found by
+the audit (`cli-presentation-code-6`). **Outcome:** the no-color preference
+travels outside argv (for example a `privilege.Invocation` field) and a remedy
+repeats only what the operator typed. **Why parked:** it is cosmetic, because the
+repeated command is valid, and the fix changes the privilege invocation
+contract. **Requires:** none. **Definition:** `Specified`. **Exit evidence:** a
+remedy test run under `NO_COLOR`.
+
+### B669
+
+The CLI depends on `charmbracelet/x/ansi` and `go-colorful` besides a width
+library. Found by the audit (`cli-presentation-code-7`). **Outcome:** consider
+measuring before styling and depending only on `go-runewidth`, dropping the other
+two. X103 still uses `ansi.StringWidth` and `ansi.Truncate`. **Why parked:** the
+modules are documented and free of known vulnerabilities, and nothing is
+defective. **Requires:** none. **Definition:** `Candidate`. **Exit
+evidence:** the module list after the change and the `internal/cli` tests.
+
+### B670
+
+A structured export holds transient copies of a secret in Go strings. Found by
+the audit (`cli-output-contract-9`). **Outcome:** structured exports are encoded
+into an owned byte buffer that is cleared after the write, with no string copies,
+or the [output spec](../cli/output.md) states that they hold transient
+GC-managed copies. **Why parked:** no spec requires clearing output copies
+([secrets](../secrets.md) governs confidential capabilities), and Go strings make
+complete clearing impossible without a custom encoder. **Requires:** none.
+**Definition:** `Needs definition`. **Exit evidence:** an export test that
+inspects the buffer after the write, or the spec sentence and `make docs-check`.
+
+### B671
+
+Nothing asserts the block set of the `lab-services` plans. Found by the audit
+(`examples-reorg-4`). **Outcome:** a plan test for
+`examples/infra-components/lab-services` asserts the apply plan's block set with
+no consumed authorization, and that the destroy plan consumes no data-loss
+authorization and plans only `remove-` and `close-` impacts. **Why parked:** test
+hardening, with no defect shown. **Requires:** none. **Definition:**
+`Specified`. **Exit evidence:** the plan test, mutation-checked.
+
+### B672
+
+The gate does not lint example YAML. Found by the audit (`examples-reorg-5`).
+**Outcome:** `make docs-check` (or `make check`) runs the pinned yamllint with
+`examples/.yamllint` over the tracked example YAML, or the
+[formatting reference](../../.agents/skills/code-implementation/references/formatting.md)
+records the deliberate omission. **Why parked:** gate hardening, and no example
+fails today. **Requires:** none. **Definition:** `Specified`. **Exit
+evidence:** the gate failing on a deliberately malformed example, then passing.
+
+### B673
+
+A test fails under concurrent gate runs: the controller-setup lease conflict in
+`TestAnInterruptedPublicationLeavesAUsableStoreAndItsRetryConverges` (reported
+in d9e67eb11, 2dc470bff, 7e3963d91 and 77e0be76c). The firewall access-time
+case (ce9767849) is [B633](#b633)'s. Found by the audit
+(`process-compliance-4`). **Outcome:** the test is deterministic under
+concurrent gate runs, or its cause is recorded. **Why parked:** it does not
+reproduce cheaply. **Requires:** none. **Definition:** `Needs definition`.
+**Exit evidence:** repeated concurrent gate runs (`make -j check race quick
+docs-check`) with no lease conflict.
+
 ### B674
 
 Releasing a Ceph host whose cluster block never started retains the owned
@@ -2213,6 +2334,17 @@ removal, and it is a feature gap outside a defect slice. **Requires:** none.
 **Definition:** `Specified`. **Exit evidence:** a seam test on a synthetic build
 that declares the option, and the existing refusal kept for a build that does
 not.
+
+### B676
+
+`spec.dependencyVersions.libvirt` admits a NEVRA pin
+(`api/v1alpha1/environment.go`), while the controller stage refuses any pin
+(`internal/controller/clients/capability.go`). Found by the D163 sweep
+(`D163-B13`). **Outcome:** the field either honours a NEVRA pin through host
+`dnf` or leaves the grammar. **Why parked:** it is implementation scope, not a
+compatibility rule. **Requires:** none. **Definition:** `Needs definition`.
+**Exit evidence:** a controller test that installs the pinned package, or the
+field's removal from the grammar and its spec row.
 
 ### B677
 
@@ -2270,6 +2402,51 @@ X102's lanes and reviews left these edges, none reached by a known input:
   host is not documented, and the phrase "release-qualified" still names
   mechanics qualification in several spec sentences and in the Go refusal text
   of the native check, which D163 may want reworded.
+
+**Outcome:** each edge has a test that fails without its guard, a measurement,
+or a recorded reason it needs none. **Requires:** none. **Definition:**
+`Specified`. **Exit evidence:** the named tests, mutation-checked, and the
+recorded measurements.
+
+### B680
+
+[D163](#decisions) removed the stable-only screen on exact CLI tool pins, so the
+OpenShift installer and clients of a release candidate download
+(`internal/controller/tools.go`). Whether the OpenShift container-cluster
+admission of `distribution.release.version` accepts such an exact publisher
+release is unchecked: X103 reached only the tool pins and the download. Found
+by X103 (D163 follow-up). **Outcome:** admission accepts an exact publisher
+release such as a release candidate, and any stable-only screen found in
+`internal/controller/tools.go` or the container-cluster admission is removed.
+**Why parked:** an unconfirmed edge outside the five X103 items. **Requires:**
+none. **Definition:** `Specified`. **Exit evidence:** an admission test with a
+`4.22.0-rc.1` release, mutation-checked, and `make docs-check`.
+
+### B681
+
+X103's lanes and reviews left these edges, none reached by a known input:
+
+- compact managed Ceph `cluster info` emits its Access group in several calls,
+  so values start at different columns inside one visual group, and the 95-cell
+  Certificate SHA-256 token overflows a 96-column row on a line of its own, which
+  the never-split rule accepts;
+- the progress presenter's `field()` never wraps, `internal/cli/output_controller.go`
+  builds `field` with unkeyed literals, and `wrapDisplayText` yields a trailing
+  empty line for a value that ends in spaces after an over-wide token, as it did
+  before X103;
+- the status headline test reads goldens instead of rendering each fixture, and
+  the structured-output test decodes JSON output with a YAML decoder, which folds
+  NEL; a JSON-only regression is better checked with `encoding/json`;
+- the destroy guard cannot see whether the readiness unit file exists, so its
+  remedy shows when the barrier is failed and not enabled; the fake's `Unit X not
+  loaded.` text is taken from systemd's D-Bus manager source from memory, and no
+  real host ran the removal path;
+- `ansible-lint` warns `jinja[spacing]` for the multi-line `fail_msg` in
+  `roles/substrate_libvirt_host/tasks/destroy.yml`, and the readiness wait's
+  attempt count (31 at two seconds) follows ansible-core 2.21;
+- the [operator guide](../../docs/operator-guide.md) section "M1 closing
+  validation" still carries a closing framing and a present-tense X48 sentence
+  although M1 is accepted.
 
 **Outcome:** each edge has a test that fails without its guard, a measurement,
 or a recorded reason it needs none. **Requires:** none. **Definition:**

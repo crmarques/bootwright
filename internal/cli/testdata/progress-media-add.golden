@@ -1,5 +1,5 @@
 
-Progress
+  Progress
   [RUNNING]  [1/2] Acquire rhel-9.8-x86_64-dvd.iso: https://images.example.test/rhel-9.8-x86_64-dvd.iso
   [RUNNING]  [1/2] Acquire rhel-9.8-x86_64-dvd.iso: https://images.example.test/rhel-9.8-x86_64-dvd.iso  still running, 10s
   [DONE]     [1/2] Acquire rhel-9.8-x86_64-dvd.iso: 13123217408 bytes  14s

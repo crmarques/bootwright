@@ -131,7 +131,7 @@ func TestAJSONMediaListWritesNoProgress(t *testing.T) {
 	deps = localMediaDependencies(nil, nil, process.LifecycleProgress, process.MediaPresenter, controller.Route{}, nil)
 	deps.Progress.ReportProgress(ctx, verify)
 	hooks.finish()
-	if want := "\nChecks\n  [RUNNING]  [1/1] Verify demo.iso\n"; out.String() != want || errOut.Len() != 0 {
+	if want := "\n  Checks\n  [RUNNING]  [1/1] Verify demo.iso\n"; out.String() != want || errOut.Len() != 0 {
 		t.Fatalf("a text media list reported stdout %q, stderr %q, want stdout %q", out.String(), errOut.String(), want)
 	}
 }

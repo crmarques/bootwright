@@ -83,8 +83,6 @@ func TestEnvironmentDependencyVersionsRejectAmbiguousOverrides(t *testing.T) {
 		{"context-independent nmstate", "nmstate: latest", "api.field", "nmstate"},
 		{"empty version", "helm: ''", "api.value", "helm"},
 		{"range", "helm: '^4.0.0'", "api.value", "helm"},
-		{"partial release", "govc: '0.54'", "api.value", "govc"},
-		{"prerelease", "virtctl: '1.9.0rc1'", "api.value", "virtctl"},
 		{"whitespace", "virtctl: ' latest'", "api.value", "virtctl"},
 		{"package expression", "libvirt: '>=5.0'", "api.value", "libvirt"},
 		{"package path", "libvirt: '../release'", "api.value", "libvirt"},
@@ -98,5 +96,17 @@ func TestEnvironmentDependencyVersionsRejectAmbiguousOverrides(t *testing.T) {
 			inherited := serviceEnvironment + "  defaults:\n    Environment:\n      dependencyVersions: {" + tc.value + "}\n"
 			trustFailure(t, controllerInputs(inherited, serviceHost), tc.code, "$.spec.defaults.Environment.dependencyVersions"+field)
 		})
+	}
+}
+
+func TestEnvironmentDependencyVersionsAdmitAnyPublisherReleaseTag(t *testing.T) {
+	environment := serviceEnvironment + `  dependencyVersions:
+    govc: "0.54"
+    virtctl: "1.9.0rc1"
+`
+	state, _ := compileAcceptance(t, controllerInputs(environment, serviceHost))
+	versions := requireObject(t, state.Effective(), api.Environment, "synthetic").Spec().Get("dependencyVersions")
+	if versions.Get("govc").Text() != "0.54" || versions.Get("virtctl").Text() != "1.9.0rc1" {
+		t.Fatal("an exact publisher release tag was not preserved as authored")
 	}
 }

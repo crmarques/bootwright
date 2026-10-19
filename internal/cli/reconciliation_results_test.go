@@ -238,7 +238,7 @@ func TestProgressReportsEachBlockAsOneRowUnbuffered(t *testing.T) {
 	presenter.ReportProgress(context.Background(), group("start-service", "start the managed service", "running", 1))
 	block.Status = "done"
 	presenter.ReportProgress(context.Background(), block)
-	want := "\nProgress\n" +
+	want := "\n  Progress\n" +
 		"  [RUNNING]  [1/2] serve artifacts on lab\n" +
 		"  [RUNNING]  [1/2] serve artifacts on lab: acquire the pinned server image - 0%\n" +
 		"  [RUNNING]  [1/2] serve artifacts on lab: start the managed service - 50%\n" +
@@ -288,7 +288,7 @@ func TestStatusRendersTextAndJSON(t *testing.T) {
 	}
 	// The build that registered the operation is what a removal is planned
 	// from, so a refusal naming it as the remedy is readable in advance.
-	for _, want := range []string{"context | lab", "  Mode  ready\n", "Controller binding", "ArtifactServer/lab", "Registered by", "1.4.0 (9f2c1ab)"} {
+	for _, want := range []string{"  ✓ Context lab\n", "  Mode  ready\n", "Controller binding", "ArtifactServer/lab", "Registered by", "1.4.0 (9f2c1ab)"} {
 		if !strings.Contains(text.String(), want) {
 			t.Fatalf("status text = %q, missing %q", text.String(), want)
 		}
@@ -549,7 +549,7 @@ func TestStatusTextEscapesOnce(t *testing.T) {
 		t.Fatalf("status text escaped a value twice: %q", text.String())
 	}
 	for _, want := range []string{
-		"  ○ context | " + shown("ctx") + " · ok\n", "  Mode  " + shown("mode") + "\n", "  [UNKNOWN]   " + shown("check") + "\n",
+		"  ✓ Context " + shown("ctx") + "\n", "  Mode  " + shown("mode") + "\n", "  [UNKNOWN]   " + shown("check") + "\n",
 		"  Revision         " + shown("rev") + "\n", "  Environment      " + shown("env") + "\n",
 		"  [UNKNOWN]   " + shown("ckind") + "/" + shown("cname") + "\n", "  [UNKNOWN]   " + shown("skind") + "/" + shown("sname") + "\n",
 		"  [UNKNOWN]   " + shown("vkind") + "/" + shown("vname") + "   " + shown("machine") + "\n", "  " + shown("step") + "\n",
@@ -633,7 +633,7 @@ func TestProgressNamesTheLogLocationBeforeItsFirstRow(t *testing.T) {
 		Block: "artifact-server-lab", Description: "serve artifacts on lab", Status: "running", Position: 1, Total: 1,
 	})
 	want := "\n  Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n" +
-		"\nProgress\n" +
+		"\n  Progress\n" +
 		"  [RUNNING]  [1/1] serve artifacts on lab\n"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
@@ -666,12 +666,12 @@ func TestQuiescenceChecksSettleAsOneRowBeforeTheEffects(t *testing.T) {
 	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
 		Block: "machine-rhel-01", Description: "remove the virtual machine rhel-01", Status: "done", Position: 1, Total: 2,
 	})
-	want := "\nChecks\n" +
+	want := "\n  Checks\n" +
 		"  [RUNNING]  prove nothing this removal takes back is still in use: Machine/rhel-01 - 0%\n" +
 		"  [RUNNING]  prove nothing this removal takes back is still in use: ArtifactServer/lab - 50%\n" +
 		"  [OK]       prove nothing this removal takes back is still in use\n" +
 		"\n  Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n" +
-		"\nProgress\n" +
+		"\n  Progress\n" +
 		"  [DONE]     [1/2] remove the virtual machine rhel-01\n"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
@@ -703,7 +703,7 @@ func TestResolutionChecksSettleAsOneRowBeforeTheGate(t *testing.T) {
 		Phase: lifecycle.CheckPhase, Block: "quiescence",
 		Description: "prove nothing this removal takes back is still in use", Status: "ok",
 	})
-	want := "\nChecks\n" +
+	want := "\n  Checks\n" +
 		"  [RUNNING]  prove the outcome of every effect this removal takes back: resolve names for lab-dns - 0%\n" +
 		"  [RUNNING]  prove the outcome of every effect this removal takes back: serve time for lab-ntp - 50%\n" +
 		"  [OK]       prove the outcome of every effect this removal takes back\n" +
@@ -728,7 +728,7 @@ func TestUnresolvedRemovalChecksSettleAsUnknown(t *testing.T) {
 		Phase: lifecycle.CheckPhase, Block: "resolution",
 		Description: "prove the outcome of every effect this removal takes back", Status: "unknown",
 	})
-	want := "\nChecks\n" +
+	want := "\n  Checks\n" +
 		"  [RUNNING]  prove the outcome of every effect this removal takes back: resolve names for lab-dns - 0%\n" +
 		"  [UNKNOWN]  prove the outcome of every effect this removal takes back\n"
 	if out.String() != want {
@@ -751,7 +751,7 @@ func TestTerminalQuiescenceChecksOccupyOneLine(t *testing.T) {
 	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
 		Phase: lifecycle.CheckPhase, Block: "quiescence", Description: "prove nothing is in use", Status: "ok",
 	})
-	rows, _ := strings.CutPrefix(out.String(), "\nChecks\n")
+	rows, _ := strings.CutPrefix(out.String(), "\n  Checks\n")
 	if lines := strings.Count(rows, "\n"); lines != 1 {
 		t.Fatalf("the gate wrote %d lines under its heading, want one: %q", lines, out.String())
 	}

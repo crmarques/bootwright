@@ -268,3 +268,8 @@ func TestPackageRepositoryAdmitsOnlyWhatTheGuestAcquisitionFetches(t *testing.T)
 		[]string{longest + "a", prefix + strings.Repeat("a", 2048-len(prefix)), "https://packages.example.test/ceph/../x", "https://packages.example.test/ceph/./x", "https://packages.example.test/ceph/%2e%2e/x",
 			"https://packages.example.test/ceph/%2E/x", "https://packages.example.test/ceph/..", "https://packages.example.test/ceph%5cx"})
 }
+
+func TestCLIVersionAdmitsLatestOrAnyExactPublisherReleaseTag(t *testing.T) {
+	lexicalRows(t, "cli-version", []string{"latest", "1.2.3", "v1.2.3", "v1.9.0-rc.0", "4.22.0-rc.1", "1.2.3+build", "1.02.3", "v1.2", "4.18.0-okd-scos.8", strings.Repeat("1", 95), "v" + strings.Repeat("1", 95)},
+		[]string{"", "v", "vlatest", "latest-1", "Latest", "-1.2.3", "1.2 3", "1.2.3/x", "1.2.3:x", "1.2.3~rc", "v1.2.3\n", strings.Repeat("1", 96), "v" + strings.Repeat("1", 96)})
+}

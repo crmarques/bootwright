@@ -142,7 +142,7 @@ func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMod
 		})
 	}
 	var text display
-	text.resourceHeading("context", result.Context.Name, "ok")
+	text.headline("OK", "Context "+result.Context.Name)
 	text.section("")
 	text.mutedFields(field{Label: "Mode", Value: displayValue(result.Context.Mode)})
 	writeStatusSetup(&text, result.SetupChecks)
@@ -228,7 +228,7 @@ func writeStatusLifecycle(text *display, result *lifecycle.StatusResult) {
 		return
 	}
 	text.section("Lifecycle")
-	text.fields(
+	text.verbatimFields(
 		field{Label: "Operation", Value: displayValue(summary.Operation)},
 		field{Label: "Verb", Value: displayValue(summary.Verb)},
 		field{Label: "State", Value: displayValue(summary.State)},
@@ -252,7 +252,7 @@ func writeStatusLifecycle(text *display, result *lifecycle.StatusResult) {
 	}
 	if len(tail) != 0 {
 		text.section("")
-		text.mutedFields(tail...)
+		text.mutedVerbatimFields(tail...)
 	}
 	for _, block := range summary.Blocks {
 		if block.Unresolved == nil {

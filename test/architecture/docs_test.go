@@ -484,22 +484,66 @@ func TestDocsExamplesAreIndexed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read examples index: %v", err)
 	}
-	examples := map[string]bool{}
+	for _, violation := range exampleIndexViolations(tracked, string(index)) {
+		t.Error(violation)
+	}
+}
+
+func exampleIndexViolations(tracked []string, index string) []string {
+	var violations []string
+	scenarios := map[string]bool{}
 	for _, name := range tracked {
-		if rest, ok := strings.CutPrefix(name, "examples/"); ok && strings.HasSuffix(rest, "/environment.yaml") {
-			example := strings.TrimSuffix(rest, "/environment.yaml")
-			if len(strings.Split(example, "/")) != 2 {
-				t.Errorf("examples/%s must be under a category and scenario directory", rest)
+		rest, ok := strings.CutPrefix(name, "examples/")
+		if !ok {
+			continue
+		}
+		if rest == ".gitignore" || rest == ".yamllint" || rest == "README.md" {
+			continue
+		}
+		parts := strings.Split(rest, "/")
+		if len(parts) < 3 {
+			violations = append(violations, fmt.Sprintf("examples/%s must be under a category and scenario directory", rest))
+			continue
+		}
+		scenarios[parts[0]+"/"+parts[1]] = true
+	}
+	for _, scenario := range sortedKeys(scenarios) {
+		for _, required := range []string{"environment.yaml", "README.md"} {
+			if !slices.Contains(tracked, "examples/"+scenario+"/"+required) {
+				violations = append(violations, fmt.Sprintf("examples/%s does not track %s", scenario, required))
 			}
-			if !slices.Contains(tracked, "examples/"+example+"/README.md") {
-				t.Errorf("examples/%s has no runbook", example)
-			}
-			examples[example] = true
+		}
+		if !strings.Contains(index, scenario+"/") {
+			violations = append(violations, fmt.Sprintf("examples/README.md does not index examples/%s", scenario))
 		}
 	}
-	for _, example := range sortedKeys(examples) {
-		if !strings.Contains(string(index), example+"/") {
-			t.Errorf("examples/README.md does not index examples/%s", example)
+	return violations
+}
+
+func TestExampleIndexViolations(t *testing.T) {
+	complete := []string{"examples/.gitignore", "examples/.yamllint", "examples/README.md",
+		"examples/cat/one/environment.yaml", "examples/cat/one/README.md", "examples/cat/one/inputs/a.yaml"}
+	cases := []struct {
+		name    string
+		tracked []string
+		index   string
+		want    []string
+	}{
+		{"complete and indexed", complete, "cat/one/", nil},
+		{"unindexed", complete, "nothing", []string{"examples/README.md does not index examples/cat/one"}},
+		{"environment.yml only", []string{"examples/cat/one/environment.yml", "examples/cat/one/README.md"}, "cat/one/",
+			[]string{"examples/cat/one does not track environment.yaml"}},
+		{"README only", []string{"examples/cat/one/README.md"}, "cat/one/",
+			[]string{"examples/cat/one does not track environment.yaml"}},
+		{"no README", []string{"examples/cat/one/environment.yaml"}, "cat/one/",
+			[]string{"examples/cat/one does not track README.md"}},
+		{"too shallow", append([]string{"examples/cat/x.yaml"}, complete...), "cat/one/",
+			[]string{"examples/cat/x.yaml must be under a category and scenario directory"}},
+	}
+	for _, tc := range cases {
+		got := exampleIndexViolations(tc.tracked, tc.index)
+		if !slices.Equal(got, tc.want) {
+			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
 		}
 	}
 }

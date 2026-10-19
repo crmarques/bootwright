@@ -149,6 +149,8 @@ outcome is observed against the frozen request before any retry. Keep the
 imported input and bound Secret/media versions unchanged during continuation.
 If the observation remains unknown, repair the reported reachability or trust
 problem and repeat the same verb; there is no force continuation.
+An automation-only rebuild continues: run `make build` and the same apply;
+follow [changing the build between runs](../../../docs/operator-guide.md#changing-the-build-between-runs) rather than destroying.
 
 To abandon an incomplete apply, stop any guest it created and run the destroy
 below. Destroy resolves uncertain effects and proves the guest stopped before

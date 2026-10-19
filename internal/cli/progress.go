@@ -275,7 +275,7 @@ func (p *progressPresenter) openHeading(heading string) {
 	}
 	p.closeLine()
 	p.heading = heading
-	io.WriteString(p.out, "\n"+styleAccent(escapeDisplayLine(heading), presentationFor(p.out))+"\n")
+	io.WriteString(p.out, "\n"+displayIndent+styleAccent(escapeDisplayLine(heading), presentationFor(p.out))+"\n")
 }
 
 // closeLine ends the running block a terminal is still rewriting. Its rows stay

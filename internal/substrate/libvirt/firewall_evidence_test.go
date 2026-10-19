@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -19,7 +20,6 @@ func TestHostPresenceRequiresItsEnabledOwnedFirewallBarrier(t *testing.T) {
 		"missing":      func(e *FirewallReadyEvidence) { e.Present = false },
 		"foreign":      func(e *FirewallReadyEvidence) { e.Owned = false },
 		"disabled":     func(e *FirewallReadyEvidence) { e.Enabled = false },
-		"failed":       func(e *FirewallReadyEvidence) { e.State = "failed" },
 		"another unit": func(e *FirewallReadyEvidence) { e.Name = "other.service" },
 		"unreported":   func(e *FirewallReadyEvidence) { *e = FirewallReadyEvidence{} },
 	} {
@@ -34,6 +34,40 @@ func TestHostPresenceRequiresItsEnabledOwnedFirewallBarrier(t *testing.T) {
 			}
 			if err := ValidateHostUnremoved(encode(t, evidence), request, "digest"); err == nil {
 				t.Fatal("a missing or changed boot barrier proved no removal effect")
+			}
+		})
+	}
+}
+
+func TestAFailedBootBarrierIsNoRemovalEffect(t *testing.T) {
+	request := hostRequest(t)
+	var evidence HostEvidence
+	if err := json.Unmarshal(hostEvidence(request, "digest"), &evidence); err != nil {
+		t.Fatal(err)
+	}
+	evidence.FirewallReady.State, evidence.FirewallReady.Ready = "failed", false
+	data := encode(t, evidence)
+	if err := ValidateHostPresence(data, request, "digest"); err == nil {
+		t.Fatal("presence accepted a failed boot barrier")
+	}
+	if err := ValidateHostUnremoved(data, request, "digest"); err != nil {
+		t.Fatalf("a failed boot barrier held with everything else was refused as no removal effect: %v", err)
+	}
+	effect, err := hostEffect(reconciliation.Destroy, data, request, "digest")
+	if err != nil || effect != reconciliation.EffectNoEffect {
+		t.Fatalf("destroy over a failed boot barrier = %v, %v", effect, err)
+	}
+	for name, damage := range map[string]func(*FirewallReadyEvidence){
+		"missing":  func(e *FirewallReadyEvidence) { e.Present = false },
+		"foreign":  func(e *FirewallReadyEvidence) { e.Owned = false },
+		"disabled": func(e *FirewallReadyEvidence) { e.Enabled = false },
+	} {
+		t.Run(name, func(t *testing.T) {
+			damaged := evidence
+			damage(&damaged.FirewallReady)
+			effect, _ := hostEffect(reconciliation.Destroy, encode(t, damaged), request, "digest")
+			if effect == reconciliation.EffectNoEffect {
+				t.Fatal("a failed barrier that is also missing, foreign or disabled proved no removal effect")
 			}
 		})
 	}
@@ -115,5 +149,49 @@ func TestAnExternalOnlyHostRequiresNoFirewallBarrier(t *testing.T) {
 	}
 	if err := ValidateHostPresence(hostEvidence(request, "digest"), request, "digest"); err != nil {
 		t.Fatalf("external-only host required a barrier: %v", err)
+	}
+}
+
+func TestAFirewallReadinessRefusalNamesItsRemedy(t *testing.T) {
+	request := hostRequest(t)
+	for name, test := range map[string]struct {
+		damage func(*FirewallReadyEvidence)
+		remedy string
+	}{
+		"not ready": {func(e *FirewallReadyEvidence) { e.Ready = false },
+			"start firewalld.service, confirm firewall-cmd --state reports running, then repeat the apply"},
+		"unread": {func(e *FirewallReadyEvidence) { e.Answered = false },
+			"repeat the apply to restore the owned readiness unit; start firewalld first if it is not answering"},
+		"disabled": {func(e *FirewallReadyEvidence) { e.Enabled = false },
+			"repeat the apply to restore the owned readiness unit; start firewalld first if it is not answering"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var evidence HostEvidence
+			if err := json.Unmarshal(hostEvidence(request, "digest"), &evidence); err != nil {
+				t.Fatal(err)
+			}
+			test.damage(&evidence.FirewallReady)
+			reported := diagnostics.Of(ValidateHostPresence(encode(t, evidence), request, "digest"))
+			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Remediation != test.remedy {
+				t.Fatalf("a firewall readiness refusal reported %+v", reported)
+			}
+		})
+	}
+}
+
+func TestAnUnreadExternalOnlyFirewallNamesNoUnitToRestore(t *testing.T) {
+	request := hostRequest(t)
+	request.FirewallReadyUnit = ""
+	for index := range request.Networks {
+		request.Networks[index].Managed = false
+	}
+	var evidence HostEvidence
+	if err := json.Unmarshal(hostEvidence(request, "digest"), &evidence); err != nil {
+		t.Fatal(err)
+	}
+	evidence.FirewallReady.Answered = false
+	reported := diagnostics.Of(ValidateHostPresence(encode(t, evidence), request, "digest"))
+	if len(reported) != 1 || reported[0].Remediation != "" {
+		t.Fatalf("an external-only host was told to restore a unit it never had: %+v", reported)
 	}
 }

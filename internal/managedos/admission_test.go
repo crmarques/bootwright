@@ -365,7 +365,6 @@ func TestEveryManagedOSAdmissionRefusalNamesItsRemedy(t *testing.T) {
 		field  string
 	}{
 		"OS family":              {Validate(profile(func(s api.Value) api.Value { return s.WithPath(api.StringValue("debian"), "os", "family") }), api.Catalog{}), "$.spec.os.family"},
-		"OS version":             {Validate(profile(func(s api.Value) api.Value { return s.WithPath(api.StringValue("8.10"), "os", "version") }), api.Catalog{}), "$.spec.os.version"},
 		"repository key missing": {Validate(custom(m("repositories", m("configure", list(m("id", "custom", "baseURL", "https://example.test/repo"))))), api.Catalog{}), "$.spec.customizations.repositories.configure[0].gpgKeyURL"},
 		"repository key URL":     {Validate(custom(m("repositories", m("configure", list(m("id", "repo", "gpgKeyURL", "ftp://example.test/key"))))), api.Catalog{}), "$.spec.customizations.repositories.configure[0].gpgKeyURL"},
 		"two registrations": {Validate(profile(func(s api.Value) api.Value {
@@ -409,6 +408,19 @@ func TestEveryManagedOSAdmissionRefusalNamesItsRemedy(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// The install profile registers no RHEL major-version rule: the operator
+// chooses the version and a native failure on an older or newer target is the
+// operator's to read.
+func TestTheInstallProfileAdmitsAnyRHELMajorVersion(t *testing.T) {
+	for _, version := range []string{"7.9", "8.10", "9", "10.1", "11"} {
+		o := anaconda()
+		o = o.WithSpec(o.Spec().WithPath(api.StringValue(version), "os", "version"))
+		if issues := issuesAt(Validate(o, api.Catalog{}), "$.spec.os.version"); len(issues) != 0 {
+			t.Errorf("os.version %s refused: %#v", version, issues)
+		}
 	}
 }
 

@@ -1,5 +1,5 @@
 
-Checks
+  Checks
   [RUNNING]  [1/1] Read the power state through Machine/hypervisor
   [RUNNING]  [1/1] Read the power state through Machine/hypervisor: read-state
   [RUNNING]  [1/1] Read the power state through Machine/hypervisor: read-state  still running, 10s

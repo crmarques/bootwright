@@ -11,9 +11,22 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
+
+func TestEveryAdmittedCLIVersionPassesTheToolScreen(t *testing.T) {
+	for _, value := range []string{"1.2.3", "v1.9.0-rc.0", strings.Repeat("1", 95), "v" + strings.Repeat("1", 95), strings.Repeat("1", 96), "v" + strings.Repeat("1", 96)} {
+		if !api.ValidLexical("cli-version", value) {
+			continue
+		}
+		requests := []controller.ToolRequest{{Kind: "helm", Version: "v" + strings.TrimPrefix(value, "v")}}
+		if _, err := toolRequests(requests, func(string) bool { return true }); err != nil {
+			t.Errorf("admitted %d-byte tag %q is refused by setup: %v", len(value), value, err)
+		}
+	}
+}
 
 func TestHelmLatestResolvesPublisherLockAndRetainsItWithoutNetwork(t *testing.T) {
 	request := controller.ToolRequest{Kind: "helm", Version: "latest", Mirror: "https://mirror.example.test/tools"}
@@ -59,7 +72,7 @@ func TestHelmLatestResolvesPublisherLockAndRetainsItWithoutNetwork(t *testing.T)
 }
 
 func TestToolMetadataRefusesUnsupportedCompatibilityBeforeNetwork(t *testing.T) {
-	for _, request := range []controller.ToolRequest{{Kind: "virtctl", Version: "v1.8.0-rc.1", Compatibility: "kubevirt"}, {Kind: "virtctl", Version: "4.21.0", Compatibility: "openshift-virtualization"}, {Kind: "helm", Version: "latest", Mirror: "https://user:secret@example.test"}, {Kind: "openshift-install", Version: "latest", Compatibility: "openshift"}} {
+	for _, request := range []controller.ToolRequest{{Kind: "virtctl", Version: "4.21.0", Compatibility: "openshift-virtualization"}, {Kind: "helm", Version: "latest", Mirror: "https://user:secret@example.test"}, {Kind: "openshift-install", Version: "latest", Compatibility: "openshift"}} {
 		calls := 0
 		resolver := &ToolCatalog{metadata: func(context.Context, string, string, int64, prerequisites.SetupEgress) (toolMetadata, error) {
 			calls++
@@ -224,6 +237,47 @@ func TestVirtctlLatestAndExactOverrideFreezeUpstreamPublisherIdentity(t *testing
 		if err != nil || !complete || !reflect.DeepEqual(resolved, selected) || calls != 1 {
 			t.Fatal("frozen virtctl retried mutable publisher metadata", selected, complete, err)
 		}
+	}
+}
+
+func TestExactPinsResolveThePublishersPrereleaseTags(t *testing.T) {
+	digest := strings.Repeat("c", 64)
+	for _, test := range []struct {
+		request controller.ToolRequest
+		url     string
+		answers map[string]string
+	}{
+		{controller.ToolRequest{Kind: "openshift-install", Version: "4.22.0-rc.1", Compatibility: "openshift"}, "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.22.0-rc.1/openshift-install-linux-4.22.0-rc.1.tar.gz", map[string]string{
+			"https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.22.0-rc.1/sha256sum.txt": digest + "  openshift-install-linux-4.22.0-rc.1.tar.gz\n",
+		}},
+		{controller.ToolRequest{Kind: "virtctl", Version: "v1.9.0-rc.0", Compatibility: "kubevirt"}, "https://github.com/kubevirt/kubevirt/releases/download/v1.9.0-rc.0/virtctl-v1.9.0-rc.0-linux-amd64", map[string]string{
+			"https://api.github.com/repos/kubevirt/kubevirt/releases/tags/v1.9.0-rc.0": `{"tag_name":"v1.9.0-rc.0","draft":false,"prerelease":true,"assets":[{"name":"virtctl-v1.9.0-rc.0-linux-amd64","browser_download_url":"https://github.com/kubevirt/kubevirt/releases/download/v1.9.0-rc.0/virtctl-v1.9.0-rc.0-linux-amd64","size":12345,"digest":"sha256:` + digest + `"}]}`,
+		}},
+		{controller.ToolRequest{Kind: "helm", Version: "4.1.0-rc.1"}, "https://get.helm.sh/helm-v4.1.0-rc.1-linux-amd64.tar.gz", map[string]string{
+			"https://api.github.com/repos/helm/helm/releases/tags/v4.1.0-rc.1":  `{"tag_name":"v4.1.0-rc.1","draft":false,"prerelease":true,"assets":[]}`,
+			"https://get.helm.sh/helm-v4.1.0-rc.1-linux-amd64.tar.gz.sha256sum": digest + "  helm-v4.1.0-rc.1-linux-amd64.tar.gz\n",
+		}},
+	} {
+		t.Run(test.request.Kind, func(t *testing.T) {
+			resolver := &ToolCatalog{metadata: func(_ context.Context, method, endpoint string, _ int64, _ prerequisites.SetupEgress) (toolMetadata, error) {
+				if method == http.MethodHead && endpoint == test.url {
+					return toolMetadata{size: 4096}, nil
+				}
+				answer, ok := test.answers[endpoint]
+				if method != http.MethodGet || !ok {
+					t.Fatal("unexpected publisher request", method, endpoint)
+				}
+				return toolMetadata{data: []byte(answer)}, nil
+			}}
+			resolved, err := resolver.Resolve(t.Context(), []controller.ToolRequest{test.request}, prerequisites.SetupEgress{})
+			if err != nil || len(resolved) != 1 || resolved[0].Version != test.request.Version || resolved[0].Source.URL != test.url || resolved[0].Source.SHA256 != digest {
+				t.Fatal("exact publisher tag was not resolved", resolved, err)
+			}
+			selected, complete, err := (&ToolCatalog{}).Select([]controller.ToolRequest{test.request}, []prerequisites.DependencySource{resolved[0].Source})
+			if err != nil || !complete || !reflect.DeepEqual(selected, resolved) {
+				t.Fatal("exact publisher tag was not retained", selected, complete, err)
+			}
+		})
 	}
 }
 

@@ -951,7 +951,7 @@ Neither command has a lifecycle receipt or a private operation log.
 
 Each check reports `ready` or `not-ready`, or `unverified` where a dry run
 cannot verify it. An informational line, `controller.untested-release` or
-`controller.loader-preload`, is a `[WARN]` diagnostic on standard error,
+`controller.loader-preload`, is a `warning` diagnostic on standard error,
 written once with the result; it never changes the outcome or exit status.
 Setup writes the lines its plan carried before that plan and its prompt, and
 those raised after it, such as `controller.runtime-retention`, with the result.

@@ -206,10 +206,22 @@ func (exportResult) documentedResult() {}
 
 func exportedResult(mediaType string, value []byte) exportResult {
 	encoding, content := "utf-8", string(value)
-	if !utf8.Valid(value) {
+	if !exportableText(value) {
 		encoding, content = "base64", base64.StdEncoding.EncodeToString(value)
 	}
 	return exportResult{Export: exportPresentation{MediaType: mediaType, Encoding: encoding, Content: content}}
+}
+
+func exportableText(value []byte) bool {
+	if !utf8.Valid(value) {
+		return false
+	}
+	for _, r := range string(value) {
+		if r < 0x20 && r != '\t' && r != '\n' && r != '\r' || r >= 0x7f && r <= 0x9f {
+			return false
+		}
+	}
+	return true
 }
 
 type helpCommandPresentation struct {

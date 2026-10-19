@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -175,16 +176,24 @@ func TestEnvironmentDependencyVersionsOverrideOnlyRequiredVariableClients(t *tes
 	}
 }
 
-func TestTargetCLIVersionOverridesRejectUnstableSelections(t *testing.T) {
-	for _, value := range []api.Value{api.StringValue(""), api.StringValue("v1.2"), api.StringValue("v1.2.3-rc.1"), api.StringValue("1.02.3"), api.StringValue("1.2.3+build"), api.BoolValue(true)} {
+func TestTargetCLIVersionOverridesRejectMalformedSelections(t *testing.T) {
+	withVirtctl := func(value api.Value) []api.Object {
 		objects := selectionObjects()
 		for index, object := range objects {
 			if object.Kind() == api.Environment {
 				objects[index] = api.NewObject(api.Environment, object.Name(), api.Value{}, object.Spec().WithPath(value, "dependencyVersions", "virtctl"))
 			}
 		}
-		if _, err := controller.SelectTools(api.NewCatalog(objects)); err == nil {
-			t.Fatal("invalid CLI version override accepted", value)
+		return objects
+	}
+	for _, value := range []api.Value{api.StringValue(""), api.StringValue("v"), api.StringValue("vlatest"), api.StringValue("1.2 3"), api.StringValue("../1.2.3"), api.StringValue(strings.Repeat("1", 96)), api.BoolValue(true)} {
+		if _, err := controller.SelectTools(api.NewCatalog(withVirtctl(value))); err == nil {
+			t.Fatal("malformed CLI version override accepted", value)
+		}
+	}
+	for _, value := range []string{"latest", "v1.2.3", "v1.2.3-rc.1", "1.02.3", "1.2.3+build", "v1.2", strings.Repeat("1", 95), "v" + strings.Repeat("1", 95)} {
+		if _, err := controller.SelectTools(api.NewCatalog(withVirtctl(api.StringValue(value)))); err != nil {
+			t.Fatal("exact publisher release tag refused", value, err)
 		}
 	}
 }

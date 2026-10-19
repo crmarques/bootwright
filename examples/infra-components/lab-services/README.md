@@ -66,6 +66,8 @@ operation; `status` reads records, while `diff --observe` checks live service
 evidence. Independent services may start concurrently once their prerequisites
 are ready. For a failed or interrupted apply, inspect `status` and the reported
 operation logs, resolve the cause, and repeat that apply with the same stages.
+An automation-only rebuild continues: run `make build` and the same apply;
+follow [changing the build between runs](../../../docs/operator-guide.md#changing-the-build-between-runs) rather than destroying.
 To change imported declarations, destroy the existing realization while
 keeping its context, update the input as described in the
 [examples index](../../README.md#prepare-an-operator-copy), and apply again.

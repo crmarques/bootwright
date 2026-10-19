@@ -39,11 +39,6 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 				Message:     "no rescue journey exists yet, so no lifecycle can use a rescue declaration",
 				Remediation: "remove spec.lifecycle.rescue from " + object.Identity()})
 		}
-		if version := rescue.Get("os", "version").Text(); version != "" && !strings.HasPrefix(version, "9.") && len(issues) < 999 {
-			issues = append(issues, api.Issue{Code: "api.invariant", Field: "$.spec.lifecycle.rescue.os.version",
-				Message:     "rescue requires a RHEL 9 version",
-				Remediation: "set spec.lifecycle.rescue.os.version to a RHEL 9 version, 9.<minor>"})
-		}
 		for _, problem := range validateRescueArtifactEndpoint(rescue.Get("artifactServerEndpoint"), catalog) {
 			problem.Field = "$.spec.lifecycle.rescue.artifactServerEndpoint" + strings.TrimPrefix(problem.Field, "$")
 			issues = append(issues, problem)

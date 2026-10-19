@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -97,14 +96,6 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	issues = add(issues, infrastructureservices.ValidateServerSelections(s.Get("ntp"), c, api.NTPServer, "$.spec.ntp")...)
 	if family := s.Get("os", "family"); family.Present() && !strings.EqualFold(family.Text(), "rhel") {
 		issues = add(issues, issue("$.spec.os.family", "machine installation supports the rhel OS family", "set spec.os.family to rhel"))
-	}
-	version := s.Get("os", "version").Text()
-	major := strings.SplitN(version, ".", 2)[0]
-	if digits(major) {
-		n, e := strconv.ParseUint(major, 10, 64)
-		if e == nil && n < 9 {
-			issues = add(issues, issue("$.spec.os.version", "numeric RHEL major versions must be at least 9", "set spec.os.version to a RHEL 9 or later version"))
-		}
 	}
 	issues = add(issues, validateCustomizationEntries(custom)...)
 	issues = add(issues, validateSubscription(s, c)...)
@@ -522,17 +513,6 @@ func subscriptionRepositoryID(s string) bool {
 // paragraph separators.
 func lineBreak(r rune) bool  { return unicode.IsControl(r) || r == '\u2028' || r == '\u2029' }
 func hasSpace(s string) bool { return strings.IndexFunc(s, unicode.IsSpace) >= 0 }
-func digits(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
-}
 
 // issue states one refusal with the exact change that clears it, naming the
 // field or object to change.

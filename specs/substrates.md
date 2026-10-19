@@ -283,6 +283,9 @@ like some of them present, is a positive partial realization. The adapter's
 postcondition is the apply's, which leaves the directory out, so it plays no
 part here either: a host holding everything the apply proves except the pool
 directory is a positive partial realization.
+The readiness unit's active state is no part of positive no effect: a unit that
+failed at boot but is still owned and enabled is held, so the removal has taken
+nothing back.
 
 ## Machine realization
 

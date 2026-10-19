@@ -320,7 +320,7 @@ func TestControllerResolutionRowsPrecedeThePlanUnderOneHeadline(t *testing.T) {
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "python-runtime", Status: "running", Detail: "acquiring ansible.tar.gz", Step: 1, Steps: 1, Completed: 1, Declared: 2})
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.SetupPhase, Action: "python-runtime", Status: "changed", Step: 1, Steps: 1})
 	rendered := out.String()
-	prefix := "Controller setup\n\nResolving\n" +
+	prefix := "Controller setup\n\n  Resolving\n" +
 		"  [RUNNING]  [1/2] Python and Ansible\n" +
 		"  [OK]       [1/2] Python and Ansible: Python 3.14.7, Ansible 2.21.4\n" +
 		"  [OK]       [2/2] Native packages: no changes\n" +
@@ -328,7 +328,7 @@ func TestControllerResolutionRowsPrecedeThePlanUnderOneHeadline(t *testing.T) {
 	if !strings.HasPrefix(rendered, prefix) {
 		t.Fatalf("result = %q, want prefix %q", rendered, prefix)
 	}
-	suffix := "\nProgress\n" +
+	suffix := "\n  Progress\n" +
 		"  [RUNNING]  [1/1] Controller runtime\n" +
 		"  [RUNNING]  [1/1] Controller runtime: acquiring python.tar.gz - 0%\n" +
 		"  [RUNNING]  [1/1] Controller runtime: acquiring ansible.tar.gz - 50%\n" +
@@ -357,11 +357,11 @@ func TestControllerScopeChecksResolutionAndPlanStreamInOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "  Controller setup\n\n    Scope     baseline\n    Platform  fedora 43/amd64\n" +
-		"\nChecks\n" +
+		"\n  Checks\n" +
 		"  [OK]       Host: fedora 43/amd64\n" +
 		"  [RUNNING]  Controller runtime: verifying the controller runtime\n" +
 		"  [FAIL]     Controller runtime: required qualified Python and Ansible; observed missing or unverified\n" +
-		"\nResolving\n" +
+		"\n  Resolving\n" +
 		"  [OK]       [1/1] Native packages: no changes\n" +
 		"\n  Host package requirements\n    qualified-source.tar.gz\n" +
 		"\n  Planned changes\n    ○ Prepare the qualified controller runtime\n"
@@ -379,7 +379,7 @@ func TestControllerReadinessStreamsUnderItsOwnHeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 	presenter.ReportProgress(ctx, prerequisites.ProgressEvent{Phase: prerequisites.ReadinessPhase, Action: "host", Status: "ok", Detail: "fedora 43/amd64"})
-	want := "  Controller readiness\n\n    Scope     baseline\n    Platform  fedora 43/amd64\n\nChecks\n  [OK]       Host: fedora 43/amd64\n"
+	want := "  Controller readiness\n\n    Scope     baseline\n    Platform  fedora 43/amd64\n\n  Checks\n  [OK]       Host: fedora 43/amd64\n"
 	if out.String() != want {
 		t.Fatalf("result = %q, want %q", out.String(), want)
 	}

@@ -1,5 +1,5 @@
 
-Checks
+  Checks
   [RUNNING]  [1/2] Verify rhel-9.8-x86_64-boot.iso
   [OK]       [1/2] Verify rhel-9.8-x86_64-boot.iso: matches its record  2s
   [RUNNING]  [2/2] Verify rhel-9.8-x86_64-dvd.iso

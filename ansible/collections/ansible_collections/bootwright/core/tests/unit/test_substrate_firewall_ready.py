@@ -33,7 +33,8 @@ def test_readiness_follows_ownership_guards_and_precedes_every_network_start():
     foreign = next(i for i, task in enumerate(apply) if task["name"] == "Refuse a same-named network this context does not own")
     assert foreign < prepare
     start = next(i for i, task in enumerate(apply) if "net-start" in argv(task))
-    fresh = apply[start - 1]
+    fresh, refusal = apply[start - 2], apply[start - 1]
+    assert "ansible.builtin.assert" in refusal and refusal["when"] == fresh["when"]
     assert argv(fresh) == ["/usr/bin/timeout", "15", "/usr/bin/firewall-cmd", "--state"]
     assert "timeout" not in fresh and fresh["retries"] == 30 and fresh["delay"] == 2
     assert fresh["changed_when"] is False

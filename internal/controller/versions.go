@@ -62,7 +62,7 @@ func selectDependencyVersions(environment api.Object) (DependencyVersions, error
 			return DependencyVersions{}, selectionFailure(environment, "api.value", "$.spec.dependencyVersions."+field.Name, "dependency version names must identify a supported dependency")
 		}
 		if field.Value.Type() != api.String || !api.ValidLexical(grammar, field.Value.Text()) {
-			return DependencyVersions{}, selectionFailure(environment, "api.value", "$.spec.dependencyVersions."+field.Name, "dependency version must be latest or an exact supported release")
+			return DependencyVersions{}, selectionFailure(environment, "api.value", "$.spec.dependencyVersions."+field.Name, "dependency version must be latest or an exact publisher release tag")
 		}
 		*target = field.Value.Text()
 		if grammar == "cli-version" {

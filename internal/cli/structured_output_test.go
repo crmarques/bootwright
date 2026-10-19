@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -271,6 +272,40 @@ func TestYAMLAcceptsRawEffectiveJSONWithoutRetypingStrings(t *testing.T) {
 	}
 }
 
+func TestYAMLKeepsRawDocumentStringsAndKeysExact(t *testing.T) {
+	labels := map[string]string{
+		"del": "a\x7fb", "nel": "a\u0085b", "c1": "x\u0080y", "c1-end": "a\u009fb", "nonchar": "\ufffe\uffff", "ls": "a\u2028b",
+		"on": "x", "1:20": "y", "yes": "z", "~": "w", "0x1f": "v", "app.example/name": "u",
+	}
+	raw, err := json.Marshal([]map[string]any{{"metadata": map[string]any{"labels": labels}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	writer := WithPresentation(&out, PresentationOptions{Format: "yaml"})
+	if err := writeStructuredResult(writer, "render effective", effectiveResult{EffectiveState: json.RawMessage(raw)}, nil, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	document := structuredDocument(t, out.String())
+	object := document["result"].(map[string]any)["effectiveState"].([]any)[0].(map[string]any)
+	got := object["metadata"].(map[string]any)["labels"].(map[string]any)
+	want := map[string]any{}
+	for key, value := range labels {
+		want[key] = value
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("labels = %q, want %q\n%s", got, want, out.String())
+	}
+	for _, key := range []string{"on", "1:20", "yes", "~", "0x1f"} {
+		if !strings.Contains(out.String(), `"`+key+`": `) {
+			t.Errorf("key %q is not quoted:\n%s", key, out.String())
+		}
+	}
+	if !strings.Contains(out.String(), "app.example/name: ") || !strings.Contains(out.String(), "effectiveState:") {
+		t.Errorf("a plain key was quoted:\n%s", out.String())
+	}
+}
+
 func TestStructuredControllerRetainsNextAndExecutionEvidence(t *testing.T) {
 	for _, format := range []string{"json", "yaml"} {
 		for _, path := range []string{"setup", "preflight controller"} {
@@ -349,6 +384,74 @@ func TestStructuredWriterFailuresDoNotAppendFallbacks(t *testing.T) {
 		code, out, errOut, record := runRecorded(args)
 		if code != 0 || out == "" || errOut != "" || record.calls != 0 {
 			t.Fatalf("explicit help precedence %v: %d %q %q", args, code, out, errOut)
+		}
+	}
+}
+
+func TestYAMLQuotesEveryStringValue(t *testing.T) {
+	for _, value := range []string{"on", "yes", "no", "off", "y", "1:20", "null", "~"} {
+		var out bytes.Buffer
+		writer := WithPresentation(&out, PresentationOptions{Format: "yaml"})
+		if err := writeDiagnostics(writer, io.Discard, value, nil, 1, true, []string{value}); err != nil {
+			t.Fatal(err)
+		}
+		quoted := `"` + value + `"`
+		if !strings.Contains(out.String(), "command: "+quoted+"\n") || !strings.Contains(out.String(), "- "+quoted+"\n") {
+			t.Fatalf("%s: unquoted string: %s", value, out.String())
+		}
+		document := structuredDocument(t, out.String())
+		if document["command"] != value || document["logs"].([]any)[0] != value {
+			t.Fatalf("%s: retyped: %v", value, document)
+		}
+		out.Reset()
+		if err := writeStructuredResult(writer, "media add", mediaMutationPresentation{Name: value}, nil, nil, 0); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out.String(), "name: "+quoted+"\n") || structuredDocument(t, out.String())["result"].(map[string]any)["name"] != value {
+			t.Fatalf("%s: unquoted result: %s", value, out.String())
+		}
+	}
+}
+
+func exportedContent(t *testing.T, output string) []byte {
+	t.Helper()
+	export := structuredDocument(t, output)["result"].(map[string]any)["export"].(map[string]any)
+	content, _ := export["content"].(string)
+	switch export["encoding"] {
+	case "utf-8":
+		return []byte(content)
+	case "base64":
+		decoded, err := base64.StdEncoding.DecodeString(content)
+		if err != nil {
+			t.Fatalf("invalid base64: %s", output)
+		}
+		return decoded
+	}
+	t.Fatalf("unknown encoding: %s", output)
+	return nil
+}
+
+func TestStructuredExportsCarryControlBytesExactly(t *testing.T) {
+	for _, content := range []string{"\tkey\n", "a\u0085b", "a\x7fb", "a\x01b"} {
+		value := []byte(content)
+		for _, format := range []string{"json", "yaml"} {
+			material := secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: bytes.Clone(value)})
+			record := &dispatchRecord{result: commandResult{secretReveal: &custody.RevealResult{Material: material, Part: secrets.ValuePart}}}
+			code, out, errOut := runSecretResult([]string{"secret", "show", "--name", "demo", "--part", "value", "--output", format}, record)
+			if code != 0 || errOut != "" {
+				t.Fatalf("%q %s: %d %q %q", content, format, code, out, errOut)
+			}
+			if got := exportedContent(t, out); !bytes.Equal(got, value) {
+				t.Fatalf("%q %s: secret bytes changed to %q: %s", content, format, got, out)
+			}
+			kubeconfig := &containeraccess.KubeconfigResult{Cluster: "demo", Unproved: true, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: bytes.Clone(value)})}
+			code, out, errOut = runSecretResult([]string{"cluster", "kubeconfig", "--name", "demo", "--output", format}, &dispatchRecord{result: commandResult{kubeconfig: kubeconfig}})
+			if code != 0 || errOut != "" {
+				t.Fatalf("%q %s: %d %q %q", content, format, code, out, errOut)
+			}
+			if got := exportedContent(t, out); !bytes.Equal(got, value) {
+				t.Fatalf("%q %s: kubeconfig bytes changed to %q: %s", content, format, got, out)
+			}
 		}
 	}
 }

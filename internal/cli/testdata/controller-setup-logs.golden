@@ -4,7 +4,7 @@
     Platform  fedora 44/amd64
     Route     direct
 
-Checks
+  Checks
   [OK]       Host: fedora 44/amd64
   [OK]       Controller runtime: Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5
   [FAIL]     Host packages: required openssh-clients, podman; observed missing podman
@@ -33,7 +33,7 @@ Checks
 
   Logs  /var/lib/bootwright/setup/runs/setup-000003
 
-Progress
+  Progress
   [RUNNING]  [1/2] Host packages
   [DONE]     [1/2] Host packages
   [RUNNING]  [2/2] Setup receipt

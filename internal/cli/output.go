@@ -40,14 +40,20 @@ func writeEnvelope(out io.Writer, envelope commandEnvelope) error {
 		return err
 	}
 	var document yaml.Node
-	if err := yaml.Unmarshal(encoded.Bytes(), &document); err != nil {
+	if err := yaml.Unmarshal(yamlSafeJSON(encoded.Bytes()), &document); err != nil {
 		return err
 	}
 	var blockStyle func(*yaml.Node)
 	blockStyle = func(node *yaml.Node) {
 		node.Style = 0
-		for _, child := range node.Content {
+		for i, child := range node.Content {
 			blockStyle(child)
+			if child.Kind != yaml.ScalarNode || child.Tag != "!!str" {
+				continue
+			}
+			if node.Kind == yaml.SequenceNode || node.Kind == yaml.MappingNode && (i%2 == 1 || !plainYAMLKey(child.Value)) {
+				child.Style = yaml.DoubleQuotedStyle
+			}
 		}
 	}
 	blockStyle(&document)
@@ -65,6 +71,36 @@ func writeEnvelope(out io.Writer, envelope commandEnvelope) error {
 		err = io.ErrShortWrite
 	}
 	return err
+}
+
+func yamlSafeJSON(encoded []byte) []byte {
+	var safe bytes.Buffer
+	for len(encoded) > 0 {
+		r, size := utf8.DecodeRune(encoded)
+		if r == 0x7f || r >= 0x80 && r <= 0x9f || r == 0xfffe || r == 0xffff {
+			fmt.Fprintf(&safe, "\\u%04x", r)
+		} else {
+			safe.Write(encoded[:size])
+		}
+		encoded = encoded[size:]
+	}
+	return safe.Bytes()
+}
+
+func plainYAMLKey(key string) bool {
+	if key == "" || !(key[0] >= 'a' && key[0] <= 'z' || key[0] >= 'A' && key[0] <= 'Z') {
+		return false
+	}
+	for _, r := range key {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("_.-/", r)) {
+			return false
+		}
+	}
+	switch strings.ToLower(key) {
+	case "y", "n", "yes", "no", "true", "false", "on", "off", "null":
+		return false
+	}
+	return true
 }
 
 // jsonResult is a command's documented structured result. Only the result types this
@@ -141,9 +177,7 @@ func writeValidation(out, errOut io.Writer, command string, report *compilation.
 		return err
 	}
 	var text display
-	text.headline("OK", "Desired state is valid")
-	text.section("Admission")
-	text.fields(field{Label: "Files seen", Value: fmt.Sprint(report.Counts.FilesSeen)}, field{Label: "Objects decoded", Value: fmt.Sprint(report.Counts.ObjectsDecoded)})
+	text.headline("OK", fmt.Sprintf("Desired state is valid (files seen: %d, objects decoded: %d)", report.Counts.FilesSeen, report.Counts.ObjectsDecoded))
 	return text.writeTo(out)
 }
 

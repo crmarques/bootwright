@@ -35,13 +35,25 @@ class Host:
             return 1, "", "injected failure"
         if action == "show":
             present = (self.root / NAME).exists()
+            if "--value" in argv:
+                # systemctl show --value prints the bare property value (systemctl(1)).
+                return 0, self.state + "\n", ""
             return 0, ("LoadState=%s\nActiveState=%s\nFragmentPath=%s\nDropInPaths=%s\n" % (
                 "loaded" if present else "not-found", self.state, str(self.root / NAME) if present else "", self.dropins)
                 + "".join("%s=%s\n" % item for item in self.effective.items())), ""
         if action == "is-enabled":
             return (0, "enabled\n", "") if self.enabled else (1, "disabled\n", "")
-        if action in ("start", "stop"):
-            self.state = "active" if action == "start" else "inactive"
+        if action == "reset-failed":
+            # systemd keeps a failed unit loaded until reset-failed (systemd.unit(5) CollectMode=);
+            # a unit that is not loaded fails with "Unit X not loaded." (systemd src/core/dbus-manager.c).
+            if self.state != "failed" and not (self.root / NAME).exists():
+                return 1, "", "Failed to reset failed state of unit %s: Unit %s not loaded.\n" % (argv[2], argv[2])
+            self.state = "inactive" if self.state == "failed" else self.state
+            return 0, "", ""
+        if action == "start":
+            self.state = "active"
+        elif action == "stop" and self.state != "failed":
+            self.state = "inactive"
         return 0, "", ""
 
     def manage(self, state):
@@ -62,6 +74,44 @@ def test_apply_replay_and_owned_cleanup(tmp_path):
     assert not (tmp_path / NAME).exists()
     assert not (tmp_path / "virtnetworkd.service.wants" / NAME).is_symlink()
     assert not any(call[1] in ("enable", "disable") for call in host.calls)
+    assert not any(call[1] == "reset-failed" for call in host.calls)
+
+
+def failed_barrier(tmp_path):
+    host = Host(tmp_path)
+    assert host.manage("present")
+    host.state = "failed"
+    host.calls.clear()
+    return host
+
+
+def test_failed_barrier_removal_proves_absence(tmp_path):
+    host = failed_barrier(tmp_path)
+    assert host.manage("absent")
+    assert [ready.SYSTEMCTL, "reset-failed", NAME] in host.calls
+    evidence = ready.observe(host.run, REQUEST, str(tmp_path), os.geteuid())
+    assert evidence == {"name": NAME, "answered": True, "present": False, "owned": False, "enabled": False, "ready": False, "state": ""}
+    assert not host.manage("absent")
+
+
+def test_reset_failed_tolerates_not_loaded(tmp_path):
+    host = failed_barrier(tmp_path)
+
+    def collected(argv, **kwargs):
+        if argv[1] == "reset-failed":
+            host.state = "inactive"
+        return host.run(argv, **kwargs)
+
+    ready.manage(collected, REQUEST, "absent", str(tmp_path), os.geteuid())
+    assert not (tmp_path / NAME).exists()
+    assert not ready.observe(host.run, REQUEST, str(tmp_path), os.geteuid())["present"]
+
+
+def test_reset_failed_other_error_refuses(tmp_path):
+    host = failed_barrier(tmp_path)
+    host.fail = "reset-failed"
+    with pytest.raises(ValueError, match="restore firewalld and repeat"):
+        host.manage("absent")
 
 
 @pytest.mark.parametrize("collision", ["content", "symlink", "wants", "dropin"])
@@ -97,7 +147,7 @@ def test_interrupted_start_retains_owned_unit_for_replay(tmp_path):
         host.manage("absent")
     host.fail = ""
     assert not host.manage("absent")
-    assert host.calls[-1] == [ready.SYSTEMCTL, "daemon-reload"]
+    assert host.calls[-2:] == [[ready.SYSTEMCTL, "daemon-reload"], [ready.SYSTEMCTL, "show", "--property=ActiveState", "--value", NAME]]
 
 
 def test_disabled_firewall_refuses_without_installing_or_enabling_it(tmp_path):
@@ -162,8 +212,9 @@ def test_missing_fragment_does_not_hide_retained_or_unknown_unit_state(tmp_path,
     evidence = ready.observe(host.run, REQUEST, str(tmp_path), os.geteuid())
     assert evidence["present"] and not evidence["owned"]
     assert evidence["state"] == state
-    with pytest.raises(ValueError, match="unknown or foreign"):
+    with pytest.raises(ValueError, match="unknown or foreign") as refused:
         host.manage("absent")
+    assert ("systemctl reset-failed " + NAME in str(refused.value)) == (state == "failed")
     assert all(call[1] == "show" for call in host.calls)
 
 

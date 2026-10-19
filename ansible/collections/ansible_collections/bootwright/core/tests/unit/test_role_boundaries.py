@@ -998,3 +998,17 @@ def test_the_scratch_rule_passes(text):
 def test_the_scratch_rule_rejects(text, path):
     problems = fixed_scratch_problems("synthetic", text)
     assert problems == ["synthetic: names the fixed path %s; use the invocation scratch" % path], problems
+
+
+# An exhausted wait for the host firewall refuses with its remedy, not with the
+# raw result of its last firewall-cmd --state (specs/substrates.md, Provider
+# host realization).
+def test_an_unanswered_host_firewall_refuses_with_its_remedy():
+    ordered = list(walk(load(ROLES / "substrate_libvirt_host" / "tasks" / "apply.yml")))
+    waits = [index for index, task in enumerate(ordered) if task.get("register") == "substrate_libvirt_host_firewall_state"]
+    assert len(waits) == 1, "the walk no longer sees the host firewall wait"
+    wait, refusal = ordered[waits[0]], ordered[waits[0] + 1]
+    assert wait.get("failed_when") is False and "until" in wait, wait
+    assert action(refusal) == "ansible.builtin.assert" and refusal.get("when") == wait.get("when"), refusal
+    assert arguments(refusal).get("that") == ["(substrate_libvirt_host_firewall_state.rc | default(1)) == 0"], refusal
+    assert "start firewalld.service" in str(arguments(refusal).get("fail_msg")), refusal

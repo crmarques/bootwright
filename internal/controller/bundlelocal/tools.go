@@ -164,19 +164,13 @@ func toolRequests(requests []controller.ToolRequest, mirrorAdmitted func(string)
 			if request.Compatibility != "" {
 				return nil, bundleFailure("generic tool request has unqualified compatibility metadata")
 			}
-			if request.Version != "latest" && !stableVersion(request.Version) {
-				return nil, bundleFailure("generic tool version must identify a stable release")
-			}
 		case "openshift-clients", "openshift-install":
 			if request.Version == "latest" || request.Compatibility != "openshift" && request.Compatibility != "okd" {
 				return nil, bundleFailure("installer and client tools require the exact target distribution release")
 			}
-			if request.Compatibility == "openshift" && !stableVersion(request.Version) {
-				return nil, bundleFailure("OpenShift client tools require an exact stable target release")
-			}
 		case "virtctl":
-			if request.Compatibility != "kubevirt" || request.Version != "latest" && !stableVersion(request.Version) {
-				return nil, bundleFailure("virtctl requires the upstream KubeVirt publisher and latest or an exact stable release")
+			if request.Compatibility != "kubevirt" {
+				return nil, bundleFailure("virtctl requires the upstream KubeVirt publisher")
 			}
 		default:
 			return nil, bundleFailure("target native tool is outside the supported dependency vocabulary")
@@ -344,7 +338,7 @@ func (c *ToolCatalog) release(ctx context.Context, repository, version string, e
 	if err != nil {
 		return release, err
 	}
-	if json.Unmarshal(data.data, &release) != nil || release.Draft || release.Prerelease || !toolVersion(release.Tag) || len(release.Assets) > 256 || version != "latest" && release.Tag != version {
+	if json.Unmarshal(data.data, &release) != nil || release.Draft || version == "latest" && release.Prerelease || !toolVersion(release.Tag) || len(release.Assets) > 256 || version != "latest" && release.Tag != version {
 		return release, bundleFailure("publisher release metadata is missing, unstable, or inconsistent")
 	}
 	return release, nil

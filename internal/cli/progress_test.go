@@ -84,7 +84,7 @@ func TestProgressRowsAlignAndCloseWithElapsedTime(t *testing.T) {
 	clock.advance(3 * time.Second)
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Controller setup", Status: "changed", Position: 1, Total: 2})
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Controller binding", Status: "changed", Position: 2, Total: 2})
-	want := "\nProgress\n" +
+	want := "\n  Progress\n" +
 		"  [RUNNING]  [1/2] Controller setup\n" +
 		"  [RUNNING]  [1/2] Controller setup: downloading 3 of 11 wheels\n" +
 		"  [DONE]     [1/2] Controller setup  3s\n" +
@@ -112,7 +112,7 @@ func TestProgressHeartbeatRepeatsASilentStep(t *testing.T) {
 	presenter.report(ctx, progressEvent{Heading: "Resolving", Label: "Native packages", Detail: "14 changes", Status: "ok", Position: 2, Total: 3})
 	afterOutcome := out.Len()
 	clock.advance(3 * progressHeartbeat)
-	want := "\nResolving\n" +
+	want := "\n  Resolving\n" +
 		"  [RUNNING]  [2/3] Native packages\n" +
 		"  [RUNNING]  [2/3] Native packages  still running, 10s\n" +
 		"  [RUNNING]  [2/3] Native packages  still running, 20s\n" +
@@ -138,7 +138,7 @@ func TestProgressSettledSubStepAdvancesCompletionWithoutARow(t *testing.T) {
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Detail: "acquire the pinned server image", Status: "ok", Position: 1, Total: 1, Completed: 1, Declared: 2, Nested: true})
 	clock.advance(progressHeartbeat)
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Status: "done", Position: 1, Total: 1})
-	want := "\nProgress\n" +
+	want := "\n  Progress\n" +
 		"  [RUNNING]  [1/1] Serve artifacts\n" +
 		"  [RUNNING]  [1/1] Serve artifacts: acquire the pinned server image - 0%\n" +
 		"  [RUNNING]  [1/1] Serve artifacts: acquire the pinned server image - 50%  still running, 10s\n" +
@@ -155,7 +155,7 @@ func TestProgressPadsThePositionToItsTotal(t *testing.T) {
 	ctx := context.Background()
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "install the operating system", Status: "done", Position: 9, Total: 12})
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "verify the installation", Status: "done", Position: 10, Total: 12})
-	want := "\nProgress\n" +
+	want := "\n  Progress\n" +
 		"  [DONE]     [ 9/12] install the operating system\n" +
 		"  [DONE]     [10/12] verify the installation\n"
 	if out.String() != want {
@@ -171,11 +171,11 @@ func TestProgressOpensEachHeadingOnce(t *testing.T) {
 	presenter.report(ctx, progressEvent{Heading: "Resolving", Label: "Python and Ansible", Detail: "Python 3.14.7, Ansible 2.21.4", Status: "ok", Position: 1, Total: 2})
 	presenter.report(ctx, progressEvent{Heading: "Resolving", Label: "Native packages", Status: "ok", Detail: "no changes", Position: 2, Total: 2})
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Controller setup", Status: "running", Position: 1, Total: 1})
-	want := "\nResolving\n" +
+	want := "\n  Resolving\n" +
 		"  [RUNNING]  [1/2] Python and Ansible\n" +
 		"  [OK]       [1/2] Python and Ansible: Python 3.14.7, Ansible 2.21.4\n" +
 		"  [OK]       [2/2] Native packages: no changes\n" +
-		"\nProgress\n" +
+		"\n  Progress\n" +
 		"  [RUNNING]  [1/1] Controller setup\n"
 	if out.String() != want {
 		t.Fatalf("progress = %q, want %q", out.String(), want)
@@ -208,12 +208,12 @@ func TestTerminalProgressRewritesTheRunningRowInPlace(t *testing.T) {
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Controller setup", Status: "running", Position: 1, Total: 1})
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Controller setup", Detail: "downloading 3 of 11 wheels", Status: "running", Position: 1, Total: 1, Nested: true})
 	presenter.finish()
-	want := "\nResolving\n" +
+	want := "\n  Resolving\n" +
 		"  [RUNNING]  [2/2] Native packages" +
 		eraseLine + "  [RUNNING]  [2/2] Native packages  still running, 1s" +
 		eraseLine + "  [RUNNING]  [2/2] Native packages  still running, 2s" +
 		eraseLine + "  [OK]       [2/2] Native packages: no changes  2s\n" +
-		"\nProgress\n" +
+		"\n  Progress\n" +
 		"  [RUNNING]  [1/1] Controller setup" +
 		eraseLine + "  [RUNNING]  [1/1] Controller setup: downloading 3 of 11 wheels\n"
 	if out.String() != want {
@@ -233,11 +233,11 @@ func TestTerminalProgressGivesEveryRunningStepItsOwnLine(t *testing.T) {
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Status: "running", Position: 1, Total: 1})
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Detail: "acquire the pinned server image", Status: "ok", Position: 1, Total: 1, Nested: true})
 	clock.advance(time.Second)
-	want := "\nChecks\n" +
+	want := "\n  Checks\n" +
 		"  [RUNNING]  Installed host: verifying local identity" +
 		eraseLine + "  [RUNNING]  Installed host: verifying local identity\n" +
 		"  [RUNNING]  Controller setup: verifying the controller runtime\n" +
-		"\nProgress\n" +
+		"\n  Progress\n" +
 		"  [RUNNING]  [1/1] Serve artifacts" +
 		eraseLine + "  [RUNNING]  [1/1] Serve artifacts  still running, 1s"
 	if out.String() != want {
@@ -347,7 +347,7 @@ func TestAppendedProgressInterleavesConcurrentStepsAndBeatsEachOne(t *testing.T)
 	clock.advance(progressHeartbeat)
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Serve artifacts", Status: "done", Position: 1, Total: 2})
 	presenter.report(ctx, progressEvent{Heading: "Progress", Label: "Resolve names", Status: "done", Position: 2, Total: 2})
-	want := "\nProgress\n" +
+	want := "\n  Progress\n" +
 		"  [RUNNING]  [1/2] Serve artifacts\n" +
 		"  [RUNNING]  [2/2] Resolve names\n" +
 		"  [RUNNING]  [1/2] Serve artifacts  still running, 10s\n" +

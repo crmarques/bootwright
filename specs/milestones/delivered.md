@@ -6987,12 +6987,12 @@ D163 as component version rules: gap1-package-resolution-matri-3-2 (a RHEL
 release requirement), gap1-package-resolution-matri-3-4 (binding the license to
 a Ceph release) and gap1-test-weakening-2-1 (an OS gate; its residual
 diagnostic is parked). Owner questions: [B650](m2.md#b650), [B652](m2.md#b652),
-[B653](m2.md#b653) and [B654](m2.md#b654) on M2, and the audit's M1 questions on
-M1. Parked: [B657](backlog.md#b657) to [B664](backlog.md#b664),
+[B653](m2.md#b653) and [B654](m2.md#b654) on M2, and [B651](m1.md#b651),
+[B655](m1.md#b655) and [B656](m1.md#b656) on M1. Parked: [B657](backlog.md#b657) to [B664](backlog.md#b664),
 [B674](backlog.md#b674), [B675](backlog.md#b675), [B677](backlog.md#b677),
 [B678](backlog.md#b678) and [B679](backlog.md#b679). The audit also noted that
 the numbering of the peer branch `m2c` against the ids on main
-(milestones-docs-1) is the peer's to reconcile above D164, B679 and X103; this
+(milestones-docs-1) is the peer's to reconcile above D164, B681 and X103; this
 slice edits nothing of it.
 
 **Review:** each of the 33 sub-items was reviewed by two lenses, brief
@@ -7041,3 +7041,121 @@ lanes left. The 2026-10-19 flake of
 `test_vendor_defaults_allow_completion_replay_and_owned_removal_without_global_writes`
 on Python 3.9, which this slice does not touch, is recorded in
 [B633](backlog.md#b633).
+
+### X103 — Audit defects and D163 screens for Foundations (M1)
+
+**Owner:** CLI presentation, Controller, Managed OS and Substrate, with
+Environment and Docs. A defect slice of [M1](m1.md), delivered as one commit
+after [X102](#x102--audit-defects-for-full-ibm-ceph-m2) on the owner's approval
+of 2026-10-19 to fix the general defects of the 2026-10-18 audit of main
+`fcff2f58f..ce190446a`. **Decision:** [D163](backlog.md#decisions), which
+authorizes the audit defect work, planned as X102, and records that Bootwright
+registers and enforces no component version rule. A slice is the ordered items
+of one milestone, so the work splits: X102 carries the M2 items and this slice
+the M1 items. **Items:** B643, B644, B645, B646 and B647. Every confirmed
+general finding of the audit that belongs to M1 is closed below, recorded as an
+owner question or parked.
+
+- **B643, the libvirt firewall readiness barrier.** Findings
+  substrate-firewall-1 to substrate-firewall-3. Removing a barrier that had
+  failed now runs `systemctl reset-failed`, so the failed unit no longer reads as
+  foreign and no later destroy or apply refuses on it; a barrier that failed at
+  boot while the networks, pool and directory were held is positive no removal
+  effect ([substrates](../substrates.md)); and a readiness refusal, in Go and in
+  the role's wait, carries a remedy.
+- **B644, human output.** Findings cli-presentation-code-1, -3 and -4,
+  cli-output-contract-2, -3, -4, -7 and -8, and trust-info-commands-1. A path, an
+  identifier or a command is never split or truncated (the Logs path, operation
+  ids, `Next`, the Ceph command, the access templates and a resource heading's
+  name); `status` opens with `✓ Context <name>`; compact `cluster info` keeps the
+  dashboard certificate fingerprint; every field group is one aligned call and a
+  blank line separates resource records; progress headings are indented like
+  section headings; the controller and CLI spec text match the rendered output.
+- **B645, structured output.** Findings cli-presentation-code-2 and
+  cli-output-contract-1. Every YAML string value is double-quoted and a mapping
+  key YAML 1.1 would retype is quoted; a raw effective-state or diff document
+  keeps every character of a JSON string; an export holding a C0 control other
+  than tab, line feed or carriage return, DEL or a C1 control is base64-encoded
+  in JSON and YAML alike ([output](../cli/output.md)); a successful `validate`
+  prints exactly the one summary line the spec requires.
+- **B646, the D163 screens.** Findings D163-A1 to D163-A3. An exact pin of
+  `helm`, `govc`, `kubectl` or `virtctl`, and the exact `openshift-install` and
+  `openshift-clients` of a cluster release, may name any publisher release tag,
+  a release candidate included; the CLI version grammar is `latest` or an
+  optional `v`, a leading digit and then `[A-Za-z0-9._+-]`, 95 characters at most
+  after the `v`, and `latest` still resolves a stable release. The controller-stage
+  module projects what admission accepts. The managed-OS `spec.os.version` is
+  free-form and the refusal of a RHEL major below 9 is gone; the rescue
+  declaration is no longer pinned to RHEL 9 (any rescue is still refused for want
+  of a journey).
+- **B647, the operator guide and the docs suite.** Findings examples-reorg-2,
+  examples-reorg-3, guards-contracts-2 and milestones-docs-7 (operator-guide
+  part). The [operator guide](../../docs/operator-guide.md) records the accepted
+  M1 gates as a re-run recipe, the recovery text of the lab examples links the
+  rebuild-and-continue path, and the docs suite indexes every tracked example
+  scenario, including `examples/machines/libvirt-network-variants`.
+
+**Operator-visible effects:**
+
+- A libvirt host whose firewalld readiness barrier failed destroys and applies
+  again; a readiness refusal names starting `firewalld.service`, confirming
+  `firewall-cmd --state` and repeating the apply, and the wait states 31
+  attempts two seconds apart.
+- Human output never cuts a path, an identifier or a command, so a narrow
+  terminal or a long name prints a line wider than the row; `status`,
+  `cluster info`, `machine info`, `secret info`, the progress headings and
+  `validate` follow [the output spec](../cli/output.md).
+- `-o yaml` quotes every string value, so `on`, `yes` and `1:20` read back as
+  strings; a secret export with a NEL, DEL or other control is base64 and no
+  longer fails or folds to a space.
+- A pin such as `virtctl v1.9.0-rc.0` or a `4.22.0-rc.1` cluster's installer is
+  admitted, frozen and installed by `setup` and `apply --stage controller`.
+  `distribution.release.version` of an OpenShift cluster is not part of this
+  change ([B680](backlog.md#b680)).
+- The stable-only pin screen, the managed-OS RHEL floor and the rescue RHEL 9
+  pin are gone; a version the operator chooses fails natively on an older
+  target.
+
+**Digest effects:** no request, record or plan-digest version moved, and no
+contract golden changed. The automation digest moved, by the libvirt host role
+and the controller-stage module, and the Go changes move no pin. A live
+operation therefore continues after a rebuild, `setup` and an apply, as
+[a fix to a failed step](../../.agents/knowledge/continuation-after-a-fix.md)
+states.
+
+**Review:** each of the 17 sub-items had two lenses, brief conformance with test
+adequacy, and its correctness against the production path. Of 34 verdicts, 33
+approved and 1 blocked: no test failed when the verbatim call sites of the
+unsplit-output change were reverted, and the renderer-level tests that answer it
+were added. The adversarial review of the integrated diff raised 7 findings.
+Six were real and in scope, one blocking and five minor, and are fixed with a
+test that fails without the fix: the controller-stage module still refused every
+non-stable exact pin (blocking), a continuation line opened with a space, a
+resource heading still split a name, YAML altered or refused raw-document
+strings and left keys such as `on` plain, `secrets.md` contradicted the output
+spec, and admission accepted a 96-byte unprefixed tag that setup then refused
+(the bound is now 95 characters after the optional `v`). One finding, about the
+order of the operator guide's re-run recipe, was not real. An independent check
+of the repaired head reproduced every scenario as fixed and found no further
+gap. An integration fix inverted the two dependency-version test rows that
+asserted the removed screen. No finding remains open.
+
+**Gates:** the integrated head (after its integration fix) and the repair head
+passed `make fmt-check modules-check tidy-check test vet completion-test
+vulncheck docs-check race`, `./scripts/ansible-check` with all suites,
+`./scripts/check-commits` and `git diff --check`; the first integrated `make
+test` failed the dependency-version rows above, fixed as above. Each lane ran
+its targeted tests and `make focus`, and the lex lanes' focus run failed the
+dependency-version rows that the integration fix inverted. Each
+behaviour-changing sub-item names a mutation that failed its test; the
+documentation-only sub-items cli-6, docs1-1 and docs1-2 name none. The results
+on the squashed commit are in its body. No live host ran: the
+firewall removal path is qualified in-tree only, and its first real run is the
+owner's.
+
+**Constraints left behind:** `latest` still resolves a stable release only. A
+rescue declaration is still refused. Follow-ups: owner questions
+[B651](m1.md#b651), [B655](m1.md#b655) and [B656](m1.md#b656); parked
+[B665](backlog.md#b665) to [B673](backlog.md#b673), [B676](backlog.md#b676),
+[B680](backlog.md#b680) and [B681](backlog.md#b681), which holds the edges the
+lanes left.

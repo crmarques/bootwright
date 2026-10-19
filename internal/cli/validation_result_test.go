@@ -26,7 +26,7 @@ func TestValidationSuccessHasExactStableRepresentations(t *testing.T) {
 		if code != 0 || errOut.Len() != 0 || record.calls != 1 || record.request.(compilation.ValidateRequest).ContextName != "" {
 			t.Fatalf("code=%d out=%q err=%q record=%#v", code, out.String(), errOut.String(), record)
 		}
-		want := "  ✓ Desired state is valid\n\n  Admission\n    Files seen       2\n    Objects decoded  4\n"
+		want := "  ✓ Desired state is valid (files seen: 2, objects decoded: 4)\n"
 		if jsonMode {
 			want = "{\"schemaVersion\":\"v1alpha1\",\"command\":\"validate\",\"ok\":true,\"exitCode\":0,\"result\":{\"counts\":{\"filesSeen\":2,\"objectsDecoded\":4},\"excludedContainerClusters\":[],\"excludedStorageClusters\":[],\"excludedResourceFiles\":[],\"advisories\":[]},\"diagnostics\":[],\"logs\":[]}\n"
 		}

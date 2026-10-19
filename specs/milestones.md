@@ -30,7 +30,7 @@ remain delivered.
   local branch `m2c`, with M1c's X55/X60 as its foundation gaps, each offered
   to main at its checkpoint (D164). M1f/M1g are not blanket prerequisites.
 - **Next for operator:** review D159 to D164 (D164 answers M2c's OD28 to
-  OD31), B650, B652 to B654. Other provider and cluster gates keep their
+  OD31), B650 to B656. Other provider and cluster gates keep their
   acceptance.
 
 ## Scope rules

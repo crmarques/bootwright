@@ -3,11 +3,9 @@
       MACHINE   rhel-01
       POWER     off
       PREVIOUS  on
-      LOGS      /var/lib/bootwright/contexts/lab/state/runs/run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9
-                a
+      LOGS      /var/lib/bootwright/contexts/lab/state/runs/run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a
 
       MACHINE   rhel-02
       POWER     off
       PREVIOUS  off
-      LOGS      /var/lib/bootwright/contexts/lab/state/runs/run-0a1b2c3d4e5f60718293a4b5c6d7e8f
-                9
+      LOGS      /var/lib/bootwright/contexts/lab/state/runs/run-0a1b2c3d4e5f60718293a4b5c6d7e8f9

@@ -568,17 +568,21 @@ func writeSecretInfo(out io.Writer, command string, result *custody.ListResult, 
 		return text.writeTo(out)
 	}
 	full := presentationFor(out).Detail == "full"
-	for _, row := range sortedSecretListRows(result.Secrets) {
+	for index, row := range sortedSecretListRows(result.Secrets) {
+		if index > 0 {
+			text.separate()
+		}
 		text.resourceHeading("secret", row.Name, row.State)
 		text.subsection("Identity")
 		text.mutedFields(field{Label: "Type", Value: row.Type}, field{Label: "Parts", Value: displaySecretParts(row.Parts)})
 		text.subsection("Custody")
-		text.mutedFields(field{Label: "Source", Value: row.Source},
-			field{Label: "Current version", Value: displayVersionOrdinal(row.CurrentVersion, row.CurrentSequence)},
-			field{Label: "Bound versions", Value: strconv.Itoa(row.BoundVersions)})
+		custody := []field{{Label: "Source", Value: row.Source},
+			{Label: "Current version", Value: displayVersionOrdinal(row.CurrentVersion, row.CurrentSequence)},
+			{Label: "Bound versions", Value: strconv.Itoa(row.BoundVersions)}}
 		if full && row.CurrentVersion != nil {
-			text.mutedFields(field{Label: "Version ID", Value: *row.CurrentVersion})
+			custody = append(custody, field{Label: "Version ID", Value: *row.CurrentVersion})
 		}
+		text.mutedFields(custody...)
 	}
 	return text.writeTo(out)
 }

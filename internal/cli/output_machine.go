@@ -131,7 +131,10 @@ func writeMachineInfo(out io.Writer, command string, result *inventory.ListResul
 		return text.writeTo(out)
 	}
 	full := presentationFor(out).Detail == "full"
-	for _, row := range result.Machines {
+	for index, row := range result.Machines {
+		if index > 0 {
+			text.separate()
+		}
 		text.resourceHeading("machine", row.Name, row.Lifecycle)
 		text.subsection("Placement")
 		fields := []field{{Label: "OS", Value: displayValue(row.OS)}, {Label: "Clusters", Value: displayValue(strings.Join(row.Clusters, ", "))}}
@@ -140,17 +143,13 @@ func writeMachineInfo(out io.Writer, command string, result *inventory.ListResul
 		}
 		text.mutedFields(fields...)
 		text.subsection("Access")
-		text.mutedFields(field{Label: "Contact", Value: displayValue(row.Address)})
+		access := []field{{Label: "Contact", Value: displayValue(row.Address)}}
 		if full {
-			text.mutedFields(field{Label: "Addresses", Value: displayValue(strings.Join(row.IPs, ", "))})
+			access = append(access, field{Label: "Addresses", Value: displayValue(strings.Join(row.IPs, ", "))})
 		}
+		text.mutedFields(access...)
 		text.subsection("Evidence")
-		text.mutedFields(field{Label: "Lifecycle", Value: row.Lifecycle})
-		power := "not read"
-		if result.PowerRead {
-			power = displayValue(row.Power)
-		}
-		text.mutedFields(field{Label: "Power", Value: power})
+		text.mutedFields(field{Label: "Lifecycle", Value: row.Lifecycle}, field{Label: "Power", Value: "not read"})
 	}
 	return text.writeTo(out)
 }

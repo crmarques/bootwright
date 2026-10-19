@@ -16,6 +16,7 @@
       cluster rsh  not-implemented
       sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
       reached through bootwright cluster kubeconfig
+
   ○ cluster | okd-lab
     Topology
       Type  ContainerCluster
@@ -34,6 +35,7 @@
       cluster rsh  not-implemented
       sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
       reached through bootwright cluster kubeconfig
+
   ○ cluster | archive
     Topology
       Type  StorageCluster
@@ -43,9 +45,10 @@
       cluster kubectl  not-applicable
       cluster oc  not-applicable
       cluster rsh  not-applicable
+
   ○ cluster | storage · ready
     Topology
-      Type  StorageCluster
+      Type        StorageCluster
       Management  managed
       Release     9.9.1.2
       Admin node  rhel-01
@@ -58,19 +61,16 @@
       cluster rsh  ready
       bootwright cluster rsh --context lab --name storage --node rhel-01
       Monitors  rhel-01  rhel-01.lab.test  192.0.2.11
-        rhel-02  rhel-02.lab.test  192.0.2.12
-        rhel-03  rhel-03.lab.test  192.0.2.13
-      Ceph command  bootwright cluster exec --context lab --name storage --node rhel-01 -- sudo
-                    -n ceph --conf
-                    /var/lib/bootwright/ceph/6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b/ceph.conf
-                    --keyring
-                    /var/lib/bootwright/ceph/6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b/ceph.client.a
-                    dmin.keyring
-      Dashboard         https://rhel-01.lab.test:8443/  (active MGR rhel-01 at last
-                        observation)
-                        https://rhel-02.lab.test:8443/  (standby rhel-02; redirects to the
-                        active MGR)
-      Dashboard status  ready
+                rhel-02  rhel-02.lab.test  192.0.2.12
+                rhel-03  rhel-03.lab.test  192.0.2.13
+      Ceph command  bootwright cluster exec --context lab --name storage --node rhel-01 -- sudo -n ceph --conf /var/lib/bootwright/ceph/6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b/ceph.conf --keyring /var/lib/bootwright/ceph/6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b/ceph.client.admin.keyring
+      Dashboard            https://rhel-01.lab.test:8443/  (active MGR rhel-01 at last
+                           observation)
+                           https://rhel-02.lab.test:8443/  (standby rhel-02; redirects to the
+                           active MGR)
+      Dashboard status     ready
+      Certificate SHA-256  AB:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C
+                           (self-signed; compare before accepting the browser warning)
     Evidence
       Status  ready
     Custody
