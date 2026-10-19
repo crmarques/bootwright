@@ -9,6 +9,7 @@ short_description: Resolve the authored IBM Ceph image manifest-only
 version_added: "0.1.0"
 description:
   - Resolves the authored tag or digest with a bounded origin-confined OCI client.
+  - The request may carry the auxiliary image set; each member resolves to its own linux/amd64 manifest digest at the same registry authority.
   - Downloads no image layers, starts no container and retains nothing.
   - Observation and removal read nothing remote and report the resolution absent.
 options:
@@ -18,7 +19,7 @@ options:
     choices: [apply, observe, destroy]
     required: true
   request:
-    description: Frozen image resolution request.
+    description: Frozen image resolution request, with the auxiliary image set when the cluster selects one.
     type: dict
     required: true
   digest:

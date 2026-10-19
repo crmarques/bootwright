@@ -517,7 +517,7 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 			t.Fatalf("the host request reaches %s, so its schema moves the host contract", forbidden)
 		}
 	}
-	want := []string{"ansiblePackageVersion", "bootstrap", "callHome", "cephadm", "cluster", "clusterKeyRef", "clusterNetworks", "clusterSSHTransport", "clusterSSHUser",
+	want := []string{"ansiblePackageVersion", "auxiliary", "bootstrap", "callHome", "cephadm", "cluster", "clusterKeyRef", "clusterNetworks", "clusterSSHTransport", "clusterSSHUser",
 		"config", "controller", "fsid", "hosts", "image", "monIP", "nfsGaneshaPackageVersion", "owner", "packageRepository", "packages", "publicNetworks", "registry",
 		"registryRef", "release", "services", "version"}
 	slices.Sort(want)
@@ -529,6 +529,7 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 	r.Config = map[string]map[string]string{"global": {"osd_pool_default_size": "2"}}
 	r.Cephadm = Tool{Path: "/usr/sbin/cephadm", PackageVersion: "synthetic-cephadm-1"}
 	r.Release, r.AnsiblePackageVersion = "synthetic-release", "synthetic-ansible-1"
+	r.Auxiliary = []AuxiliaryReference{{Name: "haproxy", Image: PinnedRegistry + "/cp/ibm-ceph/haproxy-synthetic@sha256:" + strings.Repeat("d", 64)}}
 	r.PackageRepository, r.NFSGaneshaPackageVersion = "https://publisher.example.test/ceph", "synthetic-ganesha-1"
 	r.MonIP, r.ClusterSSHUser, r.CallHome = "192.0.2.1", "operator", "enabled"
 	r.PublicNetworks, r.ClusterNetworks = []string{"192.0.2.0/24"}, []string{"198.51.100.0/24"}

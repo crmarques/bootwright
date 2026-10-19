@@ -171,5 +171,5 @@
       "service_type": "mgr"
     }
   ],
-  "version": "ceph-core-v11"
+  "version": "ceph-core-v12"
 }

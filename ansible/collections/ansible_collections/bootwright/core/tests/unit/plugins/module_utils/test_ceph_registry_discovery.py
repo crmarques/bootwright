@@ -24,7 +24,7 @@ from ansible_collections.bootwright.core.plugins.modules import ceph_image_resol
 
 COLLECTION = pathlib.Path(__file__).resolve().parents[4]
 GOLDEN = json.loads((COLLECTION / "tests" / "fixtures" / "ceph-image-call.golden").read_text())
-GOLDEN["request"]["version"] = "ceph-image-v2"
+GOLDEN["request"]["version"] = "ceph-image-v3"
 REPOSITORY = GOLDEN["request"]["base"]
 NAMESPACE = REPOSITORY.split("/", 1)[1]
 TAG_NAME = GOLDEN["request"]["tag"]
@@ -807,3 +807,95 @@ def test_refusal_keeps_coordinate_when_username_is_a_coordinate_segment():
     assert caught.value.native_error["coordinate"] == coordinate
     assert coordinate in caught.value.native_error["cause"]
     assert "pw" not in caught.value.native_error["cause"] and blob not in str(caught.value.native_error)
+
+
+AUX_BASE = REGISTRY + "/cp/ibm-ceph/haproxy-synthetic"
+AUX_NAMESPACE = AUX_BASE.split("/", 1)[1]
+AUX_ENTRY = {"name": "haproxy", "base": AUX_BASE, "tag": "synthetic-2", "image": AUX_BASE + ":synthetic-2"}
+
+
+class AuxiliaryClient(Client):
+    """Another repository of the same authority whose index lists an arm64 child before the amd64 one."""
+
+    def __init__(self):
+        super().__init__()
+        self.config["config"] = {"Entrypoint": ["/usr/sbin/haproxy"]}
+        self.manifest["config"].update(digest=sha(raw(self.config)), size=len(raw(self.config)))
+        self.selected.update(digest=sha(raw(self.manifest)), size=len(raw(self.manifest)))
+        arm = dict(self.manifest, layers=[])
+        arm["config"] = dict(self.manifest["config"], digest="sha256:" + "9" * 64)
+        self.arm = {"mediaType": discovery.MANIFEST_TYPES[0], "digest": sha(raw(arm)), "size": len(raw(arm)),
+                    "platform": {"os": "linux", "architecture": "arm64"}}
+        self.index["manifests"] = [self.arm, self.selected]
+        challenge = AUTH.replace(SCOPE, "repository:" + AUX_NAMESPACE + ":pull")
+        self.rows = [(401, {"www-authenticate": challenge}, b""), response({"token": "synthetic-token", "expires_in": 3600}),
+                     response(self.index, discovery.INDEX_TYPES[0]), response(self.manifest, discovery.MANIFEST_TYPES[0])]
+
+
+def test_auxiliary_reference_resolves_its_own_linux_amd64_digest(tmp_path, monkeypatch):
+    tmp_path.chmod(0o700)
+    path = tmp_path / "registry"
+    path.write_bytes(raw({"url": REGISTRY, "username": "cp", "password": "synthetic-secret"}))
+    path.chmod(0o600)
+    checks = []
+    fake_tls(monkeypatch, checks)
+    clients = {REPOSITORY: Client(), AUX_BASE: AuxiliaryClient()}
+    requests = []
+
+    def registry(context, request):
+        requests.append(request)
+        return clients[request["base"]]
+
+    monkeypatch.setattr(discovery, "Registry", registry)
+    request = dict(GOLDEN["request"], auxiliary=[AUX_ENTRY])
+    result = discovery.execute("apply", request, GOLDEN["digest"], {"registryJSON": str(path)})
+    child = sha(raw(clients[AUX_BASE].manifest))
+    assert child != sha(raw(clients[REPOSITORY].manifest)) and child != clients[AUX_BASE].arm["digest"]
+    assert result["evidence"]["digest"] == sha(raw(clients[REPOSITORY].manifest))
+    assert result["evidence"]["auxiliary"] == [{"name": "haproxy", "base": AUX_BASE, "tag": "synthetic-2", "digest": child, "platform": "linux/amd64"}]
+    assert [value["base"] for value in requests] == [REPOSITORY, AUX_BASE] and "auxiliary" not in requests[1]
+    assert all(client.rows == [] for client in clients.values())
+    token_path = clients[AUX_BASE].calls[1][0]
+    assert discovery.urllib.parse.parse_qs(token_path.split("?", 1)[1])["scope"] == ["repository:" + AUX_NAMESPACE + ":pull"]
+    assert clients[AUX_BASE].calls[1][1] == clients[REPOSITORY].calls[1][1]
+    assert all(call[0].startswith("/v2/" + AUX_NAMESPACE + "/") for call in clients[AUX_BASE].calls if not call[0].startswith("/oauth/"))
+    assert checks == ["tls"] * 4 and "synthetic-secret" not in str(result)
+    digested = dict(AUX_ENTRY, tag="", image=AUX_BASE + "@sha256:" + "e" * 64)
+    with pytest.raises(discovery.DiscoveryRefusal, match="^image-digest-mismatch$"):
+        discovery.resolution(dict(GOLDEN["request"], auxiliary=[digested]), GOLDEN["digest"], "sha256:" + "c" * 64, [child])
+
+
+@pytest.mark.parametrize("auxiliary", [
+    [dict(AUX_ENTRY, name="base")],
+    [dict(AUX_ENTRY, name="keepalived"), AUX_ENTRY],
+    [AUX_ENTRY, AUX_ENTRY],
+    [],
+    [dict(AUX_ENTRY, name=name) for name in discovery.AUXILIARY_NAMES] + [AUX_ENTRY],
+    [dict(AUX_ENTRY, base="quay.io/ceph/haproxy", image="quay.io/ceph/haproxy:synthetic-2")],
+    [dict(AUX_ENTRY, base=REGISTRY + "x/haproxy", image=REGISTRY + "x/haproxy:synthetic-2")],
+    [dict(AUX_ENTRY, digest="sha256:" + "a" * 64)],
+    [dict(AUX_ENTRY, tag="other")],
+    [dict(AUX_ENTRY, tag="synthetic-2", image=AUX_BASE + "@sha256:" + "a" * 64)],
+    "haproxy",
+])
+def test_auxiliary_request_is_closed(monkeypatch, auxiliary):
+    monkeypatch.setattr(discovery, "tls_proof", lambda: pytest.fail("TLS before admission"))
+    with pytest.raises(discovery.DiscoveryRefusal, match="^request$"):
+        discovery.execute("apply", dict(GOLDEN["request"], auxiliary=auxiliary), GOLDEN["digest"], {"registryJSON": "/owned/loan"})
+
+
+@pytest.mark.parametrize("change", [
+    {"auxiliary": []},
+    {"auxiliary": [{"name": "haproxy", "base": AUX_BASE, "tag": "synthetic-2", "digest": "sha256:" + "c" * 64, "platform": "linux/arm64"}]},
+    {"auxiliary": [{"name": "base", "base": AUX_BASE, "tag": "synthetic-2", "digest": "sha256:" + "c" * 64, "platform": "linux/amd64"}]},
+    {"auxiliary": [{"name": "haproxy", "base": AUX_BASE, "tag": "synthetic-2", "digest": "sha256:" + "0" * 64, "platform": "linux/amd64"}]},
+    {"auxiliary": [{"name": "haproxy", "base": AUX_BASE, "tag": "synthetic-2", "digest": "sha256:" + "c" * 64, "platform": "linux/amd64",
+                    "index": "x"}]},
+    {"auxiliary": [{"name": name, "base": AUX_BASE, "tag": "", "digest": "sha256:" + "c" * 64, "platform": "linux/amd64"}
+                   for name in ("keepalived", "haproxy")]},
+])
+def test_published_auxiliary_evidence_is_closed(change):
+    value = discovery.resolution(GOLDEN["request"], GOLDEN["digest"], "sha256:" + "c" * 64)
+    value.update(change)
+    with pytest.raises(discovery.DiscoveryRefusal, match="^discovery$"):
+        discovery.evidence(value, GOLDEN["digest"])

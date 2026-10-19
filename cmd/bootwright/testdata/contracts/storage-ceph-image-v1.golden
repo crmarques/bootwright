@@ -1,7 +1,12 @@
 implementation: storage-ceph-image-v1
-content-digest: 9e2fbb421ee6b115530037b89963e922db036b53c33440a065de8b464e4ea6dc
+content-digest: 36085d42b5cc44f95c8c7fad353c10a01a4faf43b606d103e4081dbde690a54e
 automation-formats: none
 request-schema:
+  auxiliary []struct ceph.AuxiliaryImage omitempty
+  auxiliary[].base string
+  auxiliary[].image string
+  auxiliary[].name string
+  auxiliary[].tag string
   base string
   cluster string
   controller string
@@ -13,6 +18,12 @@ request-schema:
   version string
 evidence-schema:
   absent bool omitempty
+  auxiliary []struct ceph.AuxiliaryEvidence omitempty
+  auxiliary[].base string
+  auxiliary[].digest string
+  auxiliary[].name string
+  auxiliary[].platform string
+  auxiliary[].tag string
   base string omitempty
   digest string omitempty
   platform string omitempty

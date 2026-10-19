@@ -19,20 +19,36 @@ import (
 )
 
 const ImageImplementation = "storage-ceph-image-v1"
-const ImageVersion = "ceph-image-v2"
+const ImageVersion = "ceph-image-v3"
 const imageDeadline = 4 * time.Minute
-const maxImageEvidence = 4096
+const maxImageEvidence = 16384
+
+type AuxiliaryImage struct {
+	Base  string `json:"base"`
+	Image string `json:"image"`
+	Name  string `json:"name"`
+	Tag   string `json:"tag"`
+}
+
+type AuxiliaryEvidence struct {
+	Base     string `json:"base"`
+	Digest   string `json:"digest"`
+	Name     string `json:"name"`
+	Platform string `json:"platform"`
+	Tag      string `json:"tag"`
+}
 
 type ImageRequest struct {
-	Base        string `json:"base"`
-	Cluster     string `json:"cluster"`
-	Controller  string `json:"controller"`
-	Image       string `json:"image"`
-	Registry    string `json:"registry"`
-	RegistryRef string `json:"registryRef"`
-	Release     string `json:"release"`
-	Tag         string `json:"tag"`
-	Version     string `json:"version"`
+	Auxiliary   []AuxiliaryImage `json:"auxiliary,omitempty"`
+	Base        string           `json:"base"`
+	Cluster     string           `json:"cluster"`
+	Controller  string           `json:"controller"`
+	Image       string           `json:"image"`
+	Registry    string           `json:"registry"`
+	RegistryRef string           `json:"registryRef"`
+	Release     string           `json:"release"`
+	Tag         string           `json:"tag"`
+	Version     string           `json:"version"`
 }
 
 func (r ImageRequest) Canonical() ([]byte, error) { return reconciliation.Freeze(r, "Ceph image") }
@@ -41,11 +57,29 @@ func DecodeImageRequest(data []byte) (ImageRequest, error) {
 	if err != nil {
 		return ImageRequest{}, err
 	}
-	validSelection := storage.NativeVersion(r.Tag) && r.Image == r.Base+":"+r.Tag || r.Tag == "" && strings.HasPrefix(r.Image, r.Base+"@") && ValidImageDigest(strings.TrimPrefix(r.Image, r.Base+"@"))
-	if r.Cluster == "" || r.Controller == "" || r.RegistryRef == "" || !strings.HasPrefix(r.Base, r.Registry+"/") || !storage.NativeVersion(r.Release) || r.Base == "" || !validSelection {
+	if r.Cluster == "" || r.Controller == "" || r.RegistryRef == "" || !strings.HasPrefix(r.Base, r.Registry+"/") || !storage.NativeVersion(r.Release) || r.Base == "" || !validSelection(r.Base, r.Tag, r.Image) || !validAuxiliary(r) {
 		return ImageRequest{}, failure("lifecycle.state", "the frozen Ceph image request has inconsistent coordinates", "")
 	}
 	return r, nil
+}
+
+func validSelection(base, tag, image string) bool {
+	return storage.NativeVersion(tag) && image == base+":"+tag || tag == "" && strings.HasPrefix(image, base+"@") && ValidImageDigest(strings.TrimPrefix(image, base+"@"))
+}
+
+func validAuxiliary(r ImageRequest) bool {
+	if len(r.Auxiliary) > len(AuxiliaryNames) {
+		return false
+	}
+	previous := -1
+	for _, a := range r.Auxiliary {
+		at := slices.Index(AuxiliaryNames, a.Name)
+		if at <= previous || !strings.HasPrefix(a.Base, r.Registry+"/") || !validSelection(a.Base, a.Tag, a.Image) {
+			return false
+		}
+		previous = at
+	}
+	return true
 }
 
 func ImageContentDigest() string {
@@ -56,14 +90,15 @@ func ImageContentDigest() string {
 func ImageBlockID(cluster string) string { return "ceph-image-" + cluster }
 
 type ImageEvidence struct {
-	Absent        bool   `json:"absent,omitempty"`
-	Base          string `json:"base,omitempty"`
-	Digest        string `json:"digest,omitempty"`
-	Platform      string `json:"platform,omitempty"`
-	Postcondition bool   `json:"postcondition"`
-	Release       string `json:"release,omitempty"`
-	Request       string `json:"request"`
-	Tag           string `json:"tag,omitempty"`
+	Absent        bool                `json:"absent,omitempty"`
+	Auxiliary     []AuxiliaryEvidence `json:"auxiliary,omitempty"`
+	Base          string              `json:"base,omitempty"`
+	Digest        string              `json:"digest,omitempty"`
+	Platform      string              `json:"platform,omitempty"`
+	Postcondition bool                `json:"postcondition"`
+	Release       string              `json:"release,omitempty"`
+	Request       string              `json:"request"`
+	Tag           string              `json:"tag,omitempty"`
 }
 
 func decodeImageEvidence(data []byte, digest string) (ImageEvidence, error) {
@@ -78,16 +113,32 @@ func decodeImageEvidence(data []byte, digest string) (ImageEvidence, error) {
 }
 
 func imageDigestMismatch() error {
-	return failure("lifecycle.unsupported", "the resolved Ceph image does not match the authored digest (image-digest-mismatch)", "select the digest of the intended linux/amd64 manifest")
+	return failure("lifecycle.unsupported", "the resolved Ceph image or an auxiliary image does not match its authored digest (image-digest-mismatch)", "select the digest of the intended linux/amd64 manifest")
 }
 
 func selectedResolution(e ImageEvidence, r ImageRequest) bool {
-	return !e.Absent && e.Postcondition && e.Release == r.Release && e.Base == r.Base && e.Tag == r.Tag && e.Platform == PinnedPlatform && ValidImageDigest(e.Digest)
+	if e.Absent || !e.Postcondition || e.Release != r.Release || e.Base != r.Base || e.Tag != r.Tag || e.Platform != PinnedPlatform || !ValidImageDigest(e.Digest) || len(e.Auxiliary) != len(r.Auxiliary) {
+		return false
+	}
+	for i, a := range r.Auxiliary {
+		child := e.Auxiliary[i]
+		if child.Name != a.Name || child.Base != a.Base || child.Tag != a.Tag || child.Platform != PinnedPlatform || !ValidImageDigest(child.Digest) {
+			return false
+		}
+	}
+	return true
 }
 
 func authoredMatches(e ImageEvidence, r ImageRequest) bool {
-	authored, digest := strings.CutPrefix(r.Image, r.Base+"@")
-	return !digest || authored == e.Digest
+	if authored, digest := strings.CutPrefix(r.Image, r.Base+"@"); digest && authored != e.Digest {
+		return false
+	}
+	for i, a := range r.Auxiliary {
+		if authored, digest := strings.CutPrefix(a.Image, a.Base+"@"); digest && authored != e.Auxiliary[i].Digest {
+			return false
+		}
+	}
+	return true
 }
 
 func resolution(e ImageEvidence, r ImageRequest) error {
@@ -101,7 +152,7 @@ func resolution(e ImageEvidence, r ImageRequest) error {
 }
 
 func imageEffect(e ImageEvidence, r ImageRequest, removal bool) reconciliation.EffectState {
-	resolved := e.Base != "" || e.Digest != "" || e.Platform != "" || e.Release != "" || e.Tag != ""
+	resolved := e.Base != "" || e.Digest != "" || e.Platform != "" || e.Release != "" || e.Tag != "" || len(e.Auxiliary) != 0
 	switch {
 	case e.Absent && (resolved || !e.Postcondition):
 		return reconciliation.EffectUnknown
@@ -308,34 +359,82 @@ func (ImageCapability) Unresolved(verb reconciliation.Verb, block reconciliation
 	return lifecycle.Drifted(verb, "the selected Ceph image resolution", "Machine "+r.Controller, refused)
 }
 
-func ProvedImage(proofs []lifecycle.BlockEvidence, cluster, authored string) (string, error) {
-	found := ""
+func provedResolution(proofs []lifecycle.BlockEvidence, cluster string) (ImageRequest, ImageEvidence, error) {
+	found := false
+	var request ImageRequest
+	var resolved ImageEvidence
 	for _, proof := range proofs {
 		if proof.Kind != string(api.StorageCluster) || proof.Object != cluster || proof.Implementation != ImageImplementation || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone ||
 			proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != proof.Implementation {
 			continue
 		}
-		if found != "" {
-			return "", failure("lifecycle.state", "the Ceph image has ambiguous resolution proofs", "")
+		if found {
+			return ImageRequest{}, ImageEvidence{}, failure("lifecycle.state", "the Ceph image has ambiguous resolution proofs", "")
 		}
 		r, err := DecodeImageRequest(proof.Block.Request)
 		if err != nil || r.Cluster != cluster {
-			return "", failure("lifecycle.state", "the Ceph image resolution proof names another request", "")
+			return ImageRequest{}, ImageEvidence{}, failure("lifecycle.state", "the Ceph image resolution proof names another request", "")
 		}
 		evidence, err := decodeImageEvidence(proof.Evidence, proof.Block.RequestDigest)
 		if err != nil {
-			return "", failure("lifecycle.state", "the Ceph image resolution proof is unreadable", "")
+			return ImageRequest{}, ImageEvidence{}, failure("lifecycle.state", "the Ceph image resolution proof is unreadable", "")
 		}
 		if err := resolution(evidence, r); err != nil {
-			return "", err
+			return ImageRequest{}, ImageEvidence{}, err
 		}
-		if r.Image != authored {
-			return "", failure("lifecycle.state", "the Ceph image resolution proof was resolved for another authored image", "")
+		found, request, resolved = true, r, evidence
+	}
+	if !found {
+		return ImageRequest{}, ImageEvidence{}, failure("lifecycle.state", "Ceph lacks its original apply's image resolution proof", "restore the original apply evidence; the image is resolved once and never again for the same operation")
+	}
+	return request, resolved, nil
+}
+
+func ProvedImage(proofs []lifecycle.BlockEvidence, cluster, authored string) (string, error) {
+	r, evidence, err := provedResolution(proofs, cluster)
+	if err != nil {
+		return "", err
+	}
+	if r.Image != authored {
+		return "", failure("lifecycle.state", "the Ceph image resolution proof was resolved for another authored image", "")
+	}
+	return r.Base + "@" + evidence.Digest, nil
+}
+
+func ProvedAuxiliaryImages(proofs []lifecycle.BlockEvidence, cluster string, authored []AuxiliaryReference) ([]AuxiliaryReference, error) {
+	r, evidence, err := provedResolution(proofs, cluster)
+	if err != nil {
+		return nil, err
+	}
+	if len(r.Auxiliary) != len(authored) {
+		return nil, auxiliarySetMismatch()
+	}
+	if len(authored) == 0 {
+		return nil, nil
+	}
+	out := make([]AuxiliaryReference, 0, len(authored))
+	for i, a := range r.Auxiliary {
+		if a.Name != authored[i].Name || a.Image != authored[i].Image {
+			return nil, auxiliarySetMismatch()
 		}
-		found = r.Base + "@" + evidence.Digest
+		out = append(out, AuxiliaryReference{Name: a.Name, Image: a.Base + "@" + evidence.Auxiliary[i].Digest})
 	}
-	if found == "" {
-		return "", failure("lifecycle.state", "Ceph lacks its original apply's image resolution proof", "restore the original apply evidence; the image is resolved once and never again for the same operation")
+	return out, nil
+}
+
+func auxiliarySetMismatch() error {
+	return failure("lifecycle.state", "the Ceph image resolution proof was resolved for another authored auxiliary image set", "")
+}
+
+func auxiliaryImage(name, base, version, registryURL string) (AuxiliaryImage, error) {
+	if base != registryURL && !strings.HasPrefix(base, registryURL+"/") {
+		return AuxiliaryImage{}, failure("lifecycle.unsupported", "the auxiliary image "+name+" is not beneath the Entitlement registry "+registryURL, "select an image for "+name+" beneath the Entitlement registry.url")
 	}
-	return found, nil
+	if ValidImageDigest(version) {
+		return AuxiliaryImage{Name: name, Base: base, Image: base + "@" + version}, nil
+	}
+	if !storage.NativeVersion(version) {
+		return AuxiliaryImage{}, failure("lifecycle.unsupported", "the auxiliary image "+name+" names neither a tag nor a sha256 digest", "set its version to a tag or a sha256 digest")
+	}
+	return AuxiliaryImage{Name: name, Base: base, Image: base + ":" + version, Tag: version}, nil
 }

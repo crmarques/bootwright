@@ -104,6 +104,44 @@ verification, private output and shutdown during resolution.
   ([registries_d.go:195-201](https://github.com/containers/image/blob/v5.34.3/docker/registries_d.go#L195-L201)),
   where a missing file means no signatures.
 
+## Auxiliary images and native deploy pulls
+
+A daemon whose image is a `mgr/cephadm/container_image_<name>` setting, such as
+haproxy or prometheus, is pulled by the native deploy itself when the host
+lacks it. In cephadm v20.2.1 the
+[container run builder](https://raw.githubusercontent.com/ceph/ceph/v20.2.1/src/cephadm/cephadmlib/container_types.py)
+(`build_engine_run_args`, lines 82-95) adds
+`--authfile=/etc/ceph/podman-auth.json` to every podman run when that file
+exists. The [cephadm binary](https://raw.githubusercontent.com/ceph/ceph/v20.2.1/src/cephadm/cephadm.py)'s
+deploy path (`command_deploy` at line 2917, `deploy_daemon` at line 872) calls
+no explicit `_pull_image`: its call sites are `cephadm pull` (line 1773),
+bootstrap (line 2661) and adopt (line 3356). A missing daemon image is
+therefore pulled implicitly by podman run's default missing policy, with that
+authfile. The [manager's serve loop](https://raw.githubusercontent.com/ceph/ceph/v20.2.1/src/pybind/mgr/cephadm/serve.py)
+logs in to the custom registry before each deploy (lines 1411-1412);
+`convert_tags_to_repo_digest` (lines 1225-1245) skips a setting that is already
+a repository digest, and `_get_container_image_info` (lines 1790-1823) runs
+`cephadm pull` only while converting a tag.
+
+`/etc/ceph/podman-auth.json` is the protected guest registry record the
+[core adapter](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py)
+writes (`REGISTRY_FILE`); `registry_scope` admits exactly one entry, the frozen
+registry authority. Every frozen auxiliary reference sits beneath that same
+authority, so a native deploy can pull one only through that single-authority
+record, and no service family refuses on this ground. Host preparation
+pre-pulls each frozen auxiliary digest, so podman run normally pulls nothing.
+
+The [pull broker](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_pull_broker.py)
+serves one frozen reference per instance: the registry issues a bearer token
+scoped to one repository (`repository:<namespace>:pull`), and the broker's
+manifest and blob admission names that repository and digest alone. A broker
+for a reference outside the frozen image set refuses before any connection,
+file or directory. Each auxiliary pull journals its own
+`auxiliary-<name>-attempt-<n>.json` records under the host block's markers and
+follows the Ceph pull's per-run budget: each preparation run makes up to three
+bounded attempts, and a later apply whose auxiliary image is still absent pulls
+again within its own three.
+
 ## Bootstrap container-engine initialization
 
 [X79](../../specs/milestones/delivered.md#x79--cephadm-bootstrap-reads-its-podman-version)

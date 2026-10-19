@@ -17,13 +17,14 @@ import (
 )
 
 const HostImplementation = "storage-ceph-host-v1"
-const HostVersion = "ceph-host-v2"
+const HostVersion = "ceph-host-v3"
 const HostEvidenceVersion = "ceph-host-evidence-v1"
 const SharedLabel = "system_u:object_r:container_file_t:s0"
 const maxHostEvidence = 16384
 
 type ClusterScope struct {
 	AnsiblePackageVersion    string                       `json:"ansiblePackageVersion"`
+	Auxiliary                []AuxiliaryReference         `json:"auxiliary,omitempty"`
 	Bootstrap                string                       `json:"bootstrap"`
 	CallHome                 string                       `json:"callHome"`
 	Cephadm                  Tool                         `json:"cephadm"`
@@ -296,6 +297,9 @@ func (c HostCapability) prepare(ctx context.Context, e lifecycle.Execution) (Hos
 		return HostRequest{}, err
 	}
 	r.Cluster.Image = image
+	if r.Cluster.Auxiliary, err = ProvedAuxiliaryImages(provedFor(e), r.Cluster.Cluster, r.Cluster.Auxiliary); err != nil {
+		return HostRequest{}, err
+	}
 	return r, nil
 }
 
@@ -309,8 +313,8 @@ func provedFor(e lifecycle.Execution) []lifecycle.BlockEvidence {
 func hostRefusals() map[string]error {
 	out := map[string]error{"unsupported-release": unsupportedFailure()}
 	for reason, message := range map[string]string{
-		"image-pull":      "the frozen Ceph image digest could not be pulled within its three bounded attempts",
-		"image-platform":  "the pulled Ceph image is not the frozen linux/amd64 digest",
+		"image-pull":      "the frozen Ceph image or an auxiliary image digest could not be pulled within its three bounded attempts",
+		"image-platform":  "a pulled image is not its frozen linux/amd64 digest",
 		"image-profile":   "the contained probe of the frozen Ceph image did not prove its runtime profile",
 		"route-probe":     "the native SSH class inside the frozen Ceph image did not prove the verified tunnel route",
 		"device-identity": "the Ceph host could not derive its devices' native identities through the image SDK",

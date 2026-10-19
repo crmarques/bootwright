@@ -1,4 +1,4 @@
-"""Session-free resolution of the authored IBM Ceph image.
+"""Session-free resolution of the authored IBM Ceph image and its auxiliary image set.
 
 The approved Python runtime talks only to the selected HTTPS registry authority.
 No ambient proxy is followed. Only the config blob read follows one delivery
@@ -28,9 +28,14 @@ import urllib.parse
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_worker, ceph_pull_broker, native_diagnostics
 
 PLATFORM = "linux/amd64"
-VERSION = "ceph-image-v2"
+VERSION = "ceph-image-v3"
 OPERATIONS = ("apply", "observe", "destroy")
 REQUEST = ("base", "cluster", "controller", "image", "registry", "registryRef", "release", "tag", "version")
+# cephadm's container_image_<name> settings an auxiliary image may fill, in name order.
+AUXILIARY_NAMES = (
+    "alertmanager", "alloy", "grafana", "haproxy", "keepalived", "loki", "nginx", "node_exporter",
+    "nvmeof", "oauth2_proxy", "prometheus", "promtail", "samba", "samba_metrics", "snmp_gateway",
+)
 REASONS = ("request", "artifact", "material", "discovery", "timeout", "unknown", "adapter-exception", "image-digest-mismatch")
 TOTAL_SECONDS = 180
 MAX_BODY = 1 << 20
@@ -99,16 +104,37 @@ def name(value):
 
 
 def validate_request(value):
-    require(isinstance(value, dict) and set(value) == set(REQUEST))
+    require(isinstance(value, dict) and set(value) in (set(REQUEST), set(REQUEST) | {"auxiliary"}))
     require(value["version"] == VERSION and isinstance(value["release"], str) and bool(value["release"]))
+    validate_selection(value)
+    require(name(value["cluster"]) and name(value["controller"]) and name(value["registryRef"]))
+    if "auxiliary" in value:
+        entries = value["auxiliary"]
+        require(isinstance(entries, list) and 1 <= len(entries) <= len(AUXILIARY_NAMES))
+        require(all(isinstance(entry, dict) and set(entry) == {"name", "base", "tag", "image"} for entry in entries))
+        require(all(isinstance(entry["name"], str) and entry["name"] in AUXILIARY_NAMES for entry in entries))
+        order = [AUXILIARY_NAMES.index(entry["name"]) for entry in entries]
+        require(order == sorted(set(order)))
+        for entry in entries:
+            validate_selection(auxiliary_request(value, entry))
+    return value
+
+
+def validate_selection(value):
+    """One repository beneath the registry authority and its authored tag or digest."""
     require(all(isinstance(value[key], str) and "\x00" not in value[key] for key in ("base", "tag", "image", "registry")))
     require(re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9.:-]*", value["registry"]) is not None)
     require(value["base"].startswith(value["registry"] + "/") and re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]+", value["base"]) is not None)
     require(all(part not in ("", ".", "..") for part in value["base"].split("/")))
-    require(name(value["cluster"]) and name(value["controller"]) and name(value["registryRef"]))
     authored = authored_digest(value)
     require(value["image"] == value["base"] + ":" + value["tag"] and bool(value["tag"])
             or authored is not None and value["tag"] == "" and authored.startswith("sha256:") and ID.fullmatch(authored[7:]) is not None)
+
+
+def auxiliary_request(request, entry):
+    """The Ceph request's members with one auxiliary image's coordinates in place of the Ceph image's."""
+    value = {key: request[key] for key in REQUEST}
+    value.update(base=entry["base"], tag=entry["tag"], image=entry["image"])
     return value
 
 
@@ -125,9 +151,20 @@ def evidence(value, request_digest):
     if set(value) == {"request", "postcondition", "absent"}:
         require(value["absent"] is True, "discovery")
         return value
-    require(set(value) == {"request", "postcondition", "release", "base", "tag", "digest", "platform"}, "discovery")
+    keys = {"request", "postcondition", "release", "base", "tag", "digest", "platform"}
+    require(set(value) in (keys, keys | {"auxiliary"}), "discovery")
     require(all(isinstance(value[key], str) for key in ("release", "base", "tag")) and value["platform"] == PLATFORM, "discovery")
     require(isinstance(value["digest"], str) and value["digest"].startswith("sha256:") and digest(value["digest"][7:]), "discovery")
+    if "auxiliary" in value:
+        entries = value["auxiliary"]
+        require(isinstance(entries, list) and 1 <= len(entries) <= len(AUXILIARY_NAMES), "discovery")
+        for entry in entries:
+            require(isinstance(entry, dict) and set(entry) == {"name", "base", "tag", "digest", "platform"}, "discovery")
+            require(all(isinstance(entry[key], str) for key in ("name", "base", "tag")) and entry["platform"] == PLATFORM, "discovery")
+            require(isinstance(entry["digest"], str) and entry["digest"].startswith("sha256:") and digest(entry["digest"][7:]), "discovery")
+            require(entry["name"] in AUXILIARY_NAMES, "discovery")
+        order = [AUXILIARY_NAMES.index(entry["name"]) for entry in entries]
+        require(order == sorted(set(order)), "discovery")
     return value
 
 
@@ -573,15 +610,21 @@ def resolve(basic, client, request):
     return selected["digest"]
 
 
-def resolution(request, request_digest, child):
-    """The presence of one resolution, refusing an authored index digest."""
+def resolution(request, request_digest, child, auxiliary=()):
+    """The presence of one resolution, refusing an authored index digest of the image or of an auxiliary image."""
     authored = authored_digest(request)
     require(authored is None or authored == child, "image-digest-mismatch")
-    return evidence(
-        {"request": request_digest, "postcondition": True, "release": request["release"], "base": request["base"],
-         "tag": request["tag"], "digest": child, "platform": PLATFORM},
-        request_digest,
-    )
+    value = {"request": request_digest, "postcondition": True, "release": request["release"], "base": request["base"],
+             "tag": request["tag"], "digest": child, "platform": PLATFORM}
+    entries = request.get("auxiliary", [])
+    require(len(auxiliary) == len(entries), "discovery")
+    for entry, resolved in zip(entries, auxiliary):
+        authored = authored_digest(entry)
+        require(authored is None or authored == resolved, "image-digest-mismatch")
+    if entries:
+        value["auxiliary"] = [{"name": entry["name"], "base": entry["base"], "tag": entry["tag"], "digest": resolved, "platform": PLATFORM}
+                              for entry, resolved in zip(entries, auxiliary)]
+    return evidence(value, request_digest)
 
 
 def execute(operation, request, digest_value, material):
@@ -599,4 +642,10 @@ def execute(operation, request, digest_value, material):
             child = resolve(basic, Registry(context, request), request)
             prove()
             prove_tls()
-    return {"changed": False, "evidence": resolution(original, digest_value, child)}
+            auxiliary = []
+            for entry in request.get("auxiliary", []):
+                sub = auxiliary_request(request, entry)
+                auxiliary.append(resolve(basic, Registry(context, sub), sub))
+                prove()
+                prove_tls()
+    return {"changed": False, "evidence": resolution(original, digest_value, child, auxiliary)}

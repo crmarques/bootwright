@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v11"
+const Version = "ceph-core-v12"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -175,9 +175,15 @@ type DelegatedService struct {
 	Name  string   `json:"name"`
 }
 
+type AuxiliaryReference struct {
+	Image string `json:"image"`
+	Name  string `json:"name"`
+}
+
 type Request struct {
 	Action                   string                       `json:"action"`
 	AnsiblePackageVersion    string                       `json:"ansiblePackageVersion"`
+	Auxiliary                []AuxiliaryReference         `json:"auxiliary,omitempty"`
 	Bootstrap                string                       `json:"bootstrap"`
 	CallHome                 string                       `json:"callHome"`
 	Cephadm                  Tool                         `json:"cephadm"`
@@ -217,7 +223,7 @@ func DecodeRequest(data []byte) (Request, error) {
 }
 
 func scopeOf(r Request) ClusterScope {
-	return ClusterScope{AnsiblePackageVersion: r.AnsiblePackageVersion, Bootstrap: r.Bootstrap, CallHome: r.CallHome, Cephadm: r.Cephadm, Cluster: r.Cluster,
+	return ClusterScope{AnsiblePackageVersion: r.AnsiblePackageVersion, Auxiliary: r.Auxiliary, Bootstrap: r.Bootstrap, CallHome: r.CallHome, Cephadm: r.Cephadm, Cluster: r.Cluster,
 		ClusterKeyRef: r.ClusterKeyRef, ClusterNetworks: r.ClusterNetworks, ClusterSSHTransport: r.ClusterSSHTransport, ClusterSSHUser: r.ClusterSSHUser,
 		Config: r.Config, Controller: r.Controller, FSID: r.FSID, Hosts: r.Hosts, Image: r.Image, MonIP: r.MonIP,
 		NFSGaneshaPackageVersion: r.NFSGaneshaPackageVersion, Owner: r.Owner, PackageRepository: r.PackageRepository, Packages: r.Packages,

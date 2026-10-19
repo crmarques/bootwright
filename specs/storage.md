@@ -95,6 +95,37 @@ The [storage API](api/storage.md) owns version selection and the
 [release qualification](storage-coverage.md#release-qualification) owns the
 digest resolution and the authored-digest rule.
 
+Auxiliary images. A native service whose daemons run an image other than the
+Ceph image needs an auxiliary image, named by cephadm's
+`mgr/cephadm/container_image_<name>` setting. The names form a closed set, and
+each service type needs these:
+
+| Service type | Auxiliary images |
+| --- | --- |
+| `alertmanager` | `container_image_alertmanager` |
+| `alloy` | `container_image_alloy` |
+| `grafana` | `container_image_grafana` |
+| `ingress` | `container_image_haproxy` and `container_image_keepalived`; only `container_image_keepalived` with `spec.keepalive_only` |
+| `loki` | `container_image_loki` |
+| `mgmt-gateway` | `container_image_nginx` |
+| `node-exporter` | `container_image_node_exporter` |
+| `nvmeof` | `container_image_nvmeof` |
+| `oauth2-proxy` | `container_image_oauth2_proxy` |
+| `prometheus` | `container_image_prometheus` |
+| `promtail` | `container_image_promtail` |
+| `smb` | `container_image_samba` and `container_image_samba_metrics` |
+| `snmp-gateway` | `container_image_snmp_gateway` |
+
+Each selected auxiliary image sits beneath the Entitlement registry namespace,
+resolves in the image block to its own linux/amd64 manifest digest under the
+Ceph image's rules, the authored-digest rule included, and is frozen in the
+image request and evidence. The cluster and host blocks take frozen auxiliary
+digests only from that original resolution proof. Bootwright keeps no default
+auxiliary image; until one can be selected, a declared service that needs one
+refuses before operation registration (see the [refusal table](#refusal-table)).
+A native deploy that still pulls an image uses only the protected guest registry
+record of the same registry authority.
+
 IBM's public signed RPM repository does not require registry credentials.
 Red Hat media/CDN access remains a separate entitlement and source boundary.
 
@@ -196,6 +227,7 @@ links each matrix combination that this table refuses.
 | Incomplete or unsafe Ceph coordinates or transport | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring an empty `ceph.release`, `ceph.packageVersion`, `ceph.cephadm.ansible.packageVersion` or `ceph.image.version`, an empty `ceph.image.base`, or a `ceph.cephadm.clusterSSH.transport` other than `verified-tunnel`, an omitted transport included | `the selected Ceph coordinates or cluster SSH transport are incomplete or unsafe` | `declare bounded version strings, an image repository and verified-tunnel transport; native transport is refused and host-key verification cannot be disabled` |
 | A replication network that a Ceph host has no address inside | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring `ceph.networks.clusterCIDRs` while the Machine of a `ceph.topology.nodes[]` entry declares no IP address inside any of them, a Machine whose addresses are assigned at runtime included; `<host>` is the first such node's native hostname in declaration order, `<machine>` its Machine and `<cidrs>` the declared networks joined by a comma and a space | `Ceph host <host> (Machine <machine>) has no address inside the replication networks <cidrs>` | `add an address inside one of <cidrs> to the network of <machine>, or remove spec.ceph.networks.clusterCIDRs` |
 | A native rgw, ingress or nfs service whose deploying block this build lacks | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` an `rgw` or `nfs` service or an `ingress` whose `spec.backend_service` names one; `<service>` is the first such service's qualified name in name order | `Bootwright does not deploy the native service <service> yet` | `remove <service> from spec.ceph.services, together with an ingress that fronts it and its spec.ceph.serviceBindings entries` |
+| A native service whose auxiliary image is not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that the previous row does not refuse; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type` and `<name>` the first image name it needs in name order, `keepalived` for an `ingress` with `spec.keepalive_only` | `no auxiliary image is selected for the <family> service <service>; its daemons need cephadm's container_image_<name>, and Bootwright keeps no default` | `remove <service> from spec.ceph.services, together with its spec.ceph.serviceBindings entries` |
 
 ## Bootstrap identity and continuation
 
@@ -220,12 +252,14 @@ owned markers scoped by owner, FSID and host:
 
 1. Package installation from the frozen package decision, keeping the
    inherited crypto-policy proof.
-2. A pull of the frozen image digest with a protected authfile, a signature
-   policy limited to the selected repository and at most three bounded attempts
-   per preparation run. A pull counts only after local inspection proves the
-   digest and the linux/amd64 platform. The retained attempt records serve
-   crash diagnosis and recovery; they never refuse a later apply while the image
-   is still absent, so that apply makes its own three attempts.
+2. A pull of the frozen image digest and of each frozen auxiliary digest, each
+   through its own invocation-local broker admitting only that repository and
+   digest, with a protected authfile, a signature policy limited to that
+   repository and at most three bounded attempts per preparation run. A pull
+   counts only after local inspection proves the digest and the linux/amd64
+   platform. The retained attempt records serve crash diagnosis and recovery;
+   they never refuse a later apply while the image is still absent, so that
+   apply makes its own three attempts.
 3. A runtime profile from a contained probe of the image: the ceph account,
    crypto policy, SELinux label and cephadm bytes, bound to the authenticated
    frozen image. Host RPM payloads retain their independent authenticity and
@@ -249,7 +283,9 @@ an ephemeral mutual-TLS identity; upstream entitlement and bearer credentials
 remain broker-owned. Authentication, token exchanges and manifest reads connect
 only to the frozen registry authority with ordinary host TLS verification;
 foreign token realms and manifest redirects refuse. The broker admits only
-bounded reads within the frozen repository. Local clients without the invocation
+bounded reads within its one frozen repository; one broker serves each member
+of the frozen image set, and a reference outside the set refuses before any
+connection. Local clients without the invocation
 certificate cannot use it, and a proxy bypass carries no entitlement or bearer
 credential. The native client receives an empty signature-lookaside
 configuration; trust stays the frozen digest and the signature policy.

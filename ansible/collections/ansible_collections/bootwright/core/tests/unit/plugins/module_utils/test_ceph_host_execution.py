@@ -37,7 +37,7 @@ def host_request(request_value):
          "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"}
         for host in cluster["hosts"]]}
-    return {"version": "ceph-host-v2", "cluster": cluster, "host": "node-2"}
+    return {"version": "ceph-host-v3", "cluster": cluster, "host": "node-2"}
 
 
 request_value = host_fixtures.request_value
@@ -289,7 +289,7 @@ def test_host_request_admits_only_the_cluster_scope(host_request, change):
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         ceph_core.host_request(dict(host_request, cluster=dict(host_request["cluster"], **change)))
     with pytest.raises(ceph_native.Refusal, match="^request$"):
-        ceph_core.host_request(dict(host_request, version="ceph-host-v1"))
+        ceph_core.host_request(dict(host_request, version="ceph-host-v2"))
 
 
 @pytest.mark.parametrize("operation", ["apply", "observe", "destroy"])

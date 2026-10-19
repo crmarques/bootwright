@@ -195,3 +195,48 @@ def test_host_scope_refuses_delegated(core_request):
     scope = {key: value for key, value in core_request.items() if key != "action"}
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         ceph_native.validate_scope(scope)
+
+
+AUXILIARY = [{"name": "haproxy", "image": "registry.example.test/vendor/haproxy-synthetic@sha256:" + "b" * 64},
+             {"name": "keepalived", "image": "registry.example.test/vendor/keepalived-synthetic@sha256:" + "c" * 64}]
+
+
+def test_validate_admits_the_frozen_auxiliary_set(core_request):
+    core_request["auxiliary"] = [dict(entry) for entry in AUXILIARY]
+    assert ceph_native.validate(core_request) is core_request
+    scope = {key: value for key, value in core_request.items() if key != "action"}
+    assert ceph_native.validate_scope(scope) is scope
+
+
+@pytest.mark.parametrize("change", ["empty", "too-many", "unknown-name", "unsorted", "duplicate", "tag", "foreign-registry", "registry-prefix",
+                                    "extra-key", "not-a-list", "zero-length-digest"])
+def test_validate_refuses_malformed_auxiliary(core_request, change):
+    auxiliary = [dict(entry) for entry in AUXILIARY]
+    if change == "empty":
+        auxiliary = []
+    elif change == "too-many":
+        auxiliary = [dict(AUXILIARY[0], name=name) for name in ceph_native.AUXILIARY_NAMES] + [AUXILIARY[0]]
+    elif change == "unknown-name":
+        auxiliary[0]["name"] = "base"
+    elif change == "unsorted":
+        auxiliary.reverse()
+    elif change == "duplicate":
+        auxiliary[1]["name"] = "haproxy"
+    elif change == "tag":
+        auxiliary[0]["image"] = "registry.example.test/vendor/haproxy-synthetic:synthetic-2"
+    elif change == "foreign-registry":
+        auxiliary[0]["image"] = "quay.io/ceph/haproxy@sha256:" + "b" * 64
+    elif change == "registry-prefix":
+        auxiliary[0]["image"] = "registry.example.testx/haproxy@sha256:" + "b" * 64
+    elif change == "extra-key":
+        auxiliary[0]["base"] = "registry.example.test/vendor/haproxy-synthetic"
+    elif change == "not-a-list":
+        auxiliary = AUXILIARY[0]
+    else:
+        auxiliary[0]["image"] = "registry.example.test/vendor/haproxy-synthetic@sha256:"
+    core_request["auxiliary"] = auxiliary
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate(core_request)
+    scope = {key: value for key, value in core_request.items() if key != "action"}
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate_scope(scope)

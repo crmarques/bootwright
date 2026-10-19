@@ -21,6 +21,9 @@ argument_specs:
           ansiblePackageVersion:
             type: str
             required: true
+          auxiliary:
+            type: list
+            elements: dict
           nfsGaneshaPackageVersion:
             type: str
           packageRepository:
@@ -98,7 +101,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [ceph-core-v11]
+            choices: [ceph-core-v12]
       bootwright_ceph_digest:
         type: str
         required: true

@@ -6,6 +6,9 @@ argument_specs:
         type: dict
         required: true
         options:
+          auxiliary:
+            type: list
+            elements: dict
           base:
             type: str
             required: true
@@ -33,7 +36,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [ceph-image-v2]
+            choices: [ceph-image-v3]
       bootwright_ceph_image_digest:
         type: str
         required: true

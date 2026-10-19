@@ -65,7 +65,7 @@ def request_value():
               "devices": [{"path": "/dev/sda", "serial": "drive-scsi" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    return {"controller": "controller", "version": "ceph-core-v11", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v12", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": IMAGE,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "5.0.3-1", "packageRepository": "https://publisher.example.test/ceph",
@@ -1218,3 +1218,172 @@ def test_host_runtime_binds_one_scope_from_both_blocks(request_value):
     for refused in (pool, dict(scope, pool=pool["pool"])):
         with pytest.raises(ceph_native.Refusal, match="^request$"):
             runtime.HostRuntime(copy.deepcopy(refused), "node-1", packages=object())
+
+
+HAPROXY = "cp.icr.io/cp/ibm-ceph/haproxy-synthetic@sha256:" + "d" * 64
+KEEPALIVED = "cp.icr.io/cp/ibm-ceph/keepalived-synthetic@sha256:" + "e" * 64
+
+
+class ImageSet:
+    """A scripted engine holding several images; each pull follows its reference's outcomes."""
+
+    def __init__(self, outcomes):
+        self.outcomes = {reference: list(values) for reference, values in outcomes.items()}
+        self.present = set()
+        self.calls = []
+        self.policies = {}
+        self.environments = []
+
+    @staticmethod
+    def identifier(reference):
+        return hashlib.sha256(reference.encode()).hexdigest()
+
+    def __call__(self, argv, timeout, limit, environment=None):
+        self.calls.append(list(argv))
+        assert 0 < timeout and 0 < limit
+        if argv[:3] == ["/usr/bin/podman", "image", "inspect"]:
+            reference = argv[3]
+            if reference not in self.present:
+                return 125, b""
+            return 0, json.dumps([{"Id": self.identifier(reference), "Os": "linux", "Architecture": "amd64", "RepoDigests": [reference],
+                                   "Size": 1 << 30}]).encode()
+        if argv[:2] == ["/usr/bin/podman", "pull"]:
+            reference = argv[-1]
+            self.environments.append((reference, dict(environment or {})))
+            with open(argv[argv.index("--signature-policy") + 1], "rb") as handle:
+                self.policies[reference] = json.loads(handle.read())
+            if self.outcomes[reference].pop(0) == "ok":
+                self.present.add(reference)
+                return 0, b""
+            return 125, ceph_native.NativeOutput(b"", ("denied for registry-user password=" + PASSWORD).encode())
+        raise AssertionError("unexpected command " + repr(argv))
+
+
+@pytest.fixture
+def auxiliary_brokers(monkeypatch):
+    instances = []
+
+    class Broker:
+        failure_cause = ""
+
+        def __init__(self, directory, request, private, deadline, command, *, image=None):
+            del request, deadline, command
+            assert json.loads(private)["password"] == PASSWORD
+            self.image = image
+            self.cert_directory = os.path.join(directory, "native-certs")
+            self.environment = {"HTTPS_PROXY": "http://127.0.0.1:" + str(40000 + len(instances))}
+            instances.append(self)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *unused):
+            return False
+
+    monkeypatch.setattr(runtime.ceph_pull_broker, "Broker", Broker)
+    return instances
+
+
+def auxiliary_runtime(request_value, tmp_path, monkeypatch, outcomes, outputs=()):
+    request_value["auxiliary"] = [{"name": "haproxy", "image": HAPROXY}, {"name": "keepalived", "image": KEEPALIVED}]
+    images = ImageSet(outcomes)
+    engine = Engine(list(outputs))
+
+    def command(argv, timeout, limit, environment=None):
+        if argv[:2] in (["/usr/bin/podman", "image"], ["/usr/bin/podman", "pull"]):
+            return images(argv, timeout, limit, environment)
+        return engine(argv, timeout, limit)
+
+    worker, markers, unused_clock = host_runtime(request_value, tmp_path, command)
+    monkeypatch.setattr(runtime.HostRuntime, "label", lambda self, image_id, user, parent: runtime.SHARED_LABEL)
+    return worker, markers, images
+
+
+def test_host_prepull_pulls_each_frozen_auxiliary_digest(request_value, tmp_path, monkeypatch, authenticated, auxiliary_brokers):
+    del authenticated
+    worker, markers, images = auxiliary_runtime(request_value, tmp_path, monkeypatch, {IMAGE: ["ok"], HAPROXY: ["ok"], KEEPALIVED: ["ok"]},
+                                                [probe_output(), probe_output()])
+    assert worker.profile({"registryJSON": registry(request_value)}) == {"changed": True}
+    pulls = [argv for argv in images.calls if argv[:2] == ["/usr/bin/podman", "pull"]]
+    assert [argv[-1] for argv in pulls] == [IMAGE, HAPROXY, KEEPALIVED]
+    assert [broker.image for broker in auxiliary_brokers] == [None, HAPROXY, KEEPALIVED]
+    for argv, broker in zip(pulls[1:], auxiliary_brokers[1:]):
+        reference = argv[-1]
+        policy, auth = argv[argv.index("--signature-policy") + 1], argv[argv.index("--authfile") + 1]
+        assert argv == ["/usr/bin/podman", "pull", "--signature-policy", policy, "--tls-verify=true", "--authfile", auth,
+                        "--cert-dir", broker.cert_directory, reference]
+        assert os.path.basename(os.path.dirname(policy)).startswith("auxiliary-scratch-")
+        assert images.policies[reference] == {"default": [{"type": "reject"}],
+                                              "transports": {"docker": {reference.split("@", 1)[0]: [{"type": "insecureAcceptAnything"}]}}}
+        assert (reference, broker.environment) in images.environments
+    scope = runtime.scope(request_value, "node-1")
+    for name, reference in (("haproxy", HAPROXY), ("keepalived", KEEPALIVED)):
+        assert markers.records["auxiliary-" + name + "-pulled.json"] == {"scope": scope, "image": reference, "imageID": images.identifier(reference)}
+        assert markers.records["auxiliary-" + name + "-attempt-1.json"] == {"scope": scope, "image": reference, "attempt": 1}
+    assert not [name for name in os.listdir(markers.path) if name.startswith("auxiliary-scratch-")]
+    images.calls.clear()
+    assert worker.profile({"registryJSON": registry(request_value)}) == {"changed": False}
+    assert not [argv for argv in images.calls if argv[:2] == ["/usr/bin/podman", "pull"]]
+    inspected = [argv[3] for argv in images.calls if argv[:3] == ["/usr/bin/podman", "image", "inspect"]]
+    assert HAPROXY in inspected and KEEPALIVED in inspected
+
+
+def test_host_profile_without_an_auxiliary_set_pulls_only_the_ceph_image(request_value, tmp_path, monkeypatch, authenticated, auxiliary_brokers):
+    del authenticated
+    worker, markers, images = auxiliary_runtime(request_value, tmp_path, monkeypatch, {IMAGE: ["ok"]}, [probe_output(), probe_output()])
+    worker.request.pop("auxiliary")
+    assert worker.profile({"registryJSON": registry(request_value)}) == {"changed": True}
+    assert [argv[-1] for argv in images.calls if argv[:2] == ["/usr/bin/podman", "pull"]] == [IMAGE]
+    assert {argv[3] for argv in images.calls if argv[:3] == ["/usr/bin/podman", "image", "inspect"]} == {IMAGE}
+    assert [broker.image for broker in auxiliary_brokers] == [None]
+    assert not [name for name in markers.records if name.startswith("auxiliary-")]
+
+
+def test_auxiliary_pull_carries_no_credential_in_argv_or_environment(request_value, tmp_path, monkeypatch, auxiliary_brokers):
+    worker, markers, images = auxiliary_runtime(request_value, tmp_path, monkeypatch, {IMAGE: ["ok"], HAPROXY: ["fail"] * runtime.PULL_ATTEMPTS})
+    with pytest.raises(ceph_native.NativeFailure, match="^image-pull$") as caught:
+        worker.profile({"registryJSON": registry(request_value)})
+    pulls = [argv for argv in images.calls if argv[:2] == ["/usr/bin/podman", "pull"]]
+    assert [argv[-1] for argv in pulls] == [IMAGE] + [HAPROXY] * runtime.PULL_ATTEMPTS
+    assert [broker.image for broker in auxiliary_brokers] == [None, HAPROXY]
+    for argv in pulls:
+        assert not any(PASSWORD in item or "registry-user" in item or item.startswith("--creds") for item in argv)
+    for unused_reference, environment in images.environments:
+        assert not any(PASSWORD in value or "registry-user" in value for value in environment.values())
+    detail = caught.value.native_error
+    assert detail["coordinate"] == HAPROXY
+    assert PASSWORD not in str(detail) and "auxiliary-haproxy-pulled.json" not in markers.records
+    assert markers.records["auxiliary-haproxy-attempt-3.json"]["attempt"] == 3
+
+
+def test_a_retained_auxiliary_pull_of_another_reference_refuses(request_value, tmp_path, monkeypatch, auxiliary_brokers):
+    del auxiliary_brokers
+    worker, unused_markers, images = auxiliary_runtime(request_value, tmp_path, monkeypatch, {IMAGE: ["ok"], HAPROXY: ["ok"], KEEPALIVED: ["ok"]})
+    images.present.update((HAPROXY, KEEPALIVED))
+    with worker.journal(create=True) as durable:
+        durable.write("auxiliary-haproxy-attempt-1.json", {"scope": worker.scope(), "image": HAPROXY, "attempt": 1})
+        durable.write("auxiliary-haproxy-pulled.json", {"scope": worker.scope(), "image": KEEPALIVED, "imageID": images.identifier(KEEPALIVED)})
+        with pytest.raises(ceph_native.Refusal, match="^image-platform$"):
+            worker.pull_auxiliary(durable, registry(request_value), 4285)
+    assert not [argv for argv in images.calls if argv[:2] == ["/usr/bin/podman", "pull"]]
+
+
+@pytest.mark.parametrize("outcomes", [["ok"], ["fail", "ok"], ["fail", "fail", "ok"], ["fail"] * (runtime.PULL_ATTEMPTS + 1)])
+def test_an_exhausted_auxiliary_journal_lets_the_next_invocation_pull(request_value, tmp_path, monkeypatch, auxiliary_brokers, outcomes):
+    del auxiliary_brokers
+    worker, markers, images = auxiliary_runtime(request_value, tmp_path, monkeypatch, {HAPROXY: list(outcomes), KEEPALIVED: ["ok"]})
+    images.present.add(KEEPALIVED)
+    scope = runtime.scope(request_value, "node-1")
+    for attempt in range(1, runtime.PULL_ATTEMPTS + 1):
+        markers.records["auxiliary-haproxy-attempt-%d.json" % attempt] = {"scope": scope, "image": HAPROXY, "attempt": attempt}
+        markers.records["auxiliary-keepalived-attempt-%d.json" % attempt] = {"scope": scope, "image": KEEPALIVED, "attempt": attempt}
+    pulled = "ok" in outcomes
+    with contextlib.ExitStack() as stack:
+        if not pulled:
+            stack.enter_context(pytest.raises(ceph_native.Refusal, match="^image-pull$"))
+        with worker.journal(create=True) as durable:
+            assert worker.pull_auxiliary(durable, registry(request_value), 4285) is True
+    pulls = [argv[-1] for argv in images.calls if argv[:2] == ["/usr/bin/podman", "pull"]]
+    assert pulls == [HAPROXY] * min(len(outcomes), runtime.PULL_ATTEMPTS)
+    assert ("auxiliary-haproxy-pulled.json" in markers.records) is pulled
+    assert ("auxiliary-keepalived-pulled.json" in markers.records) is pulled

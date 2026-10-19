@@ -861,3 +861,44 @@ def test_refusal_message_keeps_coordinate_when_username_is_a_coordinate_segment(
     assert coordinate.encode() in output.getvalue()
     assert password.encode() not in output.getvalue() and up.basic[6:].encode() not in output.getvalue()
     assert value.failure_cause == "broker observed manifest upstream HTTP 404"
+
+
+HAPROXY = REGISTRY + "/vendor/haproxy-synthetic@sha256:" + "b" * 64
+KEEPALIVED = REGISTRY + "/vendor/keepalived-synthetic@sha256:" + "c" * 64
+FROZEN_SET = {"registry": REGISTRY, "image": REPOSITORY + "@sha256:" + DIGEST,
+              "auxiliary": [{"name": "haproxy", "image": HAPROXY}, {"name": "keepalived", "image": KEEPALIVED}]}
+
+
+def manifest_path(reference):
+    repository, unused, digest = reference.rpartition("@")
+    return "/v2/" + repository.split("/", 1)[1] + "/manifests/" + digest
+
+
+def test_broker_admits_exactly_the_frozen_set(tmp_path):
+    references = [FROZEN_SET["image"], HAPROXY, KEEPALIVED]
+    for index, reference in enumerate(references):
+        directory = tmp_path / str(index)
+        directory.mkdir(mode=0o700)
+        image = None if index == 0 else reference
+        value = broker.Broker(str(directory), FROZEN_SET, json.dumps(MATERIAL), time.monotonic() + 60,
+                              lambda *args: pytest.fail("certificate effect"), upstream=object(), tls=object(), image=image)
+        assert value.repository + "@sha256:" + value.digest == reference
+        assert value.path("GET", manifest_path(reference)) == broker.MAX_METADATA
+        repository = reference.rpartition("@")[0].split("/", 1)[1]
+        assert value.path("HEAD", "/v2/" + repository + "/blobs/sha256:" + "f" * 64) == broker.MAX_BLOB
+        for other in references:
+            if other != reference:
+                with pytest.raises(broker.BrokerError):
+                    value.path("GET", manifest_path(other))
+
+
+@pytest.mark.parametrize("reference", [REGISTRY + "/vendor/foreign@sha256:" + "d" * 64, "foreign.example.test/vendor/haproxy-synthetic@sha256:" + "b" * 64,
+                                       REGISTRY + "/vendor/haproxy-synthetic@sha256:" + "e" * 64])
+def test_broker_refuses_a_repository_outside_the_frozen_set(tmp_path, monkeypatch, reference):
+    monkeypatch.setattr(broker, "Upstream", lambda *args, **kwargs: pytest.fail("upstream before admission"))
+    monkeypatch.setattr(broker, "certificate", lambda *args, **kwargs: pytest.fail("certificate before admission"))
+    tmp_path.chmod(0o700)
+    with pytest.raises(broker.BrokerError):
+        broker.Broker(str(tmp_path), FROZEN_SET, json.dumps(MATERIAL), time.monotonic() + 60,
+                      lambda *args: pytest.fail("command before admission"), image=reference)
+    assert list(tmp_path.iterdir()) == []

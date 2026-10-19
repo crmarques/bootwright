@@ -151,6 +151,8 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 		}
 		if reason, remedy, gap := undeployedDelegated(cluster); gap {
 			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
+		} else if reason, remedy, gap := unselectedAuxiliary(cluster); gap {
+			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
 		}
 	}
 	return out
@@ -221,6 +223,9 @@ func (c Capability) prepare(ctx context.Context, e lifecycle.Execution) (Request
 		return Request{}, err
 	}
 	r.Image = image
+	if r.Auxiliary, err = ProvedAuxiliaryImages(proofs, r.Cluster, r.Auxiliary); err != nil {
+		return Request{}, err
+	}
 	return r, nil
 }
 func (c Capability) Apply(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {

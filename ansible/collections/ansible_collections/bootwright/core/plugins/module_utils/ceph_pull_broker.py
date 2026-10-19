@@ -5,7 +5,9 @@ client receives an empty authfile and an ephemeral CA, so a proxy bypass never
 carries credentials. Every upstream connection uses the host TLS trust.
 Authentication stays at the selected registry authority; only blob reads may
 use one public HTTPS delivery endpoint without registry credentials. Foreign
-token realms refuse.
+token realms refuse. One broker serves one frozen reference: the Ceph image or
+a member of its auxiliary image set; any other reference refuses before any
+connection, file or directory.
 """
 
 from __future__ import annotations
@@ -393,13 +395,15 @@ class Upstream:
 class Broker:
     """Bounded concurrent CONNECT listeners, all joined before private cleanup."""
 
-    def __init__(self, directory, request, private, deadline, command, *, upstream=None, tls=None):
+    def __init__(self, directory, request, private, deadline, command, *, upstream=None, tls=None, image=None):
         self.directory, self.request, self.deadline = directory, request, deadline
         info = os.stat(directory, follow_symlinks=False)
         require(stat.S_ISDIR(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o700 and info.st_uid == os.geteuid())
         self.authority = request["registry"]
         self.host, self.port = authority(self.authority)
-        self.repository, separator, self.digest = request["image"].rpartition("@sha256:")
+        reference = request["image"] if image is None else image
+        require(reference == request["image"] or reference in [entry["image"] for entry in request.get("auxiliary", [])])
+        self.repository, separator, self.digest = reference.rpartition("@sha256:")
         require(separator and HEX.fullmatch(self.digest) is not None and self.repository.startswith(self.authority + "/"))
         self.namespace = self.repository.split("/", 1)[1]
         self.upstream = upstream or Upstream(self.authority, self.repository, json.loads(private), deadline)

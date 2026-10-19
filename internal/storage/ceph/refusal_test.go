@@ -37,7 +37,7 @@ func TestAHostRefusalReachesTheOperatorWithItsRemedy(t *testing.T) {
 	result, err := NewHost(runner).WithProofs(proofs).Apply(context.Background(), e)
 	d := diagnostics.Of(err)
 	if result.Outcome == reconciliation.OutcomeChanged || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
-		d[0].Message != "the frozen Ceph image digest could not be pulled within its three bounded attempts" ||
+		d[0].Message != "the frozen Ceph image or an auxiliary image digest could not be pulled within its three bounded attempts" ||
 		d[0].Remediation != "inspect the attempt's adapter output, then apply again; host preparation resumes from its journal" {
 		t.Fatalf("an image-pull refusal reached the operator as %+v %+v", result, d)
 	}

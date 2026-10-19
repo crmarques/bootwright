@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
 	"strings"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -33,6 +35,23 @@ func ValidImageDigest(value string) bool {
 		}
 	}
 	return true
+}
+
+var AuxiliaryNames = []string{"alertmanager", "alloy", "grafana", "haproxy", "keepalived", "loki", "nginx", "node_exporter", "nvmeof",
+	"oauth2_proxy", "prometheus", "promtail", "samba", "samba_metrics", "snmp_gateway"}
+
+var auxiliaryFamilies = map[string][]string{
+	"alertmanager": {"alertmanager"}, "alloy": {"alloy"}, "grafana": {"grafana"}, "ingress": {"haproxy", "keepalived"}, "loki": {"loki"},
+	"mgmt-gateway": {"nginx"}, "node-exporter": {"node_exporter"}, "nvmeof": {"nvmeof"}, "oauth2-proxy": {"oauth2_proxy"},
+	"prometheus": {"prometheus"}, "promtail": {"promtail"}, "smb": {"samba", "samba_metrics"}, "snmp-gateway": {"snmp_gateway"},
+}
+
+func auxiliaryNeeds(service api.Value) []string {
+	t := service.Get("service_type").Text()
+	if t == "ingress" && service.Get("spec", "keepalive_only").Bool() {
+		return []string{"keepalived"}
+	}
+	return slices.Clone(auxiliaryFamilies[t])
 }
 
 func Supported(release, packageVersion, ansibleVersion, base, version, transport string) bool {

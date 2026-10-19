@@ -32,6 +32,7 @@ CORE = {
     "callHome": "enabled",
     "release": "synthetic-release",
     "ansiblePackageVersion": "synthetic-tool",
+    "auxiliary": [{"image": "cp.icr.io/cp/ibm-ceph/haproxy-synthetic@sha256:" + "d" * 64, "name": "haproxy"}],
     "nfsGaneshaPackageVersion": "synthetic-nfs",
     "packageRepository": "https://packages.example.test/selected",
     "cephadm": {"packageVersion": "20.2.1-405.el9cp", "path": "/usr/sbin/cephadm"},
@@ -112,10 +113,12 @@ CORE = {
     "registryRef": "ibm-registry",
     "services": [{"placement": {"count": 2, "hosts": ["node-1"]}, "service_type": "mgr"}],
     "subvolume": {"filesystem": "files", "gid": 0, "group": "", "mode": "755", "name": "docs", "pool": "files-data", "sizeBytes": 0, "uid": 0},
-    "version": "ceph-core-v11",
+    "version": "ceph-core-v12",
 }
 
 IMAGE = {
+    "auxiliary": [{"base": "cp.icr.io/cp/ibm-ceph/haproxy-synthetic", "image": "cp.icr.io/cp/ibm-ceph/haproxy-synthetic:synthetic-2",
+                   "name": "haproxy", "tag": "synthetic-2"}],
     "base": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
     "cluster": "example",
     "controller": "controller",
@@ -124,10 +127,10 @@ IMAGE = {
     "registryRef": "ibm-registry",
     "release": "9.9.1.2",
     "tag": "v9.9.1-25074",
-    "version": "ceph-image-v2",
+    "version": "ceph-image-v3",
 }
 
-HOST = {"cluster": {key: value for key, value in CORE.items() if key not in ("action", "delegated")}, "host": "node-1", "version": "ceph-host-v2"}
+HOST = {"cluster": {key: value for key, value in CORE.items() if key not in ("action", "delegated")}, "host": "node-1", "version": "ceph-host-v3"}
 
 # Role, its entry points, the request variable and the request carrying every
 # member the Go side encodes, with the variables its entry point also requires.

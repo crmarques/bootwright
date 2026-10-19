@@ -142,6 +142,21 @@ func undeployedDelegated(cluster api.Object) (string, string, bool) {
 	return "", "", false
 }
 
+func unselectedAuxiliary(cluster api.Object) (string, string, bool) {
+	services := cluster.Spec().Get("ceph", "services").Items()
+	slices.SortStableFunc(services, func(a, b api.Value) int {
+		return strings.Compare(storage.NativeServiceName(a), storage.NativeServiceName(b))
+	})
+	for _, svc := range services {
+		if needs := auxiliaryNeeds(svc); len(needs) != 0 {
+			name := storage.NativeServiceName(svc)
+			return "no auxiliary image is selected for the " + svc.Get("service_type").Text() + " service " + name + "; its daemons need cephadm's container_image_" + needs[0] + ", and Bootwright keeps no default",
+				"remove " + name + " from spec.ceph.services, together with its spec.ceph.serviceBindings entries", true
+		}
+	}
+	return "", "", false
+}
+
 func gatewayExecuted(c api.Catalog, cluster api.Object, ref string) bool {
 	svc, found := storage.NativeService(cluster, ref)
 	if !found {

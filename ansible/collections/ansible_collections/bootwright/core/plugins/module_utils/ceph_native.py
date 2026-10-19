@@ -58,7 +58,12 @@ HOST_PHASES = frozenset(("profile", "route", "device_identity", "host_devices", 
 SCOPE_MEMBERS = frozenset(("controller", "version", "cluster", "owner", "fsid", "image", "cephadm", "bootstrap", "hosts", "services", "clusterSSHUser",
                            "clusterSSHTransport", "monIP", "publicNetworks", "clusterNetworks", "callHome", "release", "ansiblePackageVersion",
                            "packageRepository", "clusterKeyRef", "registryRef", "registry"))
-SCOPE_OPTIONAL = frozenset(("config", "packages", "nfsGaneshaPackageVersion"))
+SCOPE_OPTIONAL = frozenset(("auxiliary", "config", "packages", "nfsGaneshaPackageVersion"))
+# cephadm's container_image_<name> settings an auxiliary image may fill, in name order.
+AUXILIARY_NAMES = (
+    "alertmanager", "alloy", "grafana", "haproxy", "keepalived", "loki", "nginx", "node_exporter",
+    "nvmeof", "oauth2_proxy", "prometheus", "promtail", "samba", "samba_metrics", "snmp_gateway",
+)
 RESOURCE_ID = re.compile(r"(?:0|[1-9][0-9]{0,18})\Z")
 # librbd's image ID: lowercase hex cut to RBD_MAX_IMAGE_ID_LENGTH 14 (src/librbd/Utils.cc:75-93, src/include/rbd_types.h:86).
 RBD_IMAGE_ID = re.compile(r"[0-9a-f]{1,14}\Z")
@@ -451,6 +456,22 @@ def validate_delegated(request, hosts):
     require(services == sorted(set(services)))
 
 
+def validate_auxiliary(request):
+    """Admit the frozen auxiliary digests: each name once, in name order, beneath the registry authority."""
+    if "auxiliary" not in request:
+        return
+    entries = request["auxiliary"]
+    require(isinstance(entries, list) and 1 <= len(entries) <= len(AUXILIARY_NAMES))
+    for entry in entries:
+        require(isinstance(entry, dict) and set(entry) == {"image", "name"})
+        require(isinstance(entry["name"], str) and entry["name"] in AUXILIARY_NAMES)
+        image = entry["image"]
+        require(isinstance(image, str) and re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}", image) is not None)
+        require(image.startswith(request["registry"] + "/"))
+    order = [AUXILIARY_NAMES.index(entry["name"]) for entry in entries]
+    require(order == sorted(set(order)))
+
+
 def delegated_daemon(daemon, request):
     """Tolerate a daemon another block executes only when its service is listed and it runs on one of that service's hosts."""
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_observe
@@ -479,7 +500,7 @@ def host_scope(request):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v11")
+    require(request["version"] == "ceph-core-v12")
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])
@@ -505,6 +526,7 @@ def scope_checks(request):
     require(named(request["clusterKeyRef"]) and named(request["registryRef"]))
     require(isinstance(request["registry"], str) and re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]{1,255}", request["registry"]) is not None)
     registry_authority(request)
+    validate_auxiliary(request)
     require(request["callHome"] in ("enabled", "disabled"))
     for key in ("publicNetworks", "clusterNetworks"):
         require(request[key] is None or isinstance(request[key], list) and len(request[key]) <= 8)

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import functools
 import hashlib
 import inspect
 import json
@@ -34,7 +35,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 
 ROOT = "/var/lib/bootwright/ceph-host"
 PACKAGE_ROOT = "/var/lib/bootwright/ceph-packages"
-VERSION = "ceph-host-v2"
+VERSION = "ceph-host-v3"
 PROFILE_VERSION = "ceph-runtime-profile-v3"
 ROUTE_VERSION = "ceph-host-route-v2"
 DEVICES_VERSION = "ceph-device-identities-v1"
@@ -429,11 +430,12 @@ class HostRuntime:
         self.markers = markers
         self.packages = packages or ceph_native.Markers(self.request, root=PACKAGE_ROOT)
 
-    def command(self, argv, timeout, limit, reason="native-command", *, environment=None, secrets=()):
+    def command(self, argv, timeout, limit, reason="native-command", *, environment=None, secrets=(), coordinate=None):
         options = {"environment": environment} if environment else {}
         code, output = self.run(argv, timeout=timeout, limit=limit, **options)
         if code != 0:
-            raise ceph_native.NativeFailure(reason, self.request["image"], getattr(output, "stderr", b"") or output, secrets=secrets)
+            raise ceph_native.NativeFailure(reason, self.request["image"] if coordinate is None else coordinate,
+                                            getattr(output, "stderr", b"") or output, secrets=secrets)
         return output
 
     def journal(self, create=False):
@@ -496,6 +498,71 @@ class HostRuntime:
             raise
         current = inspect_image(image, self.command)
         durable.write("pulled.json", {"scope": self.scope(), "imageID": current["id"]})
+        return True
+
+    def pull_auxiliary(self, durable, private, deadline):
+        """Pre-pull each frozen auxiliary digest, so no native deploy pulls one."""
+        discard_residue(durable.path, "auxiliary-scratch-")
+        changed = False
+        for entry in self.request.get("auxiliary", []):
+            changed = self.pull_reference(durable, private, deadline, entry["name"], entry["image"]) or changed
+        return changed
+
+    def pull_reference(self, durable, private, deadline, name, reference):
+        """The frozen-image pull of one auxiliary reference, journaled under its own name with its own broker."""
+        attempt_name, pulled_name = "auxiliary-" + name + "-attempt-%d.json", "auxiliary-" + name + "-pulled.json"
+        inspect = functools.partial(self.command, coordinate=reference)
+        attempts = 0
+        while attempts < PULL_ATTEMPTS and durable.read(attempt_name % (attempts + 1)) is not None:
+            record = durable.read(attempt_name % (attempts + 1))
+            require(canonical(record) == canonical({"scope": self.scope(), "image": reference, "attempt": attempts + 1}), "image-pull")
+            attempts += 1
+        completed = durable.read(pulled_name)
+        if completed is not None:
+            require(attempts > 0, "image-pull")
+            require(isinstance(completed, dict) and completed.get("image") == reference, "image-platform")
+            current = inspect_image(reference, inspect)
+            require(canonical(completed) == canonical({"scope": self.scope(), "image": reference, "imageID": current["id"]}), "image-platform")
+            return False
+        if attempts:
+            try:
+                current = inspect_image(reference, inspect)
+            except Refusal:
+                current = None
+            if current is not None:
+                durable.write(pulled_name, {"scope": self.scope(), "image": reference, "imageID": current["id"]})
+                return True
+        ceph_native.registry_material(self.request, private)
+        material = json.loads(private, object_pairs_hook=ceph_native.unique_object)
+        secrets = (material["password"],)
+        broker = None
+        try:
+            with owned_scratch(durable.path, "auxiliary-scratch-") as scratch, authfile(scratch) as auth, \
+                    ceph_pull_broker.Broker(scratch, self.request, private, deadline, self.command, image=reference) as broker:
+                policy = os.path.join(scratch, "policy.json")
+                ceph_native.private_write(policy, signature_policy(reference))
+                argv = ["/usr/bin/podman", "pull", "--signature-policy", policy, "--tls-verify=true", "--authfile", auth,
+                        "--cert-dir", broker.cert_directory, reference]
+                # Each invocation has its own budget; the retained records only show that an attempt began.
+                tried = 0
+                while True:
+                    seconds = min(PULL_SECONDS, deadline - self.clock() - PULL_RESERVE)
+                    require(seconds >= PULL_MINIMUM, "image-pull")
+                    tried += 1
+                    durable.write(attempt_name % tried, {"scope": self.scope(), "image": reference, "attempt": tried})
+                    try:
+                        self.command(argv, seconds, 256 << 10, "image-pull", environment=broker.environment, secrets=secrets, coordinate=reference)
+                        break
+                    except Refusal:
+                        if tried >= PULL_ATTEMPTS:
+                            raise
+                        self.pause(PULL_PAUSE)
+        except ceph_native.NativeFailure as error:
+            if broker is not None and broker.failure_cause:
+                error.native_error["cause"] = native_diagnostics.redact(broker.failure_cause + "; " + error.native_error["cause"])
+            raise
+        current = inspect_image(reference, inspect)
+        durable.write(pulled_name, {"scope": self.scope(), "image": reference, "imageID": current["id"]})
         return True
 
     def prove_container(self, identifier, image_id, label, *, user, script, arguments=(), mounts=(), sysctls=()):
@@ -630,6 +697,7 @@ class HostRuntime:
         require(isinstance(private, dict) and set(private) == {"registryJSON"}, "material")
         with self.journal(create=True) as durable:
             changed = self.pull(durable, private["registryJSON"], deadline)
+            changed = self.pull_auxiliary(durable, private["registryJSON"], deadline) or changed
             original = inspect_image(self.request["image"], self.command)
             require(canonical(durable.read("pulled.json")) == canonical({"scope": self.scope(), "imageID": original["id"]}), "image-platform")
             existing = durable.read(PROFILE)
@@ -849,7 +917,7 @@ def route_cases(value):
 @contextlib.contextmanager
 def staged(directory, synthetic, uid, gid):
     """Retain the synthetic bytes outside the read-only mounted children."""
-    request = {"version": "ceph-core-v11", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
+    request = {"version": "ceph-core-v12", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
                "clusterSSHTransport": "verified-tunnel", "clusterSSHUser": probe.USER,
                "hosts": [{"name": probe.HOST, "address": probe.ADDRESS, "port": probe.OUTER_PORT}]}
     known = ("[" + probe.ADDRESS + "]:" + str(probe.OUTER_PORT) + " " + synthetic["keys"]["outer"]["public"] + "\n").encode()

@@ -1,9 +1,12 @@
 implementation: storage-ceph-host-v1
-content-digest: a8d2bc7d282f00cbe2d2114525c07278967a1e7f6eb32af455be4ac008f61f28
+content-digest: 33ab3c7848d4ca757d23cdf07be2bcd7a24ee5cacb1bec8ef20d358da84ef5a1
 automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v1, ceph-host-route-v2, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-runtime-profile-v3
 request-schema:
   cluster struct ceph.ClusterScope
   cluster.ansiblePackageVersion string
+  cluster.auxiliary []struct ceph.AuxiliaryReference omitempty
+  cluster.auxiliary[].image string
+  cluster.auxiliary[].name string
   cluster.bootstrap string
   cluster.callHome string
   cluster.cephadm struct ceph.Tool

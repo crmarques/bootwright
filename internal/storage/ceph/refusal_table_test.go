@@ -53,6 +53,12 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 				return spec.WithPath(api.ListValue(services...), "ceph", "services")
 			},
 		}, values: map[string]string{"<service>": "nfs.files"}},
+		"A native service whose auxiliary image is not selected": {edits: map[string]func(api.Value) api.Value{
+			"prometheus service": func(spec api.Value) api.Value {
+				services := append(spec.Get("ceph", "services").Items(), requestMap("service_type", "prometheus", "placement", requestMap("label", "mon", "count", 1)))
+				return spec.WithPath(api.ListValue(services...), "ceph", "services")
+			},
+		}, values: map[string]string{"<family>": "prometheus", "<service>": "prometheus", "<name>": "prometheus"}},
 	}
 	refused := map[api.Kind]string{api.StorageCluster: "example", api.StoragePool: "volumes", api.StorageClient: "consumer"}
 	for _, row := range refusalTable(t) {
