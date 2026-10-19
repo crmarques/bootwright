@@ -22,7 +22,8 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_channel
 # The tree image is the shared package-tree publication's to prove.
 REFUSALS = ("hardware-mismatch", "identity-mismatch", "machine-running")
 MEDIA_REFUSALS = ("media-changed-boot",)
-POLICY_REFUSALS = ("ssh-policy-unavailable", "ssh-policy-host-excluded", "ssh-policy-fleet-excluded")
+POLICY_REFUSALS = ("ssh-policy-unavailable", "ssh-policy-host-excluded", "ssh-policy-fleet-excluded", "ssh-policy-generated-excluded")
+FIPS_REFUSALS = ("fips-not-enabled",)
 POWER_STATES = ("", "On", "Off")
 MAX_MARKER = 4096
 MAX_HOST_KEY = 4096
@@ -80,6 +81,7 @@ def presence(arguments, request_digest):
     evidence = {
         "absent": False,
         "address": bounded(arguments.get("address"), 128),
+        "fips": flag(arguments.get("fips")),
         "hostKey": bounded(arguments.get("hostKey"), MAX_HOST_KEY),
         "image": bool(observation.get("image")),
         "marker": bounded(arguments.get("marker"), MAX_MARKER),
@@ -104,6 +106,7 @@ def presence(arguments, request_digest):
         and ((not evidence["image"]) if private_delivery else evidence["image"])
         and not evidence["private"] and evidence["reachable"]
         and evidence["network"] and evidence["networkReboot"]
+        and (evidence["fips"] or not flag(arguments.get("fipsRequired")))
     )
     return evidence
 
@@ -118,7 +121,7 @@ def remaining(arguments):
     return [name for name in CONTENT if observation.get(name)]
 
 
-def unproved(evidence, private_delivery=False):
+def unproved(evidence, private_delivery=False, fips_required=False):
     """What a completion proof still lacks, named for the same reason."""
     names = [name for name in ("marker", "hostKey", "address") if not evidence[name]]
     if evidence["media"]:
@@ -134,6 +137,8 @@ def unproved(evidence, private_delivery=False):
     if not evidence["reachable"]:
         names.append("reachable")
     names += [name for name in ("network", "networkReboot") if not evidence[name]]
+    if fips_required and not evidence["fips"]:
+        names.append("fips")
     return names
 
 
@@ -143,6 +148,7 @@ def absence(arguments, request_digest):
     return {
         "absent": True,
         "address": "",
+        "fips": False,
         "hostKey": "",
         "image": False,
         "marker": "",
@@ -171,7 +177,8 @@ def completion(arguments):
         unmet, verb = remaining(arguments), "still present"
     else:
         evidence = presence(arguments, request_digest)
-        unmet, verb = unproved(evidence, flag(arguments.get("privateDelivery"))), "not proved"
+        unmet = unproved(evidence, flag(arguments.get("privateDelivery")), flag(arguments.get("fipsRequired")))
+        verb = "not proved"
     if publishes(evidence, arguments.get("observed")):
         return evidence, None
     return evidence, unreached("the installation", verb, unmet)
@@ -182,7 +189,7 @@ CAPABILITY = adapter_protocol.Capability(
     "the installation capability result could not be published",
     completion,
     phases=adapter_protocol.REFUSING_PHASES,
-    refusals=REFUSALS + MEDIA_REFUSALS + POLICY_REFUSALS,
+    refusals=REFUSALS + MEDIA_REFUSALS + POLICY_REFUSALS + FIPS_REFUSALS,
 )
 PHASES = CAPABILITY.phases
 

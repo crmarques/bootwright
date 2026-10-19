@@ -29,6 +29,25 @@ def test_excluded_host_and_fleet_types_name_their_secret_before_installation(usa
     assert refused.value.reason == "ssh-policy-%s-excluded" % usage
 
 
+# The host key a guest-agent installation generates is checked against the host
+# key list, even where the fleet list would admit the type.
+def test_check_keys_names_the_machine_for_a_generated_key():
+    result = {"hostKeyAlgorithms": HOST, "fleetKeyAlgorithms": "ssh-ed25519," + FLEET}
+    with pytest.raises(policy.PolicyError) as refused:
+        policy.check_keys(result, [{"machine": "rhel-01", "type": "ssh-ed25519", "usage": "generated"}])
+    assert refused.value.reason == "ssh-policy-generated-excluded"
+    assert "Machine/rhel-01" in str(refused.value) and "ssh-ed25519" in str(refused.value)
+    policy.check_keys(result, [{"machine": "rhel-01", "type": "ecdsa-sha2-nistp256", "usage": "generated"},
+                               {"secret": "fleet", "type": "ssh-ed25519", "usage": "fleet"}])
+    for machine in (None, "", "Rhel-01", "rhel-01-", "rhel_01"):
+        with pytest.raises(policy.PolicyError) as refused:
+            policy.check_keys(result, [{"machine": machine, "type": "ecdsa-sha2-nistp256", "usage": "generated"}])
+        assert refused.value.reason == "ssh-policy-unavailable"
+    with pytest.raises(policy.PolicyError) as refused:
+        policy.check_keys(result, [{"machine": "rhel-01", "type": "ssh-dss", "usage": "generated"}])
+    assert refused.value.reason == "ssh-policy-unavailable"
+
+
 def test_native_default_and_modifier_evaluation_is_used_without_overriding_policy():
     calls = []
 

@@ -82,10 +82,10 @@ def machine_reads():
     """The tasks that read the machine rather than the published content."""
     found = [task for task in tasks()
              if READ in task
-             or task.get("ansible.builtin.include_tasks") in ("identity.yml", "reachable.yml", "network_observe.yml")
+             or task.get("ansible.builtin.include_tasks") in ("identity.yml", "reachable.yml", "network_observe.yml", "host_security.yml")
              or (task.get("bootwright.core.lifecycle_scratch") or {}).get("state", "present") == "present" and "bootwright.core.lifecycle_scratch" in task]
-    # Private connection files, the identity, fleet, network and controller reads.
-    assert len(found) == 5
+    # Private connection files, the identity, fleet, network, FIPS and controller reads.
+    assert len(found) == 6
     return found
 
 

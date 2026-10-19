@@ -669,7 +669,7 @@ separate cluster proxy and NTP choices and does not inherit Machine fields.
 | `services.disabled` | array of strings | no | `[]` | Unique systemd unit names (letters, digits, `:_.@-`, starting with a letter or digit, at most 255 bytes), disjoint from `enabled`. |
 | `security.selinux.mode` | string | no | OS default | `enforcing`, `permissive`, or `disabled`. |
 | `security.firewall.enabled` | boolean | no | OS default | `true` requires `firewalld` in packages and enabled services. |
-| `security.fips.enabled` | boolean | no | `false` | RHEL-only. |
+| `security.fips.enabled` | boolean | no | `false` | RHEL-only. `true` installs the operating system in FIPS mode on a virtual Machine with an ECDSA P-256 guest host key; a physical Machine and an Ed25519 fleet key refuse ([managed OS](../managed-os.md#fips-mode)). |
 | `security.diskEncryption` | object | no | — | TPM2 unlock plus recovery passphrase below. |
 
 A Kickstart token is printable ASCII with no whitespace, quote, backslash, `#`

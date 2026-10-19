@@ -187,6 +187,7 @@
           "evidence": {
             "absent": false,
             "address": "198.51.100.11",
+            "fips": false,
             "hostKey": "ssh-ed25519 AAAA",
             "image": true,
             "marker": "{\"context\":\"lab\"}",
@@ -231,6 +232,7 @@
           "evidence": {
             "absent": false,
             "address": "198.51.100.11",
+            "fips": false,
             "hostKey": "ssh-ed25519 AAAA",
             "image": true,
             "marker": "",
@@ -267,6 +269,7 @@
           "evidence": {
             "absent": true,
             "address": "",
+            "fips": false,
             "hostKey": "",
             "image": false,
             "marker": "",

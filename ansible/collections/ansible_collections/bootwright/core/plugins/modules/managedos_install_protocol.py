@@ -32,8 +32,11 @@ options:
         C(identity-mismatch) or C(machine-running), or C(media-changed-boot)
         for a boot image that no longer has the size and SHA-256 the
         operation froze.
-      - C(ssh-policy-unavailable), C(ssh-policy-host-excluded) and
-        C(ssh-policy-fleet-excluded) identify pre-effect SSH policy refusals.
+      - C(ssh-policy-unavailable), C(ssh-policy-host-excluded),
+        C(ssh-policy-fleet-excluded) and C(ssh-policy-generated-excluded)
+        identify pre-effect SSH policy refusals.
+      - C(fips-not-enabled) names an installed system that does not report
+        the FIPS mode its installation enabled.
     type: str
     required: false
   outcome:
@@ -76,6 +79,18 @@ options:
     description:
       - Whether the fleet account answered on the host key the machine
         reported. An observation proves this the same way an apply does.
+    type: bool
+    required: false
+  fips:
+    description:
+      - Whether the installed system proved FIPS mode after its network
+        converged.
+    type: bool
+    required: false
+  fipsRequired:
+    description:
+      - Whether the frozen installer arguments enable FIPS mode, so a
+        completion proves it.
     type: bool
     required: false
   privateDelivery:

@@ -39,27 +39,50 @@ def applied():
     return flattened(ROLE / "tasks" / "apply.yml")
 
 
-@pytest.mark.parametrize("channel", ["delivered-key", "guest-agent"])
-def test_actual_bound_key_policy_is_checked_before_publication_or_boot(channel):
+def policy_check():
     tasks = LOADER.load_from_file(str(ROLE / "tasks" / "apply.yml"), trusted_as_template=True)
     check = next(index for index, task in enumerate(tasks)
                  if any("bootwright.core.ssh_key_policy" in inner for inner in task.get("block", [])))
-    for task in tasks[:check]:
-        assert "ansible.builtin.assert" in task or task.get(PROTOCOL, {}).get("phase") == "loaded"
+    return tasks, check
+
+
+def checked_keys(channel, generated="ssh-ed25519"):
+    """The keys the placement check proves for one identity channel."""
+    tasks, check = policy_check()
     templar = Templar(loader=LOADER, variables={
-        "bootwright_os_install_request": {"fleetKeyRef": "fleet", "target": {
+        "bootwright_os_install_request": {"fleetKeyRef": "fleet", "identity": {"object": "rhel-01"}, "target": {
             "channel": channel, "hostKeyRef": "host",
         }},
-        "bootwright_os_install_material": {"fleetKeyType": "ssh-rsa", "hostKeyType": "ssh-ed25519"},
+        "bootwright_os_install_material": {"fleetKeyType": "ssh-rsa", "hostKeyType": "ssh-ed25519", "generatedHostKeyType": generated},
     })
-    keys = templar.template(tasks[check]["block"][0]["bootwright.core.ssh_key_policy"]["keys"])
+    return templar.template(tasks[check]["block"][0]["bootwright.core.ssh_key_policy"]["keys"])
+
+
+@pytest.mark.parametrize("channel", ["delivered-key", "guest-agent"])
+def test_actual_bound_key_policy_is_checked_before_publication_or_boot(channel):
+    tasks, check = policy_check()
+    for task in tasks[:check]:
+        assert "ansible.builtin.assert" in task or task.get(PROTOCOL, {}).get("phase") == "loaded"
     rescue = tasks[check]["rescue"]
     assert rescue[0][PROTOCOL] == {"phase": "refused", "reason": '{{ ansible_failed_result.reason | default("ssh-policy-unavailable") }}'}
     assert "ansible.builtin.fail" in rescue[1]
     expected = [{"secret": "fleet", "type": "ssh-rsa", "usage": "fleet"}]
     if channel == "delivered-key":
         expected.append({"secret": "host", "type": "ssh-ed25519", "usage": "host"})
-    assert keys == expected
+    else:
+        expected.append({"machine": "rhel-01", "type": "ssh-ed25519", "usage": "generated"})
+    assert checked_keys(channel) == expected
+
+
+# A guest-agent installation generates its own host key, so the placement host
+# has to accept that type before anything is published or booted; a
+# delivered-key installation's host key is the bound one checked above.
+def test_guest_agent_policy_check_includes_the_generated_host_key():
+    assert checked_keys("guest-agent", "ecdsa-sha2-nistp256") == [
+        {"secret": "fleet", "type": "ssh-rsa", "usage": "fleet"},
+        {"machine": "rhel-01", "type": "ecdsa-sha2-nistp256", "usage": "generated"},
+    ]
+    assert not [key for key in checked_keys("delivered-key", "ecdsa-sha2-nistp256") if key["usage"] == "generated"]
 
 
 def index_of(tasks, predicate, description):

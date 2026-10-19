@@ -54,7 +54,10 @@
                'type': bootwright_os_install_material.fleetKeyType, 'usage': 'fleet'}]
              + ([{'secret': bootwright_os_install_request.target.hostKeyRef,
                   'type': bootwright_os_install_material.hostKeyType, 'usage': 'host'}]
-                if bootwright_os_install_request.target.channel == 'delivered-key' else []) }}
+                if bootwright_os_install_request.target.channel == 'delivered-key' else [])
+             + ([{'machine': bootwright_os_install_request.identity.object,
+                  'type': bootwright_os_install_material.generatedHostKeyType, 'usage': 'generated'}]
+                if bootwright_os_install_request.target.channel == 'guest-agent' else []) }}
   rescue:
     - name: Name the bounded SSH policy refusal to the installation runner
       bootwright.core.managedos_install_protocol:
@@ -602,6 +605,27 @@
         status: ok
       no_log: true
 
+    - name: Read the installed machine's FIPS state after its network converged
+      ansible.builtin.include_tasks: host_security.yml
+
+    - name: Name a machine that does not prove the FIPS mode it was installed with
+      bootwright.core.managedos_install_protocol:
+        phase: refused
+        reason: fips-not-enabled
+      when:
+        - managedos_install_anaconda_fips_requested | bool
+        - not (managedos_install_anaconda_fips | bool)
+      no_log: true
+
+    - name: Refuse a machine that does not prove FIPS mode
+      ansible.builtin.fail:
+        msg: >-
+          Machine {{ bootwright_os_install_request.identity.object }} does not
+          report FIPS mode after its installation
+      when:
+        - managedos_install_anaconda_fips_requested | bool
+        - not (managedos_install_anaconda_fips | bool)
+
     - name: Prove everything this installation publishes is in place
       bootwright.core.managedos_install_inspect:
         request: '{{ bootwright_os_install_request }}'
@@ -638,4 +662,6 @@
     network: '{{ managedos_install_anaconda_network_result.network | default(false) }}'
     networkReboot: '{{ managedos_install_anaconda_network_result.networkReboot | default(false) }}'
     networkDifferences: '{{ managedos_install_anaconda_network_result.networkDifferences | default([]) }}'
+    fips: '{{ managedos_install_anaconda_fips | default(false) }}'
+    fipsRequired: "{{ 'fips=1' in (bootwright_os_install_request.installerArguments | default([])) }}"
   no_log: true

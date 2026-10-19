@@ -137,10 +137,11 @@ validate refuses any other source, naming the import that fixes it. The
 profile an installed Machine selects names its `redfishVirtualMedia`
 endpoint, on every substrate, because the installer image is always booted
 through it. A profile selecting
-`initialPassword`, `diskEncryption`, an enabled `fips`, a top-level
+`initialPassword`, `diskEncryption`, a top-level
 `subscription`, `fromSubscription`, `mirror` or `templateClone` refuses before
 registration. These shapes carry secret bytes or effects this contract does not
-prove. A profile enabling `ssh.passwordAuthentication` refuses too, because no
+prove. A profile enabling `fips` is admitted on a virtual Machine and refused
+on a physical one, as [FIPS mode](#fips-mode) states. A profile enabling `ssh.passwordAuthentication` refuses too, because no
 password can be set while `initialPassword` is refused. A Machine whose
 profile configures a repository refuses while its effective proxy names a
 Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, because
@@ -291,6 +292,8 @@ the `%pre` target proof also requires. Anaconda writes each pin to the
 installed system as `/etc/systemd/network/10-anaconda-ifname-<name>.link`, so
 the installer and the installed system use the declared names on both
 substrates. dracut reserves the kernel's `ethN` names, which therefore refuse.
+A profile enabling `fips` appends `fips=1` after the pins, once, so the
+installer and the installed system boot in [FIPS mode](#fips-mode).
 Sources:
 [RHEL 9 Kickstart `network`](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/automatically_installing_rhel/kickstart-commands-and-options-reference_rhel-installer#network_kickstart-commands-for-network-configuration),
 [pykickstart network.py](https://raw.githubusercontent.com/pykickstart/pykickstart/master/pykickstart/commands/network.py),
@@ -313,7 +316,9 @@ installation by [network convergence](#network-convergence)
 What the `%post` does about the host key follows the
 [identity channel](substrates.md#identity-and-power-operations). For the guest
 agent it generates the host keys and republishes the public half beside the
-marker, and permits the agent the bounded reads that prove completion: the
+marker: the Ed25519 key, or, when the profile enables `fips`, an ECDSA P-256
+key it generates explicitly before the other types, a type the request
+freezes, and permits the agent the bounded reads that prove completion: the
 agent is confined and can read neither its own shipped filter's refusals nor
 sshd's key directory, so the `%post` both permits those reads and republishes
 the key, and proves each edit took rather than leaving a guest that installs
@@ -333,9 +338,10 @@ than the frozen one refuses before any effect. Every SSH connection the
 installation makes to the machine pins `HostKeyAlgorithms` to the pinned key's
 type, an `ssh-rsa` key as `rsa-sha2-512,rsa-sha2-256`. Before installation
 effects, the actual SSH placement host reads its crypto-policy directives
-and compiled OpenSSH policy. It proves that policy permits both the bound
-fleet identity and every delivered host-key type, naming the Secret and type
-on refusal. Unreadable, malformed or unsupported policy refuses. Subsequent
+and compiled OpenSSH policy. It proves that policy permits the bound fleet
+identity, every delivered host-key type and the host-key type a guest-agent
+installation generates, naming the Secret, or the Machine whose installation
+generates the key, and the type on refusal. Unreadable, malformed or unsupported policy refuses. Subsequent
 connections intersect the pinned algorithms with this policy; explicit key
 pinning cannot re-enable an excluded signature. An absent system policy uses
 OpenSSH defaults. This proves access compatibility, not FIPS certification.
@@ -451,8 +457,10 @@ the host crypto policy, with no ambient known hosts, proxy, control or identity
 directive and with `ServerAliveInterval=15` and `ServerAliveCountMax=3`, the virtual media ejected, and the Machine reported
 powered on, and the installed system converged to its declared network and
 proved it after a restart, as [network convergence](#network-convergence)
-states. The evidence records the marker digest, the host public key, the
-address, whether that connection was accepted and the network result; a later consumer that
+states, and, when the profile enables `fips`, the installed system reporting
+FIPS mode, as [FIPS mode](#fips-mode) states. The evidence records the marker
+digest, the host public key, the address, whether that connection was accepted,
+the network result and `fips`, whether the installed system proved FIPS mode; a later consumer that
 connects to the Machine binds that key, never a first-use answer from the
 network. An observation proves completion the same way, because it is what
 resolves an interrupted apply: an observation that proves the marker and the
@@ -771,6 +779,58 @@ match its declaration after a reboot`.
 **Unverified until the owner's run.** A reboot with a pending checkpoint;
 Anaconda's connection profiles beside NMState's; the NMState version RHEL 9.8
 ships; and RHEL-29001.
+
+### FIPS mode
+
+A profile enabling `spec.customizations.security.fips` installs the operating
+system in FIPS mode. Bootwright claims FIPS mode on the installed system and
+nothing more: never FIPS 140 validation of a module, and no vendor support or
+certification status.
+
+**Boot argument.** FIPS mode is set at installation by the `fips=1` kernel
+argument, which the request freezes as the last of its `installerArguments`
+and `mkksiso --cmdline` adds to every boot entry of the installer image;
+Anaconda carries it to the installed system. Sources:
+[RHEL 9 switching to FIPS mode](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/security_hardening/switching-rhel-to-fips-mode_security-hardening)
+and [lorax mkksiso](https://raw.githubusercontent.com/weldr/lorax/rhel9-branch/src/bin/mkksiso).
+Bootwright never switches an installed system into or out of FIPS mode.
+
+**Host keys.** A FIPS-mode OpenSSH refuses Ed25519 keys, and `ssh-keygen -A`
+skips that type, so a guest-agent installation in FIPS mode generates an ECDSA
+P-256 host key explicitly before the other types and republishes it; the
+request freezes that type. Source:
+[CentOS Stream 9 OpenSSH FIPS patch](https://gitlab.com/redhat/centos-stream/rpms/openssh/-/raw/c9s/openssh-7.7p1-fips.patch).
+The placement host's SSH policy check covers that generated type before
+anything is published or booted.
+
+**Fleet key.** The plan refuses a fleet key Secret that generates an Ed25519
+key, the default included, and an apply refuses, before any effect, a bound
+fleet key that is not ECDSA or an RSA key of at least 2048 bits; both name the
+Secret and the key type, never key bytes, as the [refusal table](#refusal-table)
+lists.
+
+**Physical Machines.** A profile enabling `fips` refuses on a physical
+Machine before registration; its qualification is
+[B78](milestones/m1.md#b78).
+
+**Proof.** After the installed system's network converged, an apply reads
+`/proc/sys/crypto/fips_enabled` and `/etc/crypto-policies/state/current` over
+the pinned fleet connection, the two files `fips-mode-setup --check` reads
+([fips-mode-setup](https://gitlab.com/redhat-crypto/fedora-crypto-policies/-/raw/rhel9/fips-mode-setup),
+lines 88 and 95). FIPS mode is proved only by exactly `1` and exactly `FIPS`;
+no field selects a subpolicy, so `FIPS:OSPP` proves nothing. An observation
+reads it the same way. The evidence records the answer as `fips`; an
+installation whose profile does not enable `fips` reads nothing and records
+false.
+
+**Refusal.** An apply whose installed system does not prove FIPS mode names
+`fips-not-enabled` and fails with
+`Machine/<machine> was installed with FIPS mode enabled, but its kernel or its crypto policy does not report FIPS mode`;
+the remedy takes the context back with `bootwright destroy` and applies it
+again, because FIPS mode is set only at installation. The attempt then records
+its effect unknown, so the destroy still observes the Machine. An observation
+that proves the frozen marker without the FIPS proof reports a partial
+installation, never a complete one.
 
 ### Shared package-tree publication
 

@@ -1,0 +1,28 @@
+---
+# FIPS mode is set only at installation. A FIPS installation proves it on the
+# installed system after its network converged, over the pinned fleet
+# connection, from the two files fips-mode-setup --check reads; any other
+# installation reads nothing.
+- name: Name whether this installation enables FIPS mode
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_fips_requested: "{{ 'fips=1' in bootwright_os_install_request.installerArguments }}"
+
+- name: Read the installed machine's FIPS state
+  ansible.builtin.include_tasks: guest.yml
+  vars:
+    managedos_install_anaconda_guest_command:
+      - /usr/bin/sh
+      - -c
+      - |-
+        set -u
+        printf 'kernel=%s\n' "$(head -c 8 /proc/sys/crypto/fips_enabled 2>/dev/null | tr -cd 0-9)"
+        printf 'policy=%s\n' "$(head -n 1 /etc/crypto-policies/state/current 2>/dev/null | head -c 64 | tr -cd '[:graph:]')"
+      - bootwright-fips
+  when: managedos_install_anaconda_fips_requested | bool
+
+- name: Name whether the machine proved FIPS mode
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_fips: >-
+      {{ (managedos_install_anaconda_fips_requested | bool)
+         and (managedos_install_anaconda_guest.rc | default(1) | int) == 0
+         and (managedos_install_anaconda_guest.stdout | default('')).splitlines() == ['kernel=1', 'policy=FIPS'] }}

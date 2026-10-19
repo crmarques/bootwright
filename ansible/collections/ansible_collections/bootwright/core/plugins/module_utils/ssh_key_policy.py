@@ -109,11 +109,24 @@ def effective_policy(data, run=subprocess.run):
 def check_keys(policy, keys):
     """Validate actual bound public-key types, never a declared provider policy."""
     for key in keys:
-        secret, key_type, usage = key["secret"], key["type"], key["usage"]
-        if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", secret) or key_type not in ALGORITHMS:
+        key_type, usage = key.get("type"), key.get("usage")
+        if usage == "generated":
+            check_generated(policy, key.get("machine"), key_type)
+            continue
+        secret = key.get("secret")
+        if not isinstance(secret, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", secret) or key_type not in ALGORITHMS:
             raise PolicyError("the SSH policy check requires a Secret name and a qualified bound key type")
         candidates = ALGORITHMS[key_type].split(",")
         accepted = policy["hostKeyAlgorithms" if usage == "host" else "fleetKeyAlgorithms"].split(",")
         if not set(candidates).intersection(accepted):
             raise PolicyError("Secret/%s key type %s is excluded by the placement host SSH %s key policy; nothing was booted" %
                               (secret, key_type, usage), "ssh-policy-%s-excluded" % usage)
+
+
+def check_generated(policy, machine, key_type):
+    """The host key an installation generates must be one this host's client accepts."""
+    if not isinstance(machine, str) or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", machine) or key_type not in ALGORITHMS:
+        raise PolicyError("the SSH policy check requires a Machine name and a qualified generated key type")
+    if not set(ALGORITHMS[key_type].split(",")).intersection(policy["hostKeyAlgorithms"].split(",")):
+        raise PolicyError("the %s host key the installation of Machine/%s generates is excluded by the placement host SSH host key policy; nothing was booted" %
+                          (key_type, machine), "ssh-policy-generated-excluded")

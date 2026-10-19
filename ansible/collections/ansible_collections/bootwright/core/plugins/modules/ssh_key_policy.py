@@ -15,23 +15,30 @@ description:
     not certification of a crypto provider or a target operating system.
 options:
   keys:
-    description: Bound public key types and their owning Secret names; no key bytes.
+    description:
+      - Bound public key types and their owning Secret names, and the host key
+        type an installation generates and the Machine it generates it for;
+        no key bytes.
     type: list
     elements: dict
     default: []
     suboptions:
       secret:
-        description: The Secret whose bound key is checked.
+        description: The Secret whose bound key is checked; required for C(host) and C(fleet).
         type: str
-        required: true
+        required: false
+      machine:
+        description: The Machine whose installation generates the checked host key; required for C(generated).
+        type: str
+        required: false
       type:
-        description: The bound OpenSSH public key type.
+        description: The bound or generated OpenSSH public key type.
         type: str
         required: true
       usage:
-        description: Host authentication or fleet user authentication.
+        description: Host authentication, fleet user authentication, or the host key an installation generates.
         type: str
-        choices: [host, fleet]
+        choices: [host, fleet, generated]
         required: true
 author:
   - Bootwright contributors (@crmarques)
@@ -44,6 +51,13 @@ EXAMPLES = r"""
       - secret: installed-host-key
         type: ssh-ed25519
         usage: host
+
+- name: Check the host key type a guest-agent installation generates before boot
+  bootwright.core.ssh_key_policy:
+    keys:
+      - machine: rhel-01
+        type: ecdsa-sha2-nistp256
+        usage: generated
 """
 
 RETURN = r"""
@@ -70,9 +84,10 @@ from ansible_collections.bootwright.core.plugins.module_utils.ssh_key_policy imp
 def main():
     module = AnsibleModule(argument_spec={
         "keys": {"type": "list", "elements": "dict", "default": [], "no_log": False, "options": {
-            "secret": {"type": "str", "required": True, "no_log": False},
+            "secret": {"type": "str", "required": False, "no_log": False},
+            "machine": {"type": "str", "required": False, "no_log": False},
             "type": {"type": "str", "required": True},
-            "usage": {"type": "str", "choices": ["host", "fleet"], "required": True},
+            "usage": {"type": "str", "choices": ["host", "fleet", "generated"], "required": True},
         }},
     }, supports_check_mode=True)
     try:

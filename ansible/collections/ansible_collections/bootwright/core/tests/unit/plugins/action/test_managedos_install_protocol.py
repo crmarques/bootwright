@@ -51,7 +51,8 @@ def test_a_changed_boot_image_is_named_to_the_runner(monkeypatch):
     assert published == [{"phase": "refused", "reason": "media-changed-boot"}]
 
 
-@pytest.mark.parametrize("reason", ["ssh-policy-unavailable", "ssh-policy-host-excluded", "ssh-policy-fleet-excluded"])
+@pytest.mark.parametrize("reason", ["ssh-policy-unavailable", "ssh-policy-host-excluded", "ssh-policy-fleet-excluded",
+                                    "ssh-policy-generated-excluded", "fips-not-enabled"])
 def test_early_key_policy_refusals_use_the_go_owned_public_diagnostic(reason, monkeypatch):
     result, published = run({"phase": "refused", "reason": reason}, monkeypatch)
     assert result == {"changed": False}
@@ -77,3 +78,25 @@ def test_a_malformed_tree_identity_is_never_published(identity):
 def test_a_removal_reports_no_tree_identity():
     evidence = protocol.absence({"observation": {"treeIdentity": IDENTITY}}, DIGEST)
     assert evidence["treeIdentity"] == ""
+
+
+def proved(**extra):
+    """A completion's arguments that prove every other postcondition."""
+    arguments = {"digest": DIGEST, "power": "On", "marker": "{}", "hostKey": "ssh-ed25519 AAAA", "address": "192.0.2.10",
+                 "reachable": True, "network": True, "networkReboot": True, "observation": {"image": True}}
+    arguments.update(extra)
+    return arguments
+
+
+# A FIPS installation completes only when the installed system proved FIPS
+# mode; any other installation is unaffected by what it reports.
+def test_a_fips_installation_completes_only_with_the_fips_proof():
+    evidence, refused = protocol.completion(proved(fipsRequired=True, fips=False))
+    assert evidence["fips"] is False and evidence["postcondition"] is False
+    assert refused is not None and refused.endswith("not proved: fips")
+    evidence, refused = protocol.completion(proved(fipsRequired="True", fips="True"))
+    assert evidence["fips"] is True and evidence["postcondition"] is True and refused is None
+    for arguments in (proved(), proved(fips=False), proved(fipsRequired=False)):
+        evidence, refused = protocol.completion(arguments)
+        assert evidence["fips"] is False and evidence["postcondition"] is True and refused is None
+    assert protocol.absence({"observation": {}}, DIGEST)["fips"] is False
