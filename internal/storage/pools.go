@@ -11,12 +11,10 @@ import (
 )
 
 var (
-	crushRuleName     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
-	crushClassName    = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
-	automaticClasses  = []string{"hdd", "ssd", "nvme"}
-	ibmErasureMinimum = map[[2]int64]int64{{2, 2}: 5, {4, 2}: 6, {5, 2}: 7, {6, 2}: 8, {8, 3}: 11, {8, 4}: 12}
-	jerasureProfiles  = [][2]int64{{4, 2}, {8, 3}, {8, 4}}
-	roleApplication   = map[string]string{"rbd": "rbd", "cephfs-metadata": "cephfs", "cephfs-data": "cephfs", "rgw": "rgw"}
+	crushRuleName    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+	crushClassName   = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+	automaticClasses = []string{"hdd", "ssd", "nvme"}
+	roleApplication  = map[string]string{"rbd": "rbd", "cephfs-metadata": "cephfs", "cephfs-data": "cephfs", "rgw": "rgw"}
 )
 
 func TargetSizeBytes(text string) (*big.Int, bool) {
@@ -243,15 +241,11 @@ func (a *admission) erasure(cluster api.Object) {
 			a.issue("api.invariant", "$.spec.erasure.stripeUnit", "the monitor refuses a stripe unit that is not a multiple of 4096 bytes unless forced, and Bootwright never forces it", "set spec.erasure.stripeUnit to a positive multiple of 4096 or omit it (4096)")
 		}
 	}
-	data, coding := erasure.Get("dataChunks"), erasure.Get("codingChunks")
+	data := erasure.Get("dataChunks")
 	if new(big.Int).Mul(numeric(data), stripe).Cmp(big.NewInt(4294967295)) > 0 {
 		a.issue("api.invariant", "$.spec.erasure.stripeUnit", "the stripe width dataChunks × stripeUnit exceeds the native 32-bit stripe width", "lower spec.erasure.stripeUnit")
 	}
-	if textOf(cluster.Spec(), "ceph", "distribution") == "ibm" {
-		a.ibmErasure(cluster, erasure)
-	} else if cluster.Spec().Get("ceph", "topology", "nodes").Len() > 0 && positive(data) && positive(coding) && new(big.Int).Add(numeric(data), numeric(coding)).Cmp(big.NewInt(osdHostCount(cluster))) > 0 {
-		a.issue("api.invariant", "$.spec.erasure", "erasure data and coding chunks exceed declared OSD-host capacity", "add OSD-bearing hosts, or lower dataChunks and codingChunks")
-	}
+	a.erasureProfile(cluster, erasure)
 	for _, key := range []string{"dataChunks", "codingChunks", "plugin", "technique", "crushDeviceClass", "crushRoot", "stripeUnit", "failureDomain", "k", "m", "crush-device-class", "crush-root", "crush-failure-domain", "stripe_unit"} {
 		if erasure.Get("parameters").Has(key) {
 			a.invalid("$.spec.erasure.parameters", "erasure parameters cannot repeat typed or derived fields")
@@ -259,29 +253,26 @@ func (a *admission) erasure(cluster api.Object) {
 	}
 }
 
-func (a *admission) ibmErasure(cluster api.Object, erasure api.Value) {
-	k, m := numeric(erasure.Get("dataChunks")).Int64(), numeric(erasure.Get("codingChunks")).Int64()
-	profile := fmt.Sprintf("%d+%d", k, m)
-	minimum, row := ibmErasureMinimum[[2]int64{k, m}]
-	if !row && k > 0 && m > 0 {
-		message := "erasure profile " + profile + " is not one of the erasure-coding profiles Bootwright supports"
-		if k == 8 && m == 6 {
-			message = "erasure profile 8+6 is IBM's MSR special case, which needs mon_osd_down_out_subtree_limit = host and a special CRUSH rule that Bootwright does not admit"
+func (a *admission) erasureProfile(cluster api.Object, erasure api.Value) {
+	data, coding := erasure.Get("dataChunks"), erasure.Get("codingChunks")
+	if cluster.Spec().Get("ceph", "topology", "nodes").Len() > 0 && positive(data) && positive(coding) {
+		k, m := numeric(data), numeric(coding)
+		width := new(big.Int).Add(k, m)
+		class := textOf(erasure, "crushDeviceClass")
+		hosts, custom := classHostCount(cluster, class)
+		if width.Cmp(big.NewInt(hosts)) > 0 {
+			if custom {
+				a.issue("api.invariant", "$.spec.erasure", fmt.Sprintf("erasure profile %d+%d needs %d OSD hosts whose OSD services declare device class %s, one per chunk under failure domain host; %d are declared", k, m, width, class, hosts), fmt.Sprintf("declare crush_device_class %s on OSD services of at least %d hosts, or lower dataChunks and codingChunks", class, width))
+			} else {
+				a.issue("api.invariant", "$.spec.erasure", fmt.Sprintf("erasure profile %d+%d needs %d OSD hosts, one per chunk under failure domain host; %d are declared", k, m, width, hosts), fmt.Sprintf("add OSD-bearing hosts until %d carry OSDs, or lower dataChunks and codingChunks", width))
+			}
 		}
-		a.issue("api.invariant", "$.spec.erasure", message, "use 2+2, 4+2, 5+2, 6+2, 8+3 or 8+4")
 	}
-	if hosts, _ := classHostCount(cluster, textOf(erasure, "crushDeviceClass")); row && cluster.Spec().Get("ceph", "topology", "nodes").Len() > 0 && hosts < minimum {
-		a.issue("api.invariant", "$.spec.erasure", fmt.Sprintf("erasure profile %s needs at least %d OSD hosts without mon_osd_down_out_subtree_limit = host; %d are declared", profile, minimum, hosts), fmt.Sprintf("add OSD-bearing hosts until %d carry OSDs, or choose a profile whose minimum the cluster meets", minimum))
-	}
-	plugin := textOf(erasure, "plugin")
-	if slices.Contains([]string{"clay", "lrc", "shec"}, plugin) {
-		a.issue("api.invariant", "$.spec.erasure.plugin", "Bootwright supports only the isa and jerasure erasure-code plugins; "+plugin+" is not supported", "omit spec.erasure.plugin (isa) or set isa or jerasure")
-	}
-	if plugin == "jerasure" && !slices.Contains(jerasureProfiles, [2]int64{k, m}) {
-		a.issue("api.invariant", "$.spec.erasure.plugin", "jerasure is admitted only for the 4+2, 8+3 and 8+4 profiles IBM lists as supported jerasure values; this pool declares "+profile, "omit spec.erasure.plugin to use isa, or choose 4+2, 8+3 or 8+4")
+	if plugin := textOf(erasure, "plugin"); slices.Contains([]string{"clay", "lrc", "shec"}, plugin) {
+		a.issue("api.invariant", "$.spec.erasure.plugin", "Bootwright does not realize the "+plugin+" erasure-code plugin; it realizes isa and jerasure", "omit spec.erasure.plugin (isa) or set isa or jerasure")
 	}
 	if technique := textOf(erasure, "technique"); erasure.Has("technique") && technique != "reed_sol_van" {
-		a.issue("api.invariant", "$.spec.erasure.technique", "only the reed_sol_van technique is qualified; "+technique+" is not", "omit spec.erasure.technique or set reed_sol_van")
+		a.issue("api.invariant", "$.spec.erasure.technique", "Bootwright does not realize the "+technique+" erasure-code technique; it realizes reed_sol_van", "omit spec.erasure.technique or set reed_sol_van")
 	}
 }
 

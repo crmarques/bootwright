@@ -236,18 +236,19 @@ then the policy, then 3/2. A policy and an erasure-coded pool are exclusive:
 an erasure-coded pool places itself through `spec.erasure.crushDeviceClass`.
 
 An erasure-coded pool owns one erasure-code profile and one CRUSH rule, both
-named after the pool, with host failure domain under `default`. For
-distribution `ibm`, `dataChunks+codingChunks` is a row of the
-[IBM Storage Ceph 9.9.1 erasure-code profiles](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-code-profiles)
-Table 1, and the declared OSD hosts (of the declared class, when one is
-declared) meet its minimum: 2+2 needs 5, 4+2 needs 6, 5+2 needs 7, 6+2 needs
-8, 8+3 needs 11 and 8+4 needs 12. 8+6 (MSR) refuses. The plugin is `isa` when
-omitted, `jerasure` is admitted only for 4+2, 8+3 and 8+4, and the other
-[plugins](https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=overview-erasure-code-plugins)
-refuse; the technique is `reed_sol_van`. Other distributions keep the
-`k+m` within declared OSD hosts rule. The stripe unit is a multiple of 4096
-bytes (4096 when omitted), always passed, and `dataChunks` times it fits the
-native 32-bit stripe width. `spec.erasure.parameters` and a non-default
+named after the pool, with host failure domain under `default`. The rule
+places each of the `dataChunks+codingChunks` chunks on a distinct host, so the
+declared OSD hosts (only those whose OSD services declare
+`spec.erasure.crushDeviceClass`, when it names a declared class) number at
+least `dataChunks+codingChunks`, and apply proves the same count from
+`ceph osd tree` before any effect (`crush-capacity`). No other `k`/`m`
+restriction applies; the selected release's monitor refuses a profile it does
+not accept, reported through `nativeError`. The plugin is `isa` when omitted.
+`isa` and `jerasure` are the plugins Bootwright realizes, because its profile
+readback proves exactly their stored keys; `clay`, `lrc` and `shec` refuse at
+admission as not realized. The technique is `reed_sol_van`. The stripe unit is
+a multiple of 4096 bytes (4096 when omitted), always passed, and `dataChunks`
+times it fits the native 32-bit stripe width. `spec.erasure.parameters` and a non-default
 `crushRoot` refuse at plan. An erasure-coded `rbd` or `cephfs-data` pool
 derives irreversible overwrite enablement, as IBM's
 [erasure-coding overwrites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-coding-overwrites)

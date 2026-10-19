@@ -63,6 +63,13 @@ def pool_value(kind="replicated", role="rbd", plugin="isa", device_class="", **c
     return pool
 
 
+def erasure_pool(k, m, plugin="isa", device_class=""):
+    pool = pool_value("erasure", plugin=plugin, device_class=device_class)
+    pool["erasure"].update(dataChunks=k, codingChunks=m)
+    pool.update(size=k + m, minSize=k + 1)
+    return pool
+
+
 def policy_value(device_class="ssd", size=2, rule="ssd-hosts"):
     return {"deviceClass": device_class, "failureDomain": "host", "name": "fast", "root": "default", "rule": rule, "size": size}
 
@@ -736,8 +743,8 @@ def test_pool_validation_holds_the_frozen_contract(change):
 
 
 @pytest.mark.parametrize("change", [
-    {"dataChunks": 3}, {"plugin": "clay"}, {"technique": "cauchy_good"}, {"profile": "other"}, {"stripeUnit": 1000}, {"profileDefaults": {"foo": ""}},
-    {"failureDomain": "osd"}, {"deviceClass": "a/b"},
+    {"dataChunks": 3}, {"plugin": "clay"}, {"plugin": "lrc"}, {"plugin": "shec"}, {"plugin": ["isa"]}, {"technique": "cauchy_good"}, {"profile": "other"},
+    {"stripeUnit": 1000}, {"profileDefaults": {"foo": ""}}, {"failureDomain": "osd"}, {"deviceClass": "a/b"},
 ])
 def test_erasure_validation_holds_the_frozen_contract(change):
     pool = pool_value("erasure")
@@ -746,8 +753,38 @@ def test_erasure_validation_holds_the_frozen_contract(change):
         resource(World(), "pool", pool)
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         resource(World(), "pool", pool_value("erasure"), count=5)
-    jerasure = pool_value("erasure", plugin="jerasure")
-    jerasure["erasure"].update(dataChunks=2, codingChunks=2)
-    jerasure.update(size=4, minSize=3)
+
+
+def test_erasure_host_minimum_is_k_plus_m():
+    resource(World(), "pool", erasure_pool(2, 2), count=4)
     with pytest.raises(ceph_native.Refusal, match="^request$"):
-        resource(World(), "pool", jerasure)
+        resource(World(), "pool", erasure_pool(2, 2), count=3)
+    world = World([["ssd"]] * 4 + [["hdd"]] * 2)
+    native, marks = resource(world, "pool", erasure_pool(2, 2, device_class="ssd"))
+    assert native.pool() == {"changed": True}
+    world = World([["ssd"]] * 3 + [["hdd"]] * 3)
+    native, marks = resource(world, "pool", erasure_pool(2, 2, device_class="ssd"))
+    with pytest.raises(ceph_native.Refusal, match="^crush-capacity$"):
+        native.pool()
+    assert "pool-attempt-volumes.json" not in marks.records and world.effects() == [("write", "pool-volumes.json")]
+
+
+@pytest.mark.parametrize("k, m, plugin", [(2, 1, "isa"), (3, 2, "jerasure"), (2, 2, "jerasure"), (8, 6, "isa")])
+def test_any_k_m_profile_reaches_the_profile_set(k, m, plugin):
+    world = World([["hdd"]] * (k + m))
+    native, unused = resource(world, "pool", erasure_pool(k, m, plugin), count=k + m)
+    assert native.pool() == {"changed": True}
+    assert ("osd", "erasure-code-profile", "set", "volumes", "k=" + str(k), "m=" + str(m), "plugin=" + plugin, "technique=reed_sol_van",
+            "crush-failure-domain=host", "crush-root=default", "stripe_unit=4096") in world.log
+    assert ready(native)[0] is True
+
+
+@pytest.mark.parametrize("plugin, extra, accepted", [
+    ("isa", {}, True), ("jerasure", {}, True), ("jerasure", {"w": "16"}, False), ("jerasure", {"jerasure-per-chunk-alignment": "true"}, False),
+    ("isa", {"w": "8"}, False),
+])
+def test_profile_readback_still_proves_isa_and_jerasure_defaults(plugin, extra, accepted):
+    world = World([["hdd"]] * 5)
+    native, unused = resource(world, "pool", erasure_pool(3, 2, plugin), count=5)
+    world.profiles["volumes"] = dict(normalized(native.profile_passed(native.request["pool"])), **extra)
+    assert native.profile_matches(native.request["pool"]) is accepted

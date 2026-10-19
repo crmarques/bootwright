@@ -51,9 +51,8 @@ RBD_MEMBERS = frozenset(("dataPool", "features", "name", "pool", "sizeBytes"))
 RBD_FEATURES = ("layering", "exclusive-lock", "object-map", "fast-diff", "deep-flatten", "journaling")
 # librbd refuses an object map over 256000000 objects (src/librbd/ObjectMap.cc:73-76); rbd_default_order 22 makes them 4 MiB.
 RBD_OBJECT_MAP_BYTES = 256000000 << 22
-# Each supported erasure-code profile row and the OSD hosts it needs; jerasure only on its three rows.
-ERASURE_ROWS = {(2, 2): 5, (4, 2): 6, (5, 2): 7, (6, 2): 8, (8, 3): 11, (8, 4): 12}
-JERASURE_ROWS = frozenset(((4, 2), (8, 3), (8, 4)))
+# The plugins whose stored profile profile_matches proves: isa, and jerasure with its two frozen defaults.
+ERASURE_PLUGINS = frozenset(("isa", "jerasure"))
 APPLICATIONS = {"rbd": "rbd", "cephfs-metadata": "cephfs", "cephfs-data": "cephfs", "rgw": "rgw"}
 POOL_MEMBERS = frozenset(("application", "autoscale", "compression", "crushRule", "filesystem", "minSize", "name", "overwrites", "pgNum", "quota", "role",
                           "size", "type"))
@@ -212,8 +211,8 @@ def validate_erasure(pool, osd_hosts):
     erasure = pool["erasure"]
     require(isinstance(erasure, dict) and set(erasure) == ERASURE_MEMBERS)
     row = (erasure["dataChunks"], erasure["codingChunks"])
-    require(all(type(value) is int for value in row) and row in ERASURE_ROWS and osd_hosts >= ERASURE_ROWS[row])
-    require(erasure["plugin"] == "isa" or erasure["plugin"] == "jerasure" and row in JERASURE_ROWS)
+    require(all(type(value) is int and value > 0 for value in row) and osd_hosts >= row[0] + row[1])
+    require(isinstance(erasure["plugin"], str) and erasure["plugin"] in ERASURE_PLUGINS)
     require(erasure["technique"] == "reed_sol_van" and erasure["failureDomain"] == "host" and erasure["root"] == "default")
     require(erasure["profile"] == pool["name"] == pool["crushRule"] and device_class(erasure["deviceClass"]))
     require(type(erasure["stripeUnit"]) is int and erasure["stripeUnit"] > 0 and erasure["stripeUnit"] % 4096 == 0)
@@ -346,7 +345,7 @@ class ResourceWorker(ceph_native.Worker):
         """Prove the pool's own profile and derived rule are absent, or this operation's, before the create that derives the rule."""
         name, erasure = pool["name"], pool["erasure"]
         hosts = self.osd_tree_hosts(erasure["deviceClass"])
-        require(hosts >= ERASURE_ROWS[(erasure["dataChunks"], erasure["codingChunks"])], "crush-capacity")
+        require(hosts >= erasure["dataChunks"] + erasure["codingChunks"], "crush-capacity")
         profiles, rules = self.profile_names(), self.rule_names()
         if not recorded:
             require(name not in profiles, "foreign-profile")

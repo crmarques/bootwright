@@ -284,6 +284,8 @@ func TestErasureProfileDefaultsFrozenPerPlugin(t *testing.T) {
 		"isa without a class": {requestMap("dataChunks", 4, "codingChunks", 2), unclassed},
 		"isa with ssd":        {requestMap("dataChunks", 4, "codingChunks", 2, "crushDeviceClass", "ssd"), base},
 		"jerasure 4+2":        {requestMap("dataChunks", 4, "codingChunks", 2, "plugin", "jerasure"), jerasure},
+		"jerasure 2+2":        {requestMap("dataChunks", 2, "codingChunks", 2, "plugin", "jerasure"), jerasure},
+		"isa 3+2":             {requestMap("dataChunks", 3, "codingChunks", 2), unclassed},
 	} {
 		r, err := planned(t, planCatalog(6, 6, nil, erasurePool("volumes", test.erasure)), api.StoragePool, "volumes")
 		if err != nil || !maps.Equal(r.Pool.Erasure.ProfileDefaults, test.want) {

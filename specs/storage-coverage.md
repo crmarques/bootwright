@@ -171,7 +171,7 @@ The last column names the item that owns the implementation and its evidence.
 | --- | --- | --- |
 | Hosts and native bootstrap | Managed RHEL, entitled package/registry access, time and DNS, non-root orchestration SSH login with qualified privilege escalation, public/replication networks (a declared replication network is refused before any effect unless every Ceph host's Machine declares an address inside it, [refusal table](storage.md#refusal-table)), stable FSID, MON quorum and active/standby MGR, explicit IBM call-home choice, qualified config and manager modules | [B490](milestones/m2.md#b490), [B80](milestones/m2.md#b80) |
 | Devices and OSDs | Explicit devices and bounded selectors, drive groups, BlueStore data/DB/WAL separation, device class, slots and allocation, encrypted OSDs and supported TPM2 variants; prove every destructive target and owned cleanup | [B475](milestones/m2.md#b475) |
-| CRUSH and pools | Host/site failure domains, replicated and supported erasure profiles, application tags, autoscaling/PG bounds, quotas, compression, device classes where supported, RBD initialization and data-pool selection | [B81](milestones/m2.md#b81) |
+| CRUSH and pools | Host/site failure domains, replicated and erasure profiles, application tags, autoscaling/PG bounds, quotas, compression, device classes where supported, RBD initialization and data-pool selection | [B81](milestones/m2.md#b81) |
 | CephFS | Replicated metadata, replicated or supported EC data, multiple data pools and explicit default/layout, MDS placement and standby/replay, subvolume groups, subvolumes and service-consumer references | [B492](milestones/m2.md#b492) |
 | RGW | Service placement, realm/zonegroup/zone bootstrap, pools, users/buckets/credentials needed to prove S3 access, backend ports, TLS public endpoints and HA ingress | [B477](milestones/m2.md#b477) |
 | NFS | NFS-Ganesha placement, supported CephFS/RGW exports, client restrictions and squash, ingress transport and VIP failover; native release decides backend/TLS support | [B478](milestones/m2.md#b478) |
@@ -429,21 +429,19 @@ failover from a VIP.
 require BlueStore and explicit overwrite enablement for RBD/CephFS data, with
 replicated metadata and explicit data-pool/layout selection. RGW keeps its
 metadata/index pools replicated and uses EC only where the release permits.
-The qualified patch decides supported EC plugins/profiles and workload limits;
-an older support article and a newer native option are not interchangeable.
+The selected release's native tools decide which EC plugins, profiles and
+workload limits they accept and report a refusal through `nativeError`.
 
-B81 records the EC decision (D160, OD25). A pool's
-`k+m` is a row of [Table 1](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-code-profiles)
-and the declared OSD hosts meet its minimum without
-`mon_osd_down_out_subtree_limit = host`: 2+2 needs 5, 4+2 needs 6, 5+2 needs
-7, 6+2 needs 8, 8+3 needs 11 and 8+4 needs 12. 2+2 on four hosts and the 8+6
-MSR case refuse, because the core config map admits neither that monitor
-option nor a special CRUSH rule. The plugin defaults to `isa`, `jerasure` is
-admitted only on 4+2, 8+3 and 8+4, and `clay`, `lrc` and `shec` refuse by
-omission from the [IBM plugin list](https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=overview-erasure-code-plugins).
-FastEC (`allow_ec_optimizations`) is not exposed; its native default is false
-(upstream `global.yaml.in` at v20.2.1, unverified for the IBM image until
-B472). Site and rack failure domains and CRUSH roots other than `default` are
+B81 records the EC decision (D160, OD25, as D157 amends it). An
+erasure-coded pool needs `k+m` OSD hosts of its device class under failure
+domain host, one per chunk; admission checks the declared hosts and apply
+proves the count from `ceph osd tree`. No `k`/`m` pair is otherwise
+restricted, and a profile the selected release's monitor refuses is reported
+through `nativeError`. The plugin defaults to `isa`; `isa` and `jerasure` with
+technique `reed_sol_van` are what Bootwright realizes, and `clay`, `lrc` and
+`shec` refuse as not realized. FastEC (`allow_ec_optimizations`) is not
+exposed; its native default is false (upstream `global.yaml.in` at v20.2.1,
+unverified for the IBM image until B472). Site and rack failure domains and CRUSH roots other than `default` are
 parked (D160, OD25). The [admission contract](api/storage.md#pool-protection-and-erasure-coding)
 owns the rules.
 
@@ -484,17 +482,11 @@ before B484's exit.
 | U01 | Stretch topology in a non-stretch milestone | [Stretch constraints](#stretch-constraints) (M2e) | [B486](milestones/m2.md#b486) | admission `api.invariant` on StorageCluster `$.spec.ceph.topology.stretch`, beside `api.invariant` on each StoragePool `$.spec.replicated` that the stretch default makes invalid | tested | [U01.yaml](../cmd/bootwright/testdata/matrix/U01.yaml) |
 | U02 | Host-domain replicas above the declared OSD hosts | [IBM colocation](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=recommendations-colocation) | [B81](milestones/m2.md#b81) | admission `api.invariant` on StoragePool `$.spec.replicated.size` | tested | [U02.yaml](../cmd/bootwright/testdata/matrix/U02.yaml) |
 | U03 | Replicated size equal to the OSD-host count on IBM | [IBM colocation](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=recommendations-colocation) ("three replicas is four nodes") | [B81](milestones/m2.md#b81) | admission `api.invariant` on StoragePool `$.spec.replicated.size` (IBM's extra-host rule) | tested | [U03.yaml](../cmd/bootwright/testdata/matrix/U03.yaml) |
-| U04a | EC `k+m` above the declared OSD hosts | [IBM EC profiles](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-code-profiles), Table 1 | [B81](milestones/m2.md#b81) | admission `api.invariant` on StoragePool `$.spec.erasure` | tested | [U04a.yaml](../cmd/bootwright/testdata/matrix/U04a.yaml) |
-| U04b | EC 2+2 on exactly four OSD hosts without `mon_osd_down_out_subtree_limit = host` | [IBM EC profiles](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-code-profiles), Table 1 (2+2 needs five hosts, four only as the edge case) | [B81](milestones/m2.md#b81) | none yet: admission admits it | gap | none until B81 refuses it on a four-OSD-host base |
-| U04c | An EC `k`/`m` pair that Table 1 does not list, such as 3+1 | [IBM EC profiles](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-code-profiles), Table 1 (unsupported by omission) | [B81](milestones/m2.md#b81) | none yet: admission admits it | gap | none until B81 refuses it or records, with a source, that admission does not restrict pairs |
+| U04a | EC `k+m` above the declared OSD hosts of the pool's device class | [upstream erasure code](https://docs.ceph.com/en/tentacle/rados/operations/erasure-code/) and [upstream CRUSH device classes](https://docs.ceph.com/en/tentacle/rados/operations/crush-map/#device-classes) (one chunk per host under failure domain host; rule semantics, not a vendor statement) | [B81](milestones/m2.md#b81) | admission `api.invariant` on StoragePool `$.spec.erasure` | tested | [U04a.yaml](../cmd/bootwright/testdata/matrix/U04a.yaml) |
 | U05 | EC on a pool role that does not permit it (today only `cephfs-metadata`) | [IBM EC overwrites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-coding-overwrites) | [B81](milestones/m2.md#b81) | admission `api.invariant` on StoragePool `$.spec.role` | tested | [U05.yaml](../cmd/bootwright/testdata/matrix/U05.yaml) |
 | U06 | EC CephFS metadata pool | [IBM EC overwrites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-coding-overwrites) | [B81](milestones/m2.md#b81), [B492](milestones/m2.md#b492) | admission `api.invariant` on StoragePool `$.spec.type` | tested | [U06.yaml](../cmd/bootwright/testdata/matrix/U06.yaml) |
 | U07 | `clusterSSH.transport: native`, or the transport omitted | [Release qualification](#release-qualification); [upstream ssh.py v20.2.1](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/ssh.py#L161) | [B79](milestones/m2.md#b79) (refusal), B595 (table) | [Ceph refusal table](storage.md#refusal-table): Incomplete or unsafe Ceph coordinates or transport | tested | [U07.yaml](../cmd/bootwright/testdata/matrix/U07.yaml) |
 | U09 | Replicated size above the OSD hosts that carry the pool rule's device class | [upstream CRUSH device classes](https://docs.ceph.com/en/tentacle/rados/operations/crush-map/#device-classes) (rule semantics, not an IBM statement) | [B81](milestones/m2.md#b81) | none yet: the OSD-host count ignores device class | gap | none until B81 counts only the OSD hosts of the rule's class |
-
-IBM supports EC 8+6 on four hosts with four OSDs each only as its MSR special
-case. B81 does not admit MSR; 8+6 refuses at admission as a profile outside
-Table 1 (D160, OD25).
 
 ## Acceptance evidence
 

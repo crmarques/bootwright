@@ -119,33 +119,8 @@ func noIssues(t *testing.T, issues []api.Issue) {
 	}
 }
 
-const tableRemedy = "use 2+2, 4+2, 5+2, 6+2, 8+3 or 8+4"
-
-func TestErasureProfileMustBeAnIBMTableRow(t *testing.T) {
-	onlyIssue(t, admitted(clusterOf(t, 6, true), ecPool("ec", chunks(3, 2))), "$.spec.erasure", "erasure profile 3+2 is not one of the erasure-coding profiles Bootwright supports", tableRemedy)
-	noIssues(t, admitted(clusterOf(t, 6, true), ecPool("ec", chunks(4, 2))))
-	onlyIssue(t, admitted(clusterOf(t, 14, true), ecPool("ec", chunks(8, 6))), "$.spec.erasure", "erasure profile 8+6 is IBM's MSR special case, which needs mon_osd_down_out_subtree_limit = host and a special CRUSH rule that Bootwright does not admit", tableRemedy)
-}
-
-func TestErasureHostMinimumFollowsIBMTable(t *testing.T) {
-	onlyIssue(t, admitted(clusterOf(t, 4, true), ecPool("ec", chunks(2, 2))), "$.spec.erasure", "erasure profile 2+2 needs at least 5 OSD hosts without mon_osd_down_out_subtree_limit = host; 4 are declared", "add OSD-bearing hosts until 5 carry OSDs, or choose a profile whose minimum the cluster meets")
-	noIssues(t, admitted(clusterOf(t, 5, true), ecPool("ec", chunks(2, 2))))
-}
-
-func TestJerasureLimitedToProseRows(t *testing.T) {
-	onlyIssue(t, admitted(clusterOf(t, 5, true), ecPool("ec", chunks(2, 2, "plugin", "jerasure"))), "$.spec.erasure.plugin", "jerasure is admitted only for the 4+2, 8+3 and 8+4 profiles IBM lists as supported jerasure values; this pool declares 2+2", "omit spec.erasure.plugin to use isa, or choose 4+2, 8+3 or 8+4")
-	noIssues(t, admitted(clusterOf(t, 5, true), ecPool("ec", chunks(2, 2, "plugin", "isa"))))
-	noIssues(t, admitted(clusterOf(t, 6, true), ecPool("ec", chunks(4, 2, "plugin", "jerasure"))))
-}
-
-func TestUnsupportedPluginsRefuse(t *testing.T) {
-	for _, plugin := range []string{"clay", "lrc", "shec"} {
-		onlyIssue(t, admitted(clusterOf(t, 6, true), ecPool("ec", chunks(4, 2, "plugin", plugin))), "$.spec.erasure.plugin", "Bootwright supports only the isa and jerasure erasure-code plugins; "+plugin+" is not supported", "omit spec.erasure.plugin (isa) or set isa or jerasure")
-	}
-}
-
 func TestTechniqueOnlyReedSolVan(t *testing.T) {
-	onlyIssue(t, admitted(clusterOf(t, 6, true), ecPool("ec", chunks(4, 2, "technique", "cauchy_good"))), "$.spec.erasure.technique", "only the reed_sol_van technique is qualified; cauchy_good is not", "omit spec.erasure.technique or set reed_sol_van")
+	onlyIssue(t, admitted(clusterOf(t, 6, true), ecPool("ec", chunks(4, 2, "technique", "cauchy_good"))), "$.spec.erasure.technique", "Bootwright does not realize the cauchy_good erasure-code technique; it realizes reed_sol_van", "omit spec.erasure.technique or set reed_sol_van")
 	noIssues(t, admitted(clusterOf(t, 6, true), ecPool("ec", chunks(4, 2, "technique", "reed_sol_van"))))
 	noIssues(t, admitted(clusterOf(t, 6, true), ecPool("ec", chunks(4, 2))))
 }
@@ -237,7 +212,7 @@ func TestPolicyRuleNamesUniqueAndApartFromECPools(t *testing.T) {
 
 func TestGenericPoolRemediesNameTheNextStep(t *testing.T) {
 	onlyIssue(t, admitted(fixtureCatalog(), object(api.StoragePool, "block", m("clusterRef", "storage", "role", "rbd", "replicated", m("size", 4)))), "$.spec.replicated.size", "host-domain replicas exceed declared OSD-host capacity", "add OSD-bearing hosts, or lower replicated.size to at most the declared OSD-host count")
-	onlyIssue(t, admitted(fixtureCatalog(), ecPool("ec", chunks(4, 2))), "$.spec.erasure", "erasure data and coding chunks exceed declared OSD-host capacity", "add OSD-bearing hosts, or lower dataChunks and codingChunks")
+	onlyIssue(t, admitted(fixtureCatalog(), ecPool("ec", chunks(4, 2))), "$.spec.erasure", "erasure profile 4+2 needs 6 OSD hosts, one per chunk under failure domain host; 3 are declared", "add OSD-bearing hosts until 6 carry OSDs, or lower dataChunks and codingChunks")
 	issues := admitted(fixtureCatalog(), object(api.StoragePool, "meta-ec", m("clusterRef", "storage", "type", "erasure", "role", "cephfs-metadata", "erasure", chunks(2, 1))))
 	want := []api.Issue{
 		{Code: "api.invariant", Field: "$.spec.role", Message: "pool role does not permit erasure protection", Remediation: "use role rbd, cephfs-data or rgw for an erasure-coded pool, or set type: replicated"},
@@ -258,12 +233,47 @@ func TestErasureDeviceClassMustBeAutomaticOrDeclared(t *testing.T) {
 	noIssues(t, admitted(clusterOf(t, 6, true, pathLevel), pool))
 }
 
-func TestErasureHostMinimumCountsOnlyDeclaringHosts(t *testing.T) {
+const (
+	noClassMessage = "erasure profile 2+2 needs 4 OSD hosts, one per chunk under failure domain host; 3 are declared"
+	noClassRemedy  = "add OSD-bearing hosts until 4 carry OSDs, or lower dataChunks and codingChunks"
+)
+
+func TestErasureProfileNeedsKPlusMOSDHostsOfItsClass(t *testing.T) {
+	onlyIssue(t, admitted(clusterOf(t, 3, true), ecPool("ec", chunks(2, 2))), "$.spec.erasure", noClassMessage, noClassRemedy)
+	noIssues(t, admitted(clusterOf(t, 4, true), ecPool("ec", chunks(2, 2))))
+	onlyIssue(t, admitted(clusterOf(t, 3, false), ecPool("ec", chunks(2, 2))), "$.spec.erasure", noClassMessage, noClassRemedy)
 	data := m("service_type", "osd", "service_id", "data", "placement", m("label", "storage"), "spec", m("data_devices", m("paths", api.StringList("/dev/vdb"))))
 	fast := func(hosts ...string) api.Value {
 		return osdWithClass(m("hosts", api.StringList(hosts...)), m("crush_device_class", "fast", "data_devices", m("paths", api.StringList("/dev/vdc"))))
 	}
 	pool := ecPool("ec", chunks(4, 2, "crushDeviceClass", "fast"))
-	onlyIssue(t, admitted(clusterOf(t, 6, true, data, fast("node-1", "node-2", "node-3", "node-4", "node-5")), pool), "$.spec.erasure", "erasure profile 4+2 needs at least 6 OSD hosts without mon_osd_down_out_subtree_limit = host; 5 are declared", "add OSD-bearing hosts until 6 carry OSDs, or choose a profile whose minimum the cluster meets")
+	onlyIssue(t, admitted(clusterOf(t, 6, true, data, fast("node-1", "node-2", "node-3", "node-4", "node-5")), pool), "$.spec.erasure", "erasure profile 4+2 needs 6 OSD hosts whose OSD services declare device class fast, one per chunk under failure domain host; 5 are declared", "declare crush_device_class fast on OSD services of at least 6 hosts, or lower dataChunks and codingChunks")
 	noIssues(t, admitted(clusterOf(t, 6, true, data, fast("node-1", "node-2", "node-3", "node-4", "node-5", "node-6")), pool))
+}
+
+func TestErasureProfileOutsideTheFormerVendorTableIsAdmitted(t *testing.T) {
+	for _, test := range []struct{ hosts, k, m int }{{5, 3, 2}, {14, 8, 6}, {3, 2, 1}, {4, 3, 1}} {
+		noIssues(t, admitted(clusterOf(t, test.hosts, true), ecPool("ec", chunks(test.k, test.m))))
+	}
+}
+
+func TestJerasureIsAdmittedOnAnyProfile(t *testing.T) {
+	for _, test := range []struct {
+		hosts, k, m int
+		ibm         bool
+	}{{4, 2, 2, true}, {5, 3, 2, true}, {14, 8, 6, true}, {3, 2, 1, false}} {
+		noIssues(t, admitted(clusterOf(t, test.hosts, test.ibm), ecPool("ec", chunks(test.k, test.m, "plugin", "jerasure"))))
+	}
+}
+
+func TestOnlyPluginsTheProfileReadbackRealizesAreAdmitted(t *testing.T) {
+	for _, ibm := range []bool{true, false} {
+		for _, plugin := range []string{"clay", "lrc", "shec"} {
+			onlyIssue(t, admitted(clusterOf(t, 6, ibm), ecPool("ec", chunks(4, 2, "plugin", plugin))), "$.spec.erasure.plugin", "Bootwright does not realize the "+plugin+" erasure-code plugin; it realizes isa and jerasure", "omit spec.erasure.plugin (isa) or set isa or jerasure")
+		}
+		for _, plugin := range []string{"isa", "jerasure"} {
+			noIssues(t, admitted(clusterOf(t, 6, ibm), ecPool("ec", chunks(4, 2, "plugin", plugin))))
+		}
+		noIssues(t, admitted(clusterOf(t, 6, ibm), ecPool("ec", chunks(4, 2))))
+	}
 }

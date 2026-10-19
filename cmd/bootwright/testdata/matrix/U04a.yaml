@@ -10,8 +10,8 @@ expect:
   kind: StoragePool
   name: rbd-data
   field: $.spec.erasure
-  message: "erasure profile 2+2 needs at least 5 OSD hosts without mon_osd_down_out_subtree_limit = host; 3 are declared"
-  remediation: add OSD-bearing hosts until 5 carry OSDs, or choose a profile whose minimum the cluster meets
+  message: "erasure profile 2+2 needs 4 OSD hosts, one per chunk under failure domain host; 3 are declared"
+  remediation: add OSD-bearing hosts until 4 carry OSDs, or lower dataChunks and codingChunks
 - code: api.invariant
   kind: StorageRBDImage
   name: rbd-disk
