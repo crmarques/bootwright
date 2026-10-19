@@ -448,6 +448,89 @@ def test_nfs_unit_observe_reads_only(tmp_path):
     assert evidence["owned"] and evidence["exists"]
 
 
+def ready_unit(tmp_path):
+    """A haproxy-mode unit whose every readiness condition holds; each test below breaks exactly one."""
+    request = unit_request("haproxy")
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    worker(monitor, markers).unit()
+    monitor.running = [daemon(request, kind, "ingress.nfs.files", host, "nfs.files." + host + ".abcdef")
+                       for kind in ("haproxy", "keepalived") for host in ("node-1", "node-2")]
+    monitor.running += [daemon(request, "nfs", "nfs.files", host, "files." + str(i) + ".0." + host + ".abcdef") for i, host in enumerate(("node-1", "node-2"))]
+    native = worker(monitor, markers)
+    assert native.observe_resource(native.empty_evidence(), True) is True and native.blocking == []
+    return markers, monitor
+
+
+def observe(monitor, markers):
+    native = worker(monitor, markers)
+    return native.observe_resource(native.empty_evidence(), True), native.blocking
+
+
+def test_nfs_unit_readiness_needs_the_cluster_listed_by_the_nfs_module(tmp_path):
+    markers, monitor = ready_unit(tmp_path)
+    monitor.clusters = []
+    before = records(markers)
+    assert observe(monitor, markers)[0] is False
+    assert records(markers) == before and monitor.mutations == [("orch", "apply", "-i", "-")]
+
+
+def test_nfs_unit_readiness_needs_the_recorded_pool_identity(tmp_path):
+    markers, monitor = ready_unit(tmp_path)
+    os.remove(os.path.join(markers.path, "nfs-pool-id.json"))
+    before = records(markers)
+    assert observe(monitor, markers)[0] is False
+    assert records(markers) == before and markers.read("nfs-pool-id.json") is None
+    assert monitor.mutations == [("orch", "apply", "-i", "-")]
+
+
+def test_nfs_unit_observation_refuses_an_unclaimed_nfs_pool(tmp_path):
+    markers, monitor = ready_unit(tmp_path)
+    os.remove(os.path.join(markers.path, "nfs-pool.json"))
+    before = records(markers)
+    with pytest.raises(ceph_native.Refusal, match="^nfs-pool-foreign$"):
+        observe(monitor, markers)
+    assert records(markers) == before
+
+
+def test_nfs_unit_settle_waits_for_the_nfs_application(tmp_path):
+    request = unit_request("direct")
+    markers = markers_for(tmp_path, request)
+    markers.write("nfs-pool.json", {"owner": OWNER, "fsid": FSID, "pool": ".nfs"})
+    monitor = Monitor(request, pools=[nfs_pool(9, application=False)], creates_pool=False)
+    native = worker(monitor, markers)
+    ticks = iter(range(0, 10000, 5))
+    native.clock = lambda: next(ticks)
+    with pytest.raises(ceph_native.Refusal, match="^not-ready$"):
+        ceph_native_nfs.settle(native, request["service"])
+    assert markers.read("nfs-pool-id.json") is None
+    assert monitor.log.count(("osd", "pool", "ls", "detail")) > 1 and monitor.mutations == []
+
+
+def test_nfs_unit_readiness_does_not_count_a_daemon_without_image_digests(tmp_path):
+    markers, monitor = ready_unit(tmp_path)
+    row = next(row for row in monitor.running if row["daemon_type"] == "nfs")
+    row["container_image_digests"] = []
+    ready, blocking = observe(monitor, markers)
+    assert ready is False and blocking == ["nfs@nfs.files"]
+
+
+@pytest.mark.parametrize("foreign", ["stored", "running"])
+def test_nfs_unit_observation_refuses_an_unowned_service_created_outside(tmp_path, foreign):
+    request = unit_request("direct")
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    if foreign == "stored":
+        monitor.specs = {"nfs.files": request["service"]["documents"][0]}
+    else:
+        monitor.running = [daemon(request, "nfs", "nfs.files", "node-1", "files.0.0.node-1.abcdef")]
+    before = records(markers)
+    native = worker(monitor, markers)
+    with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
+        native.observe_resource(native.empty_evidence(), True)
+    assert records(markers) == before and monitor.mutations == []
+
+
 def test_unit_unfinished_reports_its_own_inputs_record(tmp_path):
     request = unit_request("haproxy")
     markers = markers_for(tmp_path, request)
