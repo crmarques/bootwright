@@ -234,3 +234,52 @@ func TestPGBudgetCountsTheSharedRGWRootOnce(t *testing.T) {
 	_, err := kindPlan(api.StorageObjectGateway, catalogFor(206))
 	refusedWith(t, err, "api.invariant", "pool placement groups for CRUSH rule replicated_rule exceed the per-OSD bound (1502 > 250 × 6)", remedy)
 }
+
+func TestGatewayFreezesTheBoundRGWServiceSpec(t *testing.T) {
+	service := requestMap("service_type", "rgw", "service_id", "objects", "placement", requestMap("label", "mon", "count", 2), "spec", requestMap(
+		"rgw_frontend_port", 8443, "rgw_frontend_type", "beast", "rgw_exit_timeout_secs", 90, "only_bind_port_on_networks", true, "ssl", true))
+	withService := func(spec api.Value) api.Value {
+		spec = withCorePair(spec)
+		return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), service)...), "ceph", "services")
+	}
+	g := gatewayOf(t, gatewayBlock(t, planCatalog(3, 3, withService, objectGateway("objects")))).Gateway
+	var document struct {
+		Spec map[string]any `json:"spec"`
+	}
+	if err := json.Unmarshal(g.Documents[0], &document); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"only_bind_port_on_networks": true, "rgw_exit_timeout_secs": float64(90), "rgw_frontend_port": float64(8443), "rgw_frontend_type": "beast",
+		"rgw_realm": "objects", "rgw_zone": "objects", "rgw_zonegroup": "objects", "ssl": true}
+	if !reflect.DeepEqual(document.Spec, want) {
+		t.Fatalf("the rgw document froze spec %v, want %v", document.Spec, want)
+	}
+}
+
+func TestGatewayPartialEvidenceScope(t *testing.T) {
+	r := gatewayRuntimeRequest()
+	partial := func(change func(*Evidence)) Evidence {
+		e := gatewayEvidence(r)
+		e.Ready, e.Partial = false, true
+		change(&e)
+		return e
+	}
+	for name, e := range map[string]Evidence{
+		"its zone and endpoint": partial(func(*Evidence) {}),
+		"no resource":           partial(func(e *Evidence) { e.Resource = ResourceEvidence{} }),
+	} {
+		if effect, err := EvaluateEvidence(evidenceBytes(t, e), r, "digest", false); err != nil || effect != reconciliation.EffectPartial {
+			t.Errorf("partial gateway evidence with %s is %s (%v)", name, effect, err)
+		}
+	}
+	for name, change := range map[string]func(*Evidence){
+		"another endpoint":  func(e *Evidence) { e.Resource.Path = "other.example.test" },
+		"uppercase zone id": func(e *Evidence) { e.Resource.ID = strings.ToUpper(e.Resource.ID) },
+		"numeric zone id":   func(e *Evidence) { e.Resource.ID = "7" },
+		"a client":          func(e *Evidence) { e.Client = "client.objects" },
+	} {
+		if effect, err := EvaluateEvidence(evidenceBytes(t, partial(change)), r, "digest", false); err == nil || effect != reconciliation.EffectUnknown {
+			t.Errorf("partial gateway evidence with %s is %s (%v)", name, effect, err)
+		}
+	}
+}
