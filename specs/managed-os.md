@@ -700,7 +700,12 @@ with: `the declared network of <m> cannot
 change under this apply: <recovery>, correct the network of <m> so <address>
 stays reachable from the controller, then run bootwright apply`; a running network that differs from
 its declaration after the restart ends with the same text without the
-reachability clause. A connection that does not come back says `its state is
+reachability clause. A difference the inspect step finds, which restarted
+nothing because an earlier attempt of this apply committed and restarted the
+machine, names the differences and both ways back: `reboot <m> so it returns to
+its committed network, then run bootwright apply`, when the network changed on
+<m> since, and `<recovery>, correct the network of <m>, then run bootwright
+apply`, when the declared network does not hold across a restart. A connection that does not come back says `its state is
 unknown: repeat bootwright apply, and if <m> stays unreachable, restore its
 network from its console`. A failed connection, commit, marker write or
 power-off request, a power-off the controller never reports and a guest that
