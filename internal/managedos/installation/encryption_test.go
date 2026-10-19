@@ -183,7 +183,7 @@ func TestFIPSDiskEncryptionPinsPBKDF2(t *testing.T) {
 }
 
 func TestDiskEncryptionPostBindsTPM2WithTheNativePCRConfig(t *testing.T) {
-	const pass = `test "$(clevis luks pass -d "${bootwright_device}" -s "${bootwright_slot}")" = "${bootwright_recovery}"`
+	const pass = `clevis luks pass -d "${bootwright_device}" -s "${bootwright_slot}" | cryptsetup open --test-passphrase --key-slot "${bootwright_slot}" --key-file - "${bootwright_device}"`
 	for _, row := range []struct {
 		ids    []int
 		config string
@@ -198,6 +198,11 @@ func TestDiskEncryptionPostBindsTPM2WithTheNativePCRConfig(t *testing.T) {
 		bound := lineIndex(t, lines, bind)
 		if slices.Contains(lines, pass) != row.pass {
 			t.Fatalf("PCRs %v: the clevis luks pass proof is present = %t", row.ids, !row.pass)
+		}
+		for _, line := range lines {
+			if strings.Contains(line, "clevis luks pass") && strings.Contains(line, "bootwright_recovery") {
+				t.Fatalf("PCRs %v: %q compares the slot's clevis-generated key with the recovery passphrase, which clevis never stores in its slot", row.ids, line)
+			}
 		}
 		post := slices.Index(lines, "%post --erroronfail --interpreter=/bin/bash")
 		marker := lineIndex(t, lines, "%post --erroronfail")

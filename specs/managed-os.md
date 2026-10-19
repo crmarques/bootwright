@@ -904,7 +904,13 @@ and anaconda's `preScriptPass`
 **Unlock.** `%packages` adds `clevis-dracut`, `clevis-luks` and
 `clevis-systemd`, and a `%post` binds every `crypto_LUKS` device with
 `clevis luks bind -y -k - tpm2 <config>`, proves the new `tpm2` slot, fails
-when no device was bound, and regenerates the initramfs with dracut. The
+when no device was bound, and regenerates the initramfs with dracut. Clevis
+stores in that slot a key it generates, never the recovery passphrase, so with
+no `pcrIds` the proof pipes the key `clevis luks pass` decrypts from the slot
+to `cryptsetup open --test-passphrase --key-slot <slot> --key-file -` on the
+device
+([clevis-luks-pass(1)](https://github.com/latchset/clevis/blob/master/src/luks/clevis-luks-pass.1.adoc));
+with `pcrIds` it proves that clevis lists the slot. The
 configuration spells `pcr_bank` and `pcr_ids` from `unlock.tpm2`; with no
 `pcrIds` it is `{}`, which binds the disk to the TPM with no PCR policy: that
 protects a disk copied without its TPM, not a tampered boot. Clevis seals the

@@ -168,7 +168,7 @@ func encryptionPostLines(input Installation) []string {
 		`test -n "${bootwright_slot}"`,
 	)
 	if len(input.DiskEncryption.PCRIDs) == 0 {
-		lines = append(lines, `test "$(clevis luks pass -d "${bootwright_device}" -s "${bootwright_slot}")" = "${bootwright_recovery}"`)
+		lines = append(lines, `clevis luks pass -d "${bootwright_device}" -s "${bootwright_slot}" | cryptsetup open --test-passphrase --key-slot "${bootwright_slot}" --key-file - "${bootwright_device}"`)
 	}
 	return append(lines,
 		"bootwright_bound=$((bootwright_bound + 1))",
