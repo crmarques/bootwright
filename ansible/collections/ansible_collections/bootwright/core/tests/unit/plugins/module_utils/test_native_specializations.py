@@ -30,7 +30,7 @@ LICENSE_CALL_ID = "ceph-bootstrap-license-call-continues"
 CURRENT_VARIANTS = dict(GENERAL, **{"ceph.bootstrap.license-call-refusal": "continue-seed"})
 # The IBM bootstrap's own call as both signed 20.2.x zipapps list it (__main__.py:3445-3447 in 20.2.1-405, :3534-3535 in 20.2.2-349).
 LICENSE_CALL_SOURCE = "def bootstrap(ctx, cli):\n    if ctx.ibm_build:\n        cli(['orch', 'accept-license', '--image', ctx.image])\n"
-SEAM_CALLERS = frozenset(("ceph_native.py", "ceph_tunnel_staging.py"))
+SEAM_CALLERS = frozenset(("ceph_native.py", "ceph_native_resources.py", "ceph_tunnel_staging.py"))
 SEAMLESS = ("ceph_tunnel.py", "ceph_tunnel_custody.py", "ceph_pull_broker.py", "ceph_host_route_probe.py", "ceph_crypto_policy.py",
             "native_signatures.py", "native_diagnostics.py")
 UNCONSULTED = frozenset()
@@ -203,7 +203,7 @@ def test_each_signed_build_list_gives_its_recorded_facts(build):
 
 @pytest.mark.parametrize("build", sorted(build for build, current in BUILDS.items() if current))
 def test_todays_bootstrap_options_are_declared_by_each_twenty_two_build(build):
-    request = {"version": "ceph-core-v6", "clusterSSHTransport": "verified-tunnel", "owner": "apply-example",
+    request = {"version": "ceph-core-v10", "clusterSSHTransport": "verified-tunnel", "owner": "apply-example",
                "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
                "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": build}, "bootstrap": "node-1.example.test",
                "monIP": "192.0.2.1", "clusterNetworks": ["198.51.100.0/24"], "callHome": "enabled",
