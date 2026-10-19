@@ -43,9 +43,15 @@ func delegatedCatalog(services, bindings []api.Value, children ...api.Object) ap
 }
 
 func gatewayGraph(bindings ...api.Value) api.Catalog {
-	return delegatedCatalog([]api.Value{rgwService("objects"), ingressService("rgw.objects")}, bindings,
+	objects := delegatedCatalog([]api.Value{rgwService("objects"), ingressService("rgw.objects")}, bindings,
 		childOf(api.StorageObjectGateway, "objects", "serviceRef", "rgw.objects"), replicatedPool("volumes"),
-		childOf(api.StorageClient, "consumer", "poolRef", "volumes", "access", "read-write"))
+		childOf(api.StorageClient, "consumer", "poolRef", "volumes", "access", "read-write")).Objects()
+	for i, object := range objects {
+		if object.Kind() == api.StorageCluster {
+			objects[i] = object.WithSpec(withCorePair(object.Spec()))
+		}
+	}
+	return api.NewCatalog(objects)
 }
 
 func TestDelegatedServicesProjectIntoDelegated(t *testing.T) {

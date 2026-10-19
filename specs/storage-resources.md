@@ -175,6 +175,24 @@ Derived pools take the cluster's default replica size: the
 else the replicated default, and that size must satisfy the replicated-pool
 host rule against the declared OSD-bearing hosts.
 
+Each derived zone pool is realized by its own block
+`ceph-gateway-<gateway>-pool-<suffix>`, the suffix written with `-` for `.`
+(`meta`, `control`, `dedup`, `log`, `otp`, `buckets-index`,
+`buckets-non-ec`, `buckets-data`), the set
+[`init_zone_pool_names`](https://github.com/ceph/ceph/blob/v20.2.1/src/rgw/rgw_zone.cc#L1277-L1312)
+names once its namespaces are stripped. The block has Kind
+StorageObjectGateway, is exclusive on its cluster and depends on the cluster
+and image blocks by block identity. Its pool is a replicated `rgw` pool on
+`replicated_rule` with the initial 32 placement groups and autoscale `on`
+that an undeclared autoscale freezes, the default replica pair and
+application `rgw`; it is created and observed exactly as a StoragePool's pool,
+with the same records and refusals. The blocks need no realm, so they precede
+the gateway's realm, zone group and zone. A declared placement ref replaces
+its derived block. A gateway name longer than 30 characters refuses at plan,
+because its block identities would exceed 63 characters, and a default size
+that the declared OSD-bearing hosts cannot hold refuses at plan before any
+effect.
+
 The endpoint FQDN is the gateway's endpoint identity. It is unique across the
 graph, against every storage node hostname and every other gateway's FQDN,
 and it is not published to DNS. The terminating service is the ingress whose

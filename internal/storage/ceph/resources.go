@@ -226,11 +226,13 @@ func pgBudget(c api.Catalog, cluster api.Object, r Request, rule string) error {
 		}
 	}
 	if rule == defaultRule {
-		mgr := int64(3)
-		if r.Config["global"]["osd_pool_default_size"] == "2" {
-			mgr = 2
+		size, _ := zonePoolReplicas(r)
+		total += int64(size)
+		for _, gateway := range c.OfKind(api.StorageObjectGateway) {
+			if gateway.Spec().Get("clusterRef").Text() == cluster.Name() {
+				total += int64(len(derivedZonePools(gateway))) * clampPGs(0, 0) * int64(size)
+			}
 		}
-		total += mgr
 	}
 	denominator := int64(3)
 	if class == "" {

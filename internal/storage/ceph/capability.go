@@ -54,29 +54,22 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	}
 	catalog := input.State.Effective()
 	for _, object := range catalog.OfKind(c.kind) {
-		request, err := c.request(catalog, object, input.Context.Name)
+		requests, err := c.objectRequests(catalog, object, input.Context.Name)
 		if err != nil {
 			return plan, err
 		}
-		request.Controller = input.Controller
-		requests := []Request{request}
-		if c.kind == api.StorageCluster {
-			if settings, needed := settingsRequest(request, object); needed {
-				requests = append(requests, settings)
-			}
-			units, err := serviceUnitRequests(request, object)
-			if err != nil {
-				return plan, err
-			}
-			requests = append(requests, units...)
-		}
 		for _, r := range requests {
+			r.Controller = input.Controller
 			definition, err := c.definition(input.Verb, object, r)
 			if err != nil {
 				return plan, err
 			}
 			plan.Definitions = append(plan.Definitions, definition)
 		}
+		if len(requests) == 0 {
+			continue
+		}
+		request := requests[0]
 		plan.Secrets = append(plan.Secrets, request.ClusterKeyRef, request.RegistryRef)
 		for _, h := range request.Hosts {
 			plan.Secrets = append(plan.Secrets, h.SSHKeyRef)
@@ -88,6 +81,28 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
 	return plan, nil
+}
+
+func (c Capability) objectRequests(catalog api.Catalog, object api.Object, contextName string) ([]Request, error) {
+	if c.kind == api.StorageObjectGateway {
+		return gatewayPoolRequests(catalog, object, contextName)
+	}
+	request, err := c.request(catalog, object, contextName)
+	if err != nil {
+		return nil, err
+	}
+	requests := []Request{request}
+	if c.kind == api.StorageCluster {
+		if settings, needed := settingsRequest(request, object); needed {
+			requests = append(requests, settings)
+		}
+		units, err := serviceUnitRequests(request, object)
+		if err != nil {
+			return nil, err
+		}
+		requests = append(requests, units...)
+	}
+	return requests, nil
 }
 
 func (c Capability) definition(verb reconciliation.Verb, object api.Object, request Request) (reconciliation.BlockDefinition, error) {
@@ -108,6 +123,10 @@ func (c Capability) definition(verb reconciliation.Verb, object api.Object, requ
 	id := "ceph-" + request.Action + "-" + object.Name()
 	if request.Service != nil {
 		id = ServiceUnitBlockID(request.Cluster, *request.Service)
+	}
+	if c.kind == api.StorageObjectGateway && request.Action == "pool" && request.Pool != nil {
+		suffix, _ := zonePoolSuffix(request.Pool.Name)
+		id = GatewayPoolBlockID(object.Name(), suffix)
 	}
 	return reconciliation.BlockDefinition{ID: id, Description: strings.Join(impacts, ""), Stage: reconciliation.StageClusters, Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph/" + request.Cluster}, Impacts: impacts, Consumes: consumes, Kind: string(c.kind), Object: object.Name(), Implementation: Implementation, ContentDigest: ContentDigest(), Request: canonical}, nil
 }
@@ -133,7 +152,7 @@ func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, 
 			dependencies = unitDependencies(request, object)
 		}
 	case "pool":
-		if ref := object.Spec().Get("placementPolicyRef").Text(); ref != "" {
+		if ref := object.Spec().Get("placementPolicyRef").Text(); ref != "" && object.Kind() == api.StoragePool {
 			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePlacementPolicy), Object: ref})
 		}
 	case "client":
@@ -198,6 +217,9 @@ func subjectOf(r Request, object string) string {
 	if r.Service != nil {
 		return "service " + r.Service.name() + " of " + object
 	}
+	if r.Pool != nil && r.Pool.Name != object {
+		return "zone pool " + r.Pool.Name + " of object gateway " + object
+	}
 	return r.Action + " " + object
 }
 func (Capability) RequiresOnlineRemoval(reconciliation.Block) bool { return true }
@@ -210,7 +232,7 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if err != nil {
 		return Request{}, err
 	}
-	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePlacementPolicy: "policy", api.StoragePool: "pool", api.StorageClient: "client", api.StorageRBDImage: "rbd", api.StorageFilesystem: "filesystem", api.StorageSubvolume: "subvolume"}[c.kind]
+	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePlacementPolicy: "policy", api.StoragePool: "pool", api.StorageClient: "client", api.StorageRBDImage: "rbd", api.StorageFilesystem: "filesystem", api.StorageSubvolume: "subvolume", api.StorageObjectGateway: "pool"}[c.kind]
 	object := r.Cluster
 	if r.Action == "policy" && r.Policy != nil {
 		object = r.Policy.Name
@@ -229,6 +251,9 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	}
 	if r.Action == "subvolume" && r.Subvolume != nil {
 		object = r.Subvolume.Name
+	}
+	if c.kind == api.StorageObjectGateway {
+		object = gatewayPoolObject(e.Block, r)
 	}
 	if c.kind == api.StorageCluster && (r.Action == "settings" || r.Action == "service") {
 		action = r.Action

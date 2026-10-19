@@ -54,6 +54,10 @@ func auxiliaryNeeds(service api.Value) []string {
 	return slices.Clone(auxiliaryFamilies[t])
 }
 
+var ZonePoolSuffixes = []string{"meta", "control", "dedup", "log", "otp", "buckets.index", "buckets.non-ec", "buckets.data"}
+
+var zonePlacementSuffixes = map[string]string{"indexPoolRef": "buckets.index", "dataExtraPoolRef": "buckets.non-ec", "dataPoolRef": "buckets.data"}
+
 func Supported(release, packageVersion, ansibleVersion, base, version, transport string) bool {
 	return storage.NativeVersion(release) && storage.NativeVersion(packageVersion) && storage.NativeVersion(ansibleVersion) && base != "" && storage.NativeVersion(version) && transport == PinnedTransport
 }
