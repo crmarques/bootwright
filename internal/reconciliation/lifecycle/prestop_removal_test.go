@@ -202,3 +202,42 @@ func TestPreStopRemovalLeavesOnlineDeferredMachinesToTheOnlineBoundary(t *testin
 		t.Fatalf("after operator stop = %+v, removed %v (%v)", result, h.capability.destroys, err)
 	}
 }
+
+func preStopPairHarness(t *testing.T) (*harness, *onlineTestCapability) {
+	t.Helper()
+	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
+		stagedDefinition("host", reconciliation.StageSubstrates),
+		stagedDefinition("machine", reconciliation.StageMachines, "host"),
+		stagedDefinition("installation", reconciliation.StageClusters, "machine"),
+		stagedDefinition("installation-b", reconciliation.StageClusters, "machine"),
+		stagedDefinition("storage", reconciliation.StageClusters, "installation"),
+	})
+	c := &onlineTestCapability{testCapability: h.capability, online: map[string]bool{}, preStop: map[string]bool{"installation": true, "installation-b": true}}
+	h.service.capabilities = testResolver{capability: c}
+	h.service.options.Concurrency = 1
+	return h, c
+}
+
+func TestPreStopRemovalNeverRepeatsACompletedInverseBesideARetriedOne(t *testing.T) {
+	h, _ := preStopPairHarness(t)
+	completeApply(t, h)
+	h.capability.quiescence = map[string]Quiescence{"machine": {State: Live, Reason: "running", Stop: preStopMachineStop}}
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeChanged}, {Outcome: reconciliation.OutcomeUnknown}}
+	result, err := destroy(h)
+	if err == nil || result.Receipt.State != string(reconciliation.OperationUnknown) || !slices.Equal(h.capability.destroys, []string{"installation-b", "installation"}) {
+		t.Fatalf("lost second pre-stop inverse = %+v, removed %v (%v)", result, h.capability.destroys, err)
+	}
+	h.capability.outcomes, h.capability.observations = nil, []Observation{{Effect: reconciliation.EffectNoEffect}}
+	result, err = destroy(h)
+	if firstCode(err) != "lifecycle.live" || result == nil || result.Receipt.State != string(reconciliation.OperationPaused) || !slices.Contains(h.capability.calls, "observe-removal:installation") {
+		t.Fatalf("resolved pair = %+v, removed %v (%v)", result, h.capability.destroys, err)
+	}
+	if !slices.Equal(h.capability.destroys, []string{"installation-b", "installation", "installation"}) {
+		t.Fatalf("retrying one pre-stop inverse repeated the completed one: %v", h.capability.destroys)
+	}
+	h.capability.quiescence["machine"] = Quiescence{State: Quiescent}
+	result, err = destroy(h)
+	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) || occurrences(h.capability.destroys, "installation-b") != 1 || occurrences(h.capability.destroys, "installation") != 2 {
+		t.Fatalf("after stop = %+v, removed %v (%v)", result, h.capability.destroys, err)
+	}
+}
