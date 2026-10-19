@@ -284,7 +284,9 @@ cluster's pools on the rule (width is the replica size, or `k+m`; a
 `cephfs-metadata` pool counts at least 16), plus one `.mgr` placement group
 times the effective default size (2 with the global 2/2 pair, else 3) and 32
 placement groups times the effective default size for each zone pool a
-StorageObjectGateway of the cluster derives on `replicated_rule`, must not
+StorageObjectGateway of the cluster derives on `replicated_rule`, plus 32
+placement groups times that size once for the shared `.rgw.root` when the
+cluster has a StorageObjectGateway, must not
 exceed 250 times the selected OSD count, at least
 3, or 3 for a rule restricted to a device class.
 

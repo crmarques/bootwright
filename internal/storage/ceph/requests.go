@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v14"
+const Version = "ceph-core-v15"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -198,6 +198,7 @@ type Request struct {
 	Delegated                []DelegatedService           `json:"delegated,omitempty"`
 	Filesystem               *Filesystem                  `json:"filesystem,omitempty"`
 	FSID                     string                       `json:"fsid,omitempty"`
+	Gateway                  *Gateway                     `json:"gateway,omitempty"`
 	Hosts                    []Host                       `json:"hosts"`
 	Image                    string                       `json:"image"`
 	MonIP                    string                       `json:"monIP"`

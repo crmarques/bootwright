@@ -85,7 +85,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 
 func (c Capability) objectRequests(catalog api.Catalog, object api.Object, contextName string) ([]Request, error) {
 	if c.kind == api.StorageObjectGateway {
-		return gatewayPoolRequests(catalog, object, contextName)
+		return gatewayRequests(catalog, object, contextName)
 	}
 	request, err := c.request(catalog, object, contextName)
 	if err != nil {
@@ -168,6 +168,13 @@ func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, 
 		}
 	case "subvolume":
 		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageFilesystem), Object: request.Subvolume.Filesystem})
+	case "gateway":
+		for _, suffix := range derivedZonePools(object) {
+			dependencies = append(dependencies, GatewayPoolBlockID(object.Name(), suffix))
+		}
+		for _, pool := range declaredPlacementPools(object) {
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: pool})
+		}
 	}
 	slices.Sort(dependencies)
 	return requires, dependencies
@@ -217,6 +224,9 @@ func subjectOf(r Request, object string) string {
 	if r.Service != nil {
 		return "service " + r.Service.name() + " of " + object
 	}
+	if r.Gateway != nil {
+		return "object gateway " + object
+	}
 	if r.Pool != nil && r.Pool.Name != object {
 		return "zone pool " + r.Pool.Name + " of object gateway " + object
 	}
@@ -254,11 +264,14 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	}
 	if c.kind == api.StorageObjectGateway {
 		object = gatewayPoolObject(e.Block, r)
+		if r.Action == "gateway" && r.Gateway != nil && e.Block.ID == GatewayBlockID(r.Gateway.Name) {
+			action, object = r.Action, r.Gateway.Name
+		}
 	}
 	if c.kind == api.StorageCluster && (r.Action == "settings" || r.Action == "service") {
 		action = r.Action
 	}
-	if action == "" || r.Action != action || (r.Action == "settings") != (r.Settings != nil) || (r.Action == "service") != (r.Service != nil) || e.Block.Kind != string(c.kind) || e.Block.Object != object {
+	if action == "" || r.Action != action || (r.Action == "settings") != (r.Settings != nil) || (r.Action == "service") != (r.Service != nil) || (r.Action == "gateway") != (r.Gateway != nil) || e.Block.Kind != string(c.kind) || e.Block.Object != object {
 		return Request{}, failure("lifecycle.state", "Ceph request does not match its frozen resource identity", "")
 	}
 	if r.Owner != "" || r.FSID != "" || e.ApplyOperation == "" {

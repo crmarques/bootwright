@@ -49,6 +49,13 @@ CORE = {
                    "groups": [{"gid": 0, "mode": "755", "name": "csi", "pool": "files-data", "sizeBytes": 0, "uid": 0}], "mdsService": "mds.files",
                    "metadataPool": "files-metadata", "name": "files", "standbyCountWanted": 0, "standbyReplay": False},
     "fsid": "5effe704-a878-5cae-8b43-c81f7112832a",
+    "gateway": {"dataExtraPool": "objects.rgw.buckets.non-ec", "dataPool": "objects.rgw.buckets.data",
+                "documents": [{"placement": {"hosts": ["node-1"]}, "service_id": "objects", "service_type": "rgw",
+                               "spec": {"rgw_realm": "objects", "rgw_zone": "objects", "rgw_zonegroup": "objects"}}],
+                "endpoint": "objects.example.test", "indexPool": "objects.rgw.buckets.index", "name": "objects", "realm": "objects", "zone": "objects",
+                "zoneGroup": "objects",
+                "zonePools": ["objects.rgw.buckets.data", "objects.rgw.buckets.index", "objects.rgw.buckets.non-ec", "objects.rgw.control",
+                              "objects.rgw.dedup", "objects.rgw.log", "objects.rgw.meta", "objects.rgw.otp"]},
     "hosts": [{
         "address": "192.0.2.1",
         "devices": [{"path": "/dev/vdb", "serial": "node-1", "sizeBytes": 1073741824}],
@@ -115,7 +122,7 @@ CORE = {
     "services": [{"placement": {"count": 2, "hosts": ["node-1"]}, "service_type": "mgr"}],
     "settings": {"modules": ["nfs"]},
     "subvolume": {"filesystem": "files", "gid": 0, "group": "", "mode": "755", "name": "docs", "pool": "files-data", "sizeBytes": 0, "uid": 0},
-    "version": "ceph-core-v14",
+    "version": "ceph-core-v15",
 }
 
 IMAGE = {
@@ -132,7 +139,7 @@ IMAGE = {
     "version": "ceph-image-v3",
 }
 
-HOST = {"cluster": {key: value for key, value in CORE.items() if key not in ("action", "delegated", "service", "settings")},
+HOST = {"cluster": {key: value for key, value in CORE.items() if key not in ("action", "delegated", "gateway", "service", "settings")},
         "host": "node-1", "version": "ceph-host-v3"}
 
 # Role, its entry points, the request variable and the request carrying every

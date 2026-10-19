@@ -1,14 +1,42 @@
 package ceph
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/storage"
 )
+
+type Gateway struct {
+	DataExtraPool string            `json:"dataExtraPool"`
+	DataPool      string            `json:"dataPool"`
+	Documents     []json.RawMessage `json:"documents"`
+	Endpoint      string            `json:"endpoint"`
+	IndexPool     string            `json:"indexPool"`
+	Name          string            `json:"name"`
+	Realm         string            `json:"realm"`
+	Zone          string            `json:"zone"`
+	ZoneGroup     string            `json:"zoneGroup"`
+	ZonePools     []string          `json:"zonePools"`
+}
+
+type rgwSpec struct {
+	OnlyBindPortOnNetworks bool   `json:"only_bind_port_on_networks,omitempty"`
+	RGWExitTimeoutSecs     *int64 `json:"rgw_exit_timeout_secs,omitempty"`
+	RGWFrontendPort        *int64 `json:"rgw_frontend_port,omitempty"`
+	RGWFrontendType        string `json:"rgw_frontend_type,omitempty"`
+	RGWRealm               string `json:"rgw_realm"`
+	RGWZone                string `json:"rgw_zone"`
+	RGWZoneGroup           string `json:"rgw_zonegroup"`
+	SSL                    bool   `json:"ssl,omitempty"`
+}
+
+func GatewayBlockID(gateway string) string { return "ceph-gateway-" + gateway }
 
 func GatewayPoolBlockID(gateway, suffix string) string {
 	return "ceph-gateway-" + gateway + "-pool-" + strings.ReplaceAll(suffix, ".", "-")
@@ -56,7 +84,65 @@ func gatewayPoolObject(block reconciliation.Block, r Request) string {
 	return block.Object
 }
 
-func gatewayPoolRequests(c api.Catalog, gateway api.Object, contextName string) ([]Request, error) {
+func rgwSpecOf(gateway api.Value) func(api.Value) any {
+	return func(spec api.Value) any {
+		return rgwSpec{OnlyBindPortOnNetworks: spec.Get("only_bind_port_on_networks").Bool(), RGWExitTimeoutSecs: integerOf(spec.Get("rgw_exit_timeout_secs")),
+			RGWFrontendPort: integerOf(spec.Get("rgw_frontend_port")), RGWFrontendType: spec.Get("rgw_frontend_type").Text(), RGWRealm: gateway.Get("realm").Text(),
+			RGWZone: gateway.Get("zone").Text(), RGWZoneGroup: gateway.Get("zoneGroup").Text(), SSL: spec.Get("ssl").Bool()}
+	}
+}
+
+func placementPool(gateway api.Value, suffix string) string {
+	for key, replaced := range zonePlacementSuffixes {
+		if replaced == suffix {
+			if name := gateway.Get("pools", key).Text(); name != "" {
+				return name
+			}
+		}
+	}
+	return gateway.Get("zone").Text() + ".rgw." + suffix
+}
+
+func declaredPlacementPools(gateway api.Object) []string {
+	out := []string{}
+	for key := range zonePlacementSuffixes {
+		if name := gateway.Spec().Get("pools", key).Text(); name != "" {
+			out = append(out, name)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+func gatewayRequest(cluster, gateway api.Object, base Request) (Request, error) {
+	spec := gateway.Spec()
+	svc, found := storage.NativeService(cluster, spec.Get("serviceRef").Text())
+	if !found {
+		return Request{}, failure("api.invariant", "StorageObjectGateway "+gateway.Name()+" binds no declared rgw service", "set spec.serviceRef to rgw.<service_id> of a declared rgw service")
+	}
+	document, err := unitDocumentOf(cluster, svc, rgwSpecOf(spec))
+	if err != nil {
+		return Request{}, err
+	}
+	zonePools := []string{}
+	for _, suffix := range ZonePoolSuffixes {
+		zonePools = append(zonePools, placementPool(spec, suffix))
+	}
+	slices.Sort(zonePools)
+	r := base
+	r.Action = "gateway"
+	r.Gateway = &Gateway{DataExtraPool: placementPool(spec, "buckets.non-ec"), DataPool: placementPool(spec, "buckets.data"), Documents: []json.RawMessage{document},
+		Endpoint: spec.Get("endpoint", "fqdn").Text(), IndexPool: placementPool(spec, "buckets.index"), Name: gateway.Name(), Realm: spec.Get("realm").Text(),
+		Zone: spec.Get("zone").Text(), ZoneGroup: spec.Get("zoneGroup").Text(), ZonePools: slices.Compact(zonePools)}
+	return r, nil
+}
+
+func gatewayDeadline(operation string) time.Duration {
+	budget := map[string]unitBudget{"apply": {calls: 4, waits: 1}, "observe": {calls: 1}, "destroy": {calls: 2}}[operation]
+	return time.Duration(budget.calls*nativeCall+budget.waits*readinessWait+60) * time.Second
+}
+
+func gatewayRequests(c api.Catalog, gateway api.Object, contextName string) ([]Request, error) {
 	cluster, _ := c.Find(api.StorageCluster, gateway.Spec().Get("clusterRef").Text())
 	base, err := baseRequest(c, cluster, contextName)
 	if err != nil {
@@ -86,7 +172,7 @@ func gatewayPoolRequests(c api.Catalog, gateway api.Object, contextName string) 
 		return nil, err
 	}
 	zone := gateway.Spec().Get("zone").Text()
-	requests := make([]Request, 0, len(suffixes))
+	requests := make([]Request, 0, len(suffixes)+1)
 	for _, suffix := range suffixes {
 		r := base
 		r.Action = "pool"
@@ -94,5 +180,9 @@ func gatewayPoolRequests(c api.Catalog, gateway api.Object, contextName string) 
 			Autoscale: PoolAutoscale{Mode: "on"}, PGNum: int(clampPGs(0, 0)), Size: size, MinSize: minSize}
 		requests = append(requests, r)
 	}
-	return requests, nil
+	r, err := gatewayRequest(cluster, gateway, base)
+	if err != nil {
+		return nil, err
+	}
+	return append(requests, r), nil
 }

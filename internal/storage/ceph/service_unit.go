@@ -142,6 +142,7 @@ func nfsIngressSpecOf(spec api.Value) any {
 
 var unitSpecMembers = map[string][]string{
 	"nfs": {"enable_haproxy_protocol", "monitoring_port", "port", "virtual_ip"},
+	"rgw": {"only_bind_port_on_networks", "rgw_exit_timeout_secs", "rgw_frontend_port", "rgw_frontend_type", "rgw_realm", "rgw_zone", "rgw_zonegroup", "ssl"},
 	"ingress": {"backend_service", "enable_haproxy_protocol", "first_virtual_router_id", "frontend_port", "haproxy_peer_communication_port",
 		"health_check_interval", "keepalive_only", "monitor_port", "virtual_ip", "virtual_interface_networks"},
 }

@@ -1,5 +1,5 @@
 implementation: storage-ceph-core-v3
-content-digest: 899fda36716bd69fde671132f7efba9135ba28d9f4b2bdd2c3c0a10d5fe3874b
+content-digest: f321d4adcc035cde92bb151b362c45ef8ca772affd025075bb5c3dc4f3e148f8
 automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v1, ceph-dashboard-port-attempt-v1, ceph-dashboard-port-repair-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-user-v1, ceph-device-identities-v1, ceph-filesystem-attempt-v1, ceph-host-cache-v1, ceph-native-teardown-v1, ceph-osd-device-intent-v1, ceph-policy-attempt-v1, ceph-pool-attempt-v2, ceph-rbd-image-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v3, ceph-service-inputs-v1, ceph-subvolume-attempt-v1, ceph-subvolume-group-attempt-v1, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v2
 request-schema:
   action string
@@ -43,6 +43,17 @@ request-schema:
   filesystem.standbyCountWanted int
   filesystem.standbyReplay bool
   fsid string omitempty
+  gateway *struct ceph.Gateway omitempty
+  gateway.dataExtraPool string
+  gateway.dataPool string
+  gateway.documents []opaque
+  gateway.endpoint string
+  gateway.indexPool string
+  gateway.name string
+  gateway.realm string
+  gateway.zone string
+  gateway.zoneGroup string
+  gateway.zonePools []string
   hosts []struct ceph.Host
   hosts[].address string
   hosts[].devices []struct ceph.Device

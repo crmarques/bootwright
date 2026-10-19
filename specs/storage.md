@@ -189,7 +189,8 @@ them:
   precede their NFS exports; gateways precede their ingress endpoints. An export
   for a downstream consumer waits for all resources and material it describes.
 - Every child block of a cluster (its settings block, its service-unit blocks,
-  placement policies, pools, clients, RBD images, filesystems and subvolumes)
+  object gateways and their zone pool blocks, placement policies, pools,
+  clients, RBD images, filesystems and subvolumes)
   depends on the cluster block by its block identity, never through the
   StorageCluster API identity that the cluster's image, host, settings and
   service-unit blocks share; a client still follows its pool through the
@@ -200,6 +201,13 @@ them:
   and depends on the cluster, image and settings blocks by ID plus any blocks
   its type names; its deadline is fixed per type and does not grow with the
   host count.
+- A gateway block `ceph-gateway-<gateway>` (Kind StorageObjectGateway,
+  exclusive `ceph/<cluster>`) executes its gateway's realm, zone group, zone,
+  zone placement and rgw service on the bootstrap host. It depends on the
+  cluster and image blocks and on each of its derived zone pool blocks by ID,
+  and on each declared placement StoragePool through that pool; its deadline
+  is fixed (apply 3600 s, observe 720 s, destroy 1380 s) and does not grow with
+  the host count.
 
 Before an apply that selects managed Ceph claims an operation or binds secrets,
 it observes aggregate declared libvirt CPU, memory and backing-filesystem disk

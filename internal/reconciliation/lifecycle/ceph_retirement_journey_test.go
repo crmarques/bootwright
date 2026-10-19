@@ -70,6 +70,9 @@ func (r *fleetRunner) Run(_ context.Context, run lifecycle.RunRequest) (lifecycl
 		produced = []lifecycle.Produced{{Name: ceph.DashboardOutput, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(fleetDashboardPassword)})}}
 	case "pool":
 		evidence.Resource = ceph.ResourceEvidence{ID: "1"}
+	case "gateway":
+		evidence.Resource = ceph.ResourceEvidence{ID: "0b8c6f2e-3c1d-4a5e-9f70-1a2b3c4d5e6f"}
+		evidence.Daemons = []ceph.UnitDaemon{{Host: fleetHosts[0], Name: "rgw.objects." + fleetHosts[0] + ".abcdef", Service: "rgw.objects"}}
 	case "client":
 		evidence.Client = "client." + request.Client.Name
 		credential := `[{"caps":{"mgr":"profile rbd pool=volumes","mon":"profile rbd","osd":"profile rbd pool=volumes"},"entity":"client.consumer","key":"` + base64.StdEncoding.EncodeToString([]byte("consumer-key")) + `"}]`
@@ -186,17 +189,19 @@ func fleetRequest(t *testing.T, change func(*ceph.Request)) json.RawMessage {
 	return data
 }
 
+var fleetApplyRuns = []string{"ceph-cluster-example:apply", "ceph-gateway-objects-pool-meta:apply", "ceph-pool-volumes:apply", "ceph-client-consumer:apply", "ceph-gateway-objects:apply"}
+
 func fleetJourney(t *testing.T, keeps bool) (*lifecycle.CapabilityJourney, *fleetRunner, *fleetMachines) {
 	t.Helper()
 	runner := &fleetRunner{resolvedAt: "sha256:" + strings.Repeat("ab", 32)}
 	machines := &fleetMachines{running: true, keeps: keeps}
-	journey := fleetEngine(t, machines, runner)
+	journey := fleetEngine(t, machines, runner, fleetGatewayBlocks(t)...)
 	result, err := journey.Service.Apply(context.Background(), lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true})
 	if err != nil || result.Receipt.State != string(reconciliation.OperationDone) {
 		t.Fatalf("the apply = %+v, %+v (%v)", result, diagnostics.Of(err), err)
 	}
 	hostRuns, imageRuns := runner.took()
-	if !slices.Equal(hostRuns, []string{"ceph-cluster-example:apply", "ceph-pool-volumes:apply", "ceph-client-consumer:apply"}) || !slices.Equal(imageRuns, []string{"apply"}) {
+	if !slices.Equal(hostRuns, fleetApplyRuns) || !slices.Equal(imageRuns, []string{"apply"}) {
 		t.Fatalf("the apply ran host-contacting %v and controller-local image %v", hostRuns, imageRuns)
 	}
 	if kept := journey.Kept(); len(kept) != 2 || !strings.HasPrefix(kept[0], "ceph-client-consumer/client=") ||
@@ -206,20 +211,37 @@ func fleetJourney(t *testing.T, keeps bool) (*lifecycle.CapabilityJourney, *flee
 	return journey, runner, machines
 }
 
+func fleetCephBlock(id string, kind api.Kind, object string, request json.RawMessage, dependencies ...string) reconciliation.BlockDefinition {
+	slices.Sort(dependencies)
+	return reconciliation.BlockDefinition{ID: id, Description: "realize Ceph " + object, Stage: reconciliation.StageClusters, Dependencies: dependencies, Exclusive: []string{"ceph/example"},
+		Impacts: []string{"realize Ceph " + object}, Consumes: []string{}, Kind: string(kind), Object: object, Implementation: ceph.Implementation, ContentDigest: ceph.ContentDigest(), Request: request}
+}
+
+func fleetGatewayBlocks(t *testing.T) []reconciliation.BlockDefinition {
+	t.Helper()
+	return []reconciliation.BlockDefinition{
+		fleetCephBlock(ceph.GatewayPoolBlockID("objects", "meta"), api.StorageObjectGateway, "objects", fleetRequest(t, func(r *ceph.Request) {
+			r.Action, r.Pool = "pool", &ceph.Pool{Application: "rgw", Autoscale: ceph.PoolAutoscale{Mode: "on"}, CrushRule: "replicated_rule", MinSize: 2, Name: "objects.rgw.meta", PGNum: 32, Role: "rgw", Size: 3, Type: "replicated"}
+		}), "ceph-cluster-example"),
+		fleetCephBlock(ceph.GatewayBlockID("objects"), api.StorageObjectGateway, "objects", fleetRequest(t, func(r *ceph.Request) {
+			r.Action, r.Delegated = "gateway", []ceph.DelegatedService{{Name: "rgw.objects", Hosts: fleetHosts}}
+			r.Gateway = &ceph.Gateway{Name: "objects", Realm: "objects", ZoneGroup: "objects", Zone: "objects", IndexPool: "objects.rgw.buckets.index", DataPool: "objects.rgw.buckets.data",
+				DataExtraPool: "objects.rgw.buckets.non-ec", ZonePools: []string{"objects.rgw.meta"}, Documents: []json.RawMessage{
+					json.RawMessage(`{"placement":{"count":2,"hosts":["rhel-01","rhel-02","rhel-03"]},"service_id":"objects","service_type":"rgw","spec":{"rgw_realm":"objects","rgw_zone":"objects","rgw_zonegroup":"objects"}}`)}}
+		}), "ceph-cluster-example", ceph.GatewayPoolBlockID("objects", "meta")),
+	}
+}
+
 // fleetEngine is the fleet's engine before any apply: its Machines, the real
 // Ceph image and Ceph capabilities over runner, and the Secrets they bind.
-func fleetEngine(t *testing.T, machines *fleetMachines, runner ceph.Runner) *lifecycle.CapabilityJourney {
+func fleetEngine(t *testing.T, machines *fleetMachines, runner ceph.Runner, gateways ...reconciliation.BlockDefinition) *lifecycle.CapabilityJourney {
 	t.Helper()
 	image, err := ceph.ImageRequest{Version: ceph.ImageVersion, Cluster: "example", Controller: "controller", Release: "9.9.1.2", Base: "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9", Tag: "v9.9.1-25074",
 		Image: "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9" + ":" + "v9.9.1-25074", Registry: "cp.icr.io", RegistryRef: "registry"}.Canonical()
 	if err != nil {
 		t.Fatal(err)
 	}
-	cephBlock := func(id string, kind api.Kind, object string, request json.RawMessage, dependencies ...string) reconciliation.BlockDefinition {
-		slices.Sort(dependencies)
-		return reconciliation.BlockDefinition{ID: id, Description: "realize Ceph " + object, Stage: reconciliation.StageClusters, Dependencies: dependencies, Exclusive: []string{"ceph/example"},
-			Impacts: []string{"realize Ceph " + object}, Consumes: []string{}, Kind: string(kind), Object: object, Implementation: ceph.Implementation, ContentDigest: ceph.ContentDigest(), Request: request}
-	}
+	cephBlock := fleetCephBlock
 	definitions := []reconciliation.BlockDefinition{}
 	machineBlocks := []string{}
 	for _, host := range fleetHosts {
@@ -239,6 +261,7 @@ func fleetEngine(t *testing.T, machines *fleetMachines, runner ceph.Runner) *lif
 			r.Action, r.Client = "client", &ceph.Client{Access: "read-write", Name: "consumer", Pool: "volumes"}
 		}), ceph.ImageBlockID("example"), "ceph-pool-volumes"),
 	)
+	definitions = append(definitions, gateways...)
 	secretNames := []string{"cluster-key", "fleet-key", "registry"}
 	for _, host := range fleetHosts {
 		secretNames = append(secretNames, host+"-host-key")
@@ -250,6 +273,7 @@ func fleetEngine(t *testing.T, machines *fleetMachines, runner ceph.Runner) *lif
 		{Binding: lifecycle.CapabilityBinding{Kind: string(api.StorageCluster), Implementation: ceph.Implementation}, Capability: ceph.New(api.StorageCluster, runner).WithProofs(fleetProofs{})},
 		{Binding: lifecycle.CapabilityBinding{Kind: string(api.StoragePool), Implementation: ceph.Implementation}, Capability: ceph.New(api.StoragePool, runner).WithProofs(fleetProofs{})},
 		{Binding: lifecycle.CapabilityBinding{Kind: string(api.StorageClient), Implementation: ceph.Implementation}, Capability: ceph.New(api.StorageClient, runner).WithProofs(fleetProofs{})},
+		{Binding: lifecycle.CapabilityBinding{Kind: string(api.StorageObjectGateway), Implementation: ceph.Implementation}, Capability: ceph.New(api.StorageObjectGateway, runner).WithProofs(fleetProofs{})},
 	}, lifecycle.CapabilityPlan{Definitions: definitions, Secrets: secretNames})
 	holdFleetSecrets(journey)
 	return journey

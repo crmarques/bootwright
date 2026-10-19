@@ -50,6 +50,16 @@ func blockIDs(definitions []reconciliation.BlockDefinition) []string {
 	return ids
 }
 
+func poolBlocks(definitions []reconciliation.BlockDefinition) []reconciliation.BlockDefinition {
+	out := []reconciliation.BlockDefinition{}
+	for _, d := range definitions {
+		if strings.HasPrefix(d.ID, "ceph-gateway-"+d.Object+"-pool-") {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
 func zonePool(suffix string, size int) Pool {
 	return Pool{Name: "objects.rgw." + suffix, Type: "replicated", Role: "rgw", Application: "rgw", CrushRule: "replicated_rule", Autoscale: PoolAutoscale{Mode: "on"}, PGNum: 32, Size: size, MinSize: 2}
 }
@@ -57,14 +67,15 @@ func zonePool(suffix string, size int) Pool {
 func TestGatewayDerivedPoolsAreFrozenSuffixSet(t *testing.T) {
 	suffixes := []string{"meta", "control", "dedup", "log", "otp", "buckets-index", "buckets-non-ec", "buckets-data"}
 	native := []string{"meta", "control", "dedup", "log", "otp", "buckets.index", "buckets.non-ec", "buckets.data"}
-	definitions := gatewayBlocks(t, planCatalog(3, 3, withPairAndRGW, objectGateway("objects", "placementPolicyRef", "fast")))
+	blocks := gatewayBlocks(t, planCatalog(3, 3, withPairAndRGW, objectGateway("objects", "placementPolicyRef", "fast")))
 	want := []string{}
 	for _, suffix := range suffixes {
 		want = append(want, "ceph-gateway-objects-pool-"+suffix)
 	}
-	if got := blockIDs(definitions); !reflect.DeepEqual(got, want) {
-		t.Fatalf("derived blocks %v, want %v", got, want)
+	if got := blockIDs(blocks); !reflect.DeepEqual(got, append(slices.Clone(want), "ceph-gateway-objects")) {
+		t.Fatalf("derived blocks %v, want %v and the gateway", got, want)
 	}
+	definitions := poolBlocks(blocks)
 	for i, d := range definitions {
 		if !reconciliation.ValidSegment(d.ID) || d.Kind != string(api.StorageObjectGateway) || d.Object != "objects" || len(d.Requires) != 0 || d.Stage != reconciliation.StageClusters ||
 			!reflect.DeepEqual(d.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) || !reflect.DeepEqual(d.Exclusive, []string{"ceph/example"}) {
@@ -81,7 +92,7 @@ func TestGatewayDerivedPoolsAreFrozenSuffixSet(t *testing.T) {
 	if len(slices.Compact(slices.Sorted(slices.Values(blockIDs(definitions))))) != len(ZonePoolSuffixes) {
 		t.Fatal("derived block identities collide")
 	}
-	for _, d := range gatewayBlocks(t, planCatalog(4, 4, withRGW, objectGateway("objects"))) {
+	for _, d := range poolBlocks(gatewayBlocks(t, planCatalog(4, 4, withRGW, objectGateway("objects")))) {
 		if r, err := DecodeRequest(d.Request); err != nil || r.Pool.Size != 3 || r.Pool.MinSize != 2 {
 			t.Fatalf("default pair froze %+v (%v)", r.Pool, err)
 		}
@@ -95,7 +106,7 @@ func TestGatewayDerivedPoolsAreFrozenSuffixSet(t *testing.T) {
 	long := strings.Repeat("g", 31)
 	_, err = kindPlan(api.StorageObjectGateway, planCatalog(3, 3, withPairAndRGW, objectGateway(long)))
 	refusedWith(t, err, "api.invariant", "StorageObjectGateway "+long+" has a name too long to identify its derived zone pool blocks, whose identities hold at most 63 characters", "rename the StorageObjectGateway to at most 30 characters")
-	if got := gatewayBlocks(t, planCatalog(3, 3, withPairAndRGW, objectGateway(long[:30]))); len(got) != 8 {
+	if got := gatewayBlocks(t, planCatalog(3, 3, withPairAndRGW, objectGateway(long[:30]))); len(got) != 9 {
 		t.Fatalf("a 30-character gateway planned %v", blockIDs(got))
 	}
 }
@@ -103,10 +114,10 @@ func TestGatewayDerivedPoolsAreFrozenSuffixSet(t *testing.T) {
 func TestDeclaredPoolRefReplacesDerivedBlock(t *testing.T) {
 	catalog := planCatalog(3, 3, withPairAndRGW, objectGateway("objects", "pools", requestMap("indexPoolRef", "index")), rgwPool("index"))
 	definitions := gatewayBlocks(t, catalog)
-	if len(definitions) != 7 || slices.Contains(blockIDs(definitions), "ceph-gateway-objects-pool-buckets-index") {
+	if len(definitions) != 8 || slices.Contains(blockIDs(definitions), "ceph-gateway-objects-pool-buckets-index") {
 		t.Fatalf("a declared index pool planned %v", blockIDs(definitions))
 	}
-	for _, d := range definitions {
+	for _, d := range poolBlocks(definitions) {
 		if r, _ := DecodeRequest(d.Request); r.Pool.Name == "objects.rgw.buckets.index" {
 			t.Fatal("a declared index pool is still derived")
 		}
@@ -117,7 +128,7 @@ func TestDeclaredPoolRefReplacesDerivedBlock(t *testing.T) {
 	}
 	all := planCatalog(3, 3, withPairAndRGW, objectGateway("objects", "pools", requestMap("indexPoolRef", "index", "dataPoolRef", "data", "dataExtraPoolRef", "extra")),
 		rgwPool("index"), rgwPool("data"), rgwPool("extra"))
-	want := []string{"ceph-gateway-objects-pool-meta", "ceph-gateway-objects-pool-control", "ceph-gateway-objects-pool-dedup", "ceph-gateway-objects-pool-log", "ceph-gateway-objects-pool-otp"}
+	want := []string{"ceph-gateway-objects-pool-meta", "ceph-gateway-objects-pool-control", "ceph-gateway-objects-pool-dedup", "ceph-gateway-objects-pool-log", "ceph-gateway-objects-pool-otp", "ceph-gateway-objects"}
 	if got := blockIDs(gatewayBlocks(t, all)); !reflect.DeepEqual(got, want) {
 		t.Fatalf("three declared refs planned %v", got)
 	}
@@ -134,15 +145,15 @@ func TestPGBudgetCountsDerivedZonePools(t *testing.T) {
 			return planCatalog(3, 3, withPairAndRGW, children...)
 		}
 		elsewhere := api.NewObject(api.StorageObjectGateway, "elsewhere", api.Value{}, requestMap("clusterRef", "other", "serviceRef", "rgw.objects", "zone", "elsewhere"))
-		if _, err := planned(t, catalogFor(118, elsewhere), api.StoragePool, "volumes"); err != nil {
+		if _, err := planned(t, catalogFor(86, elsewhere), api.StoragePool, "volumes"); err != nil {
 			t.Fatalf("750 placement groups did not plan: %v", diagnostics.Of(err))
 		}
-		if _, err := kindPlan(api.StorageObjectGateway, catalogFor(118)); err != nil {
+		if _, err := kindPlan(api.StorageObjectGateway, catalogFor(86)); err != nil {
 			t.Fatalf("the gateway at 750 placement groups did not plan: %v", diagnostics.Of(err))
 		}
-		_, err := planned(t, catalogFor(119), api.StoragePool, "volumes")
+		_, err := planned(t, catalogFor(87), api.StoragePool, "volumes")
 		refusedWith(t, err, "api.invariant", "pool placement groups for CRUSH rule replicated_rule exceed the per-OSD bound (752 > 250 × 3)", remedy)
-		_, err = kindPlan(api.StorageObjectGateway, catalogFor(119))
+		_, err = kindPlan(api.StorageObjectGateway, catalogFor(87))
 		refusedWith(t, err, "api.invariant", "pool placement groups for CRUSH rule replicated_rule exceed the per-OSD bound (752 > 250 × 3)", remedy)
 	}
 }

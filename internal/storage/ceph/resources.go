@@ -228,11 +228,14 @@ func pgBudget(c api.Catalog, cluster api.Object, r Request, rule string) error {
 	if rule == defaultRule {
 		size, _ := zonePoolReplicas(r)
 		total += int64(size)
+		root := int64(0)
 		for _, gateway := range c.OfKind(api.StorageObjectGateway) {
 			if gateway.Spec().Get("clusterRef").Text() == cluster.Name() {
 				total += int64(len(derivedZonePools(gateway))) * clampPGs(0, 0) * int64(size)
+				root = clampPGs(0, 0) * int64(size)
 			}
 		}
+		total += root
 	}
 	denominator := int64(3)
 	if class == "" {

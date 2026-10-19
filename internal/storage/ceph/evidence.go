@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-const EvidenceVersion = "ceph-core-evidence-v4"
+const EvidenceVersion = "ceph-core-evidence-v5"
 
 const DashboardPort = "8443"
 
@@ -19,6 +19,7 @@ var certificateDigest = regexp.MustCompile(`\A[0-9a-f]{64}\z`)
 var resourceID = regexp.MustCompile(`\A(?:0|[1-9][0-9]{0,18})\z`)
 var rbdImageID = regexp.MustCompile(`\A[0-9a-f]{1,14}\z`)
 var unitDaemonName = regexp.MustCompile(`\A[a-z][a-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\z`)
+var zoneID = regexp.MustCompile(`\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z`)
 var subvolumeUUID = regexp.MustCompile(`\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z`)
 
 func subvolumePath(s *Subvolume, id string) string {
@@ -245,11 +246,17 @@ func validOSDs(e Evidence, r Request, complete bool) bool {
 }
 
 func unitDocuments(r Request) []unitDocument {
-	if r.Service == nil {
+	var raws []json.RawMessage
+	switch {
+	case r.Action == "gateway" && r.Gateway != nil:
+		raws = r.Gateway.Documents
+	case r.Service != nil:
+		raws = r.Service.Documents
+	default:
 		return nil
 	}
 	documents := []unitDocument{}
-	for _, raw := range r.Service.Documents {
+	for _, raw := range raws {
 		document, err := reconciliation.DecodeEvidence[unitDocument](raw, 60*1024, "Ceph unit document")
 		if err != nil {
 			return nil
@@ -260,7 +267,7 @@ func unitDocuments(r Request) []unitDocument {
 }
 
 func validDaemons(e Evidence, r Request) bool {
-	if r.Action != "service" {
+	if r.Action != "service" && r.Action != "gateway" {
 		return len(e.Daemons) == 0
 	}
 	documents := unitDocuments(r)
@@ -300,6 +307,9 @@ func validateScope(e Evidence, r Request) bool {
 	}
 	if r.Action == "subvolume" {
 		return e.Client == "" && r.Subvolume != nil && (e.Resource == ResourceEvidence{} || subvolumeResource(e, r))
+	}
+	if r.Action == "gateway" {
+		return e.Client == "" && r.Gateway != nil && (e.Resource == ResourceEvidence{} || zoneID.MatchString(e.Resource.ID) && e.Resource.Path == r.Gateway.Endpoint)
 	}
 	if e.Resource.Path != "" {
 		return false
@@ -350,6 +360,8 @@ func validateReady(e Evidence, r Request) bool {
 		return r.Filesystem != nil && resourceID.MatchString(e.Resource.ID)
 	case "subvolume":
 		return subvolumeResource(e, r)
+	case "gateway":
+		return r.Gateway != nil && zoneID.MatchString(e.Resource.ID) && e.Resource.Path == r.Gateway.Endpoint && everyDocumentRuns(e, r)
 	}
 	return false
 }
