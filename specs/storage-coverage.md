@@ -293,6 +293,18 @@ The iSCSI family is refusal-only: [B481](milestones/m2.md#b481) refuses it as
 a gateway Bootwright does not realize. Physical provisioning and Stretch are M2d and M2e rows outside
 this catalog.
 
+The [three-node block and file example](../examples/storage-clusters/libvirt-3-nodes-ceph-block-file/README.md)
+is outside this catalog and claims no B484 row. On three OSD hosts it declares
+the [B81](milestones/m2.md#b81) and [B492](milestones/m2.md#b492) resources
+that fit them: a placement policy, an RBD pool placed by it, an RBD image,
+replicated CephFS metadata and data pools, an `mds` service of two daemons
+bound to a filesystem with one active rank, one standby and a subvolume group,
+a subvolume in that group and the pool client. Its runbook follows the profile
+runbook sections and records RBD and CephFS data checks with the administrator
+keyring, MDS failover, interruption and continuation, replay, changed-intent
+refusal and retirement with the hosts. Erasure-coded pools and the larger
+CephFS shapes stay with P1 and P2.
+
 ### Profile runbooks
 
 Each P1 to P7 README has these `##` headings, each once and in this order.

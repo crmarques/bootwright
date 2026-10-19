@@ -1,0 +1,13 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: rbd-data
+
+spec:
+  clusterRef: ceph-lab
+  placementPolicyRef: ssd-hosts
+  type: replicated
+  role: rbd
+
+  autoscale:
+    mode: 'on'

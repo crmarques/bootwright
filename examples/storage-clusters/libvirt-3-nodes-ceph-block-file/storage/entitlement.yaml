@@ -1,0 +1,15 @@
+# Review IBM license terms before using this authored example.
+apiVersion: bootwright.io/v1alpha1
+kind: Entitlement
+metadata:
+  name: ibm-ceph
+
+spec:
+  type: ibm-storage-ceph
+
+  registry:
+    url: cp.icr.io
+    credentialsRef: ibm-registry
+
+  license:
+    accept: true
