@@ -125,6 +125,15 @@ func TestNFSExportPseudoUniquePerService(t *testing.T) {
 	catalog = replace(catalog, twin)
 	requireAdmits(t, nfs, catalog)
 	requireAdmits(t, twin, catalog)
+	catalog = replace(catalog, object(api.StorageCluster, "other", find(t, catalog, api.StorageCluster, "storage").Spec()))
+	catalog = replace(catalog, object(api.StorageFilesystem, "other-files", m("clusterRef", "other", "mdsServiceRef", "mds.other-files", "metadataPoolRef", "metadata", "dataPoolRefs", api.StringList("data"))))
+	far := object(api.StorageNFSExport, "far", nfs.Spec().With("clusterRef", api.StringValue("other")).With("filesystemRef", api.StringValue("other-files")).WithPath(api.StringValue("other-files"), "native", "fsal", "fs_name"))
+	catalog = replace(catalog, far)
+	if textOf(far.Spec(), "serviceID") != textOf(nfs.Spec(), "serviceID") || !far.Spec().Get("native", "pseudo").Equal(nfs.Spec().Get("native", "pseudo")) {
+		t.Fatal("the far export must share the service ID and pseudo path of nfs")
+	}
+	requireAdmits(t, nfs, catalog)
+	requireAdmits(t, far, catalog)
 }
 
 func TestNFSExportBackingExactlyOne(t *testing.T) {
@@ -264,8 +273,20 @@ func TestNFSExportFrozenDefaultsAndBindingFSName(t *testing.T) {
 		t.Fatalf("subvolume binding normalized to %#v", subvolume.Spec().Get("native"))
 	}
 	requireAdmits(t, subvolume, replace(changed, subvolume))
+	disagreement := func(export api.Object, catalog api.Catalog) {
+		t.Helper()
+		exactIssue(t, Validate(export, catalog), "api.invariant", "$.spec.native.fsal.fs_name", "fs_name disagrees with the filesystem the export's binding selects", "omit spec.native.fsal.fs_name so the binding supplies it, or set it to the bound filesystem's name")
+	}
 	other, changed := nfsExportWith(t, catalog, nativeEdit(api.StringValue("other"), "fsal", "fs_name"))
-	exactIssue(t, Validate(other, changed), "api.invariant", "$.spec.native.fsal.fs_name", "fs_name disagrees with the filesystem the export's binding selects", "omit spec.native.fsal.fs_name so the binding supplies it, or set it to the bound filesystem's name")
+	disagreement(other, changed)
+	otherSubvolume, changed := nfsExportWith(t, catalog, func(spec api.Value) api.Value {
+		return spec.Without("filesystemRef").With("subvolumeRef", api.StringValue("docs")).WithPath(api.StringValue("other"), "native", "fsal", "fs_name")
+	})
+	otherSubvolume, _ = Normalize(otherSubvolume, changed)
+	if textOf(otherSubvolume.Spec(), "native", "fsal", "fs_name") != "other" {
+		t.Fatal("normalization replaced the authored fs_name of a subvolume binding")
+	}
+	disagreement(otherSubvolume, replace(changed, otherSubvolume))
 }
 
 func TestNFSExportRefusesObjectBackingAndKerberos(t *testing.T) {
