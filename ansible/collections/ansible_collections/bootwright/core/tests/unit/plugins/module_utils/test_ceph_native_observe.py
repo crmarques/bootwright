@@ -93,6 +93,67 @@ def test_exact_daemon_projection_uses_only_bounded_inspection(fixture):
     assert all(not set(argv) & {"ls", "pull", "start", "restart", "reload", "exec", "--version"} for argv, unused in calls)
 
 
+DELEGATED_IMAGE = "registry.example.test/haproxy@sha256:" + "b" * 64
+
+
+def delegated(fixture, name, service, listed, hosts=("node-1",), unit_files=True):
+    """A daemon directory another block executes, laid out as cephadm writes it: unit.meta and unit.image, a unit and a container
+    named ceph-<fsid>-<type>-<daemon id> (cephadm get_unique_name with prefix=service_id, cephadm/module.py v20.2.1 L922-L966)."""
+    request, command = fixture[2], fixture[-1]
+    request["delegated"] = [{"name": entry, "hosts": list(hosts)} for entry in listed]
+    directory = fixture[1].parent / name
+    directory.mkdir(mode=0o700)
+    if unit_files:
+        (directory / "unit.meta").write_text(json.dumps({"service_name": service}))
+        (directory / "unit.image").write_text(DELEGATED_IMAGE + "\n")
+    kind, identifier = name.split(".", 1)
+    unit = "ceph-" + request["fsid"] + "@" + name + ".service"
+    container = ("ceph-" + request["fsid"] + "-" + kind + "-" + identifier).replace(".", "-")
+    state = dict(fixture[3], Id=unit)
+
+    def run(argv, **options):
+        if argv[0] == "/usr/bin/systemctl" and argv[-1] == unit:
+            return "".join(key + "=" + value + "\n" for key, value in state.items()).encode()
+        if argv[:2] == ["/usr/bin/podman", "ps"] and argv[-1] == "name=^" + container + "$":
+            return [{"Id": "e" * 64, "Names": [container]}] if unit_files else []
+        if argv[:3] == ["/usr/bin/podman", "container", "inspect"] and argv[-1] == container:
+            return [{"Name": container, "Id": "e" * 64, "Image": "f" * 64, "ImageName": DELEGATED_IMAGE, "State": {"Running": True}}]
+        if argv == ["/usr/bin/podman", "image", "inspect", "f" * 64]:
+            return [{"Id": "f" * 64, "RepoDigests": [DELEGATED_IMAGE]}]
+        return command(argv, **options)
+
+    return run
+
+
+def test_listed_delegated_daemon_is_reported_without_the_ceph_image(fixture):
+    run = delegated(fixture, "haproxy.rgw.objects.node-1.abcdef", "ingress.rgw.objects", ["ingress.rgw.objects"])
+    result = observe.daemons(fixture[2], os.getuid(), run, owned=True, host="node-1")
+    assert [item["name"] for item in result] == ["haproxy.rgw.objects.node-1.abcdef", "mgr.host.abcdef"]
+    assert result[0]["state"] == "running" and result[0]["container_image_name"] == DELEGATED_IMAGE
+    assert result[0]["container_image_digests"] == [DELEGATED_IMAGE] and result[1]["container_image_name"] == fixture[2]["image"]
+
+
+@pytest.mark.parametrize("change", ["unlisted", "other-host", "no-host", "foreign-family"])
+def test_unlisted_delegated_daemon_refuses(fixture, change):
+    listed = ["rgw.objects"] if change == "unlisted" else ["ingress.rgw.objects"]
+    service = "rgw.objects" if change == "foreign-family" else "ingress.rgw.objects"
+    hosts = ("node-2",) if change == "other-host" else ("node-1",)
+    run = delegated(fixture, "haproxy.rgw.objects.node-1.abcdef", service, listed, hosts)
+    with pytest.raises(observe.ObservationRefusal):
+        observe.daemons(fixture[2], os.getuid(), run, owned=True, host=None if change == "no-host" else "node-1")
+
+
+def test_delegated_daemon_without_unit_files_matches_one_listed_prefix(fixture):
+    run = delegated(fixture, "rgw.objects.node-1.abcdef", None, ["nfs.objects", "rgw.objects"], unit_files=False)
+    result = observe.daemons(fixture[2], os.getuid(), run, owned=True, host="node-1")
+    assert result[1]["name"] == "rgw.objects.node-1.abcdef" and result[1]["state"] == "unknown"
+    assert result[1]["container_image_name"] == "" and result[1]["container_id"] == ""
+    (fixture[1].parent / "rgw.objects.node-1.abcdef").rmdir()
+    run = delegated(fixture, "rgw.a.b.node-1.abcdef", None, ["rgw.a", "rgw.a.b"], unit_files=False)
+    with pytest.raises(observe.ObservationRefusal):
+        observe.daemons(fixture[2], os.getuid(), run, owned=True, host="node-1")
+
+
 def cache(fixture):
     path = fixture[1].parent / ("cephadm." + "d" * 64)
     path.write_bytes(b"synthetic provider binary which must never be read")
@@ -205,10 +266,10 @@ def test_worker_artifact_proof_precedes_lending_exact_image_uid(core_request, mo
     native.verify_tool = lambda: proofs.append("verified")
     native._profile = {"uid": 167, "gid": 167, "policy": "Ciphers aes256-gcm@openssh.com\n", "label": "fixture:shared:label:s0"}
 
-    def daemons(request, uid, command, *, owned, cache_uid, clock, pause):
+    def daemons(request, uid, command, *, owned, cache_uid, clock, pause, host):
         assert proofs == ["verified"] and request is native.request
         assert uid == 167 and command == native.command and owned is True and cache_uid is None
-        assert clock == native.clock and pause == native.pause
+        assert clock == native.clock and pause == native.pause and host == core_request["bootstrap"]
         return []
 
     monkeypatch.setattr(observe, "daemons", daemons)

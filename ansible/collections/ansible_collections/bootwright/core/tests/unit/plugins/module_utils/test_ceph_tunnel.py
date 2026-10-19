@@ -22,7 +22,7 @@ def key():
 
 @pytest.fixture
 def tunnel_request():
-    return {"version": "ceph-core-v10", "clusterSSHTransport": "verified-tunnel", "owner": "apply-example",
+    return {"version": "ceph-core-v11", "clusterSSHTransport": "verified-tunnel", "owner": "apply-example",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "clusterSSHUser": "operator",
             "hosts": [{"name": "node-2", "address": "2001:db8::2", "port": 2222},
                       {"name": "node-1", "address": "192.0.2.1", "port": 22}]}

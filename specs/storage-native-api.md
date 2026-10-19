@@ -5,8 +5,9 @@ This page owns the M2 target for the native service model approved in D133.
 input. M2b implements the common native path and strict MON/MGR/OSD admission;
 [B492](milestones/m2.md#b492) adds the MDS family.
 [B477](milestones/m2.md#b477) and [B478](milestones/m2.md#b478) add the RGW,
-ingress and NFS records, which planning refuses until their execution lanes
-land.
+ingress and NFS records; the core request lists their services for core
+observation, and planning refuses each family until the block that deploys it
+lands.
 Release-qualified projection, additional families and protected leaf registries
 remain gated by [B472](milestones/m2.md#b472), [B474](milestones/m2.md#b474)
 and each [service item](storage-coverage.md#feature-matrix).
@@ -261,6 +262,22 @@ declared MDS service its native daemon ID
 An MDS service is ready when its placement count of daemons runs with the
 frozen image; no active rank is required before its filesystem exists.
 
+RGW, ingress and NFS services run in blocks the cluster block does not own.
+The core request lists each one in its `delegated` member by its qualified
+name and its eligible native hostnames, and carries nothing else of its
+document; the host request never carries the member. In the daemon-type table,
+`rgw`, `haproxy`, `keepalived` and `nfs` daemons (cephadm service types `rgw`,
+`ingress` and `nfs`) are admitted only when their `service_name` is listed in
+`delegated`, names their service type and their host is among that entry's
+hosts; any other is a foreign service. They are never counted toward readiness
+and never compared with the Ceph image; their executing block checks both. In
+the host layout, a listed daemon's directory is admitted on a host of its
+entry, identified by its `unit.meta` `service_name` or, before unit files
+exist, by the one listed service whose ID prefixes its daemon name
+`<service_id>.[<rank>.<generation>.]<host short name>.<six lowercase letters>`
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py#L922-L966));
+none or more than one such service refuses.
+
 `serviceRef` is a scalar exact reference to this registry in the already
 selected cluster. It is not a Bootwright object name, may contain native dots,
 and is resolved through the registry rather than guessed by splitting an
@@ -278,8 +295,11 @@ The [resource contract](storage-resources.md) owns those relationships.
 ### RGW, ingress and NFS records
 
 Admission accepts `rgw`, `ingress` and `nfs` documents under closed records
-whose members and spelling follow IBM's python3-ceph-common 20.2.1-405 ServiceSpec schema (the source read for these records, not a pinned build); planning
-still refuses each of them `lifecycle.unsupported` until its execution lane.
+whose members and spelling follow IBM's python3-ceph-common 20.2.1-405 ServiceSpec schema (the source read for these records, not a pinned build). The
+core request lists each of them by name and hosts
+([service identity](#service-identity-and-references)), and planning still
+refuses each family `lifecycle.unsupported` until the block that deploys it
+lands ([refusal table](storage.md#refusal-table)).
 
 | Type | Admitted `spec` members |
 | --- | --- |
@@ -463,6 +483,10 @@ required parents, native type and confidential serialization. Arrays must
 already have the addressed structural element; bindings cannot grow arrays or
 choose resource identities. Whole-secret documents are not injected into
 arbitrary maps.
+
+The core cluster request never carries a binding: planning leaves the TLS
+bindings of an RGW service that a StorageObjectGateway binds, and of the
+ingress that fronts it, to the gateway block, and refuses every other entry.
 
 For a native resource wrapper, `spec.secrets` uses this same pair and resolves
 paths relative to that resource's `native` payload. No `serviceRef` is needed

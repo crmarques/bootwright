@@ -47,6 +47,12 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 				return spec.WithPath(api.StringList("198.51.100.0/24"), "ceph", "networks", "clusterCIDRs")
 			},
 		}, values: map[string]string{"<host>": "node-1", "<machine>": "node-1", "<cidrs>": "198.51.100.0/24"}},
+		"A native rgw, ingress or nfs service whose deploying block this build lacks": {edits: map[string]func(api.Value) api.Value{
+			"nfs service": func(spec api.Value) api.Value {
+				services := append(spec.Get("ceph", "services").Items(), requestMap("service_type", "nfs", "service_id", "files", "placement", requestMap("label", "mon", "count", 2)))
+				return spec.WithPath(api.ListValue(services...), "ceph", "services")
+			},
+		}, values: map[string]string{"<service>": "nfs.files"}},
 	}
 	refused := map[api.Kind]string{api.StorageCluster: "example", api.StoragePool: "volumes", api.StorageClient: "consumer"}
 	for _, row := range refusalTable(t) {

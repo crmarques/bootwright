@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v10"
+const Version = "ceph-core-v11"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -170,6 +170,11 @@ type nativeService struct {
 
 const DefaultPackageRepository = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64"
 
+type DelegatedService struct {
+	Hosts []string `json:"hosts"`
+	Name  string   `json:"name"`
+}
+
 type Request struct {
 	Action                   string                       `json:"action"`
 	AnsiblePackageVersion    string                       `json:"ansiblePackageVersion"`
@@ -184,6 +189,7 @@ type Request struct {
 	ClusterSSHUser           string                       `json:"clusterSSHUser"`
 	Config                   map[string]map[string]string `json:"config,omitempty"`
 	Controller               string                       `json:"controller"`
+	Delegated                []DelegatedService           `json:"delegated,omitempty"`
 	Filesystem               *Filesystem                  `json:"filesystem,omitempty"`
 	FSID                     string                       `json:"fsid,omitempty"`
 	Hosts                    []Host                       `json:"hosts"`
@@ -275,8 +281,13 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 		return Request{}, failure(issue.Code, issue.Message, issue.Remediation)
 	}
 	r.Config = config
-	if spec.Get("mgrModules").Len() != 0 || spec.Get("serviceBindings").Len() != 0 || spec.Get("cephadm", "workarounds").Len() != 0 || spec.Get("cephadm", "bootstrap", "singleHostDefaults").Bool() {
-		return Request{}, failure("lifecycle.unsupported", "the core adapter does not yet realize additional cluster configuration or service bindings", "use only the qualified core MON/MGR/OSD profile")
+	if spec.Get("mgrModules").Len() != 0 || spec.Get("cephadm", "workarounds").Len() != 0 || spec.Get("cephadm", "bootstrap", "singleHostDefaults").Bool() {
+		return Request{}, failure("lifecycle.unsupported", "the core adapter does not yet realize additional cluster configuration", "use only the qualified core MON/MGR/OSD profile")
+	}
+	for _, binding := range spec.Get("serviceBindings").Items() {
+		if ref := binding.Get("serviceRef").Text(); !gatewayExecuted(c, cluster, ref) {
+			return Request{}, failure("lifecycle.unsupported", "Bootwright does not realize the service binding of "+ref+"; it realizes only the TLS bindings of an rgw service that a StorageObjectGateway binds and of the ingress that fronts it", "remove the spec.ceph.serviceBindings entry for "+ref)
+		}
 	}
 	if err := bindHosts(&r, c, cluster, contextName); err != nil {
 		return Request{}, err

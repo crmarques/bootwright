@@ -41,7 +41,7 @@ def cluster_request():
               "user": "operator", "port": 22, "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}],
               "labels": [], "location": {}, "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    return {"controller": "controller", "version": "ceph-core-v10", "action": "cluster", "cluster": "example", "owner": "apply-example",
+    return {"controller": "controller", "version": "ceph-core-v11", "action": "cluster", "cluster": "example", "owner": "apply-example",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -745,6 +745,18 @@ def test_manager_mount_proof_admits_only_a_daemon_without_a_container_naming_no_
     else:
         with pytest.raises(ceph_native.Refusal, match="native-tunnel-unproved"):
             native.verify_manager_mounts([pending, daemon])
+
+
+@pytest.mark.parametrize("name,admitted", [("haproxy.rgw.objects.node-1.abcdef", True), ("mon.x", False)])
+def test_manager_mounts_ignore_delegated_daemon_images(native, name, admitted):
+    daemon, unused = inspect_fixture(native)
+    delegated = dict(daemon, name=name, container_id="e" * 64, container_image_id="f" * 64,
+                     container_image_name="registry.example.test/haproxy@sha256:" + "b" * 64)
+    if admitted:
+        native.verify_manager_mounts([delegated, daemon])
+    else:
+        with pytest.raises(ceph_native.Refusal, match="^native-tunnel-unproved$"):
+            native.verify_manager_mounts([delegated, daemon])
 
 
 @pytest.mark.parametrize("state,container", [("stopped", ""), ("unknown", ""), ("unknown", "b" * 64), ("error", "")])

@@ -43,6 +43,7 @@ CORE = {
     "clusterSSHUser": "operator",
     "config": {"global": {"osd_pool_default_size": "2"}},
     "controller": "controller",
+    "delegated": [{"hosts": ["node-1"], "name": "rgw.objects"}],
     "filesystem": {"activeCount": 1, "dataPools": ["files-data"], "defaultDataPool": "files-data",
                    "groups": [{"gid": 0, "mode": "755", "name": "csi", "pool": "files-data", "sizeBytes": 0, "uid": 0}], "mdsService": "mds.files",
                    "metadataPool": "files-metadata", "name": "files", "standbyCountWanted": 0, "standbyReplay": False},
@@ -111,7 +112,7 @@ CORE = {
     "registryRef": "ibm-registry",
     "services": [{"placement": {"count": 2, "hosts": ["node-1"]}, "service_type": "mgr"}],
     "subvolume": {"filesystem": "files", "gid": 0, "group": "", "mode": "755", "name": "docs", "pool": "files-data", "sizeBytes": 0, "uid": 0},
-    "version": "ceph-core-v10",
+    "version": "ceph-core-v11",
 }
 
 IMAGE = {
@@ -126,7 +127,7 @@ IMAGE = {
     "version": "ceph-image-v2",
 }
 
-HOST = {"cluster": {key: value for key, value in CORE.items() if key != "action"}, "host": "node-1", "version": "ceph-host-v2"}
+HOST = {"cluster": {key: value for key, value in CORE.items() if key not in ("action", "delegated")}, "host": "node-1", "version": "ceph-host-v2"}
 
 # Role, its entry points, the request variable and the request carrying every
 # member the Go side encodes, with the variables its entry point also requires.

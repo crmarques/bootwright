@@ -11,9 +11,15 @@ Current admission requires nonempty `spec.ceph.services`. Core MON, MGR and
 OSD documents are admitted, and so are MDS documents that a StorageFilesystem
 of the same cluster binds by name. StorageFilesystem is admitted under
 [CephFS filesystems](#cephfs-filesystems). RGW, ingress and NFS documents are admitted under their
-[native records](../storage-native-api.md#rgw-ingress-and-nfs-records), and
-planning refuses them `lifecycle.unsupported` until B477 and B478's execution
-lanes. An RGW document must be bound by a StorageObjectGateway of the same
+[native records](../storage-native-api.md#rgw-ingress-and-nfs-records). The
+core request lists each of them only by its qualified name and eligible hosts,
+outside the host request, so that core observation
+[tolerates its daemons](../storage-native-api.md#service-identity-and-references);
+planning still refuses each family `lifecycle.unsupported` until the block
+that deploys it lands ([refusal table](../storage.md#refusal-table)). A
+`spec.ceph.serviceBindings` entry is left to the gateway block only for an RGW
+service a StorageObjectGateway binds and for the ingress that fronts it; any
+other entry refuses at planning. An RGW document must be bound by a StorageObjectGateway of the same
 cluster whose `spec.serviceRef` names it; an unbound one refuses at its
 `service_id`, because cephadm would deploy it before its realm, zone group and
 zone exist. `spec.ceph.mgrModules` admits `cephadm` and `rbd_support`; `nfs`
@@ -104,7 +110,7 @@ this field grants no exception to host-key verification. The three-node
 example selects `verified-tunnel` explicitly; its protected mounts and staged
 bootstrap remain subject to
 [release qualification](../storage-coverage.md#release-qualification).
-Core request v10 refuses continuation of v9 operations, image request v2 and
+Core request v11 refuses continuation of v10 operations, image request v2 and
 package request v2 refuse continuation of older operations, and core
 evidence v3 and host request v2 refuse continuation of operations an
 earlier build made; finish or remove old contexts with their original

@@ -102,7 +102,13 @@ DAEMON_TYPES = {
     "crash": ("cluster", "request", True, "ceph"),
     "ceph-exporter": ("cluster", "request", True, "ceph"),
     "mds": ("cluster", "service", True, "ceph"),
+    "rgw": ("delegated", "delegated", False, "none"),
+    "haproxy": ("delegated", "delegated", False, "none"),
+    "keepalived": ("delegated", "delegated", False, "none"),
+    "nfs": ("delegated", "delegated", False, "none"),
 }
+# A service another block executes, listed by its cephadm service_name: rgw.<id>, ingress.<id> or nfs.<id>.
+DELEGATED_SERVICE = re.compile(r"(?:rgw|ingress|nfs)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
 
 
 def supported_transport(request):
@@ -415,8 +421,10 @@ def validate(request):
     """Admit only the implemented core envelope, including concrete devices."""
     require(isinstance(request, dict))
     required = SCOPE_MEMBERS | {"action"}
-    require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"pool", "client", "policy", "rbd", "filesystem", "subvolume"})
+    resources = {"pool", "client", "policy", "rbd", "filesystem", "subvolume"}
+    require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"delegated"} - resources)
     hosts = scope_checks(request)
+    validate_delegated(request, hosts)
     if request["action"] == "cluster":
         require(not {"pool", "client", "policy", "rbd", "filesystem", "subvolume"} & set(request))
         return request
@@ -424,6 +432,33 @@ def validate(request):
     require(request["action"] in ceph_native_resources.ACTIONS)
     ceph_native_resources.validate(request, hosts)
     return request
+
+
+def validate_delegated(request, hosts):
+    """Admit the services other blocks execute: each listed once, in name order, on distinct request hosts."""
+    if "delegated" not in request:
+        return
+    delegated = request["delegated"]
+    require(isinstance(delegated, list) and 1 <= len(delegated) <= 128)
+    names = [host["name"] for host in hosts]
+    for entry in delegated:
+        require(isinstance(entry, dict) and set(entry) == {"name", "hosts"})
+        require(isinstance(entry["name"], str) and DELEGATED_SERVICE.fullmatch(entry["name"]) is not None)
+        listed = entry["hosts"]
+        require(isinstance(listed, list) and bool(listed) and all(isinstance(host, str) and host in names for host in listed))
+        require(len(set(listed)) == len(listed))
+    services = [entry["name"] for entry in delegated]
+    require(services == sorted(set(services)))
+
+
+def delegated_daemon(daemon, request):
+    """Tolerate a daemon another block executes only when its service is listed and it runs on one of that service's hosts."""
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_observe
+    delegated = {entry["name"]: entry["hosts"] for entry in request.get("delegated", [])}
+    service = daemon.get("service_name")
+    require(isinstance(service, str) and service in delegated, "foreign-service")
+    require(service.startswith(ceph_native_observe.DELEGATED_TYPES[daemon["daemon_type"]] + "."), "foreign-service")
+    require(daemon["hostname"] in delegated[service], "foreign-service")
 
 
 def validate_scope(scope):
@@ -444,7 +479,7 @@ def host_scope(request):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v10")
+    require(request["version"] == "ceph-core-v11")
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])
@@ -1365,7 +1400,7 @@ class Worker:
         self.verify_tool()
         try:
             daemons = ceph_native_observe.daemons(self.request, self.observed_manager_uid(), self.command, owned=self.markers.owned(),
-                                                  cache_uid=self.observer_cache_uid(), clock=self.clock, pause=self.pause)
+                                                  cache_uid=self.observer_cache_uid(), clock=self.clock, pause=self.pause, host=self.host["name"])
         except ceph_native_observe.ObservationChangedRefusal:
             # cephadm kept moving this host's layout through every bounded snapshot: unfinished, never foreign.
             raise Refusal("not-ready") from None
@@ -2573,12 +2608,16 @@ class Worker:
         """Prove each running manager container of this host mounts the bundle exactly. An observation names a manager whose
         container is absent or not running, as cephadm's --rm containers are while it restarts them, as pending; an action
         requires it running. A running container that contradicts the request refuses either way."""
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_observe
         helper, unused = tunnel_helpers()
         require(isinstance(daemons, list) and bool(daemons), "native-tunnel-unproved")
         seen, pending = set(), []
         managers = next(s["placement"]["hosts"] for s in self.request["services"] if s["service_type"] == "mgr")
         for daemon in daemons:
             require(isinstance(daemon, dict) and daemon.get("fsid") == self.request["fsid"], "native-tunnel-unproved")
+            # Another block owns a delegated daemon's image; the host layout already proved its listing.
+            if str(daemon.get("name", "")).split(".", 1)[0] in ceph_native_observe.DELEGATED_TYPES:
+                continue
             # A daemon cephadm has not yet written unit files for names no image and runs no container.
             images = (self.request["image"],) if daemon.get("container_id") != "" else (self.request["image"], "")
             require(daemon.get("container_image_name") in images, "native-tunnel-unproved")
@@ -3392,7 +3431,9 @@ class Worker:
             require(isinstance(daemon, dict) and daemon.get("daemon_type") in DAEMON_TYPES, "foreign-service")
             unused, host_rule, counted, image_rule = DAEMON_TYPES[daemon["daemon_type"]]
             require(daemon.get("hostname") in wanted, "foreign-service")
-            if host_rule == "identity":
+            if host_rule == "delegated":
+                delegated_daemon(daemon, self.request)
+            elif host_rule == "identity":
                 expected = expected_mons if daemon["daemon_type"] == "mon" else expected_mgrs
                 require(daemon_identity_host(daemon["daemon_type"], daemon.get("daemon_id"), expected) == daemon["hostname"], "foreign-service")
             elif host_rule == "service":

@@ -109,3 +109,89 @@ def test_cluster_ready_needs_mds_running_count_not_active(core_request, change):
 
 def test_host_layout_types_match_the_daemon_type_table():
     assert observe.TYPES == frozenset(ceph_native.DAEMON_TYPES)
+    assert frozenset(observe.DELEGATED_TYPES) == {name for name, row in ceph_native.DAEMON_TYPES.items() if row[0] == "delegated"}
+
+
+def with_delegated(request):
+    names = [host["name"] for host in request["hosts"]]
+    request["delegated"] = [{"name": name, "hosts": names[:2]} for name in ("ingress.rgw.objects", "nfs.files", "rgw.objects")]
+    request["config"] = core_fixtures.memory_config()
+    return request
+
+
+def delegated_daemon(daemon_type, service, host, status=0):
+    """One `ceph orch ps` row of a daemon another block executes, as DaemonDescription.to_json emits it with its service_name
+    (orchestrator/_interface.py, v20.2.1); its image is that service's own, never the Ceph image."""
+    identifier = service.split(".", 1)[1] + "." + host.split(".", 1)[0] + ".abcdef"
+    return {"daemon_type": daemon_type, "daemon_id": identifier, "service_name": service, "hostname": host, "status": status,
+            "container_image_digests": ["registry.example.test/other@sha256:" + "a" * 64]}
+
+
+DELEGATED_ROWS = {"rgw": "rgw.objects", "haproxy": "ingress.rgw.objects", "keepalived": "ingress.rgw.objects", "nfs": "nfs.files"}
+
+
+@pytest.mark.parametrize("daemon_type", sorted(DELEGATED_ROWS))
+def test_observe_tolerates_listed_delegated_daemons(core_request, daemon_type):
+    with_delegated(core_request)
+    answers = core_fixtures.memory_observation_answers(core_request)
+    hosts = [host["name"] for host in core_request["hosts"]]
+    answers[("orch", "ps")] += [delegated_daemon(daemon_type, DELEGATED_ROWS[daemon_type], host) for host in hosts[:2]]
+    native, unused = core_fixtures.worker(core_request, answers)
+    assert native.observe()["ready"] is True
+    assert native.markers.writes == []
+
+
+@pytest.mark.parametrize("change", ["unlisted", "outside-hosts", "wrong-family", "no-service"])
+def test_observe_refuses_unlisted_delegated_daemon(core_request, change):
+    with_delegated(core_request)
+    answers = core_fixtures.memory_observation_answers(core_request)
+    hosts = [host["name"] for host in core_request["hosts"]]
+    row = {"unlisted": delegated_daemon("nfs", "nfs.other", hosts[0]), "outside-hosts": delegated_daemon("nfs", "nfs.files", hosts[2]),
+           "wrong-family": delegated_daemon("haproxy", "nfs.files", hosts[0]), "no-service": delegated_daemon("rgw", "rgw.objects", hosts[0])}[change]
+    if change == "no-service":
+        del row["service_name"]
+    answers[("orch", "ps")].append(row)
+    native, unused = core_fixtures.worker(core_request, answers)
+    with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
+        native.observe()
+    assert native.markers.writes == []
+
+
+def test_validate_admits_delegated_member(core_request):
+    with_delegated(core_request)
+    assert ceph_native.validate(core_request) is core_request
+
+
+@pytest.mark.parametrize("change", ["empty", "cluster-family", "unknown-host", "duplicate-host", "no-hosts", "unsorted", "duplicate-name",
+                                    "extra-key", "not-a-list"])
+def test_validate_refuses_malformed_delegated(core_request, change):
+    with_delegated(core_request)
+    delegated = core_request["delegated"]
+    names = [host["name"] for host in core_request["hosts"]]
+    if change == "empty":
+        core_request["delegated"] = []
+    elif change == "cluster-family":
+        delegated[1]["name"] = "mds.files"
+    elif change == "unknown-host":
+        delegated[0]["hosts"] = ["node-9"]
+    elif change == "duplicate-host":
+        delegated[0]["hosts"] = [names[0], names[0]]
+    elif change == "no-hosts":
+        delegated[0]["hosts"] = []
+    elif change == "unsorted":
+        delegated.reverse()
+    elif change == "duplicate-name":
+        delegated[1]["name"] = delegated[0]["name"]
+    elif change == "extra-key":
+        delegated[0]["spec"] = {}
+    else:
+        core_request["delegated"] = {"name": "rgw.objects", "hosts": names}
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate(core_request)
+
+
+def test_host_scope_refuses_delegated(core_request):
+    with_delegated(core_request)
+    scope = {key: value for key, value in core_request.items() if key != "action"}
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate_scope(scope)

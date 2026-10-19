@@ -26,7 +26,10 @@ ROOT_UID = 0
 MAX_DAEMONS = 1024
 MAX_ENTRIES = 4096
 MAX_METADATA = 4096
-TYPES = frozenset(("mon", "mgr", "osd", "crash", "ceph-exporter", "mds"))
+CLUSTER_TYPES = frozenset(("mon", "mgr", "osd", "crash", "ceph-exporter", "mds"))
+# Each daemon type another block executes, mapped to its cephadm service type (orchestrator daemon_type_to_service).
+DELEGATED_TYPES = {"haproxy": "ingress", "keepalived": "ingress", "nfs": "nfs", "rgw": "rgw"}
+TYPES = CLUSTER_TYPES | frozenset(DELEGATED_TYPES)
 NAME = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
 IMAGE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}\Z")
 HEX = re.compile(r"[0-9a-f]{64}\Z")
@@ -190,9 +193,10 @@ def metadata(directory, kind, owners):
     except (ValueError, UnicodeError):
         raise ObservationRefusal("native-observation-unproved") from None
     require(isinstance(value, dict) and isinstance(value.get("service_name"), str))
-    require(value["service_name"] == kind or value["service_name"].startswith(kind + "."))
+    service = DELEGATED_TYPES.get(kind, kind)
+    require(value["service_name"] == service or value["service_name"].startswith(service + "."))
     # Do not merge arbitrary unit.meta members into evidence as cephadm ls does.
-    return binding
+    return binding, value["service_name"]
 
 
 def unit_state(raw, unit):
@@ -225,11 +229,13 @@ def unit_state(raw, unit):
 
 
 def container_state(value, name, image):
-    """The container's identity and whether it runs; the caller binds that to its unit."""
+    """The container's identity and whether it runs; the caller binds that to its unit. A delegated daemon's image is None:
+    its executing block, not this one, compares it."""
     require(isinstance(value, list) and len(value) == 1 and isinstance(value[0], dict))
     item = value[0]
     require(isinstance(item.get("Id"), str) and HEX.fullmatch(item["Id"]) is not None and item.get("Name") == name)
-    require(item.get("ImageName") == image and isinstance(item.get("Image"), str) and HEX.fullmatch(item["Image"]) is not None)
+    require(image is None or item.get("ImageName") == image)
+    require(isinstance(item.get("Image"), str) and HEX.fullmatch(item["Image"]) is not None)
     state = item.get("State")
     require(isinstance(state, dict) and type(state.get("Running")) is bool)
     return item["Id"], item["Image"], state["Running"]
@@ -241,19 +247,40 @@ def image_digests(value, identifier, image):
     require(item.get("Id") in (identifier, "sha256:" + identifier))
     digests = item.get("RepoDigests")
     require(isinstance(digests, list) and 1 <= len(digests) <= 64 and all(isinstance(item, str) and IMAGE.fullmatch(item) is not None for item in digests))
-    require(len(set(digests)) == len(digests) and image in digests)
+    require(len(set(digests)) == len(digests) and (image is None or image in digests))
     return sorted(digests)
 
 
 def unit_files(directory, kind, owners, image):
-    """None before cephadm has written the daemon's unit files; a written image must be the request's."""
+    """(None, None, None) before cephadm has written the daemon's unit files; else their bindings, service name and image.
+    A cluster daemon's written image must be the request's; a delegated daemon's (image None) need only be well formed."""
     try:
-        bindings = {"unit.meta": metadata(directory, kind, owners)}
+        binding, service = metadata(directory, kind, owners)
+        bindings = {"unit.meta": binding}
         value, bindings["unit.image"] = public_file(directory, "unit.image", owners)
     except FileNotFoundError:
-        return None
-    require(value.strip() == image.encode("ascii"))
-    return bindings
+        return None, None, None
+    if image is not None:
+        require(value.strip() == image.encode("ascii"))
+        return bindings, service, image
+    try:
+        written = value.strip().decode("ascii")
+    except UnicodeError:
+        raise ObservationRefusal("native-observation-unproved") from None
+    require(0 < len(written) <= 1024 and all(32 < ord(char) < 127 for char in written))
+    return bindings, service, written
+
+
+def delegated_service(name, service, listed):
+    """The listed service a delegated daemon belongs to: cephadm names it <type>.<service_id>.<suffix> (get_unique_name with
+    prefix=service_id), and its unit.meta, once written, must name that same listed service."""
+    kind = name.split(".", 1)[0]
+    matches = [entry for entry in listed if entry.split(".", 1)[0] == DELEGATED_TYPES[kind] and name.startswith(kind + "." + entry.split(".", 1)[1] + ".")]
+    if service is None:
+        require(len(matches) == 1)
+        return matches[0]
+    require(service in matches)
+    return service
 
 
 def present(command, container):
@@ -264,15 +291,18 @@ def present(command, container):
     return bool(value)
 
 
-def daemon(directory, request, name, owners, command):
-    """A daemon of this FSID without unit files, a loaded unit or a container yet is reported not running."""
+def daemon(directory, request, name, owners, command, listed=()):
+    """A daemon of this FSID without unit files, a loaded unit or a container yet is reported not running. A delegated daemon
+    must belong to a service listed for this host, and is never compared with the Ceph image."""
     kind, identifier = name.split(".", 1)
     require(kind in TYPES and NAME.fullmatch(identifier) is not None)
-    image = request["image"]
-    bindings = unit_files(directory, kind, owners, image)
+    image = None if kind in DELEGATED_TYPES else request["image"]
+    bindings, service, written = unit_files(directory, kind, owners, image)
+    if kind in DELEGATED_TYPES:
+        delegated_service(name, service, listed)
     unit = "ceph-" + request["fsid"] + "@" + name + ".service"
     result = {"style": "cephadm:v1", "name": name, "fsid": request["fsid"], "systemd_unit": unit.removesuffix(".service"),
-              "enabled": False, "state": "unknown", "container_id": "", "container_image_name": "" if bindings is None else image,
+              "enabled": False, "state": "unknown", "container_id": "", "container_image_name": "" if bindings is None else written,
               "container_image_id": "", "container_image_digests": []}
     loaded, running = None, False
     argv = ["/usr/bin/systemctl", "show", "--no-pager"] + ["--property=" + field for field in PROPERTIES] + [unit]
@@ -307,13 +337,13 @@ def daemon(directory, request, name, owners, command):
     return result
 
 
-def daemons(request, uid, command, *, owned, cache_uid=None, clock=time.monotonic, pause=time.sleep):
+def daemons(request, uid, command, *, owned, cache_uid=None, clock=time.monotonic, pause=time.sleep, host=None):
     """A settled snapshot: one cephadm moved is taken again, bounded by attempts and a horizon, then refused as changed."""
     deadline = clock() + SETTLE_HORIZON
     attempt = 1
     while True:
         try:
-            return snapshot(request, uid, command, owned=owned, cache_uid=cache_uid)
+            return snapshot(request, uid, command, owned=owned, cache_uid=cache_uid, host=host)
         except ObservationChangedRefusal:
             if attempt >= SETTLE_ATTEMPTS or clock() + SETTLE_PAUSE >= deadline:
                 raise
@@ -321,12 +351,21 @@ def daemons(request, uid, command, *, owned, cache_uid=None, clock=time.monotoni
         pause(SETTLE_PAUSE)
 
 
-def snapshot(request, uid, command, *, owned, cache_uid=None):
+def listed_services(request, host):
+    """The delegated services the request lists on this host; none without a host."""
+    delegated = request.get("delegated", [])
+    require(isinstance(delegated, list) and all(isinstance(entry, dict) and isinstance(entry.get("name"), str) and "." in entry["name"]
+                                                and isinstance(entry.get("hosts"), list) for entry in delegated))
+    return [] if host is None else [entry["name"] for entry in delegated if host in entry["hosts"]]
+
+
+def snapshot(request, uid, command, *, owned, cache_uid=None, host=None):
     """Inspect only the fixed managed host layout; do not infer file custody."""
     try:
         require(type(owned) is bool and (cache_uid is None or type(cache_uid) is int and cache_uid > 0))
         require(isinstance(request, dict) and isinstance(request.get("fsid"), str) and str(uuid.UUID(request["fsid"])) == request["fsid"])
         require(isinstance(request.get("image"), str) and IMAGE.fullmatch(request["image"]) is not None)
+        listed = listed_services(request, host)
         with root_directory(uid) as root:
             if root is None:
                 return []
@@ -363,7 +402,7 @@ def snapshot(request, uid, command, *, owned, cache_uid=None):
                 result = []
                 for name in selected:
                     with child_directory(cluster, name, owners) as directory:
-                        result.append(daemon(directory, request, name, owners, command))
+                        result.append(daemon(directory, request, name, owners, command, listed))
                 require(entries(cluster) == names and entries(root) == before, changed=True)
                 return result
     except ObservationRefusal:

@@ -24,6 +24,14 @@ func projectServices(r *Request, cluster api.Object) error {
 	})
 	for _, svc := range services {
 		t := svc.Get("service_type").Text()
+		if slices.Contains(delegatedFamilies, t) {
+			hosts, err := serviceHosts(cluster, svc)
+			if err != nil {
+				return err
+			}
+			r.Delegated = append(r.Delegated, DelegatedService{Name: storage.NativeServiceName(svc), Hosts: hosts})
+			continue
+		}
 		if !slices.Contains([]string{"mon", "mgr", "osd", "mds"}, t) {
 			return failure("lifecycle.unsupported", "a selected service has no core lifecycle", "use only MON, MGR, OSD and MDS services until its feature item is delivered")
 		}
@@ -40,17 +48,10 @@ func projectServices(r *Request, cluster api.Object) error {
 		if svc.Has("extra_container_args") || svc.Has("extra_entrypoint_args") || svc.Has("custom_configs") || svc.Has("config") || svc.Get("unmanaged").Bool() {
 			return failure("lifecycle.unsupported", "core services cannot carry unqualified additional effects", "remove the unqualified service options")
 		}
-		names, issues := storage.ResolveServicePlacement(cluster, svc)
-		if len(issues) != 0 {
-			return failure("api.invariant", "native service placement could not be resolved", "correct the service placement")
-		}
-		hosts := []string{}
-		for _, n := range names {
-			for _, node := range spec.Get("topology", "nodes").Items() {
-				if node.Get("name").Text() == n {
-					hosts = append(hosts, storage.NativeHostname(node))
-				}
-			}
+		names, _ := storage.ResolveServicePlacement(cluster, svc)
+		hosts, err := serviceHosts(cluster, svc)
+		if err != nil {
+			return err
 		}
 		projected := nativeService{ServiceType: t, ServiceID: svc.Get("service_id").Text(), Placement: nativePlacement{Hosts: hosts}}
 		if t == "mgr" && r.ClusterSSHTransport == "verified-tunnel" && !slices.Contains(hosts, r.Bootstrap) {
@@ -87,4 +88,74 @@ func projectServices(r *Request, cluster api.Object) error {
 		r.Services = append(r.Services, data)
 	}
 	return nil
+}
+
+var delegatedFamilies = []string{"rgw", "ingress", "nfs"}
+
+var undeployedFamilies = []string{"nfs", "rgw"}
+
+func serviceHosts(cluster api.Object, svc api.Value) ([]string, error) {
+	names, issues := storage.ResolveServicePlacement(cluster, svc)
+	if len(issues) != 0 {
+		return nil, failure("api.invariant", "native service placement could not be resolved", "correct the service placement")
+	}
+	hosts := []string{}
+	for _, n := range names {
+		for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
+			if node.Get("name").Text() == n {
+				hosts = append(hosts, storage.NativeHostname(node))
+			}
+		}
+	}
+	return hosts, nil
+}
+
+func serviceFamily(cluster api.Object, svc api.Value) string {
+	t := svc.Get("service_type").Text()
+	if t != "ingress" {
+		return t
+	}
+	backend, found := storage.NativeService(cluster, svc.Get("spec", "backend_service").Text())
+	if !found {
+		return ""
+	}
+	return backend.Get("service_type").Text()
+}
+
+func undeployedDelegated(cluster api.Object) (string, string, bool) {
+	services := cluster.Spec().Get("ceph", "services").Items()
+	slices.SortStableFunc(services, func(a, b api.Value) int {
+		return strings.Compare(storage.NativeServiceName(a), storage.NativeServiceName(b))
+	})
+	for _, svc := range services {
+		t := svc.Get("service_type").Text()
+		if !slices.Contains(delegatedFamilies, t) {
+			continue
+		}
+		family := serviceFamily(cluster, svc)
+		if family == "" || slices.Contains(undeployedFamilies, family) {
+			name := storage.NativeServiceName(svc)
+			return "Bootwright does not deploy the native service " + name + " yet",
+				"remove " + name + " from spec.ceph.services, together with an ingress that fronts it and its spec.ceph.serviceBindings entries", true
+		}
+	}
+	return "", "", false
+}
+
+func gatewayExecuted(c api.Catalog, cluster api.Object, ref string) bool {
+	svc, found := storage.NativeService(cluster, ref)
+	if !found {
+		return false
+	}
+	switch svc.Get("service_type").Text() {
+	case "ingress":
+		return serviceFamily(cluster, svc) == "rgw" && gatewayExecuted(c, cluster, svc.Get("spec", "backend_service").Text())
+	case "rgw":
+		for _, gateway := range c.OfKind(api.StorageObjectGateway) {
+			if gateway.Spec().Get("clusterRef").Text() == cluster.Name() && gateway.Spec().Get("serviceRef").Text() == ref {
+				return true
+			}
+		}
+	}
+	return false
 }

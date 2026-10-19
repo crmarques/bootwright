@@ -6,6 +6,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -111,6 +112,17 @@ func TestFrozenRequestGolden(t *testing.T) {
 		if err != nil || !bytes.Equal(data, roundtrip) {
 			t.Fatal("frozen request did not round-trip")
 		}
+	}
+	r.Action, r.Subvolume = "cluster", nil
+	r.Delegated = []DelegatedService{{Name: "ingress.rgw.objects", Hosts: []string{"node-1", "node-2"}}, {Name: "rgw.objects", Hosts: []string{"node-1", "node-2"}}}
+	data, err := r.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	matchesGolden(t, "request-cluster-delegated", data, false)
+	decoded, err := DecodeRequest(data)
+	if err != nil || !reflect.DeepEqual(decoded.Delegated, r.Delegated) {
+		t.Fatalf("frozen delegated services did not round-trip: %+v %v", decoded.Delegated, err)
 	}
 }
 
