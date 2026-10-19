@@ -150,6 +150,23 @@ func TestServiceUnitProjection(t *testing.T) {
 	if len(two) != 2 || two[0].ID != "alpha" || two[1].ID != "zeta" || !reflect.DeepEqual(ServiceUnitBlockID("example", two[0]), "ceph-service-example-nfs-alpha") {
 		t.Fatalf("two nfs services make %+v", two)
 	}
+	fronted := unitsOf(t, frontedNFS("zeta", "192.0.2.60/24")[1], frontedNFS("alpha", "192.0.2.50/24")[0], frontedNFS("alpha", "192.0.2.50/24")[1],
+		frontedNFS("zeta", "192.0.2.60/24")[0], rgwService("objects"), ingressService("rgw.objects"))
+	for i, id := range []string{"alpha", "zeta"} {
+		vip := map[string]string{"alpha": "192.0.2.50/24", "zeta": "192.0.2.60/24"}[id]
+		want := []string{
+			`{"placement":{"count":2,"hosts":["node-1","node-2","node-3"]},"service_id":"nfs.` + id + `","service_type":"ingress","spec":{"backend_service":"nfs.` + id + `","virtual_ip":"` + vip + `"}}`,
+			`{"placement":{"count":2,"hosts":["node-1","node-2","node-3"]},"service_id":"` + id + `","service_type":"nfs"}`,
+		}
+		if len(fronted) != 2 || fronted[i].ID != id || !slices.Equal(documentsOf(fronted[i]), want) {
+			t.Fatalf("the fronted unit %s is %q", id, documentsOf(fronted[i]))
+		}
+	}
+}
+
+func frontedNFS(id, vip string) []api.Value {
+	return []api.Value{nfsService(id), requestMap("service_type", "ingress", "service_id", "nfs."+id, "placement", requestMap("label", "mon", "count", 2),
+		"spec", requestMap("backend_service", "nfs."+id, "virtual_ip", vip))}
 }
 
 func planError(t *testing.T, catalog api.Catalog) error {
