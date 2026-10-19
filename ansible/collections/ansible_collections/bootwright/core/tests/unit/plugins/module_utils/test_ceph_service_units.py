@@ -531,6 +531,77 @@ def test_nfs_unit_observation_refuses_an_unowned_service_created_outside(tmp_pat
     assert records(markers) == before and monitor.mutations == []
 
 
+def test_nfs_unit_readiness_needs_the_nfs_application_on_the_recorded_pool(tmp_path):
+    markers, monitor = ready_unit(tmp_path)
+    monitor.pools[0]["application_metadata"] = {}
+    before = records(markers)
+    assert observe(monitor, markers)[0] is False
+    assert records(markers) == before and markers.read("nfs-pool-id.json") == {"id": 9}
+    assert monitor.mutations == [("orch", "apply", "-i", "-")]
+
+
+def test_nfs_unit_readiness_needs_every_completion_record(tmp_path):
+    request = unit_request("haproxy")
+    markers = markers_for(tmp_path, request)
+    seed_records(markers, request)
+    markers.write("nfs-pool-id.json", {"id": 9})
+    specs = {name_of(document): document for document in request["service"]["documents"]}
+    monitor = Monitor(request, pools=[nfs_pool(9)], specs=specs)
+    monitor.clusters = ["files"]
+    monitor.running = [daemon(request, kind, "ingress.nfs.files", host, "nfs.files." + host + ".abcdef")
+                       for kind in ("haproxy", "keepalived") for host in ("node-1", "node-2")]
+    monitor.running += [daemon(request, "nfs", "nfs.files", host, "files." + str(i) + ".0." + host + ".abcdef") for i, host in enumerate(("node-1", "node-2"))]
+    before = records(markers)
+    native = worker(monitor, markers)
+    evidence = native.empty_evidence()
+    assert native.observe_resource(evidence, True) is False
+    assert evidence["owned"] and native.blocking == []
+    assert records(markers) == before and monitor.mutations == []
+
+
+def test_nfs_unit_refuses_a_readback_that_differs_from_the_applied_document(tmp_path):
+    request = unit_request("haproxy")
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    run = monitor.run
+
+    def rewriting(argv, data=b"", timeout=60):
+        result = run(argv, data, timeout)
+        if tuple(argv[-4:]) == ("orch", "apply", "-i", "-"):
+            monitor.specs["nfs.files"] = dict(monitor.specs["nfs.files"], spec={"enable_haproxy_protocol": True, "port": 2049})
+        return result
+
+    monitor.run = rewriting
+    with pytest.raises(ceph_native.Refusal, match="^not-ready$"):
+        worker(monitor, markers).unit()
+    assert len(monitor.batches) == 1
+    assert not any(name.endswith("-complete.json") for name in records(markers))
+
+
+@pytest.mark.parametrize("record", ["foreign attempt", "completion without attempt"])
+def test_nfs_unit_refuses_a_service_record_that_is_not_its_intent(tmp_path, record):
+    request = unit_request("haproxy")
+    markers = markers_for(tmp_path, request)
+    specs = {}
+    if record == "foreign attempt":
+        seed_records(markers, request)
+        other = dict(request["service"]["documents"][1], spec={"port": 2049})
+        os.remove(os.path.join(markers.path, "service-nfs.files-attempt.json"))
+        markers.write("service-nfs.files-attempt.json", {"scope": scope(request), "service": other})
+    else:
+        seed_records(markers, request, complete=True)
+        os.remove(os.path.join(markers.path, "service-nfs.files-attempt.json"))
+        specs = {name_of(document): document for document in request["service"]["documents"]}
+    before = records(markers)
+    monitor = Monitor(request, specs=specs)
+    with pytest.raises(ceph_native.Refusal, match="^ownership$"):
+        worker(monitor, markers).unit()
+    native = worker(monitor, markers)
+    with pytest.raises(ceph_native.Refusal, match="^ownership$"):
+        native.observe_resource(native.empty_evidence(), True)
+    assert records(markers) == before and monitor.mutations == []
+
+
 def test_unit_unfinished_reports_its_own_inputs_record(tmp_path):
     request = unit_request("haproxy")
     markers = markers_for(tmp_path, request)
@@ -621,8 +692,9 @@ def observation(request, ready, daemons=()):
 
 
 class Transport:
-    def __init__(self, request, ready_after=1, blocking=()):
+    def __init__(self, request, ready_after=1, blocking=(), observed=None):
         self.request, self.calls, self.ready_after, self.blocking = request, [], ready_after, list(blocking)
+        self.observed = dict(observed or {})
 
     def call(self, host, phase, timeout=None):
         self.calls.append((host["name"], phase))
@@ -630,7 +702,7 @@ class Transport:
             assert timeout is None or 0 < timeout <= 660
             ready = sum(call[1] == "observe" for call in self.calls) >= self.ready_after
             daemons = [{"host": "node-1", "name": "nfs.files.0.0.node-1.abcdef", "service": "nfs.files"}] if ready else []
-            return dict(observation(self.request, ready, daemons), blocking=[] if ready else self.blocking)
+            return dict(observation(self.request, ready, daemons), blocking=[] if ready else self.blocking, **self.observed)
         if phase == "prerequisites":
             return {"name": host["name"], "owned": True, "exists": True}
         return {"changed": phase == "unit"}
@@ -646,6 +718,31 @@ def test_core_execute_runs_the_unit_on_the_bootstrap_host_only(monkeypatch):
     transport = Transport(request)
     result = ceph_core.execute(request, "observe", "d" * 64, transport)
     assert transport.calls == [("node-1", "observe")] and result["changed"] is False
+
+
+def test_core_destroy_runs_the_unit_destroy_then_one_observation_on_the_bootstrap_host(monkeypatch):
+    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
+    request = unit_request("direct")
+    removed = {"exists": False, "ready": False, "removed": True, "partial": False, "daemons": []}
+    transport = Transport(request, observed=removed)
+    result = ceph_core.execute(request, "destroy", "d" * 64, transport)
+    assert transport.calls == [("node-1", "destroy"), ("node-1", "observe")] and result["evidence"]["removed"] is True
+    transport = Transport(request, ready_after=99, observed={"partial": True})
+    with pytest.raises(ceph_native.Refusal, match="^not-removed$"):
+        ceph_core.execute(request, "destroy", "d" * 64, transport)
+    assert transport.calls == [("node-1", "destroy"), ("node-1", "observe")]
+
+
+@pytest.mark.parametrize("lost", ["owned", "exists", "partial"])
+def test_core_unit_wait_refuses_an_unowned_or_settled_unready_unit_without_polling(monkeypatch, lost):
+    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
+    request = unit_request("direct")
+    clock = iter(range(0, 100000, 300))
+    transport = Transport(request, ready_after=99, observed={lost: False})
+    with pytest.raises(ceph_native.Refusal, match="^not-ready$") as caught:
+        ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: next(clock), pause=lambda seconds: None)
+    assert not isinstance(caught.value, ceph_core.ReadinessRefusal)
+    assert transport.calls == [("node-1", "prerequisites"), ("node-1", "unit"), ("node-1", "observe")]
 
 
 def test_core_unit_readiness_timeout_names_the_missing_daemons(monkeypatch):
