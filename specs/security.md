@@ -107,7 +107,14 @@ access during admission or inspection.
 Secret materialization requires an explicit context-scoped authority and must
 not fall back to ambient credentials. Secret bytes stay in bounded memory, an
 inherited descriptor or standard input, or an operation-scoped `0600` file
-beneath a `0700` directory. The lifecycle runner writes each such file once
+beneath a `0700` directory. A managed-OS registration's organization and
+activation key are read from their lent material files by the controller
+module that opens the guest connection; they cross that pinned SSH session
+only on the standard input of a fixed root worker and reach the subscription
+service only through the RHSM D-Bus API's private registration bus. They never
+enter an Ansible variable, an argument, an environment variable, evidence, a
+result or a log, and a value that is not one line of printable ASCII without
+whitespace is refused without being repeated. The lifecycle runner writes each such file once
 and then clears its copy of the value, so a run request whose material list
 names one file twice, or binds one adapter variable to two files, refuses with
 `lifecycle.state` before the runner creates its job directory or writes any

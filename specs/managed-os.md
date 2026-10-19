@@ -1006,3 +1006,10 @@ private subtree. [Network convergence](#network-convergence) runs fixed
 commands, those needing root through `sudo -n`, over the fleet connection
 pinned to the key the identity channel reported; the network document and the
 network marker reach the guest only on standard input, never in an argument.
+Registration with a subscription service, when an installation registers, runs
+one fixed worker as root through `sudo -n` over that same connection, built
+option for option as those commands are and with host-key algorithms the
+placement host's policy permits; the organization and activation key reach it
+only on standard input, read by the controller module from the lent material
+files, and never enter an argument, an Ansible variable, the evidence or the
+logs.
