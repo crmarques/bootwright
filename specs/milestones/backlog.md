@@ -209,11 +209,11 @@ Alias cell.
 | [B657](#b657) | new, 2026-10-19 (X102) | safety | Storage package resolution, with Security | Plan packages from the `broker` root must be RHEL-signed and sourced from the host's DVD tree | No trust break today: every package is verified under its repository's pinned signer, and no IBM repository ships `openssl` |
 | [B658](#b658) | new, 2026-10-19 (X102) | enabling | Storage preflight and State reconciliation | Cross-context capacity admission states its limit or holds a host-scoped reservation | No spec violation, a short window, and a reservation would be new durable cross-context state |
 | [B659](#b659) | new, 2026-10-19 (X102) | product | Ceph core lifecycle | An apply that stopped after enrollment continues from per-host receipts instead of refusing `partial-cluster` | Needs a new durable recovery protocol, and the native API spec declares it out of scope |
-| [B660](#b660) | new, 2026-10-19 (X102) | safety | Ceph host runtime route probe, with the future FIPS core profile | The route probe's synthetic keys follow the cluster key's type under FIPS | Declared FIPS is refused at planning; the probe key contract belongs to that profile |
+| [B660](#b660) | new, 2026-10-19 (X102); assigned to M2c lane x61-ceph-fips on 2026-10-19 (D166) | safety | Ceph host runtime route probe, with the future FIPS core profile | The route probe's synthetic keys follow the cluster key's type under FIPS | Declared FIPS is refused at planning; D166 assigns the probe key contract to M2c lane x61-ceph-fips |
 | [B661](#b661) | new, 2026-10-19 (X102) | enabling | Ceph host runtime image profile | The cephadm payload bound is raised or derived and an oversized payload refuses with its measured size | The largest current payload is 1,676,391 bytes; a future refusal, not a defect |
 | [B662](#b662) | new, 2026-10-19 (X102) | safety | Ceph lifecycle, Devices and destructive ownership | An intent-marked OSD device with partial LVM metadata refuses with a named token and a supported recovery | Nothing is adopted or zapped today; a real remedy needs an owned-zap design |
 | [B663](#b663) | new, 2026-10-19 (X102) | enabling | Storage adapter | Authored package candidates mark only the chosen root, keeping DNF's own no-match text | No wrong plan was observed; refusing glob characters would be a Bootwright version grammar |
-| [B664](#b664) | new, 2026-10-19 (X102) | product | the owner for scope, then Storage adapter | Mirror or disconnected IBM package sources are decided, with the publisher key location authored beside them | Fail-closed today, and it needs a scope decision |
+| [B664](#b664) | new, 2026-10-19 (X102); assigned to M2c lane x59-d4-host-pull-route on 2026-10-19 (D166) | product | the owner for scope, then Storage adapter | Mirror or disconnected IBM package sources are decided, with the publisher key location authored beside them | Fail-closed today; D166 decided the scope and assigns the fix to M2c lane x59-d4-host-pull-route |
 | [B665](#b665) | new, 2026-10-19 (X103) | enabling | Developer tooling, with the code-implementation skill | Commits that change a trust anchor say so; `scripts/check-commits` resolves `Refs:` tokens, the subject length and attribution trailers; policy changes land apart from reformats | Process tooling; history stays as it is |
 | [B666](#b666) | new, 2026-10-19 (X103) | enabling | Infrastructure, substrate libvirt | The firewall readiness barrier reloads systemd only when something changed, and destroy removes its stale staging files | Each leftover is inert and the reload is harmless; fixing it adds durable creation state for no behavioural gain |
 | [B667](#b667) | new, 2026-10-19 (X103) | enabling | CLI presentation and help | Compact `cluster info` explains not-applicable access rows once, and `session` and `exec` help list the SSH flags | The output matches the spec today and the "More detail" pointer keeps the flags discoverable |
@@ -2150,7 +2150,9 @@ follows the cluster key's type, and the native fact (the 20.2.2 cephadm SSH
 module's key handling) is recorded in the
 [native SSH knowledge](../../.agents/knowledge/ibm-ceph-native-ssh.md).
 **Why parked:** declared FIPS is refused at planning, and changing the probe's
-key contract belongs to that profile. **Requires:** the FIPS core profile.
+key contract belongs to that profile. **Assigned:** M2c lane x61-ceph-fips on
+2026-10-19 ([D166](#decisions)), which generates ECDSA synthetic probe keys on
+FIPS hosts. **Requires:** the FIPS core profile.
 **Definition:** `Candidate`. **Exit evidence:** a probe test per key type under
 a FIPS-mode fixture, and the named refusal for the ed25519 case.
 
@@ -2201,8 +2203,10 @@ disconnected IBM package sources are supported; if so, the publisher key
 location is authored beside `ceph.packageRepository` while the code-pinned IBM
 fingerprint stays the trust anchor, and the `el10cp` signer is recorded in
 [knowledge](../../.agents/knowledge/ibm-ceph-version-constraints.md) once an
-`el10cp` package is inspected. **Why parked:** it fails closed today and needs a
-scope decision. **Requires:** an owner decision. **Definition:**
+`el10cp` package is inspected. **Why parked:** it fails closed today and needed
+a scope decision. **Assigned:** M2c lane x59-d4-host-pull-route on 2026-10-19
+([D166](#decisions)), which takes the key from the declared mirror under its
+trust bundle. **Requires:** none; D166 answered the owner decision. **Definition:**
 `Needs definition`. **Exit evidence:** a package-source test with an authored
 key location whose fingerprint differs from the pin and refuses.
 
@@ -3246,6 +3250,21 @@ Requires cell as `owner decision: <question>`.
   lock's `tested` list, warning only) is an explicit exception to D163, because
   it concerns Bootwright's own host and never refuses; the
   [controller spec](../controller.md#supported-hosts) records it.
+
+- **D166** (2026-10-19, the owner): the owner answered the session's question
+  about the two audit defects that X102 parked and that held eight M2c lanes,
+  choosing "Fix both in M2c (Recommended)". (1) [B660](#b660): the Ceph route
+  probe always generates ssh-ed25519 synthetic keys, so a FIPS-mode Ceph host
+  cannot pass host preparation and its refusal reads as a route failure; M2c
+  lane x61-ceph-fips fixes it with ECDSA synthetic probe keys on FIPS hosts.
+  (2) [B664](#b664): the IBM package publisher key is always fetched from the
+  public IBM site even when `ceph.packageRepository` names a mirror; M2c lane
+  x59-d4-host-pull-route fixes it, and the key comes from the declared mirror
+  under its trust bundle. The answer releases the program's two holds: the
+  lanes x61-ceph-fips, od29-fips-service-list, x61-host-variants-example, X61-L6
+  and int-x61-held, and the lanes x59-d4-host-pull-route, x59-d5-disconnected-profile
+  and int-x59-held. It changes no product spec and no delivery state; the
+  items stay parked and name their lanes.
 
 - **D168** (2026-10-20, the owner): the owner instructed that "finished lanes
   that are complete and would make main functional with the feature it
