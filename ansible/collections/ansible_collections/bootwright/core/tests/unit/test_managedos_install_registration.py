@@ -394,6 +394,39 @@ def test_destroy_names_an_unanswered_machine_unreachable():
     assert message == "Machine rhel-01 did not answer through its identity channel, so its subscription registration was not removed"
 
 
+@pytest.mark.parametrize("result, message", [
+    ({"ok": False, "reason": "registration-unavailable", "cause": "unregister", "detail": "SENTINEL"},
+     "registration-unavailable (unregister)"),
+    ({"ok": False, "reason": "registration-unreachable", "detail": "SENTINEL"}, "registration-unreachable"),
+    ({"ok": False, "reason": "transport", "cause": "host-key", "detail": "SENTINEL"}, "transport (host-key)"),
+    ({"ok": False, "reason": "SENTINEL", "cause": "SENTINEL", "detail": "SENTINEL"}, "unexpected answer"),
+    ({"ok": False, "reason": "registration-input", "cause": "SENTINEL"}, "registration-input"),
+    ({"failed": True, "msg": "SENTINEL"}, "unexpected answer"),
+], ids=["unavailable", "unreachable", "transport", "unknown", "unknown-cause", "no-answer"])
+def test_unregistration_refusals_are_named_and_the_failure_is_closed(result, message):
+    named = destroy_tasks(lambda task: UNREGISTRATION in str((task.get(PROTOCOL) or {}).get("reason", "")),
+                          "name an unregistration refusal")
+    assert named[PROTOCOL] == {"phase": "refused", "reason": "{{ %s.reason }}" % UNREGISTRATION} and named["no_log"] is True
+    for reason in ("registration-unreachable", "registration-unavailable"):
+        assert holds(named["when"], **guest(**{UNREGISTRATION: {"ok": False, "reason": reason}}))
+        assert not holds(named["when"], **guest(marker='{"request":"another"}', **{UNREGISTRATION: {"ok": False, "reason": reason}}))
+        assert not holds(named["when"], False, **guest(**{UNREGISTRATION: {"ok": False, "reason": reason}}))
+    for other in ("transport", "registration-input", "SENTINEL"):
+        assert not holds(named["when"], **guest(**{UNREGISTRATION: {"ok": False, "reason": other}}))
+    assert not holds(named["when"], **guest(**{UNREGISTRATION: {"ok": True, "reason": "registration-unavailable"}}))
+
+    refused = destroy_tasks(lambda task: FAIL in task and UNREGISTRATION in str(task.get("vars", "")),
+                            "refuse an unfinished unregistration")
+    assert "no_log" not in refused
+    assert holds(refused["when"], **dict(refused["vars"], **guest(**{UNREGISTRATION: result})))
+    assert not holds(refused["when"], **dict(refused["vars"], **guest(**{UNREGISTRATION: {"ok": True}})))
+    assert not holds(refused["when"], False, **dict(refused["vars"], **guest(**{UNREGISTRATION: result})))
+    assert not holds(refused["when"], **dict(refused["vars"], **guest(marker="", **{UNREGISTRATION: result})))
+    rendered = render(refused[FAIL]["msg"], **dict(refused["vars"], **guest(**{UNREGISTRATION: result})))
+    assert rendered == "Machine rhel-01 was not unregistered from its subscription service: " + message
+    assert "SENTINEL" not in rendered
+
+
 def test_removal_observation_reads_the_guest_only_for_a_registering_request():
     removal = block("observe.yml", "Read the registration a removal takes back")
     assert removal["when"] == [REMOVAL, REGISTERING]
