@@ -198,9 +198,6 @@ func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 		"initial password": {installProfile(field("customizations", customizations.With("ssh", api.MapValue(
 			field("initialPassword", api.MapValue(text("secretRef", "root-password"))),
 		)))), selected("spec.customizations.ssh.initialPassword")},
-		"disk encryption": {installProfile(field("customizations", customizations.With("security", api.MapValue(
-			field("diskEncryption", api.MapValue(text("recoveryPassphraseRef", "luks"))),
-		)))), selected("spec.customizations.security.diskEncryption")},
 	} {
 		t.Run(name, func(t *testing.T) {
 			unsupported := lifecycle.Identities(Refusals(labCatalog(test.profile)))
@@ -226,6 +223,9 @@ func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 	}
 	if unsupported := lifecycle.Identities(Refusals(labCatalog(fipsProfile()))); len(unsupported) != 0 {
 		t.Fatalf("an enabled FIPS declaration on a virtual Machine reported %v", unsupported)
+	}
+	if unsupported := lifecycle.Identities(Refusals(labCatalog(encryptingProfile(), recoverySecret(api.MapValue(field("generated", api.MapValue())))))); len(unsupported) != 0 {
+		t.Fatalf("disk encryption on a virtual Machine reported %v", unsupported)
 	}
 }
 

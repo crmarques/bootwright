@@ -137,11 +137,13 @@ validate refuses any other source, naming the import that fixes it. The
 profile an installed Machine selects names its `redfishVirtualMedia`
 endpoint, on every substrate, because the installer image is always booted
 through it. A profile selecting
-`initialPassword`, `diskEncryption`, a top-level
+`initialPassword`, a top-level
 `subscription`, `fromSubscription`, `mirror` or `templateClone` refuses before
 registration. These shapes carry secret bytes or effects this contract does not
 prove. A profile enabling `fips` is admitted on a virtual Machine and refused
-on a physical one, as [FIPS mode](#fips-mode) states. A profile enabling `ssh.passwordAuthentication` refuses too, because no
+on a physical one, as [FIPS mode](#fips-mode) states. A profile selecting
+`diskEncryption` is admitted on a virtual Machine and refused on a physical
+one, as [Root-disk encryption](#root-disk-encryption) states. A profile enabling `ssh.passwordAuthentication` refuses too, because no
 password can be set while `initialPassword` is refused. A Machine whose
 profile configures a repository refuses while its effective proxy names a
 Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, because
@@ -176,11 +178,12 @@ address on its install interface, its default route and the selected name
 servers, as the [derived installation](#installation) states;
 [network convergence](#network-convergence) applies the rest of the declared
 network after installation. Publicly
-served content remains secret-free by construction; the one thing an installation
-may deliver confidentially is the host key it installs, and the installer image
-of a delivered-key Machine, whose Kickstart names the key's private URL, both
-travel only through the [private path](#physical-installation) below; every
-other secret-bearing arm stays refused until it is separately specified.
+served content remains secret-free by construction; an installation delivers
+confidentially only the host key it installs and the recovery passphrase of an
+encrypted root disk. The installer image whose Kickstart names their private
+URL travels with them, and all three travel only through the
+[private path](#physical-installation) below; every other secret-bearing arm
+stays refused until it is separately specified.
 
 The Environment's
 [rescue declaration](api/environment.md#lifecycle-rescue-declaration) is
@@ -201,14 +204,18 @@ refused at admission, at the Machine's
 account; the `bootwright` account
 with the public half of `remoteMachinesAccessKey` authorized and passwordless
 sudo; the root disk `rootDeviceHints.deviceName` names cleared and partitioned, or
-automatic partitioning when a Machine its substrate created names none; the
-`minimal` environment, the profile's packages, and `qemu-guest-agent` on a
+automatic partitioning when a Machine its substrate created names none, or,
+for a profile selecting `diskEncryption`, partitioned by the `%include` of the
+storage file its `%pre` writes ([Root-disk encryption](#root-disk-encryption));
+the `minimal` environment, the profile's packages, the clevis packages of an
+encrypted root disk, and `qemu-guest-agent` on a
 Machine whose identity channel is the guest agent; the profile's enabled and
 disabled services; SELinux and firewall as selected; and a `%post` that writes
 the install marker, establishes the host key its identity channel requires,
 writes the regional formats and the configured repositories, writes the
 sudoers and SSH daemon drop-ins, and removes every retained copy of the
-Kickstart. The marker is
+Kickstart, preceded, for an encrypted root disk, by a second `%post` that binds
+it to the TPM2. The marker is
 bounded JSON naming the context, Machine, profile, boot image name and the
 request digest, which covers the frozen size and SHA-256 of every image, and
 its content is frozen with the plan.
@@ -353,12 +360,15 @@ the per-Machine installer image, built by `mkksiso` from the frozen boot media
 with the derived Kickstart implanted, the frozen installer arguments added to
 every boot entry's kernel command line, and the media check removed from every
 boot entry, at `os/<machine>/install.iso` for a Machine proved through its
-guest agent, and for a delivered-key Machine at
-`private/os/<machine>/<token>/install.iso`, beside `identity` and
-`identity.pub`, under the [private publication](#physical-installation) below.
+guest agent, and at `private/os/<machine>/<token>/install.iso` for a private
+installation, under the [private publication](#physical-installation) below:
+beside `identity` and `identity.pub` for a delivered-key Machine, or, for a
+Machine whose profile selects `diskEncryption`, beside `recovery` while its
+installer runs ([Root-disk encryption](#root-disk-encryption)).
 Both image forms receive mode 0640 owned by root:root and the served root's
 label in the work area before atomic rename, independent of the process umask;
-the private identity files also receive that mode, ownership and label. An apply first
+the private identity and recovery files also receive that mode, ownership and
+label. An apply first
 clears whatever an earlier attempt left beneath `private/os/<machine>/`, whose
 token it does not know. A hosted package tree belongs to the
 [shared publication block](#shared-package-tree-publication), which this
@@ -458,9 +468,12 @@ directive and with `ServerAliveInterval=15` and `ServerAliveCountMax=3`, the vir
 powered on, and the installed system converged to its declared network and
 proved it after a restart, as [network convergence](#network-convergence)
 states, and, when the profile enables `fips`, the installed system reporting
-FIPS mode, as [FIPS mode](#fips-mode) states. The evidence records the marker
+FIPS mode, as [FIPS mode](#fips-mode) states, and, when the profile selects
+`diskEncryption`, the root filesystem proved on a TPM2-bound LUKS device, as
+[Root-disk encryption](#root-disk-encryption) states. The evidence records the marker
 digest, the host public key, the address, whether that connection was accepted,
-the network result and `fips`, whether the installed system proved FIPS mode; a later consumer that
+the network result, `fips`, whether the installed system proved FIPS mode, and
+`rootEncryption`, whether it proved its root disk encrypted; a later consumer that
 connects to the Machine binds that key, never a first-use answer from the
 network. An observation proves completion the same way, because it is what
 resolves an interrupted apply: an observation that proves the marker and the
@@ -487,7 +500,7 @@ realization to be destroyed and applied again. A powered-off Machine with no
 marker installs.
 
 **Inverse.** Destroy removes the published image, the private subtree when one was
-published, with a delivered-key Machine's image inside it, and the machine's
+published, with a private installation's image inside it, and the machine's
 work area, then proves each absent. It never deletes the shared package tree;
 inverse dependencies remove that publication only after every installation
 consumer has been removed, and before the artifact server is removed.
@@ -513,14 +526,16 @@ a positive partial realization; network convergence yields no effect only in the
 connection, when it answers, the observation also reads the network marker,
 the boot ID and `nmstatectl show --json`, and compares the running network
 with its declaration. A
-delivered-key completion has nothing published beneath its private subtree,
-neither the key pair nor the image; that subtree left on a powered-off guest
+private completion, of a delivered key or an encrypted root disk, has nothing
+published beneath its private subtree, neither its private material nor the
+image; that subtree left on a powered-off guest
 that never installed is its partial. Anything else
 stays unknown, including a guest answering with another marker and a powered-on
 guest with none, because the first belongs to another installation and the
-second may be running the installer now. A delivered-key Machine the network
+second may be running the installer now. A private Machine, of a delivered key
+or an encrypted root disk, the network
 restart powered off before its disk boot is the one window that leaves nothing
-to read: the withdrawn key pair and image, no marker over the unanswered
+to read: the withdrawn private material and image, no marker over the unanswered
 identity read and a powered-off controller read are exactly what an apply that
 stopped before it published anything leaves, so it reads positive no effect.
 The next apply installs it again, as the interruption table below says; a
@@ -832,6 +847,105 @@ its effect unknown, so the destroy still observes the Machine. An observation
 that proves the frozen marker without the FIPS proof reports a partial
 installation, never a complete one.
 
+### Root-disk encryption
+
+A profile selecting `spec.customizations.security.diskEncryption` installs the
+root disk encrypted with LUKS2 and bound to the machine's TPM 2.0, so it
+unlocks unattended at every boot, and keeps its recovery passphrase as the one
+way to unlock it by hand.
+
+**Layout.** The Kickstart's storage ends in `%include` of a file its `%pre`
+writes: `autopart --type=lvm --encrypted --luks-version=luks2
+--passphrase=<recovery passphrase>`, with `--pbkdf=pbkdf2` when the profile
+also enables `fips`, because Argon2 is unusable in FIPS mode. Automatic
+partitioning encrypts every LVM physical volume it creates and leaves `/boot`
+to the installer's own layout. `%pre` runs in a first pass whose parser
+tolerates a missing include, so the file it writes is the one the full parse
+reads. Sources:
+[RHEL 9 Kickstart commands and options](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/automatically_installing_rhel/kickstart-commands-and-options-reference_rhel-installer),
+[Kickstart script file format](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/automatically_installing_rhel/kickstart-script-file-format-reference_rhel-installer)
+and anaconda's `preScriptPass`
+([pyanaconda/kickstart.py](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/kickstart.py)).
+
+**Unlock.** `%packages` adds `clevis-dracut`, `clevis-luks` and
+`clevis-systemd`, and a `%post` binds every `crypto_LUKS` device with
+`clevis luks bind -y -k - tpm2 <config>`, proves the new `tpm2` slot, fails
+when no device was bound, and regenerates the initramfs with dracut. The
+configuration spells `pcr_bank` and `pcr_ids` from `unlock.tpm2`; with no
+`pcrIds` it is `{}`, which binds the disk to the TPM with no PCR policy: that
+protects a disk copied without its TPM, not a tampered boot. Clevis seals the
+PCR values current when it runs, which are those measured while the installer
+runs, so a selected PCR that measures the boot loader, the kernel or its
+command line can differ on the installed boot and leave the disk waiting on the
+console. Sources:
+[RHEL 9 policy-based decryption](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/security_hardening/configuring-automated-unlocking-of-encrypted-volumes-using-policy-based-decryption_security-hardening),
+[clevis-encrypt-tpm2(1)](https://github.com/latchset/clevis/blob/master/src/pins/tpm2/clevis-encrypt-tpm2.1.adoc)
+and [clevis-luks-bind(1)](https://github.com/latchset/clevis/blob/master/src/luks/clevis-luks-bind.1.adoc).
+`%pre` proves `/dev/tpmrm0` before it fetches anything or touches any disk, and
+refuses an installation on a machine that presents no TPM 2.0.
+
+**Recovery passphrase.** The recovery passphrase is the value of the Secret
+`recoveryPassphraseRef` names: 8 to 256 printable ASCII characters other than
+space, `"`, `'`, `\` and `#`, which the storage directive carries unquoted. A
+generated `token` Secret encodes its bytes in base64url, so it generates at
+most 192 bytes. The class is checked at plan for a generated token's length,
+at apply before any effect for the bound value, naming the Secret and never a
+byte of it, and again in `%pre`. The passphrase is fetched by `%pre` and
+`%post` into a shell variable, written only to the installer's storage file and
+given to clevis on standard input; it never reaches a request, evidence, a
+log, an argv or the installed disk.
+
+**Custody.** The Secret version bound to the installation is the disk's
+recovery secret: it is never renewed or replaced while the Machine exists. An
+apply never re-keys an installed disk and does not detect a changed value, and
+Bootwright offers no command that reveals a bound version, so the operator
+keeps the value the installation bound.
+
+**Publication.** `recovery` is published beneath the private subtree, beside
+the installer image, only by an apply that boots the installer: after the
+substrate's pre-boot proof and before the media is inserted, with its first
+byte fetched through the listener the installer uses, so a replay, or an apply
+that finds the frozen marker, never publishes it. The completion withdraws it
+with the subtree before its inspection, the inverse removes it, and the next
+apply clears it after a failure. A virtual Machine's emulated controller
+fetches the private installer image without verifying the server and never
+proves a verified fetch, so its insert does not ask for the verified-fetch
+read-back a physical insert requires; that leg never leaves the provider host
+the artifact server is placed on, as the
+[security spec](security.md#network-remote-systems-and-privilege) bounds every
+emulated controller and the [refusal table](#refusal-table) enforces before
+registration. In `%pre` no name service is configured yet, so the artifact
+server endpoint the installer image is published through must be an IP
+literal, and a profile selecting a hostname endpoint refuses before
+registration.
+
+**Physical Machines.** A profile selecting `diskEncryption` refuses on a
+physical Machine before registration; its qualification is
+[B78](milestones/m1.md#b78).
+
+**Proof.** After the installed system's network converged, an apply reads,
+over the pinned fleet connection with root from the Kickstart's sudoers entry,
+the device chain of the root filesystem: it proves encryption only when that
+chain holds a `crypt` device and its `crypto_LUKS` backing device carries a
+clevis `tpm2` slot. The read writes nothing. An observation reads it the same
+way. The evidence records the answer as `rootEncryption`; an installation whose
+profile does not select `diskEncryption` reads nothing and records false.
+
+**Refusal.** An apply whose installed system does not prove it names
+`root-encryption-unproved` and fails with
+`Machine/<machine> was installed with an encrypted root disk, but its root filesystem is not on a LUKS device with a TPM2 binding`;
+the remedy takes the context back with `bootwright destroy` and applies it
+again, because the root disk is encrypted only at installation. An observation
+that proves the frozen marker without the proof reports a partial installation,
+never a complete one.
+
+**Boot.** Every boot of the installed disk, network convergence's restart
+included, unlocks unattended through the TPM. A disk that cannot unlock waits
+on the console, because `systemd-cryptsetup` waits without a timeout
+([crypttab(5)](https://man7.org/linux/man-pages/man5/crypttab.5.html)), until
+the identity budget fails the apply. Recovery is the console with the recovery
+passphrase.
+
 ### Shared package-tree publication
 
 For a hosted package source, Managed OS plans one block per context and
@@ -974,6 +1088,12 @@ reconstructible only by the attempt that minted it; a media URL the controller
 reports is redacted before it reaches evidence, because a controller can echo
 it with its host or port rewritten.
 
+An encrypting virtual installation uses the same subtree, token and proofs for
+its installer image and its `recovery`, the latter published inside the boot
+as [Root-disk encryption](#root-disk-encryption) states; its controller leg is
+bounded by the emulated-controller exception stated there rather than by the
+verified-fetch read-back.
+
 This is the private path the rest of this contract was shaped to admit. The
 profile arms that carry secret bytes remain refused, and promoting one is now a
 question of what it delivers through this path rather than of whether a path
@@ -1007,14 +1127,17 @@ VLAN's `vlan.id`.
 `spec.machineRef` names; `<provider>` is the Machine's `InfraProvider` and
 `<provider host>` the Machine its `spec.libvirt.machineRef` names.
 `<secret>` is the Secret the Environment's `spec.remoteMachinesAccessKey.keyRef`
-names, as `Secret/<name>`.
+names, as `Secret/<name>`. `<recovery secret>` is the Secret the profile's
+`spec.customizations.security.diskEncryption.recoveryPassphraseRef` names, as
+`Secret/<name>`, `<bytes>` its `spec.source.generated.bytes`, and `<length>`
+the length of that many bytes in base64url without padding.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
 | A physical Machine naming no root device | no `spec.os.install.rootDeviceHints.deviceName` on a Machine on a `baremetal` provider, a `wwn` alone included | `a physical installation erases only a root device named by path, and the Machine names none` | `set spec.os.install.rootDeviceHints.deviceName on <machine>; a wwn-only selection is not yet supported` |
 | A root-device hint other than deviceName | any `spec.os.install.rootDeviceHints` field but `deviceName` | `a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares` | `remove <hints> from <machine>` |
-| An unverified fetch of private material | `spec.hardware.management.bmc.virtualMedia.tls.trust: disable-verification` on a Machine whose installation delivers private material | `a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server` | `declare hardware.management.bmc.virtualMedia.tls.trust: import-certificate on <machine>, or established when its controller already trusts the server` |
-| An unverified controller leg for private delivery | a Machine whose installation delivers private material, with a non-https `spec.hardware.management.bmc.address` or `tls.verify: false` | `a Machine whose installation delivers private material hands its controller the private installer image URL, so the controller must be reached over https with its certificate verified` | `address the controller of <machine> with an https:// spec.hardware.management.bmc.address and remove the tls.verify opt-out on <machine> or in spec.baremetal.defaults.bmc of <provider>; name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it` |
+| An unverified fetch of private material | `spec.hardware.management.bmc.virtualMedia.tls.trust: disable-verification` on a Machine whose installation delivers private material (a delivered host key or an encrypted root disk's recovery passphrase) | `a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server` | `declare hardware.management.bmc.virtualMedia.tls.trust: import-certificate on <machine>, or established when its controller already trusts the server` |
+| An unverified controller leg for private delivery | a Machine whose installation delivers private material (a delivered host key or an encrypted root disk's recovery passphrase), with a non-https `spec.hardware.management.bmc.address` or `tls.verify: false` | `a Machine whose installation delivers private material hands its controller the private installer image URL, so the controller must be reached over https with its certificate verified` | `address the controller of <machine> with an https:// spec.hardware.management.bmc.address and remove the tls.verify opt-out on <machine> or in spec.baremetal.defaults.bmc of <provider>; name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it` |
 | A DHCP-only install | an effective `spec.network.installAddressRef` naming no `spec.network.addresses` entry with an `interface` and an IPv4 address with its prefix; admission refuses it first, so no validated graph reaches this row | `a managed-OS installation configures one static IPv4 install address, and the Machine selects none; DHCP installation is not supported` | `assign an IPv4 address with its prefix to the install interface in spec.network.addresses of <machine> and select it with spec.network.installAddressRef` |
 | A kernel-style interface name | any available composed `ethernet` interface whose `name` matches `^eth[0-9]+$`, on any substrate | `a managed-OS installation names each ethernet interface after its hardware address, and a kernel-style name such as <name> can collide with the names the kernel assigns` | `rename interface <name> in the network of <machine> to a name outside the kernel's ethN scheme, such as its predictable name` |
 | An ethernet interface without a hardware address | on a `baremetal` provider, an available composed `ethernet` interface that resolves, through its `spec.network.interfaceBinding` `nicRef` or else the `spec.hardware.nics` entry of its own name, to no NIC, or to one whose `macAddress` differs from its authored `mac-address` | `a managed-OS installation names each ethernet interface after its hardware address, and interface <name> of <machine> resolves to no declared hardware NIC, or to one whose address differs from its mac-address` | `bind interface <name> to its hardware NIC in spec.network.interfaceBinding of <machine>, or mark it absent in its network` |
@@ -1031,10 +1154,12 @@ names, as `Secret/<name>`.
 | Packages from a subscription | a profile's `spec.installer.anaconda.packageSource.fromSubscription` | `the install profile selects spec.installer.anaconda.packageSource.fromSubscription, which carries secret bytes or effects this executable does not prove` | `remove spec.installer.anaconda.packageSource.fromSubscription from <profile>` |
 | A subscription | a profile's `spec.subscription` | `the install profile selects spec.subscription, which carries secret bytes or effects this executable does not prove` | `remove spec.subscription from <profile>` |
 | An initial password | a profile's `spec.customizations.ssh.initialPassword` | `the install profile selects spec.customizations.ssh.initialPassword, which carries secret bytes or effects this executable does not prove` | `remove spec.customizations.ssh.initialPassword from <profile>` |
-| Disk encryption | a profile's `spec.customizations.security.diskEncryption` | `the install profile selects spec.customizations.security.diskEncryption, which carries secret bytes or effects this executable does not prove` | `remove spec.customizations.security.diskEncryption from <profile>` |
 | Password authentication | a profile's `spec.customizations.ssh.passwordAuthentication: true` | `the install profile enables spec.customizations.ssh.passwordAuthentication, but no password can be set while spec.customizations.ssh.initialPassword is refused` | `set spec.customizations.ssh.passwordAuthentication to false on <profile>` |
 | FIPS on a physical Machine | a profile's `spec.customizations.security.fips.enabled: true` selected by a Machine on a `baremetal` provider, whose installation is proved by a delivered key | `the FIPS profile arm is qualified only on virtual Machines, and <machine> is physical; physical qualification is B78` | `install <machine> with a profile that does not enable spec.customizations.security.fips, or disable spec.customizations.security.fips on <profile>` |
 | An Ed25519 fleet key under FIPS | a profile's `spec.customizations.security.fips.enabled: true` while the Environment's `spec.remoteMachinesAccessKey.keyRef` names a Secret whose `spec.source.generated.keyType` is `ed25519`, the default included | `a FIPS-mode installation refuses Ed25519 keys, and the fleet key <secret> generates one` | `declare spec.source.generated.keyType as ecdsa-p256, ecdsa-p384, ecdsa-p521 or rsa on <secret>` |
+| Disk encryption on a physical Machine | a profile's `spec.customizations.security.diskEncryption` selected by a Machine on a `baremetal` provider, whose installation is proved by a delivered key | `the disk-encryption profile arm is qualified only on virtual Machines, and <machine> is physical; physical qualification is B78` | `install <machine> with a profile that does not select spec.customizations.security.diskEncryption, or remove spec.customizations.security.diskEncryption from <profile>` |
+| A hostname artifact endpoint under disk encryption | a profile selecting `spec.customizations.security.diskEncryption` whose `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` resolves to a URL whose host is not an IP literal | `the installer fetches the recovery passphrase before it configures name resolution, so the artifact server endpoint of <profile> must be addressed by IP` | `select an artifact server endpoint whose address is an IP literal in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
+| A generated recovery passphrase too long | a profile selecting `spec.customizations.security.diskEncryption` whose `recoveryPassphraseRef` names a `token` Secret generating more than 192 bytes | `the recovery passphrase is limited to 256 characters, and <recovery secret> generates <bytes> bytes, which encode to <length> characters` | `set spec.source.generated.bytes to at most 192 on <recovery secret>` |
 | A credentialed proxy | a Machine's effective `spec.proxy` naming a Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, while its profile configures a repository | `the installed system's repositories would reach <proxy> through a credential or private trust anchor, which an installation cannot carry` | `select direct: {} or an external Proxy without spec.connection.auth and spec.connection.trustBundleRef in spec.proxy of <machine> or of <profile>` |
 | An installer image server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation builds and publishes its installer image on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
 | A package tree server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation extracts and publishes its package tree on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint on <profile>` |
@@ -1064,8 +1189,10 @@ quotes of the `sshkey` directive after the renderer's guard; one that holds a
 control character, a Unicode line or paragraph separator, a double quote or a
 backslash refuses `api.value` before the adapter runs. No private key, password
 or other secret enters the Kickstart, the image, the package tree, the evidence
-or the logs, and the delivered host key reaches the machine only through the
-private subtree. [Network convergence](#network-convergence) runs fixed
+or the logs, and the delivered host key and the recovery passphrase reach the
+machine only through the private subtree; the passphrase is fetched by `%pre`
+and `%post` into a shell variable, written only to the installer's storage file
+and given to clevis on standard input. [Network convergence](#network-convergence) runs fixed
 commands, those needing root through `sudo -n`, over the fleet connection
 pinned to the key the identity channel reported; the network document and the
 network marker reach the guest only on standard input, never in an argument.

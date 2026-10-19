@@ -52,7 +52,7 @@ def test_a_changed_boot_image_is_named_to_the_runner(monkeypatch):
 
 
 @pytest.mark.parametrize("reason", ["ssh-policy-unavailable", "ssh-policy-host-excluded", "ssh-policy-fleet-excluded",
-                                    "ssh-policy-generated-excluded", "fips-not-enabled"])
+                                    "ssh-policy-generated-excluded", "fips-not-enabled", "root-encryption-unproved"])
 def test_early_key_policy_refusals_use_the_go_owned_public_diagnostic(reason, monkeypatch):
     result, published = run({"phase": "refused", "reason": reason}, monkeypatch)
     assert result == {"changed": False}
@@ -100,3 +100,18 @@ def test_a_fips_installation_completes_only_with_the_fips_proof():
         evidence, refused = protocol.completion(arguments)
         assert evidence["fips"] is False and evidence["postcondition"] is True and refused is None
     assert protocol.absence({"observation": {}}, DIGEST)["fips"] is False
+
+
+# An encrypting installation completes only when the installed system proved
+# its root filesystem on a TPM2-bound LUKS device; any other installation is
+# unaffected by what it reports.
+def test_an_encrypting_installation_completes_only_with_the_root_encryption_proof():
+    evidence, refused = protocol.completion(proved(rootEncryptionRequired=True, rootEncryption=False))
+    assert evidence["rootEncryption"] is False and evidence["postcondition"] is False
+    assert refused is not None and refused.endswith("not proved: rootEncryption")
+    evidence, refused = protocol.completion(proved(rootEncryptionRequired="True", rootEncryption="True"))
+    assert evidence["rootEncryption"] is True and evidence["postcondition"] is True and refused is None
+    for arguments in (proved(), proved(rootEncryption=False), proved(rootEncryptionRequired=False)):
+        evidence, refused = protocol.completion(arguments)
+        assert evidence["rootEncryption"] is False and evidence["postcondition"] is True and refused is None
+    assert protocol.absence({"observation": {}}, DIGEST)["rootEncryption"] is False

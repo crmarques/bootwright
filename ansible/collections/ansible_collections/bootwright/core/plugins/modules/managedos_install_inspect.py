@@ -93,7 +93,7 @@ def tree_identity(path):
 def private_image(root):
     """Whether a direct child of the private subtree holds a regular install.iso.
 
-    A delivered-key installation publishes its image beneath the unguessable
+    A private installation publishes its image beneath the unguessable
     directory its attempt minted, which no request names, so every directory
     one level down is looked in and nothing deeper.
     """
@@ -119,7 +119,7 @@ def observe(request, staging, work):
     image = request.get("image")
     return {
         # The installer image is published publicly, or beneath the private
-        # subtree for a delivered-key installation.
+        # subtree for a private installation.
         "image": (bool(image) and os.path.isfile(image["path"])) or (bool(private) and private_image(private["path"])),
         # Material that only needed to exist for one boot must not outlive it,
         # so a subtree still present is unfinished work rather than a state.

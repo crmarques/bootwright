@@ -37,6 +37,9 @@ options:
         identify pre-effect SSH policy refusals.
       - C(fips-not-enabled) names an installed system that does not report
         the FIPS mode its installation enabled.
+      - C(root-encryption-unproved) names an installed system that does not
+        report its root filesystem on a TPM2-bound LUKS device although its
+        installation encrypted the root disk.
     type: str
     required: false
   outcome:
@@ -91,6 +94,19 @@ options:
     description:
       - Whether the frozen installer arguments enable FIPS mode, so a
         completion proves it.
+    type: bool
+    required: false
+  rootEncryption:
+    description:
+      - Whether the installed system proved its root filesystem on a crypt
+        device whose LUKS backing device carries a clevis tpm2 slot, after its
+        network converged.
+    type: bool
+    required: false
+  rootEncryptionRequired:
+    description:
+      - Whether the frozen request encrypts the root disk, so a completion
+        proves it.
     type: bool
     required: false
   privateDelivery:

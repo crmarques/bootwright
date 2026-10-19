@@ -433,7 +433,9 @@ output; only that cause does, with the token redacted. The proof precedes
 anything that lets a later attempt treat the publication as complete.
 
 The physical installation proves its `install.iso`, `identity` and
-`identity.pub` this way, each before any media is inserted.
+`identity.pub` this way, each before any media is inserted. An encrypting
+managed-OS installation proves its `install.iso` this way before the insert,
+and its `recovery` right before it, when its boot publishes it.
 
 A consumer that hands its private URL to a remote fetcher, such as a
 management controller it asks to fetch an image, sends it only over a
@@ -449,7 +451,10 @@ is needed for as long as its own block is retained.
 Two consumers use it. A [physical installation](managed-os.md#physical-installation)
 delivers the host key its machine will present, which is material Bootwright
 generated, and the installer image whose Kickstart names where that key is
-fetched; neither outlives the boot that installs it. A
+fetched; neither outlives the boot that installs it. A managed-OS installation
+that [encrypts its root disk](managed-os.md#root-disk-encryption) delivers the
+same way its recovery passphrase and the installer image whose Kickstart names
+where it is fetched, both withdrawn when its installation completes. A
 [container cluster](container-clusters.md#boot-media) publishes its agent boot
 image, which embeds the operator's own pull secret in its ignition and is
 retained while the cluster's media block is, because a node may be booted from

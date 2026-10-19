@@ -21,7 +21,6 @@ var unsupportedSelections = [][]string{
 	{"installer", "anaconda", "packageSource", "fromSubscription"},
 	{"subscription"},
 	{"customizations", "ssh", "initialPassword"},
-	{"customizations", "security", "diskEncryption"},
 }
 
 // refusedProfile says why a profile selects what this contract cannot
@@ -130,6 +129,10 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 			continue
 		}
 		if reason, remediation := refusedFIPS(catalog, machine, profile, derived, derivedOK); reason != "" {
+			found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
+			continue
+		}
+		if reason, remediation := refusedEncryption(catalog, machine, profile, derived, derivedOK); reason != "" {
 			found = append(found, lifecycle.RefusalOf(machine, reason, remediation))
 			continue
 		}

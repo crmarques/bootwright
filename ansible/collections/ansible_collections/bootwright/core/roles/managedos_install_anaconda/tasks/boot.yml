@@ -49,6 +49,16 @@
       release
   when: bootwright_os_install_request.target.substrate not in ['libvirt', 'baremetal']
 
+# Published only here, after the substrate proved the target and before the
+# media is inserted, so a replay or an apply that finds the machine installed
+# never publishes it again; the withdrawal of the private subtree removes it.
+- name: Publish the recovery passphrase this machine's installer fetches
+  ansible.builtin.include_tasks: private_recovery.yml
+  when: bootwright_os_install_request.diskEncryption is defined
+
+# A physical controller proves it fetched private media with verification. An
+# emulated controller fetches without verifying, a leg that never leaves the
+# provider host the artifact server is placed on, so it is not asked to.
 - name: Insert the published installer image as virtual media
   bootwright.core.redfish_boot:
     endpoint: '{{ managedos_install_anaconda_endpoint }}'
@@ -60,7 +70,7 @@
     image: '{{ managedos_install_anaconda_image_url }}'
     trust: '{{ managedos_install_anaconda_media_trust.trust }}'
     certificate: '{{ managedos_install_anaconda_certificate }}'
-    private_delivery: '{{ bootwright_os_install_request.private is defined }}'
+    private_delivery: '{{ bootwright_os_install_request.private is defined and (bootwright_os_install_request.target.physical | bool) }}'
   register: managedos_install_anaconda_inserted
   failed_when: false
   no_log: true

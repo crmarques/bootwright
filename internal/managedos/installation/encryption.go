@@ -1,15 +1,20 @@
 package installation
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"net/netip"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 type KickstartEncryption struct {
@@ -40,6 +45,62 @@ func kickstartEncryptionFor(profile api.Object) *KickstartEncryption {
 		encryption.PBKDF = "pbkdf2"
 	}
 	return &encryption
+}
+
+const (
+	encryptionField      = "spec.customizations.security.diskEncryption"
+	maxGeneratedRecovery = 192
+)
+
+func refusedEncryption(catalog api.Catalog, machine, profile api.Object, derived substrate.Target, derivedOK bool) (reason, remediation string) {
+	selected := diskEncryption(profile)
+	if !selected.Present() {
+		return "", ""
+	}
+	if derivedOK && derived.Identity.Channel == substrate.ChannelDeliveredKey {
+		return "the disk-encryption profile arm is qualified only on virtual Machines, and " + machine.Identity() + " is physical; physical qualification is B78",
+			"install " + machine.Identity() + " with a profile that does not select " + encryptionField + ", or remove " + encryptionField + " from " + profile.Identity()
+	}
+	if !imageEndpointIsIPLiteral(catalog, profile) {
+		return "the installer fetches the recovery passphrase before it configures name resolution, so the artifact server endpoint of " + profile.Identity() + " must be addressed by IP",
+			"select an artifact server endpoint whose address is an IP literal in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on " + profile.Identity()
+	}
+	return refusedRecoveryLength(catalog, selected.Get("recoveryPassphraseRef").Text())
+}
+
+func imageEndpointIsIPLiteral(catalog api.Catalog, profile api.Object) bool {
+	selection := profile.Spec().Get("installer", "anaconda", "redfishVirtualMedia", "artifactServerEndpoint")
+	server, err := artifactserver.Selected(catalog, selection, profile.Identity())
+	if err != nil {
+		return true
+	}
+	base, err := artifactserver.EndpointURL(catalog, server, selection.Get("endpointRef").Text(), profile.Identity())
+	if err != nil {
+		return true
+	}
+	parsed, err := url.Parse(base)
+	if err != nil {
+		return false
+	}
+	_, err = netip.ParseAddr(parsed.Hostname())
+	return err == nil
+}
+
+func refusedRecoveryLength(catalog api.Catalog, reference string) (reason, remediation string) {
+	recovery, found := catalog.Find(api.Secret, reference)
+	if !found || recovery.Spec().Get("type").Text() != "token" || !recovery.Spec().Has("source", "generated") {
+		return "", ""
+	}
+	count := int64(32)
+	if declared, ok := recovery.Spec().Get("source", "generated", "bytes").Int64(); ok {
+		count = declared
+	}
+	if count <= maxGeneratedRecovery {
+		return "", ""
+	}
+	return "the recovery passphrase is limited to 256 characters, and " + recovery.Identity() + " generates " + strconv.FormatInt(count, 10) +
+			" bytes, which encode to " + strconv.Itoa(base64.RawURLEncoding.EncodedLen(int(count))) + " characters",
+		"set spec.source.generated.bytes to at most " + strconv.Itoa(maxGeneratedRecovery) + " on " + recovery.Identity()
 }
 
 func encryptionValue(read func(KickstartEncryption) string) func(Installation) []string {

@@ -217,6 +217,7 @@ func TestDiskEncryptionPostBindsTPM2WithTheNativePCRConfig(t *testing.T) {
 }
 
 func TestRecoveryPassphraseOutsideTheTokenClassRefusesBeforeEffects(t *testing.T) {
+	assertGeneratedRecoveryLengthRefusesAtPlan(t)
 	request := pinnedRequest(t, labCatalog(encryptingProfile()))
 	const sentinel = "SENTINELxyz"
 	for name, value := range map[string]string{
@@ -384,5 +385,90 @@ func TestPrivateControllerRulesApplyToEveryPrivateInstallation(t *testing.T) {
 	}
 	if reason, _ := refusedTarget(guest(), derived, true); reason != "" {
 		t.Fatalf("the lab target refused: %q", reason)
+	}
+}
+
+func recoverySecret(source api.Value) api.Object {
+	return recoverySecretOf("token", source)
+}
+
+func recoverySecretOf(kind string, source api.Value) api.Object {
+	declared := api.NewObject(api.Secret, "rhel-luks-recovery", api.Value{}, api.MapValue(text("type", kind), field("source", source)))
+	normalized, _ := secrets.Normalize(declared, api.Catalog{})
+	return normalized
+}
+
+func hostnameEndpointServer() api.Object {
+	return artifactServer(field("endpoints", api.ListValue(
+		api.MapValue(text("name", "ip-https"), text("listenerRef", "https"), text("addressRef", "ip")),
+		api.MapValue(text("name", "ip-http"), text("listenerRef", "http"), text("addressRef", "ip")),
+		api.MapValue(text("name", "fqdn-https"), text("listenerRef", "https"), text("addressRef", "fqdn")),
+	)))
+}
+
+func encryptingProfileOn(endpoint string) api.Object {
+	return onEndpoint(encryptingProfile(), endpoint)
+}
+
+func onEndpoint(profile api.Object, endpoint string) api.Object {
+	return profile.WithSpec(profile.Spec().WithPath(api.StringValue(endpoint),
+		"installer", "anaconda", "redfishVirtualMedia", "artifactServerEndpoint", "endpointRef"))
+}
+
+func TestPhysicalMachineRefusesDiskEncryptionNamingB78(t *testing.T) {
+	catalog := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))),
+		sshKeySecret(api.MapValue(field("generated", api.MapValue()))), encryptingProfile())
+	want := []lifecycle.Refusal{{Kind: "Machine", Name: "metal-01",
+		Reason:      "the disk-encryption profile arm is qualified only on virtual Machines, and Machine/metal-01 is physical; physical qualification is B78",
+		Remediation: "install Machine/metal-01 with a profile that does not select spec.customizations.security.diskEncryption, or remove spec.customizations.security.diskEncryption from MachineInstallProfile/rhel-9-8",
+	}}
+	refused := Refusals(catalog)
+	if !slices.Equal(refused, want) {
+		t.Fatalf("refusals = %+v", refused)
+	}
+	for _, named := range []string{"M1", "M5", "X6", "X10", "milestone", "slice"} {
+		if strings.Contains(refused[0].Reason, named) {
+			t.Fatalf("the reason names %q: %q", named, refused[0].Reason)
+		}
+	}
+}
+
+func TestDiskEncryptionRefusesAHostnameArtifactEndpoint(t *testing.T) {
+	want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01",
+		Reason:      "the installer fetches the recovery passphrase before it configures name resolution, so the artifact server endpoint of MachineInstallProfile/rhel-9-8 must be addressed by IP",
+		Remediation: "select an artifact server endpoint whose address is an IP literal in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on MachineInstallProfile/rhel-9-8",
+	}}
+	if refused := Refusals(labCatalog(hostnameEndpointServer(), encryptingProfileOn("fqdn-https"))); !slices.Equal(refused, want) {
+		t.Fatalf("refusals = %+v", refused)
+	}
+	if refused := Refusals(labCatalog(hostnameEndpointServer(), encryptingProfileOn("ip-https"))); len(refused) != 0 {
+		t.Fatalf("an IP endpoint refused: %+v", refused)
+	}
+	if refused := Refusals(labCatalog(hostnameEndpointServer(), onEndpoint(installProfile(), "fqdn-https"))); len(refused) != 0 {
+		t.Fatalf("an unencrypted profile on a hostname endpoint refused: %+v", refused)
+	}
+}
+
+func assertGeneratedRecoveryLengthRefusesAtPlan(t *testing.T) {
+	t.Helper()
+	generated := func(fields ...api.FieldValue) api.Value {
+		return api.MapValue(field("generated", api.MapValue(fields...)))
+	}
+	want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01",
+		Reason:      "the recovery passphrase is limited to 256 characters, and Secret/rhel-luks-recovery generates 193 bytes, which encode to 258 characters",
+		Remediation: "set spec.source.generated.bytes to at most 192 on Secret/rhel-luks-recovery",
+	}}
+	if refused := Refusals(labCatalog(encryptingProfile(), recoverySecret(generated(number("bytes", "193"))))); !slices.Equal(refused, want) {
+		t.Fatalf("refusals = %+v", refused)
+	}
+	for name, secret := range map[string]api.Object{
+		"192 bytes":     recoverySecret(generated(number("bytes", "192"))),
+		"default bytes": recoverySecret(generated()),
+		"opaque":        recoverySecretOf("opaque", api.MapValue(field("contextStore", api.MapValue()))),
+		"stored token":  recoverySecret(api.MapValue(field("contextStore", api.MapValue()))),
+	} {
+		if refused := Refusals(labCatalog(encryptingProfile(), secret)); len(refused) != 0 {
+			t.Fatalf("%s refused: %+v", name, refused)
+		}
 	}
 }

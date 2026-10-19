@@ -1,0 +1,36 @@
+---
+# Root-disk encryption is set only at installation. An encrypting installation
+# proves it on the installed system after its network converged, over the
+# pinned fleet connection: the root filesystem sits on a crypt device whose
+# LUKS backing device carries a clevis tpm2 slot. Root comes from the
+# Kickstart's NOPASSWD sudoers entry for the fleet account. The read writes
+# nothing; any other installation reads nothing.
+- name: Name whether this installation encrypts its root disk
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_root_encryption_requested: "{{ bootwright_os_install_request.diskEncryption is defined }}"
+
+- name: Read whether the root filesystem is on a TPM2-bound LUKS device
+  ansible.builtin.include_tasks: guest.yml
+  vars:
+    managedos_install_anaconda_guest_command:
+      - /usr/bin/sudo
+      - -n
+      - /usr/bin/sh
+      - -c
+      - |-
+        set -u
+        root=$(findmnt -nvo SOURCE / 2>/dev/null | head -n 1)
+        chain=$(lsblk -rpnso NAME,TYPE,FSTYPE -- "$root" 2>/dev/null)
+        luks=$(printf '%s\n' "$chain" | awk '$3 == "crypto_LUKS" && !found {print $1; found=1}')
+        if printf '%s\n' "$chain" | awk '$2 == "crypt" {found=1} END {exit !found}'; then echo crypt=yes; else echo crypt=no; fi
+        if [ -n "$luks" ] && clevis luks list -d "$luks" 2>/dev/null | awk -F': ' '$2 ~ /^tpm2 / {found=1} END {exit !found}'
+        then echo tpm2=yes; else echo tpm2=no; fi
+      - bootwright-root-encryption
+  when: managedos_install_anaconda_root_encryption_requested | bool
+
+- name: Name whether the root disk proved its encryption
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_root_encryption: >-
+      {{ (managedos_install_anaconda_root_encryption_requested | bool)
+         and (managedos_install_anaconda_guest.rc | default(1) | int) == 0
+         and (managedos_install_anaconda_guest.stdout | default('')).splitlines() == ['crypt=yes', 'tpm2=yes'] }}

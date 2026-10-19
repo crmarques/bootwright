@@ -187,14 +187,14 @@
         status: running
       no_log: true
 
-    # An earlier attempt that failed leaves its private image and key pair beneath
+    # An earlier attempt that failed leaves its private image and material beneath
     # a directory whose token this attempt does not know, so the whole subtree is
     # cleared before a new one is minted; private.yml creates it again.
     - name: Clear whatever an earlier attempt published privately
       ansible.builtin.file:
         path: '{{ managedos_install_anaconda_private_root }}'
         state: absent
-      when: managedos_install_anaconda_delivers_key | bool
+      when: managedos_install_anaconda_delivers_private | bool
 
     # The unguessable segment is minted here, by the attempt, so it exists in no
     # frozen request and reaches no evidence, progress line or log.
@@ -206,13 +206,13 @@
           - -hex
           - '32'
       register: managedos_install_anaconda_token
-      when: managedos_install_anaconda_delivers_key | bool
+      when: managedos_install_anaconda_delivers_private | bool
       changed_when: false
       no_log: true
 
-    - name: Publish the host key only this machine may read
+    - name: Publish the private material only this machine may read
       ansible.builtin.include_tasks: private.yml
-      when: managedos_install_anaconda_delivers_key | bool
+      when: managedos_install_anaconda_delivers_private | bool
 
     - name: Render the frozen kickstart with the values this attempt derived
       ansible.builtin.copy:
@@ -236,7 +236,7 @@
         owner: root
         group: root
         mode: '0755'
-      when: not (managedos_install_anaconda_delivers_key | bool)
+      when: not (managedos_install_anaconda_delivers_private | bool)
       register: managedos_install_anaconda_image_directory
 
     - name: Build this machine's own installer image
@@ -275,8 +275,8 @@
           - '{{ managedos_install_anaconda_work }}/install.iso'
       changed_when: false
 
-    # A delivered-key Machine's image is published into the unguessable directory
-    # beside its key pair, because its Kickstart names that directory's URL.
+    # A private Machine's image is published into the unguessable directory
+    # beside its material, because its Kickstart names that directory's URL.
     - name: Publish the installer image by atomic rename
       ansible.builtin.command:
         argv:
@@ -285,7 +285,7 @@
           - '{{ managedos_install_anaconda_work }}/install.iso'
           - '{{ managedos_install_anaconda_image_path }}'
       changed_when: true
-      no_log: '{{ managedos_install_anaconda_delivers_key | bool }}'
+      no_log: '{{ managedos_install_anaconda_delivers_private | bool }}'
 
     # Before any machine is given the image, the block fetches its first byte, and
     # the first byte of the tree's marker, through the listener a consumer uses:
@@ -307,7 +307,7 @@
         status_code: [200, 206]
         timeout: 30
       register: managedos_install_anaconda_image_fetch
-      when: not (managedos_install_anaconda_delivers_key | bool)
+      when: not (managedos_install_anaconda_delivers_private | bool)
       failed_when: false
       changed_when: false
 
@@ -321,15 +321,16 @@
               | bootwright.core.printable)[:512] }},
           so no machine was given media
       when:
-        - not (managedos_install_anaconda_delivers_key | bool)
+        - not (managedos_install_anaconda_delivers_private | bool)
         - managedos_install_anaconda_image_fetch.status | default(-1) | int not in [200, 206]
 
-    # A delivered-key Machine's controller is given the image and its installer
-    # fetches the key pair, all at URLs carrying the token, so the three are proved
-    # the same way before any media is inserted: a key the installer could not
-    # fetch would otherwise fail %post after the disk was cleared. Each result
-    # carries the token, so it is judged in a separate step that names only the
-    # file and the cause.
+    # A private Machine's controller is given the image and a delivered-key
+    # installer fetches the key pair, all at URLs carrying the token, so each is
+    # proved the same way before any media is inserted: a key the installer could
+    # not fetch would otherwise fail %post after the disk was cleared. The
+    # recovery passphrase is proved the same way when the boot publishes it. Each
+    # result carries the token, so it is judged in a separate step that names
+    # only the file and the cause.
     - name: Fetch the first byte of each private file through its listener
       ansible.builtin.uri:
         url: '{{ managedos_install_anaconda_private_url }}/{{ item }}'
@@ -342,12 +343,9 @@
         follow_redirects: none
         status_code: [200, 206]
         timeout: 30
-      loop:
-        - install.iso
-        - identity
-        - identity.pub
+      loop: '{{ managedos_install_anaconda_private_files }}'
       register: managedos_install_anaconda_private_fetch
-      when: managedos_install_anaconda_delivers_key | bool
+      when: managedos_install_anaconda_delivers_private | bool
       failed_when: false
       changed_when: false
       no_log: true
@@ -369,7 +367,7 @@
              if managedos_install_anaconda_private_status == -1 else
              ('the listener answered ' ~ managedos_install_anaconda_private_status ~ ' where 200 or 206 was expected') }}
       vars:
-        managedos_install_anaconda_private_file: "{{ ['install.iso', 'identity', 'identity.pub'][managedos_install_anaconda_private_index] }}"
+        managedos_install_anaconda_private_file: '{{ managedos_install_anaconda_private_files[managedos_install_anaconda_private_index] }}'
         managedos_install_anaconda_private_result: >-
           {{ managedos_install_anaconda_private_fetch.results[managedos_install_anaconda_private_index] }}
         managedos_install_anaconda_private_status: '{{ managedos_install_anaconda_private_result.status | default(-1) | int }}'
@@ -377,11 +375,11 @@
           {{ ((managedos_install_anaconda_private_result.msg | default('the request recorded no result') | string)
               | replace(managedos_install_anaconda_token.stdout | trim, '<token>')
               | bootwright.core.printable)[:512] }}
-      loop: [0, 1, 2]
+      loop: '{{ range(managedos_install_anaconda_private_files | length) | list }}'
       loop_control:
         loop_var: managedos_install_anaconda_private_index
       when:
-        - managedos_install_anaconda_delivers_key | bool
+        - managedos_install_anaconda_delivers_private | bool
         - managedos_install_anaconda_private_fetch.results[managedos_install_anaconda_private_index].status | default(-1) | int not in [200, 206]
 
     - name: Fetch the first byte of the package tree marker through its listener
@@ -576,8 +574,8 @@
       ansible.builtin.file:
         path: '{{ managedos_install_anaconda_private_root }}'
         state: absent
-      when: managedos_install_anaconda_delivers_key | bool
-      changed_when: managedos_install_anaconda_delivers_key | bool
+      when: managedos_install_anaconda_delivers_private | bool
+      changed_when: managedos_install_anaconda_delivers_private | bool
 
     - name: Report installation verification completion
       bootwright.core.managedos_install_protocol:
@@ -604,6 +602,28 @@
         group: converge-network
         status: ok
       no_log: true
+
+    - name: Read whether the root disk is encrypted after its network converged
+      ansible.builtin.include_tasks: root_encryption.yml
+
+    - name: Name a machine that does not prove the root-disk encryption it was installed with
+      bootwright.core.managedos_install_protocol:
+        phase: refused
+        reason: root-encryption-unproved
+      when:
+        - managedos_install_anaconda_root_encryption_requested | bool
+        - not (managedos_install_anaconda_root_encryption | bool)
+      no_log: true
+
+    - name: Refuse a machine that does not prove its root-disk encryption
+      ansible.builtin.fail:
+        msg: >-
+          Machine {{ bootwright_os_install_request.identity.object }} does not
+          report its root filesystem on a TPM2-bound LUKS device after its
+          installation
+      when:
+        - managedos_install_anaconda_root_encryption_requested | bool
+        - not (managedos_install_anaconda_root_encryption | bool)
 
     - name: Read the installed machine's FIPS state after its network converged
       ansible.builtin.include_tasks: host_security.yml
@@ -658,10 +678,12 @@
     # so any token-shaped run is redacted rather than a known prefix.
     media: "{{ managedos_install_anaconda_ejected.media | default('') | regex_replace('[0-9a-f]{64}', '<token>') }}"
     power: '{{ managedos_install_anaconda_ejected.power }}'
-    privateDelivery: '{{ managedos_install_anaconda_delivers_key | bool }}'
+    privateDelivery: '{{ managedos_install_anaconda_delivers_private | bool }}'
     network: '{{ managedos_install_anaconda_network_result.network | default(false) }}'
     networkReboot: '{{ managedos_install_anaconda_network_result.networkReboot | default(false) }}'
     networkDifferences: '{{ managedos_install_anaconda_network_result.networkDifferences | default([]) }}'
     fips: '{{ managedos_install_anaconda_fips | default(false) }}'
     fipsRequired: "{{ 'fips=1' in (bootwright_os_install_request.installerArguments | default([])) }}"
+    rootEncryption: '{{ managedos_install_anaconda_root_encryption | default(false) }}'
+    rootEncryptionRequired: "{{ bootwright_os_install_request.diskEncryption is defined }}"
   no_log: true

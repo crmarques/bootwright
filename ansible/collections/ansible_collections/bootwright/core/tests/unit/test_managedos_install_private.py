@@ -81,7 +81,8 @@ def scope(private=True, **extra):
     one arm, the material files the runner wrote and the minted token."""
     values = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
     request = {"identity": {"context": "lab", "object": "metal-01"}, "tlsCertificateRef": "lab-artifacts-tls"}
-    request.update({"private": dict(PRIVATE)} if private else {"image": dict(PUBLIC)})
+    request.update({"private": dict(PRIVATE), "target": {"channel": "delivered-key", "physical": True}} if private
+                   else {"image": dict(PUBLIC), "target": {"channel": "guest-agent", "physical": False}})
     values.update({
         "bootwright_run_scratch": "/var/tmp/bootwright-run-scratch-1-1",
         "bootwright_os_install_request": request,
@@ -196,7 +197,7 @@ def write_targets(task):
 def test_every_task_naming_the_private_url_or_token_is_hidden_and_stays_private():
     work = expand("{{ managedos_install_anaconda_work }}")
     seen = []
-    for name in ("apply.yml", "private.yml", "boot.yml"):
+    for name in ("apply.yml", "private.yml", "boot.yml", "private_recovery.yml"):
         for task in flattened(name):
             text = repr(task).replace(REDACTION, "")
             if not any(secret in text for secret in SECRET_NAMES):
@@ -208,7 +209,8 @@ def test_every_task_naming_the_private_url_or_token_is_hidden_and_stays_private(
                 assert written.startswith(work + "/") or written == PRIVATE["path"] or written.startswith(PRIVATE["path"] + "/"), (
                     "%s: %r writes %s" % (name, task.get("name"), written))
     for expected in ("Publish the installer image by atomic rename", "Fetch the first byte of each private file through its listener",
-                     "Insert the published installer image as virtual media", "Publish the host key pair this installation delivers"):
+                     "Insert the published installer image as virtual media", "Publish the host key pair this installation delivers",
+                     "Publish the recovery passphrase only this machine may read"):
         assert expected in seen, "the walk no longer sees %r" % expected
 
 
@@ -265,9 +267,10 @@ def test_the_private_image_and_key_are_fetched_before_the_insert():
     assert after < fetched < refused < boot
     task = tasks[fetched]
     fetch = task[URI]
-    assert task["loop"] == ["install.iso", "identity", "identity.pub"]
-    assert [render(fetch["url"], item=item) for item in task["loop"]] == [
-        PRIVATE["url"] + "/" + TOKEN + "/" + item for item in task["loop"]]
+    leaves = render(task["loop"])
+    assert leaves == ["install.iso", "identity", "identity.pub"]
+    assert [render(fetch["url"], item=item) for item in leaves] == [
+        PRIVATE["url"] + "/" + TOKEN + "/" + item for item in leaves]
     assert render(fetch["ca_path"]) == "/run/material/artifact-ca"
     assert fetch["validate_certs"] is True and fetch["use_proxy"] is False and fetch["follow_redirects"] == "none"
     assert fetch["headers"] == {"Range": "bytes=0-0"} and fetch["status_code"] == [200, 206]
@@ -277,11 +280,12 @@ def test_the_private_image_and_key_are_fetched_before_the_insert():
     loop_var = guard["loop_control"]["loop_var"]
     register = task["register"]
     for result, diagnosis in OUTCOMES:
-        for position, leaf in enumerate(task["loop"]):
-            results = [dict(FETCHED) for _leaf in task["loop"]]
+        for position, leaf in enumerate(leaves):
+            results = [dict(FETCHED) for _leaf in leaves]
             results[position] = result
             variables = dict(guard.get("vars", {}), **{register: {"results": results}})
-            for other in range(len(task["loop"])):
+            assert render(guard["loop"]) == list(range(len(leaves)))
+            for other in range(len(leaves)):
                 assert holds(guard["when"], **dict(variables, **{loop_var: other})) == (other == position)
             message = render(guard[FAIL]["msg"], **dict(variables, **{loop_var: position}))
             assert TOKEN not in message, message
@@ -310,6 +314,9 @@ def test_the_insert_asks_for_the_verified_fetch_read_back_exactly_when_delivery_
     assert "private_delivery" in arguments, "the insert never asks for the D104 (b) read-back"
     assert render(arguments["private_delivery"]) is True
     assert render(arguments["private_delivery"], private=False) is False
+    virtual = scope()["bootwright_os_install_request"]
+    virtual["target"] = {"channel": "guest-agent", "physical": False}
+    assert render(arguments["private_delivery"], bootwright_os_install_request=virtual) is False
     assert render(arguments["image"]) == PRIVATE["url"] + "/" + TOKEN + "/install.iso"
 
 

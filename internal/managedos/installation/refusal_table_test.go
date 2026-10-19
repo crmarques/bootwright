@@ -92,8 +92,6 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 			"Machine/rhel-01", onProfile},
 		"An initial password": {labCatalog(installProfile(field("customizations", customizations.With("ssh", api.MapValue(
 			field("initialPassword", api.MapValue(text("secretRef", "root-password")))))))), "Machine/rhel-01", onProfile},
-		"Disk encryption": {labCatalog(installProfile(field("customizations", customizations.With("security", api.MapValue(
-			field("diskEncryption", api.MapValue(text("recoveryPassphraseRef", "luks")))))))), "Machine/rhel-01", onProfile},
 		"Password authentication": {labCatalog(installProfile(field("customizations", customizations.With("ssh", api.MapValue(
 			field("passwordAuthentication", api.BoolValue(true))))))), "Machine/rhel-01", onProfile},
 		"A credentialed proxy": {labCatalog(externalProxy("corporate", text("httpsProxy", "http://proxy.example.test:3128"),
@@ -104,6 +102,13 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 			map[string]string{"<machine>": "Machine/metal-01", "<profile>": "MachineInstallProfile/rhel-9-8"}},
 		"An Ed25519 fleet key under FIPS": {labCatalog(fipsProfile(), normalizedFleetSecret(t, api.MapValue(field("generated", api.MapValue())))),
 			"Machine/rhel-01", map[string]string{"<machine>": "Machine/rhel-01", "<secret>": "Secret/bootwright-machine-key"}},
+		"Disk encryption on a physical Machine": {labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))),
+			sshKeySecret(api.MapValue(field("generated", api.MapValue()))), encryptingProfile()), "Machine/metal-01",
+			map[string]string{"<machine>": "Machine/metal-01", "<profile>": "MachineInstallProfile/rhel-9-8"}},
+		"A hostname artifact endpoint under disk encryption": {labCatalog(hostnameEndpointServer(), encryptingProfileOn("fqdn-https")),
+			"Machine/rhel-01", onProfile},
+		"A generated recovery passphrase too long": {labCatalog(encryptingProfile(), recoverySecret(api.MapValue(field("generated", api.MapValue(number("bytes", "193")))))),
+			"Machine/rhel-01", map[string]string{"<recovery secret>": "Secret/rhel-luks-recovery", "<bytes>": "193", "<length>": "258"}},
 		"A DHCP-only install": {labCatalog(unselected), "Machine/rhel-01", onGuest},
 		"A kernel-style interface name": {labCatalog(networkWith(declaredInterface("enp1s0", "ethernet"), declaredInterface("eth0", "ethernet"))),
 			"Machine/rhel-01", map[string]string{"<machine>": "Machine/rhel-01", "<name>": "eth0"}},

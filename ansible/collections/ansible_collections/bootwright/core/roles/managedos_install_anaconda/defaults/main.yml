@@ -76,16 +76,23 @@ managedos_install_anaconda_expected: >-
 # The subtree this block owns for material only the installing machine may read,
 # and the unguessable directory beneath it this attempt mints. The token is
 # generated here rather than frozen in the plan, so it appears in no request, no
-# evidence and no log.
+# evidence and no log. The private material is a delivered host key pair or an
+# encrypted root disk's recovery passphrase, and the installer image whose
+# Kickstart names its URL travels with it.
 managedos_install_anaconda_private_root: >-
   {{ bootwright_os_install_request.private.path | default('') }}
-managedos_install_anaconda_delivers_key: >-
+managedos_install_anaconda_delivers_private: >-
   {{ bootwright_os_install_request.private is defined }}
+# The private files published before the image is proved; recovery is published
+# later, inside the boot, by private_recovery.yml.
+managedos_install_anaconda_private_files: >-
+  {{ ['install.iso'] + (['identity', 'identity.pub']
+     if bootwright_os_install_request.target.channel == 'delivered-key' else []) }}
 managedos_install_anaconda_private_dir: >-
   {{ managedos_install_anaconda_private_root }}/{{ managedos_install_anaconda_token.stdout | default('') | trim }}
 managedos_install_anaconda_private_url: >-
   {{ (bootwright_os_install_request.private.url ~ '/' ~ (managedos_install_anaconda_token.stdout | default('') | trim))
-     if managedos_install_anaconda_delivers_key | bool else '' }}
+     if managedos_install_anaconda_delivers_private | bool else '' }}
 # Where this attempt publishes its installer image and the URL its controller
 # fetches it from: the public publication, or install.iso beneath the
 # unguessable directory, whose URL carries the token and is never logged.

@@ -1,0 +1,67 @@
+---
+# The recovery passphrase an encrypting installer fetches in %pre and %post,
+# published beside the installer image only while that installer runs: boot.yml
+# includes this after the substrate proved the target and before the media is
+# inserted, and the withdrawal of the private subtree removes it before the
+# completion inspection. The material arrives as a file path, never as a value,
+# and its first byte is fetched through the listener the installer uses, so a
+# passphrase it could not fetch refuses before anything is booted.
+- name: Publish the recovery passphrase only this machine may read
+  ansible.builtin.copy:
+    src: '{{ bootwright_os_install_material.recoveryPassphrase }}'
+    dest: '{{ managedos_install_anaconda_private_dir }}/recovery'
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0640'
+  no_log: true
+
+- name: Label the recovery passphrase so the serving process can read it
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/chcon
+      - --reference
+      - '{{ managedos_install_anaconda_served_root }}'
+      - '{{ managedos_install_anaconda_private_dir }}/recovery'
+  changed_when: true
+  no_log: true
+
+- name: Fetch the first byte of the recovery passphrase through its listener
+  ansible.builtin.uri:
+    url: '{{ managedos_install_anaconda_private_url }}/recovery'
+    method: GET
+    headers:
+      Range: bytes=0-0
+    ca_path: '{{ bootwright_os_install_material.artifactCertificate }}'
+    validate_certs: true
+    use_proxy: false
+    follow_redirects: none
+    status_code: [200, 206]
+    timeout: 30
+  register: managedos_install_anaconda_recovery_fetch
+  failed_when: false
+  changed_when: false
+  no_log: true
+
+- name: Refuse a recovery passphrase the listener does not serve
+  ansible.builtin.fail:
+    msg: >-
+      the private recovery could not be fetched through its artifact server
+      listener, so no machine was given media:
+      {{ 'the listener answered 403, so the worker it serves as cannot read it'
+         if managedos_install_anaconda_recovery_status == 403 else
+         'the listener answered 404, so the worker it serves as finds nothing at the path this attempt published'
+         if managedos_install_anaconda_recovery_status == 404 else
+         ('its certificate did not verify against the serving certificate Secret '
+          ~ bootwright_os_install_request.tlsCertificateRef ~ ' holds: ' ~ managedos_install_anaconda_recovery_cause)
+         if managedos_install_anaconda_recovery_cause is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed') else
+         ('the request failed before any status line: ' ~ managedos_install_anaconda_recovery_cause)
+         if managedos_install_anaconda_recovery_status == -1 else
+         ('the listener answered ' ~ managedos_install_anaconda_recovery_status ~ ' where 200 or 206 was expected') }}
+  vars:
+    managedos_install_anaconda_recovery_status: '{{ managedos_install_anaconda_recovery_fetch.status | default(-1) | int }}'
+    managedos_install_anaconda_recovery_cause: >-
+      {{ ((managedos_install_anaconda_recovery_fetch.msg | default('the request recorded no result') | string)
+          | replace(managedos_install_anaconda_token.stdout | trim, '<token>')
+          | bootwright.core.printable)[:512] }}
+  when: managedos_install_anaconda_recovery_fetch.status | default(-1) | int not in [200, 206]

@@ -24,6 +24,7 @@ REFUSALS = ("hardware-mismatch", "identity-mismatch", "machine-running")
 MEDIA_REFUSALS = ("media-changed-boot",)
 POLICY_REFUSALS = ("ssh-policy-unavailable", "ssh-policy-host-excluded", "ssh-policy-fleet-excluded", "ssh-policy-generated-excluded")
 FIPS_REFUSALS = ("fips-not-enabled",)
+ENCRYPTION_REFUSALS = ("root-encryption-unproved",)
 POWER_STATES = ("", "On", "Off")
 MAX_MARKER = 4096
 MAX_HOST_KEY = 4096
@@ -70,8 +71,9 @@ def presence(arguments, request_digest):
     """The evidence a completion proves.
 
     A private installation's image names the private URL in its Kickstart, so
-    its completion has withdrawn the image with the key pair and proves
-    neither published; a public installation's image stays in place.
+    its completion has withdrawn the image with the private material, a
+    delivered key pair or a recovery passphrase, and proves neither published;
+    a public installation's image stays in place.
     """
     observation = arguments.get("observation") or {}
     private_delivery = flag(arguments.get("privateDelivery"))
@@ -94,6 +96,7 @@ def presence(arguments, request_digest):
         "private": bool(observation.get("private")),
         "reachable": bool(arguments.get("reachable")),
         "request": adapter_protocol.request_digest(request_digest),
+        "rootEncryption": flag(arguments.get("rootEncryption")),
         "tree": bool(observation.get("tree")),
         "treeContent": bool(observation.get("treeContent")),
         "treeIdentity": tree_identity(observation.get("treeIdentity")),
@@ -107,6 +110,7 @@ def presence(arguments, request_digest):
         and not evidence["private"] and evidence["reachable"]
         and evidence["network"] and evidence["networkReboot"]
         and (evidence["fips"] or not flag(arguments.get("fipsRequired")))
+        and (evidence["rootEncryption"] or not flag(arguments.get("rootEncryptionRequired")))
     )
     return evidence
 
@@ -121,7 +125,7 @@ def remaining(arguments):
     return [name for name in CONTENT if observation.get(name)]
 
 
-def unproved(evidence, private_delivery=False, fips_required=False):
+def unproved(evidence, private_delivery=False, fips_required=False, encryption_required=False):
     """What a completion proof still lacks, named for the same reason."""
     names = [name for name in ("marker", "hostKey", "address") if not evidence[name]]
     if evidence["media"]:
@@ -139,6 +143,8 @@ def unproved(evidence, private_delivery=False, fips_required=False):
     names += [name for name in ("network", "networkReboot") if not evidence[name]]
     if fips_required and not evidence["fips"]:
         names.append("fips")
+    if encryption_required and not evidence["rootEncryption"]:
+        names.append("rootEncryption")
     return names
 
 
@@ -161,6 +167,7 @@ def absence(arguments, request_digest):
         "private": False,
         "reachable": False,
         "request": adapter_protocol.request_digest(request_digest),
+        "rootEncryption": False,
         "tree": False,
         "treeContent": False,
         "treeIdentity": "",
@@ -177,7 +184,10 @@ def completion(arguments):
         unmet, verb = remaining(arguments), "still present"
     else:
         evidence = presence(arguments, request_digest)
-        unmet = unproved(evidence, flag(arguments.get("privateDelivery")), flag(arguments.get("fipsRequired")))
+        unmet = unproved(
+            evidence, flag(arguments.get("privateDelivery")), flag(arguments.get("fipsRequired")),
+            flag(arguments.get("rootEncryptionRequired")),
+        )
         verb = "not proved"
     if publishes(evidence, arguments.get("observed")):
         return evidence, None
@@ -189,7 +199,7 @@ CAPABILITY = adapter_protocol.Capability(
     "the installation capability result could not be published",
     completion,
     phases=adapter_protocol.REFUSING_PHASES,
-    refusals=REFUSALS + MEDIA_REFUSALS + POLICY_REFUSALS + FIPS_REFUSALS,
+    refusals=REFUSALS + MEDIA_REFUSALS + POLICY_REFUSALS + FIPS_REFUSALS + ENCRYPTION_REFUSALS,
 )
 PHASES = CAPABILITY.phases
 

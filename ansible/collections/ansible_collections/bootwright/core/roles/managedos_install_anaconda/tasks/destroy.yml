@@ -57,7 +57,7 @@
   ansible.builtin.file:
     path: '{{ managedos_install_anaconda_private_root }}'
     state: absent
-  when: managedos_install_anaconda_delivers_key | bool
+  when: managedos_install_anaconda_delivers_private | bool
   register: managedos_install_anaconda_private_removed
 
 # An attempt killed part way leaves the area it built the image in, with the

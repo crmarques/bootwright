@@ -670,7 +670,7 @@ separate cluster proxy and NTP choices and does not inherit Machine fields.
 | `security.selinux.mode` | string | no | OS default | `enforcing`, `permissive`, or `disabled`. |
 | `security.firewall.enabled` | boolean | no | OS default | `true` requires `firewalld` in packages and enabled services. |
 | `security.fips.enabled` | boolean | no | `false` | RHEL-only. `true` installs the operating system in FIPS mode on a virtual Machine with an ECDSA P-256 guest host key; a physical Machine and an Ed25519 fleet key refuse ([managed OS](../managed-os.md#fips-mode)). |
-| `security.diskEncryption` | object | no | — | TPM2 unlock plus recovery passphrase below. |
+| `security.diskEncryption` | object | no | — | Encrypts the root disk with LUKS2 bound to the TPM2 on a virtual Machine; a physical Machine refuses ([managed OS](../managed-os.md#root-disk-encryption)). TPM2 unlock plus recovery passphrase below. |
 
 A Kickstart token is printable ASCII with no whitespace, quote, backslash, `#`
 or comma, and does not start with `%`. These grammars keep every authored value
@@ -702,7 +702,15 @@ passphrase.
 `tpm2.pcrIds` is a unique integer list in `0..23`; optional `pcrBank` is one of
 `sha1`, `sha256`, `sha384`, or `sha512`, defaults to `sha256` when PCRs are
 selected, and is invalid without `pcrIds`. A consuming virtual profile supplies
-TPM support.
+TPM support. The recovery passphrase is 8 to 256 printable ASCII characters
+other than space, `"`, `'`, `\` and `#`; a generated `token` Secret generates
+at most 192 bytes. The profile's `redfishVirtualMedia.artifactServerEndpoint`
+must resolve to an IP literal, because the installer fetches the passphrase
+before it configures name resolution. The selected PCRs are sealed at the
+values measured while the installer runs, so a PCR that measures the boot
+loader, the kernel or its command line can leave the installed disk waiting on
+the console. The bound passphrase is the disk's recovery secret: keep the
+recovery Secret unchanged while the Machine exists.
 
 Any referenced install profile enables `sshd`; cross-field service and
 firewall requirements are checked before effective rendering.

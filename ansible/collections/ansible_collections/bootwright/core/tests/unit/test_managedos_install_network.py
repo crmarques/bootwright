@@ -730,7 +730,7 @@ def publication(name, **scope):
         "managedos_install_anaconda_reachable": {"rc": 0},
         "managedos_install_anaconda_ejected": {"media": "", "power": "On"},
         "managedos_install_anaconda_controller": {"media": "", "power": "On"},
-        "managedos_install_anaconda_delivers_key": False,
+        "managedos_install_anaconda_delivers_private": False,
     })
     variables.update(scope)
     return protocol.completion(Templar(loader=LOADER, variables=variables).template(task[PROTOCOL]))
