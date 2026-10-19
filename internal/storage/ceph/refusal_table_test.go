@@ -47,12 +47,12 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 				return spec.WithPath(api.StringList("198.51.100.0/24"), "ceph", "networks", "clusterCIDRs")
 			},
 		}, values: map[string]string{"<host>": "node-1", "<machine>": "node-1", "<cidrs>": "198.51.100.0/24"}},
-		"A native rgw, ingress or nfs service whose deploying block this build lacks": {edits: map[string]func(api.Value) api.Value{
-			"nfs service": func(spec api.Value) api.Value {
-				services := append(spec.Get("ceph", "services").Items(), requestMap("service_type", "nfs", "service_id", "files", "placement", requestMap("label", "mon", "count", 2)))
+		"A native rgw service, or an ingress that fronts one, whose deploying block this build lacks": {edits: map[string]func(api.Value) api.Value{
+			"rgw service": func(spec api.Value) api.Value {
+				services := append(spec.Get("ceph", "services").Items(), requestMap("service_type", "rgw", "service_id", "objects", "placement", requestMap("label", "mon", "count", 2)))
 				return spec.WithPath(api.ListValue(services...), "ceph", "services")
 			},
-		}, values: map[string]string{"<service>": "nfs.files"}},
+		}, values: map[string]string{"<service>": "rgw.objects"}},
 		"A native service whose auxiliary image is not selected": {edits: map[string]func(api.Value) api.Value{
 			"prometheus service": func(spec api.Value) api.Value {
 				services := append(spec.Get("ceph", "services").Items(), requestMap("service_type", "prometheus", "placement", requestMap("label", "mon", "count", 1)))

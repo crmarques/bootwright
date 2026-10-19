@@ -10,6 +10,7 @@ import inspect
 import ipaddress
 import json
 import os
+import re
 import shlex
 import socket
 import ssl
@@ -17,9 +18,9 @@ import tempfile
 import time
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    adapter_protocol, ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_resources, ceph_native_observe,
-    ceph_native_worker, ceph_package_sources, ceph_package_worker, ceph_packages, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody,
-    native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
+    adapter_protocol, ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_nfs, ceph_native_resources,
+    ceph_native_observe, ceph_native_units, ceph_native_worker, ceph_package_sources, ceph_package_worker, ceph_packages, ceph_tunnel, ceph_tunnel_staging,
+    ceph_tunnel_custody, native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
 )
 
 READINESS_TIMEOUT = 900
@@ -30,6 +31,7 @@ BOOTSTRAP_CEILING = 1920
 BOOTSTRAP_BUDGET = 1800
 BOOTSTRAP_CALL = BOOTSTRAP_BUDGET + 60
 NATIVE_FAILURES = ("native-unknown", "native-refusal", "native-timeout")
+UNIT_DAEMON = re.compile(r"[a-z][a-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\Z")
 # The refusals each block's Go caller remedies by name (hostRefusals and
 # adapterRefusals in internal/storage/ceph); a test holds them equal.
 HOST_REASONS = (
@@ -48,7 +50,7 @@ CLUSTER_REASONS = (
     "not-removed", "cluster-unavailable", "device", "foreign-cluster", "native-command", "native-timeout", "native-output", "unknown", "transport",
     "remote-refusal", "adapter-exception", "foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget",
     "foreign-rbd-image", "rbd-image-identity", "foreign-filesystem", "filesystem-identity", "filesystem-multiple-disabled", "foreign-subvolume-group",
-    "mds-coverage", "foreign-subvolume", "subvolume-identity", "foreign-image",
+    "mds-coverage", "foreign-subvolume", "subvolume-identity", "foreign-image", "nfs-module-disabled", "nfs-pool-foreign",
 )
 
 
@@ -74,8 +76,9 @@ def unsettled(error):
 
 
 def blocking_entry(value):
-    """A blocking health check code, or a daemon a host has not yet running."""
-    return isinstance(value, str) and (ceph_native.HEALTH_CHECK.fullmatch(value) is not None or ceph_native.PENDING_DAEMON.fullmatch(value) is not None)
+    """A blocking health check code, a daemon a host has not yet running, or a service unit's unmet daemon count or endpoint."""
+    return isinstance(value, str) and (ceph_native.HEALTH_CHECK.fullmatch(value) is not None or ceph_native.PENDING_DAEMON.fullmatch(value) is not None
+                                       or ceph_native_units.PENDING.fullmatch(value) is not None)
 
 
 def readiness_detail(checks):
@@ -128,11 +131,11 @@ def evidence(value, request_digest, request=None):
     fields = {"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs",
               "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "daemons"}
     ceph_native.require(isinstance(value, dict) and set(value) == fields, "evidence")
-    ceph_native.require(value["daemons"] == [], "evidence")
     ceph_native.require(value["version"] == ceph_native.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
                         "evidence")
     dashboard_evidence(value)
-    ceph_native.require(value["action"] in ("cluster", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings"), "evidence")
+    ceph_native.require(value["action"] in ("cluster", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service"), "evidence")
+    daemon_evidence(value, request)
     ceph_native.require(all(type(value[k]) is bool for k in ("owned", "exists", "ready", "removed", "partial")), "evidence")
     ceph_native.require(value["health"] in ("", "HEALTH_OK", "HEALTH_WARN", "HEALTH_ERR"), "evidence")
     ceph_native.require(ceph_native.named(value["owner"]), "evidence")
@@ -166,6 +169,25 @@ def evidence(value, request_digest, request=None):
     ceph_native.require(not value["removed"] or value["owned"] and not value["exists"] and not value["ready"], "evidence")
     ceph_native.require(len(ceph_native.canonical(value)) <= 60000, "evidence")
     return value
+
+
+def daemon_evidence(value, request=None):
+    """A service unit's daemons: unique names, each on a host of the unit document it belongs to; every other action has none."""
+    daemons = value["daemons"]
+    if value["action"] != "service":
+        ceph_native.require(daemons == [], "evidence")
+        return
+    ceph_native.require(isinstance(daemons, list) and len(daemons) <= 256, "evidence")
+    hosts = None
+    if request is not None:
+        hosts = {document["service_type"] + "." + document["service_id"]: document["placement"]["hosts"] for document in request["service"]["documents"]}
+    names = set()
+    for daemon in daemons:
+        ceph_native.require(isinstance(daemon, dict) and set(daemon) == {"host", "name", "service"} and ceph_native.named(daemon["host"]), "evidence")
+        ceph_native.require(isinstance(daemon["name"], str) and UNIT_DAEMON.fullmatch(daemon["name"]) is not None and daemon["name"] not in names, "evidence")
+        ceph_native.require(isinstance(daemon["service"], str) and ceph_native.DELEGATED_SERVICE.fullmatch(daemon["service"]) is not None, "evidence")
+        ceph_native.require(hosts is None or daemon["host"] in hosts.get(daemon["service"], ()), "evidence")
+        names.add(daemon["name"])
 
 
 def dashboard_evidence(value):
@@ -315,7 +337,7 @@ class Transport:
     @staticmethod
     def native_sources():
         modules = (native_diagnostics, native_specializations, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
-                   ceph_native_resources, ceph_host_route_probe, ceph_pull_broker, ceph_host_runtime)
+                   ceph_native_resources, ceph_native_nfs, ceph_native_units, ceph_host_route_probe, ceph_pull_broker, ceph_host_runtime)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
         ceph_native.require(tuple(sources) == ceph_native_worker.MODULES, "transport")
         return sources
@@ -573,6 +595,8 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         ceph_native.require(set(outputs) == {"client" if request["action"] == "client" else "dashboard"}, "material")
     elif operation in ("apply", "observe"):
         ceph_native.require(not outputs, "material")
+    if request["action"] == "service":
+        return execute_unit(request, operation, request_digest, transport, bootstrap, now=now, pause=pause)
     changed = False
     if operation == "apply":
         preparations = [transport.call(host, "prerequisites") for host in request["hosts"]]
@@ -641,6 +665,62 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         observation, effect = dashboard_phase(request, operation, request_digest, bootstrap, transport, observation, outputs["dashboard"],
                                               now=now, pause=pause, connect=connect)
         changed = effect or changed
+    return {"changed": changed, "evidence": observation}
+
+
+def observe_unit(request, request_digest, bootstrap, transport, timeout=None, blocking=None):
+    """One read-only observation of a service unit on the bootstrap host; no other host is called."""
+    observed = transport.call(bootstrap, "observe") if timeout is None else transport.call(bootstrap, "observe", timeout=timeout)
+    ceph_native.require(isinstance(observed, dict), "evidence")
+    observed = dict(observed)
+    checks = observed.pop("blocking", [])
+    ceph_native.require(isinstance(checks, list) and len(checks) <= 16 and all(blocking_entry(check) for check in checks), "evidence")
+    if blocking is not None:
+        blocking[:] = checks
+    observed["request"] = request_digest
+    return evidence(observed, request_digest, request)
+
+
+def wait_unit(request, request_digest, bootstrap, transport, now, pause):
+    """Poll the unit's own observation until ready; a timeout names the daemons, endpoint or health checks still blocking."""
+    deadline = now() + READINESS_TIMEOUT
+    blocking = []
+    while True:
+        remaining = deadline - now()
+        if remaining <= 0:
+            raise ReadinessRefusal(blocking)
+        try:
+            observed = observe_unit(request, request_digest, bootstrap, transport, min(660, remaining), blocking)
+        except ceph_native.RemoteRefusal as error:
+            if not unsettled(error):
+                raise
+            blocking[:] = (["unsettled@" + bootstrap["name"]] + [entry for entry in blocking if not entry.startswith("unsettled@")])[:16]
+            observed = None
+        if observed is not None and observed["ready"]:
+            return observed
+        ceph_native.require(observed is None or observed["owned"] and observed["exists"] and observed["partial"], "not-ready")
+        remaining = deadline - now()
+        if remaining <= 0:
+            raise ReadinessRefusal(blocking)
+        pause(min(READINESS_INTERVAL, remaining))
+
+
+def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause):
+    """A service unit runs only on the bootstrap host: its preparation proof, its one apply phase, then its own readiness wait."""
+    changed = False
+    if operation == "apply":
+        transport.call(bootstrap, "prerequisites")
+        produced = transport.call(bootstrap, "unit")
+        ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
+        changed = produced["changed"]
+        observation = wait_unit(request, request_digest, bootstrap, transport, now, pause)
+        ceph_native.require(observation["ready"], "not-ready")
+    elif operation == "destroy":
+        changed = transport.call(bootstrap, "destroy")["changed"]
+        observation = observe_unit(request, request_digest, bootstrap, transport)
+        ceph_native.require(observation["removed"], "not-removed")
+    else:
+        observation = observe_unit(request, request_digest, bootstrap, transport)
     return {"changed": changed, "evidence": observation}
 
 

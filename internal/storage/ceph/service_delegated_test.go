@@ -177,15 +177,21 @@ func TestDelegatedServiceRefusesUntilItsBlockLands(t *testing.T) {
 	if got := New(api.StorageCluster, nil).Unsupported(graph(nil)); len(got) != 0 {
 		t.Fatalf("the plain graph refuses %+v", got)
 	}
-	for name, state := range map[string]*compilation.State{
-		"nfs.files":         graph([]api.Value{nfsService("files")}),
-		"rgw.objects":       graph([]api.Value{rgwService("objects")}, childOf(api.StorageObjectGateway, "objects", "serviceRef", "rgw.objects")),
-		"ingress.nfs.files": graph([]api.Value{nfsService("files"), ingressService("nfs.files")}),
-	} {
-		want := []lifecycle.Refusal{{Kind: string(api.StorageCluster), Name: "example", Reason: "Bootwright does not deploy the native service " + name + " yet",
-			Remediation: "remove " + name + " from spec.ceph.services, together with an ingress that fronts it and its spec.ceph.serviceBindings entries"}}
-		if got := New(api.StorageCluster, nil).Unsupported(state); !reflect.DeepEqual(got, want) {
-			t.Fatalf("%s: refuses %+v, want %+v", name, got, want)
-		}
+	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{nfsService("files")})); len(got) != 0 {
+		t.Fatalf("a direct nfs service refuses %+v", got)
+	}
+	state := graph([]api.Value{rgwService("objects")}, childOf(api.StorageObjectGateway, "objects", "serviceRef", "rgw.objects"))
+	want := []lifecycle.Refusal{{Kind: string(api.StorageCluster), Name: "example", Reason: "Bootwright does not deploy the native service rgw.objects yet",
+		Remediation: "remove rgw.objects from spec.ceph.services, together with an ingress that fronts it and its spec.ceph.serviceBindings entries"}}
+	if got := New(api.StorageCluster, nil).Unsupported(state); !reflect.DeepEqual(got, want) {
+		t.Fatalf("rgw.objects: refuses %+v, want %+v", got, want)
+	}
+	nfsIngress := requestMap("service_type", "ingress", "service_id", "nfs.files", "placement", requestMap("label", "mon", "count", 2),
+		"spec", requestMap("backend_service", "nfs.files", "virtual_ip", "192.0.2.50/24", "frontend_port", 2049, "monitor_port", 9049, "enable_haproxy_protocol", true))
+	want = []lifecycle.Refusal{{Kind: string(api.StorageCluster), Name: "example",
+		Reason:      "no auxiliary image is selected for the ingress service ingress.nfs.files; its daemons need cephadm's container_image_haproxy, and Bootwright keeps no default",
+		Remediation: "remove ingress.nfs.files from spec.ceph.services, together with its spec.ceph.serviceBindings entries"}}
+	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{nfsService("files"), nfsIngress})); !reflect.DeepEqual(got, want) {
+		t.Fatalf("ingress.nfs.files: refuses %+v, want %+v", got, want)
 	}
 }

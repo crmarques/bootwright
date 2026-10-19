@@ -6,8 +6,8 @@ input. M2b implements the common native path and strict MON/MGR/OSD admission;
 [B492](milestones/m2.md#b492) adds the MDS family.
 [B477](milestones/m2.md#b477) and [B478](milestones/m2.md#b478) add the RGW,
 ingress and NFS records; the core request lists their services for core
-observation, and planning refuses each family until the block that deploys it
-lands.
+observation, and planning refuses the rgw family until the block that deploys
+it lands.
 Release-qualified projection, additional families and protected leaf registries
 remain gated by [B472](milestones/m2.md#b472), [B474](milestones/m2.md#b474)
 and each [service item](storage-coverage.md#feature-matrix).
@@ -262,7 +262,9 @@ declared MDS service its native daemon ID
 An MDS service is ready when its placement count of daemons runs with the
 frozen image; no active rank is required before its filesystem exists.
 
-RGW, ingress and NFS services run in blocks the cluster block does not own.
+An NFS service and the ingress that fronts it run in one service-unit block;
+RGW and its ingress run in the gateway block. Neither is a block the cluster
+block owns.
 The core request lists each one in its `delegated` member by its qualified
 name and its eligible native hostnames, and carries nothing else of its
 document; the host request never carries the member. In the daemon-type table,

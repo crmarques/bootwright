@@ -68,12 +68,14 @@ that adaptation neither approves nor refuses a selection.
 
 Ordinary apply realizes the core cluster, placement policies, replicated and
 erasure-coded pools, RBD images, CephFS filesystems with their subvolume
-groups, CephFS subvolumes and the client over `verified-tunnel`.
+groups, CephFS subvolumes, native `nfs` services and the client over
+`verified-tunnel`; an ingress that fronts an `nfs` service refuses until its
+auxiliary images can be selected.
 `ceph.release` is the operator's release label;
 `ceph.packageVersion` selects the Ceph/cephadm RPM roots and
 `ceph.cephadm.ansible.packageVersion` selects the actual cephadm-ansible RPM.
-Optional `ceph.nfsGanesha.packageVersion` selects the NFS-Ganesha RPM without
-admitting NFS orchestration. These strings are nonempty, bounded to 1024 UTF-8
+Optional `ceph.nfsGanesha.packageVersion` selects the NFS-Ganesha RPM; NFS
+daemons that a declared nfs service deploys run from the frozen Ceph image. These strings are nonempty, bounded to 1024 UTF-8
 bytes and control-free; native tools interpret their contents.
 `ceph.packageRepository` optionally selects an HTTPS RPM repository without
 userinfo or fragment, of at most 1798 bytes without trailing slashes, so

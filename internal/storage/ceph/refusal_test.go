@@ -2,6 +2,7 @@ package ceph
 
 import (
 	"context"
+	"encoding/json"
 	"maps"
 	"regexp"
 	"slices"
@@ -129,10 +130,43 @@ func TestAForeignImageRefusalNamesTheSettingAndNeverOverwrites(t *testing.T) {
 	observation, err := New(api.StorageCluster, &refusingRunner{reason: "foreign-image"}).Observe(context.Background(), e)
 	d := diagnostics.Of(err)
 	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
-		d[0].Message != "a cephadm container_image setting of the Ceph cluster holds an image this operation did not freeze, or is set outside the mgr section" ||
+		d[0].Message != "a cephadm container_image setting of the Ceph cluster holds an image this operation did not freeze, is set outside the mgr section, or no longer holds the frozen image a declared service needs" ||
 		d[0].Remediation != "find the setting the native error names in ceph config dump, then remove it with ceph config rm or set it to the frozen image outside Bootwright and apply again; "+
 			"Bootwright never overwrites a container_image setting it did not write" {
 		t.Fatalf("a foreign-image refusal reached the operator as %+v %+v", observation, d)
+	}
+}
+
+func nfsUnitRequest() Request {
+	r := coreRequest()
+	document := json.RawMessage(`{"placement":{"count":1,"hosts":["node-1"]},"service_id":"files","service_type":"nfs"}`)
+	r.Action, r.Service = "service", &ServiceUnit{Documents: []json.RawMessage{document}, ID: "files", Type: "nfs"}
+	return r
+}
+
+func TestANFSModuleDisabledRefusalNamesTheSettingsBlock(t *testing.T) {
+	r := nfsUnitRequest()
+	e := withMaterial(executionFor(t, r), r)
+	observation, err := New(api.StorageCluster, &refusingRunner{reason: "nfs-module-disabled"}).Observe(context.Background(), e)
+	d := diagnostics.Of(err)
+	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+		d[0].Message != "the Ceph cluster's nfs manager module is disabled, although the cluster's settings block enabled it for the declared NFS service" ||
+		d[0].Remediation != "enable it again outside Bootwright with ceph mgr module enable nfs, then apply again; the settings block does not run again once it completed, "+
+			"and an NFS service block never enables a manager module" {
+		t.Fatalf("an nfs-module-disabled refusal reached the operator as %+v %+v", observation, d)
+	}
+}
+
+func TestANFSPoolForeignRefusalNamesThePool(t *testing.T) {
+	r := nfsUnitRequest()
+	e := withMaterial(executionFor(t, r), r)
+	observation, err := New(api.StorageCluster, &refusingRunner{reason: "nfs-pool-foreign"}).Observe(context.Background(), e)
+	d := diagnostics.Of(err)
+	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+		d[0].Message != "a Ceph pool named .nfs exists that this operation's NFS services did not create, or it is not the pool they recorded" ||
+		d[0].Remediation != "find the .nfs pool with ceph osd pool ls detail; if nothing uses it, remove it outside Bootwright and apply again, "+
+			"or take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright never adopts a .nfs pool it did not create" {
+		t.Fatalf("an nfs-pool-foreign refusal reached the operator as %+v %+v", observation, d)
 	}
 }
 
@@ -167,7 +201,7 @@ func TestEachCephBlockNamesExactlyTheRefusalsItsModuleMayPublish(t *testing.T) {
 func TestResourceRefusalsNameTheirNextStep(t *testing.T) {
 	refusals := adapterRefusals()
 	generic := diagnostics.Of(refusals["native-output"])[0].Remediation
-	for _, reason := range []string{"foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget", "foreign-rbd-image", "rbd-image-identity", "foreign-subvolume", "subvolume-identity", "pool-drift"} {
+	for _, reason := range []string{"foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget", "foreign-rbd-image", "rbd-image-identity", "foreign-subvolume", "subvolume-identity", "pool-drift", "nfs-module-disabled", "nfs-pool-foreign"} {
 		d := diagnostics.Of(refusals[reason])
 		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Remediation == generic || strings.Contains(d[0].Message, "could not prove its") {
 			t.Fatalf("%s reaches the operator as %+v", reason, d)

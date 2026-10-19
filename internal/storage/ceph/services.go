@@ -92,7 +92,7 @@ func projectServices(r *Request, cluster api.Object) error {
 
 var delegatedFamilies = []string{"rgw", "ingress", "nfs"}
 
-var undeployedFamilies = []string{"nfs", "rgw"}
+var undeployedFamilies = []string{"rgw"}
 
 func serviceHosts(cluster api.Object, svc api.Value) ([]string, error) {
 	names, issues := storage.ResolveServicePlacement(cluster, svc)

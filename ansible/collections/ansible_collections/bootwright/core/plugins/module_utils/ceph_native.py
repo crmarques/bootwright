@@ -426,12 +426,18 @@ def validate(request):
     """Admit only the implemented core envelope, including concrete devices."""
     require(isinstance(request, dict))
     required = SCOPE_MEMBERS | {"action"}
-    resources = {"pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings"}
+    resources = {"pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service"}
     require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"delegated"} - resources)
     hosts = scope_checks(request)
     validate_delegated(request, hosts)
     if request["action"] == "cluster":
-        require(not {"pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings"} & set(request))
+        require(not resources & set(request))
+        return request
+    require(request["action"] == "service" or "service" not in request)
+    if request["action"] == "service":
+        require(not (resources - {"service"}) & set(request))
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_units
+        ceph_native_units.validate(request, hosts)
         return request
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_resources
     require(request["action"] in ceph_native_resources.ACTIONS)
@@ -2838,9 +2844,10 @@ class Worker:
             result[(host, device["path"])] = value["deviceID"]
         return result
 
-    def service_specs(self):
+    def service_specs(self, limit=None):
         values = self.ceph("orch", "ls", "--export")
-        require(isinstance(values, list) and len(values) <= len(self.request["services"]) * len(self.request["hosts"]), "foreign-service")
+        limit = len(self.request["services"]) * len(self.request["hosts"]) if limit is None else limit
+        require(isinstance(values, list) and len(values) <= limit, "foreign-service")
         result = {}
         for value in values:
             require(isinstance(value, dict) and isinstance(value.get("service_type"), str), "native-output")
@@ -2874,17 +2881,18 @@ class Worker:
             result.append(projected)
         return result
 
-    def normalized_services(self, groups):
+    def normalized_services(self, groups, record="service-inputs.json"):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime as runtime
         scope = {"owner": self.request["owner"], "fsid": self.request["fsid"], "image": self.request["image"], "inputs": groups}
-        retained = self.markers.read("service-inputs.json")
+        retained = self.markers.read(record)
         if retained is not None:
             require(isinstance(retained, dict) and set(retained) == {"version", "scope", "services"}
                     and retained["version"] == "ceph-service-inputs-v1" and retained["scope"] == scope, "ownership")
             result = json.loads(canonical(retained["services"]))
         else:
             profile = self.runtime_profile()
-            worker = runtime.HostRuntime(self.request, self.host["name"], command=self.run)
+            cluster = {key: value for key, value in self.request.items() if key != "service"}
+            worker = runtime.HostRuntime(dict(cluster, action="cluster"), self.host["name"], command=self.run)
             source = ("import json,sys\nfrom ceph.deployment.service_spec import ServiceSpec\n"
                       "values=json.loads(sys.argv[1])\n"
                       "print(json.dumps([[ServiceSpec.from_json(value).to_json() for value in group] for group in values]))\n")
@@ -2906,7 +2914,7 @@ class Worker:
                             and not any(spec.get(field) for field in ("db_devices", "wal_devices", "journal_devices", "data_directories", "encrypted", "tpm2"))
                             and spec.get("osds_per_device", 1) == 1, "osd-unqualified")
         if retained is None:
-            self.markers.write("service-inputs.json", {"version": "ceph-service-inputs-v1", "scope": scope, "services": result})
+            self.markers.write(record, {"version": "ceph-service-inputs-v1", "scope": scope, "services": result})
         return result
 
     def prove_service_projections(self, projections, observed, scope):
@@ -3573,12 +3581,14 @@ def dispatch(envelope):
     if phase in HOST_PHASES:
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime
         return ceph_host_runtime.dispatch(envelope)
-    from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_resources
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_resources, ceph_native_units
     request = envelope["request"]
     resource = isinstance(request, dict) and request.get("action") in ceph_native_resources.ACTIONS
-    worker = (ceph_native_resources.ResourceWorker if resource else Worker)(request, envelope["host"])
+    unit = isinstance(request, dict) and request.get("action") == "service"
+    kind = ceph_native_units.UnitWorker if unit else ceph_native_resources.ResourceWorker if resource else Worker
+    worker = kind(request, envelope["host"])
     worker.horizon = worker.clock() + MANAGER_HORIZON
-    require(phase in CORE_PHASES or (resource and phase in ceph_native_resources.PHASES))
+    require(phase in CORE_PHASES or (resource and phase in ceph_native_resources.PHASES) or (unit and phase in ceph_native_units.PHASES))
     if phase not in CORE_READ_ONLY_PHASES and phase not in ceph_native_resources.READ_ONLY_PHASES:
         require(supported_transport(worker.request), "unsupported-release")
     if phase in ("bootstrap", "authorize", "tunnel_configure"):

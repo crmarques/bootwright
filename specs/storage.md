@@ -250,7 +250,7 @@ links each matrix combination that this table refuses.
 | --- | --- | --- | --- |
 | Incomplete or unsafe Ceph coordinates or transport | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring an empty `ceph.release`, `ceph.packageVersion`, `ceph.cephadm.ansible.packageVersion` or `ceph.image.version`, an empty `ceph.image.base`, or a `ceph.cephadm.clusterSSH.transport` other than `verified-tunnel`, an omitted transport included | `the selected Ceph coordinates or cluster SSH transport are incomplete or unsafe` | `declare bounded version strings, an image repository and verified-tunnel transport; native transport is refused and host-key verification cannot be disabled` |
 | A replication network that a Ceph host has no address inside | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring `ceph.networks.clusterCIDRs` while the Machine of a `ceph.topology.nodes[]` entry declares no IP address inside any of them, a Machine whose addresses are assigned at runtime included; `<host>` is the first such node's native hostname in declaration order, `<machine>` its Machine and `<cidrs>` the declared networks joined by a comma and a space | `Ceph host <host> (Machine <machine>) has no address inside the replication networks <cidrs>` | `add an address inside one of <cidrs> to the network of <machine>, or remove spec.ceph.networks.clusterCIDRs` |
-| A native rgw, ingress or nfs service whose deploying block this build lacks | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` an `rgw` or `nfs` service or an `ingress` whose `spec.backend_service` names one; `<service>` is the first such service's qualified name in name order | `Bootwright does not deploy the native service <service> yet` | `remove <service> from spec.ceph.services, together with an ingress that fronts it and its spec.ceph.serviceBindings entries` |
+| A native rgw service, or an ingress that fronts one, whose deploying block this build lacks | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` an `rgw` service or an `ingress` whose `spec.backend_service` names one or resolves to no declared service; `<service>` is the first such service's qualified name in name order | `Bootwright does not deploy the native service <service> yet` | `remove <service> from spec.ceph.services, together with an ingress that fronts it and its spec.ceph.serviceBindings entries` |
 | A native service whose auxiliary image is not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that the previous row does not refuse; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type` and `<name>` the first image name it needs in name order, `keepalived` for an `ingress` with `spec.keepalive_only` | `no auxiliary image is selected for the <family> service <service>; its daemons need cephadm's container_image_<name>, and Bootwright keeps no default` | `remove <service> from spec.ceph.services, together with its spec.ceph.serviceBindings entries` |
 
 ## Bootstrap identity and continuation
@@ -355,8 +355,9 @@ writes by others and makes them private before recording their identities;
 observation never changes them. A phase that restarts the manager waits,
 bounded and inside its worker budget, for the MON to report an available
 manager whose orchestrator answers. Orchestrator reads, and the idempotent IBM enable-call-home and accept-license declarations, repeat while the active manager restarts. Per-host enrollment
-and label attempts and per-service apply attempts retain exact intent before
-effects and exact completion after native readback. A lost reply settles from
+and label attempts and per-service apply attempts, including each document of
+a service-unit block, retain exact intent before effects and exact completion
+after native readback. A lost reply settles from
 the same host/service identity; drift refuses. Native ServiceSpec defaults come
 from the selected image's SDK and are frozen before effects.
 An orchestrator service description is not by itself a stored specification:
@@ -545,6 +546,38 @@ type, state, layout pool, namespace, quota, owner, mode and owner metadata; a
 drift is not ready rather than refused. No phase removes, resizes, snapshots,
 clones or re-creates a recorded subvolume; it retires with its cluster's
 hosts, and [B491](milestones/m2.md#b491) owns its online removal.
+
+A declared `nfs` service, with the `ingress` that fronts it when one is
+declared, is realized by its service-unit block
+`ceph-service-<cluster>-nfs-<id>`, which depends on the cluster, image and
+settings blocks and runs only on the bootstrap host. Its apply phase proves,
+before any write: the cluster's ownership record and FSID; the `nfs` manager
+module the settings block enabled (`nfs-module-disabled` when it is off; the
+unit never enables a module); the shared `.nfs` pool, which may exist only
+under the claim this operation's NFS units recorded and, once recorded, only
+under its recorded ID (`nfs-pool-foreign`; it is never adopted, rewritten or
+deleted); and, with an ingress, the frozen `container_image_keepalived`
+setting and, unless the ingress is keepalive-only, `container_image_haproxy`
+(`foreign-image` names a setting the settings block no longer holds; the unit
+never writes one). It then retains the unit's normalized inputs record under
+its own name, claims `.nfs` before cephadm creates it, writes each missing
+document's attempt record and applies every missing document in one
+`ceph orch apply -i -` stream, the ingress first so the virtual IP exists for
+the NFS daemons. A readback of every stored specification precedes the
+completion records; a stored specification without this operation's attempt,
+or one that differs from a completed document, refuses `foreign-service`.
+Last it waits, bounded by 120 s, for cephadm's asynchronous creation of `.nfs`
+with its `nfs` application and records the pool's native ID. Readiness needs
+every document completed, each daemon type's count running on its frozen image
+(the Ceph image for `nfs`, the frozen auxiliary image for `haproxy` and
+`keepalived`), `.nfs` with application `nfs` under its recorded ID, the unit's
+ID in `nfs cluster ls` and, with an ingress, a TCP connect from the bootstrap
+host to the virtual IP at the ingress `frontend_port`, or at the NFS `port`
+when keepalive-only; a readiness timeout names `<daemon type>@<service>` and
+`vip@ingress.nfs.<id>` beside the blocking health checks. Observation never
+writes, and a stored specification, password or keyring never reaches
+evidence, which lists only each daemon's host, name and service. The block's
+deadline is fixed for its type (apply 2280 s, observe 720 s, destroy 1380 s).
 
 Readiness reports bounded observations of FSID, quorum, orchestrator and host
 state, expected daemons, OSD membership, placement/capacity, pool protection,
