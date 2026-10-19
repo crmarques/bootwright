@@ -12,8 +12,8 @@ listed commands return the [unavailable result](cli.md#recognized-but-unavailabl
 
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
-| [M1](milestones/m1.md) | Foundations: substrates, infrastructure components and Machines | none | in progress | foundation gaps for M2c; M1f/M1g future |
-| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | D156; applicable M1c/M1d/M1e; B509 | in progress | M2b done; M2c full virtual coverage |
+| [M1](milestones/m1.md) | Foundations: substrates, infrastructure components and Machines | none | in progress | X55/X60 for M2c (D159); M1f/M1g future |
+| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | D156; applicable M1c/M1d/M1e; B509 | in progress | M2c under D159 on branch `m2c` |
 | [M3](milestones/m3.md) | Full OpenShift on bare metal/BMC and libvirt+sushy | M2; applicable M1c/M1d/M1e; B18/B23/B265 | in progress | B61's gate; define B473 |
 | [M4](milestones/m4.md) | MetalLB and IBM Fusion Data Foundation | M2, M3 | not started | nothing until M2 and M3 |
 | [M5](milestones/m5.md) | OpenShift clusters over OpenShift Virtualization | M3, M1g | not started | nothing until M3 and M1g |
@@ -26,11 +26,12 @@ under [X98](milestones/delivered.md#x98--m1-owner-acceptance) and M2b under
 [X99](milestones/delivered.md#x99--operator-selected-ceph-artifacts-and-m2b-completion)
 remain delivered.
 
-- **Next for agents:** [M2c](milestones/m2.md#m2c), including the shared
-  foundation gaps its profiles require. M1f/M1g are future work, not blanket
-  prerequisites; no new slice is activated.
-- **Next for operator:** no accepted hardening or M2b rerun is introduced.
-  Remaining provider and cluster gates keep their own acceptance.
+- **Next for agents:** [M2c](milestones/m2.md#m2c)'s lanes under D159 on the
+  local branch `m2c`, with M1c's X55/X60 as its foundation gaps, in graph
+  order. M1f/M1g are future work, not blanket prerequisites.
+- **Next for operator:** answer M2c's
+  [OD28 to OD31](milestones/m2.md#m2c-open-decisions) and review D159 to D161.
+  Other provider and cluster gates keep their acceptance.
 
 ## Scope rules
 

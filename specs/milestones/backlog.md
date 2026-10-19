@@ -172,7 +172,7 @@ Alias cell.
 | [B584](#b584) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | Goldens pin a resolution with an observation failure, an adopted attempt and `replaces` | Found by the X91 audit; no milestone depends on it: test depth |
 | [B585](#b585) | new, 2026-10-14 (X91 audit) | defect | Substrate | The spec and the role agree on which libvirt disk sizes refuse | Found by the X91 audit; no milestone depends on it: the role is the safe side |
 | [B586](#b586) | new, 2026-10-14 (X91 audit) | enabling | Controller setup | The controller-clients content digest comment says only what it hashes | Found by the X91 audit; no milestone depends on it: a comment |
-| [B587](#b587) | new, 2026-10-14 (X91 audit) | defect | Storage | Detected Ceph pool `size` and `min_size` drift refuses without writing until a named delta admits it | D155 selects refusal without writes until a named delta; future implementation |
+| [B587](#b587) | new, 2026-10-14 (X91 audit) | defect | Storage | Detected Ceph pool `size` and `min_size` drift refuses without writing until a named delta admits it | D155 selects refusal without writes; X99's pool setters refuse drift of a completed `size` or `min_size` without writing; a drift test remains, and M2c's B81 extends the same records to every pool setter |
 | [B588](#b588) | new, 2026-10-14 (X91 audit) | enabling | Storage and Managed OS | Image and tree observations surface decode errors as unknown with a reason | Found by the X91 audit; no milestone depends on it: the effect is the same, only the diagnostic is weaker |
 | [B589](#b589) | new, 2026-10-14 (X91 audit) | enabling | Storage | Ceph core and host blocks gain an unresolved reason | Found by the X91 audit; no milestone depends on it: diagnostics only |
 | [B590](#b590) | new, 2026-10-14 (X91 audit) | enabling | Storage | Ceph wires its image dependency one way | Found by the X91 audit; no milestone depends on it: the edges are correct today |
@@ -199,6 +199,8 @@ Alias cell.
 | [B616](#b616) | new, 2026-10-16 | defect | Architecture and developer tooling | Source checks exclude unreadable ignored non-source directories | Found during integration verification; test tooling, no milestone gate |
 | [B617](#b617) | new, 2026-10-17 | defect | Storage | Registry socket publication serialized with close | Pre-existing connector race; separate cancellation follow-up, no new milestone gate |
 | [B618](#b618) | new, 2026-10-17 | defect | Storage and CLI | Bounded native traceback projection retains the terminal cause | Pre-existing diagnostic truncation; separate output follow-up, no new milestone gate |
+| [B622](#b622) | new, 2026-10-18 (D159; found while planning M2c) | defect | Container clusters | The agent-install projection keeps an authored `dns-resolver.config.server` | M3's agent-install journey is its first consumer and no milestone exit names it yet |
+| [B624](#b624) | new, 2026-10-18 (D159; found by the X55 checkpoint) | enabling | CLI and Managed OS | `diff --observe` shows a Machine's bounded network differences | Display only; the runbook reads the drifted value from the guest, and a projector is promoted with B576 |
 | [B630](#b630) | new, 2026-10-19 (X101) | safety | Storage | A proved-absent native rejection leaves a bootstrap or `set-user` attempt recoverable instead of `partial-cluster` | Found in X101; narrowing a safety refusal needs its own named slice and decision; X101's argv check before the attempt record already covers the bootstrap options |
 | [B631](#b631) | new, 2026-10-19 (X101) | enabling | Storage | A wrong `ceph.ibm.callHome` for the selected build is refused before any host block runs | Found in X101; Go has no planning-visible Call Home model fact, and D157 forbids gating on the release |
 | [B632](#b632) | new, 2026-10-19 (X101) | enabling | Storage | The unused `installed_cephadm` and the tests that patch it are removed | Found in X101; dead code with no effect |
@@ -1671,18 +1673,21 @@ quick`.
 
 ### B587
 
-The Ceph pool phase runs `osd pool set size` and `min_size` blindly on every
-pass that is not ready and that passes the ownership check
-(`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py:2412-2441`,
-`:2990-2992`;
-`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py:550-553`).
-Drift is written back with the declared values and not reported. **Impact:**
-silent correction of an operator's change; out of scope for the three admitted
-scenarios. **Smallest fix:** for the first Ceph delta, read the live values,
-refuse detected drift without writing until its named delta admits it.
-[D155](#decisions) accepts this policy for future implementation. **Exit
-evidence:** a role test that detected drift refuses without writing. The projector
-that proves them is [B600](#b600).
+When the X91 audit ran, the Ceph pool phase ran `osd pool set size` and
+`min_size` blindly on every pass that was not ready and passed the ownership
+check, writing drift back unreported. [D155](#decisions) accepts refusal without
+writes until a named delta admits drift.
+[X99](delivered.md#x99--operator-selected-ceph-artifacts-and-m2b-completion)
+delivers that policy for the minimal pool phase: each setter retains its intent
+before the effect and its completion after readback, keyed by the numeric pool
+ID, and a completed setting whose live value differs refuses `pool-identity`
+without writing
+(`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py:2874-2889`);
+[storage](../storage.md) requires it for every pool setter. **Remaining:** no
+role test shows detected drift of a completed setting refusing without writing,
+and M2c's [B81](m2.md#b81) must route its quota, compression and EC-overwrite
+setters through the same records. **Exit evidence:** that role test. The
+projector that proves them is [B600](#b600).
 
 ### B588
 
@@ -1966,6 +1971,29 @@ publishing private material or changing execution and continuation behavior.
 **Exit evidence:** long and nested tracebacks, UTF-8 boundaries and secrets at
 projection cuts prove useful cause retention, the unchanged limit and no
 disclosure. Parked for separate diagnostic work; it adds no M2b acceptance gate.
+
+### B622
+
+The agent-install projection overwrites an authored
+`dns-resolver.config.server` when DNS servers are selected
+(`internal/containercluster/agentinstall/projection.go:308-323`), so an
+authored resolver list is dropped without a refusal. Found while planning M2c;
+parked because no M2 slice reads it. **Outcome:** an authored resolver list is
+kept, or the conflicting declaration refuses naming both sources and the next
+step. **Exit evidence:** a projection test over an authored `server` list with
+and without selected DNS servers.
+
+### B624
+
+Network convergence ([B326](m1.md#b326)) stores a drifted installed Machine's
+bounded `networkDifferences` in its installation evidence, and observation
+reads the Machine as a positive partial realization, but `diff --observe`
+attaches only the generic partial note: no command renders the differences
+(found by the X55 checkpoint, which changed the libvirt network-variants
+runbook to read the drifted value from the guest). **Outcome:** the observed
+diff of an installed Machine names each bounded network difference without
+echoing a secret. **Exit evidence:** a projector and diff golden over a drifted
+bond MTU.
 
 ### B630
 
@@ -2473,6 +2501,162 @@ Requires cell as `owner decision: <question>`.
   gates, safety refusals and operator acceptance requirements remain. This
   request authorizes roadmap and ownership changes only, with no new active
   slice or substrate implementation.
+
+- **D159** (2026-10-18, the owner's requests; the clauses after the owner's
+  words are taken by the session, pending the owner's review): on 2026-10-15
+  the owner asked to "start planning and then implement M2c, using best fitting
+  model/effort for each subtask", and on 2026-10-18, after D158 and M2b's
+  completion, said "resume". The session reads them as authorizing
+  [M2c](m2.md#m2c)'s slices X56 to X59 and X61 and, as the foundation gaps M2c
+  requires under D158, M1c's slices [X55 and X60](m1.md#planned-slices). It
+  replaces the session's earlier activation records on the unmerged branch
+  `m2c`, whose decision and item numbers collided with main's and are not used.
+  Taken by the session, pending the owner's review: (1) M2b is done, so nothing
+  of it is waived; M2's Requires on M1's X55 and X60 is waived for the
+  implementation of X56 and X61 only, and X55's Requires on X47's trust
+  contracts and X60's and B346's Requires on B448 are waived for implementation
+  only; promotion of B74, B326, B75 to B77 and B346 still requires them.
+  Promotion of each M2c item still requires the M1 features its profile uses,
+  and M2c's exit stays [B484](m2.md#b484)'s owner-accepted matrix on the commit
+  closing X61. (2) X55 to X61 are excepted from the two-active-slice WIP limit
+  and may run out of sequence. (3) The M2c program's dependency graph fixes the
+  landing order of its lanes; the Requires between these slices name the work a
+  lane builds on and do not force whole-slice integration order. (4) The work
+  lands on the local branch `m2c`, never pushed, rebased onto main `a38a6d183`:
+  this docs commit opens it, the code commits of the lanes that had landed
+  follow it, and each later reviewed lane is rebased onto the branch tip and
+  fast-forwarded by one serialized landing step; slice checkpoints run the full
+  gates and an adversarial review of the slice's commits. Merging `m2c` waits
+  for the owner. A version-specifics slice on main and this branch integrate in
+  landing order: whoever lands second rebases, and no M2c lane adds
+  release-conditional behavior outside that slice's architecture. (5) In the
+  replay, each replayed commit that moved a frozen version moves it one step
+  from its value on the replay tip, commit by commit; after that, each lane
+  that changes a frozen type moves that version exactly one step from its value
+  on the branch tip, lanes holding the same version are ordered by the graph,
+  and no reader of an older version is added.
+  A context made by an earlier build, including every build of `m2c` before this
+  rebase, is finished or destroyed with that build. (6) X56's "Requires D143"
+  means D143's transport and retirement baseline as D157 amends it, and waives
+  nothing else. (7) One execution mechanism for services the cluster block does
+  not own: the cluster block applies mon, mgr, osd and mds in its one services
+  batch with its deadline formula unchanged; RGW and its ingress run in the
+  gateway block; NFS, monitoring, the management gateway, NVMe-oF gateways and
+  rbd-mirror run in one generic service-unit block type with per-type hooks;
+  core observation tolerates a delegated daemon only when its service is listed
+  in the request and it runs on that service's hosts; per-host and per-service
+  intent records extend the formats M2b delivered. (8) Families tied to one
+  cluster are actions of the core Ceph request; SMB, the NVMe-oF subsystem and
+  cross-cluster replication are their own implementations; the host request
+  carries only host-relevant facts. (9) A settings block is the single writer
+  of every `mgr/cephadm/container_image_*` key a declared family needs, each
+  from its frozen digest, and of every manager module a declared family derives
+  (nfs, smb); cephadm enables the prometheus module itself for a declared
+  prometheus service; `spec.ceph.mgrModules` admits none of them; a key holding
+  a foreign value refuses without overwrite. Bootwright keeps no auxiliary
+  image default; their source is M2c's question OD28. (10) Every cluster child
+  block depends on its core cluster block by block ID, not through Requires
+  StorageCluster. (11) Post-install network convergence runs on every installed
+  anaconda Machine ([B326](m1.md#b326)), which amends the B326 sentence that
+  B80's minimal profile uses the delivered install path (D129). A network
+  declaration error found by convergence is recovered by `bootwright destroy`
+  and a fresh apply; destroy keeps a physical Machine's installed system, so
+  its operator also powers it off from its management controller before that
+  apply ([B623](m1.md#b623)). (12) [B76](m1.md#b76) never publishes
+  registration secrets: its exit evidence reads "secrets reach the guest only
+  on a fixed worker's stdin and are never published" instead of "over the
+  private path". (13) The defaults listed under M2c's question OD25 are
+  implemented as recorded, except B81's erasure-profile and jerasure rows, which
+  D157 removes because Bootwright checks no vendor support, and the FIPS service
+  list, which OD29 asks about. (14) M2c's questions OD1 to OD31 (OD8 merged into
+  OD7) are listed on [its page](m2.md#m2c-open-decisions); until answered, the
+  lanes a question gates do not start, every gated lane starts only after the
+  decision-free program has landed, and for each non-gating open question the
+  option named under Running by default is implemented. (15) No product string
+  claims or cites a vendor support status or a release: a refusal of a feature
+  Bootwright does not realize names the object, that Bootwright does not realize
+  it and the next step, and may name its parked item; a restriction whose only
+  basis is a vendor support table is removed (D157). Decision and question IDs
+  never appear in operator-visible strings. (16) Under D158, Ceph on FIPS-mode
+  hosts belongs to [B484](m2.md#b484) and the Ceph controller-to-host
+  crypto-policy defect to [B625](m2.md#b625), both in X61; X60 keeps the OS arms
+  B75, B76 and B77 and controller access B346. Each overturned clause reopens
+  the work it shaped as a new item.
+- **D160** (2026-10-15, the owner; recorded on 2026-10-18 under D159): after
+  reading the M2c decisions brief (questions OD1 to OD27, OD8 merged into OD7),
+  the owner replied: "I accept recommendations". The owner accepts the
+  recommendation of every question OD1 to OD27 of
+  [M2c](m2.md#m2c-open-decisions), which answers them as follows; a bracket
+  says where a later owner decision changes an answer's premise. OD1 (a): M2c
+  lands on the local branch `m2c` [M2b is done (X99), so "main stays B476's
+  build" no longer applies; OD31 asks when M1c's X55 and X60 reach main]. OD2
+  (a): per-resource online removal and B489's single-client revocation move to
+  [B491](m2.md#b491); the family items keep whole-cluster retirement. OD3 (a):
+  StorageObjectUser and StorageObjectBucket, with the example records of the
+  X56b slice plan, 1.1, approved. OD4 (a): `objectUserRef` user-level RGW NFS
+  exports. OD5 (a): the owner supplies the then-pinned image's auxiliary tags
+  and refusing pin tables guard until then [superseded by D157: Bootwright
+  keeps no pin table or image catalog; OD28 asks how auxiliary images are
+  selected]. OD6 (d1) if the image facts show loki and its agent, else (d2)
+  [D161 settles (d1); under D157 the selected release's cephadm refuses a
+  service type it does not know]. OD7 (a): park SSO, the direct-dashboard
+  certificate and local roles, and revisit (b) only if the image facts show
+  that the IBM oauth2-proxy template verifies the IdP [reopened and answered by
+  D161]. OD9 (a). OD10 (a), a cluster keyring command, with the output shape
+  (o1) [the shared output presentation carries (o1): compact identity and
+  health, full scope and endpoints]. OD11 (a): StorageExport material moves to
+  M4's [B86](m4.md#b86). OD12 (a): one StorageNVMeoFSubsystem kind. OD13 (B):
+  host-NQN authorization plus gateway mTLS now, and (C) DH-HMAC-CHAP after the
+  live probe. OD14 (B): refuse `linked_to_cluster`. OD15 (A). OD16 (A) and OD17
+  (a): IBM's physical image names through `Entitlement.registry` plus two
+  package-mirror fields, and the pinned tag resolved on the declared mirror
+  [D157's authored image base and `ceph.packageRepository` change both
+  premises; OD30 re-asks them]. OD18 (A). OD19 (a). OD20 (c): a pre-stop
+  removal phase. OD21 (b): IBM per-guest sums plus 2 GiB [M2b's capacity
+  admission also refuses an apply that does not fit the provider host]. OD22
+  (a): a bounded item split from B79 and B475 into M2c. OD23 (a): a larger
+  single lab host, which the owner provides. OD24 (A). OD25: every session
+  default is accepted as recorded [D157 removes B81's erasure-profile and
+  jerasure rows, which came from a vendor table; isa stays the default; OD29
+  asks whether the FIPS service list stays]. OD26 (a): refuse and park [the
+  refusals name no release or decision, D159 clause 15]. OD27 (a) for NFS over
+  RDMA and CephFS snapshot mirroring from IBM's public pages, and (b) for iSCSI
+  and the RHEL FIPS row [under D157 Bootwright records no vendor status: NFS
+  over RDMA, CephFS snapshot mirroring and iSCSI refuse as features Bootwright
+  does not realize, and the RHEL FIPS row becomes OD29's service-list question].
+  The gated lanes start only after the decision-free program has landed (D159
+  clause 14).
+- **D161** (2026-10-15, a session finding and the owner's answers; recorded on
+  2026-10-18 under D159; the clauses after the owner's words are taken by the
+  session, pending the owner's review): (1) Session finding, not an owner
+  answer: the session read the then-pinned image
+  `cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074` (manifest digest
+  `sha256:c5b181f15d4ebff833a1c0de84398d2d55ff416d9dd5ed3816a9baa817eb4bde`;
+  `ceph-common` and `cephadm` `20.2.1-405.el9cp`) read-only with the network
+  disabled and recorded its auxiliary image defaults, known service types and
+  oauth2-proxy template as
+  [research](../../.agents/knowledge/ibm-ceph-auxiliary-images.md). Under D157
+  they describe that release only and are not Bootwright defaults; this
+  supersedes the session's earlier reading that the image answered OD5. OD6
+  resolves to (d1): `alloy`, `loki` and `promtail` are known service types
+  there. `iscsi` is still a known type, which establishes no vendor support.
+  The oauth2-proxy template writes `ssl_insecure_skip_verify=true` only when
+  the spec field (default false) is true, so D160's condition for revisiting
+  OD7 held. (2) The owner's answers, to the session's questions: OD7: "Also
+  private-CA IdPs". oauth2-proxy SSO is admitted for an IdP whose certificate
+  chains to a CA in the selected image's trust store and, for a private-CA IdP,
+  through a Bootwright-bound CA bundle mounted into the oauth2-proxy container
+  through the native `custom_configs`; `ssl_insecure_skip_verify=true` always
+  refuses. Because the release is the operator's (D157), verification is proved
+  from the deployed daemon's rendered configuration, never from one release's
+  template. This supersedes D160's OD7 (a) for SSO and adds a gated SSO lane to
+  X57; the direct-dashboard certificate and local roles stay parked. OD15: "No
+  AD available". Both SMB authentication modes are implemented and
+  offline-tested; the active-directory live row stays unrun and is recorded as
+  such. OD23: "Bigger host later". The session builds the larger profiles and
+  their runbooks, and the owner runs their rows when the host exists. OD27:
+  "Leave them open"; D157 later settled them: Bootwright records no vendor
+  status, and only the FIPS service list remains a question (OD29).
 
 - **D162** (2026-10-18, the owner requests this architecture and readiness
   for the listed versions; clauses (b) to (d) are the design's recommendations
