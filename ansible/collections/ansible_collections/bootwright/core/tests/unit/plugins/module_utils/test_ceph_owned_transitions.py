@@ -221,7 +221,7 @@ def test_pool_setter_lost_success_is_read_back_without_a_second_write(core_reque
     assert native.pool() == {"changed": False}
     assert len(effects) == count
     pools[0]["size"] = 4
-    with pytest.raises(ceph_native.Refusal, match="pool-identity"):
+    with pytest.raises(ceph_native.Refusal, match="^pool-drift$"):
         native.pool()
     assert len(effects) == count
 

@@ -116,6 +116,14 @@ def test_a_cluster_refusal_reaches_the_runner_by_its_name(monkeypatch):
         {"phase": "refused", "reason": "dashboard-drift", "detail": failure["detail"]}]
 
 
+def test_a_pool_drift_the_worker_raised_reaches_the_runner_by_its_name(monkeypatch):
+    detail = "native-refusal:pool-drift@ceph_native_resources.pool_setting:332"
+    failure = failed(ceph_cluster, "execute", ceph_native.RemoteRefusal(detail), monkeypatch)
+    assert failure["reason"] == "pool-drift" and failure["detail"] == detail
+    named = naming("storage_ceph_core", "apply", "bootwright.core.ceph_cluster", "storage_ceph_core_result")
+    assert published(named, "storage_ceph_core_result", registered_failure(failure)) == [{"phase": "refused", "reason": "pool-drift", "detail": detail}]
+
+
 def test_a_token_the_block_does_not_name_reaches_the_runner_in_its_detail(monkeypatch):
     failure = failed(ceph_cluster, "execute", ceph_native.Refusal("registry-ownership"), monkeypatch)
     assert failure["reason"] == "unknown" and failure["detail"].startswith("registry-ownership@")
@@ -138,6 +146,8 @@ def test_an_exception_names_its_type_and_site_and_never_its_text(monkeypatch):
     ("native-refusal:host-time@ceph_native.time:12", ceph_core.CLUSTER_REASONS, "remote-refusal"),
     ("native-refusal:call-home-unqualified@ceph_native.tunnel_bootstrap:12", ceph_core.CLUSTER_REASONS, "call-home-unqualified"),
     ("native-refusal:call-home-unqualified@ceph_native.tunnel_bootstrap:12", ceph_core.HOST_REASONS, "remote-refusal"),
+    ("native-refusal:pool-drift@ceph_native_resources.pool_option:451", ceph_core.CLUSTER_REASONS, "pool-drift"),
+    ("native-refusal:pool-drift@ceph_native_resources.pool_option:451", ceph_core.HOST_REASONS, "remote-refusal"),
     ("native-unknown:KeyError@ceph_native.dispatch:9", ceph_core.HOST_REASONS, "remote-refusal"),
     ("native-unknown:image-pull@ceph_native.dispatch:9", ceph_core.HOST_REASONS, "remote-refusal"),
     ("native-timeout", ceph_core.HOST_REASONS, "native-timeout"),

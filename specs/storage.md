@@ -312,7 +312,8 @@ OSD services use deterministic per-host children with the proved virtio or
 QEMU SCSI serial aliases. Immediately before submission each host proves empty devices or exact
 owned partial OSD/LV UUID and membership; raw path reuse cannot widen the write
 target. Read-only device observation publishes no custody records. Pool setters
-retain setting intent/completion and settle from the same numeric pool ID.
+retain setting intent/completion, settle from the same numeric pool ID and
+refuse `pool-drift` without writing when a completed setting drifted.
 An incomplete RBD init may repeat only the bounded native idempotent init of
 that exact owned pool; an application flag alone proves no completed init.
 
@@ -422,14 +423,17 @@ overwrites, both quotas, each declared compression option and the application
 of a pool that is not a replicated rbd pool) keeps the pool setter
 intent/completion records: it is sent only while its completion is absent and
 its observed value differs, then read back, and a completed setting is never
-sent again. A completed size or minimum size that drifted refuses
-`pool-identity`; another completed setting that drifted reads as not ready. A
+sent again. A completed setting whose live value differs, or a completed RBD
+init whose pool no longer carries the rbd application, refuses `pool-drift`
+before any write: Bootwright never rewrites it, and the operator restores the
+value outside Bootwright, or destroys and applies again. A setting or init
+record that names another numeric pool ID refuses `pool-identity`. A
 settled pool apply makes no native effect and reports no change. Pool
 readiness compares every frozen attribute (type, rule, size, minimum size,
 profile and stripe width, overwrites, bulk, autoscale mode, the PG count when
 the autoscaler is off, quota, application and each owned pool option), and an
-unset value must be absent; a mismatch is not ready, and only an identity
-contradiction refuses.
+unset value must be absent; observation reports a mismatch as not ready and
+refuses only an identity contradiction.
 
 An RBD image is created only in pools this operation created and still holds
 under their recorded IDs. It writes its attempt record before `rbd create`, and

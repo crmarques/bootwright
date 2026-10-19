@@ -309,7 +309,7 @@ class ResourceWorker(ceph_native.Worker):
             require(attempted is None or attempted == init, "pool-identity")
             require(completed is None or completed == init and attempted == init, "pool-identity")
             current = self.owned_pool(pool["name"])
-            require(completed is None or "rbd" in current.get("application_metadata", {}), "pool-identity")
+            require(completed is None or "rbd" in current.get("application_metadata", {}), "pool-drift")
             if completed is None:
                 self.markers.write(attempt_name, init)
                 proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verified-tunnel" else contextlib.nullcontext()
@@ -329,7 +329,7 @@ class ResourceWorker(ceph_native.Worker):
         attempt, complete = self.markers.read(prefix + "-attempt.json"), self.markers.read(prefix + "-complete.json")
         require(attempt is None or attempt == intent, "pool-identity")
         require(complete is None or complete == intent and attempt == intent, "pool-identity")
-        require(complete is None or current[field] == wanted, "pool-identity")
+        require(complete is None or current[field] == wanted, "pool-drift")
         if attempt is None:
             self.markers.write(prefix + "-attempt.json", intent)
         if current[field] != wanted:
@@ -440,7 +440,7 @@ class ResourceWorker(ceph_native.Worker):
     def pool_option(self, pool, field, wanted, observed, argv):
         """One setting under the size pair's records, keyed by the numeric pool ID: the attempt before the effect, the setter only while
         the completion is absent and the observed value differs, the completion after the readback. A completed setting is never
-        sent again; its later drift reads as not ready. Returns whether the completion was absent."""
+        sent again; a completed setting whose live value differs refuses pool-drift before any write. Returns whether the completion was absent."""
         current = self.owned_pool(pool["name"])
         prefix = "pool-setting-" + pool["name"] + "-" + field
         intent = {"owner": self.request["owner"], "fsid": self.request["fsid"], "id": self.pool_id(current), "field": field, "value": wanted}
@@ -448,6 +448,7 @@ class ResourceWorker(ceph_native.Worker):
         require(attempt is None or attempt == intent, "pool-identity")
         require(complete is None or complete == intent and attempt == intent, "pool-identity")
         if complete is not None:
+            require(observed(current), "pool-drift")
             return False
         if attempt is None:
             self.markers.write(prefix + "-attempt.json", intent)

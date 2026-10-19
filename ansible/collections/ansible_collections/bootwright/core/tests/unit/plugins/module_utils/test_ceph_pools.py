@@ -404,8 +404,109 @@ def test_pool_quota_setter_lost_success_is_read_back_without_a_second_write():
     effects = native_effects(world)
     assert native.pool() == {"changed": False} and native_effects(world) == effects
     world.entry("volumes")["quota_max_bytes"] = 0
-    assert native.pool() == {"changed": False} and native_effects(world) == effects
+    with pytest.raises(ceph_native.Refusal, match="^pool-drift$"):
+        native.pool()
+    assert native_effects(world) == effects
     assert ready(native)[0] is False
+
+
+QUOTA = {"maxBytes": 1073741824, "maxObjects": 0}
+COMPRESSION = {"algorithm": "zstd", "maxBlob": 0, "minBlob": 0, "mode": "passive", "requiredRatio": ""}
+
+
+def settled(value):
+    world = World()
+    native, marks = resource(world, "pool", value)
+    assert native.pool() == {"changed": True}
+    assert native.pool() == {"changed": False}
+    return world, native, marks
+
+
+def refuses_drift_without_writing(world, native, marks, reason="pool-drift"):
+    before, effects = copy.deepcopy(marks.records), native_effects(world)
+    with pytest.raises(ceph_native.Refusal, match="^" + reason + "$"):
+        native.pool()
+    assert marks.records == before and native_effects(world) == effects
+
+
+@pytest.mark.parametrize("field,value", [("size", 3), ("min_size", 1)])
+def test_completed_size_setting_drift_refuses_pool_drift_without_writing(field, value):
+    world, native, marks = settled(pool_value())
+    world.entry("volumes")[field] = value
+    refuses_drift_without_writing(world, native, marks)
+
+
+@pytest.mark.parametrize("field,value", [("quota_max_bytes", 0), ("quota_max_objects", 5)])
+def test_completed_quota_drift_refuses_pool_drift_without_writing(field, value):
+    world, native, marks = settled(pool_value(quota=QUOTA))
+    world.entry("volumes")[field] = value
+    refuses_drift_without_writing(world, native, marks)
+
+
+@pytest.mark.parametrize("drift", ["mode", "algorithm"])
+def test_completed_compression_drift_refuses_pool_drift_without_writing(drift):
+    world, native, marks = settled(pool_value(compression=COMPRESSION))
+    options = world.entry("volumes")["options"]
+    if drift == "mode":
+        options["compression_mode"] = "aggressive"
+    else:
+        del options["compression_algorithm"]
+    refuses_drift_without_writing(world, native, marks)
+
+
+@pytest.mark.parametrize("field,value", [("flags_names", "hashpspool"), ("application_metadata", {})])
+def test_completed_ec_overwrites_and_application_drift_refuse_pool_drift_without_writing(field, value):
+    world, native, marks = settled(pool_value("erasure", role="rbd"))
+    world.entry("volumes")[field] = value
+    refuses_drift_without_writing(world, native, marks)
+
+
+def test_completed_rbd_init_application_drift_refuses_pool_drift_without_writing():
+    world, native, marks = settled(pool_value())
+    assert "pool-rbd-complete-volumes.json" in marks.records
+    inits = [entry for entry in world.log if entry[0] == "/usr/bin/rbd"]
+    world.entry("volumes")["application_metadata"] = {}
+    refuses_drift_without_writing(world, native, marks)
+    assert [entry for entry in world.log if entry[0] == "/usr/bin/rbd"] == inits
+
+
+@pytest.mark.parametrize("field,record,drift", [
+    ("size", "attempt", 3), ("size", "complete", 3), ("quota_max_bytes", "attempt", 0), ("quota_max_bytes", "complete", 0),
+])
+def test_an_attempt_or_completion_for_another_pool_id_still_refuses_pool_identity(field, record, drift):
+    world, native, marks = settled(pool_value(quota=QUOTA))
+    name = "pool-setting-volumes-" + field + "-" + record + ".json"
+    marks.records[name] = dict(marks.records[name], id=9)
+    world.entry("volumes")[field] = drift
+    refuses_drift_without_writing(world, native, marks, "pool-identity")
+
+
+@pytest.mark.parametrize("argv,field", [
+    (("osd", "pool", "set-quota", "volumes", "max_bytes", "1073741824"), "quota_max_bytes"),
+    (("osd", "pool", "set", "volumes", "size", "2"), "size"),
+])
+def test_an_incomplete_setter_still_continues_to_the_frozen_value(argv, field):
+    world = World()
+    native, marks = resource(world, "pool", pool_value(quota=QUOTA))
+    original = native.ceph
+    failed = False
+
+    def ceph(*args, **kwargs):
+        nonlocal failed
+        if args == argv and not failed:
+            failed = True
+            raise ceph_native.Refusal("native-command")
+        return original(*args, **kwargs)
+
+    native.ceph = ceph
+    with pytest.raises(ceph_native.Refusal, match="^native-command$"):
+        native.pool()
+    prefix = "pool-setting-volumes-" + field
+    assert prefix + "-attempt.json" in marks.records and prefix + "-complete.json" not in marks.records
+    assert argv not in world.log
+    assert native.pool() == {"changed": True}
+    assert [entry for entry in world.log if entry == argv] == [argv]
+    assert marks.records[prefix + "-complete.json"] == marks.records[prefix + "-attempt.json"]
 
 
 @pytest.mark.parametrize("option,value,expected", [

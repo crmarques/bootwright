@@ -24,7 +24,7 @@ options:
       package-drift, package-journal, package-license, package-limit,
       package-timeout, package-platform, package-host, foreign-cluster, native-command, native-timeout, native-output, unknown, transport,
       remote-refusal, adapter-exception, cache-unproved, dashboard-identity, dashboard-drift, dashboard-policy, dashboard-verify, pool-identity,
-      client-quiescence-unqualified, native-option-undeclared, call-home-unqualified, call-home-drift, config-drift, partial-cluster,
+      pool-drift, client-quiescence-unqualified, native-option-undeclared, call-home-unqualified, call-home-drift, config-drift, partial-cluster,
       not-removed, cluster-unavailable, device, dashboard-manager, foreign-pool, foreign-profile, foreign-rule, crush-capacity, pg-budget, foreign-rbd-image,
       rbd-image-identity, foreign-filesystem, filesystem-identity, filesystem-multiple-disabled, foreign-subvolume-group, mds-coverage,
       foreign-subvolume, subvolume-identity]
