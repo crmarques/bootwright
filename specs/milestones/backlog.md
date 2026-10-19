@@ -2722,3 +2722,46 @@ Requires cell as `owner decision: <question>`.
   refuse or recommend a version. The owner also authorizes the defect work for
   the confirmed general findings of the 2026-10-18 audit of main
   fcff2f58f..ce190446a, planned as X102.
+
+- **D164** (2026-10-18, the owner; recorded on 2026-10-19): the owner answered
+  the four questions OD28 to OD31 that D157 and the rebase onto main created for
+  [M2c](m2.md#m2c-open-decisions), choosing the recommended option each time.
+  Their selections: OD28 "Authored per family (Recommended)"; OD29 "Drop the
+  list (Recommended)"; OD30 "Trust + closure (Recommended)"; OD31 "M1c at
+  checkpoints (Recommended)". They settle the following. (1) OD28 (a): a
+  StorageCluster field `ceph.images.<name>` with `base` and `version`, like
+  `ceph.image`, keyed by cephadm's `container_image_<name>` names, required
+  only when a declared family needs that image. Each is resolved and frozen by
+  digest, and the settings block writes the frozen digests. Bootwright keeps no
+  default and no table; examples author the values and the owner confirms them
+  for the authored release, because the research on one release's images is not
+  a source for another. This replaces OD5 (a) of D160 and the OD5 part of D161
+  (the image facts stay research). The pull broker's scope grows from one frozen
+  repository@digest to the frozen set (lane X56b-E1), and the lanes implement this answer in place of the
+  running default (a family that needs an auxiliary image refuses at plan),
+  which no lane has built.
+  (2) OD29 (b): every declared service is admitted on FIPS-mode hosts. A service
+  that cannot run under the OS's FIPS policy fails natively and the operator
+  sees its cause through nativeError, then recovers by destroy and apply.
+  Bootwright keeps the host FIPS proof and the Ed25519 and AES256K key
+  refusals, which are mechanism refusals. This replaces OD25's service list and
+  OD27's RHEL FIPS row; x61-ceph-fips and od29-fips-service-list implement
+  no service allow-list (none was built), and [B484](m2.md#b484)'s FIPS rows record the
+  tested services as evidence, never as an allowlist. (3) OD30 (a): D157's
+  naming stays, so the authored registry, image base and `ceph.packageRepository`
+  are the disconnected naming, and no physical-name rule or second pair of
+  package-mirror fields is added; OD16 (A) and OD17 (a) of D160 are superseded.
+  [B493](m2.md#b493) adds the registry trust-bundle consumer
+  ([B619](m2.md#b619)), a CA-bundle binding for the package repository (one new
+  field), auxiliary-image closure and an egress-denied proof with a disconnected
+  example. The lanes x59-d1 to x59-d4 are re-planned to that scope before their
+  briefs; x59-d5 and X61-L7 keep their purpose. (4) OD31 (b) changes the
+  integration cadence of D160's OD1 and D159: when int-x55 or int-x60 passes
+  (int-x55 re-runs on the replayed tip), the session offers that M1c slice's
+  commits to main for the owner to merge, then rebases `m2c` onto main. M1c's
+  X55 and X60 are therefore offered to main at their checkpoints; M2c's Ceph
+  slices stay on `m2c` until the owner merges them. OD1's branch answer stands,
+  and the owner still decides each merge: nothing merges or is pushed without
+  that decision. The four answers gate no lane any longer; the gated lanes
+  still start only after the decision-free program has landed (D159 clause 14).
+  The brackets in D159, D160 and D161 that name these questions are history.

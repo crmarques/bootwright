@@ -3,8 +3,8 @@
 Research about one release's auxiliary service images, not a catalog. Under
 D157 operators select every Ceph artifact and Bootwright keeps no image
 default, pin table or per-release profile;
-[M2c's question OD28](../../specs/milestones/m2.md#m2c-open-decisions) decides
-how auxiliary images are selected. Use these facts to author an example or to
+[D164's answer to OD28](../../specs/milestones/m2.md#m2c-open-decisions) has the
+operator author each auxiliary image under `ceph.images`. Use these facts to author an example or to
 investigate a native failure, never as a default or an admission rule.
 [Version constraints](ibm-ceph-version-constraints.md) routes other
 version-specific findings.

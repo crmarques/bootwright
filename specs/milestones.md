@@ -27,10 +27,9 @@ under [X98](milestones/delivered.md#x98--m1-owner-acceptance) and M2b under
 remain delivered.
 
 - **Next for agents:** [M2c](milestones/m2.md#m2c)'s lanes under D159 on the
-  local branch `m2c`, with M1c's X55/X60 as its foundation gaps, in graph
-  order. M1f/M1g are future work, not blanket prerequisites.
-- **Next for operator:** answer M2c's
-  [OD28 to OD31](milestones/m2.md#m2c-open-decisions) and review D159 to D161.
+  local branch `m2c`, with M1c's X55/X60 as its foundation gaps, each offered
+  to main at its checkpoint (D164). M1f/M1g are not blanket prerequisites.
+- **Next for operator:** review D159 to D164; D164 answers M2c's OD28 to OD31.
   Other provider and cluster gates keep their acceptance.
 
 ## Scope rules
