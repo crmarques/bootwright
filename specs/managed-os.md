@@ -1033,8 +1033,9 @@ its attempt's preparation through the acknowledged `prepared` record of
 capability accepts exactly that one member naming the frozen marker, and the
 worker registers only after the runner has recorded it, so an apply whose
 records hold no such preparation never registered. The marker is public, and
-the preparation carries nothing else. A preparation naming anything else
-refuses `lifecycle.state` with `the installation's automation published a
+the preparation carries nothing else. A preparation naming anything else is
+never acknowledged, so the worker never registers, and the attempt fails
+`lifecycle.state` with `the installation's automation published a
 before-state that does not name this installation's marker`.
 
 **Effect.** Once that proof is recorded, the apply runs the controller module

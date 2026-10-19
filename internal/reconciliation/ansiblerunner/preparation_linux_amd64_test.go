@@ -58,11 +58,19 @@ func TestLifecyclePreparationIsRecordedBeforeItIsAcknowledged(t *testing.T) {
 		return errors.New("the attempt record could not be written")
 	})
 	reported := diagnostics.Of(err)
-	if output != "" || len(reported) != 1 || reported[0].Code != "lifecycle.unknown" {
+	if output != "" || len(reported) != 1 || reported[0].Code != "lifecycle.unknown" || reported[0].Message != "the attempt's preparation could not be recorded" {
 		t.Fatalf("an unrecorded preparation let the adapter print %q and reported %+v (%v)", output, reported, err)
 	}
 	if outcome := lifecycle.AttemptOutcome(err); outcome == "changed" {
 		t.Fatalf("an unrecorded preparation completed the attempt")
+	}
+	const refused = "the installation's automation published a before-state that does not name this installation's marker"
+	output, err = preparingRun(t, func(context.Context, json.RawMessage) error {
+		return diagnostics.NewFailureWithRemediation("lifecycle.state", refused, "", "")
+	})
+	reported = diagnostics.Of(err)
+	if output != "" || len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != refused {
+		t.Fatalf("a refused preparation let the adapter print %q and reported %+v (%v)", output, reported, err)
 	}
 }
 

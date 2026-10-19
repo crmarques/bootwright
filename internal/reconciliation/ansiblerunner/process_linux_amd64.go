@@ -327,10 +327,10 @@ func (j *lifecycleJudge) Judge(ctx context.Context, record adapterprotocol.Recor
 	case "prepared":
 		valid = valid && j.loaded && !j.prepared && j.request.Prepare != nil && !j.request.ReadOnly
 		if valid && !moment.Exited {
-			valid = j.request.Prepare(ctx, record.Preparation) == nil
+			verdict.Failure = j.unprepared(j.request.Prepare(ctx, record.Preparation))
 		}
 		j.prepared = j.prepared || valid
-		verdict.Acknowledge = valid
+		verdict.Acknowledge = valid && verdict.Failure == nil
 	case "completed":
 		valid = valid && j.loaded
 		j.completed = j.completed || valid
@@ -347,6 +347,13 @@ func (j *lifecycleJudge) Judge(ctx context.Context, record adapterprotocol.Recor
 	}
 	verdict.Valid = valid
 	return verdict
+}
+
+func (j *lifecycleJudge) unprepared(err error) error {
+	if err == nil || len(diagnostics.Of(err)) != 0 {
+		return err
+	}
+	return failure("lifecycle.unknown", "the attempt's preparation could not be recorded", j.request.OutputRemediation)
 }
 
 func refusalDetail(named error, detail string) error {
