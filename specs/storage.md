@@ -258,7 +258,8 @@ links each matrix combination that this table refuses.
 | --- | --- | --- | --- |
 | Incomplete or unsafe Ceph coordinates or transport | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring an empty `ceph.release`, `ceph.packageVersion`, `ceph.cephadm.ansible.packageVersion` or `ceph.image.version`, an empty `ceph.image.base`, or a `ceph.cephadm.clusterSSH.transport` other than `verified-tunnel`, an omitted transport included | `the selected Ceph coordinates or cluster SSH transport are incomplete or unsafe` | `declare bounded version strings, an image repository and verified-tunnel transport; native transport is refused and host-key verification cannot be disabled` |
 | A replication network that a Ceph host has no address inside | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring `ceph.networks.clusterCIDRs` while the Machine of a `ceph.topology.nodes[]` entry declares no IP address inside any of them, a Machine whose addresses are assigned at runtime included; `<host>` is the first such node's native hostname in declaration order, `<machine>` its Machine and `<cidrs>` the declared networks joined by a comma and a space | `Ceph host <host> (Machine <machine>) has no address inside the replication networks <cidrs>` | `add an address inside one of <cidrs> to the network of <machine>, or remove spec.ceph.networks.clusterCIDRs` |
-| A native rgw service, or an ingress that fronts one, whose deploying block this build lacks | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` an `rgw` service or an `ingress` whose `spec.backend_service` names one or resolves to no declared service; `<service>` is the first such service's qualified name in name order | `Bootwright does not deploy the native service <service> yet` | `remove <service> from spec.ceph.services, together with an ingress that fronts it and its spec.ceph.serviceBindings entries` |
+| An ingress that fronts an rgw service, or that resolves to no declared service | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` an `ingress` whose `spec.backend_service` names an `rgw` service or resolves to no declared service; `<service>` is the first such ingress's qualified name in name order | `Bootwright does not deploy the native service <service> yet` | `remove <service> from spec.ceph.services, together with its spec.ceph.serviceBindings entries` |
+| TLS on an rgw service | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` an `rgw` service with `spec.ssl: true`, or a `ceph.serviceBindings` entry whose `serviceRef` names an `rgw` service; `<service>` is the first such service's qualified name in name order; the two rows are checked together in name order | `Bootwright does not realize TLS on the rgw service <service> yet` | `set spec.ssl to false or omit it on <service> in spec.ceph.services, and remove its spec.ceph.serviceBindings entries` |
 | A native service whose auxiliary image is not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that the previous row does not refuse; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type` and `<name>` the first image name it needs in name order, `keepalived` for an `ingress` with `spec.keepalive_only` | `no auxiliary image is selected for the <family> service <service>; its daemons need cephadm's container_image_<name>, and Bootwright keeps no default` | `remove <service> from spec.ceph.services, together with its spec.ceph.serviceBindings entries` |
 
 ## Bootstrap identity and continuation
@@ -586,6 +587,42 @@ when keepalive-only; a readiness timeout names `<daemon type>@<service>` and
 writes, and a stored specification, password or keyring never reaches
 evidence, which lists only each daemon's host, name and service. The block's
 deadline is fixed for its type (apply 2280 s, observe 720 s, destroy 1380 s).
+
+A StorageObjectGateway's realm, zone group, zone, zone placement and rgw service
+are realized by its gateway block `ceph-gateway-<gateway>`, which runs only on
+the bootstrap host in three phases. Every `radosgw-admin` call that reaches the
+configuration store creates the shared `.rgw.root` pool when it is absent, so
+`gateway_zone` first proves the cluster's ownership record and FSID and
+`radosgw-admin` itself (the verified `ceph-common` package and the hash its
+record holds, `artifact` when it changes), then proves `.rgw.root` absent or
+under the claim this operation's gateways share through monitor commands only,
+and writes that claim and the gateway's own record before any `radosgw-admin`
+call. A realm, zone group or zone of the gateway's names without its creation
+record, a recorded one that is gone or now names another ID or realm, or a
+`.rgw.root` without the claim refuses `object-realm-foreign` before any
+create; a name is adopted only under the attempt record written before its
+create. The phase creates the realm, then the zone group and zone with
+`--master` and never with `--default`, records each native ID, and adds the
+zone to its zone group once when a lost response left it outside.
+`gateway_placement` binds the declared pools to the zone's `default-placement`
+with one `zone placement modify` naming only the differing pools, refuses
+`object-zone-pools` when the zone names a pool outside the gateway's derived
+and declared set or its placement still differs, records the placement, and
+only then commits the period with `period update --commit`; a derived pool the
+zone does not name is accepted. `gateway_service` runs only after that commit
+and applies the rgw document in one `ceph orch apply -i -` stream, with the
+same inputs, attempt, readback and completion records as a service unit.
+Readiness needs the committed period holding the zone, every record, the
+placement count of `rgw` daemons running on the frozen Ceph image and an HTTP
+status line from each daemon's frontend port, probed from the bootstrap host; a
+readiness timeout names `rgw@rgw.<id>` and `http@rgw.<id>`. S3 requests are the
+operator's acceptance. Observation never writes and never calls `radosgw-admin`
+while `.rgw.root` is absent; evidence carries the zone ID, the endpoint FQDN
+and each daemon's host, name and service, never zone keys, a stored
+specification or user data. The block never reads or creates an object user
+(cephadm's own `dashboard` user is tolerated). TLS and an ingress refuse at
+plan until they are realized ([refusal table](#refusal-table)), and the block
+retires only with the cluster's hosts.
 
 Readiness reports bounded observations of FSID, quorum, orchestrator and host
 state, expected daemons, OSD membership, placement/capacity, pool protection,

@@ -15,8 +15,10 @@ of the same cluster binds by name. StorageFilesystem is admitted under
 core request lists each of them only by its qualified name and eligible hosts,
 outside the host request, so that core observation
 [tolerates its daemons](../storage-native-api.md#service-identity-and-references);
-planning still refuses each family `lifecycle.unsupported` until the block
-that deploys it lands ([refusal table](../storage.md#refusal-table)). A
+planning realizes an rgw service a StorageObjectGateway binds through the
+gateway block and an nfs service through its unit; an ingress that fronts an
+rgw service and rgw TLS still refuse `lifecycle.unsupported`
+([refusal table](../storage.md#refusal-table)). A
 `spec.ceph.serviceBindings` entry is left to the gateway block only for an RGW
 service a StorageObjectGateway binds and for the ingress that fronts it; any
 other entry refuses at planning. An RGW document must be bound by a StorageObjectGateway of the same
@@ -40,8 +42,7 @@ implicit administrator capability is granted. `StoragePlacementPolicy` and
 [CephFS filesystems](#cephfs-filesystems) and `StorageSubvolume` under
 [CephFS subvolumes](#cephfs-subvolumes).
 `StorageObjectGateway` is admitted under its
-[field record](../storage-resources.md#storageobjectgateway-field-record);
-execution still refuses every selected gateway until the gateway block lands.
+[field record](../storage-resources.md#storageobjectgateway-field-record).
 `StorageNFSExport` is admitted under its
 [field record](../storage-resources.md#storagenfsexport); execution still
 refuses every selected export until the NFS export block lands.

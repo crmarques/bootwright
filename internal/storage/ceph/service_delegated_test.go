@@ -186,11 +186,19 @@ func TestDelegatedServiceRefusesUntilItsBlockLands(t *testing.T) {
 	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{nfsService("files")})); len(got) != 0 {
 		t.Fatalf("a direct nfs service refuses %+v", got)
 	}
-	state := graph([]api.Value{rgwService("objects")}, childOf(api.StorageObjectGateway, "objects", "serviceRef", "rgw.objects"))
-	want := []lifecycle.Refusal{{Kind: string(api.StorageCluster), Name: "example", Reason: "Bootwright does not deploy the native service rgw.objects yet",
-		Remediation: "remove rgw.objects from spec.ceph.services, together with an ingress that fronts it and its spec.ceph.serviceBindings entries"}}
-	if got := New(api.StorageCluster, nil).Unsupported(state); !reflect.DeepEqual(got, want) {
-		t.Fatalf("rgw.objects: refuses %+v, want %+v", got, want)
+	gateway := childOf(api.StorageObjectGateway, "objects", "serviceRef", "rgw.objects")
+	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{httpRGWService("objects")}, gateway)); len(got) != 0 {
+		t.Fatalf("a plain rgw service a gateway binds refuses %+v", got)
+	}
+	want := []lifecycle.Refusal{{Kind: string(api.StorageCluster), Name: "example", Reason: "Bootwright does not realize TLS on the rgw service rgw.objects yet",
+		Remediation: "set spec.ssl to false or omit it on rgw.objects in spec.ceph.services, and remove its spec.ceph.serviceBindings entries"}}
+	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{rgwService("objects")}, gateway)); !reflect.DeepEqual(got, want) {
+		t.Fatalf("rgw.objects with ssl: refuses %+v, want %+v", got, want)
+	}
+	want = []lifecycle.Refusal{{Kind: string(api.StorageCluster), Name: "example", Reason: "Bootwright does not deploy the native service ingress.rgw.objects yet",
+		Remediation: "remove ingress.rgw.objects from spec.ceph.services, together with its spec.ceph.serviceBindings entries"}}
+	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{httpRGWService("objects"), ingressService("rgw.objects")}, gateway)); !reflect.DeepEqual(got, want) {
+		t.Fatalf("ingress.rgw.objects: refuses %+v, want %+v", got, want)
 	}
 	nfsIngress := requestMap("service_type", "ingress", "service_id", "nfs.files", "placement", requestMap("label", "mon", "count", 2),
 		"spec", requestMap("backend_service", "nfs.files", "virtual_ip", "192.0.2.50/24", "frontend_port", 2049, "monitor_port", 9049, "enable_haproxy_protocol", true))

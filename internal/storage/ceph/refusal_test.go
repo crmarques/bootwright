@@ -170,6 +170,39 @@ func TestANFSPoolForeignRefusalNamesThePool(t *testing.T) {
 	}
 }
 
+func gatewayRefusal(t *testing.T, reason string) (reconciliation.EffectState, []diagnostics.Diagnostic) {
+	t.Helper()
+	r := coreRequest()
+	r.Action, r.Gateway = "gateway", gatewayRuntimeRequest().Gateway
+	e := withMaterial(executionFor(t, r), r)
+	e.Block.ID, e.Block.Kind, e.Block.Object = GatewayBlockID("objects"), string(api.StorageObjectGateway), "objects"
+	observation, err := New(api.StorageObjectGateway, &refusingRunner{reason: reason}).Observe(context.Background(), e)
+	return observation.Effect, diagnostics.Of(err)
+}
+
+func TestAnObjectRealmForeignRefusalNamesItsNextStep(t *testing.T) {
+	effect, d := gatewayRefusal(t, "object-realm-foreign")
+	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+		d[0].Message != "the cluster holds RGW configuration this operation did not create: a .rgw.root pool without this operation's claim, "+
+			"or a realm, zone group or zone of the StorageObjectGateway's names without its creation record, or one it created that is gone or changed" ||
+		d[0].Remediation != "find what the native error names with ceph osd pool ls and radosgw-admin realm list, zonegroup list and zone list; "+
+			"rename spec.realm, spec.zoneGroup or spec.zone of the StorageObjectGateway, or remove the foreign configuration outside Bootwright, then apply again; "+
+			"Bootwright never adopts RGW configuration it did not create" {
+		t.Fatalf("an object-realm-foreign refusal reached the operator as %s %+v", effect, d)
+	}
+}
+
+func TestAnObjectZonePoolsRefusalNamesItsNextStep(t *testing.T) {
+	effect, d := gatewayRefusal(t, "object-zone-pools")
+	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+		d[0].Message != "the zone a StorageObjectGateway created names a pool Bootwright did not plan, or its default placement does not hold the pools the gateway froze" ||
+		d[0].Remediation != "inspect the zone with radosgw-admin zone get --rgw-realm <realm> --rgw-zone <zone>; the native error names the pool; "+
+			"take back what this context owns with bootwright destroy --context <context>, then apply; "+
+			"Bootwright creates every zone pool before RGW starts and never lets RGW create a pool it did not plan" {
+		t.Fatalf("an object-zone-pools refusal reached the operator as %s %+v", effect, d)
+	}
+}
+
 // The module publishes only a reason its block names, and a token the block
 // does not name as unknown with the token in its detail, so each table names
 // exactly what ceph_core.py may publish for its block, unknown among them.
@@ -201,7 +234,7 @@ func TestEachCephBlockNamesExactlyTheRefusalsItsModuleMayPublish(t *testing.T) {
 func TestResourceRefusalsNameTheirNextStep(t *testing.T) {
 	refusals := adapterRefusals()
 	generic := diagnostics.Of(refusals["native-output"])[0].Remediation
-	for _, reason := range []string{"foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget", "foreign-rbd-image", "rbd-image-identity", "foreign-subvolume", "subvolume-identity", "pool-drift", "nfs-module-disabled", "nfs-pool-foreign"} {
+	for _, reason := range []string{"foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget", "foreign-rbd-image", "rbd-image-identity", "foreign-subvolume", "subvolume-identity", "pool-drift", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign", "object-zone-pools"} {
 		d := diagnostics.Of(refusals[reason])
 		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Remediation == generic || strings.Contains(d[0].Message, "could not prove its") {
 			t.Fatalf("%s reaches the operator as %+v", reason, d)
@@ -211,7 +244,7 @@ func TestResourceRefusalsNameTheirNextStep(t *testing.T) {
 
 func TestAPoolDriftRefusalNamesTheSettingsAndBothRemedies(t *testing.T) {
 	d := diagnostics.Of(adapterRefusals()["pool-drift"])
-	const message = "a setting this operation completed on the Ceph pool (size, min_size, a quota, a compression option, erasure-coded overwrites or its application) no longer has the value the StoragePool froze"
+	const message = "a setting this operation completed on the Ceph pool (size, min_size, a quota, a compression option, erasure-coded overwrites or its application) no longer has the value its StoragePool or StorageObjectGateway froze"
 	if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Message != message ||
 		!strings.Contains(d[0].Remediation, "outside Bootwright") || !strings.Contains(d[0].Remediation, "bootwright destroy --context <context>") {
 		t.Fatalf("a pool-drift refusal reached the operator as %+v", d)

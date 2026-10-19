@@ -1,0 +1,11 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectGateway
+metadata:
+  name: objects
+
+spec:
+  clusterRef: ceph-lab
+  serviceRef: rgw.objects
+  realm: objects
+  zoneGroup: objects
+  zone: objects

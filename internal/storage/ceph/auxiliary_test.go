@@ -243,7 +243,7 @@ func TestFamilyNeedingAnAuxiliaryImageRefusesUntilOneIsSelected(t *testing.T) {
 	}
 	gateway := auxiliaryGraph(t, []api.Value{rgwService("objects"), ingressService("rgw.objects")}, childOf(api.StorageObjectGateway, "objects", "serviceRef", "rgw.objects"))
 	want := []lifecycle.Refusal{{Kind: string(api.StorageCluster), Name: "example", Reason: "Bootwright does not deploy the native service ingress.rgw.objects yet",
-		Remediation: "remove ingress.rgw.objects from spec.ceph.services, together with an ingress that fronts it and its spec.ceph.serviceBindings entries"}}
+		Remediation: "remove ingress.rgw.objects from spec.ceph.services, together with its spec.ceph.serviceBindings entries"}}
 	if got := New(api.StorageCluster, nil).Unsupported(gateway); !reflect.DeepEqual(got, want) {
 		t.Fatalf("an undeployed gateway with its ingress refuses %+v, want only %+v", got, want)
 	}

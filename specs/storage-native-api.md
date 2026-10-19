@@ -6,8 +6,8 @@ input. M2b implements the common native path and strict MON/MGR/OSD admission;
 [B492](milestones/m2.md#b492) adds the MDS family.
 [B477](milestones/m2.md#b477) and [B478](milestones/m2.md#b478) add the RGW,
 ingress and NFS records; the core request lists their services for core
-observation, and planning refuses the rgw family until the block that deploys
-it lands.
+observation, and planning refuses an ingress that fronts an rgw service and rgw
+TLS until the gateway block realizes them.
 Release-qualified projection, additional families and protected leaf registries
 remain gated by [B472](milestones/m2.md#b472), [B474](milestones/m2.md#b474)
 and each [service item](storage-coverage.md#feature-matrix).
@@ -299,9 +299,10 @@ The [resource contract](storage-resources.md) owns those relationships.
 Admission accepts `rgw`, `ingress` and `nfs` documents under closed records
 whose members and spelling follow IBM's python3-ceph-common 20.2.1-405 ServiceSpec schema (the source read for these records, not a pinned build). The
 core request lists each of them by name and hosts
-([service identity](#service-identity-and-references)), and planning still
-refuses each family `lifecycle.unsupported` until the block that deploys it
-lands ([refusal table](storage.md#refusal-table)).
+([service identity](#service-identity-and-references)). Planning realizes an
+rgw service a StorageObjectGateway binds through the gateway block and an nfs
+service through its unit, and still refuses an ingress that fronts an rgw
+service and rgw TLS `lifecycle.unsupported` ([refusal table](storage.md#refusal-table)).
 
 | Type | Admitted `spec` members |
 | --- | --- |

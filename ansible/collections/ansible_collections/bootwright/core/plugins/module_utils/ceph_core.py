@@ -19,8 +19,8 @@ import time
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
     adapter_protocol, ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_nfs, ceph_native_resources,
-    ceph_native_observe, ceph_native_units, ceph_native_worker, ceph_package_sources, ceph_package_worker, ceph_packages, ceph_tunnel, ceph_tunnel_staging,
-    ceph_tunnel_custody, native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
+    ceph_native_observe, ceph_native_units, ceph_native_object, ceph_native_worker, ceph_package_sources, ceph_package_worker, ceph_packages, ceph_tunnel,
+    ceph_tunnel_staging, ceph_tunnel_custody, native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
 )
 
 READINESS_TIMEOUT = 900
@@ -50,7 +50,8 @@ CLUSTER_REASONS = (
     "not-removed", "cluster-unavailable", "device", "foreign-cluster", "native-command", "native-timeout", "native-output", "unknown", "transport",
     "remote-refusal", "adapter-exception", "foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget",
     "foreign-rbd-image", "rbd-image-identity", "foreign-filesystem", "filesystem-identity", "filesystem-multiple-disabled", "foreign-subvolume-group",
-    "mds-coverage", "foreign-subvolume", "subvolume-identity", "foreign-image", "nfs-module-disabled", "nfs-pool-foreign",
+    "mds-coverage", "foreign-subvolume", "subvolume-identity", "foreign-image", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign",
+    "object-zone-pools",
 )
 
 
@@ -76,9 +77,9 @@ def unsettled(error):
 
 
 def blocking_entry(value):
-    """A blocking health check code, a daemon a host has not yet running, or a service unit's unmet daemon count or endpoint."""
+    """A blocking health check code, a daemon a host has not yet running, or a service unit's or gateway's unmet daemon count or endpoint."""
     return isinstance(value, str) and (ceph_native.HEALTH_CHECK.fullmatch(value) is not None or ceph_native.PENDING_DAEMON.fullmatch(value) is not None
-                                       or ceph_native_units.PENDING.fullmatch(value) is not None)
+                                       or ceph_native_units.PENDING.fullmatch(value) is not None or ceph_native_object.PENDING.fullmatch(value) is not None)
 
 
 def readiness_detail(checks):
@@ -124,6 +125,16 @@ def subvolume_resource(resource, request):
         ceph_native.require(resource["path"] == path, "evidence")
 
 
+def gateway_resource(resource, request):
+    """A gateway's resource is empty, or its zone's native ID with the endpoint FQDN the frozen gateway records."""
+    if resource == {"id": "", "path": ""}:
+        return
+    path = resource["path"]
+    ceph_native.require(ceph_native.SUBVOLUME_UUID.fullmatch(resource["id"]) is not None and len(path) <= 253
+                        and (path == "" or all(ceph_native_object.label(part) for part in path.split("."))), "evidence")
+    ceph_native.require(request is None or request["action"] == "gateway" and path == request["gateway"]["endpoint"], "evidence")
+
+
 def evidence(value, request_digest, request=None):
     """The closed public projection, checked before any result publication."""
     if isinstance(value, dict) and value.get("version") == ceph_host_runtime.EVIDENCE_VERSION:
@@ -134,7 +145,8 @@ def evidence(value, request_digest, request=None):
     ceph_native.require(value["version"] == ceph_native.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
                         "evidence")
     dashboard_evidence(value)
-    ceph_native.require(value["action"] in ("cluster", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service"), "evidence")
+    actions = ("cluster", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway")
+    ceph_native.require(value["action"] in actions, "evidence")
     daemon_evidence(value, request)
     ceph_native.require(all(type(value[k]) is bool for k in ("owned", "exists", "ready", "removed", "partial")), "evidence")
     ceph_native.require(value["health"] in ("", "HEALTH_OK", "HEALTH_WARN", "HEALTH_ERR"), "evidence")
@@ -149,9 +161,11 @@ def evidence(value, request_digest, request=None):
                         "evidence")
     if value["action"] == "subvolume":
         subvolume_resource(resource, request)
+    elif value["action"] == "gateway":
+        gateway_resource(resource, request)
     else:
         ceph_native.require(resource["path"] == "", "evidence")
-    ceph_native.require(resource["id"] == "" or value["action"] == "subvolume"
+    ceph_native.require(resource["id"] == "" or value["action"] in ("subvolume", "gateway")
                         or value["action"] in ("pool", "policy", "filesystem") and ceph_native.RESOURCE_ID.fullmatch(resource["id"]) is not None
                         or value["action"] == "rbd" and ceph_native.RBD_IMAGE_ID.fullmatch(resource["id"]) is not None, "evidence")
     ceph_native.require(isinstance(value["osds"], list) and len(value["osds"]) <= 8192, "evidence")
@@ -172,15 +186,17 @@ def evidence(value, request_digest, request=None):
 
 
 def daemon_evidence(value, request=None):
-    """A service unit's daemons: unique names, each on a host of the unit document it belongs to; every other action has none."""
+    """A service unit's or gateway's daemons: unique names, each on a host of the document it belongs to; every other action has none."""
     daemons = value["daemons"]
-    if value["action"] != "service":
+    if value["action"] not in ("service", "gateway"):
         ceph_native.require(daemons == [], "evidence")
         return
     ceph_native.require(isinstance(daemons, list) and len(daemons) <= 256, "evidence")
     hosts = None
     if request is not None:
-        hosts = {document["service_type"] + "." + document["service_id"]: document["placement"]["hosts"] for document in request["service"]["documents"]}
+        ceph_native.require(request["action"] == value["action"], "evidence")
+        documents = request[value["action"]]["documents"]
+        hosts = {document["service_type"] + "." + document["service_id"]: document["placement"]["hosts"] for document in documents}
     names = set()
     for daemon in daemons:
         ceph_native.require(isinstance(daemon, dict) and set(daemon) == {"host", "name", "service"} and ceph_native.named(daemon["host"]), "evidence")
@@ -337,7 +353,7 @@ class Transport:
     @staticmethod
     def native_sources():
         modules = (native_diagnostics, native_specializations, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
-                   ceph_native_resources, ceph_native_nfs, ceph_native_units, ceph_host_route_probe, ceph_pull_broker, ceph_host_runtime)
+                   ceph_native_resources, ceph_native_nfs, ceph_native_units, ceph_native_object, ceph_host_route_probe, ceph_pull_broker, ceph_host_runtime)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
         ceph_native.require(tuple(sources) == ceph_native_worker.MODULES, "transport")
         return sources
@@ -597,6 +613,8 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         ceph_native.require(not outputs, "material")
     if request["action"] == "service":
         return execute_unit(request, operation, request_digest, transport, bootstrap, now=now, pause=pause)
+    if request["action"] == "gateway":
+        return execute_gateway(request, operation, request_digest, transport, bootstrap, now=now, pause=pause)
     changed = False
     if operation == "apply":
         preparations = [transport.call(host, "prerequisites") for host in request["hosts"]]
@@ -705,14 +723,15 @@ def wait_unit(request, request_digest, bootstrap, transport, now, pause):
         pause(min(READINESS_INTERVAL, remaining))
 
 
-def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause):
-    """A service unit runs only on the bootstrap host: its preparation proof, its one apply phase, then its own readiness wait."""
+def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause, phases=("unit",)):
+    """A service unit runs only on the bootstrap host: its preparation proof, its apply phases in order, then its own readiness wait."""
     changed = False
     if operation == "apply":
         transport.call(bootstrap, "prerequisites")
-        produced = transport.call(bootstrap, "unit")
-        ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
-        changed = produced["changed"]
+        for phase in phases:
+            produced = transport.call(bootstrap, phase)
+            ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
+            changed = produced["changed"] or changed
         observation = wait_unit(request, request_digest, bootstrap, transport, now, pause)
         ceph_native.require(observation["ready"], "not-ready")
     elif operation == "destroy":
@@ -722,6 +741,11 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
     else:
         observation = observe_unit(request, request_digest, bootstrap, transport)
     return {"changed": changed, "evidence": observation}
+
+
+def execute_gateway(request, operation, request_digest, transport, bootstrap, *, now, pause):
+    """An object gateway runs as a service unit does, on the bootstrap host only: zone, placement, then its rgw service."""
+    return execute_unit(request, operation, request_digest, transport, bootstrap, now=now, pause=pause, phases=ceph_native_object.APPLY_PHASES)
 
 
 def dashboard_phase(request, operation, request_digest, bootstrap, transport, observation, output, *, now, pause, connect):

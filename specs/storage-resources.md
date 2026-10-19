@@ -126,9 +126,11 @@ and no creation is ever forced.
 
 ### StorageObjectGateway field record
 
-[B477](milestones/m2.md#b477) owns this record. Admission is current;
-execution still refuses every selected StorageObjectGateway until the gateway
-block lands, and per-resource removal is [B491](milestones/m2.md#b491)'s.
+[B477](milestones/m2.md#b477) owns this record. Admission is current; the
+[gateway block](storage.md#resources-readiness-and-access) realizes the realm,
+zone group, zone, zone placement and its rgw service without TLS; TLS bindings
+and an ingress refuse at plan until they are realized, and per-resource removal
+is [B491](milestones/m2.md#b491)'s.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -159,14 +161,16 @@ spec:
 
 The DNS-label grammar of `realm`, `zoneGroup` and `zone` is an explicit
 effect restriction of Bootwright; Ceph accepts more. Bootwright never passes
-`--default`, so a gateway never changes the cluster's default realm, zone
-group or zone. The storage domain is the single Environment's
+`--default`, so a gateway never sets the cluster's default realm; inside its
+own realm, native creation records the first zone group and zone as that
+realm's defaults. The storage domain is the single Environment's
 `domains.storageClusters`, else `domains.clusters`, else `domains.base`, the
 same domain that derives node FQDNs.
 
 The gateway owns derived children it never declares as objects: the zone pools
 `<zone>.rgw.meta`, `.control`, `.log`, `.otp` and `.dedup` and every omitted
-placement pool, the shared `.rgw.root`, the per-realm `dashboard` system user
+placement pool, the shared `.rgw.root`, which the first gateway that proves it
+absent claims and its sibling gateways share, the per-realm `dashboard` system user
 that cephadm's dashboard integration creates (never read for keys) and the
 ingress passwords cephadm generates. No declared StoragePool can carry a
 derived pool name, because a StoragePool name is a DNS label without `.`.
