@@ -199,13 +199,16 @@ func TestFIPSApplyRefusesABoundEd25519OrShortRSAFleetKey(t *testing.T) {
 		{"ssh-rsa !!! bootwright", "Secret/bootwright-machine-key holds an ssh-rsa fleet key whose size cannot be read, so a FIPS-mode installation of Machine/rhel-01 cannot admit it; nothing was published or booted"},
 	} {
 		runner := &fakeRunner{}
-		_, err := New(runner).Apply(context.Background(), fipsExecution(t, row.line))
+		execution := fipsExecution(t, row.line)
+		execution.Context = "lab-b"
+		_, err := New(runner).Apply(context.Background(), execution)
 		reported := diagnostics.Of(err)
 		if len(reported) != 1 || reported[0].Code != "api.value" || reported[0].Message != row.message {
 			t.Fatalf("%s: refusal = %#v (%v)", row.line, reported, err)
 		}
-		if reported[0].Remediation != "replace Secret/bootwright-machine-key with an ECDSA key or an RSA key of at least 2048 bits, "+
-			"for example a generated keyType ecdsa-p256 or rsa, or disable spec.customizations.security.fips on MachineInstallProfile/rhel-9-8" {
+		if reported[0].Remediation != "take this context back with bootwright destroy --context lab-b, then replace Secret/bootwright-machine-key with an ECDSA key or an RSA key of at least 2048 bits, "+
+			"for example a generated keyType ecdsa-p256 or rsa, or disable spec.customizations.security.fips on MachineInstallProfile/rhel-9-8, "+
+			"and run bootwright apply --context lab-b; an apply that continues reads the key version this context bound" {
 			t.Fatalf("remediation = %q", reported[0].Remediation)
 		}
 		if text := reported[0].Message + reported[0].Remediation; strings.Contains(text, "AAAAPUBLIC") || strings.Contains(text, blob) {

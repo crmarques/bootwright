@@ -536,7 +536,7 @@ func (c Capability) applyRefusals(execution lifecycle.Execution, request Request
 	values["authorizedKey"] = key
 	values["fleetKeyType"] = strings.Fields(key)[0]
 	if request.fips() {
-		if err := fipsFleetKey(request, key); err != nil {
+		if err := fipsFleetKey(execution.Context, request, key); err != nil {
 			return nil, err
 		}
 		refusals["fips-not-enabled"] = fipsNotEnabled(execution.Context, request)

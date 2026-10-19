@@ -234,7 +234,8 @@ func TestRecoveryPassphraseOutsideTheTokenClassRefusesBeforeEffects(t *testing.T
 		_, err := New(runner).Apply(context.Background(), encryptionExecution(t, request, []byte(value)))
 		reported := diagnostics.Of(err)
 		if len(reported) != 1 || reported[0].Code != "api.value" || !strings.HasPrefix(reported[0].Message, "Secret/rhel-luks-recovery holds a recovery passphrase that is not 8 to 256 printable ASCII characters") ||
-			reported[0].Remediation != "replace Secret/rhel-luks-recovery with a value of 8 to 256 printable ASCII characters other than space, double quote, single quote, backslash and #" {
+			reported[0].Remediation != "take this context back with bootwright destroy --context lab, then replace Secret/rhel-luks-recovery with a value of 8 to 256 printable ASCII characters other than space, double quote, single quote, backslash and #, "+
+				"and run bootwright apply --context lab; an apply that continues reads the passphrase version this context bound" {
 			t.Fatalf("%s: refusal = %#v", name, reported)
 		}
 		if strings.Contains(reported[0].Message+reported[0].Remediation, "SENTIN") {

@@ -234,7 +234,9 @@ func recoveryPassphrase(execution lifecycle.Execution, request Request) error {
 	}
 	if !recoveryPassphraseCarried(value) {
 		return refusal("api.value", "Secret/"+reference+" holds a recovery passphrase that is not 8 to 256 printable ASCII characters free of spaces, quotes, backslashes and #, which the installer's storage directive cannot carry; nothing was published or booted",
-			"replace Secret/"+reference+" with a value of 8 to 256 printable ASCII characters other than space, double quote, single quote, backslash and #")
+			"take this context back with bootwright destroy --context "+execution.Context+", then replace Secret/"+reference+
+				" with a value of 8 to 256 printable ASCII characters other than space, double quote, single quote, backslash and #, and run bootwright apply --context "+execution.Context+
+				"; an apply that continues reads the passphrase version this context bound")
 	}
 	return nil
 }

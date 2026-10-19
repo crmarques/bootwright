@@ -856,7 +856,9 @@ anything is published or booted.
 key, the default included, and an apply refuses, before any effect, a bound
 fleet key that is not ECDSA or an RSA key of at least 2048 bits; both name the
 Secret and the key type, never key bytes, as the [refusal table](#refusal-table)
-lists.
+lists. A continued apply reads the Secret version its context bound, so the
+apply refusal's remedy takes the context back with destroy before replacing the
+Secret.
 
 **Physical Machines.** A profile enabling `fips` refuses on a physical
 Machine before registration; its qualification is
@@ -930,7 +932,9 @@ space, `"`, `'`, `\` and `#`, which the storage directive carries unquoted. A
 generated `token` Secret encodes its bytes in base64url, so it generates at
 most 192 bytes. The class is checked at plan for a generated token's length,
 at apply before any effect for the bound value, naming the Secret and never a
-byte of it, and again in `%pre`. The passphrase is fetched by `%pre` and
+byte of it, with a remedy that takes the context back with destroy before
+replacing the Secret, since a continued apply reads the bound version, and
+again in `%pre`. The passphrase is fetched by `%pre` and
 `%post` into a shell variable, written only to the installer's storage file and
 given to clevis on standard input; it never reaches a request, evidence, a
 log, an argv or the installed disk.
