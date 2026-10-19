@@ -109,9 +109,7 @@ func storageSubvolumeSchema() *Shape {
 }
 
 func storageObjectGatewaySchema() *Shape {
-	config := stringsMap()
-	config.Element = nonempty()
-	return record(required("clusterRef", ref(StorageCluster)), required("serviceID", nonempty()), field("placement", storagePlacement()), field("frontendPort", integer("0", "65535")), field("realm", nonempty()), field("zoneGroup", nonempty()), field("zone", nonempty()), field("config", config), field("endpoint", record(field("dnsLabel", name()), field("scheme", enumeration("https", "http")), field("port", port()), field("tls", storageTLS()), required("ingresses", nonemptyArray(named(storageIngress(false)))))))
+	return record(required("clusterRef", ref(StorageCluster)), required("serviceRef", nonempty()), required("realm", name()), required("zoneGroup", name()), required("zone", name()), field("pools", record(field("indexPoolRef", ref(StoragePool)), field("dataPoolRef", ref(StoragePool)), field("dataExtraPoolRef", ref(StoragePool)))), field("endpoint", record(field("fqdn", dns()))))
 }
 
 func storageNFSExportSchema() *Shape {

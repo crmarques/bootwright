@@ -30,10 +30,20 @@ func TestStorageWireShapesAreClosedAndVariantsAreExplicit(t *testing.T) {
 	if erasure.Shape.Open {
 		t.Fatal("erasure options must stay closed")
 	}
-	gateway, _ := Schema(StorageObjectGateway).Field("endpoint")
-	ingresses, _ := gateway.Shape.Field("ingresses")
-	if _, ok := ingresses.Shape.Element.Field("tls"); ok {
-		t.Fatal("RGW transport cannot be overridden on individual ingresses")
+	gateway := Schema(StorageObjectGateway)
+	for _, bound := range []string{"serviceRef", "realm", "zoneGroup", "zone"} {
+		if f, ok := gateway.Field(bound); !ok || !f.Required {
+			t.Fatalf("object gateway must require %s", bound)
+		}
+	}
+	for _, retired := range []string{"serviceID", "placement", "frontendPort", "config"} {
+		if _, ok := gateway.Field(retired); ok {
+			t.Fatalf("object gateway still admits retired field %s", retired)
+		}
+	}
+	endpoint, _ := gateway.Field("endpoint")
+	if len(endpoint.Shape.Fields) != 1 || endpoint.Shape.Fields[0].Name != "fqdn" {
+		t.Fatal("object gateway endpoint must carry only its FQDN")
 	}
 	nfs, _ := Schema(StorageNFSExport).Field("ingresses")
 	if _, ok := nfs.Shape.Element.Field("tls"); !ok {

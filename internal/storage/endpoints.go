@@ -11,7 +11,6 @@ type endpointIdentity struct {
 	owner    string
 	field    string
 	id       string
-	dns      string
 	address  netip.Addr
 	port     int64
 	hosts    []string
@@ -66,19 +65,6 @@ func legacyEndpointIdentities(cluster api.Object, catalog api.Catalog) []endpoin
 			continue
 		}
 		switch object.Kind() {
-		case api.StorageObjectGateway:
-			out = append(out, endpointIdentity{owner: object.Identity(), field: "$.spec.serviceID", id: textOf(spec, "serviceID"), port: defaultPort(spec.Get("frontendPort"), 8080), hosts: placementNames(cluster, spec.Get("placement"), "rgw")})
-			endpoint := spec.Get("endpoint")
-			if endpoint.Present() {
-				out = append(out, endpointIdentity{owner: object.Identity(), field: "$.spec.endpoint.dnsLabel", dns: fallback(endpoint.Get("dnsLabel"), object.Name())})
-			}
-			port := int64(443)
-			if fallback(endpoint.Get("scheme"), "https") == "http" {
-				port = 80
-			}
-			for i, ingress := range endpoint.Get("ingresses").Items() {
-				out = append(out, ingressIdentity(object.Identity(), indexed("$.spec.endpoint.ingresses", i), ingress, cluster, defaultPort(endpoint.Get("port"), port)))
-			}
 		case api.StorageNFSExport:
 			port := int64(2049)
 			if spec.Get("ingresses").Len() > 0 {
@@ -122,9 +108,6 @@ func (a *admission) sharedServiceIdentities(cluster api.Object) {
 			}
 			if left.id != "" && left.id == right.id {
 				a.invalid(left.field, "service and ingress IDs must be unique within the storage cluster")
-			}
-			if left.dns != "" && left.dns == right.dns {
-				a.invalid(left.field, "storage service DNS identities must be unique")
 			}
 			if left.address.IsValid() && left.address == right.address {
 				a.invalid(left.field, "ingress VIPs must be unique within the storage cluster")

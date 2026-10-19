@@ -1,0 +1,14 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectGateway
+metadata:
+  name: objects
+spec:
+  clusterRef: ceph-multidc-01
+  serviceRef: rgw.objects
+  realm: objects
+  zoneGroup: objects
+  zone: objects
+  pools:
+    dataPoolRef: objects-data
+  endpoint:
+    fqdn: objects.ceph-multidc-01.clusters.example.com

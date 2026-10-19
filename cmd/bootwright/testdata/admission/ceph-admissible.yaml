@@ -103,6 +103,17 @@ spec:
           count: 2
           label: ceph-core
 
+      - service_type: rgw
+        service_id: objects
+        placement:
+          count: 2
+          label: ceph-core
+        spec:
+          rgw_realm: objects
+          rgw_zonegroup: objects
+          rgw_zone: objects
+          rgw_frontend_port: 8080
+
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: StoragePlacementPolicy
@@ -178,3 +189,32 @@ spec:
   subvolumeGroups:
     - name: csi
       mode: '755'
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: objects-data
+
+spec:
+  clusterRef: ceph-multidc-01
+  placementPolicyRef: host-spread
+  type: replicated
+  role: rgw
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectGateway
+metadata:
+  name: objects
+
+spec:
+  clusterRef: ceph-multidc-01
+  serviceRef: rgw.objects
+  realm: objects
+  zoneGroup: objects
+  zone: objects
+  endpoint: {}
+
+  pools:
+    dataPoolRef: objects-data

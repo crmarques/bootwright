@@ -98,8 +98,8 @@ func TestPartialValidationIssuesAlsoRefuseTheCompleteObject(t *testing.T) {
 			s = s.WithPath(api.ListValue(append(s.Get("ceph", "services").Items(), nfs)...), "ceph", "services")
 			return s.WithPath(api.ListValue(m("serviceRef", "nfs.files", "secrets", api.ListValue(m("path", "/spec/ssl_cert", "secretRef", "a")))), "ceph", "serviceBindings")
 		})},
-		{"gateway plain TLS", edit(api.StorageObjectGateway, "objects", func(s api.Value) api.Value {
-			return s.WithPath(m("certificateRef", "certificate"), "endpoint", "tls")
+		{"gateway pool roles share one pool", edit(api.StorageObjectGateway, "objects", func(s api.Value) api.Value {
+			return s.With("pools", m("indexPoolRef", "block", "dataPoolRef", "block"))
 		})},
 		{"NFS ingress backend port", edit(api.StorageNFSExport, "nfs", func(s api.Value) api.Value {
 			return s.With("ingresses", api.ListValue(m("name", "nfs-ingress", "address", "192.0.2.60", "prefixLength", 24))).With("port", api.IntegerValue("2049"))

@@ -86,7 +86,7 @@ effects. No new field inherits an undocumented default from another resource.
 | `StoragePlacementPolicy` | Reusable CRUSH placement and pool protection policy. | OSD topology supplies its proved failure domains; policy does not deploy OSDs. |
 | `StoragePool` | Pool identity, replicated/EC protection, application, PG/autoscaler, quota, compression and supported mirroring intent. EC `rbd`/`cephfs-data` pools derive irreversible overwrite enablement; mirroring is [B483](milestones/m2.md#b483)'s. | Services and resources reference owned pools; native auto-created pools require an explicitly recorded derived owner. |
 | `StorageFilesystem` | Metadata/data-pool composition, default/layout, active ranks and standby/replay resource policy, declared subvolume groups; several filesystems per cluster. | `spec.mdsServiceRef` binds one declared MDS service whose `service_id` is the filesystem name; placement and container configuration belong to that service. One `ceph fs new` creates the native filesystem. |
-| `StorageObjectGateway` | Logical object-storage scope, realm/zone relationships, owned pool layout and public endpoint identity/trust. | B477 binds its RGW service and any ingress services by full native identity. It no longer embeds daemon placement, frontend or ingress specifications. |
+| `StorageObjectGateway` | The realm, zone group and zone it creates (never with `--default`), its zone placement binding, its derived zone pools and its endpoint identity. | `spec.serviceRef` binds exactly one declared rgw service by full native identity; the gateway executes that service and the ingress whose `spec.backend_service` is it. It embeds no daemon placement, frontend, configuration or ingress specification. |
 | `StorageExport` | Existing Data Foundation handoff, or the external-details arm. | It waits for the resources and access material it describes; it neither creates an add-on nor becomes a general native-command resource. |
 
 Their existing non-daemon fields remain unless an owning approved migration
@@ -99,13 +99,14 @@ normalization is recorded by the current admission contract until migrated.
 
 `StorageFilesystem.spec.mdsServiceRef` names its full native MDS service;
 `StorageObjectGateway.spec.serviceRef` names its full native RGW service.
-These references are required for the corresponding managed resource; the
-MDS reference is current, the RGW reference is [B477](milestones/m2.md#b477)'s.
-The MDS `service_id` agrees with the native filesystem name. RGW realm/zone names
-agree with the gateway's owned object scope. Canonical service identities are
-looked up in the qualified identity table, not recovered by naively splitting
-on dots. B477's endpoint binding selects declared ingress services whose
-backend is that RGW service; the endpoint does not create another daemon owner.
+These references are required for the corresponding managed resource, and
+both are current. The MDS `service_id` agrees with the native filesystem name.
+The rgw document's `rgw_realm`, `rgw_zonegroup` and `rgw_zone`, when present,
+agree with the gateway's `realm`, `zoneGroup` and `zone`. Canonical service
+identities are looked up in the qualified identity table, not recovered by
+naively splitting on dots. The gateway's endpoint is terminated by the declared
+ingress whose backend is that RGW service, else by the RGW service; the
+endpoint does not create another daemon owner.
 
 Provider-created internal pools need not all be hand-authored. B477 records a
 derived owner, effective pool map, native identity and protection for every
@@ -121,6 +122,85 @@ pools, and further data pools attach with `ceph fs add_data_pool`. The
 [native volume interface](https://docs.ceph.com/en/tentacle/cephfs/fs-volumes/),
 which creates and removes pools and orchestrates MDS services, is never used,
 and no creation is ever forced.
+
+### StorageObjectGateway field record
+
+[B477](milestones/m2.md#b477) owns this record. Admission is current;
+execution still refuses every selected StorageObjectGateway until the gateway
+block lands, and per-resource removal is [B491](milestones/m2.md#b491)'s.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectGateway
+metadata:
+  name: objects
+
+spec:
+  clusterRef: ceph-example
+  serviceRef: rgw.objects
+  realm: objects
+  zoneGroup: objects
+  zone: objects
+  pools:
+    dataPoolRef: objects-data
+  endpoint: {}
+```
+
+| Field | Contract | Native projection |
+| --- | --- | --- |
+| `clusterRef` | Required managed StorageCluster. | None. |
+| `serviceRef` | Required qualified name `rgw.<service_id>` of one declared rgw service of that cluster, resolved by full-name equality. One gateway binds each rgw service. | The service the gateway executes; its placement, `rgw_frontend_port`, `ssl` and networks are that document's. |
+| `realm`, `zoneGroup`, `zone` | Required DNS labels, each unique per cluster across gateways. | `radosgw-admin realm\|zonegroup\|zone create --rgw-realm/--rgw-zonegroup/--rgw-zone`; the rgw document's `rgw_realm`, `rgw_zonegroup` and `rgw_zone`. |
+| `pools.indexPoolRef` | Optional replicated StoragePool of role `rgw`; omitted derives `<zone>.rgw.buckets.index`. | Zone placement `index_pool`. |
+| `pools.dataPoolRef` | Optional StoragePool of role `rgw`, replicated or erasure-coded; omitted derives `<zone>.rgw.buckets.data`. | STANDARD storage class `data_pool`. |
+| `pools.dataExtraPoolRef` | Optional replicated StoragePool of role `rgw`; omitted derives `<zone>.rgw.buckets.non-ec`. | Zone placement `data_extra_pool`. |
+| `endpoint.fqdn` | DNS name of the public endpoint; an `endpoint` mapping without it defaults to `<gateway>.<cluster>.<storage domain>`. | None; scheme, port and TLS come from the terminating service. |
+
+The DNS-label grammar of `realm`, `zoneGroup` and `zone` is an explicit
+effect restriction of Bootwright; Ceph accepts more. Bootwright never passes
+`--default`, so a gateway never changes the cluster's default realm, zone
+group or zone. The storage domain is the single Environment's
+`domains.storageClusters`, else `domains.clusters`, else `domains.base`, the
+same domain that derives node FQDNs.
+
+The gateway owns derived children it never declares as objects: the zone pools
+`<zone>.rgw.meta`, `.control`, `.log`, `.otp` and `.dedup` and every omitted
+placement pool, the shared `.rgw.root`, the per-realm `dashboard` system user
+that cephadm's dashboard integration creates (never read for keys) and the
+ingress passwords cephadm generates. No declared StoragePool can carry a
+derived pool name, because a StoragePool name is a DNS label without `.`.
+Derived pools take the cluster's default replica size: the
+`osd_pool_default_size` pair under `spec.ceph.config.global` when declared,
+else the replicated default, and that size must satisfy the replicated-pool
+host rule against the declared OSD-bearing hosts.
+
+The endpoint FQDN is the gateway's endpoint identity. It is unique across the
+graph, against every storage node hostname and every other gateway's FQDN,
+and it is not published to DNS. The terminating service is the ingress whose
+`spec.backend_service` is the bound rgw service, else that rgw service; an
+HTTPS terminating service needs its `/spec/ssl_cert` and `/spec/ssl_key`
+bindings ([native services](storage-native-api.md)).
+
+Retired fields refuse at decode with their replacement: `spec.serviceID`
+becomes `spec.serviceRef`; `spec.placement` and `spec.frontendPort` become the
+bound rgw service's placement and `spec.rgw_frontend_port`;
+`spec.endpoint.dnsLabel` becomes `spec.endpoint.fqdn`; `spec.endpoint.scheme`,
+`.port`, `.tls` and `.ingresses` become an ingress service whose
+`spec.backend_service` is the bound rgw service, with its TLS bindings.
+`spec.config` is removed: per-service RGW configuration options have no
+qualified effect contract.
+
+Admission refuses, before any effect: a `serviceRef` that resolves to no
+declared service, names a non-rgw service or is bound by another gateway; a
+realm, zone group or zone that disagrees with the bound rgw document or is
+already owned by another gateway of the cluster; a pool reference of another
+role or cluster, an erasure-coded index or data-extra pool, a pool bound by
+another gateway or one pool in two placement roles; derived pools the declared
+OSD-bearing hosts cannot hold; an endpoint without a derivable FQDN, with an
+invalid one or with one that equals a storage node hostname or another
+gateway's FQDN; and, on the cluster, an rgw service no gateway of the cluster
+binds, because cephadm would deploy it before its realm, zone group and zone
+exist.
 
 ## StorageRBDImage
 

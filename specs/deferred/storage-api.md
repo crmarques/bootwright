@@ -63,8 +63,8 @@ role-owned placement follows the eligible role membership.
 
 `StorageIngress` is a shared nested shape for a service-owned VIP, not a
 resource kind. It does not choose a backend or share service ownership. The
-management gateway, RGW endpoint, and NFS service retain their own transport,
-TLS, authentication, and lifecycle rules.
+management gateway and NFS service retain their own transport, TLS,
+authentication, and lifecycle rules.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
@@ -217,8 +217,14 @@ unique, and a layout pool belongs to the same cluster.
 
 ## StorageObjectGateway
 
-This kind owns one RGW service and its optional public endpoint. Ingresses
-belong to that endpoint and cannot select another backend service.
+Historical: this table describes the retired embedded-service shape. The
+current contract is the
+[StorageObjectGateway field record](../storage-resources.md#storageobjectgateway-field-record),
+which binds a declared rgw service and refuses each field below that it
+retired with its replacement.
+
+This kind owned one RGW service and its optional public endpoint. Ingresses
+belonged to that endpoint and could not select another backend service.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
@@ -319,9 +325,9 @@ defaults and normalizes these values:
   tiebreaker with a node's site, and `ruleName: stretch-rule`;
 - `StoragePool.spec.type: replicated`;
 - the sole CephFS data pool as `default: true`;
-- object-gateway `frontendPort: 8080`; for a present endpoint only, its DNS
-  label from object name, `scheme: https`, and public port `443` or `80`
-  according to the effective scheme;
+- for a present object-gateway endpoint without `fqdn`, the FQDN
+  `<gateway>.<cluster>.<storage domain>`
+  ([field record](../storage-resources.md#storageobjectgateway-field-record));
 - NFS backend port `2049` or `12049` according to ingress presence; and
 - `StorageExport.spec.type: dataFoundation` when that arm is authored.
 

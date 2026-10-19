@@ -51,7 +51,7 @@ func fixtureCatalog() api.Catalog {
 		object(api.StoragePool, "data", m("clusterRef", "storage", "role", "cephfs-data")),
 		object(api.StoragePool, "block", m("clusterRef", "storage", "role", "rbd")),
 		object(api.StorageFilesystem, "files", m("clusterRef", "storage", "mdsServiceRef", "mds.files", "metadataPoolRef", "metadata", "dataPoolRefs", api.StringList("data"))),
-		object(api.StorageObjectGateway, "objects", m("clusterRef", "storage", "serviceID", "objects", "placement", m("hosts", api.StringList("node-1")), "endpoint", m("scheme", "http", "ingresses", []api.Value{m("name", "object-ingress", "address", "192.0.2.50", "prefixLength", 24, "firstVirtualRouterID", 1)}))),
+		object(api.StorageObjectGateway, "objects", m("clusterRef", "storage", "serviceRef", "rgw.objects", "realm", "realm", "zoneGroup", "group", "zone", "zone")),
 		object(api.StorageNFSExport, "nfs", m("clusterRef", "storage", "serviceID", "nfs", "placement", m("hosts", api.StringList("node-2")), "exports", []api.Value{m("pseudo", "/files", "filesystemRef", "files", "clients", api.StringList("192.0.2.0/24"))})),
 		object(api.StorageExport, "export", m("clusterRef", "storage", "dataFoundation", m("rbdPoolRef", "block", "filesystemRef", "files", "objectGatewayRef", "objects"))),
 	)
@@ -97,10 +97,11 @@ func requireIssue(t *testing.T, issues []api.Issue, field string) {
 
 func TestAllStorageKindsAdmitAndNormalizeWithoutMutatingInput(t *testing.T) {
 	_, catalog := withMDSService(t, fixtureCatalog(), mdsService("files"))
+	_, catalog = withGraph(t, catalog, []api.Value{rgwService(qualifiedRGWSpec())})
 	for _, object := range catalog.Objects() {
 		before := object.Spec()
 		issues := Validate(object, catalog)
-		if slices.Contains([]api.Kind{api.StorageObjectGateway, api.StorageNFSExport, api.StorageExport}, object.Kind()) {
+		if slices.Contains([]api.Kind{api.StorageNFSExport, api.StorageExport}, object.Kind()) {
 			requireIssue(t, issues, "$.spec")
 		} else if len(issues) != 0 {
 			t.Errorf("%s: %#v", object.Identity(), issues)
@@ -176,25 +177,6 @@ func TestStorageSizesHaveExactWholeValueGrammars(t *testing.T) {
 	}
 	for _, value := range []string{"0GB", "1GiB", "1 GB", "1GB\n", "+1GB"} {
 		requireIssue(t, ValidateAuthored(pool.WithSpec(pool.Spec().WithPath(api.StringValue(value), "autoscale", "targetSizeBytes")), api.Catalog{}), "$.spec.autoscale.targetSizeBytes")
-	}
-}
-
-func TestGatewayTLSAndListenerOwnership(t *testing.T) {
-	catalog := fixtureCatalog()
-	gateway := find(t, catalog, api.StorageObjectGateway, "objects")
-	https := gateway.WithSpec(gateway.Spec().WithPath(api.StringValue("https"), "endpoint", "scheme"))
-	requireIssue(t, validateFutureFamily(https, replace(catalog, https)), "$.spec.endpoint.tls")
-	httpTLS := gateway.WithSpec(gateway.Spec().WithPath(m("secretRef", "tls"), "endpoint", "tls"))
-	requireIssue(t, validateFutureFamily(httpTLS, replace(catalog, httpTLS)), "$.spec.endpoint.tls")
-	duplicate := object(api.StorageObjectGateway, "duplicate", gateway.Spec().With("serviceID", api.StringValue("other")))
-	conflicts := replace(catalog, duplicate)
-	requireIssue(t, validateFutureFamily(duplicate, conflicts), "$.spec.endpoint.ingresses[0]")
-	changed := gateway.WithSpec(gateway.Spec().With("frontendPort", api.IntegerValue("80")))
-	requireIssue(t, validateFutureFamily(changed, replace(catalog, changed)), "$.spec.serviceID")
-	plain := gateway.WithSpec(gateway.Spec().Without("endpoint"))
-	normalized, _ := Normalize(plain, catalog)
-	if normalized.Spec().Has("endpoint") {
-		t.Fatal("omitted endpoint was created")
 	}
 }
 
@@ -320,12 +302,13 @@ func TestDeferredStretchStillConstrainsProtection(t *testing.T) {
 
 func TestVRRPNetworkOverlapAndNetworkReachability(t *testing.T) {
 	catalog := fixtureCatalog()
-	gateway := find(t, catalog, api.StorageObjectGateway, "objects")
-	other := object(api.StorageObjectGateway, "second", gateway.Spec().With("serviceID", api.StringValue("second")).With("placement", m("hosts", api.StringList("node-2"))).WithPath(api.StringValue("second"), "endpoint", "dnsLabel").WithPath(api.ListValue(m("name", "second-ingress", "address", "192.0.2.51", "prefixLength", 24, "firstVirtualRouterID", 1)), "endpoint", "ingresses"))
+	nfs := find(t, catalog, api.StorageNFSExport, "nfs")
+	catalog = replace(catalog, nfs.WithSpec(nfs.Spec().With("ingresses", api.ListValue(m("name", "nfs-ingress", "address", "192.0.2.50", "prefixLength", 24, "firstVirtualRouterID", 1)))))
+	other := object(api.StorageNFSExport, "second", nfs.Spec().With("serviceID", api.StringValue("second")).With("placement", m("hosts", api.StringList("node-3"))).Without("exports").With("ingresses", api.ListValue(m("name", "second-ingress", "address", "192.0.2.51", "prefixLength", 24, "firstVirtualRouterID", 1))))
 	catalog = replace(catalog, other)
-	requireIssue(t, validateFutureFamily(other, catalog), "$.spec.endpoint.ingresses[0].firstVirtualRouterID")
-	other = other.WithSpec(other.Spec().WithPath(api.ListValue(m("name", "second-ingress", "address", "198.51.100.51", "prefixLength", 24)), "endpoint", "ingresses"))
-	requireIssue(t, validateFutureFamily(other, replace(catalog, other)), "$.spec.endpoint.ingresses[0].address")
+	requireIssue(t, validateFutureFamily(other, catalog), "$.spec.ingresses[0].firstVirtualRouterID")
+	other = other.WithSpec(other.Spec().With("ingresses", api.ListValue(m("name", "second-ingress", "address", "198.51.100.51", "prefixLength", 24))))
+	requireIssue(t, validateFutureFamily(other, replace(catalog, other)), "$.spec.ingresses[0].address")
 	cluster := find(t, catalog, api.StorageCluster, "storage")
 	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.StringList("192.0.2.128/25"), "ceph", "networks", "clusterCIDRs"))
 	requireIssue(t, Validate(cluster, replace(catalog, cluster)), "$.spec.ceph.networks")
@@ -400,7 +383,7 @@ func TestDeferredScopeRefusalsNameTheDeliveringItem(t *testing.T) {
 		}
 		t.Fatalf("missing %s remediation %q: %#v", field, remediation, issues)
 	}
-	for kind, item := range map[api.Kind]string{api.StorageObjectGateway: "B477", api.StorageNFSExport: "B478", api.StorageExport: "B489"} {
+	for kind, item := range map[api.Kind]string{api.StorageNFSExport: "B478", api.StorageExport: "B489"} {
 		candidates := catalog.OfKind(kind)
 		if len(candidates) == 0 {
 			t.Fatalf("fixture has no %s", kind)
@@ -435,10 +418,7 @@ func validateFutureFamily(object api.Object, catalog api.Catalog) []api.Issue {
 	catalog = replace(catalog, cluster)
 	a := admission{object: object, catalog: catalog}
 	a.intrinsic()
-	switch object.Kind() {
-	case api.StorageObjectGateway:
-		a.gateway(cluster)
-	case api.StorageNFSExport:
+	if object.Kind() == api.StorageNFSExport {
 		a.nfs(cluster)
 	}
 	a.sharedServiceIdentities(cluster)

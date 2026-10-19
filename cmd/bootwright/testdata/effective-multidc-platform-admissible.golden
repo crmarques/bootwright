@@ -2800,6 +2800,16 @@ spec:
         placement:
           label: ceph-core
           count: 2
+      - service_type: rgw
+        service_id: objects
+        placement:
+          label: ceph-core
+          count: 2
+        spec:
+          rgw_frontend_port: 8080
+          rgw_realm: objects
+          rgw_zone: objects
+          rgw_zonegroup: objects
     topology:
       nodes:
         - name: node-01
@@ -2832,6 +2842,16 @@ spec:
   replicated:
     size: 2
     minSize: 2
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: objects-data
+spec:
+  clusterRef: ceph-multidc-01
+  placementPolicyRef: host-spread
+  type: replicated
+  role: rgw
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: StoragePool
@@ -2913,6 +2933,21 @@ spec:
   clusterRef: ceph-multidc-01
   filesystemRef: odf-cephfs
   sizeBytes: 10737418240
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectGateway
+metadata:
+  name: objects
+spec:
+  clusterRef: ceph-multidc-01
+  serviceRef: rgw.objects
+  realm: objects
+  zoneGroup: objects
+  zone: objects
+  pools:
+    dataPoolRef: objects-data
+  endpoint:
+    fqdn: objects.ceph-multidc-01.clusters.example.com
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddon

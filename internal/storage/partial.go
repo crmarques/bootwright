@@ -72,9 +72,7 @@ func (a *admission) intrinsic() {
 	case api.StorageFilesystem:
 		a.subvolumeGroups()
 	case api.StorageObjectGateway:
-		if textOf(spec, "endpoint", "scheme") == "http" {
-			a.forbid(spec.Get("endpoint"), "$.spec.endpoint", "tls")
-		}
+		a.gatewayPoolRoles(spec.Get("pools"))
 	case api.StorageNFSExport:
 		if spec.Get("ingresses").Len() > 0 && numeric(spec.Get("port")).Cmp(numeric(api.IntegerValue("2049"))) == 0 {
 			a.invalid("$.spec.port", "ingress-fronted NFS cannot use backend port 2049")

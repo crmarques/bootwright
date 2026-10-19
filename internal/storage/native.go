@@ -354,6 +354,8 @@ func (a *admission) nativeServiceID(service api.Value, row nativeServiceType, fi
 		a.required(service, "service_id", field)
 	case service.Has("service_id") && row.name == "mds" && !partial:
 		a.mdsBinding(id, field)
+	case service.Has("service_id") && row.name == "rgw" && !partial:
+		a.rgwBinding(field, service)
 	}
 }
 
@@ -549,6 +551,22 @@ var retiredResourceFields = map[api.Kind]map[string]string{
 		"$.spec.mds.placement":   "an entry of its StorageCluster's spec.ceph.services with service_type mds and service_id equal to this StorageFilesystem's name, and set spec.mdsServiceRef to mds.<name>",
 		"$.spec.mds.serviceSpec": "the native fields (networks, extra_container_args, extra_entrypoint_args) of its StorageCluster's spec.ceph.services entry with service_type mds and service_id equal to this StorageFilesystem's name",
 	},
+	api.StorageObjectGateway: {
+		"$.spec.serviceID":          "spec.serviceRef naming the rgw.<service_id> entry of its StorageCluster's spec.ceph.services",
+		"$.spec.placement":          "the placement of the rgw service that spec.serviceRef names",
+		"$.spec.frontendPort":       "spec.rgw_frontend_port of the rgw service that spec.serviceRef names",
+		"$.spec.endpoint.dnsLabel":  "$.spec.endpoint.fqdn, a full DNS name that defaults to <gateway>.<cluster>.<storage domain>",
+		"$.spec.endpoint.scheme":    gatewayIngressReplacement,
+		"$.spec.endpoint.port":      gatewayIngressReplacement,
+		"$.spec.endpoint.tls":       gatewayIngressReplacement,
+		"$.spec.endpoint.ingresses": gatewayIngressReplacement,
+	},
+}
+
+const gatewayIngressReplacement = "an ingress service in its StorageCluster's spec.ceph.services whose spec.backend_service is the rgw service that spec.serviceRef names, with /spec/ssl_cert and /spec/ssl_key bound in spec.ceph.serviceBindings"
+
+var removedResourceFields = map[api.Kind]map[string]string{
+	api.StorageObjectGateway: {"$.spec.config": "per-service RGW configuration options have no qualified effect contract"},
 }
 
 func retiredIssue(field, replacement string) api.Issue {
@@ -557,6 +575,9 @@ func retiredIssue(field, replacement string) api.Issue {
 
 func RetiredField(kind api.Kind, field string) (api.Issue, bool) {
 	if kind != api.StorageCluster {
+		if reason, ok := removedResourceFields[kind][field]; ok {
+			return api.Issue{Code: "api.field", Field: field, Message: "storage daemon helper was retired by the native-service migration", Remediation: "remove " + field + ": " + reason}, true
+		}
 		replacement, ok := retiredResourceFields[kind][field]
 		if !ok {
 			return api.Issue{}, false

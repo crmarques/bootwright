@@ -32,18 +32,9 @@ func Normalize(object api.Object, catalog api.Catalog) (api.Object, []api.Issue)
 			}
 		}
 	case api.StorageObjectGateway:
-		if !spec.Has("frontendPort") || (spec.Get("frontendPort").Type() == api.Integer && numeric(spec.Get("frontendPort")).Sign() == 0) {
-			spec = spec.With("frontendPort", api.IntegerValue("8080"))
-		}
-		if endpoint := spec.Get("endpoint"); endpoint.Type() == api.Mapping {
-			endpoint = endpoint.Default("dnsLabel", api.StringValue(object.Name())).Default("scheme", api.StringValue("https"))
-			port := "443"
-			if textOf(endpoint, "scheme") == "http" {
-				port = "80"
-			}
-			endpoint = endpoint.Default("port", api.IntegerValue(port))
-			endpoint = normalizeIngresses(endpoint, "ingresses")
-			spec = spec.With("endpoint", endpoint)
+		domain, cluster := storageDomain(catalog), textOf(spec, "clusterRef")
+		if endpoint := spec.Get("endpoint"); endpoint.Type() == api.Mapping && !endpoint.Has("fqdn") && domain != "" && object.Name() != "" && cluster != "" {
+			spec = spec.With("endpoint", endpoint.With("fqdn", api.StringValue(object.Name()+"."+cluster+"."+domain)))
 		}
 	case api.StorageNFSExport:
 		if !spec.Has("port") || (spec.Get("port").Type() == api.Integer && numeric(spec.Get("port")).Sign() == 0) {
@@ -95,11 +86,7 @@ func normalizeCluster(object api.Object, catalog api.Catalog) api.Value {
 			ceph = ceph.WithPath(normalizeCIDRs(ceph.Get("networks", key)), "networks", key)
 		}
 	}
-	domain := ""
-	if environments := catalog.OfKind(api.Environment); len(environments) == 1 {
-		domains := environments[0].Spec().Get("domains")
-		domain = fallback(domains.Get("storageClusters"), fallback(domains.Get("clusters"), textOf(domains, "base")))
-	}
+	domain := storageDomain(catalog)
 	nodes := ceph.Get("topology", "nodes").Items()
 	for i, node := range nodes {
 		if !node.Has("fqdn") && textOf(node, "name") != "" && domain != "" {
@@ -164,6 +151,15 @@ func normalizeCluster(object api.Object, catalog api.Catalog) api.Value {
 	}
 
 	return spec.With("ceph", ceph)
+}
+
+func storageDomain(catalog api.Catalog) string {
+	environments := catalog.OfKind(api.Environment)
+	if len(environments) != 1 {
+		return ""
+	}
+	domains := environments[0].Spec().Get("domains")
+	return fallback(domains.Get("storageClusters"), fallback(domains.Get("clusters"), textOf(domains, "base")))
 }
 
 func normalizeCIDRs(value api.Value) api.Value {

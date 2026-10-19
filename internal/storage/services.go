@@ -136,42 +136,6 @@ func (a *admission) ingress(cluster api.Object, ingress api.Value, field string)
 	}
 }
 
-func (a *admission) gateway(cluster api.Object) {
-	spec := a.object.Spec()
-	a.placement(cluster, spec.Get("placement"), "$.spec.placement", "rgw", false)
-	present := 0
-	for _, key := range []string{"realm", "zoneGroup", "zone"} {
-		if spec.Has(key) {
-			present++
-		}
-	}
-	if present != 0 && present != 3 {
-		a.invalid("$.spec.realm", "realm, zone group and zone must be declared together")
-	}
-	for _, config := range spec.Get("config").Fields() {
-		if config.Name == "rgw_frontend_port" {
-			a.invalid("$.spec.config", "gateway config cannot own the typed frontend port")
-		}
-		for _, section := range []string{"global", "client.rgw", "client.rgw." + textOf(spec, "serviceID"), "rgw", textOf(spec, "serviceID")} {
-			if cluster.Spec().Get("ceph", "config", section).Has(config.Name) {
-				a.invalid("$.spec.config", "gateway config duplicates a same-service cluster config key")
-			}
-		}
-	}
-	endpoint := spec.Get("endpoint")
-	if !endpoint.Present() {
-		return
-	}
-	if endpoint.Len() == 0 || endpoint.Get("ingresses").Len() == 0 {
-		a.invalid("$.spec.endpoint.ingresses", "public endpoint requires at least one ingress")
-	}
-	if fallback(endpoint.Get("scheme"), "https") == "https" {
-		a.required(endpoint, "tls", "$.spec.endpoint")
-	}
-	for i, value := range endpoint.Get("ingresses").Items() {
-		a.ingress(cluster, value, indexed("$.spec.endpoint.ingresses", i))
-	}
-}
 func (a *admission) nfs(cluster api.Object) {
 	spec := a.object.Spec()
 	a.placement(cluster, spec.Get("placement"), "$.spec.placement", "", true)

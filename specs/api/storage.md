@@ -13,7 +13,10 @@ of the same cluster binds by name. StorageFilesystem is admitted under
 [CephFS filesystems](#cephfs-filesystems). RGW, ingress and NFS documents are admitted under their
 [native records](../storage-native-api.md#rgw-ingress-and-nfs-records), and
 planning refuses them `lifecycle.unsupported` until B477 and B478's execution
-lanes. `spec.ceph.mgrModules` admits `cephadm` and `rbd_support`; `nfs`
+lanes. An RGW document must be bound by a StorageObjectGateway of the same
+cluster whose `spec.serviceRef` names it; an unbound one refuses at its
+`service_id`, because cephadm would deploy it before its realm, zone group and
+zone exist. `spec.ceph.mgrModules` admits `cephadm` and `rbd_support`; `nfs`
 refuses as derived from a declared NFS service (D159 clause 9); every other
 module refuses until its service owner. Retired daemon helpers, topology roles/devices and
 drivegroup wrappers refuse with their replacement path. Machine bindings,
@@ -30,9 +33,12 @@ implicit administrator capability is granted. `StoragePlacementPolicy` and
 `StorageRBDImage` under [RBD images](#rbd-images), `StorageFilesystem` under
 [CephFS filesystems](#cephfs-filesystems) and `StorageSubvolume` under
 [CephFS subvolumes](#cephfs-subvolumes).
+`StorageObjectGateway` is admitted under its
+[field record](../storage-resources.md#storageobjectgateway-field-record);
+execution still refuses every selected gateway until the gateway block lands.
 Other P2 resource additions remain target contracts, not admitted kinds.
-Future object, NFS and export feature families are refused by current pure
-admission.
+Future NFS export and storage export feature families are refused by current
+pure admission.
 Their historical field tables in [field detail](../deferred/storage-api.md)
 are retained only for the later owning slices.
 
@@ -145,7 +151,7 @@ provider sizing and measured resource acceptance remain separate.
 | `StorageRBDImage` | One RBD image: same-cluster replicated rbd `poolRef`, exact `sizeBytes`, optional rbd `dataPoolRef` and a closed feature set; image format 2. |
 | `StorageFilesystem` | One CephFS filesystem: a same-cluster `cephfs-metadata` pool, one or more ordered `cephfs-data` pools (the default replicated), its rank and standby policy, subvolume groups, and the native MDS service it binds through `mdsServiceRef`. |
 | `StorageSubvolume` | One CephFS subvolume in a same-cluster `filesystemRef`, optionally in one of its declared groups, with an optional quota, layout pool, owner and mode. |
-| `StorageObjectGateway` | One RGW service and its optional public endpoint; ingresses belong to that endpoint and select no other backend. |
+| `StorageObjectGateway` | One logical object gateway bound to one declared rgw service through `serviceRef`: its realm, zone group and zone, its zone placement pools and its optional endpoint FQDN. Placement, frontend and ingress belong to the native services. |
 | `StorageNFSExport` | One NFS-Ganesha service and zero or more exports; there is no separate `StorageNFSService` kind. |
 | `StorageExport` | One downstream storage surface: the `dataFoundation` arm for a managed cluster, `externalDetails` for an external one. |
 
@@ -162,6 +168,7 @@ on the already selected Machine.
 | pool refs | `StoragePool` |
 | `filesystemRef` | `StorageFilesystem` |
 | `mdsServiceRef` | native service registry, exactly `mds.<filesystem>` |
+| `serviceRef` | native service registry, exactly one rgw service |
 | `objectGatewayRef` | `StorageObjectGateway` |
 | `machineRef` | `Machine` |
 | `tls.secretRef` | `Secret` |
@@ -407,7 +414,12 @@ checks:
 - two ingress services of any StorageCluster whose networks (the virtual
   IP's network and `virtual_interface_networks`) overlap use different
   keepalived virtual router IDs; an omitted `first_virtual_router_id` is 50,
-  and each ingress takes one ID because `virtual_ips_list` is refused; and
+  and each ingress takes one ID because `virtual_ips_list` is refused;
+- each declared rgw service is bound by exactly one StorageObjectGateway of
+  its cluster; realm, zone group and zone are unique per cluster across
+  gateways; zone pool roles and the derived-pool host rule hold; and endpoint
+  FQDNs are unique across storage node hostnames and gateways
+  ([field record](../storage-resources.md#storageobjectgateway-field-record)); and
 - an NFS service's mode follows its ingress, and the HAProxy mode that hides
   client addresses refuses
   ([NFS modes](../storage-native-api.md#rgw-ingress-and-nfs-records)).

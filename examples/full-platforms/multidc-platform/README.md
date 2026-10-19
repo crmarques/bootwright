@@ -68,7 +68,11 @@ hostnames; the witness belongs to MON placement without OSD devices. The stretch
 policy expresses four replicas with a minimum of two. The
 [filesystem](clusters/ceph/filesystems/odf-cephfs.yaml) declares its rank and
 standby policy and pools, bound by `mdsServiceRef` to its native MDS service.
-Native observability, Grafana Secret binding, RGW and consumer exports remain
+The [object gateway](clusters/ceph/object-gateways/odf-rgw-all.yaml) binds the
+cluster's native RGW service through `serviceRef`; its endpoint is the HTTPS
+ingress whose backend is that service. Admission accepts the gateway, its RGW
+and ingress services and their TLS binding; executing them is still
+unsupported. Native observability, Grafana Secret binding and consumer exports remain
 future intent; see [storage API](../../../specs/api/storage.md) and
 [native service qualification](../../../specs/storage-native-api.md).
 
@@ -103,7 +107,7 @@ The expected result is failure with explicit diagnostics for:
   qualified pool-default pair.
 - Prometheus, Grafana and Alertmanager native services and the Grafana Secret
   binding path.
-- Four `StorageExport` objects and `StorageObjectGateway`.
+- Four `StorageExport` objects.
 
 The exact diagnostic set is pinned by `TestActualCLIRefusesFutureReferenceFeatures`
 in [admission acceptance tests](../../../cmd/bootwright/admission_acceptance_test.go).

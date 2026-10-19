@@ -300,9 +300,44 @@ spec:
             - node-05.ceph-multidc-01.clusters.example.com
             - node-06.ceph-multidc-01.clusters.example.com
 
+      - service_type: rgw
+        service_id: odf-all
+
+        placement:
+          label: rgw
+
+        spec:
+          rgw_frontend_port: 8080
+
+      - service_type: ingress
+        service_id: rgw.odf-all
+
+        placement:
+          label: ingress
+
+        spec:
+          backend_service: rgw.odf-all
+          virtual_ip: 198.51.100.59/25
+          frontend_port: 443
+          monitor_port: 1967
+          first_virtual_router_id: 43
+          ssl: true
+
+          virtual_interface_networks:
+            - 198.51.100.0/25
+
     serviceBindings:
       - serviceRef: grafana
 
         secrets:
           - path: /spec/initial_admin_password
             secretRef: ceph-multidc-01-grafana-admin
+
+      - serviceRef: ingress.rgw.odf-all
+
+        secrets:
+          - path: /spec/ssl_cert
+            secretRef: ceph-multidc-01-rgw-all-tls
+
+          - path: /spec/ssl_key
+            secretRef: ceph-multidc-01-rgw-all-tls
