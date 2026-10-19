@@ -128,3 +128,23 @@ def test_the_fips_read_only_reads():
     assert READ.replace("2>/dev/null", "").count(">") == 0
     assert not any(word in READ for word in ("sudo", "fips-mode-setup", "update-crypto-policies", "tee", "rm ", "mv ", "cp "))
     assert READ.count("/proc/sys/crypto/fips_enabled") == 1 and READ.count("/etc/crypto-policies/state/current") == 1
+
+
+# The completion and observation evidence carry the proved fact, never a
+# constant, and the requirement comes from the frozen installer arguments, so a
+# guest that did not prove FIPS mode never publishes fips true.
+@pytest.mark.parametrize("name", ["apply.yml", "observe.yml"])
+def test_completion_evidence_carries_the_proved_fips_state(name):
+    tasks = flattened(name)
+    completed = only(tasks, lambda task: (task.get(PROTOCOL) or {}).get("phase") == "completed", "publish completion")
+    arguments = tasks[completed][PROTOCOL]
+    assert arguments["fips"] == "{{ managedos_install_anaconda_fips | default(false) }}"
+    request = {"installerArguments": ["inst.ks=hd:LABEL=x", "fips=1"]}
+    templar = Templar(loader=LOADER, variables={"bootwright_os_install_request": request})
+    assert templar.template(arguments["fipsRequired"]) is True
+    assert templar.template(arguments["fips"]) is False
+    templar = Templar(loader=LOADER, variables={"bootwright_os_install_request": {"installerArguments": ["inst.ks=hd:LABEL=x"]}})
+    assert templar.template(arguments["fipsRequired"]) is False
+    for proved in (True, False):
+        templar = Templar(loader=LOADER, variables={"bootwright_os_install_request": request, "managedos_install_anaconda_fips": proved})
+        assert templar.template(arguments["fips"]) is proved
