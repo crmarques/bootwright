@@ -88,19 +88,12 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 			text("baseURL", "https://example.test/os")))))), "Machine/rhel-01", onProfile},
 		"Packages from a subscription": {labCatalog(anaconda(api.MapValue(field("fromSubscription", api.MapValue(
 			text("entitlementRef", "rhel")))))), "Machine/rhel-01", onProfile},
+		"A subscription": {labCatalog(installProfile(field("subscription", api.MapValue(text("entitlementRef", "rhel"))))),
+			"Machine/rhel-01", onProfile},
 		"An initial password": {labCatalog(installProfile(field("customizations", customizations.With("ssh", api.MapValue(
 			field("initialPassword", api.MapValue(text("secretRef", "root-password")))))))), "Machine/rhel-01", onProfile},
 		"Password authentication": {labCatalog(installProfile(field("customizations", customizations.With("ssh", api.MapValue(
 			field("passwordAuthentication", api.BoolValue(true))))))), "Machine/rhel-01", onProfile},
-		"A subscription on a physical Machine": {labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))),
-			sshKeySecret(api.MapValue(field("generated", api.MapValue()))), registeringProfile(), rhelEntitlement()), "Machine/metal-01",
-			map[string]string{"<machine>": "Machine/metal-01", "<profile>": "MachineInstallProfile/rhel-9-8"}},
-		"Subscription repositories with external registration": {labCatalog(registeringProfile(), externalEntitlement()), "Machine/rhel-01", map[string]string{"<entitlement>": "Entitlement/rhel", "<profile>": "MachineInstallProfile/rhel-9-8"}},
-		"A Satellite registration": {labCatalog(registeringProfile(), rhelEntitlement(field("satellite", api.MapValue(text("hostname", "satellite.example.test"))))),
-			"Machine/rhel-01", map[string]string{"<entitlement>": "Entitlement/rhel", "<profile>": "MachineInstallProfile/rhel-9-8"}},
-		"Insights enrollment": {labCatalog(registeringProfile(), rhelEntitlement(field("connectToInsights", api.BoolValue(true)))), "Machine/rhel-01", map[string]string{"<entitlement>": "Entitlement/rhel", "<profile>": "MachineInstallProfile/rhel-9-8"}},
-		"Registration through a proxy": {labCatalog(registeringProfile(), rhelEntitlement(), externalProxy("corporate", text("httpsProxy", "http://192.0.2.80:3128")), proxiedGuest()),
-			"Machine/rhel-01", map[string]string{"<machine>": "Machine/rhel-01", "<profile>": "MachineInstallProfile/rhel-9-8", "<proxy>": "Proxy/corporate"}},
 		"A credentialed proxy": {labCatalog(externalProxy("corporate", text("httpsProxy", "http://proxy.example.test:3128"),
 			text("trustBundleRef", "corporate-ca")), proxiedGuest(), repositoryProfile("https://mirror.example.test/a")), "Machine/rhel-01",
 			map[string]string{"<machine>": "Machine/rhel-01", "<profile>": "MachineInstallProfile/rhel-9-8", "<proxy>": "Proxy/corporate"}},

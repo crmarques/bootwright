@@ -198,3 +198,32 @@ def test_the_observation_reports_what_a_killed_apply_left(tmp_path, monkeypatch,
     evidence = published(variables, monkeypatch)
     assert (evidence["treeStaging"], evidence["work"]) == (True, True)
     assert not any(evidence[name] for name in ("image", "private", "tree", "treeContent"))
+
+
+# A removal reads a registering Machine that answers with another marker or none
+# as holding nothing of this installation, and leaves the registration of one
+# that does not answer unread, which Go never reads as released.
+@pytest.mark.parametrize("answered, marker, state", [
+    (True, '{"request":"another"}', "absent"),
+    (True, "", "absent"),
+    (False, "", ""),
+    (False, '{"request":"another"}', ""),
+    (False, '{"request":"%s"}' % DIGEST, ""),
+], ids=["answered-another", "answered-none", "unanswered", "unanswered-another", "unanswered-ours"])
+def test_a_removal_observation_never_reads_an_unanswered_machine_as_released(answered, marker, state, monkeypatch):
+    variables = scope("removal", managedos_install_anaconda_host_key="", managedos_install_anaconda_answered=answered,
+                      managedos_install_anaconda_marker=marker,
+                      managedos_install_anaconda_observed={"observation": NOTHING},
+                      managedos_install_anaconda_controller={"changed": False, "skipped": True},
+                      bootwright_os_install_request={"address": "198.51.100.11", "registration": {}})
+    variables["bootwright_os_install_material"]["marker"] = '{"request":"%s"}' % DIGEST
+    variables.update(next(task for task in LOADER.load_from_file(str(ROLE / "tasks" / "observe.yml"), trusted_as_template=True)
+                          if task.get("name") == "Read the registration a removal takes back")["vars"])
+    named = [task for task in tasks() if task.get("name") == "Name a machine holding nothing of this installation"]
+    assert len(named) == 1 and REMOVAL in named[0]["when"]
+    if runs(named[0], variables):
+        fact = named[0]["ansible.builtin.set_fact"]["managedos_install_anaconda_registration"]
+        variables["managedos_install_anaconda_registration"] = Templar(loader=LOADER, variables=variables).template(fact)
+    assert runs(named[0], variables) is (state == "absent")
+    assert not any(runs(task, variables) for task in tasks() if task.get("ansible.builtin.include_tasks") == "registration_observe.yml")
+    assert published(variables, monkeypatch)["registration"] == {"consumer": "", "state": state}

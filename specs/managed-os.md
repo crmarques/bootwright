@@ -137,11 +137,13 @@ validate refuses any other source, naming the import that fixes it. The
 profile an installed Machine selects names its `redfishVirtualMedia`
 endpoint, on every substrate, because the installer image is always booted
 through it. A profile selecting
-`initialPassword`, `mirror` or `templateClone` refuses before
+`initialPassword`, a top-level
+`subscription`, `mirror` or `templateClone` refuses before
 registration. These shapes carry secret bytes or effects this contract does not
-prove. A profile selecting `subscription` with a `managed` `redhat-rhel`
-Entitlement is admitted on a virtual Machine, as
-[Registration](#registration) states. A profile selecting `fromSubscription` refuses too, because it
+prove; `subscription` stays refused until a destroy can tell a Machine that
+never answered with its installation's marker, and so never registered, from
+one whose registration it cannot read, and [Registration](#registration)
+states what it does once admitted. A profile selecting `fromSubscription` refuses too, because it
 registers inside the installer, where a failed registration cannot be retried
 without installing again. A profile enabling `fips` is admitted on a virtual Machine and refused
 on a physical one, as [FIPS mode](#fips-mode) states. A profile selecting
@@ -984,9 +986,15 @@ A profile selecting `spec.subscription` with a `managed` `redhat-rhel`
 Entitlement registers the installed system with the hosted subscription
 service inside its `os-install-<machine>` block.
 
-**Admission.** A profile selecting `spec.subscription` is admitted on a
-virtual Machine, and the contract below is what its installation performs. An
-Entitlement whose `spec.rhsm.management` is `external`
+**Admission.** A profile selecting `spec.subscription` still refuses before
+plan registration, as the "A subscription" row of the
+[refusal table](#refusal-table) states. A destroy reads a Machine that does not
+answer through its identity channel as unread and refuses
+`registration-unreachable`, which an installation whose installer never
+finished, or whose Machine is lost, can never satisfy; admission waits for a
+rule that tells such an installation, which never registered, from an unread
+one. The contract below is what an installation performs once it is admitted.
+An Entitlement whose `spec.rhsm.management` is `external`
 registers nothing and freezes nothing. Only the hosted subscription service is
 registered with: an Entitlement selecting `spec.rhsm.satellite` or setting
 `spec.rhsm.connectToInsights` refuses, and so does a Machine whose effective
@@ -995,8 +1003,8 @@ physical Machine refuses, its qualification being
 [B78](milestones/m1.md#b78); and subscription repositories on an `external`
 Entitlement refuse, because this executable applies them only to a
 registration it performs. Each of these refusals names the field that selects
-it and the change that admits the profile, as the subscription rows of the
-[refusal table](#refusal-table) state.
+it and the change that admits the profile; their table rows arrive with the
+admission.
 
 **Frozen request.** The installation request freezes `registration`: the
 `entitlementRef`, the `organizationRef` and `activationKeyRef` Secret
@@ -1262,8 +1270,6 @@ composed `type`; `<bridge>` is the
 `libvirt.bridge` of the Machine's managed attachment and `<id>` its install
 VLAN's `vlan.id`.
 `<proxy>` is the `Proxy` the Machine's effective `spec.proxy` selects.
-`<entitlement>` is the `Entitlement` the profile's
-`spec.subscription.entitlementRef` names.
 `<server>` is the selected `ArtifactServer` and `<server host>` the Machine its
 `spec.machineRef` names; `<provider>` is the Machine's `InfraProvider` and
 `<provider host>` the Machine its `spec.libvirt.machineRef` names.
@@ -1293,6 +1299,7 @@ the length of that many bytes in base64url without padding.
 | Another installer | a profile's `spec.installer` without `anaconda`, such as `templateClone` | `this executable installs an operating system only through the anaconda installer, which the install profile does not select` | `select spec.installer.anaconda on <profile>` |
 | A package mirror | a profile's `spec.installer.anaconda.packageSource.mirror` | `the install profile selects spec.installer.anaconda.packageSource.mirror, which carries secret bytes or effects this executable does not prove` | `remove spec.installer.anaconda.packageSource.mirror from <profile>` |
 | Packages from a subscription | a profile's `spec.installer.anaconda.packageSource.fromSubscription` | `the install profile selects spec.installer.anaconda.packageSource.fromSubscription, which registers inside the installer, where a failed registration cannot be retried without installing again` | `remove spec.installer.anaconda.packageSource.fromSubscription from <profile>, to install from its boot media or from spec.installer.anaconda.packageSource.hostedTree` |
+| A subscription | a profile's `spec.subscription` | `the install profile selects spec.subscription, which carries secret bytes or effects this executable does not prove` | `remove spec.subscription from <profile>` |
 | An initial password | a profile's `spec.customizations.ssh.initialPassword` | `the install profile selects spec.customizations.ssh.initialPassword, which carries secret bytes or effects this executable does not prove` | `remove spec.customizations.ssh.initialPassword from <profile>` |
 | Password authentication | a profile's `spec.customizations.ssh.passwordAuthentication: true` | `the install profile enables spec.customizations.ssh.passwordAuthentication, but no password can be set while spec.customizations.ssh.initialPassword is refused` | `set spec.customizations.ssh.passwordAuthentication to false on <profile>` |
 | FIPS on a physical Machine | a profile's `spec.customizations.security.fips.enabled: true` selected by a Machine on a `baremetal` provider, whose installation is proved by a delivered key | `the FIPS profile arm is qualified only on virtual Machines, and <machine> is physical; physical qualification is B78` | `install <machine> with a profile that does not enable spec.customizations.security.fips, or disable spec.customizations.security.fips on <profile>` |
@@ -1300,11 +1307,6 @@ the length of that many bytes in base64url without padding.
 | Disk encryption on a physical Machine | a profile's `spec.customizations.security.diskEncryption` selected by a Machine on a `baremetal` provider, whose installation is proved by a delivered key | `the disk-encryption profile arm is qualified only on virtual Machines, and <machine> is physical; physical qualification is B78` | `install <machine> with a profile that does not select spec.customizations.security.diskEncryption, or remove spec.customizations.security.diskEncryption from <profile>` |
 | A hostname artifact endpoint under disk encryption | a profile selecting `spec.customizations.security.diskEncryption` whose `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` resolves to a URL whose host is not an IP literal | `the installer fetches the recovery passphrase before it configures name resolution, so the artifact server endpoint of <profile> must be addressed by IP` | `select an artifact server endpoint whose address is an IP literal in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
 | A generated recovery passphrase too long | a profile selecting `spec.customizations.security.diskEncryption` whose `recoveryPassphraseRef` names a `token` Secret generating more than 192 bytes | `the recovery passphrase is limited to 256 characters, and <recovery secret> generates <bytes> bytes, which encode to <length> characters` | `set spec.source.generated.bytes to at most 192 on <recovery secret>` |
-| A subscription on a physical Machine | a profile's `spec.subscription` selected by a Machine on a `baremetal` provider, whose installation is proved by a delivered key | `the registration profile arm is qualified only on virtual Machines, and <machine> is physical; physical qualification is B78` | `install <machine> with a profile that does not select spec.subscription, or remove spec.subscription from <profile>` |
-| Subscription repositories with external registration | a profile's `spec.customizations.repositories.subscription` with a `spec.subscription` Entitlement whose `spec.rhsm.management` is `external` | `subscription repositories are enabled on a registration this executable performs, and <entitlement> sets spec.rhsm.management to external` | `remove spec.customizations.repositories.subscription from <profile>, or set spec.rhsm.management to managed on <entitlement>` |
-| A Satellite registration | a `spec.subscription` Entitlement with `spec.rhsm.satellite` | `this executable registers only with the hosted subscription service, and <entitlement> selects a Satellite in spec.rhsm.satellite` | `remove spec.rhsm.satellite from <entitlement>, or remove spec.subscription from <profile>` |
-| Insights enrollment | a `spec.subscription` Entitlement with `spec.rhsm.connectToInsights: true` | `this executable does not enroll a Machine in Insights, a second remote identity it neither proves nor removes, and <entitlement> sets spec.rhsm.connectToInsights to true` | `set spec.rhsm.connectToInsights to false on <entitlement>, or remove spec.subscription from <profile>` |
-| Registration through a proxy | a registering profile on a Machine whose effective `spec.proxy` names a Proxy | `this executable registers only over a direct route, and <machine> reaches the network through <proxy>` | `select direct: {} in spec.proxy of <machine> or of <profile>, or remove spec.subscription from <profile>` |
 | A credentialed proxy | a Machine's effective `spec.proxy` naming a Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, while its profile configures a repository | `the installed system's repositories would reach <proxy> through a credential or private trust anchor, which an installation cannot carry` | `select direct: {} or an external Proxy without spec.connection.auth and spec.connection.trustBundleRef in spec.proxy of <machine> or of <profile>` |
 | An installer image server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation builds and publishes its installer image on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
 | A package tree server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation extracts and publishes its package tree on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint on <profile>` |

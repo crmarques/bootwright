@@ -197,6 +197,7 @@ func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 			"this executable installs an operating system only through the anaconda installer, which the install profile does not select",
 			"select spec.installer.anaconda on MachineInstallProfile/rhel-9-8",
 		}},
+		"subscription": {installProfile(field("subscription", api.MapValue(text("entitlementRef", "rhel")))), selected("spec.subscription")},
 		"initial password": {installProfile(field("customizations", customizations.With("ssh", api.MapValue(
 			field("initialPassword", api.MapValue(text("secretRef", "root-password"))),
 		)))), selected("spec.customizations.ssh.initialPassword")},
