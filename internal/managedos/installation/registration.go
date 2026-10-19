@@ -165,12 +165,7 @@ func registrationRefusals(contextName string, request Request) map[string]error 
 	profile := "MachineInstallProfile/" + request.Identity.Profile
 	organization, key := "Secret/"+request.Registration.OrganizationRef, "Secret/"+request.Registration.ActivationKeyRef
 	again := "then run bootwright apply --context " + contextName + " again"
-	refused := func(message, remediation string) error {
-		return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
-			Severity: "error", Code: "lifecycle.state", Message: message, Remediation: remediation,
-			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: request.Identity.Object},
-		}}}
-	}
+	refused := machineRefusal(request)
 	return map[string]error{
 		"registration-input": refused("the registration worker on "+machine+" refused the organization or activation key of "+entitlement+" as not one line of printable ASCII without whitespace",
 			"replace "+organization+" or "+key+" with one line of 1 to 255 printable ASCII characters without whitespace, "+again),
@@ -185,5 +180,29 @@ func registrationRefusals(contextName string, request Request) map[string]error 
 		"registration-repositories": refused("the subscription service did not accept "+subscriptionReposField+" of "+profile+" on "+machine,
 			"correct the repository IDs in "+subscriptionReposField+" of "+profile+", then take this context back with bootwright destroy --context "+contextName+
 				" and run bootwright apply --context "+contextName+"; a repository edit is another installation"),
+	}
+}
+
+func machineRefusal(request Request) func(message, remediation string) error {
+	return func(message, remediation string) error {
+		return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
+			Severity: "error", Code: "lifecycle.state", Message: message, Remediation: remediation,
+			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: request.Identity.Object},
+		}}}
+	}
+}
+
+func unregistrationRefusals(contextName string, request Request) map[string]error {
+	if request.Registration == nil {
+		return nil
+	}
+	machine := "Machine/" + request.Identity.Object
+	again := "then run bootwright destroy --context " + contextName + " again"
+	refused := machineRefusal(request)
+	return map[string]error{
+		"registration-unreachable": refused(machine+" did not answer through its identity channel or its pinned connection, so the subscription registration its installation created was not removed",
+			"start "+machine+" with bootwright machine start --context "+contextName+" --name "+request.Identity.Object+", "+again),
+		"registration-unavailable": refused("the subscription service, or the registration tooling on "+machine+", did not complete the removal of the subscription consumer its installation created",
+			"restore the route from "+machine+" to the subscription service, "+again),
 	}
 }

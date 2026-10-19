@@ -2,9 +2,10 @@
 
 The apply's resolution reads the machine as an apply proves it: its identity
 channel, its fleet account and the power and media its controller reports. A
-removal's resolution reads only the published content the removal takes back,
-so the capability scopes that observation with the material value `observes:
-removal` and none of those machine reads runs for it. Either way the
+removal's resolution reads the published content the removal takes back and,
+for a registering request alone, the guest's registration through its identity
+channel, so the capability scopes that observation with the material value
+`observes: removal` and none of the apply's machine reads runs for it. Either way the
 observation publishes the presence form, which carries the power the
 controller reported: the absence form reports none, and without it an apply
 stopped before it published anything could never prove it had no effect.
@@ -78,15 +79,17 @@ def runs(task, variables):
                for condition in (conditions if isinstance(conditions, list) else [conditions]))
 
 
-def machine_reads():
-    """The tasks that read the machine rather than the published content."""
-    found = [task for task in tasks()
+def machine_reads(scoped="not (managedos_install_anaconda_observes_removal | bool)"):
+    """The tasks of one scope that read the machine rather than the published content."""
+    found = [task for task in tasks() if scoped in task["when"]]
+    found = [task for task in found
              if READ in task
              or task.get("ansible.builtin.include_tasks") in (
                  "identity.yml", "reachable.yml", "network_observe.yml", "host_security.yml", "registration_observe.yml")
              or (task.get("bootwright.core.lifecycle_scratch") or {}).get("state", "present") == "present" and "bootwright.core.lifecycle_scratch" in task]
-    # Private connection files, the identity, fleet, network, FIPS, registration and controller reads.
-    assert len(found) == 7
+    # Private connection files, the identity, fleet, network, FIPS, registration and controller reads,
+    # or a registering removal's private connection files, identity and registration reads.
+    assert len(found) == (7 if scoped.startswith("not") else 3)
     return found
 
 
@@ -101,9 +104,25 @@ def test_an_apply_observation_reads_the_machine(observes):
 def test_a_removal_observation_reads_only_the_published_content():
     variables = scope("removal", managedos_install_anaconda_host_key="ssh-ed25519 AAAAHOST")
     assert not any(runs(task, variables) for task in machine_reads())
+    assert not any(runs(task, variables) for task in machine_reads(REMOVAL))
     kept = [task for task in tasks() if runs(task, variables)]
     assert any(INSPECT in task for task in kept)
     assert (kept[-1].get(PUBLISH) or {}).get("phase") == "completed"
+
+
+REMOVAL = "managedos_install_anaconda_observes_removal | bool"
+
+
+def test_a_registering_removal_observation_reads_the_guest_registration_alone():
+    marker = '{"request":"%s"}' % DIGEST
+    variables = scope("removal", managedos_install_anaconda_host_key="ssh-ed25519 AAAAHOST",
+                      managedos_install_anaconda_answered=True, managedos_install_anaconda_marker=marker,
+                      bootwright_os_install_request={"address": "198.51.100.11", "registration": {}})
+    variables["bootwright_os_install_material"]["marker"] = marker
+    variables.update(next(task for task in LOADER.load_from_file(str(ROLE / "tasks" / "observe.yml"), trusted_as_template=True)
+                          if task.get("name") == "Read the registration a removal takes back")["vars"])
+    assert not any(runs(task, variables) for task in machine_reads())
+    assert all(runs(task, variables) for task in machine_reads(REMOVAL))
 
 
 def published(variables, monkeypatch):

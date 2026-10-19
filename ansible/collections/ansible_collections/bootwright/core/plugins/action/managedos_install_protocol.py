@@ -29,11 +29,14 @@ FIPS_REFUSALS = ("fips-not-enabled",)
 ENCRYPTION_REFUSALS = ("root-encryption-unproved",)
 REGISTRATION_REFUSALS = (
     "registration-input", "registration-foreign", "registration-refused", "registration-identity-collision",
-    "registration-unavailable", "registration-repositories",
+    "registration-unavailable", "registration-repositories", "registration-unreachable",
 )
-# The ownership states the registration worker reads; only an owned or a
-# pending registration names its consumer.
-REGISTRATION_STATES = ("", "owned", "pending", "absent", "foreign")
+# The ownership states the registration worker reads or a removal leaves; only
+# an owned, a pending or an unregistered registration names its consumer.
+REGISTRATION_STATES = ("", "owned", "pending", "absent", "foreign", "unregistered", "retained")
+NAMED_STATES = ("owned", "pending", "unregistered")
+# What a removal proves of the machine: no registration it created is left.
+RELEASED_STATES = ("unregistered", "absent", "retained")
 CONSUMER = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 POWER_STATES = ("", "On", "Off")
 MAX_MARKER = 4096
@@ -86,7 +89,7 @@ def registration(value):
     consumer, state = value["consumer"], value["state"]
     if not isinstance(consumer, str) or state not in REGISTRATION_STATES:
         raise ValueError("registration")
-    named = CONSUMER.fullmatch(consumer) is not None if state in ("owned", "pending") else consumer == ""
+    named = CONSUMER.fullmatch(consumer) is not None if state in NAMED_STATES else consumer == ""
     if not named:
         raise ValueError("registration")
     return {"consumer": consumer, "state": state}
@@ -152,6 +155,11 @@ def remaining(arguments):
     return [name for name in CONTENT if observation.get(name)]
 
 
+def released(evidence, arguments):
+    """Whether a removal proved its machine holds no registration it created."""
+    return evidence["registration"]["state"] in RELEASED_STATES or not flag(arguments.get("registrationRequired"))
+
+
 def unproved(evidence, private_delivery=False, fips_required=False, encryption_required=False, registration_required=False):
     """What a completion proof still lacks, named for the same reason."""
     names = [name for name in ("marker", "hostKey", "address") if not evidence[name]]
@@ -180,7 +188,7 @@ def unproved(evidence, private_delivery=False, fips_required=False, encryption_r
 def absence(arguments, request_digest):
     observation = arguments.get("observation") or {}
     gone = not any(observation.get(name) for name in CONTENT)
-    return {
+    evidence = {
         "absent": True,
         "address": "",
         "fips": False,
@@ -191,11 +199,11 @@ def absence(arguments, request_digest):
         "network": False,
         "networkDifferences": [],
         "networkReboot": False,
-        "postcondition": bool(gone),
+        "postcondition": False,
         "power": "",
         "private": False,
         "reachable": False,
-        "registration": {"consumer": "", "state": ""},
+        "registration": registration(arguments.get("registration")),
         "request": adapter_protocol.request_digest(request_digest),
         "rootEncryption": False,
         "tree": False,
@@ -204,6 +212,8 @@ def absence(arguments, request_digest):
         "treeStaging": False,
         "work": False,
     }
+    evidence["postcondition"] = bool(gone and released(evidence, arguments))
+    return evidence
 
 
 def completion(arguments):
@@ -212,6 +222,8 @@ def completion(arguments):
     if arguments.get("removed"):
         evidence = absence(arguments, request_digest)
         unmet, verb = remaining(arguments), "still present"
+        if not released(evidence, arguments):
+            unmet.append("registration")
     else:
         evidence = presence(arguments, request_digest)
         unmet = unproved(

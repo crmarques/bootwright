@@ -49,9 +49,13 @@ options:
       - C(registration-identity-collision) names another registered host the
         subscription service reports with the same hardware identity.
       - C(registration-unavailable) names a subscription service or
-        registration tooling that did not answer.
+        registration tooling that did not answer, or did not complete the
+        removal of the consumer this installation created.
       - C(registration-repositories) names subscription repository IDs the
         subscription service did not accept.
+      - C(registration-unreachable) names an installed system a removal could
+        not read through its identity channel or its pinned connection, so
+        the registration its installation created was not removed.
     type: str
     required: false
   outcome:
@@ -124,14 +128,16 @@ options:
   registration:
     description:
       - The consumer UUID and the ownership state the registration worker
-        read, C(owned), C(pending), C(absent) or C(foreign); a consumer is
-        named only for an owned or a pending registration.
+        read or a removal left, C(owned), C(pending), C(absent), C(foreign),
+        C(unregistered) or C(retained); a consumer is named only for an owned,
+        a pending or an unregistered registration.
     type: dict
     required: false
   registrationRequired:
     description:
       - Whether the frozen request registers the installed system, so a
-        completion proves an owned registration.
+        completion proves an owned registration and a removal proves one
+        C(unregistered), C(absent) or C(retained).
     type: bool
     required: false
   privateDelivery:

@@ -1,0 +1,62 @@
+---
+# A removal unregisters only the consumer this installation created, over the
+# same pinned fleet connection guest.yml makes, option for option. No material
+# is lent to it: the worker removes the consumer its own record names and
+# keeps any other registration.
+- name: Read the effective crypto policy on this connection's placement host
+  bootwright.core.ssh_key_policy:
+  register: managedos_install_anaconda_unregistration_ssh_policy
+
+- name: Publish the guest's own host key for this one connection
+  ansible.builtin.copy:
+    content: '{{ bootwright_os_install_request.address }} {{ managedos_install_anaconda_host_key | trim }}'
+    dest: '{{ managedos_install_anaconda_scratch }}/known_hosts'
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
+- name: Write the one-connection client configuration
+  ansible.builtin.copy:
+    content: '{{ managedos_install_anaconda_unregistration_ssh_policy.configuration }}'
+    dest: '{{ managedos_install_anaconda_scratch }}/ssh_config'
+    owner: root
+    group: root
+    mode: '0600'
+  changed_when: false
+
+- name: Name the algorithms the guest's key is accepted under
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_unregistration_host_key_algorithms: >-
+      {{ managedos_install_anaconda_host_key
+         | bootwright.core.host_key_algorithms(managedos_install_anaconda_unregistration_ssh_policy.hostKeyAlgorithms) }}
+  changed_when: false
+
+- name: Unregister the consumer this installation created through the fixed worker on that exact key
+  bootwright.core.managedos_registration:
+    operation: unregister
+    address: '{{ bootwright_os_install_request.address }}'
+    user: '{{ bootwright_os_install_request.user }}'
+    identity: '{{ bootwright_os_install_material.fleetIdentity }}'
+    ssh_config: '{{ managedos_install_anaconda_scratch }}/ssh_config'
+    known_hosts: '{{ managedos_install_anaconda_scratch }}/known_hosts'
+    host_key_algorithms: '{{ managedos_install_anaconda_unregistration_host_key_algorithms }}'
+    policy_host_key_algorithms: '{{ managedos_install_anaconda_unregistration_ssh_policy.hostKeyAlgorithms }}'
+    request: '{{ bootwright_os_install_digest }}'
+    timeout: 330
+  register: managedos_install_anaconda_unregistration_result
+  failed_when: false
+  changed_when: false
+  no_log: true
+
+- name: Remove the one-connection known-hosts file
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_scratch }}/known_hosts'
+    state: absent
+  changed_when: false
+
+- name: Remove the one-connection client configuration
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_scratch }}/ssh_config'
+    state: absent
+  changed_when: false

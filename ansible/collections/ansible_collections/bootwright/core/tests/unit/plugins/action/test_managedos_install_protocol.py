@@ -54,7 +54,8 @@ def test_a_changed_boot_image_is_named_to_the_runner(monkeypatch):
 @pytest.mark.parametrize("reason", ["ssh-policy-unavailable", "ssh-policy-host-excluded", "ssh-policy-fleet-excluded",
                                     "ssh-policy-generated-excluded", "fips-not-enabled", "root-encryption-unproved",
                                     "registration-input", "registration-foreign", "registration-refused",
-                                    "registration-identity-collision", "registration-unavailable", "registration-repositories"])
+                                    "registration-identity-collision", "registration-unavailable", "registration-repositories",
+                                    "registration-unreachable"])
 def test_early_key_policy_refusals_use_the_go_owned_public_diagnostic(reason, monkeypatch):
     result, published = run({"phase": "refused", "reason": reason}, monkeypatch)
     assert result == {"changed": False}
@@ -158,3 +159,30 @@ def test_a_malformed_registration_is_never_published(read, monkeypatch):
         protocol.presence(proved(registration=read), DIGEST)
     result, published = run(dict(proved(registration=read), phase="completed", outcome="changed"), monkeypatch)
     assert result.get("failed") is True and not published
+
+
+# A registering removal publishes its absence only when the machine holds no
+# registration its installation created; any other removal is unaffected.
+def test_a_registering_removal_publishes_only_a_released_registration(monkeypatch):
+    for read in ({"consumer": CONSUMER, "state": "unregistered"}, {"consumer": "", "state": "absent"},
+                 {"consumer": "", "state": "retained"}):
+        evidence, refused = protocol.completion({"digest": DIGEST, "removed": True, "observation": {},
+                                                 "registrationRequired": "True", "registration": read})
+        assert evidence["registration"] == read and evidence["postcondition"] is True and refused is None
+        result, published = run({"phase": "completed", "outcome": "changed", "digest": DIGEST, "removed": True,
+                                 "observation": {}, "registrationRequired": True, "registration": read}, monkeypatch)
+        assert result == {"changed": False} and published[0]["evidence"]["registration"] == read
+    for read in ({"consumer": CONSUMER, "state": "owned"}, {"consumer": CONSUMER, "state": "pending"}, {}, None):
+        evidence, refused = protocol.completion({"digest": DIGEST, "removed": True, "observation": {},
+                                                 "registrationRequired": True, "registration": read})
+        assert evidence["postcondition"] is False
+        assert refused is not None and refused.endswith("still present: registration")
+    evidence, refused = protocol.completion({"digest": DIGEST, "removed": True, "observation": {"image": True},
+                                             "registrationRequired": True, "registration": {}})
+    assert refused is not None and refused.endswith("still present: image, registration")
+    for arguments in ({}, {"registrationRequired": False, "registration": {"consumer": CONSUMER, "state": "owned"}}):
+        evidence, refused = protocol.completion(dict(arguments, digest=DIGEST, removed=True, observation={}))
+        assert evidence["postcondition"] is True and refused is None
+    for read in ({"consumer": "", "state": "unregistered"}, {"consumer": CONSUMER, "state": "retained"}):
+        with pytest.raises(ValueError, match="registration"):
+            protocol.registration(read)

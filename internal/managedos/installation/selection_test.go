@@ -197,7 +197,6 @@ func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 			"this executable installs an operating system only through the anaconda installer, which the install profile does not select",
 			"select spec.installer.anaconda on MachineInstallProfile/rhel-9-8",
 		}},
-		"subscription": {installProfile(field("subscription", api.MapValue(text("entitlementRef", "rhel")))), selected("spec.subscription")},
 		"initial password": {installProfile(field("customizations", customizations.With("ssh", api.MapValue(
 			field("initialPassword", api.MapValue(text("secretRef", "root-password"))),
 		)))), selected("spec.customizations.ssh.initialPassword")},
@@ -599,7 +598,7 @@ func TestTheMarkerNamesTheRequestItProves(t *testing.T) {
 // Every version but the one this build writes refuses, and the refusal names
 // it so the remedy is the executable that registered the operation.
 func TestAFrozenRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"os-install-anaconda-v1", "os-install-anaconda-v2", "os-install-anaconda-v3", "os-install-anaconda-v4", "os-install-anaconda-v5", "os-install-anaconda-v6", "os-install-anaconda-v7", "os-install-anaconda-v8", "os-install-anaconda-v9", "os-install-anaconda-v10", "os-install-anaconda-v11", "os-install-anaconda-v12", "os-install-anaconda-v14"} {
+	for _, version := range []string{"os-install-anaconda-v1", "os-install-anaconda-v2", "os-install-anaconda-v3", "os-install-anaconda-v4", "os-install-anaconda-v5", "os-install-anaconda-v6", "os-install-anaconda-v7", "os-install-anaconda-v8", "os-install-anaconda-v9", "os-install-anaconda-v10", "os-install-anaconda-v11", "os-install-anaconda-v12", "os-install-anaconda-v13"} {
 		_, err := DecodeRequest([]byte(`{"version":"` + version + `"}`))
 		if err == nil {
 			t.Fatalf("version %q was accepted", version)

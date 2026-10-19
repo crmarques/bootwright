@@ -23,6 +23,8 @@ import pytest
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
+from ansible_collections.bootwright.core.plugins.action import managedos_install_protocol as protocol
+
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
 LOADER = DataLoader()
@@ -52,6 +54,8 @@ SESSIONS = {
                      "managedos_install_anaconda_registration_host_key_algorithms"),
     "registration_observe.yml": ("managedos_install_anaconda_registration_observe_ssh_policy",
                                  "managedos_install_anaconda_registration_observe_host_key_algorithms"),
+    "unregister.yml": ("managedos_install_anaconda_unregistration_ssh_policy",
+                       "managedos_install_anaconda_unregistration_host_key_algorithms"),
 }
 GUEST = ("managedos_install_anaconda_guest_ssh_policy", "managedos_install_anaconda_guest_host_key_algorithms")
 
@@ -146,12 +150,14 @@ def test_register_runs_after_network_and_before_the_completion_inspection():
 
     observed = flattened("observe.yml")
     encryption = only(observed, included("root_encryption.yml"), "read the root-disk encryption")
-    read = only(observed, included("registration_observe.yml"), "read the registration")
+    read = only(observed, lambda task: included("registration_observe.yml")(task) and NOT_REMOVAL in task["when"],
+                "read the registration")
     assert read == encryption + 1
     assert observed[read]["when"] == [NOT_REMOVAL, REACHABLE, REGISTERING]
     assert [name for name in task_files() for task in flattened(name) if task.get(INCLUDE) == "register.yml"] == ["apply.yml"]
     assert [name for name in task_files() for task in flattened(name)
-            if task.get(INCLUDE) == "registration_observe.yml"] == ["observe.yml"]
+            if task.get(INCLUDE) == "registration_observe.yml"] == ["observe.yml", "observe.yml"]
+    assert [name for name in task_files() for task in flattened(name) if task.get(INCLUDE) == "unregister.yml"] == ["destroy.yml"]
 
 
 def test_register_material_never_enters_a_task_variable():
@@ -262,7 +268,7 @@ def completion(name):
     return tasks[only(tasks, lambda task: (task.get(PROTOCOL) or {}).get("phase") == "completed", "publish completion")][PROTOCOL]
 
 
-@pytest.mark.parametrize("name", ["apply.yml", "observe.yml"])
+@pytest.mark.parametrize("name", ["apply.yml", "observe.yml", "destroy.yml"])
 def test_completion_evidence_carries_the_registration(name):
     arguments = completion(name)
     assert render(arguments["registrationRequired"]) is True
@@ -292,3 +298,113 @@ def test_registration_observe_only_inspects():
     assert module("register.yml")[REGISTRATION]["operation"] == "register"
     applied = module("register.yml")[REGISTRATION]
     assert render(applied["enable"]) == ["rhel-9-for-x86_64-baseos-rpms"] and render(applied["disable"]) == ["*"]
+
+
+UNREGISTRATION = "managedos_install_anaconda_unregistration_result"
+REMOVAL = "managedos_install_anaconda_observes_removal | bool"
+MARKER = '{"request":"%s"}' % DIGEST
+
+
+def block(name, title):
+    """One block of a task file as the file declares it, its own vars and conditions."""
+    for task in LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True):
+        if task.get("name") == title:
+            return task
+    raise AssertionError("no block %r in %s" % (title, name))
+
+
+def guest(answered=True, marker=MARKER, host_key="ssh-ed25519 AAAAGUEST", **extra):
+    """The variables a destroy's tasks see once the identity channel answered."""
+    values = dict(block("destroy.yml", "Unregister the machine this installation registered")["vars"])
+    values.update({
+        "managedos_install_anaconda_answered": answered,
+        "managedos_install_anaconda_marker": marker,
+        "managedos_install_anaconda_host_key": host_key,
+        "bootwright_os_install_material": {"fleetIdentity": "/run/material/fleet-id", "marker": MARKER},
+    })
+    values.update(extra)
+    return values
+
+
+def destroy_tasks(predicate, description):
+    tasks = flattened("destroy.yml")
+    return tasks[only(tasks, predicate, description)]
+
+
+def test_destroy_unregisters_before_withdrawing_content():
+    tasks = flattened("destroy.yml")
+    identity = only(tasks, included("identity.yml"), "read the machine's identity")
+    unregistered = only(tasks, included("unregister.yml"), "unregister the machine")
+    reported = only(tasks, lambda task: task.get("name") == "Report published content removal", "report the content removal")
+    removals = [index for index, task in enumerate(tasks) if FILE in task]
+    assert removals and identity < unregistered < reported < min(removals)
+    assert tasks[identity]["when"] == [REGISTERING]
+    assert tasks[unregistered]["when"] == [REGISTERING, "managedos_install_anaconda_ours | bool"]
+    assert holds(tasks[identity]["when"]) and not holds(tasks[identity]["when"], False)
+
+
+def test_destroy_session_uses_the_reduced_policy_config():
+    task = module("unregister.yml")
+    arguments = task[REGISTRATION]
+    assert arguments["operation"] == "unregister"
+    assert not any(option in arguments for option in REGISTER_ONLY)
+    assert not any(word in repr(task) for word in MATERIAL)
+    scratch = render(trust_as_template("{{ managedos_install_anaconda_scratch }}"))
+    assert scratch.startswith("/var/tmp/bootwright-run-scratch-1-1/")
+    assert render(arguments["ssh_config"]) == scratch + "/ssh_config"
+    assert render(arguments["known_hosts"]) == scratch + "/known_hosts"
+    assert render(arguments["request"]) == DIGEST and arguments["timeout"] == 330
+    assert task["register"] == UNREGISTRATION and task["no_log"] is True and task["failed_when"] is False
+    assert not [other for other in flattened("unregister.yml") if FACT in other
+                and set(other[FACT]) != {"managedos_install_anaconda_unregistration_host_key_algorithms"}]
+
+
+def test_destroy_leaves_a_foreign_registration():
+    retained = {"changed": False, "consumer": "", "owned": False, "repositories": {}, "state": "retained"}
+    answer = {"changed": False, "ok": True, "registration": retained}
+    variables = guest(**{UNREGISTRATION: answer})
+    fact = destroy_tasks(lambda task: FACT in task and "managedos_install_anaconda_registration" in task[FACT],
+                         "name the registration the removal left")
+    registration = render(fact[FACT]["managedos_install_anaconda_registration"], **variables)
+    assert registration == {"consumer": "", "state": "retained"}
+    for failure in [task for task in flattened("destroy.yml") if FAIL in task]:
+        assert not holds(failure["when"], **dict(failure.get("vars", {}), **variables)), failure["name"]
+    arguments = completion("destroy.yml")
+    evidence, refused = protocol.completion({
+        "digest": DIGEST, "removed": True, "observation": {},
+        "registration": render(arguments["registration"], managedos_install_anaconda_registration=registration),
+        "registrationRequired": render(arguments["registrationRequired"]),
+    })
+    assert refused is None and evidence["postcondition"] is True and evidence["registration"] == registration
+    answered = guest(marker='{"request":"another"}')
+    assert render(fact[FACT]["managedos_install_anaconda_registration"], **answered) == {"consumer": "", "state": "absent"}
+
+
+def test_destroy_names_an_unanswered_machine_unreachable():
+    named = destroy_tasks(lambda task: (task.get(PROTOCOL) or {}).get("reason") == "registration-unreachable",
+                          "name an unanswered machine")
+    refused = destroy_tasks(lambda task: FAIL in task and "did not answer" in task[FAIL]["msg"], "refuse an unanswered machine")
+    assert named["no_log"] is True and named["when"] == refused["when"]
+    for variables in (guest(answered=False, marker=""), guest(answered=False), guest(host_key="")):
+        assert holds(refused["when"], **variables)
+    for variables in (guest(), guest(marker=""), guest(marker="", host_key="")):
+        assert not holds(refused["when"], **variables)
+    assert not holds(refused["when"], False, **guest(answered=False))
+    message = render(refused[FAIL]["msg"], **guest(answered=False))
+    assert message == "Machine rhel-01 did not answer through its identity channel, so its subscription registration was not removed"
+
+
+def test_removal_observation_reads_the_guest_only_for_a_registering_request():
+    removal = block("observe.yml", "Read the registration a removal takes back")
+    assert removal["when"] == [REMOVAL, REGISTERING]
+    observed = flattened("observe.yml")
+    identity = only(observed, lambda task: included("identity.yml")(task) and REMOVAL in task["when"], "read the identity for a removal")
+    read = only(observed, lambda task: included("registration_observe.yml")(task) and REMOVAL in task["when"],
+                "read the registration for a removal")
+    assert identity < read
+    variables = dict(guest(), managedos_install_anaconda_observes_removal=True)
+    assert holds(observed[read]["when"], **variables)
+    assert not holds(observed[read]["when"], False, **variables)
+    assert not holds(observed[read]["when"], **dict(variables, managedos_install_anaconda_observes_removal=False))
+    for other in (guest(answered=False), guest(marker=""), guest(host_key="")):
+        assert not holds(observed[read]["when"], **dict(other, managedos_install_anaconda_observes_removal=True))

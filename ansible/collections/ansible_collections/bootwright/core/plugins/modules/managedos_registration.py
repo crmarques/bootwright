@@ -55,9 +55,8 @@ description:
     spec.customizations.repositories.subscription of <profile>; correct the
     repository IDs in <profile>, then destroy and install Machine/<m> again.
   - C(registration-unreachable) the installed system did not answer over its
-    pinned SSH connection, with the consumer UUID when the evidence holds it;
-    start Machine/<m> with bootwright machine start --name <m>, then run
-    bootwright destroy --context <c> again.
+    pinned SSH connection; start Machine/<m> with bootwright machine start
+    --context <c> --name <m>, then run bootwright destroy --context <c> again.
   - C(transport) the registration session failed; run bootwright apply
     --context <c> again.
 options:

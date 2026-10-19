@@ -92,6 +92,7 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("infra_managed_service", "observe.yml", observeCollection+"infra_service_inspect", "reads the managed service's unit, container and answers", read)
 	add("managedos_install_anaconda", "observe.yml", observeCollection+"managedos_install_inspect", "reads the published installation content", read)
 	add("managedos_install_anaconda", "observe.yml", observeCollection+"redfish_system_read", "reads the machine's power and media from its controller", read)
+	add("managedos_install_anaconda", "observe.yml", "ansible.builtin.set_fact", "names, in memory, a removal's read of a machine holding nothing of this installation", read)
 	add("managedos_install_anaconda", "work.yml", "ansible.builtin.stat", "reads a work-area ancestor without following links", read)
 	add("managedos_install_anaconda", "work.yml", "ansible.builtin.assert", "refuses an ancestor that is not private to root", read)
 	add("managedos_install_anaconda", "identity.yml", "ansible.builtin.fail", "refuses an identity channel with no binding", read)

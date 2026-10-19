@@ -15,10 +15,12 @@ const (
 )
 
 const (
-	registrationOwned   = "owned"
-	registrationPending = "pending"
-	registrationAbsent  = "absent"
-	registrationForeign = "foreign"
+	registrationOwned        = "owned"
+	registrationPending      = "pending"
+	registrationAbsent       = "absent"
+	registrationForeign      = "foreign"
+	registrationUnregistered = "unregistered"
+	registrationRetained     = "retained"
 )
 
 var registrationConsumer = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
@@ -177,6 +179,23 @@ func ValidateAbsence(data []byte, digest string) error {
 	return nil
 }
 
+// ValidateReleased accepts evidence only when it proves the machine holds no subscription registration this installation created.
+func ValidateReleased(data []byte, request Request, digest string) error {
+	evidence, err := decodeEvidence(data, digest)
+	if err != nil || request.Registration == nil {
+		return err
+	}
+	switch evidence.Registration.State {
+	case registrationUnregistered, registrationAbsent, registrationRetained, registrationForeign:
+		return nil
+	}
+	return refusal("lifecycle.state", "the installation removal did not prove its machine holds no subscription registration it created", "")
+}
+
+func ownRegistration(evidence Evidence) bool {
+	return evidence.Registration.State == registrationOwned || evidence.Registration.State == registrationPending
+}
+
 // ValidateWithdrawn accepts evidence only when it names this request and
 // reports nothing left of what the removal takes back. The installed system
 // stays with the Machine's disks, so neither the marker nor the power state is
@@ -292,9 +311,9 @@ func boundedNetworkDifferences(evidence Evidence) error {
 
 func wellFormedRegistration(registration RegistrationEvidence) bool {
 	switch registration.State {
-	case registrationOwned, registrationPending:
+	case registrationOwned, registrationPending, registrationUnregistered:
 		return registrationConsumer.MatchString(registration.Consumer)
-	case "", registrationAbsent, registrationForeign:
+	case "", registrationAbsent, registrationForeign, registrationRetained:
 		return registration.Consumer == ""
 	}
 	return false

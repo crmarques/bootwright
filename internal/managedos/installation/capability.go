@@ -164,9 +164,12 @@ func mediaReservation(contextName string, names []string) (prerequisites.HostRes
 }
 
 // description states what the planned verb does to this installation. A
-// removal takes back the media this block published; the installed system
-// itself leaves with the disks the machine block deletes.
+// removal takes back the media and the consumer this block left; the installed
+// system itself leaves with the disks the machine block deletes.
 func description(verb reconciliation.Verb, request Request) string {
+	if verb == reconciliation.Destroy && request.Registration != nil {
+		return "unregister " + request.Identity.Object + " from its subscription service and remove its installer media"
+	}
 	if verb == reconciliation.Destroy {
 		return "remove the installer media of " + request.Identity.Object
 	}
@@ -191,8 +194,12 @@ func impacts(verb reconciliation.Verb, request Request) []string {
 			"configure-network "+request.Identity.Object,
 			"restart "+request.Identity.Object)
 	}
-	if verb != reconciliation.Destroy && request.Registration != nil {
-		impacts = append(impacts, "register-subscription "+request.Identity.Object)
+	if request.Registration != nil {
+		action := "register-subscription "
+		if verb == reconciliation.Destroy {
+			action = "unregister-subscription "
+		}
+		impacts = append(impacts, action+request.Identity.Object)
 	}
 	slices.Sort(impacts)
 	return slices.Compact(impacts)
@@ -214,12 +221,20 @@ func groups(verb reconciliation.Verb, request Request) []reconciliation.Group {
 			{"remove-published", "remove the published installer image"},
 			{"verify-absence", "verify every published file is gone"},
 		}
+		if request.Registration != nil {
+			steps = append([][2]string{{"unregister-subscription", "remove the subscription consumer this installation registered the machine with"}}, steps...)
+		}
 	}
 	out := make([]reconciliation.Group, 0, len(steps))
 	for _, step := range steps {
 		out = append(out, reconciliation.Group{ID: step[0], Description: step[1], Machines: machines})
 	}
 	return out
+}
+
+func (Capability) RequiresPreStopRemoval(block reconciliation.Block) bool {
+	request, err := DecodeRequest(block.Request)
+	return err == nil && request.Registration != nil
 }
 
 // Removal reads a frozen installation block as the removal of what it
@@ -268,8 +283,8 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 	digest := execution.Block.RequestDigest
 	if operation == "apply" {
 		err = ValidatePresence(result.Evidence, request, digest, string(marker))
-	} else {
-		err = ValidateAbsence(result.Evidence, digest)
+	} else if err = ValidateAbsence(result.Evidence, digest); err == nil {
+		err = ValidateReleased(result.Evidence, request, digest)
 	}
 	if err != nil {
 		return unknown, err
@@ -288,16 +303,14 @@ func (c Capability) Observe(ctx context.Context, execution lifecycle.Execution) 
 }
 
 // observesRemoval scopes an observation to what a removal takes back: the
-// adapter reads the published content alone, and neither the machine's
-// identity channel, its fleet account nor its controller, none of which a
-// removal changes.
+// published content and, for a registering request, the guest's registration,
+// never the controller, which a removal does not change.
 const observesRemoval = "removal"
 
-// ObserveRemoval reads, for what a removal proves, an observation of the
-// published content alone. The removal withdraws that content whatever the
-// guest holds, so no content left is its completion; the whole completion is
-// positive no effect; and any content left, a package tree without its
-// marker included, is a positive partial removal the next attempt converges.
+// ObserveRemoval reads the published content and a registering request's
+// guest registration. Neither of this installation's left is completion; the
+// whole completion is no effect; content or its own registration left is a
+// positive partial removal; an unread registration is no effect, so it repeats.
 func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	return c.observe(ctx, execution, reconciliation.Destroy)
 }
@@ -310,16 +323,7 @@ func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Exec
 // presence check's for an apply, the unfinished withdrawal's for a removal.
 func installationEffect(verb reconciliation.Verb, evidence []byte, request Request, digest, marker string) (reconciliation.EffectState, error) {
 	if verb == reconciliation.Destroy {
-		switch {
-		case ValidateWithdrawn(evidence, digest) == nil:
-			return reconciliation.EffectCompleted, nil
-		case ValidatePresence(evidence, request, digest, marker) == nil:
-			return reconciliation.EffectNoEffect, nil
-		}
-		if err := ValidateWithdrawalUnfinished(evidence, digest); err != nil {
-			return reconciliation.EffectUnknown, err
-		}
-		return reconciliation.EffectPartial, nil
+		return removalEffect(evidence, request, digest, marker)
 	}
 	presence := ValidatePresence(evidence, request, digest, marker)
 	switch {
@@ -334,6 +338,28 @@ func installationEffect(verb reconciliation.Verb, evidence []byte, request Reque
 		return reconciliation.EffectUnknown, foreignRegistration(decoded)
 	}
 	return reconciliation.EffectUnknown, presence
+}
+
+func removalEffect(evidence []byte, request Request, digest, marker string) (reconciliation.EffectState, error) {
+	withdrawn := ValidateWithdrawn(evidence, digest) == nil
+	released := ValidateReleased(evidence, request, digest) == nil
+	switch {
+	case withdrawn && released:
+		return reconciliation.EffectCompleted, nil
+	case ValidatePresence(evidence, request, digest, marker) == nil:
+		return reconciliation.EffectNoEffect, nil
+	}
+	unfinished := ValidateWithdrawalUnfinished(evidence, digest)
+	if unfinished == nil {
+		return reconciliation.EffectPartial, nil
+	}
+	if withdrawn {
+		if decoded, err := decodeEvidence(evidence, digest); err == nil && ownRegistration(decoded) {
+			return reconciliation.EffectPartial, nil
+		}
+		return reconciliation.EffectNoEffect, nil
+	}
+	return reconciliation.EffectUnknown, unfinished
 }
 
 // observe runs the read-only observation operation, scoped to what the verb
@@ -436,6 +462,9 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		if refusals, err = c.applyRefusals(execution, request, values); err != nil {
 			return lifecycle.RunResult{}, err
 		}
+	}
+	if operation == "destroy" {
+		refusals = unregistrationRefusals(execution.Context, request)
 	}
 	// A machine proved by a delivered key is read over a connection pinned to
 	// exactly that key, so the public half reaches every operation, not only

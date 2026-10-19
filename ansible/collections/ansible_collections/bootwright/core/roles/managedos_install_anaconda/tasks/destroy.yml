@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v13'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v14'
       - bootwright_os_install_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_os_install_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - managedos_install_anaconda_work == '/var/lib/bootwright-install/'
@@ -29,6 +29,117 @@
     loop_var: managedos_install_anaconda_work_ancestor
   vars:
     managedos_install_anaconda_work_create: false
+
+# A registering installation unregisters while its Machine still runs, before
+# anything it published is withdrawn: a Machine holding this installation's
+# marker has its consumer removed by the worker, one answering with another
+# marker or none holds nothing of this installation, and one that does not
+# answer refuses, so a failed removal leaves the content to repeat it with.
+- name: Unregister the machine this installation registered
+  when: bootwright_os_install_request.registration is defined
+  vars:
+    managedos_install_anaconda_ours: >-
+      {{ managedos_install_anaconda_marker | default('') == bootwright_os_install_material.marker }}
+  block:
+    - name: Report subscription unregistration
+      bootwright.core.managedos_install_protocol:
+        phase: group
+        group: unregister-subscription
+        status: running
+      no_log: true
+
+    - name: Prepare private connection files
+      bootwright.core.lifecycle_scratch:
+        root: '{{ bootwright_run_scratch }}'
+        scope: managedos-install
+      register: managedos_install_anaconda_scratch_ready
+
+    - name: Read the machine through its own identity channel
+      ansible.builtin.include_tasks: identity.yml
+
+    - name: Name a machine that did not answer
+      bootwright.core.managedos_install_protocol:
+        phase: refused
+        reason: registration-unreachable
+      when: >-
+        not (managedos_install_anaconda_answered | bool)
+        or (managedos_install_anaconda_ours | bool and managedos_install_anaconda_host_key | default('') | trim | length == 0)
+      no_log: true
+
+    - name: Refuse a machine that did not answer
+      ansible.builtin.fail:
+        msg: >-
+          Machine {{ bootwright_os_install_request.identity.object }} did not
+          answer through its identity channel, so its subscription
+          registration was not removed
+      when: >-
+        not (managedos_install_anaconda_answered | bool)
+        or (managedos_install_anaconda_ours | bool and managedos_install_anaconda_host_key | default('') | trim | length == 0)
+
+    - name: Unregister the consumer this installation created
+      ansible.builtin.include_tasks: unregister.yml
+      when: managedos_install_anaconda_ours | bool
+
+    - name: Name an unregistration the machine or the subscription service did not complete
+      bootwright.core.managedos_install_protocol:
+        phase: refused
+        reason: '{{ managedos_install_anaconda_unregistration_result.reason }}'
+      when:
+        - managedos_install_anaconda_ours | bool
+        - not (managedos_install_anaconda_unregistration_result.ok | default(false) | bool)
+        - managedos_install_anaconda_unregistration_result.reason | default('') in ['registration-unreachable', 'registration-unavailable']
+      no_log: true
+
+    # The message names the Machine and the worker's closed vocabulary only:
+    # the worker's detail and any other module output never reach it.
+    - name: Refuse a machine its unregistration did not complete on
+      ansible.builtin.fail:
+        msg: >-
+          Machine {{ bootwright_os_install_request.identity.object }} was not
+          unregistered from its subscription service:
+          {{ managedos_install_anaconda_unregistration_reason }}{{ managedos_install_anaconda_unregistration_cause }}
+      vars:
+        managedos_install_anaconda_unregistration_reason: >-
+          {{ managedos_install_anaconda_unregistration_result.reason | default('')
+             if managedos_install_anaconda_unregistration_result.reason | default('') in
+             ['registration-input', 'registration-foreign', 'registration-refused', 'registration-identity-collision',
+              'registration-unavailable', 'registration-repositories', 'registration-unreachable', 'transport']
+             else 'unexpected answer' }}
+        managedos_install_anaconda_unregistration_cause: >-
+          {{ ' (' ~ managedos_install_anaconda_unregistration_result.cause ~ ')'
+             if managedos_install_anaconda_unregistration_result.cause | default('') in
+             ['service', 'timeout', 'tooling', 'unregister', 'session', 'host-key', 'exit', 'answer']
+             else '' }}
+      when:
+        - managedos_install_anaconda_ours | bool
+        - not (managedos_install_anaconda_unregistration_result.ok | default(false) | bool)
+
+    - name: Name the registration the removal left
+      ansible.builtin.set_fact:
+        managedos_install_anaconda_registration:
+          consumer: >-
+            {{ managedos_install_anaconda_unregistration_result.registration.consumer
+               if managedos_install_anaconda_ours | bool else '' }}
+          state: >-
+            {{ managedos_install_anaconda_unregistration_result.registration.state
+               if managedos_install_anaconda_ours | bool else 'absent' }}
+      changed_when: false
+
+    - name: Report subscription unregistration completion
+      bootwright.core.managedos_install_protocol:
+        phase: group
+        group: unregister-subscription
+        status: ok
+      no_log: true
+
+  always:
+    - name: Remove private connection files
+      bootwright.core.lifecycle_scratch:
+        root: '{{ bootwright_run_scratch }}'
+        scope: managedos-install
+        state: absent
+        remove_root: "{{ bootwright_os_install_request.placement.connection == 'ssh' }}"
+      when: managedos_install_anaconda_scratch_ready is succeeded
 
 - name: Report published content removal
   bootwright.core.managedos_install_protocol:
@@ -172,9 +283,12 @@
              or (managedos_install_anaconda_machine_dir_before.stat.exists
                  and not managedos_install_anaconda_machine_dir_after.stat.exists)
              or (managedos_install_anaconda_context_dir_before.stat.exists
-                 and not managedos_install_anaconda_context_dir_after.stat.exists))
+                 and not managedos_install_anaconda_context_dir_after.stat.exists)
+             or (managedos_install_anaconda_unregistration_result.registration.changed | default(false) | bool))
          else 'unchanged' }}
     digest: '{{ bootwright_os_install_digest }}'
     observation: '{{ managedos_install_anaconda_after.observation }}'
     removed: true
+    registration: '{{ managedos_install_anaconda_registration | default({}) }}'
+    registrationRequired: "{{ bootwright_os_install_request.registration is defined }}"
   no_log: true
