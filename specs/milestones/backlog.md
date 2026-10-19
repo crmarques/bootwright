@@ -3145,6 +3145,21 @@ Requires cell as `owner decision: <question>`.
   that decision. The four answers gate no lane any longer; the gated lanes
   still start only after the decision-free program has landed (D159 clause 14).
   The brackets in D159, D160 and D161 that name these questions are history.
+- **D167** (2026-10-19, the owner): the owner answered the session's question
+  about how destroy tells an installation that never registered from one whose
+  registration it cannot read, choosing "Install evidence (Recommended)". The
+  X60 checkpoint found that `spec.subscription` stays refused after destroy's
+  pre-stop unregistration was built, because no rule decided that difference
+  ([B76](m1.md#b76)). The rule: at destroy, the installation block's own apply
+  evidence decides. Registration runs only after the install marker is proved,
+  so an installation whose marker was never proved never registered, and the
+  pre-stop removal skips unregistration for it. A proved marker with an
+  unreadable registration refuses before any effect, naming the Machine, the
+  reason and a manual next step. M1c lane x60-subscription-lift (slice X60,
+  item B76) implements the rule and lifts the `spec.subscription` refusal. The
+  answer changes no product spec by itself and no delivery state: B76 stays in
+  progress until that lane lands, and the lane updates the owning spec.
+
 - **D165** (2026-10-19, the owner): the owner answered the seven questions that
   X102 and X103 left open (B650 to B656). (1) B650: the libvirt-3-nodes-ceph
   example authors the build tag `v9.9.2-26729`, which the owner confirmed
