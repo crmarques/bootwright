@@ -59,14 +59,17 @@ func TestNFSExportNativeRecordIsClosed(t *testing.T) {
 	} {
 		export, changed := nfsExportWith(t, catalog, nativeEdit(api.StringValue("s3cr3t-value"), row.path...))
 		issues := Validate(export, changed)
+		if len(issues) != 1 {
+			t.Fatalf("refused member %v produced other issues: %#v", row.path, issues)
+		}
 		exactIssue(t, issues, "api.invariant", "$.spec.native."+strings.Join(row.path, "."), row.message, row.remedy)
 		for _, issue := range issues {
 			if strings.Contains(issue.Message+issue.Remediation, "s3cr3t-value") {
 				t.Fatalf("a refused member's value escaped into %#v", issue)
 			}
 		}
-		if partial := ValidatePartial(export, changed); len(issuesAt(partial, "$.spec.native."+strings.Join(row.path, "."))) != 1 {
-			t.Fatalf("partial validation admitted %v: %#v", row.path, partial)
+		if partial := ValidatePartial(export, changed); len(partial) != 1 || len(issuesAt(partial, "$.spec.native."+strings.Join(row.path, "."))) != 1 {
+			t.Fatalf("partial validation of refused member %v: %#v", row.path, partial)
 		}
 	}
 }
