@@ -47,7 +47,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	if err != nil {
 		return "", err
 	}
-	applyProved, err := applyDependencies(ctx, store, owningApply(operation), block.ID)
+	applyProved, preparations, err := applyRecords(ctx, store, owningApply(operation), block.ID)
 	if err != nil {
 		return "", err
 	}
@@ -69,7 +69,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	}
 	defer boundary.close(ctx, log)
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: "running", Position: position, Total: total})
-	result, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, block, material, proved, applyProved, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
+	result, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, block, material, proved, applyProved, preparations, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		if operation.Verb == reconciliation.Destroy {
 			execution.RetiredWithHosts = s.onlineRemoval(plan).retired[block.ID]
 			if err := s.keepBeforeRemoval(inner, tx, boundary, log, capability, execution); err != nil {
@@ -142,7 +142,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	if err != nil {
 		return "", err
 	}
-	applyProved, err := applyDependencies(ctx, store, owningApply(operation), block.ID)
+	applyProved, preparations, err := applyRecords(ctx, store, owningApply(operation), block.ID)
 	if err != nil {
 		return "", err
 	}
@@ -167,7 +167,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Detail: "resolving the unknown outcome from live evidence", Status: "running", Position: position, Total: total})
 	read := func(target reconciliation.Block, as reconciliation.Verb) (Observation, error) {
 		var observation Observation
-		_, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, target, material, nil, applyProved, log, attemptNumber, number, position, total, func(inner context.Context, execution Execution) (Result, error) {
+		_, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, target, material, nil, applyProved, preparations, log, attemptNumber, number, position, total, func(inner context.Context, execution Execution) (Result, error) {
 			observe := capability.Observe
 			if as == reconciliation.Destroy {
 				observe = capability.ObserveRemoval
@@ -329,7 +329,7 @@ func removalEffect(observed reconciliation.EffectState) reconciliation.EffectSta
 
 // invoke runs the capability inside the controller runtime. The approved
 // runtime is the operation's own, located once before its first effect.
-func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, approved approved, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, proved, applyProved []BlockEvidence, log *operationstore.Log, attempt, resolution, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
+func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStore, approved approved, boundary *logBoundary, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, material map[string]secrets.Material, proved, applyProved []BlockEvidence, preparations []json.RawMessage, log *operationstore.Log, attempt, resolution, position, total int, call func(context.Context, Execution) (Result, error)) (Result, error) {
 	view := tx.Controller()
 	result := Result{Outcome: reconciliation.OutcomeUnknown}
 	// Completion is counted in proved groups, not in elapsed time: the adapter
@@ -379,12 +379,18 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 		// Only an apply's own attempt names the command that continues it: a
 		// destroy's next command depends on what the whole run settles.
 		continuation := ""
+		var prepare func(context.Context, json.RawMessage) error
 		if operation.Verb == reconciliation.Apply && resolution == 0 {
 			continuation = contextCommand(tx.Identity().Name, string(reconciliation.Apply), authorizing(requiredTokens(plan))...)
 		}
+		if operation.Verb == reconciliation.Apply && resolution == 0 && attempt > 0 {
+			prepare = func(inner context.Context, preparation json.RawMessage) error {
+				return store.RecordPreparation(inner, operation.ID, block.ID, attempt, slices.Clone(preparation))
+			}
+		}
 		execution := Execution{
 			Operation: operation.ID, Context: tx.Identity().Name, Continuation: continuation, Attempt: attempt, Resolution: resolution, Block: block,
-			ApplyOperation: owningApply(operation), ApplyProved: applyProved,
+			ApplyOperation: owningApply(operation), ApplyProved: applyProved, ApplyPreparations: clonedPreparations(preparations), Prepare: prepare,
 			Launch: launch, Material: material, Proved: proved,
 			LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
 				return s.locateTool(inner, store, view, tx.Identity().Name, operation, plan, tool)

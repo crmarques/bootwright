@@ -137,6 +137,48 @@ func applyDependencies(ctx context.Context, store recordReader, applyOperation, 
 	return proved, nil
 }
 
+func applyRecords(ctx context.Context, store recordReader, applyOperation, blockID string) ([]BlockEvidence, []json.RawMessage, error) {
+	proved, err := applyDependencies(ctx, store, applyOperation, blockID)
+	if err != nil {
+		return nil, nil, err
+	}
+	preparations, err := applyPreparations(ctx, store, applyOperation, blockID)
+	return proved, preparations, err
+}
+
+func applyPreparations(ctx context.Context, store recordReader, applyOperation, blockID string) ([]json.RawMessage, error) {
+	operation, err := store.ReadOperation(ctx, applyOperation)
+	if err != nil {
+		return nil, err
+	}
+	if operation.Verb != reconciliation.Apply {
+		return nil, failure("lifecycle.state", "dependency identity must come from the original apply", "")
+	}
+	record, err := store.Block(ctx, applyOperation, blockID)
+	if err != nil {
+		return nil, err
+	}
+	var preparations []json.RawMessage
+	for number := 1; number <= record.Attempts; number++ {
+		attempt, err := store.Attempt(ctx, applyOperation, blockID, number)
+		if err != nil {
+			return nil, err
+		}
+		if len(attempt.Preparation) != 0 {
+			preparations = append(preparations, slices.Clone(attempt.Preparation))
+		}
+	}
+	return preparations, nil
+}
+
+func clonedPreparations(preparations []json.RawMessage) []json.RawMessage {
+	var cloned []json.RawMessage
+	for _, preparation := range preparations {
+		cloned = append(cloned, slices.Clone(preparation))
+	}
+	return cloned
+}
+
 // blockEvidence reads the latest attempt's last resolution, or the attempt
 // itself. Unstarted or running records carry no evidence from earlier records.
 func blockEvidence(ctx context.Context, store recordReader, operation string, block reconciliation.Block, verb reconciliation.Verb) (BlockEvidence, error) {

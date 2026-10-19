@@ -522,7 +522,9 @@ type Execution struct {
 	// fresh live observations never replace them. A pending or unproved record
 	// is not identity proof. Consumers decode evidence through its owner and
 	// require the state and identity that owner validates.
-	ApplyProved []BlockEvidence
+	ApplyProved       []BlockEvidence
+	ApplyPreparations []json.RawMessage
+	Prepare           func(context.Context, json.RawMessage) error
 	// LocateTool answers where the controller stage installed one executable,
 	// so a block runs the exact file that stage published for the release its
 	// own graph selected. The engine asks the plan's controller stage block,

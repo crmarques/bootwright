@@ -42,6 +42,20 @@ def test_a_refusal_the_installation_does_not_name_is_never_published(reason, mon
     assert not published
 
 
+def test_prepared_publishes_only_the_marker(monkeypatch):
+    acknowledged = []
+    monkeypatch.setattr(protocol, "emit", lambda message, acknowledge=False: acknowledged.append((message, acknowledge)))
+    module = protocol.ActionModule.__new__(protocol.ActionModule)
+    module._task = SimpleNamespace(args={"phase": "prepared", "marker": " the-marker\n", "registration": {"state": "owned"},
+                                         "digest": "1" * 64})
+    assert module.run(task_vars={}) == {"changed": False}
+    assert acknowledged == [({"phase": "prepared", "preparation": {"marker": "the-marker"}}, True)]
+    for marker in (None, "", "x" * (protocol.MAX_MARKER + 1)):
+        result, published = run({"phase": "prepared", "marker": marker}, monkeypatch)
+        assert result == {"failed": True, "msg": "the installation capability result could not be published"}
+        assert not published
+
+
 # A boot image the attempt finds changed since the plan froze it is named with
 # the diagnostic Go gave it (selection.go). The tree image is the shared
 # package-tree publication's to name, so the installation never names it.

@@ -160,6 +160,26 @@ def test_register_runs_after_network_and_before_the_completion_inspection():
     assert [name for name in task_files() for task in flattened(name) if task.get(INCLUDE) == "unregister.yml"] == ["destroy.yml"]
 
 
+def test_apply_publishes_the_marker_proof_before_registering():
+    applied = flattened("apply.yml")
+    fips = only(applied, lambda task: FAIL in task and "FIPS mode" in str(task[FAIL].get("msg", "")), "refuse an unproved FIPS mode")
+    proved = only(applied, lambda task: "ansible.builtin.assert" in task
+                  and "managedos_install_anaconda_marker == bootwright_os_install_material.marker" in task["ansible.builtin.assert"]["that"]
+                  and task["when"] == [REGISTERING], "prove the marker before registering")
+    prepared = only(applied, lambda task: (task.get(PROTOCOL) or {}).get("phase") == "prepared", "publish the marker proof")
+    registered = only(applied, included("register.yml"), "register the machine")
+    assert fips < proved and proved + 1 == prepared and prepared + 1 == registered
+    assert applied[prepared][PROTOCOL] == {"phase": "prepared", "marker": "{{ managedos_install_anaconda_marker }}"}
+    assert applied[prepared]["when"] == [REGISTERING] and applied[prepared]["no_log"] is True
+    assert applied[proved]["no_log"] is True
+    assert holds(applied[proved]["ansible.builtin.assert"]["that"],
+                 managedos_install_anaconda_marker="m", bootwright_os_install_material={"marker": "m"})
+    assert not holds(applied[proved]["ansible.builtin.assert"]["that"],
+                     managedos_install_anaconda_marker="other", bootwright_os_install_material={"marker": "m"})
+    assert [name for name in task_files() for task in flattened(name)
+            if (task.get(PROTOCOL) or {}).get("phase") == "prepared"] == ["apply.yml"]
+
+
 def test_register_material_never_enters_a_task_variable():
     carriers = []
     for name in task_files():

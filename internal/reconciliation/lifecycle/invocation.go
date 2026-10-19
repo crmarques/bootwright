@@ -100,6 +100,7 @@ type RunRequest struct {
 	Deadline   time.Duration
 	ReadOnly   bool
 	Unrecorded bool
+	Prepare    func(context.Context, json.RawMessage) error
 }
 
 const ObserveOperation = "observe"
@@ -139,7 +140,8 @@ type Invocation struct {
 	NativeErrors bool
 	// Deadline is the run's own deadline, derived from the budgets the frozen
 	// request carries; zero keeps the runner's default.
-	Deadline time.Duration
+	Deadline    time.Duration
+	Preparation func(json.RawMessage) error
 }
 
 // RunFor builds the adapter request one attempt authorizes. A capability never
@@ -147,6 +149,16 @@ type Invocation struct {
 // substitute an identity the attempt did not freeze.
 func RunFor(execution Execution, invocation Invocation) RunRequest {
 	materials := append(slices.Clone(invocation.Materials), Materials(invocation.Placement)...)
+	readOnly := execution.ReadOnly || execution.Attempt == 0 || execution.Resolution != 0
+	var prepare func(context.Context, json.RawMessage) error
+	if execution.Prepare != nil && invocation.Preparation != nil && !readOnly {
+		prepare = func(ctx context.Context, preparation json.RawMessage) error {
+			if err := invocation.Preparation(preparation); err != nil {
+				return err
+			}
+			return execution.Prepare(ctx, preparation)
+		}
+	}
 	return RunRequest{
 		Context:           execution.Context,
 		Repeat:            execution.Continuation,
@@ -170,8 +182,9 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		Refusals:          maps.Clone(invocation.Refusals),
 		NativeErrors:      invocation.NativeErrors,
 		Deadline:          invocation.Deadline,
-		ReadOnly:          execution.ReadOnly || execution.Attempt == 0 || execution.Resolution != 0,
+		ReadOnly:          readOnly,
 		Unrecorded:        execution.Attempt == 0 && execution.Resolution == 0,
+		Prepare:           prepare,
 	}
 }
 

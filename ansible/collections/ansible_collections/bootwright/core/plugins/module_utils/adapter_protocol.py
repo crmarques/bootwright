@@ -1,8 +1,8 @@
 """The adapter result protocol every capability's action plugin publishes.
 
 One dispatch hands the runner a capability's records: `loaded`, which waits for
-the runner's acknowledgement, `group` progress, a named `refused` reason and
-the terminal `completed` record. Each capability supplies only what is its own:
+the runner's acknowledgement, `group` progress, a `prepared` before-state that
+also waits for it, a named `refused` reason and the terminal `completed` record. Each capability supplies only what is its own:
 its name, its phases, the refusals it may name and the completion that builds
 its evidence. Whether that evidence proves a postcondition is the capability's
 rule and the engine's decision, never this module's.
@@ -17,6 +17,8 @@ from __future__ import annotations
 
 PHASES = ("loaded", "group", "completed")
 REFUSING_PHASES = ("loaded", "group", "refused", "completed")
+# A capability that publishes a before-state ahead of an effect.
+PREPARING_PHASES = ("loaded", "group", "prepared", "refused", "completed")
 GROUP_STATUSES = ("running", "ok", "failed", "skipped")
 OUTCOMES = ("changed", "unchanged")
 HEX = frozenset("0123456789abcdef")
@@ -60,9 +62,12 @@ class Capability:
     callable that returns the reason from the arguments and raises ValueError
     for one it refuses. An exception of a `passthrough` type fails the run with
     its own message, which names a cause the generic one would hide.
+    `preparation` takes the arguments and returns the before-state a prepared
+    phase publishes, or raises ValueError for one it refuses.
     """
 
-    def __init__(self, name, unpublished, completion, phases=PHASES, refusals=(), passthrough=(), detail=False, native_error=False):
+    def __init__(self, name, unpublished, completion, phases=PHASES, refusals=(), passthrough=(), detail=False, native_error=False,
+                 preparation=None):
         self.name = name
         self.unpublished = unpublished
         self.completion = completion
@@ -71,6 +76,7 @@ class Capability:
         self.passthrough = passthrough
         self.detail = detail
         self.native_error = native_error
+        self.preparation = preparation
 
 
 def refusal(arguments, refusals):
@@ -87,6 +93,13 @@ def handed(arguments, capability, emit):
     phase = arguments.get("phase")
     if phase == "loaded":
         emit({"phase": "loaded"}, acknowledge=True)
+        return {"changed": False}
+    if phase == "prepared":
+        # The runner acknowledges only once it recorded the before-state, so
+        # the effect this phase precedes runs only after that.
+        if capability.preparation is None:
+            raise ValueError("preparation")
+        emit({"phase": "prepared", "preparation": capability.preparation(arguments)}, acknowledge=True)
         return {"changed": False}
     if phase == "group":
         status = arguments.get("status")

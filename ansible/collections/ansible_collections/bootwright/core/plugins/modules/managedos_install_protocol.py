@@ -13,7 +13,11 @@ description:
   - The frozen Go request and that channel own authorization and evidence.
 options:
   phase:
-    description: The capability phase being published.
+    description:
+      - The capability phase being published.
+      - C(prepared) publishes, before a registering apply registers the
+        machine, that the machine holds this installation's marker; it names
+        only that marker and waits until the runner has recorded it.
     type: str
     required: true
   group:
@@ -75,7 +79,10 @@ options:
     type: dict
     required: false
   marker:
-    description: The install marker read from the guest through the identity operation.
+    description:
+      - The install marker read from the guest through the identity operation.
+      - A completion's evidence carries it, and a prepared phase publishes it
+        as the before-state its runner records.
     type: str
     required: false
   hostKey:

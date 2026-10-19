@@ -63,6 +63,37 @@ def test_loaded_is_handed_first_and_waits_for_its_acknowledgement():
     assert records == [({"phase": "loaded"}, True)]
 
 
+PREPARING = adapter_protocol.Capability(
+    "widget",
+    "the widget capability result could not be published",
+    completion,
+    phases=adapter_protocol.PREPARING_PHASES,
+    preparation=lambda arguments: {"marker": str(arguments.get("marker"))},
+)
+
+
+def test_prepared_waits_for_the_acknowledgement():
+    result, records = published({"phase": "prepared", "marker": "m-1"}, PREPARING)
+    assert result == {"changed": False}
+    assert records == [({"phase": "prepared", "preparation": {"marker": "m-1"}}, True)]
+
+    def unacknowledged(record, acknowledge=False):
+        assert acknowledge
+        raise ValueError("authorization")
+    result = adapter_protocol.publish({"phase": "prepared", "marker": "m-1"}, PREPARING, unacknowledged)
+    assert result == {"failed": True, "msg": "the widget capability result could not be published"}
+
+
+def test_prepared_without_a_capability_preparation_fails():
+    unprepared = adapter_protocol.Capability(
+        "widget", "the widget capability result could not be published", completion, phases=adapter_protocol.PREPARING_PHASES,
+    )
+    result, records = published({"phase": "prepared", "marker": "m-1"}, unprepared)
+    assert result == {"failed": True, "msg": "the widget capability result could not be published"}
+    assert records == []
+    assert published({"phase": "prepared", "marker": "m-1"})[0] == {"failed": True, "msg": "unsupported widget protocol phase"}
+
+
 def test_a_group_status_outside_the_four_is_refused():
     for status in adapter_protocol.GROUP_STATUSES:
         result, records = published({"phase": "group", "group": "Network", "status": status})

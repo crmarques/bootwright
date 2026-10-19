@@ -98,7 +98,6 @@ func TestDecodeRefusesUnsortedMembersAndNonASCII(t *testing.T) {
 
 func TestDecodeAdmitsEachRunnersPhasesOnly(t *testing.T) {
 	refuses(t, Lifecycle,
-		`{"phase":"prepared","preparation":{"addedSources":[],"inventorySHA256":"`+sha+`"}}`,
 		`{"phase":"native"}`,
 		`{"phase":"continue"}`,
 		`{"phase":"refused","reason":"timeout","source":"tool-helm"}`,
@@ -141,6 +140,21 @@ func TestDecodeAdmitsEachRunnersPhasesOnly(t *testing.T) {
 	if controller[5].Source != "tool-helm" || controller[5].Reason != "timeout" || controller[4].Source != "" {
 		t.Fatalf("controller refusals = %+v and %+v", controller[4], controller[5])
 	}
+}
+
+func TestPreparedIsAdmittedForLifecycleRuns(t *testing.T) {
+	records := accepts(t, Lifecycle,
+		`{"phase":"loaded"}`,
+		`{"phase":"prepared","preparation":{"marker":"aaaaaaaa"}}`,
+	)
+	if len(records) != 2 || records[1].Phase != "prepared" || string(records[1].Preparation) != `{"marker":"aaaaaaaa"}` {
+		t.Fatalf("records = %+v, want the preparation as written", records)
+	}
+	refuses(t, Lifecycle,
+		`{"phase":"prepared","preparation":"marker"}`,
+		`{"phase":"prepared","preparation":{"marker":"a"},"reason":"x"}`,
+		`{"phase":"prepared"}`,
+	)
 }
 
 func TestDecodeHoldsEachPhaseToItsExactFields(t *testing.T) {

@@ -1,5 +1,5 @@
 implementation: os-install-anaconda-v1
-content-digest: c8949cd8fa9f5064e41632b5bd2d7792c28164daebd08f45e1387fd0df0dba1d
+content-digest: 788172823f8c167a5bfedddaf92187d2d5f0b559b55c85a9ed07399283350eaf
 automation-formats: none
 request-schema:
   address string

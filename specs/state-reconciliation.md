@@ -418,7 +418,11 @@ replaces. A running attempt may additionally publish one bounded `preparation`
 object: the before-state its capability observed, recorded durably while the attempt is
 still running and before it is permitted to change the host. It is written once
 and never replaced, so a later recovery can tell an attempt that was authorized
-to install from one that never reached that point. A resolution observation
+to install from one that never reached that point. A lifecycle attempt publishes
+it through the acknowledged `prepared` record of
+[the adapter result protocol](architecture.md#the-adapter-result-protocol): its
+capability validates it, the runner records it, and only then is the adapter
+acknowledged, and only an apply's own attempt may. A resolution observation
 publishes none, because an observation authorizes no effect.
 [The output contract](cli/output.md#private-operation-logs) owns the `logs/`
 tree.
@@ -1828,8 +1832,10 @@ retirement runs after the stop proof.
 Every execution and quiescence probe carries its immutable owning apply
 identity. `ApplyProved` supplies detached frozen blocks and durable completion
 evidence only from the transitive dependency closure of that original apply.
-Removal reads them through the active operation store, without reopening the
-workspace lock. Context renames and a new removal identity do not create a new
+Every invocation also receives `ApplyPreparations`: the preparations the
+owning apply's own attempts of the same block recorded, in attempt order and
+unread, or none when that apply never started the block. Removal reads them
+through the active operation store, without reopening the workspace lock. Context renames and a new removal identity do not create a new
 Ceph incarnation or substitute a currently observed host key. Missing original
 evidence refuses before dependent effects.
 

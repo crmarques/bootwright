@@ -298,6 +298,7 @@ type lifecycleJudge struct {
 	request   lifecycle.RunRequest
 	grace     time.Duration
 	loaded    bool
+	prepared  bool
 	completed bool
 }
 
@@ -323,6 +324,13 @@ func (j *lifecycleJudge) Judge(ctx context.Context, record adapterprotocol.Recor
 		if valid && !moment.Exited && j.request.Log != nil {
 			_ = j.request.Log(ctx, operationstore.LogRecord{Event: "group", Group: record.Group, Detail: record.Status})
 		}
+	case "prepared":
+		valid = valid && j.loaded && !j.prepared && j.request.Prepare != nil && !j.request.ReadOnly
+		if valid && !moment.Exited {
+			valid = j.request.Prepare(ctx, record.Preparation) == nil
+		}
+		j.prepared = j.prepared || valid
+		verdict.Acknowledge = valid
 	case "completed":
 		valid = valid && j.loaded
 		j.completed = j.completed || valid

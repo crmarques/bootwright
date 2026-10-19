@@ -2,6 +2,7 @@ package installation
 
 import (
 	"context"
+	"encoding/json"
 	"maps"
 	"slices"
 	"strings"
@@ -515,10 +516,14 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	if operation == "apply" {
 		maps.Copy(refusals, keyPolicyRefusals(request, values))
 	}
+	var preparation func(json.RawMessage) error
+	if operation == "apply" && request.Registration != nil {
+		preparation = markerPreparation(marker)
+	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: Implementation, Operation: operation, Variable: variablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
-		Refusals: refusals, Deadline: request.Deadline(),
+		Refusals: refusals, Deadline: request.Deadline(), Preparation: preparation,
 	}))
 }
 

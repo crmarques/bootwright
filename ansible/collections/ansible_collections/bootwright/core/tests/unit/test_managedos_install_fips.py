@@ -74,7 +74,7 @@ def test_fips_state_read_runs_through_guest_yml_after_network():
     assert "ansible.builtin.fail" in refused
     assert named["when"] == refused["when"] == [REQUESTED, UNPROVED]
     registered = only(applied, lambda task: task.get(INCLUDE) == "register.yml", "register the machine")
-    assert read + 3 == registered < inspect
+    assert read + 5 == registered < inspect
 
     observed = flattened("observe.yml")
     network = only(observed, lambda task: task.get(INCLUDE) == "network_observe.yml", "read the network")

@@ -236,12 +236,22 @@ def completion(arguments):
     return evidence, unreached("the installation", verb, unmet)
 
 
+def preparation(arguments):
+    """The before-state a registering apply publishes once it proved its
+    marker on the machine: the public marker alone, never registration input."""
+    marker = bounded(arguments.get("marker"), MAX_MARKER)
+    if not marker:
+        raise ValueError("marker")
+    return {"marker": marker}
+
+
 CAPABILITY = adapter_protocol.Capability(
     "installation",
     "the installation capability result could not be published",
     completion,
-    phases=adapter_protocol.REFUSING_PHASES,
+    phases=adapter_protocol.PREPARING_PHASES,
     refusals=REFUSALS + MEDIA_REFUSALS + POLICY_REFUSALS + FIPS_REFUSALS + ENCRYPTION_REFUSALS + REGISTRATION_REFUSALS,
+    preparation=preparation,
 )
 PHASES = CAPABILITY.phases
 

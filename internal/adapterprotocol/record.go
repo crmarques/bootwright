@@ -81,7 +81,7 @@ type phase struct {
 var phases = map[string]phase{
 	"loaded":    {members: []string{"phase"}, admitted: Lifecycle | Controller},
 	"group":     {members: []string{"group", "phase", "status"}, admitted: Lifecycle},
-	"prepared":  {members: []string{"phase", "preparation"}, admitted: Controller},
+	"prepared":  {members: []string{"phase", "preparation"}, admitted: Lifecycle | Controller},
 	"native":    {members: []string{"phase"}, admitted: Controller},
 	"continue":  {members: []string{"phase"}, admitted: Controller},
 	"completed": {members: []string{"evidence", "outcome", "phase"}, admitted: Lifecycle | Controller},

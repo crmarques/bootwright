@@ -1025,8 +1025,19 @@ never a value. `%packages` adds `subscription-manager`. A repository edit
 changes the request and so the marker, so it is another installation: the
 context is taken back with `bootwright destroy` and applied again.
 
-**Effect.** After the installed system's network converged and its FIPS and
-root-encryption proofs passed, the apply runs the controller module
+**Proof before registration.** After the installed system's network converged
+and its FIPS and root-encryption proofs passed, the apply proves that the
+machine holds this installation's marker and publishes `{"marker":<marker>}` as
+its attempt's preparation through the acknowledged `prepared` record of
+[the adapter result protocol](architecture.md#the-adapter-result-protocol). The
+capability accepts exactly that one member naming the frozen marker, and the
+worker registers only after the runner has recorded it, so an apply whose
+records hold no such preparation never registered. The marker is public, and
+the preparation carries nothing else. A preparation naming anything else
+refuses `lifecycle.state` with `the installation's automation published a
+before-state that does not name this installation's marker`.
+
+**Effect.** Once that proof is recorded, the apply runs the controller module
 `managedos_registration` over the pinned fleet connection
 [network convergence](#network-convergence) uses, option for option. The module
 runs one fixed worker as root through `sudo -n /usr/bin/python3 -I -c`; the
@@ -1110,7 +1121,7 @@ referenced install profile in the `machines` stage. It realizes the
 `MachineInstallProfile` publication under implementation and request version
 `os-package-tree-v1`; each machine installation requires that profile
 publication alongside its own Machine realization and referenced services.
-An installation uses request version `os-install-anaconda-v14`. Profiles using
+An installation uses request version `os-install-anaconda-v15`. Profiles using
 a URL package source contribute no publication block.
 
 The request freezes only context and profile identity, artifact-server
