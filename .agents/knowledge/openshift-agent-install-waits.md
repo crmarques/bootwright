@@ -4,8 +4,8 @@ What `openshift-install agent wait-for` waits on, when the installation starts,
 and what stalls it. [Container clusters](../../specs/container-clusters.md) owns
 the required behavior. This page records native facts for the M3 items that
 size and bound an installation:
-[B711](../../specs/milestones/m3.md#b711),
-[B712](../../specs/milestones/m3.md#b712),
+[B711](../../specs/milestones/delivered.md#b711),
+[B712](../../specs/milestones/delivered.md#b712),
 [B714](../../specs/milestones/m3.md#b714) and
 [B260](../../specs/milestones/m3.md#b260).
 
@@ -65,11 +65,11 @@ read at master, not per release.
   host's final pivot, so it keeps the bootstrap control plane and bootstrap can
   complete one node short. The usual trigger is a "Joined" stage past one hour
   from slow release-payload pulls (observed by the v1 implementation
-  (main-v1); re-verify on this tree). [B711](../../specs/milestones/m3.md#b711)
+  (main-v1); re-verify on this tree). [B711](../../specs/milestones/delivered.md#b711)
   owns the release rule.
 - Two clusters installing at once on one controller converged slower and missed
   the installer's window (observed by the v1 implementation (main-v1);
-  re-verify on this tree). [B712](../../specs/milestones/m3.md#b712) owns the
+  re-verify on this tree). [B712](../../specs/milestones/delivered.md#b712) owns the
   one-at-a-time rule.
 
 ## Certificate signing requests and tokens
@@ -83,3 +83,33 @@ read at master, not per release.
 - v1 bounded install-image reuse to 24 hours without a source. Whether any
   certificate the install image embeds expires is unverified; owner question
   [Q6](../../specs/milestones/m3.md#m3a-open-decisions) records the drill.
+
+## Bounded assisted-host diagnosis
+
+The existing inspection fixtures record the asset-state shape written by
+`openshift-install` 4.21.10 (`6285755d`) during `agent create config-image`:
+`*gencrypto.AuthConfig` carries `WatcherAuthToken` and
+`*agentconfig.AgentConfig.Config` carries `rendezvousIP`. The existing
+[work-area finding](openshift-agent-work-area.md) records what `agent create
+image` writes into its directory; image-internal files are distinct from that
+work directory.
+
+The assisted-host fixtures are modeled response shapes, **not a captured live
+assisted-service response**. They model a one-element cluster array with a
+`hosts` array. A host has `requested_hostname`, JSON text in `inventory` whose
+`hostname` is another name, `status`, `status_info`, and JSON text in
+`validations_info`. The last maps validation categories to lists with `id` and
+`status`; `failure` selects the identifiers reported in a diagnosis. Empty or
+malformed validation details leave the host's status visible. These shapes
+are exercised by the
+[inspection tests](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/modules/test_containercluster_install_inspect.py)
+and [wait tests](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_containercluster_budgets.py).
+
+X118 extends that read to failed bootstrap timeouts and spent budgets, retaining
+one bounded request and the original diagnosis when the read fails. Its tests
+prove missing names precede bad-state hosts and that successful waits,
+installation waits and unrelated failures make no assisted-service request.
+The captured real host response required by B260, and verification of the
+image's `rendezvous-host.env`, `common.sh`, `set-hostname.sh` and `agent.service`
+against that installation, remain operator evidence to collect; these modeled
+fixtures do not satisfy that provenance gate.

@@ -29,6 +29,17 @@
       {{ (containercluster_install_agent_released.msg | default('') | string | bootwright.core.printable)[:512] }}
     quiet: true
 
+- name: Retire the private token after its node released the image
+  bootwright.core.containercluster_media_token:
+    request: '{{ bootwright_cluster_install_request }}'
+    source: '{{ containercluster_install_agent_before.observation.url }}'
+    image: >-
+      {{ (containercluster_install_agent_insert_tokens | default({})).get(containercluster_install_agent_node.machine,
+         containercluster_install_agent_controllers.results[containercluster_install_agent_index].media | default('')) }}
+    operation: remove
+  when: containercluster_install_agent_before.observation.url | default('') | length > 0
+  no_log: true
+
 - name: Point a machine this substrate created at its installed disk
   ansible.builtin.include_role:
     name: bootwright.core.substrate_libvirt_machine

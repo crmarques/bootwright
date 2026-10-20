@@ -290,6 +290,7 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 		Version:         mediaRequestVersion, WorkRoot: WorkRoot(contextName, name),
 	}
 	installRequest := InstallRequest{
+		Rendezvous: agent["rendezvousIP"].(string), PublicationRoot: image, TLSCertificateRef: certificate, VIPs: projectedVIPs(catalog, cluster),
 		Budgets: installBudgets(len(nodes)), Endpoints: endpointNames(catalog, cluster),
 		Identity: identity(InstallBlockID(name)), Image: image, Nodes: frozenNodes(nodes),
 		Placement: placement, Release: release, Tool: tool,

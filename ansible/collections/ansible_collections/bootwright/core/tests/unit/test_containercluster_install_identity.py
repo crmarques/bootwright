@@ -87,7 +87,7 @@ def one(name, predicate):
 
 
 def state_task(predicate):
-    return one("state.yml", predicate)
+    return one("cluster_state.yml", predicate)
 
 
 def test_the_cluster_is_read_through_the_kubeconfig_the_identity_is_taken_from():
@@ -253,8 +253,9 @@ def resolved(observation):
         "containercluster_install_agent_controllers": {"results": [
             {"changed": False, "item": {"machine": "sno-01"}, "media": "", "power": "On"}]},
     })
-    return Templar(loader=LOADER, variables=scope).template(
+    result = Templar(loader=LOADER, variables=scope).template(
         task["ansible.builtin.set_fact"]["containercluster_install_agent_state"])
+    return dict(result, media=[], ownMedia=[], powered=["sno-01"])
 
 
 # A retry, or the resolution of an attempt interrupted after `agent wait-for
@@ -332,7 +333,7 @@ def test_only_an_apply_keeps_the_installers_kubeconfig():
 
 def refused(observation):
     """Whether the apply's refusal fires over what its first inspection named, and its message."""
-    refusal = one("apply.yml", lambda task: "ansible.builtin.fail" in task)
+    refusal = one("apply.yml", lambda task: task.get("name") == "Refuse an installation with no whole kubeconfig to read its cluster through")
     templar = Templar(loader=LOADER, variables={
         "bootwright_cluster_install_request": {"identity": {"cluster": "sno", "context": "lab"}},
         "containercluster_install_agent_before": {"observation": observation},
@@ -346,7 +347,7 @@ def refused(observation):
 def test_the_apply_keeps_its_kubeconfig_and_refuses_without_one_before_its_first_effect():
     entries = apply_tasks()
     kept = only(entries, lambda task: task.get("register") == "containercluster_install_agent_before")
-    refusal = only(entries, lambda task: "ansible.builtin.fail" in task)
+    refusal = only(entries, lambda task: task.get("name") == "Refuse an installation with no whole kubeconfig to read its cluster through")
     first_read = min(i for i, task in enumerate(entries) if task.get("ansible.builtin.import_tasks") == "state.yml")
     mark = only(entries, lambda task: str((task.get("ansible.builtin.copy") or {}).get("dest", "")).endswith(
         "/.bootwright-booted"))
@@ -382,3 +383,44 @@ def test_the_rewrite_the_waits_leave_is_kept_before_the_final_read_and_the_custo
     assert len(keeps) == 2
     assert wait < keeps[1] < last_read < custody
     assert "when" not in entries[keeps[1]]
+
+
+@pytest.mark.parametrize("missing,completed", [(["master-1"], True), (["master-0"], True), ([], False), ([], True)])
+def test_media_release_is_gated_by_fresh_complete_read_on_first_apply_and_replay(missing, completed):
+    entries = trusted(ROLE / "tasks" / "apply.yml")
+    gate = only(entries, lambda task: task.get("name") ==
+                "Refuse media release until every declared node completed installation")
+    release = only(entries, lambda task: task.get("ansible.builtin.include_tasks") == "release.yml")
+    wait = only(entries, lambda task: task.get("ansible.builtin.include_tasks") == "wait.yml"
+                and task.get("vars", {}).get("containercluster_install_agent_milestone") == "install-complete")
+    assert wait < gate < release
+    assert entries[gate - 1]["ansible.builtin.import_tasks"] == "cluster_state.yml"
+    task = entries[gate]
+    for replay in (False, True):
+        scope = dict(task["vars"], bootwright_cluster_install_request={
+            "identity": {"cluster": "compact"}, "release": {"version": RELEASE},
+            "rendezvous": "192.0.2.10", "nodes": [
+                {"name": "master-0", "address": "192.0.2.10"},
+                {"name": "master-1", "address": "192.0.2.11"}]},
+            containercluster_install_agent_before={"observation": {"identity": IDENTITY}},
+            containercluster_install_agent_settled=replay,
+            containercluster_install_agent_state={"cluster": IDENTITY, "release": RELEASE,
+                                                  "missing": missing, "completed": completed})
+        templar = Templar(loader=LOADER, variables=scope)
+        refuses = templar.evaluate_conditional(task["when"])
+        assert refuses is (bool(missing) or not completed)
+        if refuses:
+            message = templar.template(task["ansible.builtin.fail"]["msg"])
+            assert "No installation media was released" in message
+            for name in missing:
+                assert name in message
+            if "master-0" in missing:
+                assert "bootstrap control plane" in message and "Destroy" in message and "fresh apply" in message
+
+
+def test_a_failed_node_read_cannot_prove_presence_from_partial_stdout():
+    task = state_task(lambda task: "ansible.builtin.set_fact" in task)
+    missing = task["ansible.builtin.set_fact"]["containercluster_install_agent_state"]["missing"]
+    scope = {"bootwright_cluster_install_request": {"nodes": [{"name": "master-0"}]},
+             "containercluster_install_agent_nodes": {"rc": 1, "stdout": "master-0"}}
+    assert Templar(loader=LOADER, variables=scope).template(missing) == ["master-0"]

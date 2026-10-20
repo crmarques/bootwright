@@ -62,6 +62,7 @@ func (c InstallCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 			// dependency is named rather than resolved from an API object:
 			// both blocks realize the same cluster.
 			Dependencies:   []string{MediaBlockID(request.Identity.Cluster)},
+			Exclusive:      []string{"container-cluster-install"},
 			Requires:       installRequires(requirements[index]),
 			Impacts:        installImpacts(input.Verb, request),
 			Groups:         installGroups(input.Verb, request),
@@ -393,9 +394,12 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 		maps.Copy(values, pins)
 		refusals = preBootRefusals(execution.Context, execution.Continuation, request)
 	}
-	// The attempt adds the placement's identity and host key, so only the
-	// nodes' own credentials are listed here.
-	var materials []lifecycle.MaterialFile
+	// The attempt adds the placement's identity and host key. The serving
+	// certificate and each node's own credentials are lent here.
+	materials := []lifecycle.MaterialFile{{
+		Name: "artifact-certificate", Part: secrets.CertificatePart,
+		Secret: request.TLSCertificateRef, Variable: "artifactCertificate",
+	}}
 	for index, node := range request.Nodes {
 		materials = append(materials,
 			lifecycle.MaterialFile{

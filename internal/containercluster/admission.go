@@ -505,13 +505,23 @@ func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 	nodes := o.Spec().Get("nodes").Items()
 	platform := o.Spec().Get("install", "platform", "type").Text()
 	vip := len(nodes) > 1 && (platform == "baremetal" || platform == "vsphere")
-	nodeIPs := map[netip.Addr]bool{}
-	for _, node := range nodes {
-		if bound, ok := c.Find(api.Machine, node.Get("machineRef").Text()); ok {
-			a, is := machine.InstallAddress(bound, c)
-			if prefix, err := netip.ParsePrefix(a.Get("address").Text()); err == nil && len(is) == 0 {
-				nodeIPs[prefix.Addr()] = true
-			}
+	owned := 0
+	for _, slot := range endpointSlots {
+		if sourceType(o.Spec().Get("install", "endpoints", slot)) == "openshift" {
+			owned++
+		}
+	}
+	if len(nodes) > 1 && owned > 0 && owned < len(endpointSlots) {
+		issues = add(issues, invariantRemediation("$.spec.install.endpoints", "the installer must own all three endpoint slots or none of them", "use openshift for every endpoint source, or external or loadBalancer for every source"))
+	}
+	if vip {
+		endpoints := o.Spec().Get("install", "endpoints")
+		apiAddress := endpoints.Get("api", "address").Text()
+		if apiAddress != "" && endpoints.Get("api-int", "address").Text() != apiAddress {
+			issues = add(issues, invariantRemediation("$.spec.install.endpoints.api-int.address", "the internal API VIP must equal the API VIP", "set api-int.address to api.address"))
+		}
+		if apiAddress != "" && endpoints.Get("ingress", "address").Text() == apiAddress {
+			issues = add(issues, invariantRemediation("$.spec.install.endpoints.ingress.address", "the ingress VIP must differ from the API VIP", "choose a distinct ingress.address"))
 		}
 	}
 	for _, slot := range endpointSlots {
@@ -523,6 +533,9 @@ func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 		expected, _, selectionIssues := endpointAddress(o, endpoint, c, path)
 		issues = add(issues, selectionIssues...)
 		source := sourceType(endpoint)
+		if vip && source != "openshift" {
+			issues = add(issues, invariantRemediation(path+".source.type", "the declared platform requires installer-owned endpoint VIPs", "use an openshift source or declare platform none for external or loadBalancer sources"))
+		}
 		if source == "node" || source == "loadBalancer" {
 			if expected.Present() && endpoint.Has("address") && !expected.Equal(endpoint.Get("address")) {
 				issues = add(issues, invariant(path+".address", "effective endpoint address must agree with its selected source"))
@@ -541,9 +554,7 @@ func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 		if len(networks) > 0 && !contains(networks, address) {
 			issues = add(issues, invariantRemediation(path+".address", "endpoint IP must belong to a consumed machine network", "set "+path+".address to an IP in the bound Machines machineNetwork"))
 		}
-		if vip && nodeIPs[address] {
-			issues = add(issues, invariantRemediation(path+".address", "endpoint VIP must not collide with a node installation IP", "set "+path+".address to an unused VIP distinct from every node installation IP"))
-		}
+		issues = add(issues, endpointCollisions(o, c, slot, endpoint, address)...)
 		narrow := []netip.Prefix{}
 		for _, raw := range endpoint.Get("interfaceNetworks").Strings() {
 			if prefix, err := netip.ParsePrefix(raw); err == nil {
@@ -627,6 +638,17 @@ func derivePlatform(o api.Object, c api.Catalog) (api.Value, bool) {
 	}
 	switch types[0] {
 	case "baremetal", "libvirt":
+		owns := false
+		for _, slot := range endpointSlots {
+			endpoint := o.Spec().Get("install", "endpoints", slot)
+			if !endpoint.Present() && slot == "api-int" {
+				endpoint = o.Spec().Get("install", "endpoints", "api")
+			}
+			owns = owns || sourceType(endpoint) == "openshift"
+		}
+		if !owns {
+			return api.MapValue(api.FieldValue{Name: "type", Value: api.StringValue("none")}), true
+		}
 		return api.MapValue(api.FieldValue{Name: "type", Value: api.StringValue("baremetal")}, api.FieldValue{Name: "baremetal", Value: api.MapValue(api.FieldValue{Name: "provisioningNetwork", Value: api.StringValue("disabled")})}), true
 	case "vsphere":
 		return api.MapValue(api.FieldValue{Name: "type", Value: api.StringValue("vsphere")}), true

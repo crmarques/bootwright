@@ -898,3 +898,33 @@ func TestAFailedResolutionIsRetriedButAFailedAttemptIsNot(t *testing.T) {
 		}
 	}
 }
+
+func TestClusterInstallationsSerializeWhileMediaBuildsOverlap(t *testing.T) {
+	first := dependent("cluster-install-alpha", "cluster-media-alpha")
+	second := dependent("cluster-install-bravo", "cluster-media-bravo")
+	first.Exclusive, second.Exclusive = []string{"container-cluster-install"}, []string{"container-cluster-install"}
+	h := scheduled(t, 4, definition("cluster-media-alpha"), definition("cluster-media-bravo"), first, second)
+	watch := newOverlap(4)
+	t.Cleanup(watch.open)
+	h.capability.hold, h.capability.released = watch.enter, watch.leave
+	finished := make(chan error, 1)
+	go func() {
+		_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+		finished <- err
+	}()
+	if first := watch.gather(t, 2); !slices.Equal(first, []string{"cluster-media-alpha", "cluster-media-bravo"}) {
+		t.Fatal("media builds did not start together", first)
+	}
+	watch.admit()
+	watch.gather(t, 1)
+	watch.open()
+	if err := returnedWithin(t, finished); err != nil {
+		t.Fatal(err)
+	}
+	if !watch.together("cluster-media-alpha", "cluster-media-bravo") || watch.together("cluster-install-alpha", "cluster-install-bravo") {
+		t.Fatal("cluster schedule did not preserve independent media builds and exclusive installations")
+	}
+	if !slices.Contains(h.capability.applies, "cluster-install-alpha") || !slices.Contains(h.capability.applies, "cluster-install-bravo") {
+		t.Fatal("an installation never started", h.capability.applies)
+	}
+}

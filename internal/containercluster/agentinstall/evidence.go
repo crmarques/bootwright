@@ -132,9 +132,8 @@ type InstallEvidence struct {
 	Media   []string `json:"media"`
 	Missing []string `json:"missing"`
 	// OwnMedia names the nodes among Media whose controller presents the image
-	// this cluster's media block published: the scheme, host and path of what
-	// the controller reports equal those of the published address, each
-	// exactly. Any other image is foreign, and no name here is outside Media.
+	// this cluster's media block published: a reported URL under its reserved
+	// publication path whose file has the published image's device and inode. Any other image is foreign, and no name here is outside Media.
 	OwnMedia      []string `json:"ownMedia"`
 	Postcondition bool     `json:"postcondition"`
 	// Powered names every node reported running, which is what tells a node
@@ -146,7 +145,8 @@ type InstallEvidence struct {
 	// kubeconfig no longer parsing and put back in its place the copy this
 	// installation keeps, which still named this build's identity. The
 	// installer's waits load that file themselves, never the kept copy.
-	Restored bool `json:"restored"`
+	Restored      bool     `json:"restored"`
+	VIPsNotProbed []string `json:"vipsNotProbed,omitempty"`
 }
 
 // ValidateInstallPresence accepts evidence only when it proves the cluster

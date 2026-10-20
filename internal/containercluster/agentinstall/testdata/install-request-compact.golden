@@ -87,15 +87,38 @@
     "connection": "local",
     "machine": "controller"
   },
+  "publicationRoot": {
+    "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/clusters/ocp",
+    "url": "https://192.0.2.1:8443/private/clusters/ocp"
+  },
   "release": {
     "distribution": "openshift",
     "version": "4.21.15"
   },
+  "rendezvous": "198.51.100.31",
+  "tlsCertificateRef": "artifact-server-tls",
   "tool": {
     "compatibility": "openshift",
     "kind": "openshift-install",
     "version": "4.21.15"
   },
-  "version": "cluster-install-agent-v4",
+  "version": "cluster-install-agent-v5",
+  "vips": [
+    {
+      "address": "198.51.100.10",
+      "bridge": "virbr-lab",
+      "slot": "api"
+    },
+    {
+      "address": "198.51.100.10",
+      "bridge": "virbr-lab",
+      "slot": "api-int"
+    },
+    {
+      "address": "198.51.100.11",
+      "bridge": "virbr-lab",
+      "slot": "ingress"
+    }
+  ],
   "workRoot": "/var/lib/bootwright-clusters/lab/ocp"
 }

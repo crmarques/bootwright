@@ -29,6 +29,19 @@ argument_specs:
           image:
             type: dict
             required: true
+          rendezvous:
+            type: str
+            required: true
+          publicationRoot:
+            type: dict
+            required: true
+          tlsCertificateRef:
+            type: str
+            required: true
+          vips:
+            type: list
+            elements: dict
+            required: true
           nodes:
             type: list
             elements: dict
@@ -45,7 +58,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [cluster-install-agent-v4]
+            choices: [cluster-install-agent-v5]
           workRoot:
             type: str
             required: true

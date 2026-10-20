@@ -77,6 +77,7 @@ SHELLS = (
 # The list is exact: an entry no task starts any longer fails, so it only
 # shrinks, and a new executable is a decision recorded here.
 EXECUTABLES = frozenset({
+    "/usr/sbin/arping",
     "/usr/bin/chcon",
     "/usr/bin/dnf",
     "/usr/bin/getent",

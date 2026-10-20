@@ -56,16 +56,14 @@ containercluster_install_agent_host_error_hint: >-
   this cluster, so waiting again would watch a state that cannot change. A
   cluster diverted into recovery is never pivoted out of bootstrap, so an
   install left short of a declared node does not finish on its own. Repair the
-  host and repeat the apply, or destroy this context and apply again.
+  host, destroy this context and perform a fresh apply.
 containercluster_install_agent_stalled_hint: >-
   the cluster reached ready but the rendezvous node never started installing.
   It starts only once every declared node reports known, so a node that never
   booted the image, whose declared hardware address is not the one it registers
   with, or whose install disk was rejected holds the cluster there.
-# A stall's own give-ups name no host, so after one the wait reads once which
-# declared nodes registered with the assisted service on the rendezvous host
-# (wait.yml) and leads with each that did not. A read that fails, or that finds
-# every declared node, leaves the hint above.
+# Failed bootstrap waits read once which declared nodes are missing or held
+# in bad states. A failed read leaves the wait's original diagnosis.
 containercluster_install_agent_unregistered_hint: >-
   {{ 'node' if containercluster_install_agent_unregistered | length == 1 else 'nodes' }}
   {{ containercluster_install_agent_unregistered | join(', ') }} never registered

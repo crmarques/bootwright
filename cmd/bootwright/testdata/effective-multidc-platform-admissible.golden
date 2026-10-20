@@ -2574,9 +2574,7 @@ spec:
     method: agent
     mode: connected
     platform:
-      type: baremetal
-      baremetal:
-        provisioningNetwork: disabled
+      type: none
     proxy:
       proxyRef: default
       noProxy:
@@ -2656,9 +2654,7 @@ spec:
     method: agent
     mode: connected
     platform:
-      type: baremetal
-      baremetal:
-        provisioningNetwork: disabled
+      type: none
     proxy:
       proxyRef: default
       noProxy:

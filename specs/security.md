@@ -87,9 +87,6 @@ examples. The prohibition covers Bootwright-owned sinks. A management
 controller necessarily receives a private virtual-media URL to fetch an image
 and may retain it or log it in its own access records; treat those records as
 confidential too. An emulated controller has the same behavior.
-Not yet met: cluster media insertion reuses the private publication token
-instead of giving every insert a fresh capability; tracked as
-[B314](milestones/m3.md#b314).
 
 `validate` and `render effective` read no Secret material under the
 [compiler boundary](api.md#compiler-boundary), and desired state names no

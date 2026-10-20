@@ -82,7 +82,9 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 func addObserveReads(add func(string, string, string, string, func(map[string]any, map[string]any) bool), read func(map[string]any, map[string]any) bool) {
 	add("containercluster_install_agent", "observe.yml", observeCollection+"containercluster_install_inspect", "reads what the installation recorded", read)
 	add("containercluster_install_agent", "observe.yml", "ansible.builtin.copy", "hands the kept kubeconfig to custody through the declared output", observeCustodyCopy)
-	add("containercluster_install_agent", "state.yml", "ansible.builtin.command", "runs oc get against the cluster with a request timeout", read)
+	add("containercluster_install_agent", "cluster_state.yml", "ansible.builtin.command", "runs oc get against the cluster with a request timeout", read)
+	add("containercluster_install_agent", "cluster_state.yml", "ansible.builtin.set_fact", "resolves the cluster answers in memory", read)
+	add("containercluster_install_agent", "state.yml", observeCollection+"containercluster_media_token", "compares image device and inode without changing publication", observeRegistrationInspect)
 	add("containercluster_install_agent", "state.yml", observeCollection+"redfish_system_read", "reads each node's power and media from its controller", read)
 	add("containercluster_install_agent", "state.yml", "ansible.builtin.fail", "names a controller that did not answer", read)
 	add("containercluster_install_agent", "state.yml", "ansible.builtin.set_fact", "resolves the answers in memory", read)
@@ -365,6 +367,16 @@ func TestEveryObservePlaybookRunsOnlyAllowedTasks(t *testing.T) {
 			return strings.Contains(problem, `ceph_cluster ("Apply instead") outside its constraint`)
 		}) {
 			t.Fatalf("the apply operation was not reported: %v", problems)
+		}
+	})
+
+	t.Run("a token mutation is reported", func(t *testing.T) {
+		planted := "\n- name: Publish a token\n  bootwright.core.containercluster_media_token:\n    operation: publish\n"
+		problems := walkObservePlaybooks(observeAssetsWith(observeRoleRoot+"containercluster_install_agent/tasks/state.yml", planted))
+		if !slices.ContainsFunc(problems, func(problem string) bool {
+			return strings.Contains(problem, `containercluster_media_token ("Publish a token") outside its constraint`)
+		}) {
+			t.Fatalf("the token publication was not reported: %v", problems)
 		}
 	})
 

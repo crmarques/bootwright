@@ -55,7 +55,7 @@ spec:
       nmstate:
         interfaces: [{name: eth0, type: ethernet}]
     attachmentRef: workload
-    addresses: [{name: primary, address: 192.0.2.10/24, interface: eth0}]
+    addresses: [{name: primary, address: 192.0.2.20/24, interface: eth0}]
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Secret

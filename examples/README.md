@@ -17,6 +17,7 @@ validate or import that directory, rather than its category or all of
 | `storage-clusters/` | [libvirt-3-nodes-ceph-object](storage-clusters/libvirt-3-nodes-ceph-object/README.md) | Install three RHEL guests and an IBM Ceph cluster with an object gateway: its realm, zone group, zone, zone pools and two RGW daemons that serve its TLS endpoint, with certificate-name and daemon failover checks. |
 | `storage-clusters/` | [libvirt-3-nodes-ceph-nfs](storage-clusters/libvirt-3-nodes-ceph-nfs/README.md) | Install three RHEL guests and an IBM Ceph cluster with a CephFS subvolume served by one NFSv4 export of a direct NFS service, with allowed and denied client checks. |
 | `container-clusters/` | [lab-sno](container-clusters/lab-sno/README.md) | Install single-node OpenShift on a libvirt guest. |
+| `container-clusters/` | [lab-compact](container-clusters/lab-compact/README.md) | Install compact OpenShift on three libvirt masters with installer-owned virtual IPs. |
 | `full-platforms/` | [multidc-platform](full-platforms/multidc-platform/README.md) | Authoring reference for a multi-datacenter platform; current admission refuses its unsupported features. |
 
 The [Ceph profile catalog](../specs/storage-coverage.md#profile-catalog) splits

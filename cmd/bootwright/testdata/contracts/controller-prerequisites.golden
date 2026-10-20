@@ -1,5 +1,5 @@
 implementation: controller-prerequisites
-content-digest: 0fad929c7f9feb9dea63e67a99ae11b1de535763d9a75011e78457f3e6620b92
+content-digest: 951ef5ecaec40a877ca5cc82dd0c745d3e1c8e8edc96a29de37fc701af4238f7
 automation-formats: none
 request-schema:
   egress struct prerequisites.SetupEgress
@@ -8,6 +8,7 @@ request-schema:
   egress.noProxy []string
   hypervisor bool
   installerMedia bool
+  iputils bool omitempty
   libvirt string
   libvirtClient bool
   machine string

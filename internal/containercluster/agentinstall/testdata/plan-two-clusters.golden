@@ -1,0 +1,24 @@
+{
+  "blocks": [
+    {
+      "exclusive": null,
+      "id": "cluster-media-other"
+    },
+    {
+      "exclusive": null,
+      "id": "cluster-media-sno"
+    },
+    {
+      "exclusive": [
+        "container-cluster-install"
+      ],
+      "id": "cluster-install-other"
+    },
+    {
+      "exclusive": [
+        "container-cluster-install"
+      ],
+      "id": "cluster-install-sno"
+    }
+  ]
+}

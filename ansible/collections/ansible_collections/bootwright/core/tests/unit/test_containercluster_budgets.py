@@ -713,21 +713,15 @@ def test_a_rendezvous_host_that_does_not_answer_keeps_the_stalls_own_hint(tmp_pa
     assert wait.reads == [{"read": False, "unregistered": []}]
 
 
-# Only a wait diagnosed as a stall reads: a reached milestone, a host in error
-# even after a stall, the budget spent, the installer's own timeout even after
-# a stall, and a give-up it cannot resume from read nothing.
+# Successful waits, host errors and unrelated give-ups read nothing.
 @pytest.mark.parametrize("script", [
     [(0, "", 600)],
     [(1, STALLED, 60), (0, "", 600)],
     [(1, HOST_ERROR, 60)],
     [(1, STALLED, 60), (1, HOST_ERROR, 60)],
-    [(0, "", 10**6)],
-    [(1, TIMED_OUT, 60), (1, TIMED_OUT, 4690)],
-    [(1, STALLED, 60), (1, TIMED_OUT, 60), (0, "", 10**6)],
     [(1, "level=fatal msg=\"failed to fetch the cluster\"", 60)],
-], ids=["reached", "reached after a stall", "host error", "host error after a stall", "budget spent", "timed out",
-        "budget spent after a later timeout", "not resumable"])
-def test_only_a_wait_diagnosed_as_a_stall_reads_the_registered_hosts(tmp_path, service, script):
+], ids=["reached", "reached after a stall", "host error", "host error after a stall", "not resumable"])
+def test_success_host_errors_and_unrelated_failures_do_not_read_registered_hosts(tmp_path, service, script):
     wait = Wait(script, work=asset_state(tmp_path / "work"), nodes=NODES)
     message = wait.run()
     assert message is None or not message.startswith(("node", "the cluster reached ready"))
@@ -779,7 +773,7 @@ def test_a_build_the_budget_stopped_fails_as_the_budget_spent_and_any_other_as_t
 
 
 def test_every_cluster_read_gives_up_on_a_request_after_a_bounded_time():
-    reads = [task for task in walk(trusted(INSTALL / "tasks" / "state.yml")) if argv(task)[:1] == [CLIENT]]
+    reads = [task for task in walk(trusted(INSTALL / "tasks" / "cluster_state.yml")) if argv(task)[:1] == [CLIENT]]
     assert len(reads) >= 4, "the walk stopped seeing the cluster reads"
     for task in reads:
         bounds = [value for value in argv(task) if value.startswith("--request-timeout")]
@@ -788,7 +782,7 @@ def test_every_cluster_read_gives_up_on_a_request_after_a_bounded_time():
         assert rendered.startswith("--request-timeout=") and rendered.endswith("s"), rendered
         assert 0 < int(rendered[len("--request-timeout="):-1]) <= 60, rendered
     for path in sorted((INSTALL / "tasks").glob("*.yml")):
-        if path.name != "state.yml":
+        if path.name != "cluster_state.yml":
             assert not [task for task in walk(trusted(path)) if argv(task)[:1] == [CLIENT]], path.name
 
 
@@ -902,3 +896,49 @@ def test_a_failed_wait_names_the_kubeconfig_it_restored(tmp_path):
     message = wait.run()
     assert wait.restores == [RESTORED]
     assert "restored the installer's kubeconfig from the kept copy before waiting" in message
+
+
+@pytest.mark.parametrize("script", [
+    [(0, "", 10**6)],
+    [(1, TIMED_OUT, 60), (1, TIMED_OUT, 4690)],
+    [(1, STALLED, 60), (1, TIMED_OUT, 60), (0, "", 10**6)],
+])
+def test_bootstrap_timeout_or_budget_spent_reads_hosts_once(tmp_path, service, script):
+    wait = Wait(script, work=asset_state(tmp_path / "work"), nodes=NODES)
+    message = wait.run()
+    assert message.startswith("nodes master-1, master-2 never registered")
+    assert service.seen == [READ]
+    assert TOKEN not in message
+
+
+def test_install_wait_timeout_never_reads_assisted_hosts(tmp_path, service):
+    wait = Wait([(0, "", 10**6)], work=asset_state(tmp_path / "work"), nodes=NODES)
+    wait.run(milestone="install-complete")
+    assert wait.reads == [] and service.seen == []
+
+
+def test_bootstrap_diagnosis_leads_with_missing_then_bad_state_nodes(tmp_path, service):
+    hosts = json.loads(listed("master-0", "master-2"))
+    hosts[0]["hosts"][0].update(
+        status="insufficient", status_info="disk is too small",
+        validations_info=json.dumps({"hardware": [{"id": "has-min-valid-disks", "status": "failure"}]}),
+    )
+    service.answer = (200, json.dumps(hosts).encode())
+    wait = Wait([(0, "", 10**6)], work=asset_state(tmp_path / "work"), nodes=NODES)
+    message = wait.run()
+    assert message.startswith("node master-1 never registered")
+    assert "node master-0 is insufficient: disk is too small" in message
+    assert "has-min-valid-disks" in message
+    assert message.index("master-1") < message.index("master-0")
+    assert service.seen == [READ]
+
+
+def test_compact_retry_boots_only_the_stopped_or_unbooted_nodes():
+    state = {"powered": ["master-0"], "ownMedia": ["master-0", "master-1"]}
+    booted = []
+    for name in ("master-0", "master-1", "master-2"):
+        rendering = scope(INSTALL, containercluster_install_agent_node={"machine": name},
+                          containercluster_install_agent_state=state)
+        if rendering.evaluate_conditional(skip()["when"]):
+            booted.append(name)
+    assert booted == ["master-1", "master-2"]

@@ -129,7 +129,8 @@ func mustReplaceOnce(t *testing.T, path, body, old, replacement string) string {
 // the Ceph sources and the add-on that can only consume a refused export
 // dropped (the hub profile keeps the add-on every cluster profile shares), a
 // non-stretch StorageCluster with its policy and pool substituted from
-// testdata, and the extras without the refused families. The public example is
+// testdata, external cluster endpoints projected onto platform none, and the
+// extras without the refused families. The public example is
 // untouched; its own refusals are pinned by referenceRefusals.
 func admissibleExampleSources(t *testing.T, withExtras bool) desiredstate.Sources {
 	t.Helper()
@@ -145,6 +146,8 @@ func admissibleExampleSources(t *testing.T, withExtras bool) desiredstate.Source
 		case strings.HasPrefix(file.Path(), ceph), strings.HasPrefix(file.Path(), addOn):
 			dropped++
 			continue
+		case strings.Contains(body, "kind: ContainerCluster\n") && strings.Contains(body, "    platform:\n      type: baremetal\n"):
+			body = mustReplaceOnce(t, file.Path(), body, "    platform:\n      type: baremetal\n\n      baremetal:\n        provisioningNetwork: disabled\n", "    platform:\n      type: none\n")
 		case strings.Contains(body, "kind: ClusterAddonProfile\n"):
 			replacement := ""
 			if strings.Contains(body, "  name: hub-cluster-addons\n") {
@@ -247,6 +250,7 @@ func TestReferenceReadmeListsExactlyTheReferenceRefusals(t *testing.T) {
 	global := func(d diagnosticTuple) bool { return strings.HasPrefix(d.field, "$.spec.ceph.config.global.") }
 	export := func(d diagnosticTuple) bool { return d.kind == "StorageExport" }
 	bullets := map[string]func(diagnosticTuple) bool{
+		"External endpoint sources on the two baremetal ContainerClusters.":                                        func(d diagnosticTuple) bool { return d.kind == "ContainerCluster" },
 		"Stretch topology and manager-module intent.":                                                              stretch,
 		"Unqualified global Ceph options, including missing members of the currently qualified pool-default pair.": global,
 		"Four `StorageExport` objects.":                                                                            export,
@@ -315,6 +319,13 @@ func referenceRefusals() []diagnosticTuple {
 		return diagnosticTuple{"api.invariant", kind, name, laterServiceRefusal}
 	}
 	return []diagnosticTuple{
+		{"api.invariant", "ContainerCluster", "ocp-multidc-01", "$.spec.install.endpoints.api.source.type"},
+		{"api.invariant", "ContainerCluster", "ocp-multidc-01", "$.spec.install.endpoints.api-int.source.type"},
+		{"api.invariant", "ContainerCluster", "ocp-multidc-01", "$.spec.install.endpoints.ingress.source.type"},
+		{"api.invariant", "ContainerCluster", "ocp-multidc-02", "$.spec.install.endpoints.api.source.type"},
+		{"api.invariant", "ContainerCluster", "ocp-multidc-02", "$.spec.install.endpoints.api-int.source.type"},
+		{"api.invariant", "ContainerCluster", "ocp-multidc-02", "$.spec.install.endpoints.ingress.source.type"},
+
 		cluster("$.spec.ceph.config.global.mon_osd_down_out_subtree_limit"),
 		cluster("$.spec.ceph.config.global.osd_pool_default_pg_autoscale_mode"),
 		{"api.required", storageClusterKind, multidcCluster, "$.spec.ceph.config.global.osd_pool_default_min_size"},

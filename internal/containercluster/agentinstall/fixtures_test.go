@@ -311,7 +311,7 @@ func externalCatalog() api.Catalog {
 	declared := cluster("ocp",
 		installSelection(
 			endpoints("198.51.100.20", "198.51.100.20", "198.51.100.21", "external"),
-			field("platform", api.MapValue(text("type", "baremetal"))),
+			field("platform", api.MapValue(text("type", "none"))),
 			field("additionalTrustBundleRefs", api.StringList("lab-root-ca", "corp-proxy-ca")),
 		),
 		node("master-0", "master", "ocp-01", "master-0.ocp.lab.example.test"),

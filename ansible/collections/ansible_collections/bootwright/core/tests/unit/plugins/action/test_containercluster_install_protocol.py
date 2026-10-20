@@ -19,6 +19,9 @@ release-4.21).
 from __future__ import annotations
 
 import pathlib
+import tempfile
+
+from ansible_collections.bootwright.core.plugins.modules import containercluster_media_token
 from types import SimpleNamespace
 
 import pytest
@@ -189,11 +192,11 @@ def one(name, predicate):
 
 
 def completion_read():
-    return one("state.yml", lambda task: task.get("register") == "containercluster_install_agent_completion")
+    return one("cluster_state.yml", lambda task: task.get("register") == "containercluster_install_agent_completion")
 
 
 def resolve():
-    return one("state.yml", lambda task: "containercluster_install_agent_state" in (
+    return one("cluster_state.yml", lambda task: "containercluster_install_agent_state" in (
         task.get("ansible.builtin.set_fact") or {}))
 
 
@@ -302,11 +305,23 @@ def controller(machine, media, power="On"):
 
 
 def resolved_media(results, published=PUBLISHED):
-    """The `media` and `ownMedia` the state read resolves from its controller reads."""
-    task = resolve()
+    """Resolve real module inode observations through the role's final state fact."""
+    task = one("state.yml", lambda t: "containercluster_install_agent_state" in t.get("ansible.builtin.set_fact", {}))
     scope = dict(task.get("vars") or {})
     scope["containercluster_install_agent_controllers"] = {"results": results}
     scope["containercluster_install_agent_before"] = {"observation": {"identity": IDENTITY, "url": published}}
+    scope["containercluster_install_agent_state"] = {}
+    identities = []
+    with tempfile.TemporaryDirectory() as directory:
+        if published:
+            source = pathlib.Path(directory) / TOKEN
+            source.mkdir()
+            (source / "agent.iso").write_bytes(b"image")
+            base = published.rsplit("/", 2)[0]
+            request = {"publicationRoot": {"path": directory, "url": base}}
+            identities = [{"item": result, **containercluster_media_token.operate(
+                request, published, result.get("media", ""), "inspect")} for result in results]
+    scope["containercluster_install_agent_media_identity"] = {"results": identities}
     templar = Templar(loader=LOADER, variables=scope)
     fields = task["ansible.builtin.set_fact"]["containercluster_install_agent_state"]
     return list(templar.template(fields["media"])), list(templar.template(fields["ownMedia"]))
@@ -468,7 +483,8 @@ def reads(observes):
     """Which of the state read's reads run under one observation scope."""
     templar = Templar(loader=LOADER, variables=scoped(observes))
     return {task["register"]: templar.evaluate_conditional(task["when"]) if "when" in task else True
-            for task in tasks("state.yml") if "register" in task}
+            for task in tasks("cluster_state.yml") + tasks("state.yml") if "register" in task and
+            task.get("register") != "containercluster_install_agent_media_identity"}
 
 
 @pytest.mark.parametrize("observes", [None, ""], ids=["unscoped", "empty"])
@@ -504,9 +520,21 @@ def test_a_removal_observation_of_a_foreign_image_publishes_the_media_alone():
     variables["containercluster_install_agent_before"] = {"observation": {"identity": IDENTITY, "url": PUBLISHED}}
     resolved = Templar(loader=LOADER, variables=variables).template(
         task["ansible.builtin.set_fact"]["containercluster_install_agent_state"])
+    media_task = one("state.yml", lambda t: "containercluster_install_agent_state" in t.get("ansible.builtin.set_fact", {}))
+    variables.update(media_task.get("vars") or {})
+    variables["containercluster_install_agent_state"] = resolved
+    variables["containercluster_install_agent_media_identity"] = {"results": []}
+    resolved = Templar(loader=LOADER, variables=variables).template(
+        media_task["ansible.builtin.set_fact"]["containercluster_install_agent_state"])
     found = protocol.evidence(arguments(outcome="unchanged", observed=True, state=resolved), DIGEST, False)
     assert found == {
         "absent": False, "cluster": "", "completed": False, "identity": IDENTITY, "media": ["sno-01"],
         "missing": ["master-0"], "ownMedia": [], "postcondition": False, "powered": ["sno-01"],
         "release": "", "request": DIGEST, "restored": False,
     }
+
+
+def test_unprobeable_vips_are_recorded_without_private_media_urls():
+    found = protocol.evidence({"vips_not_probed": ["2001:db8::10", "192.0.2.10"]}, DIGEST, False)
+    assert found["vipsNotProbed"] == ["192.0.2.10", "2001:db8::10"]
+    assert "vipsNotProbed" not in protocol.evidence({}, DIGEST, False)

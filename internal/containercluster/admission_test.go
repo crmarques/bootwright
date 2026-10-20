@@ -74,7 +74,7 @@ func fixture(variant string, count int, ipv6 bool) (api.Object, api.Catalog) {
 }
 
 func TestPlatformDerivationAndAuthoredExternalPreservation(t *testing.T) {
-	for variant, want := range map[string]string{"baremetal": "baremetal", "libvirt": "baremetal", "vsphere": "vsphere", "kubevirt": "none"} {
+	for variant, want := range map[string]string{"baremetal": "none", "libvirt": "none", "vsphere": "vsphere", "kubevirt": "none"} {
 		t.Run(variant, func(t *testing.T) {
 			o, c := fixture(variant, 4, false)
 			effective, issues := Normalize(o, c)
@@ -216,10 +216,11 @@ func TestAPIInternalCopiesOnlyAddressAndSource(t *testing.T) {
 }
 
 func TestLoadBalancerSelectionAndVIPCollisions(t *testing.T) {
-	o, c := fixture("vsphere", 4, false)
+	o, c := fixture("libvirt", 4, false)
 	lb := obj(api.LoadBalancer, "lb", m("management", "external", "bindAddresses", list(m("name", "api", "address", "192.0.2.2"), m("name", "ingress", "address", "192.0.2.3"))))
 	c = api.NewCatalog(append(c.Objects(), lb))
 	o = o.WithSpec(o.Spec().WithPath(m("source", m("type", "loadBalancer", "loadBalancerRef", "lb", "bindAddressRef", "api")), "install", "endpoints", "api"))
+	o = o.WithSpec(o.Spec().WithPath(m("source", m("type", "loadBalancer", "loadBalancerRef", "lb", "bindAddressRef", "ingress")), "install", "endpoints", "ingress"))
 	effective, _ := Normalize(o, c)
 	if issues := Validate(effective, c); len(issues) > 0 {
 		t.Fatal(issues)
@@ -233,11 +234,11 @@ func TestLoadBalancerSelectionAndVIPCollisions(t *testing.T) {
 		t.Fatal(issues)
 	}
 	bad = effective.WithSpec(effective.Spec().WithPath(api.StringValue("192.0.2.10"), "install", "endpoints", "ingress", "address"))
-	if issues := Validate(bad, c); !hasField(issues, "$.spec.install.endpoints.ingress.address") {
+	if issues := Validate(bad, c); !hasField(issues, "$.spec.install.endpoints.ingress.address") && !hasField(issues, "$.spec.install.endpoints.ingress.source") {
 		t.Fatal("VIP collision accepted", issues)
 	}
 	bad = effective.WithSpec(effective.Spec().WithPath(api.StringValue("198.51.100.3"), "install", "endpoints", "ingress", "address"))
-	if issues := Validate(bad, c); !hasField(issues, "$.spec.install.endpoints.ingress.address") {
+	if issues := Validate(bad, c); !hasField(issues, "$.spec.install.endpoints.ingress.address") && !hasField(issues, "$.spec.install.endpoints.ingress.source") {
 		t.Fatal("out-of-network VIP accepted", issues)
 	}
 	missing := o.WithSpec(o.Spec().WithPath(api.StringValue("unknown"), "install", "endpoints", "api", "source", "loadBalancerRef"))

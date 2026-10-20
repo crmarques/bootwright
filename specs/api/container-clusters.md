@@ -174,12 +174,9 @@ A multi-node KubeVirt cluster may author `baremetal`; every slot's source is
 then `openshift`, and every node's attachments are `Localnet`
 ClusterUserDefinedNetworks or `bridge` NetworkAttachmentDefinitions.
 
-Not yet met: the vSphere arm admits no `vcenterCredentials`, a KubeVirt
-`baremetal` cluster's attachment rule is not enforced, and every multi-node
-libvirt or bare-metal cluster derives `baremetal` whatever its slots' sources
-are, with a mixed slot set admitted; tracked as
-[B733](../milestones/m3.md#b733), [B88](../milestones/m3.md#b88) and
-[B707](../milestones/m3.md#b707).
+Not yet met: the vSphere arm admits no `vcenterCredentials`, and a KubeVirt
+`baremetal` cluster's attachment rule is not enforced; tracked as
+[B733](../milestones/m3.md#b733) and [B88](../milestones/m3.md#b88).
 
 ## Endpoints
 
@@ -239,9 +236,6 @@ release. `api-int` resolves the `api` address, and the `api` and
 selected machine-network CIDRs. VIPs do not collide with node install IPs, and
 endpoint/network address families are consistent.
 
-Not yet met: such a platform admits `external` and `loadBalancer` endpoints, an
-`api-int` address other than `api`'s and an `ingress` address equal to `api`'s;
-tracked as [B707](../milestones/m3.md#b707).
 
 **Endpoint addresses are the cluster's own.** An effective endpoint address
 equals no effective endpoint address of another selected ContainerCluster, no
@@ -259,8 +253,6 @@ prefix belongs to one context through its exclusive reservation, so no address
 in it is shared across contexts; on any other network Bootwright coordinates no
 address, as for node addresses.
 
-Not yet met: only a collision with the cluster's own node install addresses is
-refused; tracked as [B708](../milestones/m3.md#b708).
 
 ## Credentials and certificates
 

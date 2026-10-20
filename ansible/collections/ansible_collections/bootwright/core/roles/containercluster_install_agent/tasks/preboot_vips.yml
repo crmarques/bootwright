@@ -1,0 +1,35 @@
+---
+- name: Record which virtual IPs cannot be probed here
+  ansible.builtin.set_fact:
+    containercluster_install_agent_vips_not_probed: >-
+      {{ bootwright_cluster_install_request.vips | selectattr('bridge', 'equalto', '') | map(attribute='address') | list }}
+  changed_when: false
+
+- name: Prove the virtual IPs are free before a fresh boot
+  ansible.builtin.command:
+    argv: [/usr/sbin/arping, -D, -c, '3', -w, '3', -I, '{{ item.bridge }}', '{{ item.address }}']
+    expand_argument_vars: false
+  environment:
+    LC_ALL: C
+  loop: '{{ bootwright_cluster_install_request.vips }}'
+  loop_control:
+    label: '{{ item.slot }} {{ item.address }}'
+  register: containercluster_install_agent_vip_probes
+  changed_when: false
+  failed_when: false
+  when:
+    - item.bridge | length > 0
+    - containercluster_install_agent_state.powered | intersect(containercluster_install_agent_state.ownMedia) | length == 0
+
+- name: Refuse a virtual IP whose freedom was not proved
+  ansible.builtin.fail:
+    msg: >-
+      virtual IP {{ item.item.address }} ({{ item.item.slot }}) is not proved free;
+      {{ 'answering hardware addresses: ' ~ ((item.stdout | default('') | regex_findall('(?i)(?:[0-9a-f]{2}:){5}[0-9a-f]{2}')) | unique | join(', '))
+         if item.rc | default(-1) == 1 else 'the ARP probe failed' }}.
+  loop: '{{ containercluster_install_agent_vip_probes.results | default([]) }}'
+  loop_control:
+    label: '{{ item.item.slot }}'
+  when:
+    - not (item.skipped | default(false))
+    - item.rc | default(-1) != 0

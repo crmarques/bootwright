@@ -135,6 +135,9 @@ func (i *inspection) declare(host HostInspector, lock RuntimeLock) {
 	if i.native.NMState {
 		checks = append(checks, Check{"nmstate", closureRequirement("nmstate"), "unverified", "unverified", ContextScope})
 	}
+	if i.native.IPUtils {
+		checks = append(checks, Check{"iputils", closureRequirement("iputils"), "unverified", "unverified", ContextScope})
+	}
 	if i.stored.Context.Name != "" {
 		checks = append(checks, Check{"controller-binding", i.selection.MachineName(), "unverified", "unverified", ContextScope})
 	}
@@ -575,13 +578,15 @@ func (s Service) settleContext(ctx context.Context, current *inspection, settle 
 }
 
 func closureRequirements(id string) NativeRequirements {
-	return NativeRequirements{LibvirtClient: id == "libvirt-client", Hypervisor: id == "hypervisor", InstallerMedia: id == "installer-media", NMState: id == "nmstate"}
+	return NativeRequirements{LibvirtClient: id == "libvirt-client", Hypervisor: id == "hypervisor", InstallerMedia: id == "installer-media", NMState: id == "nmstate", IPUtils: id == "iputils"}
 }
 
 func closureRequirement(id string) string {
 	switch id {
 	case "hypervisor":
 		return "hypervisor closure"
+	case "iputils":
+		return "virtual-IP duplicate-address probe (iputils)"
 	case "nmstate":
 		return "NMState network configuration generator"
 	case "installer-media":

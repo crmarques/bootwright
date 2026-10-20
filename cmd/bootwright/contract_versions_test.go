@@ -161,7 +161,7 @@ func automationFormats() map[string]automationFormat {
 		"os-package-tree-v1":        {class: formatMirrored},
 		"os-install-anaconda-v15":   {class: formatMirrored},
 		"cluster-media-agent-v5":    {class: formatMirrored},
-		"cluster-install-agent-v4":  {class: formatMirrored},
+		"cluster-install-agent-v5":  {class: formatMirrored},
 		"artifact-server-nginx-v2":  {class: formatMirrored},
 		"managed-service-v3":        {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power

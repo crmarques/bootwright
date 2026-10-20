@@ -104,6 +104,7 @@ make build
 
 The expected result is failure with explicit diagnostics for:
 
+- External endpoint sources on the two baremetal ContainerClusters.
 - Stretch topology and manager-module intent.
 - Unqualified global Ceph options, including missing members of the currently
   qualified pool-default pair.

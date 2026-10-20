@@ -107,15 +107,10 @@ func TestAMultiNodeClusterInstallsOnItsDeclaredPlatform(t *testing.T) {
 	}
 }
 
-// A cluster whose endpoints something outside it answers declares its load
-// balancer user-managed, because the installer owns neither address.
-func TestExternallyAnsweredEndpointsDeclareAUserManagedLoadBalancer(t *testing.T) {
+func TestExternallyAnsweredEndpointsUsePlatformNone(t *testing.T) {
 	media, _, _ := onlyRequests(t, externalCatalog())
-	platform, _ := media.InstallConfig["platform"].(map[string]any)
-	arm, _ := platform["baremetal"].(map[string]any)
-	balancer, ok := arm["loadBalancer"].(map[string]any)
-	if !ok || balancer["type"] != "UserManaged" {
-		t.Fatalf("platform = %#v", platform)
+	if got := encoded(t, media.InstallConfig["platform"]); got != `{"none":{}}` {
+		t.Fatalf("platform = %s", got)
 	}
 }
 

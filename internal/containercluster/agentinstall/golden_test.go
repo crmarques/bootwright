@@ -215,7 +215,7 @@ func TestInstallEvidenceMatchesItsGoldens(t *testing.T) {
 			InstallEvidence{
 				Cluster: anchorIdentity, Completed: true, Identity: anchorIdentity, Media: []string{}, Missing: []string{},
 				OwnMedia: []string{}, Postcondition: true, Powered: []string{"sno-01"}, Release: "4.21.15",
-				Request: testDigest, Restored: true,
+				Request: testDigest, Restored: true, VIPsNotProbed: []string{"2001:db8::10"},
 			},
 			func(data []byte) error { return ValidateInstallPresence(data, install, testDigest) },
 		},

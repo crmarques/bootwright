@@ -1,5 +1,5 @@
 implementation: cluster-install-agent-v1
-content-digest: e88931125ac1c8819ea4b3554121a64195fc7976a39d55b16daa90cd29d72b02
+content-digest: 372d784b0b67afa9412c5a10dbf33e4bb142de571104f9a9afc2b956974db06f
 automation-formats: none
 request-schema:
   budgets struct agentinstall.InstallBudgets
@@ -43,14 +43,23 @@ request-schema:
   placement.port int omitempty
   placement.privateKeyRef string omitempty
   placement.user string omitempty
+  publicationRoot struct agentinstall.Publication
+  publicationRoot.path string
+  publicationRoot.url string
   release struct agentinstall.Release
   release.distribution string
   release.version string
+  rendezvous string
+  tlsCertificateRef string
   tool struct agentinstall.Tool
   tool.compatibility string
   tool.kind string
   tool.version string
   version string
+  vips []struct agentinstall.VIP
+  vips[].address string
+  vips[].bridge string
+  vips[].slot string
   workRoot string
 evidence-schema:
   absent bool
@@ -65,3 +74,4 @@ evidence-schema:
   release string
   request string
   restored bool
+  vipsNotProbed []string omitempty

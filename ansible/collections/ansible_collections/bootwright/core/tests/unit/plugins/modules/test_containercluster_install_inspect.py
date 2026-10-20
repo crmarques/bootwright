@@ -792,3 +792,26 @@ def test_the_module_reports_the_registration_and_never_the_token(tmp_path, servi
         result = run(dict(arguments, **other), capsys)
         assert result["failed"] is True and result["msg"] == "registered only reads, so it is exclusive with keep and restore"
     assert service.seen == [READ]
+
+
+@pytest.mark.parametrize("status", ["insufficient", "disconnected", "pending-for-input", "preparing-failed",
+                                    "installing-pending-user-action", "error"])
+def test_registration_reports_bad_states_and_only_failing_validation_ids(tmp_path, service, status):
+    entry = dict(host(requested="master-0"), status=status, status_info="installation needs attention",
+                 validations_info=json.dumps({"hardware": [
+                     {"id": "disk-speed", "status": "failure", "message": "details"},
+                     {"id": "cpu", "status": "success"}]}))
+    service.answer = (200, listed(entry, host(reported="master-2")), {})
+    assert registration(declared(tmp_path, asset_state(tmp_path / "work"))) == {
+        "read": True, "unregistered": ["master-1"], "unready": [
+            {"name": "master-0", "status": status, "message": "installation needs attention",
+             "validations": ["disk-speed"]}]}
+    assert service.seen == [READ]
+
+
+@pytest.mark.parametrize("validations", ["not json", "[]", "null", '{"hardware": null}'])
+def test_bad_validation_shape_keeps_the_host_status(tmp_path, service, validations):
+    service.answer = (200, listed(dict(host(requested="master-0"), status="error",
+                                       validations_info=validations)), {})
+    result = registration(declared(tmp_path, asset_state(tmp_path / "work")))
+    assert result["unready"] == [{"name": "master-0", "status": "error", "message": "", "validations": []}]

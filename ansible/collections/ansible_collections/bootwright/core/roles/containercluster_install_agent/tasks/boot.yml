@@ -103,6 +103,59 @@
               installation again with this release
           when: containercluster_install_agent_node.substrate not in ['libvirt', 'baremetal']
 
+        - name: Publish a fresh private link for this insert
+          bootwright.core.containercluster_media_token:
+            request: '{{ bootwright_cluster_install_request }}'
+            source: '{{ containercluster_install_agent_url }}'
+            operation: publish
+          register: containercluster_install_agent_token
+          no_log: true
+
+        - name: Keep this attempt's private insert token for release
+          ansible.builtin.set_fact:
+            containercluster_install_agent_insert_tokens: >-
+              {{ containercluster_install_agent_insert_tokens | default({})
+                 | combine({containercluster_install_agent_node.machine: containercluster_install_agent_token.url}) }}
+          no_log: true
+
+        - name: Prove the insert image through the verified serving listener
+          ansible.builtin.uri:
+            url: '{{ containercluster_install_agent_token.url }}'
+            method: GET
+            headers:
+              Range: bytes=0-0
+            ca_path: '{{ bootwright_cluster_install_material.artifactCertificate }}'
+            validate_certs: true
+            use_proxy: false
+            follow_redirects: none
+            status_code: [200, 206]
+            timeout: 30
+          register: containercluster_install_agent_token_probe
+          failed_when: false
+          changed_when: false
+          no_log: true
+
+        - name: Retire a link the serving listener did not prove
+          bootwright.core.containercluster_media_token:
+            request: '{{ bootwright_cluster_install_request }}'
+            source: '{{ containercluster_install_agent_url }}'
+            image: '{{ containercluster_install_agent_token.url }}'
+            operation: remove
+          when: containercluster_install_agent_token_probe.status | default(-1) | int not in [200, 206]
+          no_log: true
+
+        - name: Refuse an insert whose private image cannot be fetched
+          ansible.builtin.assert:
+            that: containercluster_install_agent_token_probe.status | default(-1) | int in [200, 206]
+            fail_msg: >-
+              the private insert image could not be fetched through the artifact listener:
+              {{ 'serving certificate verification against Secret ' ~ bootwright_cluster_install_request.tlsCertificateRef ~ ' failed'
+                 if (containercluster_install_agent_token_probe.msg | default('')) is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed')
+                 else ('listener status ' ~ (containercluster_install_agent_token_probe.status | default(-1) | string))
+                 if containercluster_install_agent_token_probe.status | default(-1) | int != -1
+                 else 'the connection failed before a status line was received' }}
+            quiet: true
+
         - name: Insert the published image as virtual media
           bootwright.core.redfish_boot:
             endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
@@ -111,7 +164,7 @@
             verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
             ca_data: '{{ lookup("ansible.builtin.file", containercluster_install_agent_ca) if containercluster_install_agent_ca else omit }}'
             operation: insert
-            image: '{{ containercluster_install_agent_url }}'
+            image: '{{ containercluster_install_agent_token.url }}'
           register: containercluster_install_agent_insertion
           failed_when: false
           no_log: true

@@ -7493,3 +7493,89 @@ Restore classifies a kubeconfig above 64 KiB from only its last 8 KiB: a complet
 ### B71
 
 Status derives GitOps handoff readiness from durable operation and block records, with fixed-order reasons and no write or host probe. A settled apply restores a latched required-log fault under a mutating transaction after re-proving its records. Human and JSON goldens cover readiness and every refusal reason.
+
+## X116 — M3c endpoint ownership
+
+**Delivery:** in-tree work for [M3c](m3.md#m3c), requested on 2026-10-20.
+The delivering commit records verification commands and results; the compact
+operator gate [B66](m3.md#b66) remains unrun.
+
+### B707
+
+Multi-node platform derivation follows endpoint ownership: installer VIPs use
+`baremetal`; external and LoadBalancer endpoints use `none`. Mixed ownership,
+an authored baremetal platform with external slots, differing API/internal API
+VIPs and an API VIP equal to ingress refuse. Installer inputs carry no
+load-balancer type. Admission and frozen external-input goldens pin this rule.
+
+### B708
+
+Endpoint collision admission names the other cluster, Machine, managed network
+host, managed service, emulated BMC or LoadBalancer holding an address. Tests
+cover every holder class, wildcard binds and the own-node/own-LoadBalancer
+exceptions. One domain projection owns locally probeable virtual IPs.
+
+## X117 — M3c boot and media safety
+
+**Delivery:** in-tree work for [M3c](m3.md#m3c), requested on 2026-10-20.
+[B709](m3.md#b709) and [B710](m3.md#b710) await the compact operator run.
+Frozen install requests move to `cluster-install-agent-v5` for publication root,
+serving certificate, VIPs and rendezvous address. Controller requests move to
+`controller-clients-v5` for the selected `iputils` closure. Contract guards and
+request goldens cover both changes.
+
+### B314
+
+Every fetching insert publishes and verifies a fresh private hard link under
+its own cryptographic token. Observation proves ownership through the source
+image's device and inode; eject retires that node's token and proves absence.
+Tests cover distinct tokens, post-eject HTTP 404, foreign inodes and paths,
+verified publication and safe cleanup. Capability URLs enter no records.
+
+**Other outcomes:** managed-controller IPv4 VIPs are ARP-probed before a fresh
+boot; unsupported probes are named in evidence. Boot TCP readiness shares the
+remaining boot budget, naming each unreachable node and address. Replays skip
+nodes already running this cluster's image and check rendezvous port 8090 only
+when this attempt booted it.
+
+## X118 — M3c completion and bootstrap diagnosis
+
+**Delivery:** runtime and in-tree tests for [M3c](m3.md#m3c), requested on
+2026-10-20. [B260](m3.md#b260) retains its captured-response provenance and
+stalled-node operator gates; modeled responses are not live evidence.
+
+### B711
+
+A fresh authenticated cluster read proves completion, release and every
+declared node before any media release. Missing-node and replay tests prove
+no eject occurs; a missing rendezvous host names the stranded bootstrap
+control plane and destroy/fresh-apply recovery. The shared API-only prerelease
+read preserves the existing controller-call deadline margin.
+
+**Other outcome:** failed bootstrap stall, installer timeout and spent-budget
+paths perform one bounded assisted-host read. Diagnostics lead with missing
+nodes, then bad-state hosts, messages and failing validation IDs. The knowledge
+page distinguishes recorded installer assets from modeled host responses.
+
+## X119 — M3c serialization and compact journeys
+
+**Delivery:** in-tree work for [M3c](m3.md#m3c), requested on 2026-10-20.
+[B66](m3.md#b66) requires B61's accepted row and a live compact rehearsal;
+neither operator gate is claimed here.
+
+### B712
+
+Each cluster installation holds `container-cluster-install`; media builds
+remain independent. A two-cluster plan golden, digest test and scheduler
+journey prove exclusivity and overlapping builds, following Q5's recommended
+serialization policy.
+
+### B713
+
+The [lab-compact example](../../examples/container-clusters/lab-compact/README.md)
+declares three 6-vCPU, 16-GiB, 120-GiB masters, managed NAT networking,
+installer-owned VIPs and a 4/8/40 capacity reserve. Its runbook carries B66's
+staged, interrupted, killed-wait, stalled-node, settled and removal drills,
+plus Q6's 25-hour image continuation. Effective-state and cluster-plan goldens
+and continuation, mixed-state resolution, boot replay and three-Machine
+`Stop first` journeys qualify the in-tree paths.

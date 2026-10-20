@@ -69,9 +69,7 @@ func installConfig(catalog api.Catalog, cluster api.Object, nodes []nodeProjecti
 // installPlatform is the platform the installer accepts, which is not always
 // the platform the API derived. The agent installer refuses a bare-metal or
 // vSphere platform for one control-plane node and no compute nodes, so a
-// single-node cluster installs on no platform at all. A cluster whose
-// endpoints are not all the installer's own declares its load balancer
-// user-managed, because something outside the cluster answers them.
+// single-node cluster installs on no platform at all.
 func installPlatform(cluster api.Object, nodes []nodeProjection) (map[string]any, error) {
 	declared := cluster.Spec().Get("install", "platform", "type").Text()
 	if len(nodes) == 1 || declared == "" || declared == "none" {
@@ -80,9 +78,6 @@ func installPlatform(cluster api.Object, nodes []nodeProjection) (map[string]any
 	arm := map[string]any{
 		"apiVIPs":     endpointAddresses(cluster, "api"),
 		"ingressVIPs": endpointAddresses(cluster, "ingress"),
-	}
-	if !installerOwnsEveryEndpoint(cluster) {
-		arm["loadBalancer"] = map[string]any{"type": "UserManaged"}
 	}
 	switch declared {
 	case "baremetal":
@@ -120,15 +115,6 @@ func endpointAddresses(cluster api.Object, slot string) []any {
 		return []any{}
 	}
 	return []any{address}
-}
-
-func installerOwnsEveryEndpoint(cluster api.Object) bool {
-	for _, slot := range []string{"api", "api-int", "ingress"} {
-		if cluster.Spec().Get("install", "endpoints", slot, "source", "type").Text() != "openshift" {
-			return false
-		}
-	}
-	return true
 }
 
 // clusterNetworking is the machine, cluster and service networking the graph

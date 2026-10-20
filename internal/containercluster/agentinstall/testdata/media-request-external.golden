@@ -218,17 +218,7 @@
       ]
     },
     "platform": {
-      "baremetal": {
-        "apiVIPs": [
-          "198.51.100.20"
-        ],
-        "ingressVIPs": [
-          "198.51.100.21"
-        ],
-        "loadBalancer": {
-          "type": "UserManaged"
-        }
-      }
+      "none": {}
     },
     "pullSecret": "",
     "sshKey": ""

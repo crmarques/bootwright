@@ -70,12 +70,6 @@ answer, and on `none` an external or load-balancer address answers each, as
 the [platform union](api/container-clusters.md#platform-union-and-derivation)
 states.
 
-Not yet met: a multi-node `baremetal` cluster with an `external` or
-`loadBalancer` endpoint is admitted and renders its load balancer as
-user-managed, which the 4.20 to 4.22 agent installers do not forward (the
-installer's development branch does), so their VIP holders still claim the
-addresses; tracked as
-[B707](milestones/m3.md#b707).
 
 ### Refusal table
 
@@ -482,8 +476,6 @@ as stranding the installation (observed by v1; re-verify, in
 [knowledge](../.agents/knowledge/openshift-agent-install-waits.md)).
 Installations of different contexts on one controller are not coordinated.
 
-Not yet met: installation blocks hold no exclusive key, so a context's clusters
-install concurrently; tracked as [B712](milestones/m3.md#b712).
 
 A node whose realized target is
 [physical](substrates.md#physical-machine-realization) makes this block consume
@@ -553,10 +545,8 @@ anything is inserted. The assisted service refuses a virtual IP another host
 answers only after every node has registered, and the installer reports that
 as a timeout naming no address. Bootwright never assigns a virtual IP to a host
 interface. An IPv6 virtual IP and one on any other network is not probed, and
-the evidence names the addresses that were.
+the evidence names the addresses that were not probed.
 
-Not yet met: no virtual IP is probed before boot; tracked as
-[B709](milestones/m3.md#b709).
 
 **Each insert has its own token.** A management controller holds the URL it is
 handed until its media is ejected, and an emulated one writes it to its journal
@@ -576,8 +566,6 @@ inode, as the media block's published image; any other image is foreign. The
 block writes only beneath the media block's reserved path, and that block's
 inverse, which a removal orders after this one, removes whatever is left there.
 
-Not yet met: one token serves every insert of a cluster and stays valid after
-eject; tracked as [B314](milestones/m3.md#b314).
 
 **Booted nodes are proved to answer.** Once a node is booted, within what is
 left of the boot budget, the block proves that the node answers a TCP
@@ -591,8 +579,6 @@ address: it did not boot this cluster's image, or the image found no network
 configuration for the hardware address it booted with. Without this proof the
 installer's own wait watches for an hour a cluster that cannot form.
 
-Not yet met: the boot ends when each node is running, and nothing proves it
-answers; tracked as [B710](milestones/m3.md#b710).
 
 **Waiting.** The block waits for bootstrap completion and then for installation
 completion, through the same installer that built the image. Each wait is a
@@ -648,13 +634,10 @@ node whose host the service holds `insufficient`, `disconnected`,
 failing validations; the image sets a node's hostname to its declared name when
 the node carries the MAC address of its first declared interface. A read that
 fails, an answer that is not exactly one cluster whose hosts each carry a name,
-or one in which every declared node registered names no node, and the block
+or one with no missing or bad-state declared node names no node, and the block
 fails with the stall's own message. The read comes after the wait, so it is no
 part of the wait's budget, and the installation's deadline covers it.
 
-Not yet met: the hosts are read only after a stall, and a registered host's
-status and validations are not reported; tracked as
-[B260](milestones/m3.md#b260).
 
 **Budgets.** Each long phase of a cluster's two blocks is bounded in wall-clock
 time by a budget its frozen request carries, never by a value the adapter
@@ -767,9 +750,6 @@ plane from the live image, because the assisted service stopped installing
 after another host's error and its recovery never pivots that host, and that
 recovery is a destroy and a fresh apply.
 
-Not yet met: the media is released once the installation wait returns, before
-the read proves every declared node; tracked as
-[B711](milestones/m3.md#b711).
 
 **Completion.** Completion requires the cluster answering with this build's
 identity, reporting the release it was installed for and its installation

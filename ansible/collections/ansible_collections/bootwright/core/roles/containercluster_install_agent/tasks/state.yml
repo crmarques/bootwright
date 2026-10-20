@@ -1,90 +1,6 @@
 ---
-# Read the cluster back through its own API, and each node through its own
-# controller. Every answer here is an observation: nothing is echoed from the
-# request, so the evidence says what is true rather than what was asked for.
-# The cluster is read through the copy this installation keeps of the
-# kubeconfig the installer wrote with the image, the file the inspection names
-# the identity from, so a read that succeeds has verified the serving
-# certificate against the authority that file carries and been authenticated
-# by its client certificate, which only this build's cluster accepts. The
-# installer's own file, which it rewrites in place, is never read here.
-# Every read passes --request-timeout, so an API that accepts the connection
-# and never answers ends each request oc makes rather than holding the read.
-# An observation for a removal's resolution reads none of the cluster, which
-# the removal leaves running: only the media each node presents decides it.
-- name: Read ClusterVersion through this build's own trust anchor
-  ansible.builtin.command:
-    argv:
-      - '{{ containercluster_install_agent_client }}'
-      - --kubeconfig
-      - '{{ containercluster_install_agent_kubeconfig }}'
-      - get
-      - clusterversion
-      - version
-      - --output
-      - name
-      - --request-timeout={{ containercluster_install_agent_request_timeout }}
-  register: containercluster_install_agent_cluster
-  changed_when: false
-  failed_when: false
-  when: not (containercluster_install_agent_observes_removal | bool)
-
-- name: Read the release the cluster reports
-  ansible.builtin.command:
-    argv:
-      - '{{ containercluster_install_agent_client }}'
-      - --kubeconfig
-      - '{{ containercluster_install_agent_kubeconfig }}'
-      - get
-      - clusterversion
-      - version
-      - --output
-      - jsonpath={.status.desired.version}
-      - --request-timeout={{ containercluster_install_agent_request_timeout }}
-  register: containercluster_install_agent_release
-  changed_when: false
-  failed_when: false
-  when: not (containercluster_install_agent_observes_removal | bool)
-
-# ClusterVersion's own report that the installation finished, one field per
-# line: the status of its Available condition, then the state and version of
-# the newest entry of its update history. The cluster version operator opens
-# that entry Partial at the desired release when the cluster starts, and marks
-# it Completed once the whole release has been applied. A history that is
-# absent or empty answers no state: oc's JSONPath prints nothing for an absent
-# key and refuses the first entry of an empty list as out of bounds.
-- name: Read whether the cluster reports its installation completed
-  ansible.builtin.command:
-    argv:
-      - '{{ containercluster_install_agent_client }}'
-      - --kubeconfig
-      - '{{ containercluster_install_agent_kubeconfig }}'
-      - get
-      - clusterversion
-      - version
-      - --output
-      - 'jsonpath={.status.conditions[?(@.type=="Available")].status}{"\n"}{.status.history[0].state}{"\n"}{.status.history[0].version}'
-      - --request-timeout={{ containercluster_install_agent_request_timeout }}
-  register: containercluster_install_agent_completion
-  changed_when: false
-  failed_when: false
-  when: not (containercluster_install_agent_observes_removal | bool)
-
-- name: Read the nodes the cluster holds
-  ansible.builtin.command:
-    argv:
-      - '{{ containercluster_install_agent_client }}'
-      - --kubeconfig
-      - '{{ containercluster_install_agent_kubeconfig }}'
-      - get
-      - nodes
-      - --output
-      - jsonpath={.items[*].metadata.name}
-      - --request-timeout={{ containercluster_install_agent_request_timeout }}
-  register: containercluster_install_agent_nodes
-  changed_when: false
-  failed_when: false
-  when: not (containercluster_install_agent_observes_removal | bool)
+- name: Read the cluster completion state
+  ansible.builtin.import_tasks: cluster_state.yml
 
 - name: Read each node through its own management controller
   bootwright.core.redfish_system_read:
@@ -119,74 +35,36 @@
       {%- endfor %}
   when: containercluster_install_agent_controllers.results | default([]) | selectattr('msg', 'defined') | list | length > 0
 
-# The cluster answers with this build's identity only when the read above
-# succeeded, and with the foreign marker when an API answered but refused the
-# read: a serving certificate the authority does not verify, or a client
-# certificate it rejects (401 or 403). Anything else is nothing answering. A
-# success through a kubeconfig in which the inspection could name no identity
-# is foreign too, because it proves no cluster of this build. The rejections are
-# matched in the form oc prints them, through kubectl's StandardErrorMessage,
-# and the marker is no SHA-256, so it never equals an identity. The
-# installation is completed only when the completion read succeeded and
-# answered exactly Available True and a newest history entry Completed at the
-# declared release; any other answer, or none, is an installation not yet done.
-#
-# Media names every node presenting any image, and ownMedia those of them
-# presenting the image this cluster's media block published, at the address
-# the inspection read. A controller may echo an inserted image back normalized,
-# most often without its default port, so its scheme, host and path are what is
-# compared, each exactly and never as a prefix: another directory under the
-# same served root, or the same path on another server, is a foreign image.
-# The parts are split by the parsing expression of RFC 3986 appendix B, which
-# matches every string, so a malformed image is foreign rather than a failed
-# read. Nothing is own while nothing is published.
+- name: Prove the inode of each image a controller presents
+  bootwright.core.containercluster_media_token:
+    request: '{{ bootwright_cluster_install_request }}'
+    source: '{{ containercluster_install_agent_before.observation.url }}'
+    image: '{{ item.media | default("") }}'
+    operation: inspect
+  loop: '{{ containercluster_install_agent_controllers.results | default([]) }}'
+  register: containercluster_install_agent_media_identity
+  when: containercluster_install_agent_before.observation.url | default('') | length > 0
+  no_log: true
+
 - name: Resolve what the cluster and its nodes answered
   ansible.builtin.set_fact:
     containercluster_install_agent_state:
-      cluster: >-
-        {{ (containercluster_install_agent_identity or containercluster_install_agent_foreign)
-           if (containercluster_install_agent_cluster.rc | default(1)) == 0
-           else (containercluster_install_agent_foreign
-                 if (containercluster_install_agent_cluster.stderr | default(''))
-                    is search(containercluster_install_agent_rejected)
-                 else '') }}
-      release: '{{ containercluster_install_agent_release.stdout | default("") | trim }}'
-      completed: >-
-        {{ (containercluster_install_agent_completion.rc | default(1)) == 0
-           and (containercluster_install_agent_completion.stdout | default('')).splitlines()
-               == ['True', 'Completed', bootwright_cluster_install_request.release.version] }}
-      missing: >-
-        {{ bootwright_cluster_install_request.nodes | map(attribute='name') | list
-           | difference((containercluster_install_agent_nodes.stdout | default('')).split()) }}
+      cluster: '{{ containercluster_install_agent_state.cluster }}'
+      release: '{{ containercluster_install_agent_state.release }}'
+      completed: '{{ containercluster_install_agent_state.completed }}'
+      missing: '{{ containercluster_install_agent_state.missing }}'
       media: >-
         {{ containercluster_install_agent_presenting | map(attribute='item.machine') | list }}
       ownMedia: >-
-        {{ (containercluster_install_agent_presenting | map(attribute='item.machine')
-            | zip(containercluster_install_agent_presenting | map(attribute='media')
-                  | map('regex_replace', containercluster_install_agent_uri, '\1://\2') | map('lower'),
-                  containercluster_install_agent_presenting | map(attribute='media')
-                  | map('regex_replace', containercluster_install_agent_uri, '\3'))
-            | selectattr('1', 'equalto', containercluster_install_agent_published
-                         | regex_replace(containercluster_install_agent_uri, '\1://\2') | lower)
-            | selectattr('2', 'equalto', containercluster_install_agent_published
-                         | regex_replace(containercluster_install_agent_uri, '\3'))
-            | map(attribute='0') | list)
-           if containercluster_install_agent_published | length > 0 else [] }}
+        {{ containercluster_install_agent_media_identity.results | default([])
+           | selectattr('own', 'defined') | selectattr('own', 'equalto', true)
+           | map(attribute='item.item.machine') | list }}
       powered: >-
         {{ containercluster_install_agent_controllers.results | default([])
            | selectattr('power', 'defined') | selectattr('power', 'equalto', 'On')
            | map(attribute='item.machine') | list }}
   vars:
-    containercluster_install_agent_identity: >-
-      {{ containercluster_install_agent_before.observation.identity | default('') }}
-    containercluster_install_agent_foreign: foreign
     containercluster_install_agent_presenting: >-
       {{ containercluster_install_agent_controllers.results | default([])
          | selectattr('media', 'defined') | selectattr('media', 'ne', '') | list }}
-    containercluster_install_agent_published: >-
-      {{ containercluster_install_agent_before.observation.url | default('') }}
-    # Scheme, then host without user information or port, then path.
-    containercluster_install_agent_uri: '(?s)^(?:([^:/?#]+):)?(?://(?:[^/?#]*@)?(\[[^/?#\]]*\]|[^/?#:]*)(?::[^/?#]*)?)?([^?#]*).*$'
-    containercluster_install_agent_rejected: >-
-      x509: |You must be logged in to the server|Error from server \(Forbidden\)
   changed_when: false

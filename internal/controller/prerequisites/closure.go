@@ -7,6 +7,7 @@ import "github.com/crmarques/bootwright/internal/controller"
 // stage and preflight both read a context's closures through it, so they can
 // never answer from two different selections.
 type StageNative struct {
+	IPUtils        bool
 	NMState        bool
 	LibvirtClient  bool
 	Hypervisor     bool
@@ -14,13 +15,13 @@ type StageNative struct {
 }
 
 func StageNativeOf(selection controller.Selection) StageNative {
-	return StageNative{LibvirtClient: selection.LibvirtClient(), Hypervisor: selection.Hypervisor(), InstallerMedia: selection.InstallerMedia(), NMState: selection.NMState()}
+	return StageNative{LibvirtClient: selection.LibvirtClient(), Hypervisor: selection.Hypervisor(), InstallerMedia: selection.InstallerMedia(), NMState: selection.NMState(), IPUtils: selection.IPUtils()}
 }
 
 // StageRequirements is what the stage asks the host's dnf for and preflight
 // reads.
 func StageRequirements(n StageNative) []string {
-	return StageHostRequirements(NativeRequirements{LibvirtClient: n.LibvirtClient, Hypervisor: n.Hypervisor, InstallerMedia: n.InstallerMedia, NMState: n.NMState})
+	return StageHostRequirements(NativeRequirements{LibvirtClient: n.LibvirtClient, Hypervisor: n.Hypervisor, InstallerMedia: n.InstallerMedia, NMState: n.NMState, IPUtils: n.IPUtils})
 }
 
 // closureTable names each closure a stage may select, in report order.
@@ -32,4 +33,5 @@ var closureTable = []struct {
 	{"hypervisor", func(n StageNative) bool { return n.Hypervisor }},
 	{"installer-media", func(n StageNative) bool { return n.InstallerMedia }},
 	{"nmstate", func(n StageNative) bool { return n.NMState }},
+	{"iputils", func(n StageNative) bool { return n.IPUtils }},
 }

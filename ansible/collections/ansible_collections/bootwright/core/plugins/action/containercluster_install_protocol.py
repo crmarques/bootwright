@@ -67,6 +67,9 @@ def evidence(arguments, request_digest, removed):
         "request": adapter_protocol.request_digest(request_digest),
         "restored": not removed and arguments.get("restored") is True,
     }
+    not_probed = names(arguments.get("vips_not_probed"))
+    if not_probed:
+        found["vipsNotProbed"] = not_probed
     if removed:
         found["postcondition"] = not found["media"]
         return found

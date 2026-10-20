@@ -37,11 +37,13 @@ func installedRequest() agentinstall.InstallRequest {
 			Address: "192.0.2.20", Machine: "sno-01", Name: "sno-01", Substrate: "libvirt",
 			Controller: agentinstall.Controller{CredentialsRef: "lab-bmc-credentials", Endpoint: "https://192.0.2.1:8000/redfish/v1/Systems/sno-01"},
 		}},
-		Placement: machineref.Placement{Connection: machineref.ConnectionLocal, Machine: "controller"},
-		Release:   agentinstall.Release{Distribution: "openshift", Version: installedRelease},
-		Tool:      agentinstall.Tool{Compatibility: "openshift", Kind: "openshift-install", Version: installedRelease},
-		Version:   "cluster-install-agent-v4",
-		WorkRoot:  "/var/lib/bootwright/work/lab/sno",
+		Placement:       machineref.Placement{Connection: machineref.ConnectionLocal, Machine: "controller"},
+		PublicationRoot: agentinstall.Publication{Path: "/var/lib/bootwright/artifacts/lab/sno", URL: "https://192.0.2.1:8443/lab/sno"},
+		Rendezvous:      "192.0.2.20", TLSCertificateRef: "artifact-server-tls", VIPs: []agentinstall.VIP{},
+		Release:  agentinstall.Release{Distribution: "openshift", Version: installedRelease},
+		Tool:     agentinstall.Tool{Compatibility: "openshift", Kind: "openshift-install", Version: installedRelease},
+		Version:  "cluster-install-agent-v5",
+		WorkRoot: "/var/lib/bootwright/work/lab/sno",
 	}
 }
 

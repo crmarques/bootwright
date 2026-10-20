@@ -68,5 +68,8 @@ func StageHostRequirements(selected NativeRequirements) []string {
 	if selected.NMState {
 		requirements = append(requirements, "nmstate")
 	}
+	if selected.IPUtils {
+		requirements = append(requirements, "iputils")
+	}
 	return requirements
 }

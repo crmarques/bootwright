@@ -113,7 +113,9 @@ registration:
     - With O(registered), C(read) is true when the assisted service answered
       with this cluster's hosts and named each of them, and C(unregistered)
       lists the declared nodes, in request order, that no registered host
-      carries the name of. A read that failed lists none.
+      carries the name of. C(unready), when present, lists declared hosts in bad
+      states with their status, bounded status message and failing validation
+      identifiers. A read that failed lists none.
   returned: when O(registered) is true
   type: dict
 """
@@ -438,6 +440,8 @@ def published(root, base):
     except OSError:
         return ""
     for entry in entries:
+        if entry.startswith("insert-"):
+            continue
         if os.path.isfile(os.path.join(root, entry, IMAGE)):
             return base + "/" + entry + "/" + IMAGE
     return ""
@@ -601,8 +605,8 @@ def registered_names(body):
 def registration(request):
     """Which declared nodes no host registered with the assisted service carries the name of.
 
-    The installer's two give-ups that mark a stall name no host, so this is
-    read once after one. A read that fails reports read false and no node.
+    A failed bootstrap stall, native timeout or spent budget reads this once.
+    A read that fails reports read false and no node.
     """
     held = installer_state(request["workRoot"])
     address = "" if held is None else admitted(held[0], request)
@@ -611,7 +615,29 @@ def registration(request):
     if found is None:
         return {"read": False, "unregistered": []}
     declared = [node.get("name") for node in request.get("nodes") or [] if isinstance(node, dict)]
-    return {"read": True, "unregistered": [name for name in declared if isinstance(name, str) and name not in found]}
+    hosts = json.loads(body)[0]["hosts"]
+    unready = []
+    bad = {"insufficient", "disconnected", "pending-for-input", "preparing-failed",
+           "installing-pending-user-action", "error"}
+    for name in declared:
+        for host in hosts:
+            if name not in host_names(host) or not isinstance(host.get("status"), str) or host["status"] not in bad:
+                continue
+            try:
+                validations = json.loads(host.get("validations_info") or "{}")
+            except (TypeError, ValueError, RecursionError):
+                validations = {}
+            failed = sorted({entry["id"] for entries in validations.values() if isinstance(entries, list)
+                             for entry in entries if isinstance(entry, dict) and entry.get("status") == "failure"
+                             and isinstance(entry.get("id"), str)}) if isinstance(validations, dict) else []
+            message = host.get("status_info")
+            unready.append({"name": name, "status": host["status"],
+                            "message": message[:1024] if isinstance(message, str) else "",
+                            "validations": [value[:128] for value in failed[:64]]})
+    result = {"read": True, "unregistered": [name for name in declared if isinstance(name, str) and name not in found]}
+    if unready:
+        result["unready"] = unready
+    return result
 
 
 def main():

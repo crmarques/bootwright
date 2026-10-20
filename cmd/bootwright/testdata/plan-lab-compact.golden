@@ -1,0 +1,37 @@
+[
+  {
+    "deadline": "1h0m0s",
+    "dependencies": [
+      "artifact-server-lab-artifacts"
+    ],
+    "exclusive": null,
+    "id": "cluster-media-compact",
+    "impacts": [
+      "create-path /var/lib/bootwright-clusters/lab-compact/compact",
+      "publish-content /var/lib/bootwright-services/lab-compact/artifact-server/lab-artifacts/public/private/clusters/compact"
+    ]
+  },
+  {
+    "deadline": "4h18m0s",
+    "dependencies": [
+      "cluster-media-compact",
+      "dns-lab-dns",
+      "machine-compact-01",
+      "machine-compact-02",
+      "machine-compact-03",
+      "ntp-lab-ntp"
+    ],
+    "exclusive": [
+      "container-cluster-install"
+    ],
+    "id": "cluster-install-compact",
+    "impacts": [
+      "install-cluster compact-01",
+      "install-cluster compact-02",
+      "install-cluster compact-03",
+      "power-on compact-01",
+      "power-on compact-02",
+      "power-on compact-03"
+    ]
+  }
+]

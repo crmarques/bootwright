@@ -332,7 +332,7 @@ the remaining matrix.
 
 One typed, invertible executable custom-playbook journey. The reserved schema
 cannot prove effects, ownership or non-exfiltration; it needs [the legacy lifecycle baseline](delivered.md#m1e--lifecycle-engine-and-managed-artifact-serving), the plan and
-execution journeys of [B713](m3.md#b713) and the produced input of
+execution journeys of [B713](delivered.md#b713) and the produced input of
 [B64](m3.md#b64) and a named journey. **Exit evidence:** a same-change API replacement of the
 [reserved shape](../deferred/custom-playbooks.md), immutable source and
 dependencies, exact targets, bounded secrets, authorization, continuation,
@@ -2653,8 +2653,8 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | B542 | 2026-10-14 | Moot under [D152](#decisions): X89 deleted the Fedora native plan and its libdnf5 solver; the host's dnf installs controller packages. |
 | B574 | 2026-10-16 | [D155](#decisions) retains records-only settlement; comparing the current build's plan is declined for now. No implementation remains. |
 | B500 | 2026-10-16 | Superseded by [D157](#decisions) and [B615](delivered.md#b615): remove reviewed release pins instead of consolidating them into per-language release profiles. |
-| B62 | 2026-10-20 | Alias L2. Folded under [D172](#decisions) into [B713](m3.md#b713) and each M3 item's own planning goldens; it named no bounded shape. |
-| B63 | 2026-10-20 | Alias L4. Folded under [D172](#decisions) into [B713](m3.md#b713); each later shape carries its own lifecycle journeys. |
+| B62 | 2026-10-20 | Alias L2. Folded under [D172](#decisions) into [B713](delivered.md#b713) and each M3 item's own planning goldens; it named no bounded shape. |
+| B63 | 2026-10-20 | Alias L4. Folded under [D172](#decisions) into [B713](delivered.md#b713); each later shape carries its own lifecycle journeys. |
 | B65 | 2026-10-20 | Alias L6. Retired under [D172](#decisions): every M3 item carries the contract, crash, replay, cancellation and real-system evidence of its own binding. |
 | B397 | 2026-10-20 | Folded under [D172](#decisions) into [B308](delivered.md#b308), whose refusal-table rows include the off-controller boot-image server. |
 
@@ -3542,7 +3542,7 @@ Requires cell as `owner decision: <question>`.
   in the 4.20 to 4.22 branches does not forward
   `platform.baremetal.loadBalancer` (its development branch does), so today's
   user-managed rendering is a pre-existing defect recorded as
-  [B707](m3.md#b707), and modelling an external load balancer only as `none` is
+  [B707](delivered.md#b707), and modelling an external load balancer only as `none` is
   Bootwright's choice. (7) The
   reference branch is read for lessons only: a native fact it observed enters
   knowledge marked "observed by the v1 implementation (main-v1); re-verify on

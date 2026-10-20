@@ -124,20 +124,29 @@ type MediaRequest struct {
 	WorkRoot          string   `json:"workRoot"`
 }
 
-// InstallRequest is the complete frozen intent for installing one cluster from
-// that image: the nodes to boot, the names the controller must resolve first,
-// and the budgets each phase is bounded by.
+// VIP is an installer-owned address and its controller-local probe bridge.
+type VIP struct {
+	Address string `json:"address"`
+	Bridge  string `json:"bridge"`
+	Slot    string `json:"slot"`
+}
+
+// InstallRequest freezes the nodes, publication, endpoint probes and phase budgets.
 type InstallRequest struct {
-	Budgets   InstallBudgets       `json:"budgets"`
-	Endpoints []Endpoint           `json:"endpoints"`
-	Identity  Identity             `json:"identity"`
-	Image     Publication          `json:"image"`
-	Nodes     []Node               `json:"nodes"`
-	Placement machineref.Placement `json:"placement"`
-	Release   Release              `json:"release"`
-	Tool      Tool                 `json:"tool"`
-	Version   string               `json:"version"`
-	WorkRoot  string               `json:"workRoot"`
+	Budgets           InstallBudgets       `json:"budgets"`
+	Endpoints         []Endpoint           `json:"endpoints"`
+	Identity          Identity             `json:"identity"`
+	Image             Publication          `json:"image"`
+	Nodes             []Node               `json:"nodes"`
+	Placement         machineref.Placement `json:"placement"`
+	PublicationRoot   Publication          `json:"publicationRoot"`
+	Release           Release              `json:"release"`
+	Rendezvous        string               `json:"rendezvous"`
+	TLSCertificateRef string               `json:"tlsCertificateRef"`
+	Tool              Tool                 `json:"tool"`
+	Version           string               `json:"version"`
+	VIPs              []VIP                `json:"vips"`
+	WorkRoot          string               `json:"workRoot"`
 }
 
 // MediaBudgets bound the media block's one long phase in wall-clock time: the
@@ -258,7 +267,7 @@ func (r MediaRequest) SecretReferences() []string {
 }
 
 func (r InstallRequest) SecretReferences() []string {
-	references := r.Placement.SecretReferences()
+	references := append(r.Placement.SecretReferences(), r.TLSCertificateRef)
 	for _, node := range r.Nodes {
 		references = append(references, node.Controller.CredentialsRef, node.Controller.TrustBundleRef)
 	}

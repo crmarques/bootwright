@@ -920,7 +920,7 @@ func TestDecodeRefusesPackagesItsClosuresDoNotSelect(t *testing.T) {
 // Every version but the one this build writes refuses, and the refusal names
 // it so the remedy is the executable that registered the operation.
 func TestAFrozenStageRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"controller-clients-v0", "controller-clients-v1", "controller-clients-v2", "controller-clients-v3", "controller-clients-v5"} {
+	for _, version := range []string{"controller-clients-v0", "controller-clients-v1", "controller-clients-v2", "controller-clients-v3", "controller-clients-v4", "controller-clients-v6"} {
 		_, err := DecodeRequest([]byte(`{"version":"` + version + `"}`))
 		if err == nil {
 			t.Fatalf("version %q was accepted", version)

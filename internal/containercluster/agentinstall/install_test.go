@@ -144,7 +144,7 @@ func TestInstallPlanWaitsForItsMediaAndItsNodes(t *testing.T) {
 	if len(plan.Reservations) != 0 {
 		t.Fatalf("an installation claimed host resources: %+v", plan.Reservations)
 	}
-	if !slices.Equal(plan.Secrets, []string{"lab-bmc-credentials", "lab-bmc-tls"}) {
+	if !slices.Equal(plan.Secrets, []string{"artifact-server-tls", "lab-bmc-credentials", "lab-bmc-tls"}) {
 		t.Fatalf("secrets = %v", plan.Secrets)
 	}
 }

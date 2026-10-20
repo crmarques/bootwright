@@ -19,7 +19,7 @@ const (
 	Kind           = string(api.Environment)
 	Implementation = "controller-prerequisites"
 	BlockID        = "controller-prerequisites"
-	Version        = "controller-clients-v4"
+	Version        = "controller-clients-v5"
 )
 
 // ToolRequest is one declared client requirement, frozen in the plan before
@@ -44,6 +44,7 @@ type Request struct {
 	// the tooling an Anaconda installation published here builds with.
 	Hypervisor     bool          `json:"hypervisor"`
 	InstallerMedia bool          `json:"installerMedia"`
+	IPUtils        bool          `json:"iputils,omitempty"`
 	Libvirt        string        `json:"libvirt"`
 	LibvirtClient  bool          `json:"libvirtClient"`
 	Machine        string        `json:"machine"`
@@ -64,6 +65,7 @@ func NewRequest(selection controller.Selection, requests []controller.ToolReques
 		Hypervisor:     selection.Hypervisor(),
 		InstallerMedia: selection.InstallerMedia(),
 		NMState:        selection.NMState(),
+		IPUtils:        selection.IPUtils(),
 		LibvirtClient:  selection.LibvirtClient(),
 		Machine:        selection.MachineName(),
 		Tools:          []ToolRequest{},
@@ -85,7 +87,7 @@ func NewRequest(selection controller.Selection, requests []controller.ToolReques
 // prerequisites.StageNativeOf reads it, so the stage and preflight ask the
 // host for the same requirements.
 func (r Request) native() prerequisites.StageNative {
-	return prerequisites.StageNative{LibvirtClient: r.LibvirtClient, Hypervisor: r.Hypervisor, InstallerMedia: r.InstallerMedia, NMState: r.NMState}
+	return prerequisites.StageNative{LibvirtClient: r.LibvirtClient, Hypervisor: r.Hypervisor, InstallerMedia: r.InstallerMedia, NMState: r.NMState, IPUtils: r.IPUtils}
 }
 
 // ToolRequests restores the catalog's own request shape from the frozen block.

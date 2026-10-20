@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_cluster_install_request.version == 'cluster-install-agent-v4'
+      - bootwright_cluster_install_request.version == 'cluster-install-agent-v5'
       - bootwright_cluster_install_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -39,40 +39,58 @@
 # The installed cluster leaves with its nodes' own disks. What this block
 # opened is the media each node presents, so that is all it takes back: a
 # removal selects no boot device and composes no substrate entry point.
-- name: Eject the media every node still presents
-  bootwright.core.redfish_boot:
-    endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", containercluster_install_agent_user) }}'
-    password: '{{ lookup("ansible.builtin.file", containercluster_install_agent_password) }}'
-    verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-    ca_data: '{{ lookup("ansible.builtin.file", containercluster_install_agent_ca) if containercluster_install_agent_ca else omit }}'
-    operation: eject
-  loop: '{{ bootwright_cluster_install_request.nodes }}'
-  loop_control:
-    loop_var: containercluster_install_agent_node
-    label: '{{ containercluster_install_agent_node.machine }}'
-    index_var: containercluster_install_agent_index
-  vars:
-    containercluster_install_agent_user: >-
-      {{ bootwright_cluster_install_material['controllerUserNode' ~ containercluster_install_agent_index] }}
-    containercluster_install_agent_password: >-
-      {{ bootwright_cluster_install_material['controllerPasswordNode' ~ containercluster_install_agent_index] }}
-    containercluster_install_agent_ca: >-
-      {{ bootwright_cluster_install_material['controllerCANode' ~ containercluster_install_agent_index] | default('') }}
-  register: containercluster_install_agent_ejected
-  failed_when: false
-  no_log: true
+- name: Release media and retire every token whose eject succeeded
+  block:
+    - name: Eject the media every node still presents
+      bootwright.core.redfish_boot:
+        endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+        user: '{{ lookup("ansible.builtin.file", containercluster_install_agent_user) }}'
+        password: '{{ lookup("ansible.builtin.file", containercluster_install_agent_password) }}'
+        verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+        ca_data: '{{ lookup("ansible.builtin.file", containercluster_install_agent_ca) if containercluster_install_agent_ca else omit }}'
+        operation: eject
+      loop: '{{ bootwright_cluster_install_request.nodes }}'
+      loop_control:
+        loop_var: containercluster_install_agent_node
+        label: '{{ containercluster_install_agent_node.machine }}'
+        index_var: containercluster_install_agent_index
+      vars:
+        containercluster_install_agent_user: >-
+          {{ bootwright_cluster_install_material['controllerUserNode' ~ containercluster_install_agent_index] }}
+        containercluster_install_agent_password: >-
+          {{ bootwright_cluster_install_material['controllerPasswordNode' ~ containercluster_install_agent_index] }}
+        containercluster_install_agent_ca: >-
+          {{ bootwright_cluster_install_material['controllerCANode' ~ containercluster_install_agent_index] | default('') }}
+      register: containercluster_install_agent_ejected
+      failed_when: false
+      no_log: true
 
-# ansible-core keeps nothing of a failure under no_log but that it failed, so
-# each controller's own refusal is reported here, where no credential is.
-- name: Stop at an eject a management controller did not complete
-  ansible.builtin.fail:
-    msg: >-
-      {% for result in containercluster_install_agent_ejected.results | default([]) if result.msg is defined -%}
-      ejecting the media of Machine {{ result.containercluster_install_agent_node.machine }}
-      failed: {{ (result.msg | string | bootwright.core.printable)[:512] }}{{ '' if loop.last else '; ' }}
-      {%- endfor %}
-  when: containercluster_install_agent_ejected.results | default([]) | selectattr('msg', 'defined') | list | length > 0
+    # ansible-core keeps nothing of a failure under no_log but that it failed, so
+    # each controller's own refusal is reported here, where no credential is.
+    - name: Stop at an eject a management controller did not complete
+      ansible.builtin.fail:
+        msg: >-
+          {% for result in containercluster_install_agent_ejected.results | default([]) if result.msg is defined -%}
+          ejecting the media of Machine {{ result.containercluster_install_agent_node.machine }}
+          failed: {{ (result.msg | string | bootwright.core.printable)[:512] }}{{ '' if loop.last else '; ' }}
+          {%- endfor %}
+      when: containercluster_install_agent_ejected.results | default([]) | selectattr('msg', 'defined') | list | length > 0
+
+  always:
+    - name: Retire each private token after eject
+      bootwright.core.containercluster_media_token:
+        request: '{{ bootwright_cluster_install_request }}'
+        source: '{{ containercluster_install_agent_before.observation.url }}'
+        image: '{{ item.media | default("") }}'
+        operation: remove
+      loop: '{{ containercluster_install_agent_controllers.results | default([]) }}'
+      loop_control:
+        index_var: containercluster_install_agent_cleanup_index
+      when:
+        - containercluster_install_agent_before.observation.url | default('') | length > 0
+        - containercluster_install_agent_ejected.results | default([]) | length > containercluster_install_agent_cleanup_index
+        - containercluster_install_agent_ejected.results[containercluster_install_agent_cleanup_index].msg is not defined
+      no_log: true
 
 - name: Report media release completion
   bootwright.core.containercluster_install_protocol:

@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_cluster_install_request.version == 'cluster-install-agent-v4'
+      - bootwright_cluster_install_request.version == 'cluster-install-agent-v5'
       - bootwright_cluster_install_request.workRoot.startswith('/var/lib/bootwright-clusters/')
       - bootwright_cluster_install_digest is match('[0-9a-f]{64}')
     quiet: true
@@ -114,6 +114,10 @@
 # handed the image, and whether or not this attempt boots one, so a rebuild
 # refuses from then on. The mark leaves only with the area itself, in the media
 # block's inverse, which the removal plan starts after this block's own.
+- name: Prove virtual IP freedom before marking or booting the image
+  ansible.builtin.import_tasks: preboot_vips.yml
+  when: not (containercluster_install_agent_settled | bool)
+
 - name: Mark the work area as one this cluster's nodes boot from
   ansible.builtin.copy:
     content: ''
@@ -147,6 +151,10 @@
       {{ bootwright_cluster_install_material['controllerPasswordNode' ~ containercluster_install_agent_index] }}
     containercluster_install_agent_ca: >-
       {{ bootwright_cluster_install_material['controllerCANode' ~ containercluster_install_agent_index] | default('') }}
+  when: not (containercluster_install_agent_settled | bool)
+
+- name: Prove the booted nodes answer within their boot budget
+  ansible.builtin.import_tasks: readiness.yml
   when: not (containercluster_install_agent_settled | bool)
 
 - name: Report node boot completion
@@ -199,6 +207,31 @@
     group: wait-install
     status: ok
   no_log: true
+
+- name: Read completion before releasing any installation media
+  ansible.builtin.import_tasks: cluster_state.yml
+
+- name: Refuse media release until every declared node completed installation
+  ansible.builtin.fail:
+    msg: >-
+      cluster {{ bootwright_cluster_install_request.identity.cluster }} has not
+      proved installation complete; missing declared nodes:
+      {{ containercluster_install_agent_state.missing | sort | join(', ') or 'none' }}.
+      {{ ('Rendezvous host ' ~ containercluster_install_agent_rendezvous ~
+          ' still runs the bootstrap control plane from the live image; '
+          ~ 'assisted recovery after a host error never pivots it. Destroy this context and perform a fresh apply.')
+         if containercluster_install_agent_rendezvous in containercluster_install_agent_state.missing
+         else 'Keep the installation media attached and inspect the cluster before repeating the apply.' }}
+      No installation media was released.
+  vars:
+    containercluster_install_agent_rendezvous: >-
+      {{ (bootwright_cluster_install_request.nodes | selectattr('address', 'equalto', bootwright_cluster_install_request.rendezvous)
+          | map(attribute='name') | sort | first) | default('') }}
+  when: >-
+    containercluster_install_agent_state.completed is not sameas true
+    or containercluster_install_agent_state.missing | length > 0
+    or containercluster_install_agent_state.cluster != containercluster_install_agent_before.observation.identity
+    or containercluster_install_agent_state.release != bootwright_cluster_install_request.release.version
 
 - name: Report media release
   bootwright.core.containercluster_install_protocol:
@@ -272,6 +305,7 @@
     digest: '{{ bootwright_cluster_install_digest }}'
     identity: '{{ containercluster_install_agent_before.observation.identity }}'
     state: '{{ containercluster_install_agent_state }}'
+    vips_not_probed: '{{ containercluster_install_agent_vips_not_probed | default([]) }}'
     # Whether a wait of this apply put the kept copy back in place of the
     # installer's own kubeconfig (wait_attempt.yml).
     restored: '{{ containercluster_install_agent_restored | default(false) }}'
