@@ -1,0 +1,20 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageSMBResource
+metadata:
+  name: smb-files
+
+spec:
+  clusterRef: ceph-lab
+  resourceRefs:
+    - smb-users
+
+  native:
+    resource_type: ceph.smb.cluster
+    cluster_id: files
+    auth_mode: user
+    user_group_settings:
+      - source_type: resource
+        ref: users
+    placement:
+      label: ceph-core
+      count: 1

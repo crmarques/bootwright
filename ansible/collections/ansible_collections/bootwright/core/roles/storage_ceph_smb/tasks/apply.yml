@@ -1,0 +1,51 @@
+---
+- name: Validate the frozen Ceph SMB request
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_smb_request.version == 'ceph-smb-v1'
+      - bootwright_ceph_smb_digest is match('^[0-9a-f]{64}$')
+      - ansible_connection == 'local'
+    quiet: true
+  no_log: true
+
+- name: Complete the SMB execution handoff
+  bootwright.core.ceph_smb_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Execute the fixed Ceph SMB apply operation
+  bootwright.core.ceph_smb:
+    request: '{{ bootwright_ceph_smb_request }}'
+    operation: apply
+    digest: '{{ bootwright_ceph_smb_digest }}'
+    material: '{{ bootwright_ceph_smb_material }}'
+  register: storage_ceph_smb_result
+  failed_when: false
+  no_log: true
+  diff: false
+
+- name: Publish the fixed Ceph SMB refusal
+  bootwright.core.ceph_smb_protocol:
+    phase: refused
+    reason: '{{ storage_ceph_smb_result.reason | default("adapter-exception") }}'
+    native_error: '{{ storage_ceph_smb_result.nativeError | default(omit) }}'
+    detail: >-
+      {{ storage_ceph_smb_result.detail
+        | default(omit if storage_ceph_smb_result.reason is defined else "module-failure") }}
+  when: storage_ceph_smb_result.evidence is not defined
+  no_log: true
+
+- name: Refuse an unproved Ceph SMB operation
+  ansible.builtin.fail:
+    msg: The Ceph SMB operation was refused; the run names its reason
+  when: storage_ceph_smb_result.evidence is not defined
+
+- name: Publish bounded Ceph SMB evidence
+  bootwright.core.ceph_smb_protocol:
+    phase: completed
+    digest: '{{ bootwright_ceph_smb_digest }}'
+    outcome: '{{ "changed" if storage_ceph_smb_result.changed else "unchanged" }}'
+    observed: false
+    removed: false
+    evidence: '{{ storage_ceph_smb_result.evidence }}'
+  no_log: true

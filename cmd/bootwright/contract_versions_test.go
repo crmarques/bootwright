@@ -54,6 +54,7 @@ func contractVersions() []contractVersion {
 		{ceph.Implementation, ceph.ContentDigest(), reflect.TypeFor[ceph.Request](), reflect.TypeFor[ceph.Evidence]()},
 		{ceph.ImageImplementation, ceph.ImageContentDigest(), reflect.TypeFor[ceph.ImageRequest](), reflect.TypeFor[ceph.ImageEvidence]()},
 		{ceph.HostImplementation, ceph.HostContentDigest(), reflect.TypeFor[ceph.HostRequest](), reflect.TypeFor[ceph.HostEvidence]()},
+		{ceph.SMBImplementation, ceph.SMBContentDigest(), reflect.TypeFor[ceph.SMBRequest](), reflect.TypeFor[ceph.SMBEvidence]()},
 	}
 	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
 		versions = append(versions, contractVersion{definition.Implementation, definition.ContentDigest(),
@@ -148,6 +149,8 @@ func automationFormats() map[string]automationFormat {
 		"ceph-core-evidence-v8":       {class: formatMirrored},
 		"ceph-packages-v2":            {class: formatMirrored},
 		"ceph-image-v3":               {class: formatMirrored},
+		"ceph-smb-v1":                 {class: formatMirrored},
+		"ceph-smb-evidence-v1":        {class: formatMirrored},
 		"os-package-tree-evidence-v1": {class: formatMirrored},
 		// The request versions each role refuses unless its request names.
 		"substrate-host-libvirt-v5": {class: formatMirrored},

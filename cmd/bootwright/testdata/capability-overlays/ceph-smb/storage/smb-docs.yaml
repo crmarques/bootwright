@@ -1,0 +1,14 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageSMBResource
+metadata:
+  name: smb-docs
+
+spec:
+  clusterRef: ceph-lab
+  smbClusterRef: smb-files
+  subvolumeRef: docs
+
+  native:
+    resource_type: ceph.smb.share
+    share_id: docs
+    cluster_id: files

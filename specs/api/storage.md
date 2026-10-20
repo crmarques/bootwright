@@ -68,8 +68,10 @@ implicit administrator capability is granted. Its OSD caps also name the
 [field record](../storage-resources.md#storagenfsexport) and realized by its
 export block.
 `StorageSMBResource` is admitted under its
-[field record](../storage-resources.md#storagesmbresource); no capability
-realizes it yet, so planning refuses each one as an unclaimed kind.
+[field record](../storage-resources.md#storagesmbresource); its SMB block
+plans it; until its samba images can be selected, planning refuses the
+StorageCluster it names (see the [refusal table](../storage.md#refusal-table)),
+and this build does not yet apply SMB effects.
 Other P2 resource additions remain target contracts, not admitted kinds.
 Future storage export feature families are refused by current pure
 admission.

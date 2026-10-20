@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"go.yaml.in/yaml/v3"
+
 	"github.com/crmarques/bootwright/ansible"
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -307,6 +309,41 @@ func TestEachCephBlockNamesExactlyTheRefusalsItsModuleMayPublish(t *testing.T) {
 				t.Fatalf("%s names %q with no remedy: %+v", name, reason, d)
 			}
 		}
+	}
+}
+
+func TestEachSMBBlockNamesExactlyTheRefusalsItsModuleMayPublish(t *testing.T) {
+	const root = "collections/ansible_collections/bootwright/core/plugins/"
+	source := string(ansible.Assets()[root+"module_utils/ceph_core.py"])
+	_, tuple, found := strings.Cut(source, "\nSMB_REASONS = (\n")
+	tuple, _, closed := strings.Cut(tuple, "\n)\n")
+	if !found || !closed {
+		t.Fatal("ceph_core.py declares no SMB_REASONS tuple")
+	}
+	published := []string{}
+	for _, match := range regexp.MustCompile(`"([a-z0-9-]+)"`).FindAllStringSubmatch(tuple, -1) {
+		published = append(published, match[1])
+	}
+	named := slices.Sorted(maps.Keys(smbRefusals()))
+	if slices.Sort(published); !slices.Equal(published, named) || !slices.Contains(published, "unknown") {
+		t.Fatalf("SMB_REASONS publishes %q, the SMB block names %q", published, named)
+	}
+	for reason, refusal := range smbRefusals() {
+		if d := diagnostics.Of(refusal); len(d) != 1 || d[0].Remediation == "" {
+			t.Fatalf("the SMB block names %q with no remedy: %+v", reason, d)
+		}
+	}
+	var documentation struct {
+		Options struct {
+			Reason struct {
+				Choices []string `yaml:"choices"`
+			} `yaml:"reason"`
+		} `yaml:"options"`
+	}
+	_, text, _ := strings.Cut(string(ansible.Assets()[root+"modules/ceph_smb_protocol.py"]), `DOCUMENTATION = r"""`)
+	text, _, _ = strings.Cut(text, `"""`)
+	if err := yaml.Unmarshal([]byte(text), &documentation); err != nil || !slices.Equal(slices.Sorted(slices.Values(documentation.Options.Reason.Choices)), named) {
+		t.Fatalf("ceph_smb_protocol documents the reasons %q (%v), the SMB block names %q", documentation.Options.Reason.Choices, err, named)
 	}
 }
 

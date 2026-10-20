@@ -1,0 +1,62 @@
+argument_specs:
+  apply:
+    short_description: Realize one Ceph SMB manager resource of its frozen cluster.
+    options: &request
+      bootwright_ceph_smb_request:
+        type: dict
+        required: true
+        options:
+          bindings:
+            type: list
+            elements: dict
+            required: true
+          cluster:
+            type: str
+            required: true
+          clusterIDs:
+            type: list
+            elements: str
+          controller:
+            type: str
+            required: true
+          id:
+            type: str
+            required: true
+          images:
+            type: list
+            elements: dict
+          machines:
+            type: list
+            elements: str
+            required: true
+          native:
+            type: dict
+            required: true
+          object:
+            type: str
+            required: true
+          resourceType:
+            type: str
+            required: true
+          scope:
+            type: dict
+          service:
+            type: dict
+          version:
+            type: str
+            required: true
+            choices: [ceph-smb-v1]
+      bootwright_ceph_smb_digest:
+        type: str
+        required: true
+      bootwright_ceph_smb_material:
+        type: dict
+        required: true
+
+  observe:
+    short_description: Observe one Ceph SMB manager resource without mutation.
+    options: *request
+
+  destroy:
+    short_description: Remove one Ceph SMB manager resource this operation created.
+    options: *request

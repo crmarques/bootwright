@@ -192,7 +192,7 @@ them:
   for a downstream consumer waits for all resources and material it describes.
 - Every child block of a cluster (its settings block, its service-unit blocks,
   object gateways and their zone pool blocks, placement policies, pools,
-  clients, RBD images, filesystems, subvolumes and NFS exports)
+  clients, RBD images, filesystems, subvolumes, NFS exports and SMB resources)
   depends on the cluster block by its block identity, never through the
   StorageCluster API identity that the cluster's image, host, settings and
   service-unit blocks share; a client still follows its pool through the
@@ -257,6 +257,13 @@ them:
   StorageFilesystem or StorageSubvolume through that object; its deadline is
   fixed (apply 2280 s, observe 720 s, destroy 1380 s) and does not grow with
   the host count.
+- An SMB block `ceph-smb-<object>` (Kind StorageSMBResource, implementation
+  `storage-ceph-smb-v1`, exclusive `ceph/<cluster>`) realizes one
+  StorageSMBResource. It depends on the cluster, image and settings blocks by
+  ID; a cluster requires its `resourceRefs` members, a share its SMB cluster
+  and its StorageFilesystem or StorageSubvolume, so auth resources precede
+  their cluster and a share follows its cluster and backing. Its deadline is
+  fixed (apply 2040 s, a share 3600 s; observe 720 s, a share 1380 s).
 
 Before an apply that selects managed Ceph claims an operation or binds secrets,
 it observes aggregate declared libvirt CPU, memory and backing-filesystem disk
@@ -730,6 +737,22 @@ and pseudo path only. The block never removes an export, creates or removes an
 NFS service, or changes a client key; it retires with the cluster's hosts, and
 [B491](milestones/m2.md#b491) owns its online removal. Mounting from a client
 is the operator's acceptance.
+
+A StorageSMBResource is realized by its SMB block `ceph-smb-<object>`. Its
+request freezes the admitted native document with only two changes, the
+resolved placement of an SMB cluster and the `cephfs` leaves a share's
+StorageFilesystem or StorageSubvolume reference supplies; the bound passwords
+only as Secret references, lent as protected files on apply alone; the full
+Machine set of its cluster; for an SMB cluster or share, the SMB cluster's
+service name, hosts and effective clustering, the declared SMB cluster IDs of
+the cluster and the samba image references. Execution takes the owner, FSID,
+bootstrap host, cluster scope and the samba image digests only from the core
+cluster and image proofs of the original apply. Evidence carries its flags,
+owner, FSID, the native resource name and, for a share, the generated daemons'
+host, name and service only. The block retires with every Machine of its
+cluster and refuses removal while any survives
+([B491](milestones/m2.md#b491)). This build plans the block but refuses its run
+(`smb-unrealized`).
 
 A StorageObjectGateway's realm, zone group, zone, zone placement and rgw service
 are realized by its gateway block `ceph-gateway-<gateway>`, which runs its

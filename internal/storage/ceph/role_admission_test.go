@@ -70,37 +70,46 @@ func TestEveryCephRoleEntryPointDeclaresExactlyTheRequestItReceives(t *testing.T
 		{"storage_ceph_image", "bootwright_ceph_image_request", []string{"resolve", "observe", "destroy"}, reflect.TypeFor[ImageRequest]()},
 		{"storage_ceph_host", "bootwright_ceph_host_request", []string{"prepare", "observe", "destroy"}, reflect.TypeFor[HostRequest]()},
 	} {
-		path := "collections/ansible_collections/bootwright/core/roles/" + role.name + "/meta/argument_specs.yml"
-		var document struct {
-			ArgumentSpecs map[string]specEntry `yaml:"argument_specs"`
-		}
-		if err := yaml.Unmarshal(ansible.Assets()[path], &document); err != nil || len(document.ArgumentSpecs) == 0 {
-			t.Fatalf("%s: no argument specification (%v)", path, err)
-		}
-		want := jsonFields(role.request)
-		for _, entry := range role.entries {
-			t.Run(role.name+"/"+entry, func(t *testing.T) {
-				declared, ok := document.ArgumentSpecs[entry].Options[role.variable]
-				if !ok || declared.Type != "dict" || !declared.Required {
-					t.Fatalf("%s does not require the dict %s", entry, role.variable)
+		requireRoleRequest(t, role.name, role.variable, role.entries, role.request)
+	}
+}
+
+func TestSMBRoleEntryPointDeclaresExactlyTheRequestItReceives(t *testing.T) {
+	requireRoleRequest(t, "storage_ceph_smb", "bootwright_ceph_smb_request", []string{"apply", "observe", "destroy"}, reflect.TypeFor[SMBRequest]())
+}
+
+func requireRoleRequest(t *testing.T, role, variable string, entries []string, request reflect.Type) {
+	t.Helper()
+	path := "collections/ansible_collections/bootwright/core/roles/" + role + "/meta/argument_specs.yml"
+	var document struct {
+		ArgumentSpecs map[string]specEntry `yaml:"argument_specs"`
+	}
+	if err := yaml.Unmarshal(ansible.Assets()[path], &document); err != nil || len(document.ArgumentSpecs) == 0 {
+		t.Fatalf("%s: no argument specification (%v)", path, err)
+	}
+	want := jsonFields(request)
+	for _, entry := range entries {
+		t.Run(role+"/"+entry, func(t *testing.T) {
+			declared, ok := document.ArgumentSpecs[entry].Options[variable]
+			if !ok || declared.Type != "dict" || !declared.Required {
+				t.Fatalf("%s does not require the dict %s", entry, variable)
+			}
+			for _, name := range slices.Sorted(maps.Keys(declared.Options)) {
+				if _, sent := want[name]; !sent {
+					t.Errorf("%s.%s is declared, and the request is never encoded with it", variable, name)
 				}
-				for _, name := range slices.Sorted(maps.Keys(declared.Options)) {
-					if _, sent := want[name]; !sent {
-						t.Errorf("%s.%s is declared, and the request is never encoded with it", role.variable, name)
-					}
+			}
+			for _, name := range slices.Sorted(maps.Keys(want)) {
+				got, ok := declared.Options[name]
+				if !ok {
+					t.Errorf("%s refuses %s.%s, which the request is encoded with", entry, variable, name)
+					continue
 				}
-				for _, name := range slices.Sorted(maps.Keys(want)) {
-					got, ok := declared.Options[name]
-					if !ok {
-						t.Errorf("%s refuses %s.%s, which the request is encoded with", entry, role.variable, name)
-						continue
-					}
-					if got != want[name] {
-						t.Errorf("%s.%s is declared %s, the request encodes %s", role.variable, name, describe(got), describe(want[name]))
-					}
+				if got != want[name] {
+					t.Errorf("%s.%s is declared %s, the request encodes %s", variable, name, describe(got), describe(want[name]))
 				}
-			})
-		}
+			}
+		})
 	}
 }
 

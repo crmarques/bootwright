@@ -18,6 +18,7 @@ import (
 	"maps"
 	"math/big"
 	"net"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"slices"
@@ -33,7 +34,9 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
@@ -165,6 +168,7 @@ func contractRows() []contractRow {
 		{kind: string(api.StorageObjectGateway), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph-object", completedFrom: cephCompletedFrom},
 		{kind: string(api.StorageNFSExport), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph-nfs", completedFrom: cephCompletedFrom},
 		{kind: string(api.StorageCluster), implementation: ceph.HostImplementation, example: "libvirt-3-nodes-ceph", completedFrom: cephHostCompletedFrom},
+		{kind: string(api.StorageSMBResource), implementation: ceph.SMBImplementation, example: "libvirt-3-nodes-ceph+smb", completedFrom: cephSMBCompletedFrom},
 		{kind: string(api.StorageCluster), implementation: ceph.ImageImplementation, example: "libvirt-3-nodes-ceph", presence: contractImagePresence, indivisible: true,
 			removalObservesNothing: "specs/storage.md, Frozen release and trust: a resolution retains nothing, so its removal takes back nothing a run could observe",
 			drift:                  map[string]any{"platform": "linux/arm64"}},
@@ -201,6 +205,36 @@ func contractRows() []contractRow {
 }
 
 const cephHostCompletedFrom = "specs/storage.md, Frozen release and trust: each host preparation pulls exactly the digest the image block froze, under the original apply's owner and FSID"
+
+const cephSMBCompletedFrom = "specs/storage.md, SMB resources: an SMB request takes its owner, FSID, bootstrap host, cluster scope and resolved samba images from the original apply's core cluster and image proofs"
+
+// contractOverlays names each example the suite composes from a tracked
+// example and a synthetic overlay under testdata, for a kind no tracked example
+// declares yet.
+var contractOverlays = map[string][2]string{
+	"libvirt-3-nodes-ceph+smb": {"libvirt-3-nodes-ceph", filepath.Join("testdata", "capability-overlays", "ceph-smb")},
+}
+
+func contractSources(t *testing.T, name string) desiredstate.Sources {
+	t.Helper()
+	overlay, composed := contractOverlays[name]
+	if !composed {
+		return exampleDirectory(t, name)
+	}
+	example, err := filepath.Abs(examplePath(t, overlay[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory, err := filepath.Abs(overlay[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources, err := (inputfs.Reader{}).Read(context.Background(), []string{example, directory})
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	return sources
+}
 
 const cephCompletedFrom = "specs/storage.md, Frozen release and trust: the cluster, pool and client requests take their owner, FSID and resolved image from the original apply"
 
@@ -326,11 +360,12 @@ type contractExample struct {
 
 func contractExampleOf(t *testing.T, resolver capabilityResolver, name string) contractExample {
 	t.Helper()
-	state, _ := compileAcceptance(t, exampleDirectory(t, name))
+	state, _ := compileAcceptance(t, contractSources(t, name))
+	identity := lifecycle.ContextIdentity{Name: strings.ReplaceAll(name, "+", "-")}
 	example := contractExample{
 		state:   state,
-		apply:   lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: name}, State: state, Controller: "controller"},
-		destroy: lifecycle.PlanInput{Verb: reconciliation.Destroy, Context: lifecycle.ContextIdentity{Name: name}, State: state, Controller: "controller"},
+		apply:   lifecycle.PlanInput{Verb: reconciliation.Apply, Context: identity, State: state, Controller: "controller"},
+		destroy: lifecycle.PlanInput{Verb: reconciliation.Destroy, Context: identity, State: state, Controller: "controller"},
 		plans:   map[lifecycle.CapabilityBinding]lifecycle.CapabilityPlan{},
 	}
 	var definitions []reconciliation.BlockDefinition
@@ -1349,6 +1384,8 @@ func contractMaterial(t *testing.T, example contractExample, references []string
 		case "caBundle":
 			certificate, _ := contractServingCertificate(t, nil).Part(secrets.CertificatePart)
 			material[reference] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: certificate})
+		case "opaque", "token":
+			material[reference] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("contract-value")})
 		default:
 			t.Fatalf("the Secret %s is a %s, which the suite synthesizes no material for", reference, kind)
 		}
