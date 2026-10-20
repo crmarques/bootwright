@@ -267,6 +267,58 @@ func TestUnregisteredFlagLetsTheRerunProceed(t *testing.T) {
 	}
 }
 
+func TestPrintedNextStepsCompleteTheManualUnregistrationWhenTheMachineRemovalLosesData(t *testing.T) {
+	journey, runner, machines := installationJourney(t, "request-lab-rhel-registered.golden")
+	machines.consumes = []string{"data-loss"}
+	setRunning(machines, false)
+	command := "bootwright destroy --context " + lifecycle.JourneyContext + " --authorize data-loss"
+	var followed []string
+	for range 4 {
+		followed = append(followed, command)
+		holdInstallationSecrets(journey, runner.request)
+		result, err := journey.Service.Destroy(context.Background(), destroyCommand(t, command))
+		if err == nil {
+			if result.Receipt.State != string(reconciliation.OperationDone) || !slices.Equal(machines.removed, []string{"rhel-01"}) {
+				t.Fatalf("%q = %+v and removed %v", command, result, machines.removed)
+			}
+			return
+		}
+		reported := diagnostics.Of(err)
+		if len(reported) == 0 {
+			t.Fatalf("%q failed without a diagnostic: %v", command, err)
+		}
+		remedy := reported[0].Remediation
+		at := strings.LastIndex(remedy, "bootwright destroy ")
+		if at < 0 {
+			t.Fatalf("%q = %+v names no destroy to run next", command, reported)
+		}
+		command = remedy[at:]
+	}
+	t.Fatalf("following each printed next step ran %q without completing", followed)
+}
+
+func destroyCommand(t *testing.T, command string) lifecycle.DestroyRequest {
+	t.Helper()
+	request := lifecycle.DestroyRequest{SkipConfirmation: true}
+	fields := strings.Fields(strings.TrimPrefix(command, "bootwright destroy "))
+	for index := 0; index+1 < len(fields); index += 2 {
+		switch fields[index] {
+		case "--context":
+			request.ContextName = fields[index+1]
+		case "--authorize":
+			request.Authorizations = append(request.Authorizations, strings.Split(fields[index+1], ",")...)
+		case "--unregistered":
+			request.Unregistered = append(request.Unregistered, strings.Split(fields[index+1], ",")...)
+		default:
+			t.Fatalf("the next step %q has an unexpected flag %q", command, fields[index])
+		}
+	}
+	if len(fields)%2 != 0 || request.ContextName == "" {
+		t.Fatalf("the next step %q is not a destroy command", command)
+	}
+	return request
+}
+
 func TestUnregisteredFlagRefusesAMachineThePlanDoesNotUnregister(t *testing.T) {
 	for name, golden := range map[string]string{"registered": "request-lab-rhel-registered.golden", "not registered": "request-lab-rhel.golden"} {
 		t.Run(name, func(t *testing.T) {

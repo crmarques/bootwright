@@ -1128,7 +1128,9 @@ in every resolution the invocation runs against that installation. The flag is
 accepted only for a Machine whose installation the destroy plan unregisters;
 any other name refuses `lifecycle.authorization` before confirmation, as
 [the command contract](cli/commands.md) states. It holds for that invocation
-only: nothing persists it, and no next step names it.
+only: nothing persists it, and no next step names it except the authorization
+refusal of that invocation, whose command keeps it beside the tokens the plan
+requires, as [the command contract](cli/commands.md) states.
 
 **Bound.** The deadline of a registering request adds 15 minutes for the
 registration, the worker's whole session being bounded at 630 seconds and its

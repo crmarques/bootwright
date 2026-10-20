@@ -230,7 +230,7 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 }
 
 func (s Service) authorized(name string, decided transition, authorizations, unregistered []string) error {
-	if err := authorize(name, decided.verb, decided.selection, decided.plan, authorizations); err != nil {
+	if err := authorize(name, decided.verb, decided.selection, decided.plan, authorizations, unregistered); err != nil {
 		return err
 	}
 	return s.acknowledgedReleases(name, decided.plan, unregistered)
@@ -322,8 +322,8 @@ func (s Service) proveShared(ctx context.Context, name string, decided transitio
 // token the plan does not consume refuses too, so a habitual authorization
 // cannot pre-authorize a future destructive plan. Either refusal names the
 // consuming steps by their place in the presented plan and the exact command
-// that passes.
-func authorize(contextName string, verb reconciliation.Verb, selection reconciliation.StageSelection, plan reconciliation.Plan, authorizations []string) error {
+// that passes, which keeps the Machines the invocation names unregistered.
+func authorize(contextName string, verb reconciliation.Verb, selection reconciliation.StageSelection, plan reconciliation.Plan, authorizations, unregistered []string) error {
 	consumers := map[string][]string{}
 	required := requiredTokens(plan)
 	for index, block := range plan.Blocks {
@@ -335,7 +335,11 @@ func authorize(contextName string, verb reconciliation.Verb, selection reconcili
 	if len(selection) != 0 {
 		flags = append(flags, "--stage", strings.Join(selection.Names(), ","))
 	}
-	passing := contextCommand(contextName, string(verb), append(flags, authorizing(required)...)...)
+	flags = append(flags, authorizing(required)...)
+	if len(unregistered) != 0 {
+		flags = append(flags, "--unregistered", strings.Join(slices.Compact(slices.Sorted(slices.Values(unregistered))), ","))
+	}
+	passing := contextCommand(contextName, string(verb), flags...)
 	supplied := slices.Compact(slices.Sorted(slices.Values(authorizations)))
 	for _, token := range supplied {
 		if !slices.Contains(required, token) {

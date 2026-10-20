@@ -92,14 +92,17 @@ type fleetMachines struct {
 	running bool
 	keeps   bool
 	removed []string
+	// consumes is what a Machine removal consumes, as a libvirt Machine's
+	// removal consumes data-loss.
+	consumes []string
 }
 
 func (*fleetMachines) Plan(context.Context, lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
 	return lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}, nil
 }
 
-func (*fleetMachines) Removal(_ context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
-	return lifecycle.Removal{Description: "remove Machine " + block.Object, Impacts: []string{"remove-machine " + block.Object}, Consumes: []string{}}, nil
+func (m *fleetMachines) Removal(_ context.Context, block reconciliation.Block) (lifecycle.Removal, error) {
+	return lifecycle.Removal{Description: "remove Machine " + block.Object, Impacts: []string{"remove-machine " + block.Object}, Consumes: append([]string{}, m.consumes...)}, nil
 }
 
 func (*fleetMachines) Apply(_ context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
