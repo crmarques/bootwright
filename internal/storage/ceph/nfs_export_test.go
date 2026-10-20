@@ -199,6 +199,20 @@ func TestNFSExportIdentity(t *testing.T) {
 	refusedIdentity(t, api.StorageSubvolume, exportExecution(t, r), "subvolume capability")
 }
 
+func subvolumeProofOn(t *testing.T, filesystem string, proof lifecycle.BlockEvidence) lifecycle.BlockEvidence {
+	t.Helper()
+	r, err := DecodeRequest(proof.Block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subvolume := *r.Subvolume
+	subvolume.Filesystem, r.Subvolume = filesystem, &subvolume
+	if proof.Block.Request, err = r.Canonical(); err != nil {
+		t.Fatal(err)
+	}
+	return proof
+}
+
 func TestNFSExportPrepareBindsTheProvedSubvolumePath(t *testing.T) {
 	r := plannedExport(t, exportCatalog(3, withShares, subvolumeExport(exportNative())))
 	exact := "/volumes/csi/docs/" + subvolumeID
@@ -210,6 +224,13 @@ func TestNFSExportPrepareBindsTheProvedSubvolumePath(t *testing.T) {
 	}
 	e = exportExecution(t, r)
 	e.ApplyProved = append(e.ApplyProved, subvolumeProof(t, "docs", "other", "/volumes/other/docs/"+subvolumeID))
+	_, err = New(api.StorageNFSExport, nil).prepare(context.Background(), e)
+	refusedWith(t, err, "lifecycle.state", "the creation proof of StorageSubvolume docs names another filesystem or group than StorageNFSExport docs froze", "restore the original apply evidence")
+	e = exportExecution(t, r)
+	e.ApplyProved = append(e.ApplyProved, subvolumeProofOn(t, "other", subvolumeProof(t, "docs", "csi", exact)))
+	if _, filesystem, group, err := ProvedSubvolume(e.ApplyProved, "docs"); err != nil || filesystem != "other" || group != "csi" {
+		t.Fatalf("the foreign-filesystem proof names %q %q (%v)", filesystem, group, diagnostics.Of(err))
+	}
 	_, err = New(api.StorageNFSExport, nil).prepare(context.Background(), e)
 	refusedWith(t, err, "lifecycle.state", "the creation proof of StorageSubvolume docs names another filesystem or group than StorageNFSExport docs froze", "restore the original apply evidence")
 	_, err = New(api.StorageNFSExport, nil).prepare(context.Background(), exportExecution(t, r))
@@ -240,6 +261,7 @@ func TestNFSExportEvidence(t *testing.T) {
 			e.Daemons = []UnitDaemon{{Host: "node-1", Name: "nfs.shares.0", Service: "nfs.shares"}}
 		},
 		"endpoint": func(e *Evidence) { e.Endpoint = EndpointEvidence{Reachable: true} },
+		"client":   func(e *Evidence) { e.Client = "client.docs" },
 		"absent with a resource": func(e *Evidence) {
 			e.Exists, e.Ready, e.Owned = false, false, false
 		},
