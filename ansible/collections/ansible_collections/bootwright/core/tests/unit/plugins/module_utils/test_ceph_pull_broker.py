@@ -1029,7 +1029,7 @@ def leaf_certificate(tmp_path):
     return cert.read_text(encoding="ascii")
 
 
-@pytest.mark.parametrize("kind", ["empty", "no-certificate", "malformed", "oversized", "leaf-only", "not-text"])
+@pytest.mark.parametrize("kind", ["empty", "no-certificate", "malformed", "oversized", "leaf-only", "not-text", "non-ascii-comment"])
 def test_bundle_context_refuses_a_bundle_without_a_ca_anchor(tmp_path, kind):
     bundles = {
         "empty": "",
@@ -1037,7 +1037,8 @@ def test_bundle_context_refuses_a_bundle_without_a_ca_anchor(tmp_path, kind):
         "malformed": "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n",
         "oversized": SYNTHETIC_CA + "#" * broker.MAX_TRUST,
         "not-text": SYNTHETIC_CA.encode("ascii"),
+        "non-ascii-comment": "# caf\u00e9 anchor\n" + SYNTHETIC_CA,
     }
     bundle = leaf_certificate(tmp_path) if kind == "leaf-only" else bundles[kind]
-    with pytest.raises(broker.BrokerError):
+    with pytest.raises(broker.BrokerError, match="^registry (trust bundle|credential boundary)$"):
         broker.bundle_context(bundle)

@@ -8,6 +8,7 @@ import hashlib
 import inspect
 import json
 import os
+import pathlib
 import stat
 import subprocess
 import sys
@@ -16,13 +17,14 @@ import pytest
 import yaml
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_host_worker, ceph_native, ceph_native_resources, ceph_native_worker, ceph_pull_broker, ceph_tunnel_staging,
+    ceph_core, ceph_host_worker, ceph_native, ceph_native_resources, ceph_native_worker, ceph_pull_broker, ceph_registry_discovery, ceph_tunnel_staging,
 )
 from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics, native_specializations
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_native_specializations as specs
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
 
 PASSWORD = "Xq7-Lm2_Rv9.Tk4-Wz8_Hn3.Pb6-Jd5_"
+SYNTHETIC_CA = (pathlib.Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "ceph-discovery-synthetic-ca.golden").read_bytes()
 EMPTY_DASHBOARD = {"url": "", "certificateSHA256": "", "reachable": False}
 UNWRITTEN = {"dashboard": "/nonexistent/bootwright-dashboard-output"}
 
@@ -2053,7 +2055,8 @@ def test_dispatch_routes_resource_actions_to_the_resource_worker(monkeypatch, co
 def test_host_profile_relays_the_bound_bundle(core_request, tmp_path):
     scope = {key: value for key, value in core_request.items() if key != "action"}
     bound = dict(scope, registryTrustBundleRef="registry-ca")
-    bundle_text = "-----BEGIN CERTIFICATE-----\nREGISTRY-BUNDLE-SENTINEL\n-----END CERTIFICATE-----\n"
+    bundle_text = SYNTHETIC_CA.decode("utf-8")
+    projection = "".join(ceph_registry_discovery.certificates(SYNTHETIC_CA))
     paths = {"sshKey": "PRIVATE-KEY-SENTINEL", "knownHosts": "node-1 ssh-ed25519 PUBLIC",
              "registryJSON": json.dumps({"url": scope["registry"], "username": "registry-user", "password": PASSWORD}), "registryCA": bundle_text}
     for name, text in paths.items():
@@ -2068,13 +2071,52 @@ def test_host_profile_relays_the_bound_bundle(core_request, tmp_path):
 
     assert ceph_core.Transport(bound, material, run=run, scope=True).host_profile(bound["hosts"][0]) == {"changed": True}
     argv, data, unused_timeout = calls[0]
-    assert json.loads(data)["payload"]["private"] == {"registryJSON": paths["registryJSON"], "registryCA": bundle_text}
-    assert "REGISTRY-BUNDLE-SENTINEL" not in " ".join(argv) and PASSWORD not in " ".join(argv)
+    assert json.loads(data)["payload"]["private"] == {"registryJSON": paths["registryJSON"], "registryCA": projection}
+    assert projection.isascii() and "#" not in projection and ceph_pull_broker.bundle_context(projection).cert_store_stats()["x509_ca"] == 1
+    assert projection.splitlines()[1] not in " ".join(argv) and PASSWORD not in " ".join(argv)
     unbound = {name: path for name, path in material.items() if name != "registryCA"}
     for request_value, private in ((scope, material), (bound, unbound)):
         with pytest.raises(ceph_native.Refusal, match="^material$"):
             ceph_core.Transport(request_value, private, run=run, scope=True).host_profile(request_value["hosts"][0])
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("kind", ["fixture", "invalid-der", "not-utf8", "no-certificate", "oversized-utf8"])
+def test_every_bundle_consumer_reaches_the_same_verdict(core_request, tmp_path, kind):
+    bundles = {
+        "fixture": SYNTHETIC_CA,
+        "invalid-der": SYNTHETIC_CA + b"-----BEGIN CERTIFICATE-----\nQUJD\n-----END CERTIFICATE-----\n",
+        "not-utf8": b"# \xff\n" + SYNTHETIC_CA,
+        "no-certificate": b"# caf\xc3\xa9 and no certificate block\n",
+        "oversized-utf8": b"# " + b"\xc3\xa9" * (ceph_pull_broker.MAX_TRUST // 2) + b"\n" + SYNTHETIC_CA,
+    }
+    tmp_path.chmod(0o700)
+    scope = dict({key: value for key, value in core_request.items() if key != "action"}, registryTrustBundleRef="registry-ca")
+    paths = {"sshKey": b"PRIVATE-KEY-SENTINEL", "knownHosts": b"node-1 ssh-ed25519 PUBLIC", "registryCA": bundles[kind],
+             "registryJSON": json.dumps({"url": scope["registry"], "username": "registry-user", "password": PASSWORD}).encode()}
+    for name, data in paths.items():
+        (tmp_path / name).write_bytes(data)
+        (tmp_path / name).chmod(0o600)
+    calls = []
+
+    def run(argv, data, timeout):
+        calls.append(json.loads(data)["payload"]["private"]["registryCA"])
+        return 0, b'{"ok":true,"result":{"changed":true}}'
+
+    transport = ceph_core.Transport(scope, {name: str(tmp_path / name) for name in paths}, run=run, scope=True)
+    if kind != "fixture":
+        with pytest.raises(ceph_registry_discovery.DiscoveryRefusal, match="^material$"):
+            with ceph_registry_discovery.bundle_proof(str(tmp_path / "registryCA")):
+                pytest.fail("discovery accepted the bundle")
+        with pytest.raises(ceph_native.Refusal, match="^material$"):
+            transport.host_profile(scope["hosts"][0])
+        assert calls == []
+        return
+    with ceph_registry_discovery.bundle_proof(str(tmp_path / "registryCA")) as (context, prove):
+        prove()
+        resolved = context.get_ca_certs()
+    assert transport.host_profile(scope["hosts"][0]) == {"changed": True}
+    assert ceph_pull_broker.bundle_context(calls[0]).get_ca_certs() == resolved
 
 
 @pytest.mark.parametrize("value", ["", "Bad Name", "a\nb", 5])

@@ -149,7 +149,7 @@ def bundle_context(bundle):
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     try:
         context.load_verify_locations(cadata=bundle)
-    except (ssl.SSLError, ValueError):
+    except (ssl.SSLError, ValueError, TypeError):
         raise BrokerError("registry trust bundle") from None
     require(context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname)
     require(context.cert_store_stats()["x509_ca"] > 0)

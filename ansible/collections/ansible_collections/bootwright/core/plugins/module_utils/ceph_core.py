@@ -20,7 +20,7 @@ import time
 from ansible_collections.bootwright.core.plugins.module_utils import (
     adapter_protocol, ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_nfs, ceph_native_observability,
     ceph_native_resources, ceph_native_observe, ceph_native_units, ceph_native_object, ceph_native_worker, ceph_package_sources, ceph_package_worker,
-    ceph_packages, ceph_smb_native, ceph_tunnel,
+    ceph_packages, ceph_registry_discovery, ceph_smb_native, ceph_tunnel,
     ceph_tunnel_staging, ceph_tunnel_custody, native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
 )
 
@@ -466,6 +466,18 @@ class Transport:
         except UnicodeError:
             raise ceph_native.Refusal("material") from None
 
+    @staticmethod
+    def trust_bundle(text):
+        """The certificate blocks resolution verified, proven as the host broker will load them, before any host effect."""
+        data = text.encode("utf-8")
+        ceph_native.require(0 < len(data) <= ceph_pull_broker.MAX_TRUST, "material")
+        try:
+            projection = "".join(ceph_registry_discovery.bundle_blocks(data))
+            ceph_pull_broker.bundle_context(projection)
+        except (ceph_registry_discovery.DiscoveryRefusal, ceph_pull_broker.BrokerError):
+            raise ceph_native.Refusal("material") from None
+        return projection
+
     def host_profile(self, host):
         """The one long call: pull the frozen digest, then prove its contained runtime."""
         names = ("registryJSON", "registryCA") if "registryTrustBundleRef" in self.request else ("registryJSON",)
@@ -474,7 +486,8 @@ class Transport:
             private = {name: ceph_native.read_regular(self.material[name], private=True).decode("utf-8") for name in names}
         except UnicodeError:
             raise ceph_native.Refusal("material") from None
-        ceph_native.require(0 < len(private.get("registryCA", "-")) <= ceph_pull_broker.MAX_TRUST, "material")
+        if "registryCA" in private:
+            private["registryCA"] = self.trust_bundle(private["registryCA"])
         payload = {"request": self.request, "host": host["name"], "phase": "profile", "private": private}
         source = ceph_host_worker.launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker))
         budget = ceph_host_worker.REMOTE_LIMIT

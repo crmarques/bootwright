@@ -296,6 +296,16 @@ def tls_proof():
         raise DiscoveryRefusal("artifact") from None
 
 
+def bundle_blocks(data):
+    """The registry trust bundle's certificate blocks; hosts receive exactly their concatenation, never the comments around them."""
+    try:
+        blocks = certificates(data)
+    except DiscoveryRefusal:
+        raise DiscoveryRefusal("material") from None
+    require(len("".join(blocks)) <= ceph_pull_broker.MAX_TRUST, "material")
+    return blocks
+
+
 @contextlib.contextmanager
 def bundle_proof(path):
     """Only the bound registry trust bundle anchors verification; the host trust path is never opened."""
@@ -306,7 +316,7 @@ def bundle_proof(path):
             prove()
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             context.minimum_version = ssl.TLSVersion.TLSv1_2
-            for block in certificates(data):
+            for block in bundle_blocks(data):
                 context.load_verify_locations(cadata=block)
             require(context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname and context.cert_store_stats()["x509_ca"] > 0, "material")
             yield context, prove
