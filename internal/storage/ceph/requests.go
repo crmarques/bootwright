@@ -264,6 +264,12 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	if !strings.HasPrefix(base, registry+"/") {
 		return Request{}, failure("lifecycle.unsupported", "the Ceph image base names only the Entitlement registry host, not a repository under it", "set ceph.image.base to a repository under the Entitlement registry, such as "+registry+"/<repository>")
 	}
+	if reason, remedy, gap := undeliveredRegistryTrust(c, cluster); gap {
+		return Request{}, failure("lifecycle.unsupported", reason, remedy)
+	}
+	if reason, remedy, gap := undeliveredRepositoryTrust(cluster); gap {
+		return Request{}, failure("lifecycle.unsupported", reason, remedy)
+	}
 	r := Request{Version: Version, Action: "cluster", Cluster: cluster.Name(), Image: reference,
 		Cephadm: Tool{Path: "/usr/sbin/cephadm", PackageVersion: spec.Get("packageVersion").Text()}, Release: spec.Get("release").Text(), AnsiblePackageVersion: spec.Get("cephadm", "ansible", "packageVersion").Text(), NFSGaneshaPackageVersion: spec.Get("nfsGanesha", "packageVersion").Text(),
 		ClusterSSHUser: spec.Get("cephadm", "clusterSSH", "user").Text(), ClusterKeyRef: spec.Get("cephadm", "clusterSSH", "keyRef").Text(),
@@ -439,6 +445,23 @@ func replicationNetworkGap(c api.Catalog, cluster api.Object) (string, string, b
 			"add an address inside one of " + listed + " to the network of " + m.Name() + ", or remove spec.ceph.networks.clusterCIDRs", true
 	}
 	return "", "", false
+}
+
+func undeliveredRegistryTrust(c api.Catalog, cluster api.Object) (string, string, bool) {
+	ent, found := c.Find(api.Entitlement, cluster.Spec().Get("ceph", "entitlementRef").Text())
+	if !found || !ent.Spec().Has("registry", "trustBundleRef") {
+		return "", "", false
+	}
+	return "StorageCluster " + cluster.Name() + " names Entitlement " + ent.Name() + ", which sets spec.registry.trustBundleRef, and Bootwright does not verify a Ceph image registry with a declared trust bundle yet",
+		"remove spec.registry.trustBundleRef from Entitlement " + ent.Name() + ", or name an Entitlement without it in spec.ceph.entitlementRef of StorageCluster " + cluster.Name(), true
+}
+
+func undeliveredRepositoryTrust(cluster api.Object) (string, string, bool) {
+	if !cluster.Spec().Has("ceph", "packageRepositoryTrustBundleRef") {
+		return "", "", false
+	}
+	return "StorageCluster " + cluster.Name() + " sets spec.ceph.packageRepositoryTrustBundleRef, and Bootwright does not verify a Ceph package repository with a declared trust bundle yet",
+		"remove spec.ceph.packageRepositoryTrustBundleRef from StorageCluster " + cluster.Name(), true
 }
 
 func insideAnyNetwork(addresses, cidrs []string) bool {

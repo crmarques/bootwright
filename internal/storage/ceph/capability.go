@@ -230,6 +230,12 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 		if reason, remedy, gap := replicationNetworkGap(state.Effective(), cluster); gap {
 			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
 		}
+		if reason, remedy, gap := undeliveredRegistryTrust(state.Effective(), cluster); gap {
+			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
+		}
+		if reason, remedy, gap := undeliveredRepositoryTrust(cluster); gap {
+			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
+		}
 		if reason, remedy, gap := undeployedDelegated(cluster); gap {
 			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
 		} else if reason, remedy, gap := unselectedAuxiliary(cluster); gap {

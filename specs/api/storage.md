@@ -115,6 +115,15 @@ every metadata path the host fetches stays within 2048 bytes. Omission uses
 source default, not a release catalog. Independent publisher signatures remain
 required for its selected RPMs.
 
+`ceph.packageRepositoryTrustBundleRef` optionally names a `caBundle` Secret
+that is to be the only TLS trust anchor for the authored
+`ceph.packageRepository`. It is admitted only with an authored
+`ceph.packageRepository`, so the source default never takes a private bundle;
+a missing Secret or a Secret of another type refuses at admission. Package
+acquisition does not consume it yet, so planning refuses a StorageCluster that
+sets it ([refusal table](../storage.md#refusal-table)) instead of accepting
+and ignoring it.
+
 `ceph.ibm.callHome` is `enabled` or `disabled`. `enabled` keeps the
 provider's Call Home reporting active after bootstrap; `disabled` leaves it
 inactive. The selected build decides how an intent is realized: on a build

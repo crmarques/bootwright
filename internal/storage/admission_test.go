@@ -412,6 +412,10 @@ func TestPartialDefaultsCheckOnlyProvableContradictions(t *testing.T) {
 	}
 	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(m("service_type", "osd", "service_id", "data", "spec", m("tpm2", true, "encrypted", false))), "ceph", "services"))
 	requireIssue(t, ValidatePartial(cluster, api.Catalog{}), "$.spec.ceph.services[0].spec.tpm2")
+	trust := object(api.StorageCluster, "partial", m("ceph", m("packageRepositoryTrustBundleRef", "ca")))
+	if issues := ValidatePartial(trust, api.Catalog{}); len(issues) != 0 {
+		t.Fatal("a partial trust bundle refused before composition supplied its repository", issues)
+	}
 }
 
 func TestDeferredScopeRefusalsNameTheDeliveringItem(t *testing.T) {

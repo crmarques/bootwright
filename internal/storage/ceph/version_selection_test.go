@@ -9,6 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/storage"
 )
 
 func TestAuthoredVersionsReachFrozenNativeRequestsWithoutCompatibilitySelection(t *testing.T) {
@@ -86,5 +87,37 @@ func TestEntitlementNamespaceScopesSelectionAndFreezesOnlyCredentialAuthority(t 
 	foreign := cluster.WithSpec(cluster.Spec().WithPath(api.StringValue("cp.icr.io/cp/unrelated/ceph"), "ceph", "image", "base"))
 	if _, err := baseRequest(catalog, foreign, "synthetic"); err == nil {
 		t.Fatal("entitlement namespace widened to another repository")
+	}
+}
+
+func TestEntitlementDefaultRegistryURLPlans(t *testing.T) {
+	catalog := pinnedCatalog(t, nil)
+	objects := catalog.Objects()
+	for i, object := range objects {
+		if object.Kind() == api.Entitlement && object.Name() == "ibm" {
+			objects[i], _ = storage.Normalize(object.WithSpec(requestMap("type", "ibm-storage-ceph", "registry", requestMap("credentialsRef", "registry"), "license", requestMap("accept", true))), catalog)
+			if url := objects[i].Spec().Get("registry", "url").Text(); url != "cp.icr.io/cp" {
+				t.Fatalf("default registry url %q", url)
+			}
+		}
+	}
+	catalog = api.NewCatalog(objects)
+	state := compilation.NewState(catalog, catalog, nil)
+	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool, api.StorageClient} {
+		if refusals := New(kind, nil).Unsupported(state); len(refusals) != 0 {
+			t.Fatalf("%s: default registry refused: %+v", kind, refusals)
+		}
+	}
+	request, err := baseRequest(catalog, catalog.OfKind(api.StorageCluster)[0], "synthetic")
+	if err != nil || request.Registry != PinnedRegistry || request.Image != PinnedRepository+":"+PinnedTag {
+		t.Fatalf("default registry request: %+v %v", request, err)
+	}
+	plan, err := NewImage(nil).Plan(context.Background(), lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: state, Controller: "controller"})
+	if err != nil || len(plan.Definitions) != 1 {
+		t.Fatalf("plan: %+v %v", plan, err)
+	}
+	image, err := DecodeImageRequest(plan.Definitions[0].Request)
+	if err != nil || image.Registry != "cp.icr.io" || image.Base != PinnedRepository {
+		t.Fatalf("default registry image request: %+v %v", image, err)
 	}
 }

@@ -22,6 +22,7 @@ func (a *admission) cluster() {
 		return
 	}
 	a.distribution(ceph)
+	a.packageRepositoryTrust(ceph)
 	a.clusterAccess(ceph)
 	a.topology(ceph)
 	a.clusterServices(ceph)
@@ -77,6 +78,14 @@ func (a *admission) distribution(ceph api.Value) {
 		}
 	}
 	a.entitlement(ceph.Get("osSubscriptionRef"), "$.spec.ceph.osSubscriptionRef", "redhat-rhel")
+}
+
+func (a *admission) packageRepositoryTrust(ceph api.Value) {
+	if ceph.Has("packageRepositoryTrustBundleRef") && !ceph.Has("packageRepository") {
+		a.issue("api.invariant", "$.spec.ceph.packageRepositoryTrustBundleRef",
+			"spec.ceph.packageRepositoryTrustBundleRef verifies only an authored spec.ceph.packageRepository, and this StorageCluster sets none",
+			"set spec.ceph.packageRepository to the HTTPS repository this bundle verifies, or remove spec.ceph.packageRepositoryTrustBundleRef")
+	}
 }
 
 func (a *admission) vendorImages(ceph api.Value) {

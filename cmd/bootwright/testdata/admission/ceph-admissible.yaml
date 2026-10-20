@@ -11,6 +11,8 @@ spec:
     distribution: ibm
     release: 9.9.1.2
     packageVersion: 20.2.1-405.el9cp
+    packageRepository: https://packages.example.test/ibm-ceph/9/rhel9/x86_64
+    packageRepositoryTrustBundleRef: custom-ca-bundle
 
     image:
       base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
