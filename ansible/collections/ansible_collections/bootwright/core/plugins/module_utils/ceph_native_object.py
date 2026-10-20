@@ -25,12 +25,10 @@ import hmac
 import ipaddress
 import os
 import re
-import socket
-import ssl
-import time
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_units
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, canonical, named, read_regular, require
+from ansible_collections.bootwright.core.plugins.module_utils.ceph_native_observability import MAX_KEY, MAX_LEAF, PRIVATE_KEY, answers, leaf, served
 
 APPLY_PHASES = ("gateway_zone", "gateway_placement", "gateway_service")
 PHASES = frozenset(APPLY_PHASES + ("ingress_firewall",))
@@ -47,21 +45,12 @@ LEAVES = {"/spec/ssl_cert": ("ssl_cert", "gatewayCertificate"), "/spec/ssl_key":
 # Non-secret stand-ins the SDK normalizes and the records hold in place of the bound leaves.
 BOUND = {"ssl_cert": "bootwright-bound:/spec/ssl_cert", "ssl_key": "bootwright-bound:/spec/ssl_key"}
 IMAGES = ("haproxy", "keepalived")
-MAX_CERTIFICATE = 65536
-MAX_KEY = 16384
-MAX_LEAF = 16384
-CERTIFICATE = re.compile(r"-----BEGIN CERTIFICATE-----\r?\n.*?-----END CERTIFICATE-----", re.S)
-PRIVATE_KEY = re.compile(r"^-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----\r?$", re.M)
 LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 ZONE_ID = ceph_native.SUBVOLUME_UUID
 PLACEMENT = "default-placement"
 # RGWSpec.get_port: 443 with ssl, else 80 (IBM python3-ceph-common 20.2.1 service_spec.py:1888-1909).
 HTTP_PORT = 80
 HTTPS_PORT = 443
-PROBE_TIMEOUT = 5
-PROBE_LIMIT = 256
-PROBE_REQUEST = b"GET / HTTP/1.0\r\n\r\n"
-STATUS_LINE = re.compile(rb"HTTP/1\.[01] [1-5][0-9]{2}(?: [^\r\n]*)?\r?\n")
 PENDING = re.compile(r"(?:(?:rgw|http|tls)@rgw|tls@ingress)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
 MEMBERS = frozenset(("bindings", "dataExtraPool", "dataPool", "documents", "endpoint", "indexPool", "name", "realm", "zone", "zoneGroup", "zonePools"))
 KINDS = ("realm", "zonegroup", "zone")
@@ -187,19 +176,6 @@ def frontend(request):
     return (documents[1], documents[1]["spec"]["frontend_port"]) if len(documents) == 2 else None
 
 
-def leaf(certificate):
-    """The DER bytes of a bound certificate's first block."""
-    require(isinstance(certificate, str) and len(certificate.encode("utf-8")) <= MAX_CERTIFICATE, "material")
-    found = CERTIFICATE.search(certificate)
-    require(found is not None, "material")
-    try:
-        der = ssl.PEM_cert_to_DER_cert(found[0])
-    except ValueError:
-        raise Refusal("material") from None
-    require(1 <= len(der) <= MAX_LEAF, "material")
-    return der
-
-
 def material(request, phase, private):
     """The bound leaves a phase may hold: certificate and key to the service apply, the certificate to observation and removal."""
     require(isinstance(private, dict), "material")
@@ -254,48 +230,6 @@ def identities(value):
     """The IDs of a zone group's zones or a period's zone groups: a list of objects or IDs, or a mapping of them."""
     entries = list(value.values()) if isinstance(value, dict) else value if isinstance(value, list) else []
     return {entry.get("id") if isinstance(entry, dict) else entry for entry in entries if isinstance(entry, (dict, str))}
-
-
-def replied(connection, request, deadline):
-    """Send one request and read at most PROBE_LIMIT bytes before the deadline: an HTTP status line, or nothing proved."""
-    data = b""
-    connection.sendall(request)
-    while len(data) < PROBE_LIMIT and b"\n" not in data:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return False
-        connection.settimeout(remaining)
-        block = connection.recv(PROBE_LIMIT - len(data))
-        if not block:
-            break
-        data += block
-    return STATUS_LINE.match(data) is not None
-
-
-def answers(address, number):
-    """An HTTP status line from the frontend within the probe's bound; a bare connection proves nothing."""
-    deadline = time.monotonic() + PROBE_TIMEOUT
-    try:
-        with socket.create_connection((address, number), timeout=PROBE_TIMEOUT) as connection:
-            return replied(connection, PROBE_REQUEST, deadline)
-    except OSError:
-        return False
-
-
-def served(address, number, name):
-    """The DER leaf a TLS frontend serves for SNI name and whether an HTTP status line follows; trust is the caller's exact fingerprint."""
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    context.minimum_version = ssl.TLSVersion.TLSv1_2
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    deadline, presented = time.monotonic() + PROBE_TIMEOUT, None
-    try:
-        with socket.create_connection((address, number), timeout=PROBE_TIMEOUT) as raw:
-            with context.wrap_socket(raw, server_hostname=name) as channel:
-                presented = channel.getpeercert(binary_form=True)
-                return presented, replied(channel, b"GET / HTTP/1.0\r\nHost: " + name.encode("ascii") + b"\r\n\r\n", deadline)
-    except (OSError, ValueError):
-        return presented, False
 
 
 class ObjectWorker(ceph_native_units.UnitWorker):
@@ -682,7 +616,7 @@ class ObjectWorker(ceph_native_units.UnitWorker):
             ready = False
             self.pending("rgw@" + service)
         for row in started:
-            address = self.frontend(row, number)
+            address = self.daemon_address(row, number)
             blocked = "http" if address is None else self.secured(address, number) if secure else None if answers(address, number) else "http"
             if blocked is not None:
                 ready = False
@@ -712,19 +646,3 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         if blocked is not None:
             self.pending(("tls@" if blocked == "tls" else "vip@") + name)
         return blocked is None
-
-    def frontend(self, row, number):
-        """The daemon's address when it listens on the frontend port: its reported IP, else its host's address."""
-        ports = row.get("ports")
-        if isinstance(ports, list) and ports and number not in ports:
-            return None
-        address = row.get("ip")
-        try:
-            address = str(ipaddress.ip_address(address)) if isinstance(address, str) else None
-        except ValueError:
-            address = None
-        if address is None:
-            host = next((item for item in self.request["hosts"] if item["name"] == row["hostname"]), None)
-            require(host is not None, "foreign-service")
-            address = host["address"]
-        return address

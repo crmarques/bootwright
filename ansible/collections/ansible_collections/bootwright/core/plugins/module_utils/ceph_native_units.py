@@ -23,17 +23,25 @@ from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, canonical, named, require
 
 # Each unit type's hooks, its daemon types' frozen image names (None runs the Ceph image), its bound credential leaves keyed by
-# (service type, JSON pointer) with their runner material variable, and whether its documents are singletons without a service_id.
+# (service type, JSON pointer) with their runner material variable, the service types whose documents are singletons without a
+# service_id, and the hook that proves its endpoint into evidence, if any.
 UnitType = collections.namedtuple("UnitType", ("validate", "check", "claim", "settle", "expected", "readiness", "daemon_types", "frontend", "images",
-                                               "leaves", "singleton"))
+                                               "leaves", "singletons", "endpoint"))
 UNIT_TYPES = {
     "monitoring": UnitType(ceph_native_observability.validate, ceph_native_observability.check, ceph_native_observability.claim,
                            ceph_native_observability.settle, ceph_native_observability.expected, ceph_native_observability.readiness,
                            ceph_native_observability.DAEMON_TYPES, ceph_native_observability.frontend, ceph_native_observability.IMAGES,
-                           {(kind, path): variable for kind, path, variable in ceph_native_observability.MONITORING_LEAVES}, True),
+                           {(kind, path): variable for kind, path, variable in ceph_native_observability.MONITORING_LEAVES},
+                           frozenset(ceph_native_observability.MONITORING_TYPES), None),
     "nfs": UnitType(ceph_native_nfs.validate, ceph_native_nfs.check, ceph_native_nfs.claim, ceph_native_nfs.settle, ceph_native_nfs.expected,
                     ceph_native_nfs.readiness, ceph_native_nfs.DAEMON_TYPES, ceph_native_nfs.frontend,
-                    {"nfs": None, "haproxy": "haproxy", "keepalived": "keepalived"}, {}, False),
+                    {"nfs": None, "haproxy": "haproxy", "keepalived": "keepalived"}, {}, frozenset(), None),
+    "mgmt-gateway": UnitType(ceph_native_observability.gateway_validate, ceph_native_observability.gateway_check, ceph_native_observability.gateway_claim,
+                             ceph_native_observability.gateway_settle, ceph_native_observability.gateway_expected,
+                             ceph_native_observability.gateway_readiness, ceph_native_observability.GATEWAY_DAEMON_TYPES,
+                             ceph_native_observability.gateway_frontend, ceph_native_observability.GATEWAY_IMAGES,
+                             {(kind, path): variable for kind, path, variable in ceph_native_observability.GATEWAY_LEAVES},
+                             frozenset(ceph_native_observability.GATEWAY_TYPES), ceph_native_observability.gateway_endpoint),
 }
 PHASES = frozenset(("unit", "ingress_firewall"))
 # The ingress firewall check reads only these host tools, never with a write, reload or query form.
@@ -57,13 +65,16 @@ RICH_PORT = re.compile(r'rule (?:family="(ipv4|ipv6)" )?port port="([0-9]{1,5})(
 DOCUMENT_MEMBERS = frozenset(("networks", "placement", "service_id", "service_type", "spec"))
 INPUTS_VERSION = "ceph-service-inputs-v1"
 MAX_DAEMONS = 256
-PENDING = re.compile(r"(?:" + "|".join(sorted({name for unit in UNIT_TYPES.values() for name in unit.daemon_types} | {"vip", "module"}))
-                     + r")@(?:(?:nfs|ingress)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}|" + "|".join(ceph_native_observability.MONITORING_TYPES) + r")\Z")
+PENDING = re.compile(r"(?:(?:" + "|".join(sorted({name for unit in UNIT_TYPES.values() for name in unit.daemon_types} | {"vip", "module"}))
+                     + r")@(?:(?:nfs|ingress)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}|"
+                     + "|".join(ceph_native_observability.MONITORING_TYPES + ceph_native_observability.GATEWAY_TYPES)
+                     + r")|(?:tls|http)@(?:" + "|".join(ceph_native_observability.GATEWAY_TYPES) + r"))\Z")
 BINDING_MEMBERS = frozenset(("path", "secretRef", "serviceRef"))
 # The non-secret stand-in a bound leaf holds wherever the worker normalizes, records or compares a document.
 BOUND = "bootwright-bound:"
 MATERIAL_VARIABLES = frozenset(variable for unit in UNIT_TYPES.values() for variable in unit.leaves.values())
 MAX_MATERIAL = 4096
+MATERIAL_LIMITS = {"mgmtGatewayCertificate": ceph_native_observability.MAX_CERTIFICATE, "mgmtGatewayKey": ceph_native_observability.MAX_KEY}
 
 
 def service_name(document):
@@ -87,27 +98,37 @@ def validate_bindings(unit):
     require(keys == sorted(set(keys)))
 
 
-def material_names(request):
-    """The runner material variables the unit's bindings name."""
+def material_names(request, phase="unit"):
+    """The runner material variables the unit's bindings name that a phase holds: every one on its apply phase, the observed leaves on
+    observation and removal, none otherwise."""
     unit = request["service"]
     leaves = UNIT_TYPES[unit["type"]].leaves
     types = {service_name(document): document["service_type"] for document in unit["documents"]}
-    return frozenset(leaves[(types[binding["serviceRef"]], binding["path"])] for binding in unit.get("bindings", []))
+    names = frozenset(leaves[(types[binding["serviceRef"]], binding["path"])] for binding in unit.get("bindings", []))
+    if phase == "unit":
+        return names
+    return names & ceph_native_observability.OBSERVED_LEAVES if phase in ("observe", "destroy") else frozenset()
 
 
-def material_value(value):
+def material_value(variable, value):
+    """A bound value within its variable's bound: a certificate chain whose first block decodes, a PEM private key, else a short text."""
+    limit = MATERIAL_LIMITS.get(variable, MAX_MATERIAL)
     try:
         size = len(value.encode("utf-8")) if isinstance(value, str) else 0
     except UnicodeError:
         size = 0
-    return 0 < size <= MAX_MATERIAL and "\x00" not in value
+    if not 0 < size <= limit or "\x00" in value:
+        return False
+    if variable == "mgmtGatewayCertificate":
+        return bool(ceph_native_observability.leaf(value))
+    return variable != "mgmtGatewayKey" or ceph_native_observability.PRIVATE_KEY.search(value) is not None
 
 
 def material(request, phase, private):
-    """The bound leaves a phase may hold: exactly those the unit's bindings name, to its apply phase only."""
+    """The bound leaves a phase may hold: exactly those the unit's bindings name that the phase holds."""
     require(isinstance(private, dict), "material")
-    expected = material_names(request) if phase == "unit" else frozenset()
-    require(set(private) == expected and all(material_value(value) for value in private.values()), "material")
+    expected = material_names(request, phase)
+    require(set(private) == expected and all(material_value(name, value) for name, value in private.items()), "material")
     return dict(private)
 
 
@@ -141,7 +162,7 @@ def validate(request, hosts):
     unit = request.get("service")
     require(isinstance(unit, dict) and {"documents", "id", "type"} <= set(unit) <= {"bindings", "documents", "id", "type"})
     require(isinstance(unit["type"], str) and unit["type"] in UNIT_TYPES)
-    singleton = UNIT_TYPES[unit["type"]].singleton
+    singletons = UNIT_TYPES[unit["type"]].singletons
     require(unit["id"] == "" or isinstance(unit["id"], str) and ceph_native.NAME.fullmatch(unit["id"]) is not None)
     documents = unit["documents"]
     require(isinstance(documents, list) and 1 <= len(documents) <= 8)
@@ -150,6 +171,7 @@ def validate(request, hosts):
     seen = set()
     for document in documents:
         require(isinstance(document, dict) and {"placement", "service_type"} <= set(document) <= DOCUMENT_MEMBERS)
+        singleton = document["service_type"] in singletons
         require(named(document["service_type"]) and ("service_id" not in document if singleton else named(document.get("service_id"))))
         placement = document["placement"]
         require(isinstance(placement, dict) and "hosts" in placement and set(placement) <= {"hosts", "count"})
@@ -496,11 +518,30 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         evidence["daemons"] = sorted(({"host": row["hostname"], "name": row["daemon_type"] + "." + row["daemon_id"], "service": row["service_name"]}
                                       for row in running), key=lambda item: item["name"])[:MAX_DAEMONS]
         unit_ready = owned and hooks.readiness(self, unit, self.blocking)
+        if hooks.endpoint is not None and owned:
+            evidence["endpoint"] = hooks.endpoint(self, unit, running)
+            unit_ready = unit_ready and evidence["endpoint"]["reachable"]
         return ready and completed and running_ready and unit_ready
 
     def pending(self, entry):
         if entry not in self.blocking:
             self.blocking.append(entry)
+
+    def daemon_address(self, row, number):
+        """The daemon's address when it listens on the frontend port: its reported IP, else its host's address."""
+        ports = row.get("ports")
+        if isinstance(ports, list) and ports and number not in ports:
+            return None
+        address = row.get("ip")
+        try:
+            address = str(ipaddress.ip_address(address)) if isinstance(address, str) else None
+        except ValueError:
+            address = None
+        if address is None:
+            host = next((item for item in self.request["hosts"] if item["name"] == row["hostname"]), None)
+            require(host is not None, "foreign-service")
+            address = host["address"]
+        return address
 
     def unit_daemons(self, expected, running):
         """Each expected (service, daemon type) runs its count of daemons on its frozen image; a row on another image refuses."""

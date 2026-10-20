@@ -397,3 +397,20 @@ func TestGatewayLeavesFollowTheBindingRegistry(t *testing.T) {
 		}
 	}
 }
+
+func TestGatewayLeavesMatchTheWorker(t *testing.T) {
+	want := []string{}
+	for _, key := range slices.Sorted(maps.Keys(gatewayLeaves)) {
+		serviceType, path, _ := strings.Cut(key, " ")
+		want = append(want, serviceType, path, gatewayLeaves[key].Variable)
+	}
+	if got := pythonTuple(t, observabilityModule, "GATEWAY_LEAVES"); !slices.Equal(got, want) {
+		t.Fatalf("the worker binds %v, the plan %v", got, want)
+	}
+}
+
+func TestGatewayTypesMatchTheWorker(t *testing.T) {
+	if got := pythonTuple(t, observabilityModule, "GATEWAY_TYPES"); !slices.Equal(got, GatewayTypes) {
+		t.Fatalf("the worker realizes %v, the plan %v", got, GatewayTypes)
+	}
+}

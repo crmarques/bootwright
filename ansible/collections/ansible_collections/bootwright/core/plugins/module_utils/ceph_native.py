@@ -116,10 +116,11 @@ DAEMON_TYPES = {
     "node-exporter": ("delegated", "delegated", False, "none"),
     "prometheus": ("delegated", "delegated", False, "none"),
     "snmp-gateway": ("delegated", "delegated", False, "none"),
+    "mgmt-gateway": ("delegated", "delegated", False, "none"),
 }
-# A service another block executes, listed by its cephadm service_name: rgw.<id>, ingress.<id>, nfs.<id> or a monitoring singleton's type.
+# A service another block executes, listed by its cephadm service_name: rgw.<id>, ingress.<id>, nfs.<id> or a singleton's type.
 DELEGATED_SERVICE = re.compile(r"(?:(?:rgw|ingress|nfs)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}"
-                               r"|alertmanager|ceph-exporter|grafana|node-exporter|prometheus|snmp-gateway)\Z")
+                               r"|alertmanager|ceph-exporter|grafana|mgmt-gateway|node-exporter|prometheus|snmp-gateway)\Z")
 
 
 def supported_transport(request):

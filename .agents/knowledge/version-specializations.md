@@ -134,6 +134,7 @@ page that owns its reasoning.
 | The NFS export readback: `fs subvolume getpath` prints the path with or without one trailing newline, `nfs export info` reads `{}` for an absent pseudo path, and the filtered readback projection, never the apply's answer alone, is the postcondition | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
 | Whether a build's cephadm opens daemon ports in firewalld: upstream opens each daemon's TCP endpoints in the default zone and never VRRP; the ingress check reads the zone's runtime state before effects instead | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
 | A build's `orch ls --export` keeps a monitoring service's bound credential leaves (grafana `initial_admin_password`, snmp-gateway `credentials`) or omits them: either is accepted when the stored leaves equal the bound ones at apply | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
+| A build infers the management gateway's `certificate_source` (`inline` with bound leaves, `cephadm-signed` without) and may keep or omit the leaves in `orch ls --export`: normalization runs the selected image's own `ServiceSpec`, and the served leaf's SHA-256 is the postcondition | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
 
 ## Adding a specialization
 

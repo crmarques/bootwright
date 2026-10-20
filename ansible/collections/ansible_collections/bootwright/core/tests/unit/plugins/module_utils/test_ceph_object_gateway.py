@@ -27,7 +27,7 @@ import uuid
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_host_runtime, ceph_native, ceph_native_object, ceph_tunnel_staging,
+    ceph_core, ceph_host_runtime, ceph_native, ceph_native_object, ceph_native_observability, ceph_tunnel_staging,
 )
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_settings as settings
 
@@ -538,7 +538,7 @@ def test_backend_readiness_needs_an_http_status_line(tmp_path, monkeypatch, spec
             self.sent += data
 
         def settimeout(self, value):
-            assert 0 < value <= ceph_native_object.PROBE_TIMEOUT
+            assert 0 < value <= ceph_native_observability.PROBE_TIMEOUT
 
         def recv(self, size):
             reply, self.reply = self.reply[:size], self.reply[size:]
@@ -551,7 +551,7 @@ def test_backend_readiness_needs_an_http_status_line(tmp_path, monkeypatch, spec
         return replies.pop(0)
 
     monkeypatch.setattr(ceph_native_object, "answers", REAL_ANSWERS)
-    monkeypatch.setattr(ceph_native_object.socket, "create_connection", connect)
+    monkeypatch.setattr(ceph_native_observability.socket, "create_connection", connect)
     replies[:] = [Connection(b""), Connection(b"")]
     ready, blocking, unused = observe(monitor, markers)
     assert ready is False and blocking == ["http@rgw.objects"]

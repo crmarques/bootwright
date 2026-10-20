@@ -385,7 +385,7 @@ def test_observe_refuses_foreign_monitoring_daemon():
     for bad in (dict(row, hostname="node-3"), dict(row, service_name="prometheus"), dict(row, daemon_type="node-exporter")):
         with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
             ceph_native.delegated_daemon(bad, listed)
-    assert "loki" not in ceph_native.DAEMON_TYPES and "mgmt-gateway" not in ceph_native.DAEMON_TYPES
+    assert "loki" not in ceph_native.DAEMON_TYPES and "oauth2-proxy" not in ceph_native.DAEMON_TYPES
 
 
 def test_observe_refuses_wrong_aux_digest(tmp_path):
@@ -521,19 +521,22 @@ def test_host_layout_admits_listed_monitoring_daemon(layout, case):
 def test_monitoring_tables_agree():
     types = set(observability.MONITORING_TYPES)
     assert list(observability.MONITORING_TYPES) == sorted(types) and observability.DAEMON_TYPES == observability.MONITORING_TYPES
-    assert set(observability.IMAGES) == types == set(observability.MEMBERS) and observe.LISTED_SINGLETONS == types
-    assert observe.SINGLETONS == types - {"ceph-exporter"} and all(observe.DELEGATED_TYPES[kind] == kind for kind in observe.SINGLETONS)
+    gateways = set(observability.GATEWAY_TYPES)
+    assert set(observability.IMAGES) == types == set(observability.MEMBERS) and observe.LISTED_SINGLETONS == types | gateways
+    assert observe.SINGLETONS == types - {"ceph-exporter"} | gateways and all(observe.DELEGATED_TYPES[kind] == kind for kind in observe.SINGLETONS)
     assert all(ceph_native.DAEMON_TYPES[kind] == ("delegated", "delegated", False, "none") for kind in observe.SINGLETONS)
     assert ceph_native.DAEMON_TYPES["ceph-exporter"] == ("cluster", "request", True, "ceph") and "ceph-exporter" in observe.CLUSTER_TYPES
     assert all(ceph_native.DELEGATED_SERVICE.fullmatch(kind) for kind in types)
-    assert not any(ceph_native.DELEGATED_SERVICE.fullmatch(name) for name in ("grafana.main", "mgmt-gateway", "loki", "prometheus.x"))
+    assert not any(ceph_native.DELEGATED_SERVICE.fullmatch(name) for name in ("grafana.main", "mgmt-gateway.main", "oauth2-proxy", "loki", "prometheus.x"))
     assert {AUXILIARY_NAME for AUXILIARY_NAME in observability.IMAGES.values() if AUXILIARY_NAME} <= set(ceph_native.AUXILIARY_NAMES)
     monitoring = ceph_native_units.UNIT_TYPES["monitoring"]
-    assert monitoring.singleton is True and monitoring.daemon_types == observability.MONITORING_TYPES and monitoring.images == observability.IMAGES
-    assert ceph_native_units.MATERIAL_VARIABLES == {variable for unused, unused_path, variable in observability.MONITORING_LEAVES}
+    assert monitoring.singletons == types and monitoring.endpoint is None
+    assert monitoring.daemon_types == observability.MONITORING_TYPES and monitoring.images == observability.IMAGES
+    leaves = observability.MONITORING_LEAVES + observability.GATEWAY_LEAVES
+    assert ceph_native_units.MATERIAL_VARIABLES == {variable for unused, unused_path, variable in leaves}
     assert all(ceph_native_units.PENDING.fullmatch(entry) for entry in ("module@prometheus", "grafana@grafana", "nfs@nfs.files", "vip@ingress.nfs.files"))
     assert not any(ceph_native_units.PENDING.fullmatch(entry) for entry in ("module@grafana.main", "grafana@loki", "module@nfs"))
-    assert ceph_native_units.UNIT_TYPES["nfs"].singleton is False and ceph_native_units.UNIT_TYPES["nfs"].leaves == {}
+    assert ceph_native_units.UNIT_TYPES["nfs"].singletons == frozenset() and ceph_native_units.UNIT_TYPES["nfs"].leaves == {}
     assert "service-credential-foreign" in ceph_core.CLUSTER_REASONS
 
 
@@ -583,8 +586,8 @@ class MaterialTransport(units.Transport):
         super().__init__(request, observed={"daemons": rows}, **options)
         self.private = []
 
-    def unit_material(self):
-        return dict(MATERIAL)
+    def unit_material(self, phase="unit"):
+        return dict(MATERIAL) if phase == "unit" else {}
 
     def call(self, host, phase, private=None, *, timeout=None):  # pylint: disable=arguments-renamed
         self.private.append((phase, sorted(private or {})))

@@ -669,6 +669,35 @@ Observation never writes, and no credential or stored specification reaches
 evidence, which lists only each daemon's host, name and service. The block's
 deadline is fixed for its type (apply 2280 s, observe 720 s, destroy 1380 s).
 
+The management gateway unit `ceph-service-<cluster>-mgmt-gateway` runs its
+apply phase only on the bootstrap host, after the firewall check below on each
+host of its keepalive-only ingress when it declares a `virtual_ip`. Before any
+write it proves the cluster's ownership record and FSID and reads, never
+writes, the frozen `container_image_nginx` setting and, with its ingress,
+`container_image_keepalived` (`foreign-image` names one the settings block no
+longer holds). The gateway's bound `ssl_cert` and `ssl_key` are placeholders in
+the normalization input, the inputs record and every attempt and completion
+record; the leaves are spliced in memory into the one `ceph orch apply -i -`
+stream, the ingress document first, so the gateway document is never applied
+without its bound leaves. The private key is lent to that apply phase alone,
+the certificate also to every observation and removal. Stored leaves follow
+the monitoring credential rule above (`service-credential-foreign`), and
+without a binding cephadm signs the certificate. Readiness needs both
+documents completed, the `mgmt-gateway` and `keepalived` daemon counts running
+on their frozen images, and an endpoint proof from the bootstrap host: the
+virtual IP at the gateway `port` (TLS name the address, the `Host` header
+bracketing an IPv6 one), else every running gateway daemon at that port with
+TLS name its host. Each endpoint must serve, with a binding, a leaf whose
+SHA-256 equals the bound certificate's, and then an HTTP status line.
+Evidence's `endpoint` holds that SHA-256 once every endpoint passed, or without
+a binding the SHA-256 of the cephadm-signed leaf the first endpoint served, and
+the coordinator refuses `evidence` for any other digest of a bound unit. A
+readiness timeout names `mgmt-gateway@mgmt-gateway`, `keepalived@ingress.<id>`,
+`tls@mgmt-gateway` and `http@mgmt-gateway` beside the blocking health checks.
+Bootwright writes no dashboard setting and runs no `dashboard` or `mgr module`
+command for the gateway; cephadm sets the dashboard's standby behaviour itself,
+and the cluster's dashboard phase keeps its own publication and readback.
+
 A StorageNFSExport is realized by its export block `ceph-nfs-export-<export>`
 on the bootstrap host. A subvolume binding binds the path the subvolume's
 applied creation proof reports and never constructs one. Before any write the
@@ -757,16 +786,18 @@ timeout names `tls@`, `vip@`, `haproxy@` or `keepalived@` the service. An
 ingress plans once its auxiliary images are authored
 ([refusal table](#refusal-table)).
 
-Before the first effect of every apply of an NFS service unit or a gateway
-whose request carries an ingress, a read-only check runs on each host of the
-ingress's placement. When `firewalld.service` is active there, the check finds
+Before the first effect of every apply of an NFS service unit, of the
+management gateway unit with its ingress, or of a gateway whose request
+carries an ingress, a read-only check runs on each host of the ingress's
+placement. When `firewalld.service` is active there, the check finds
 the interfaces cephadm puts the virtual IP and VRRP on: those whose network
 contains the virtual IP, else those on a network listed in
 `virtual_interface_networks`. It reads each one's runtime firewalld zone, or the
 default zone for an interface bound to none, and refuses `ingress-firewall`,
 naming the host, the interface, the zone and what is missing, unless that zone
 permits both VRRP (IP protocol 112) and the client port: the ingress
-`frontend_port`, or the NFS `port` when the ingress is keepalive-only. A zone
+`frontend_port`, or the NFS `port` when the ingress is keepalive-only, or the
+management gateway's `port` for its keepalive-only ingress. A zone
 permits them through target `ACCEPT`, a listed protocol (`vrrp` or `112`) or
 TCP port or port range, a service without a destination that grants them
 (followed through its includes), or an unrestricted rich rule of the form

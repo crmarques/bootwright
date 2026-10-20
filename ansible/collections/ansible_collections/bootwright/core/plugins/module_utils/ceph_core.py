@@ -246,11 +246,15 @@ def dashboard_evidence(value):
 
 
 def endpoint_evidence(value, request=None):
-    """Whether a gateway's terminating service answered and, with TLS, the SHA-256 of the bound leaf it served; every other action has none."""
+    """Whether a gateway's terminating service answered and, with TLS, the SHA-256 of the bound leaf it served; a management gateway unit's
+    served leaf SHA-256, present exactly when it answered; every other action has none."""
     endpoint = value["endpoint"]
     ceph_native.require(isinstance(endpoint, dict) and set(endpoint) == {"certificateSHA256", "reachable"}, "evidence")
     ceph_native.require(endpoint["certificateSHA256"] == "" or ceph_native.digest(endpoint["certificateSHA256"]), "evidence")
     ceph_native.require(type(endpoint["reachable"]) is bool, "evidence")
+    if value.get("action") == "service" and request is not None and request.get("action") == "service" and request["service"]["type"] == "mgmt-gateway":
+        ceph_native.require((endpoint["certificateSHA256"] != "") == endpoint["reachable"], "evidence")
+        return
     if value.get("action") != "gateway":
         ceph_native.require(endpoint == {"certificateSHA256": "", "reachable": False}, "evidence")
         return
@@ -420,9 +424,9 @@ class Transport:
         except UnicodeError:
             raise ceph_native.Refusal("material") from None
 
-    def unit_material(self):
-        """A service unit's bound credential leaves, those its bindings name, read from the runner's private files for its apply phase."""
-        names = sorted(ceph_native_units.material_names(self.request))
+    def unit_material(self, phase="unit"):
+        """A service unit's bound leaves that a phase holds, of those its bindings name, read from the runner's private files."""
+        names = sorted(ceph_native_units.material_names(self.request, phase))
         ceph_native.require(isinstance(self.material, dict) and all(name in self.material for name in names), "material")
         try:
             return {name: ceph_native.read_regular(self.material[name], private=True).decode("utf-8") for name in names}
@@ -796,25 +800,31 @@ def ingress_firewall(request, transport, found, now):
 
 def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause, phases=("unit",)):
     """A service unit runs its apply phases only on the bootstrap host: its preparation proof, with an ingress the firewall check on each
-    ingress host, its apply phases in order, then its own readiness wait."""
+    ingress host, its apply phases in order, then its own readiness wait. Its apply phase holds every bound leaf; each observation and
+    removal holds the observed ones, and a management gateway's served leaf must be the bound certificate's."""
     changed = False
+    bound_unit = request["action"] == "service" and bool(request["service"].get("bindings"))
+    seen = transport.unit_material("observe") if bound_unit else {}
     if operation == "apply":
         transport.call(bootstrap, "prerequisites")
         if request["action"] == "service":
             ingress_firewall(request, transport, ceph_native_units.frontend(request), now)
-        bound = transport.unit_material() if request["action"] == "service" and request["service"].get("bindings") else {}
+        bound = transport.unit_material("unit") if bound_unit else {}
         for phase in phases:
             produced = transport.call(bootstrap, phase, bound) if bound and phase == "unit" else transport.call(bootstrap, phase)
             ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
             changed = produced["changed"] or changed
-        observation = wait_unit(request, request_digest, bootstrap, transport, now, pause)
+        observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen)
         ceph_native.require(observation["ready"], "not-ready")
     elif operation == "destroy":
-        changed = transport.call(bootstrap, "destroy")["changed"]
-        observation = observe_unit(request, request_digest, bootstrap, transport)
+        changed = (transport.call(bootstrap, "destroy", seen) if seen else transport.call(bootstrap, "destroy"))["changed"]
+        observation = observe_unit(request, request_digest, bootstrap, transport, private=seen)
         ceph_native.require(observation["removed"], "not-removed")
     else:
-        observation = observe_unit(request, request_digest, bootstrap, transport)
+        observation = observe_unit(request, request_digest, bootstrap, transport, private=seen)
+    if "mgmtGatewayCertificate" in seen:
+        bound = hashlib.sha256(ceph_native_observability.leaf(seen["mgmtGatewayCertificate"])).hexdigest()
+        ceph_native.require(observation["endpoint"]["certificateSHA256"] in ("", bound), "evidence")
     return {"changed": changed, "evidence": observation}
 
 
@@ -841,7 +851,7 @@ def execute_gateway(request, operation, request_digest, transport, bootstrap, *,
     else:
         observation = observe_unit(request, request_digest, bootstrap, transport, private=seen)
     if seen:
-        bound = hashlib.sha256(ceph_native_object.leaf(seen["gatewayCertificate"])).hexdigest()
+        bound = hashlib.sha256(ceph_native_observability.leaf(seen["gatewayCertificate"])).hexdigest()
         ceph_native.require(observation["endpoint"]["certificateSHA256"] in ("", bound), "evidence")
     return {"changed": changed, "evidence": observation}
 
