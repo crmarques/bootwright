@@ -363,6 +363,41 @@ def test_drifted_owned_export_is_not_ready_then_reapplied(tmp_path):
     assert observe(monitor, markers)[0] is True
 
 
+@pytest.mark.parametrize("held", [{"identifier": 2}, {"principal": "nfs.shares.files.9f8e7d6c"}])
+def test_observation_refuses_a_recorded_export_of_another_identity(tmp_path, held):
+    request = export_request()
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    worker(monitor, markers).nfs_export()
+    before = records(markers)
+    monitor.exports["/docs"] = stored(frozen(request), **held)
+    with pytest.raises(ceph_native.Refusal, match="^nfs-export-foreign$") as caught:
+        observe(monitor, markers)
+    assert "that this operation created is gone or changed" in caught.value.native_error["cause"]
+    assert records(markers) == before and markers.read(IDENTITY) == {"exportId": 1, "userId": PRINCIPAL} and monitor.mutations == [APPLY]
+
+
+@pytest.mark.parametrize("held", [{"identifier": 2}, {"principal": "nfs.shares.files.9f8e7d6c"}])
+def test_reapply_that_reads_back_another_identity_refuses(tmp_path, monkeypatch, held):
+    request = export_request()
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    worker(monitor, markers).nfs_export()
+    monitor.exports["/docs"]["access_type"] = "RO"
+    applying = monitor.run
+
+    def replacing(argv, data=b"", timeout=60):
+        result = applying(argv, data=data, timeout=timeout)
+        if "apply" in argv:
+            monitor.exports["/docs"] = stored(json.loads(data), **held)
+        return result
+
+    monkeypatch.setattr(monitor, "run", replacing)
+    error = refused(monitor, markers, "nfs-export-apply")
+    assert "reads back other than applied" in error.native_error["cause"]
+    assert monitor.mutations == [APPLY, APPLY] and markers.read(IDENTITY) == {"exportId": 1, "userId": PRINCIPAL}
+
+
 def test_export_observe_reads_only(tmp_path):
     request = export_request()
     markers = markers_for(tmp_path, request)
