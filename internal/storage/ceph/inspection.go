@@ -476,21 +476,36 @@ var scopeRows = map[api.Kind]func(api.Catalog, string, []reconciliation.Block) s
 	api.StorageSubvolume:       frozenScope(api.StorageSubvolume, "subvolume", subvolumeScopeText),
 	api.StorageObjectGateway:   frozenScope(api.StorageObjectGateway, "gateway", gatewayScopeText),
 	api.StorageNFSExport:       frozenScope(api.StorageNFSExport, "nfs-export", nfsExportScopeText),
-	api.StorageSMBResource:     declaredScope(api.StorageSMBResource, smbScopeText),
+	api.StorageSMBResource:     smbFrozenScope,
 	api.StorageExport:          declaredScope(api.StorageExport, exportScopeText),
 }
 
-func smbScopeText(spec api.Value) string {
-	native := spec.Get("native")
-	switch native.Get("resource_type").Text() {
+func smbFrozenScope(_ api.Catalog, name string, frozen []reconciliation.Block) string {
+	var matched []SMBRequest
+	for _, block := range frozen {
+		if block.Kind != string(api.StorageSMBResource) || block.Object != name || block.Implementation != SMBImplementation {
+			continue
+		}
+		if r, err := DecodeSMBRequest(block.Request); err == nil {
+			matched = append(matched, r)
+		}
+	}
+	if len(matched) != 1 {
+		return ""
+	}
+	return smbScopeText(matched[0])
+}
+
+func smbScopeText(r SMBRequest) string {
+	switch r.ResourceType {
 	case api.SMBCluster:
-		return "smb cluster " + native.Get("cluster_id").Text() + ", " + native.Get("auth_mode").Text()
+		return "smb cluster " + r.ID + ", " + r.nativeLeaf("auth_mode")
 	case api.SMBShare:
-		return "share " + native.Get("share_id").Text() + " on smb cluster " + native.Get("cluster_id").Text()
+		return "share " + r.ID + " on smb cluster " + r.nativeLeaf("cluster_id")
 	case api.SMBJoinAuth:
-		return "join auth " + native.Get("auth_id").Text()
+		return "join auth " + r.ID
 	case api.SMBUsersGroups:
-		return "users and groups " + native.Get("users_groups_id").Text()
+		return "users and groups " + r.ID
 	}
 	return ""
 }
