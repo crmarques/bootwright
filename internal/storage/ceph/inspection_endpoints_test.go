@@ -201,6 +201,41 @@ func TestClusterInfoEndpoints(t *testing.T) {
 		}
 	})
 
+	t.Run("an object gateway behind an ingress follows the ingress", func(t *testing.T) {
+		catalog := planCatalog(3, 3, func(spec api.Value) api.Value {
+			spec = withCorePair(spec)
+			rgw := httpRGWService("objects").WithPath(api.IntegerValue("8080"), "spec", "rgw_frontend_port")
+			ingress := rgwIngress().WithPath(api.IntegerValue("8443"), "spec", "frontend_port")
+			spec = spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), rgw, ingress)...), "ceph", "services")
+			return spec.WithPath(api.ListValue(tlsBinding("ingress.rgw.objects", "gateway-tls")), "ceph", "serviceBindings")
+		}, objectGateway("objects", "endpoint", requestMap("fqdn", "s3.example.test")))
+		request := gatewayOf(t, gatewayBlock(t, catalog))
+		f := &endpointFixture{}
+		f.prove(t, f.gateway(t, "named", request), reached(digest))
+		row := endpointRow(InspectEndpoints("example", f.blocks, f.proofs), "rgw.objects")
+		if !slices.Equal(row.URLs, []string{"https://s3.example.test:8443/"}) || row.Issuer != IssuerBound || row.CertificateSHA256 != digest || row.Status != EndpointReady {
+			t.Fatalf("fronted gateway %+v", row)
+		}
+		request.Gateway.Endpoint = ""
+		unnamed := &endpointFixture{}
+		unnamed.gateway(t, "unnamed", request)
+		row = endpointRow(InspectEndpoints("example", unnamed.blocks, nil), "rgw.objects")
+		if !slices.Equal(row.URLs, []string{"https://192.0.2.50:8443/"}) {
+			t.Fatalf("fronted gateway without an endpoint name %+v", row)
+		}
+	})
+
+	t.Run("an NFS service behind a keepalive-only ingress keeps its own port", func(t *testing.T) {
+		services := haproxyProtocolNFS()
+		services[1] = services[1].WithPath(api.BoolValue(true), "spec", "keepalive_only")
+		f := &endpointFixture{}
+		f.prove(t, f.service(t, unitsOf(t, services...)[0]), nil)
+		row := endpointRow(InspectEndpoints("example", f.blocks, f.proofs), "nfs.files")
+		if !slices.Equal(row.URLs, []string{"nfs://192.0.2.50:12049/"}) || row.Status != EndpointReady {
+			t.Fatalf("keepalive-only NFS %+v", row)
+		}
+	})
+
 	t.Run("a foreign cluster and an unthawable request add no row", func(t *testing.T) {
 		f := &endpointFixture{}
 		foreign := plainGatewayRequest(t)
