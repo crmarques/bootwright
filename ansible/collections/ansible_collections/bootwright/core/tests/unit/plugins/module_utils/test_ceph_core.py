@@ -915,6 +915,7 @@ def test_bootstrap_consumes_private_fixed_memory_ini_and_verifies_persisted_resu
                 rendered.append(source.read())
             assert "--skip-prepare-host" not in argv
             assert "--skip-dashboard" in argv and "--skip-monitoring-stack" in argv
+            assert argv.count("--skip-pull") == 1 and argv.index("--skip-pull") > argv.index("bootstrap")
             assert "--no-minimize-config" not in argv
             assert all(not argument.startswith("--registry") and "registryJSON" not in argument for argument in argv)
             assert "registryJSON" not in os.listdir(os.path.dirname(config))

@@ -1415,7 +1415,7 @@ def general_argv(native, scratch):
     intent = ceph_tunnel_staging.stage_intent(native.request)
     return [native.tool, "--image", native.request["image"], "bootstrap", "--fsid", native.request["fsid"], "--mon-id", intent["monID"],
             "--mgr-id", intent["mgrID"], "--mon-ip", native.request["monIP"], "--output-dir", native.markers.path, "--skip-ssh",
-            "--skip-monitoring-stack", "--skip-dashboard", "--skip-admin-label", "--allow-fqdn-hostname", "--no-cleanup-on-failure",
+            "--skip-pull", "--skip-monitoring-stack", "--skip-dashboard", "--skip-admin-label", "--allow-fqdn-hostname", "--no-cleanup-on-failure",
             "--config", os.path.join(scratch, "ceph.conf"), "--automatically-accept-license"]
 
 

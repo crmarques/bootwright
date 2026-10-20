@@ -52,7 +52,7 @@ def todays_argv(stage_request):
     intent = staging.stage_intent(stage_request)
     return ["/usr/sbin/cephadm", "--image", stage_request["image"], "bootstrap", "--fsid", stage_request["fsid"],
             "--mon-id", "node-1", "--mgr-id", intent["mgrID"], "--mon-ip", "192.0.2.1",
-            "--output-dir", staging.ROOT + "/" + stage_request["fsid"], "--skip-ssh", "--skip-monitoring-stack", "--skip-dashboard",
+            "--output-dir", staging.ROOT + "/" + stage_request["fsid"], "--skip-ssh", "--skip-pull", "--skip-monitoring-stack", "--skip-dashboard",
             "--skip-admin-label", "--allow-fqdn-hostname", "--no-cleanup-on-failure",
             "--config", scratch(stage_request) + "/ceph.conf", "--automatically-accept-license"]
 
@@ -88,6 +88,12 @@ def test_bootstrap_names_are_stable_and_match_provider_format(stage_request):
     assert re.fullmatch(r"node-1\.[a-z]{6}", original["mgrID"])
     stage_request["hosts"][0]["address"] = "192.0.2.3"
     assert staging.stage_intent(stage_request) != original
+
+
+def test_bootstrap_argv_skips_the_pull(stage_request):
+    """Host preparation already pulled and proved the frozen digest through the broker; bootstrap never reaches the registry itself."""
+    argv = staging.bootstrap_argv(stage_request, scratch(stage_request), chosen())
+    assert argv.count("--skip-pull") == 1 and argv.index("--skip-pull") > argv.index("bootstrap")
 
 
 def test_bootstrap_has_no_native_ssh_or_host_enrollment_path(stage_request):

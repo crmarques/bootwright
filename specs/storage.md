@@ -368,7 +368,9 @@ owned markers scoped by owner, FSID and host:
    counts only after local inspection proves the digest and the linux/amd64
    platform. The retained attempt records serve crash diagnosis and recovery;
    they never refuse a later apply while the image is still absent, so that
-   apply makes its own three attempts.
+   apply makes its own three attempts. Bootstrap then skips cephadm's own pull
+   (`--skip-pull`) and runs the image this phase proved, so no guest pull
+   reaches the registry outside the broker.
 3. A runtime profile from a contained probe of the image: the ceph account,
    crypto policy, SELinux label and cephadm bytes, bound to the authenticated
    frozen image. Host RPM payloads retain their independent authenticity and

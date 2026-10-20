@@ -2106,7 +2106,7 @@ class Worker:
             private_write(os.path.join(scratch, "ssh_config"), ssh_config.encode())
             private_write(os.path.join(scratch, "ceph.conf"), bootstrap_config(self.request))
             argv = [self.tool, "--image", self.request["image"], "bootstrap", "--fsid", self.request["fsid"], "--mon-ip", self.request["monIP"], "--output-dir",
-                    self.markers.path, "--skip-monitoring-stack", "--skip-dashboard", "--skip-admin-label", "--allow-fqdn-hostname",
+                    self.markers.path, "--skip-pull", "--skip-monitoring-stack", "--skip-dashboard", "--skip-admin-label", "--allow-fqdn-hostname",
                     "--ssh-user", self.request["clusterSSHUser"], "--ssh-private-key", os.path.join(scratch, "clusterPrivateKey"), "--ssh-public-key",
                     os.path.join(scratch, "clusterPublicKey"), "--ssh-config", os.path.join(scratch, "ssh_config"), "--config",
                     os.path.join(scratch, "ceph.conf"), "--automatically-accept-license"]

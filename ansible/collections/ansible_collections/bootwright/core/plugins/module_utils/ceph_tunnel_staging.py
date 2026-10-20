@@ -163,7 +163,7 @@ def bootstrap_argv(request, scratch, selection):
     argv = [request["cephadm"]["path"], "--image", request["image"], "bootstrap",
             "--fsid", request["fsid"], "--mon-id", intent["monID"], "--mgr-id", intent["mgrID"],
             "--mon-ip", request["monIP"], "--output-dir", marker_path(request),
-            "--skip-ssh", "--skip-monitoring-stack", "--skip-dashboard",
+            "--skip-ssh", "--skip-pull", "--skip-monitoring-stack", "--skip-dashboard",
             "--skip-admin-label", "--allow-fqdn-hostname", "--no-cleanup-on-failure",
             "--config", os.path.join(scratch, "ceph.conf")]
     if selection.variant("ceph.bootstrap.license-flag") == "pass":
