@@ -61,14 +61,20 @@ func TestResourceScopeRendersEachKindFromItsFrozenRequest(t *testing.T) {
 	declared := api.NewCatalog([]api.Object{
 		declaredScopeObject(api.StoragePool, "rbd-ec", scopeText("type", "erasure")),
 		declaredScopeObject(api.StorageSubvolume, "docs", scopeText("filesystemRef", "files")),
-		declaredScopeObject(api.StorageObjectGateway, "objects", scopeText("realm", "r1"), scopeText("zoneGroup", "zg1"), scopeText("zone", "z1")),
-		declaredScopeObject(api.StorageNFSExport, "docs-export", scopeText("serviceID", "files"),
-			api.FieldValue{Name: "native", Value: api.MapValue(scopeText("pseudo", "/docs"))}),
+		declaredScopeObject(api.StorageObjectGateway, "objects", scopeText("realm", "r1"), scopeText("zoneGroup", "zg1"), scopeText("zone", "z2")),
+		declaredScopeObject(api.StorageNFSExport, "docs-export", scopeText("serviceID", "other"),
+			api.FieldValue{Name: "native", Value: api.MapValue(scopeText("pseudo", "/data"))}),
 		declaredScopeObject(api.StorageExport, "foundation", api.FieldValue{Name: "dataFoundation", Value: api.MapValue(
 			scopeText("rbdPoolRef", "rbd-meta"), scopeText("filesystemRef", "files"), scopeText("objectGatewayRef", "objects"))}),
 		declaredScopeObject(api.StorageExport, "bare"),
 	})
-	frozen := []reconciliation.Block{erasure, image, subvolume}
+	gateway := frozenScopeBlock(t, api.StorageObjectGateway, "objects", Request{Version: Version, Action: "gateway", Gateway: &Gateway{
+		Name: "objects", Realm: "r1", ZoneGroup: "zg1", Zone: "z1"}})
+	gatewayPool := frozenScopeBlock(t, api.StorageObjectGateway, "objects", Request{Version: Version, Action: "pool", Pool: &Pool{
+		Name: "z1.rgw.log", Application: "rgw", Type: "replicated", Size: 3, MinSize: 2}})
+	export := frozenScopeBlock(t, api.StorageNFSExport, "docs-export", Request{Version: Version, Action: "nfs-export", NFSExport: &NFSExport{
+		Name: "docs-export", Service: "files", Native: NFSExportNative{Pseudo: "/docs"}}})
+	frozen := []reconciliation.Block{erasure, image, subvolume, gatewayPool, gateway, gatewayPool, export}
 	other := erasure
 	other.Implementation = "storage-other-v1"
 	stale := frozenScopeBlock(t, api.StoragePool, "rbd-ec", Request{Version: "ceph-core-v9", Action: "pool", Pool: &Pool{Name: "rbd-ec"}})
@@ -87,8 +93,11 @@ func TestResourceScopeRendersEachKindFromItsFrozenRequest(t *testing.T) {
 		{api.StoragePool, "rbd-ec", []reconciliation.Block{stale}, ""},
 		{api.StoragePool, "rbd-ec", []reconciliation.Block{mismatched}, ""},
 		{api.StorageSubvolume, "docs", nil, ""},
-		{api.StorageObjectGateway, "objects", nil, "zone r1/zg1/z1"},
-		{api.StorageNFSExport, "docs-export", nil, "export /docs on nfs.files"},
+		{api.StorageObjectGateway, "objects", frozen, "zone r1/zg1/z1"},
+		{api.StorageNFSExport, "docs-export", frozen, "export /docs on nfs.files"},
+		{api.StorageObjectGateway, "objects", nil, ""},
+		{api.StorageObjectGateway, "objects", []reconciliation.Block{gatewayPool}, ""},
+		{api.StorageNFSExport, "docs-export", nil, ""},
 		{api.StorageExport, "foundation", nil, "export of pool rbd-meta, filesystem files, object gateway objects"},
 		{api.StorageExport, "bare", nil, "export"},
 		{api.StorageExport, "missing", nil, ""},

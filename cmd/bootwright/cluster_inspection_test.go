@@ -265,6 +265,7 @@ func inspectedResourceRows(t *testing.T) {
 		api.NewObject(api.StorageCluster, "archive", api.Value{}, api.MapValue(text("management", "external"))),
 		api.NewObject(api.StoragePool, "rbd-data", api.Value{}, api.MapValue(text("clusterRef", "ceph"))),
 		api.NewObject(api.StorageObjectGateway, "objects", api.Value{}, api.MapValue(text("clusterRef", "ceph"), text("realm", "lab"), text("zoneGroup", "lab"), text("zone", "lab-a"))),
+		api.NewObject(api.StorageExport, "foundation", api.Value{}, api.MapValue(text("clusterRef", "ceph"))),
 	})
 	request, err := ceph.Request{Version: ceph.Version, Action: "pool", Pool: &ceph.Pool{Name: "rbd-data", Size: 2, MinSize: 2, Application: "rbd"}}.Canonical()
 	if err != nil {
@@ -275,7 +276,8 @@ func inspectedResourceRows(t *testing.T) {
 			{Name: "archive", Kind: "StorageCluster", Status: lifecycle.RealizationPending, Resources: []lifecycle.ResourceSummary{}},
 			{Name: "ceph", Kind: "StorageCluster", Status: lifecycle.RealizationDone, Resources: []lifecycle.ResourceSummary{
 				{Kind: "StoragePool", Name: "rbd-data", Status: lifecycle.RealizationDone},
-				{Kind: "StorageObjectGateway", Name: "objects", Status: lifecycle.RealizationUnsupported},
+				{Kind: "StorageObjectGateway", Name: "objects", Status: lifecycle.RealizationPending},
+				{Kind: "StorageExport", Name: "foundation", Status: lifecycle.RealizationUnsupported},
 			}},
 		},
 		Frozen: []reconciliation.Block{{BlockDefinition: reconciliation.BlockDefinition{Kind: "StoragePool", Object: "rbd-data", Implementation: ceph.Implementation, Request: request}}},
@@ -283,7 +285,8 @@ func inspectedResourceRows(t *testing.T) {
 	rows, err := (cephInspection{reconciler: reader}).Resources(context.Background(), "lab", catalog)
 	want := map[string][]inspection.Resource{"ceph": {
 		{Kind: "StoragePool", Name: "rbd-data", Status: "done", Scope: "replicated size 2/min 2, application rbd"},
-		{Kind: "StorageObjectGateway", Name: "objects", Status: "unsupported", Scope: "zone lab/lab/lab-a"},
+		{Kind: "StorageObjectGateway", Name: "objects", Status: "pending"},
+		{Kind: "StorageExport", Name: "foundation", Status: "unsupported", Scope: "export"},
 	}}
 	if err != nil || !reflect.DeepEqual(rows, want) || !slices.Equal(reader.reads, []string{"resources/lab"}) {
 		t.Fatalf("resources = %+v (%v) after reads %v, want %+v", rows, err, reader.reads, want)

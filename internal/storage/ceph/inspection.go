@@ -195,13 +195,9 @@ var scopeRows = map[api.Kind]func(api.Catalog, string, []reconciliation.Block) s
 	api.StorageClient:          frozenScope(api.StorageClient, "client", clientScopeText),
 	api.StorageFilesystem:      frozenScope(api.StorageFilesystem, "filesystem", filesystemScopeText),
 	api.StorageSubvolume:       frozenScope(api.StorageSubvolume, "subvolume", subvolumeScopeText),
-	api.StorageObjectGateway: declaredScope(api.StorageObjectGateway, func(spec api.Value) string {
-		return "zone " + spec.Get("realm").Text() + "/" + spec.Get("zoneGroup").Text() + "/" + spec.Get("zone").Text()
-	}),
-	api.StorageNFSExport: declaredScope(api.StorageNFSExport, func(spec api.Value) string {
-		return "export " + spec.Get("native", "pseudo").Text() + " on nfs." + spec.Get("serviceID").Text()
-	}),
-	api.StorageExport: declaredScope(api.StorageExport, exportScopeText),
+	api.StorageObjectGateway:   frozenScope(api.StorageObjectGateway, "gateway", gatewayScopeText),
+	api.StorageNFSExport:       frozenScope(api.StorageNFSExport, "nfs-export", nfsExportScopeText),
+	api.StorageExport:          declaredScope(api.StorageExport, exportScopeText),
 }
 
 func ResourceScope(catalog api.Catalog, kind api.Kind, name string, frozen []reconciliation.Block) string {
@@ -214,20 +210,19 @@ func ResourceScope(catalog api.Catalog, kind api.Kind, name string, frozen []rec
 
 func frozenScope(kind api.Kind, action string, render func(Request) string) func(api.Catalog, string, []reconciliation.Block) string {
 	return func(_ api.Catalog, name string, frozen []reconciliation.Block) string {
-		var matched []reconciliation.Block
+		var matched []Request
 		for _, block := range frozen {
-			if block.Kind == string(kind) && block.Object == name && block.Implementation == Implementation {
-				matched = append(matched, block)
+			if block.Kind != string(kind) || block.Object != name || block.Implementation != Implementation {
+				continue
+			}
+			if r, err := DecodeRequest(block.Request); err == nil && r.Action == action {
+				matched = append(matched, r)
 			}
 		}
 		if len(matched) != 1 {
 			return ""
 		}
-		r, err := DecodeRequest(matched[0].Request)
-		if err != nil || r.Action != action {
-			return ""
-		}
-		return render(r)
+		return render(matched[0])
 	}
 }
 
@@ -239,6 +234,20 @@ func declaredScope(kind api.Kind, render func(api.Value) string) func(api.Catalo
 		}
 		return render(object.Spec())
 	}
+}
+
+func gatewayScopeText(r Request) string {
+	if r.Gateway == nil {
+		return ""
+	}
+	return "zone " + r.Gateway.Realm + "/" + r.Gateway.ZoneGroup + "/" + r.Gateway.Zone
+}
+
+func nfsExportScopeText(r Request) string {
+	if r.NFSExport == nil {
+		return ""
+	}
+	return "export " + r.NFSExport.Native.Pseudo + " on nfs." + r.NFSExport.Service
 }
 
 func policyScopeText(r Request) string {
