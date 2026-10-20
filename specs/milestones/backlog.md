@@ -3358,8 +3358,7 @@ Requires cell as `owner decision: <question>`.
   declares one of these families authors the image as `ceph.images.<name>`, with
   `base` set to the listed repository and `version` set to the digest. The
   defaults were read from the image with `ceph.cephadm.images.DefaultImages` and
-  the digests resolved by the owner with `skopeo inspect`, as recorded in the
-  owner's [values file](file:///home/crmarques/tmp/bootwright-scratch/m2c/rebase/aux-values-v9.9.2-26947.md):
+  the digests resolved by the owner with `skopeo inspect`:
 
   | cephadm name | base | version (digest) |
   | --- | --- | --- |
