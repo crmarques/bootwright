@@ -507,7 +507,7 @@ A managed Ceph StorageCluster entry adds these fields, in this order, after its
 | StoragePool, replicated | `replicated size <size>/min <minSize>, application <application>` |
 | StoragePool, erasure | `erasure k=<dataChunks> m=<codingChunks>, application <application>`, then `, overwrites` when overwrites are enabled |
 | StorageRBDImage | `image <pool>/<name>, <sizeBytes> bytes`, then `, data pool <dataPool>` when one is set |
-| StorageClient | `client.<name> <access> on pool <pool>` |
+| StorageClient | `client.<name> <access> on pool <pool>`, then `, data pools <dataPools separated by spaces>` when the frozen request derives any |
 | StorageFilesystem | `filesystem <name>, metadata <metadataPool>, data <dataPools separated by spaces>` |
 | StorageSubvolume | `subvolume <filesystem>/<group>/<name>`, with `_nogroup`, cephadm's default group, when no group is set |
 | StorageObjectGateway | `zone <realm>/<zoneGroup>/<zone>` |
