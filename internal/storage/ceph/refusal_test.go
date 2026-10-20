@@ -216,6 +216,52 @@ func TestAnObjectEndpointCertificateRefusalNamesItsNextStep(t *testing.T) {
 	}
 }
 
+func nfsExportRefusal(t *testing.T, reason string) (reconciliation.EffectState, []diagnostics.Diagnostic) {
+	t.Helper()
+	r := coreRequest()
+	r.Action, r.NFSExport = "nfs-export", &NFSExport{Filesystem: "files", Name: "docs", Service: "shares", Native: NFSExportNative{AccessType: "RW", Clients: []NFSExportClient{},
+		FSAL: NFSExportFSAL{CmountPath: "/", FSName: "files", Name: "CEPH"}, Path: "/", Protocols: []int{4}, Pseudo: "/docs", SecurityLabel: true, Squash: "root_squash", Transports: []string{"TCP"}}}
+	observation, err := New(api.StorageNFSExport, &refusingRunner{reason: reason}).Observe(context.Background(), withMaterial(exportExecution(t, r), r))
+	return observation.Effect, diagnostics.Of(err)
+}
+
+func TestANFSExportForeignRefusalNamesItsNextStep(t *testing.T) {
+	effect, d := nfsExportRefusal(t, "nfs-export-foreign")
+	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+		d[0].Message != "an NFS export exists at the StorageNFSExport's pseudo path on its NFS service that this operation did not create, "+
+			"or the export this operation created is gone or now has another export ID or CephFS principal" ||
+		d[0].Remediation != "find the export the native error names with ceph nfs export info <service> <pseudo>; for an export this operation did not create, "+
+			"set another spec.native.pseudo on the StorageNFSExport or remove the foreign export outside Bootwright, then apply again; "+
+			"when the native error says the export this operation created is gone or changed, take back what this context owns with "+
+			"bootwright destroy --context <context>, then apply; Bootwright never adopts or overwrites an NFS export it did not create" {
+		t.Fatalf("an nfs-export-foreign refusal reached the operator as %s %+v", effect, d)
+	}
+}
+
+func TestANFSExportApplyRefusalNamesItsNextStep(t *testing.T) {
+	effect, d := nfsExportRefusal(t, "nfs-export-apply")
+	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+		d[0].Message != "the NFS manager did not apply the StorageNFSExport's export cleanly: its NFS service is not listed, the apply failed or reported a warning, "+
+			"or the stored export differs from the one applied" ||
+		d[0].Remediation != "read the native error, which holds the NFS manager's answer; check the service with ceph nfs cluster ls and the export with "+
+			"ceph nfs export info <service> <pseudo>, correct what the error names outside Bootwright (a missing directory, a path another protocol claims, "+
+			"or NFS daemons that need ceph orch restart nfs.<service>), then apply again" {
+		t.Fatalf("an nfs-export-apply refusal reached the operator as %s %+v", effect, d)
+	}
+}
+
+func TestANFSExportPathEscapeRefusalNamesItsNextStep(t *testing.T) {
+	effect, d := nfsExportRefusal(t, "nfs-export-path-escape")
+	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+		d[0].Message != "the StorageNFSExport's spec.native.path does not lie within the StorageSubvolume it binds, "+
+			"or its spec.native.fsal.cmount_path is neither / nor the export path or a directory above it" ||
+		d[0].Remediation != "omit spec.native.path so the export serves the subvolume's own path, or set it to the path ceph fs subvolume getpath reports "+
+			"for the subvolume or a directory below it, and set spec.native.fsal.cmount_path to / or a directory that contains the export path, "+
+			"then apply again; Bootwright wrote nothing for this export" {
+		t.Fatalf("an nfs-export-path-escape refusal reached the operator as %s %+v", effect, d)
+	}
+}
+
 // The module publishes only a reason its block names, and a token the block
 // does not name as unknown with the token in its detail, so each table names
 // exactly what ceph_core.py may publish for its block, unknown among them.
@@ -247,7 +293,7 @@ func TestEachCephBlockNamesExactlyTheRefusalsItsModuleMayPublish(t *testing.T) {
 func TestResourceRefusalsNameTheirNextStep(t *testing.T) {
 	refusals := adapterRefusals()
 	generic := diagnostics.Of(refusals["native-output"])[0].Remediation
-	for _, reason := range []string{"foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget", "foreign-rbd-image", "rbd-image-identity", "foreign-subvolume", "subvolume-identity", "pool-drift", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign", "object-zone-pools", "object-endpoint-certificate"} {
+	for _, reason := range []string{"foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget", "foreign-rbd-image", "rbd-image-identity", "foreign-subvolume", "subvolume-identity", "pool-drift", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign", "object-zone-pools", "object-endpoint-certificate", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape"} {
 		d := diagnostics.Of(refusals[reason])
 		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Remediation == generic || strings.Contains(d[0].Message, "could not prove its") {
 			t.Fatalf("%s reaches the operator as %+v", reason, d)

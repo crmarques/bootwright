@@ -7,10 +7,9 @@ and their bindings; [Storage](storage.md) owns lifecycle, device safety and
 custody. [Provider coverage](storage-coverage.md) owns release qualification.
 
 **Current:** `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage`,
-`StorageFilesystem`, `StorageSubvolume` and minimal `StorageClient` are
-admitted and realized. Native
-effects remain artifact-gated. `StorageNFSExport` is admitted under its
-[field record](#storagenfsexport) but not executed. **Not yet met:** later P2
+`StorageFilesystem`, `StorageSubvolume`, minimal `StorageClient` and
+`StorageNFSExport`, under its [field record](#storagenfsexport), are admitted
+and realized. Native effects remain artifact-gated. **Not yet met:** later P2
 kinds and their qualified lifecycles. [Storage admission](api/storage.md)
 states current refusals.
 The target additions and migrations below belong to
@@ -567,9 +566,9 @@ parked by D160 (OD26 (a)); normalization and case sensitivity are
 ## StorageNFSExport
 
 One object owns exactly one export of one declared nfs service.
-[B478](milestones/m2.md#b478) owns this record. Admission is current;
-execution still refuses every selected StorageNFSExport until the export block
-lands, and per-resource removal is [B491](milestones/m2.md#b491)'s. Daemon
+[B478](milestones/m2.md#b478) owns this record. Admission and execution are
+current; [Storage](storage.md#resources-readiness-and-access) owns the export
+block, and per-resource removal is [B491](milestones/m2.md#b491)'s. Daemon
 placement, ports and ingress belong to the [native services](storage-native-api.md).
 
 ```yaml
@@ -657,7 +656,9 @@ The export block resolves at execution what admission cannot prove: a
 subvolume binding's `path` comes from the proved subvolume when omitted, an
 authored one must resolve within that subvolume and is never reinterpreted as
 subvolume-relative, and the cmount check then runs against that resolved path.
-The resolved path and the generated export ID are recorded once, and
+An authored subvolume `path` outside the subvolume, or a cmount that is not an
+ancestor of the resolved path, refuses `nfs-export-path-escape` before any
+write. The resolved path and the generated export ID are recorded once, and
 observation and retry use that record. The execution artifact is JSON; a
 structured mapping inside Bootwright YAML does not create a native NFS YAML
 format.

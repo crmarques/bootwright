@@ -346,6 +346,20 @@ def test_rbd_evidence_admits_only_a_lowercase_hex_image_id(core_request):
         ceph_core.evidence(pool, "d" * 64)
 
 
+def test_nfs_export_evidence_admits_only_its_export_id_and_pseudo_path(core_request):
+    request = dict(core_request, action="nfs-export", nfsExport={"native": {"pseudo": "/docs"}})
+    value = dict(observation(request, ready=True), request="d" * 64, resource={"id": "7", "path": "/docs"})
+    assert ceph_core.evidence(value, "d" * 64, request) is value
+    assert ceph_core.evidence(dict(value, ready=False, partial=True, resource={"id": "", "path": ""}), "d" * 64, request)["resource"]["id"] == ""
+    refused = [dict(value, resource={"id": "0", "path": "/docs"}), dict(value, resource={"id": "x", "path": "/docs"}),
+               dict(value, resource={"id": "7", "path": "/other"}), dict(value, resource={"id": "7", "path": "/"}),
+               dict(value, resource={"id": "7", "path": ""}), dict(value, client="client.docs"),
+               dict(value, daemons=[{"host": "node-1", "name": "nfs.shares.0.0.node-1.abcdef", "service": "nfs.shares"}])]
+    for case in refused:
+        with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+            ceph_core.evidence(case, "d" * 64, request)
+
+
 def test_rbd_apply_calls_the_rbd_phase(core_request, monkeypatch):
     request = dict(core_request, action="rbd", rbd=RBD_IMAGE)
     calls = []

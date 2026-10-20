@@ -51,7 +51,7 @@ CLUSTER_REASONS = (
     "remote-refusal", "adapter-exception", "foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget",
     "foreign-rbd-image", "rbd-image-identity", "foreign-filesystem", "filesystem-identity", "filesystem-multiple-disabled", "foreign-subvolume-group",
     "mds-coverage", "foreign-subvolume", "subvolume-identity", "foreign-image", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign",
-    "object-zone-pools", "object-endpoint-certificate",
+    "object-zone-pools", "object-endpoint-certificate", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape",
 )
 
 
@@ -135,6 +135,14 @@ def gateway_resource(resource, request):
     ceph_native.require(request is None or request["action"] == "gateway" and path == request["gateway"]["endpoint"], "evidence")
 
 
+def nfs_export_resource(resource, request):
+    """An NFS export's resource is empty, or its generated export ID with the pseudo path the frozen export records."""
+    if resource == {"id": "", "path": ""}:
+        return
+    ceph_native.require(ceph_native_nfs.EXPORT_ID.fullmatch(resource["id"]) is not None and ceph_native_nfs.clean(resource["path"], root=False), "evidence")
+    ceph_native.require(request is None or request["action"] == "nfs-export" and resource["path"] == request["nfsExport"]["native"]["pseudo"], "evidence")
+
+
 def evidence(value, request_digest, request=None):
     """The closed public projection, checked before any result publication."""
     if isinstance(value, dict) and value.get("version") == ceph_host_runtime.EVIDENCE_VERSION:
@@ -146,7 +154,7 @@ def evidence(value, request_digest, request=None):
                         "evidence")
     dashboard_evidence(value)
     endpoint_evidence(value, request)
-    actions = ("cluster", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway")
+    actions = ("cluster", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway", "nfs-export")
     ceph_native.require(value["action"] in actions, "evidence")
     daemon_evidence(value, request)
     ceph_native.require(all(type(value[k]) is bool for k in ("owned", "exists", "ready", "removed", "partial")), "evidence")
@@ -164,9 +172,12 @@ def evidence(value, request_digest, request=None):
         subvolume_resource(resource, request)
     elif value["action"] == "gateway":
         gateway_resource(resource, request)
+    elif value["action"] == "nfs-export":
+        nfs_export_resource(resource, request)
+        ceph_native.require(value["client"] == "", "evidence")
     else:
         ceph_native.require(resource["path"] == "", "evidence")
-    ceph_native.require(resource["id"] == "" or value["action"] in ("subvolume", "gateway")
+    ceph_native.require(resource["id"] == "" or value["action"] in ("subvolume", "gateway", "nfs-export")
                         or value["action"] in ("pool", "policy", "filesystem") and ceph_native.RESOURCE_ID.fullmatch(resource["id"]) is not None
                         or value["action"] == "rbd" and ceph_native.RBD_IMAGE_ID.fullmatch(resource["id"]) is not None, "evidence")
     ceph_native.require(isinstance(value["osds"], list) and len(value["osds"]) <= 8192, "evidence")
@@ -638,6 +649,8 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         ceph_native.require(not outputs, "material")
     if request["action"] == "service":
         return execute_unit(request, operation, request_digest, transport, bootstrap, now=now, pause=pause)
+    if request["action"] == "nfs-export":
+        return execute_unit(request, operation, request_digest, transport, bootstrap, now=now, pause=pause, phases=ceph_native_nfs.EXPORT_APPLY_PHASES)
     if request["action"] == "gateway":
         return execute_gateway(request, operation, request_digest, transport, bootstrap, now=now, pause=pause)
     changed = False

@@ -595,6 +595,35 @@ writes, and a stored specification, password or keyring never reaches
 evidence, which lists only each daemon's host, name and service. The block's
 deadline is fixed for its type (apply 2280 s, observe 720 s, destroy 1380 s).
 
+A StorageNFSExport is realized by its export block `ceph-nfs-export-<export>`
+on the bootstrap host. A subvolume binding binds the path the subvolume's
+applied creation proof reports and never constructs one. Before any write the
+apply proves the cluster's ownership record and FSID, the `nfs` manager module
+(`nfs-module-disabled`), the NFS service in `nfs cluster ls`
+(`nfs-export-apply`), for a subvolume binding that `fs subvolume getpath`
+still reports the proved path (`subvolume-identity`), that an authored `path`
+lies within that path and that `fsal.cmount_path` is `/`, the export path or a
+directory above it (`nfs-export-path-escape`), and with `nfs export info` that
+no export holds the pseudo path without this operation's attempt record
+(`nfs-export-foreign`; the NFS manager upserts by pseudo path). It then writes
+the attempt record, which freezes the export JSON with its resolved path, and
+applies that JSON with `ceph nfs export apply <service> -i -`, never with an
+export ID, cluster ID or CephX principal. A failed apply, a warning, an answer
+other than `added` for a new export or `updated` for its own recorded one, or a
+readback that differs refuses `nfs-export-apply`. A lost reply is adopted only
+under the attempt record and only when the stored export equals the frozen
+JSON. The generated export ID and the CephFS principal the NFS manager derives
+are recorded once; an export that is gone or holds another ID refuses
+`nfs-export-foreign`. Each readback drops `cephx_key`, `access_key_id` and
+`secret_access_key` on the host before any comparison, so none reaches a
+record, refusal or evidence. Readiness compares the stored export, apart from
+its export ID, cluster ID and principal, with the frozen JSON; a drifted export
+is not ready and the next apply re-applies it. Evidence carries the export ID
+and pseudo path only. The block never removes an export, creates or removes an
+NFS service, or changes a client key; it retires with the cluster's hosts, and
+[B491](milestones/m2.md#b491) owns its online removal. Mounting from a client
+is the operator's acceptance.
+
 A StorageObjectGateway's realm, zone group, zone, zone placement and rgw service
 are realized by its gateway block `ceph-gateway-<gateway>`, which runs only on
 the bootstrap host in three phases. Every `radosgw-admin` call that reaches the

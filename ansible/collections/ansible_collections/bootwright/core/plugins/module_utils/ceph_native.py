@@ -426,7 +426,7 @@ def validate(request):
     """Admit only the implemented core envelope, including concrete devices."""
     require(isinstance(request, dict))
     required = SCOPE_MEMBERS | {"action"}
-    resources = {"pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway"}
+    resources = {"pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway", "nfsExport"}
     require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"delegated"} - resources)
     hosts = scope_checks(request)
     validate_delegated(request, hosts)
@@ -444,6 +444,12 @@ def validate(request):
         require(not (resources - {"gateway"}) & set(request))
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_object
         ceph_native_object.validate(request, hosts)
+        return request
+    require(request["action"] == "nfs-export" or "nfsExport" not in request)
+    if request["action"] == "nfs-export":
+        require(not (resources - {"nfsExport"}) & set(request))
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_nfs
+        ceph_native_nfs.validate_export(request, hosts)
         return request
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_resources
     require(request["action"] in ceph_native_resources.ACTIONS)
@@ -3588,17 +3594,18 @@ def dispatch(envelope):
     if phase in HOST_PHASES:
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime
         return ceph_host_runtime.dispatch(envelope)
-    from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_object, ceph_native_resources, ceph_native_units
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_nfs, ceph_native_object, ceph_native_resources, ceph_native_units
     request = envelope["request"]
     resource = isinstance(request, dict) and request.get("action") in ceph_native_resources.ACTIONS
     unit = isinstance(request, dict) and request.get("action") == "service"
     gateway = isinstance(request, dict) and request.get("action") == "gateway"
-    kind = (ceph_native_object.ObjectWorker if gateway else ceph_native_units.UnitWorker if unit
+    export = isinstance(request, dict) and request.get("action") == "nfs-export"
+    kind = (ceph_native_object.ObjectWorker if gateway else ceph_native_units.UnitWorker if unit else ceph_native_nfs.ExportWorker if export
             else ceph_native_resources.ResourceWorker if resource else Worker)
     worker = kind(request, envelope["host"])
     worker.horizon = worker.clock() + MANAGER_HORIZON
     require(phase in CORE_PHASES or (resource and phase in ceph_native_resources.PHASES) or (unit and phase in ceph_native_units.PHASES)
-            or (gateway and phase in ceph_native_object.PHASES))
+            or (gateway and phase in ceph_native_object.PHASES) or (export and phase in ceph_native_nfs.EXPORT_PHASES))
     if phase not in CORE_READ_ONLY_PHASES and phase not in ceph_native_resources.READ_ONLY_PHASES:
         require(supported_transport(worker.request), "unsupported-release")
     if gateway:

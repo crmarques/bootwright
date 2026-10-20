@@ -1,0 +1,17 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: libvirt-3-nodes-ceph-nfs
+
+spec:
+  domains:
+    base: lab.example.test
+
+  controller:
+    machineRef: controller
+
+  remoteMachinesAccessKey:
+    keyRef: bootwright-machine-key
+
+  storageClusters:
+    - ceph-lab

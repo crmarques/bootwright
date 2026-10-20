@@ -44,8 +44,8 @@ implicit administrator capability is granted. `StoragePlacementPolicy` and
 `StorageObjectGateway` is admitted under its
 [field record](../storage-resources.md#storageobjectgateway-field-record).
 `StorageNFSExport` is admitted under its
-[field record](../storage-resources.md#storagenfsexport); execution still
-refuses every selected export until the NFS export block lands.
+[field record](../storage-resources.md#storagenfsexport) and realized by its
+export block.
 Other P2 resource additions remain target contracts, not admitted kinds.
 Future storage export feature families are refused by current pure
 admission.
@@ -69,9 +69,9 @@ that adaptation neither approves nor refuses a selection.
 
 Ordinary apply realizes the core cluster, placement policies, replicated and
 erasure-coded pools, RBD images, CephFS filesystems with their subvolume
-groups, CephFS subvolumes, native `nfs` services and the client over
-`verified-tunnel`; an ingress refuses until its auxiliary images can be
-selected.
+groups, CephFS subvolumes, native `nfs` services, NFS exports of a CephFS
+filesystem or subvolume and the client over `verified-tunnel`; an ingress
+refuses until its auxiliary images can be selected.
 `ceph.release` is the operator's release label;
 `ceph.packageVersion` selects the Ceph/cephadm RPM roots and
 `ceph.cephadm.ansible.packageVersion` selects the actual cephadm-ansible RPM.
