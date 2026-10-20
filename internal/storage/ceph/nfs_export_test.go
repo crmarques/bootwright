@@ -232,9 +232,10 @@ func TestNFSExportEvidence(t *testing.T) {
 		t.Fatalf("ready export evidence is %s (%v)", effect, err)
 	}
 	for name, mutate := range map[string]func(*Evidence){
-		"other path": func(e *Evidence) { e.Resource.Path = "/other" },
-		"id zero":    func(e *Evidence) { e.Resource.ID = "0" },
-		"id text":    func(e *Evidence) { e.Resource.ID = "abc" },
+		"ready without resource": func(e *Evidence) { e.Resource = ResourceEvidence{} },
+		"other path":             func(e *Evidence) { e.Resource.Path = "/other" },
+		"id zero":                func(e *Evidence) { e.Resource.ID = "0" },
+		"id text":                func(e *Evidence) { e.Resource.ID = "abc" },
 		"daemon": func(e *Evidence) {
 			e.Daemons = []UnitDaemon{{Host: "node-1", Name: "nfs.shares.0", Service: "nfs.shares"}}
 		},
