@@ -13,7 +13,7 @@ listed commands return the [unavailable result](cli.md#recognized-but-unavailabl
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
 | [M1](milestones/m1.md) | Foundations: substrates, infrastructure components and Machines | none | in progress | X55/X60 for M2c (D159); M1f/M1g future |
-| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | D156; applicable M1c/M1d/M1e; B509 | in progress | M2c under D159; X56, X57 on main |
+| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | D156; applicable M1c/M1d/M1e; B509 | in progress | M2c under D159; X56 to X58 on main |
 | [M3](milestones/m3.md) | Full OpenShift on bare metal/BMC and libvirt+sushy | M2; applicable M1c/M1d/M1e; B18/B23/B265 | in progress | B61's gate; define B473 |
 | [M4](milestones/m4.md) | MetalLB and IBM Fusion Data Foundation | M2, M3 | not started | nothing until M2 and M3 |
 | [M5](milestones/m5.md) | OpenShift clusters over OpenShift Virtualization | M3, M1g | not started | nothing until M3 and M1g |

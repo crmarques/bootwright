@@ -3264,3 +3264,9 @@ Requires cell as `owner decision: <question>`.
   [B489](m2.md#b489) stay in progress for their gated lanes. It also records
   [B686](m2.md#b686) and [B687](m1.md#b687), found at the int-x57 and
   int-x55-r checkpoints.
+  The same rule merged X58's in-tree work and the lane od28-aux-image-source
+  (D164's OD28 (a)) after the int-x58 checkpoint: [B482](m2.md#b482) awaits
+  operator acceptance, with the active-directory live row unrun (D161, OD15);
+  [B481](m2.md#b481) stays in progress for the vendor support statement the
+  owner left open (D161, OD27); and [B477](m2.md#b477), [B478](m2.md#b478) and
+  [B479](m2.md#b479) plan their families once the images are authored.
