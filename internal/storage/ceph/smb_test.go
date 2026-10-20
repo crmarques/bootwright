@@ -230,16 +230,32 @@ func TestSMBRequestGolden(t *testing.T) {
 	}
 }
 
+func withNativeLeaf(t *testing.T, native json.RawMessage, name, value string) json.RawMessage {
+	t.Helper()
+	members := map[string]any{}
+	if err := json.Unmarshal(native, &members); err != nil {
+		t.Fatal(err)
+	}
+	members[name] = value
+	data, err := json.Marshal(members)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
 func TestSMBRequestDecodeRefusesInconsistentFrozenRequests(t *testing.T) {
-	catalog := smbGraph(t)
+	catalog := smbCatalog(t, subvolumeOf(), smbUsers(), smbJoin(), smbFiles(requestMap("label", "mon", "count", 2)), smbDocs())
 	base := sambaBase(t, catalog)
 	cases := map[string]SMBRequest{}
 	users := builtSMB(t, catalog, base, "smb-users")
 	share := builtSMB(t, catalog, base, "smb-docs")
+	join := builtSMB(t, catalog, base, "smb-join")
 	add := func(name string, r SMBRequest, change func(*SMBRequest)) {
 		r.Bindings, r.Machines, r.ClusterIDs, r.Images = slices.Clone(r.Bindings), slices.Clone(r.Machines), slices.Clone(r.ClusterIDs), slices.Clone(r.Images)
 		if r.Service != nil {
 			service := *r.Service
+			service.Hosts = slices.Clone(r.Service.Hosts)
 			r.Service = &service
 		}
 		change(&r)
@@ -259,6 +275,15 @@ func TestSMBRequestDecodeRefusesInconsistentFrozenRequests(t *testing.T) {
 	add("reversed images", share, func(r *SMBRequest) { slices.Reverse(r.Images) })
 	add("one image", share, func(r *SMBRequest) { r.Images = r.Images[:1] })
 	add("a long object", users, func(r *SMBRequest) { r.Object = strings.Repeat("a", 55) })
+	add("a service naming another listed cluster", share, func(r *SMBRequest) { r.ClusterIDs, r.Service.Name = []string{"files", "other"}, "smb.other" })
+	add("a cluster list without its own cluster", share, func(r *SMBRequest) { r.ClusterIDs = []string{"other"} })
+	add("a join auth at another path", join, func(r *SMBRequest) { r.Bindings[0].Path = "/auth/username" })
+	add("a join auth with two bindings", join, func(r *SMBRequest) {
+		r.Bindings = append(r.Bindings, SMBBinding{Path: "/auth/password", SecretRef: "other-password"})
+	})
+	add("a join auth without a Secret", join, func(r *SMBRequest) { r.Bindings[0].SecretRef = "" })
+	add("users without a binding", users, func(r *SMBRequest) { r.Bindings = []SMBBinding{} })
+	add("another native resource type", users, func(r *SMBRequest) { r.Native = withNativeLeaf(t, r.Native, "resource_type", api.SMBJoinAuth) })
 	for name, r := range cases {
 		t.Run(name, func(t *testing.T) {
 			data, err := reconciliation.Freeze(r, "Ceph SMB")
@@ -391,7 +416,7 @@ func TestSMBRequestCarriesDescriptorsNeverSecretBytes(t *testing.T) {
 				index := string(rune('0' + i))
 				want = append(want, lifecycle.MaterialFile{Name: "smb-secret-" + index, Secret: b.SecretRef, Part: secrets.ValuePart, Variable: "smbSecret" + index})
 			}
-			if got := runner.request.Materials; !slices.Equal(got[:len(want)], want) {
+			if got := runner.request.Materials; !slices.Equal(got, want) {
 				t.Fatalf("material files %+v, want %+v", got, want)
 			}
 			if runner.request.Implementation != SMBImplementation || runner.request.Variable != "bootwright_ceph_smb" || runner.request.Operation != "apply" || !runner.request.NativeErrors || runner.request.Placement.Machine != "controller" {
@@ -615,6 +640,31 @@ func TestSMBPlanNamesItsSecretsAndSubjects(t *testing.T) {
 	want := []string{"remove Ceph SMB cluster files of smb-files", "remove Ceph SMB share docs of smb-docs", "remove Ceph SMB users and groups users of smb-users"}
 	if !slices.Equal(descriptions, want) {
 		t.Fatalf("descriptions %v, want %v", descriptions, want)
+	}
+}
+
+func TestSMBPlanBindsEveryHostKeySecret(t *testing.T) {
+	objects := smbGraph(t).Objects()
+	for i, object := range objects {
+		if object.Kind() == api.Machine {
+			objects[i] = object.WithSpec(object.Spec().WithPath(api.StringValue(object.Name()+"-host-key"), "os", "install", "hostKeyRef"))
+		}
+	}
+	catalog := api.NewCatalog(objects)
+	want := []string{"alice-password", "bob-password", "fleet-key"}
+	for _, h := range smbBase(t, catalog).Hosts {
+		want = append(want, h.Machine+"-host-key")
+	}
+	slices.Sort(want)
+	if len(want) != 6 {
+		t.Fatalf("the cluster binds %v", want)
+	}
+	plan, err := NewSMB(nil).Plan(context.Background(), lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"})
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	if !slices.Equal(plan.Secrets, want) {
+		t.Fatalf("the SMB plan binds %v, want %v", plan.Secrets, want)
 	}
 }
 

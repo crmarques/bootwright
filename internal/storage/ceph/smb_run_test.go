@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -121,6 +122,26 @@ func TestSMBObserveReportsTheProvedEffect(t *testing.T) {
 		t.Fatalf("an observation with produced values = %+v", got)
 	}
 	producedCleared(t, produced)
+}
+
+func TestSMBObserveLendsNoBoundSecret(t *testing.T) {
+	catalog := smbCatalog(t, subvolumeOf(), smbUsers(), smbJoin())
+	base := smbBase(t, catalog)
+	want := []lifecycle.MaterialFile{{Name: "fleet-key", Secret: "fleet-key", Part: secrets.PrivateKeyPart, Variable: "sshKey"}, {Name: "known-hosts", Secret: knownHostsMaterial, Part: secrets.ValuePart, Variable: "knownHosts"}}
+	for _, name := range []string{"smb-users", "smb-join"} {
+		t.Run(name, func(t *testing.T) {
+			r := builtSMB(t, catalog, base, name)
+			e := smbExecution(t, r, "pass\nword")
+			runner := &recordingRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: smbReady(t, e, r, nil)}}
+			got, err := NewSMB(runner).Observe(context.Background(), e)
+			if err != nil || got.Effect != reconciliation.EffectCompleted || runner.calls != 1 {
+				t.Fatalf("observe = %+v (%v), calls %d", got, diagnostics.Of(err), runner.calls)
+			}
+			if !slices.Equal(runner.request.Materials, want) {
+				t.Fatalf("the observation lends %+v, want %+v", runner.request.Materials, want)
+			}
+		})
+	}
 }
 
 func TestSMBServiceClusteredFollowsClusteringAndCount(t *testing.T) {
