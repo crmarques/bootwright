@@ -51,6 +51,19 @@ installer input, because the agent installer has none for them; whether the
 installation applies them once it completes is
 [B716](milestones/m3.md#b716)'s open decision, and until then they are inert.
 
+The following admitted fields are preserved in effective state without changing
+an agent-install plan:
+
+| Field | Meaning for the agent installer |
+| --- | --- |
+| `spec.distribution.release.channel` | Informational, including a channel derived from the version; release selection uses the exact version or image. |
+| `spec.install.endpoints.*.port` | Inert; the installer uses its native endpoint ports. |
+| `spec.install.endpoints.*.scheme` | Inert; the installer uses its native endpoint protocols. |
+| `spec.install.endpoints.*.prefixLength` | Inert; no installer input consumes it. |
+| `spec.install.endpoints.*.interfaceNetworks` | Inert; no installer input consumes it. |
+| `spec.nodes[].labels` | Inert until the node-label decision above is resolved. |
+| `spec.nodes[].taints` | Inert until the node-taint decision above is resolved. |
+
 A multi-node cluster's platform follows who answers its endpoints: on
 `baremetal` the installer owns all three as virtual IPs its own VIP holders
 answer, and on `none` an external or load-balancer address answers each, as
@@ -76,6 +89,7 @@ artifact server and its placement Machine.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
+| A boot-image server off the controller | selected artifact server’s `spec.machineRef` differs from the controller Machine | `a cluster's boot image is built on the controller, so the server it is published through is placed there` | `set spec.machineRef on <server> to the controller Machine` |
 | An OKD cluster | `spec.distribution.type: okd` | `this executable installs no OKD cluster` | `correct <cluster>` |
 | A release pinned by image alone | `spec.distribution.release` without `version` | `a cluster pinned to a release image alone names no version for its installer to match` | `correct <cluster>` |
 | A disconnected cluster | `spec.install.mode: disconnected` | `this executable installs no disconnected cluster` | `correct <cluster>` |
@@ -320,10 +334,9 @@ refuse, and the projection falls back to IPv4 defaults; tracked as
 
 ## Boot media
 
-Not yet met: cluster names admitted by the API can exceed the block identity
-bound once `cluster-media-` or `cluster-install-` is prefixed; planning then
-refuses as an object-less `lifecycle.state` instead of admission naming
-`metadata.name`; tracked as [B411](milestones/m3.md#b411).
+ContainerCluster `metadata.name` is at most 47 bytes: the longest block
+prefix, `cluster-install-`, consumes 16 of the block identity's 63 bytes.
+Admission refuses a longer name at `metadata.name`.
 
 The block `cluster-media-<cluster>` produces the cluster's agent boot image. It
 requires the managed `ArtifactServer` its `agent.redfishVirtualMedia` selection
@@ -742,10 +755,6 @@ kubeconfig` reveals it until then, with a warning when it is unproved
 initial administrator password stays in the work area. No copy is ever
 written to evidence, progress output or a log.
 
-Not yet met: a file past the bound is never read, so a cut one is not restored,
-and a restore is recorded only in completion evidence; tracked as
-[B259](milestones/m3.md#b259).
-
 **Releasing the media.** Once the read that follows the installation wait
 proves the installation complete, as Completion below defines it with every
 declared node present, and only then, each node's virtual media is ejected and
@@ -899,10 +908,8 @@ readiness.
   host the cluster's nodes are placed on, as the apply's gate computes them.
 
 With `--dry-run` every check is `pending`, its `reason` names the record or the
-quantity it would check, and nothing is resolved or observed.
-
-Not yet met: `preflight container-cluster` reports nothing; tracked as
-[B705](milestones/m3.md#b705).
+quantity it would check, and nothing is resolved or observed. These controller
+checks refuse `--trust-on-first-use` and borrowed SSH options.
 
 ## Post-installation network configuration
 

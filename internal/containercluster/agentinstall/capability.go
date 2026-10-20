@@ -4,7 +4,6 @@ import (
 	"context"
 	"slices"
 	"strconv"
-	"strings"
 
 	controllerscope "github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -17,9 +16,14 @@ import (
 // MediaCapability builds and publishes the image one cluster's nodes boot. It
 // owns what completion, replay and absence mean for that image and nothing
 // else: the cluster it serves belongs to the installation block.
-type MediaCapability struct{ runner Runner }
+type MediaCapability struct {
+	runner        Runner
+	authorizedKey AuthorizedKey
+}
 
-func NewMedia(runner Runner) MediaCapability { return MediaCapability{runner: runner} }
+func NewMedia(runner Runner, authorizedKey AuthorizedKey) MediaCapability {
+	return MediaCapability{runner: runner, authorizedKey: authorizedKey}
+}
 
 const mediaVariablePrefix = "bootwright_cluster_media"
 
@@ -303,7 +307,7 @@ func (c MediaCapability) runWithOutputs(ctx context.Context, execution lifecycle
 		if err != nil {
 			return lifecycle.RunResult{}, err
 		}
-		key, err := publicHalf(execution, request.SSHKeyRef)
+		key, err := c.publicHalf(execution, request.SSHKeyRef)
 		if err != nil {
 			return lifecycle.RunResult{}, err
 		}
@@ -348,18 +352,16 @@ func ToolPath(ctx context.Context, execution lifecycle.Execution, tool Tool, exe
 	})
 }
 
-// publicHalf reads the public half of one bound key pair. A private half never
-// leaves its binding as a value.
-func publicHalf(execution lifecycle.Execution, reference string) (string, error) {
+// publicHalf reads the public key from the bound key pair or opaque value.
+// A private half never leaves its binding as a value.
+func (c MediaCapability) publicHalf(execution lifecycle.Execution, reference string) (string, error) {
 	material, ok := execution.Material[reference]
 	if !ok {
 		return "", refusal("secret.store", "the bound cluster administration key is not available to this attempt",
 			lifecycle.ReopenBindings(execution.Context, execution.Continuation))
 	}
-	value, ok := material.Part(secrets.PublicKeyPart)
-	if !ok || len(value) == 0 {
-		return "", refusal("secret.part", "the bound cluster administration key carries no public half",
-			lifecycle.ReopenBindings(execution.Context, execution.Continuation))
+	if c.authorizedKey == nil {
+		return "", refusal("lifecycle.state", "the public-key reader is not configured", "")
 	}
-	return strings.TrimRight(string(value), "\n"), nil
+	return c.authorizedKey(material, reference)
 }

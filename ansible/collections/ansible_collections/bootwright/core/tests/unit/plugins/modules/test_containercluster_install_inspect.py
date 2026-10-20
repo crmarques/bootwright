@@ -488,6 +488,21 @@ def test_an_installer_file_that_parses_or_is_never_read_is_left_as_it_is(tmp_pat
         assert target.read_bytes() == installer
 
 
+@pytest.mark.parametrize("section", ["clusters", "users"])
+def test_a_grown_installer_file_cut_in_each_section_is_restored(tmp_path, section):
+    data = rewritten(last_within_the_bound() + 100).encode()
+    if section == "clusters":
+        cut = data[:MAX_KUBECONFIG + 100]
+    else:
+        cut = data[:data.index(b"    client-key-data:") + 30]
+    assert len(cut) > MAX_KUBECONFIG
+    kept = kubeconfig().encode()
+    work = restoring(tmp_path / "work", cut, kept)
+    assert restore(request(tmp_path, work), anchor()) == RESTORED
+    assert (work / "auth" / "kubeconfig").read_bytes() == kept
+    assert (work / KEPT).read_bytes() == kept
+
+
 def test_check_mode_reports_the_restore_it_would_make_and_writes_nothing(tmp_path):
     cut = kubeconfig().encode()[:200]
     work = restoring(tmp_path / "work", cut, kubeconfig().encode())

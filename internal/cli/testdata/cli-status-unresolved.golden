@@ -62,3 +62,11 @@
             this context's ownership
     Remedy  remove or rename domain bootwright-lab-rhel-01 on Machine hypervisor at 192.0.2.5,
             which this context does not own
+
+  Handoff
+    not ready
+    the apply is unknown, not done
+    block proxy-lab-proxy is failed, not done
+    block machine-rhel-01 is unknown, not done
+    block os-install-rhel-01 is pending, not done
+    block machine-rhel-01 has an unresolved unknown outcome

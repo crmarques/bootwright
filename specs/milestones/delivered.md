@@ -2378,7 +2378,7 @@ holds no run lock, so retention could retire its directory if 16 newer runs
 of its context opened beside it, which no later build can change. Tracked
 elsewhere: the uninitialized-store refusal the bounded read shares with a
 binding ([B361](#x46--the-safety-and-defect-sweep-of-m1)); container-cluster admission remedies
-([B313](m3.md#b313)); content the install line still drops, search domains
+([B313](delivered.md#b313)); content the install line still drops, search domains
 and IPv6 policy among it ([B338](#x43--libvirt-roles-managed-os-installation-network-composition-and-controller-automation), [B326](m1.md#b326)); RHEL 9.8's
 `rpm` output and the snapshot read as the helper account
 ([B335](backlog.md#retired), and the RHEL 9.8 controller run D60 plans); the
@@ -7111,7 +7111,7 @@ owner question or parked.
 - A pin such as `virtctl v1.9.0-rc.0` or a `4.22.0-rc.1` cluster's installer is
   admitted, frozen and installed by `setup` and `apply --stage controller`.
   `distribution.release.version` of an OpenShift cluster is not part of this
-  change ([B680](m3.md#b680)).
+  change ([B680](delivered.md#b680)).
 - The stable-only pin screen, the managed-OS RHEL floor and the rescue RHEL 9
   pin are gone; a version the operator chooses fails natively on an older
   target.
@@ -7157,7 +7157,7 @@ owner's.
 rescue declaration is still refused. Follow-ups: owner questions
 B651, B655 and B656, closed in [X104](#x104--owner-answers-of-2026-10-19); parked
 [B665](backlog.md#b665) to [B673](backlog.md#b673), [B676](backlog.md#b676),
-[B680](m3.md#b680) and [B681](backlog.md#b681), which holds the edges the
+[B680](delivered.md#b680) and [B681](backlog.md#b681), which holds the edges the
 lanes left.
 
 ### X104 — Owner answers of 2026-10-19
@@ -7395,3 +7395,101 @@ later move to `ceph-core-v26` is B479's. There is no older-version reader, so an
 incomplete operation or context planned by an earlier build is finished or
 destroyed with that build. The collection change moves the Ceph automation
 digest, which alone needs a rebuild and an apply to continue.
+
+## X111 — M3b controller and release recovery
+
+**Delivery:** in-tree work for [M3b](m3.md#m3b), requested on 2026-10-20.
+The delivering commit records verification commands and results. M3b's
+[B61](m3.md#b61) operator acceptance remains unrun.
+The selected `nmstatectl` host-package closure is implemented and source-verified;
+[B706](m3.md#b706) awaits the same operator run.
+
+### B307
+
+One exact publisher-release grammar now governs ContainerCluster admission, tool selection and tool requests. A missing patch refuses at validate and plan; publisher pre-releases remain accepted.
+
+### B680
+
+Admission of `4.22.0-rc.1` is regression-tested. Replacing the grammar with a stable-only screen made that test fail; the mutant was removed.
+
+### B309
+
+Installation resolves tools in a fixed order, installer before `oc`, so two missing tools always name the installer.
+
+### B237
+
+Recovery treats a published but unsealed client area as incomplete. Replay seals it before the block completes, and tool lookup preserves store failures.
+
+### B239
+
+Recovery and context preflight select `latest` from the context binding it proved. An interrupted first publication reuses its prepared sources rather than adopting another context's newer client.
+
+## X112 — M3b admission diagnostics
+
+**Delivery:** in-tree work for [M3b](m3.md#m3b), requested on 2026-10-20.
+The delivering commit records verification commands and results. M3b's
+[B61](m3.md#b61) operator acceptance remains unrun.
+
+### B411
+
+Normalization lowercases ContainerCluster release-image and ClusterAddon catalog-image digests. ContainerCluster admission refuses names beyond the 47-byte budget of the longest lifecycle block prefix at `metadata.name`.
+
+### B312
+
+Endpoint connection metadata and the derived release channel are declared inert or informational in the owning API contract. The inert-fields test proves media and installation plans unchanged.
+
+### B313
+
+ContainerCluster invariant diagnostics name the field to correct and provide an exact remedy when one exists. The generic remedy was removed.
+
+## X113 — M3b installer projection
+
+**Delivery:** in-tree work for [M3b](m3.md#m3b), requested on 2026-10-20.
+The delivering commit records verification commands and results. M3b's
+[B61](m3.md#b61) operator acceptance remains unrun.
+
+### B308
+
+Agent-install planning diagnostics name the ContainerCluster and the field to correct. The off-controller boot-image server refusal joins the capability's Unsupported table.
+
+### B306
+
+The Secrets material adapter returns one authorized-key line from an `sshKeyPair` public part or an opaque public key, through the media consumer's injected port. Malformed material names the Secret and discloses no bytes.
+
+### B310
+
+Projection and admission call the owners of the cluster zone, controller Machine, endpoint names, label grammar and substrate arms. DNS publication and installation consume one endpoint-name owner, with a parity test.
+
+### B311
+
+Projection reads normalized network defaults. An empty machine-network list refuses as an internal invariant; projection fixtures are normalized before use.
+
+### B622
+
+Admission refuses composed node DNS server lists that conflict with selected DNS servers, naming both fields. Authored resolver lists without a selection reach the installer unchanged.
+
+## X114 — Shared libvirt capacity admission
+
+**Delivery:** in-tree work for [M3b](m3.md#m3b), requested on 2026-10-20.
+The delivering commit records verification commands and results. M3b's
+[B61](m3.md#b61) operator acceptance remains unrun.
+
+### B700
+
+Every apply whose selection may start or resolve a libvirt Machine proves aggregate host CPU, memory and backing-filesystem disk capacity for all declared guests on that host plus the authored reserve. The substrate owns the shared budget and reserve policy; storage and container-cluster preflight reuse it. A continuation with all Machine blocks done performs no capacity observation. Every libvirt example declares its reserve.
+
+## X115 — M3b preflight and handoff
+
+**Delivery:** in-tree work for [M3b](m3.md#m3b), requested on 2026-10-20.
+The delivering commit records verification commands and results. M3b's
+[B61](m3.md#b61) operator acceptance remains unrun.
+Container-cluster preflight's in-tree implementation is included;
+[B705](m3.md#b705) awaits the same operator run.
+
+### B259
+
+Restore classifies a kubeconfig above 64 KiB from only its last 8 KiB: a complete final client-key-data line is left to the installer, and a cut rewrite is restored from the kept copy after identity validation. A failed wait names a restore it performed. Tests cover cuts in clusters and users, a whole grown file, and the failed wait.
+
+### B71
+
+Status derives GitOps handoff readiness from durable operation and block records, with fixed-order reasons and no write or host probe. A settled apply restores a latched required-log fault under a mutating transaction after re-proving its records. Human and JSON goldens cover readiness and every refusal reason.

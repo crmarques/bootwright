@@ -530,10 +530,6 @@ Pure planning probes nothing, a continuation whose Machine blocks are all done
 is not gated, and [container-cluster preflight](container-clusters.md#preflight)
 and storage preflight report the same checks.
 
-Not yet met: only an apply that selects a managed StorageCluster is gated, so a
-libvirt apply without one starts guests its host may not hold; tracked as
-[B700](milestones/m1.md#b700).
-
 ## Physical machine realization
 
 The block `machine-<machine>` on a bare-metal provider realizes nothing. A

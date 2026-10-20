@@ -65,5 +65,8 @@ func StageHostRequirements(selected NativeRequirements) []string {
 	if selected.InstallerMedia {
 		requirements = append(requirements, installerMediaRequirements...)
 	}
+	if selected.NMState {
+		requirements = append(requirements, "nmstate")
+	}
 	return requirements
 }

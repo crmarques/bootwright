@@ -108,9 +108,7 @@ DNS=192.0.2.1
 Domains=~lab.example.test
 RESOLVED
 sudo systemctl restart systemd-resolved
-getent ahosts api.sno.lab.example.test
-getent ahosts api-int.sno.lab.example.test
-getent ahosts bootwright-sno.apps.sno.lab.example.test
+./bin/bootwright preflight container-cluster --context lab-sno
 ```
 
 Each name must answer only with the node's customized IP. Bootwright proves

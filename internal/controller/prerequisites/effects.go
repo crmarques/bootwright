@@ -18,6 +18,7 @@ type PythonLaunch struct {
 // NativeRequirements selects the fixed package closure required by the
 // admitted controller capabilities and referenced infrastructure providers.
 type NativeRequirements struct {
+	NMState          bool `json:"nmstate,omitempty"`
 	ContainerRuntime bool `json:"containerRuntime"`
 	// Hypervisor is the closure a libvirt provider hosted on this Machine runs:
 	// the daemon with its drivers, the emulator and the TPM helper, beside the

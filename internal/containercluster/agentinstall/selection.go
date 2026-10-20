@@ -91,8 +91,9 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 	if reason, remediation := pastTheCeiling(cluster); reason != "" {
 		return reason, remediation
 	}
-	controllerMachine := controllerMachineName(catalog)
+	controllerMachine, _ := lifecycle.ControllerMachine(catalog) // Placement refuses an absent controller.
 	server, serverHost, served := mediaServer(catalog, cluster)
+
 	for _, node := range spec.Get("nodes").Items() {
 		bound, found := catalog.Find(api.Machine, node.Get("machineRef").Text())
 		if !found {
@@ -127,6 +128,9 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 					server.Identity() + " is placed on " + serverHost.Identity() + "; place " +
 					string(api.InfraProvider) + "/" + target.Provider + " and " + server.Identity() + " on the same Machine"
 		}
+	}
+	if served && serverHost.Name() != controllerMachine {
+		return "a cluster's boot image is built on the controller, so the server it is published through is placed there", "set spec.machineRef on " + server.Identity() + " to the controller Machine"
 	}
 	return "", ""
 }
@@ -189,17 +193,6 @@ func mediaServer(catalog api.Catalog, cluster api.Object) (server, host api.Obje
 	return server, host, found
 }
 
-// controllerMachineName is the Machine this Environment selects as its
-// controller. Refusal reads it from the graph, because it decides what it can
-// realize before an operation hands it that name.
-func controllerMachineName(catalog api.Catalog) string {
-	environments := catalog.OfKind(api.Environment)
-	if len(environments) != 1 {
-		return ""
-	}
-	return environments[0].Spec().Get("controller", "machineRef").Text()
-}
-
 // Requests derives one media and one install request per selected cluster, in
 // canonical name order. It reads no host, endpoint or Secret material.
 func Requests(catalog api.Catalog, controllerMachine, contextName string) ([]MediaRequest, []InstallRequest, []Requirements, error) {
@@ -223,10 +216,17 @@ func Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Med
 func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, contextName string) (MediaRequest, InstallRequest, Requirements, error) {
 	name := cluster.Name()
 	empty := func(err error) (MediaRequest, InstallRequest, Requirements, error) {
+		reported := diagnostics.Of(err)
+		for i := range reported {
+			reported[i].Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(cluster.Kind()), Name: cluster.Name()}
+		}
+		if len(reported) != 0 {
+			err = &diagnostics.Failure{Diagnostics: reported}
+		}
 		return MediaRequest{}, InstallRequest{}, Requirements{}, err
 	}
 	if !substrate.SafeSegment(name) {
-		return empty(refusal("lifecycle.state", "the cluster name is not a safe host identifier", "rename "+cluster.Identity()))
+		return empty(refusalAt("lifecycle.state", "$.metadata.name", "the cluster name is not a safe host identifier", "rename "+cluster.Identity()))
 	}
 	if reason, remediation := refusedCluster(catalog, cluster); reason != "" {
 		return empty(refusal("lifecycle.unsupported", reason, remediation))
@@ -248,15 +248,6 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	placement, err := artifactserver.PlacementFor(catalog, server, controllerMachine)
 	if err != nil {
 		return empty(err)
-	}
-	// The image is built by the installer the controller stage published, which
-	// that stage installs on the controller alone. A server placed on another
-	// host would have its image built where no installer exists, so the
-	// placement is refused here rather than discovered at execution.
-	if !placement.Local() {
-		return empty(refusal("lifecycle.state",
-			"a cluster's boot image is built on the controller, so the server it is published through is placed there",
-			"place "+server.Identity()+" on the controller Machine"))
 	}
 	needs.ArtifactServers = append(needs.ArtifactServers, server.Name())
 	timeSources, err := timeAddresses(catalog, cluster, &needs)
@@ -282,7 +273,7 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	}
 	pullSecret := cluster.Spec().Get("install", "pullSecretRef").Text()
 	if pullSecret == "" {
-		return empty(refusal("api.required", "the cluster names no pull secret", "set spec.install.pullSecretRef on "+cluster.Identity()))
+		return empty(refusalAt("api.required", "$.spec.install.pullSecretRef", "the cluster names no pull secret", "set spec.install.pullSecretRef on "+cluster.Identity()))
 	}
 	sshKey, err := clusterKeyRef(cluster)
 	if err != nil {
@@ -305,7 +296,7 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 		Version: installRequestVersion, WorkRoot: WorkRoot(contextName, name),
 	}
 	if len(installRequest.Endpoints) == 0 {
-		return empty(refusal("api.required", "the cluster resolves no endpoint address for its controller to reach",
+		return empty(refusalAt("api.required", "$.spec.install.endpoints", "the cluster resolves no endpoint address for its controller to reach",
 			"declare spec.install.endpoints on "+cluster.Identity()))
 	}
 	return mediaRequest, installRequest, needs, nil
@@ -320,7 +311,7 @@ func clusterKeyRef(cluster api.Object) (string, error) {
 			return reference, nil
 		}
 	}
-	return "", refusal("api.required", "the cluster names no administration key for its nodes",
+	return "", refusalAt("api.required", "$.spec.install.nodeSSH", "the cluster names no administration key for its nodes",
 		"set spec.install.nodeSSH on "+cluster.Identity())
 }
 
@@ -426,7 +417,7 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 		})
 	}
 	if len(projections) == 0 {
-		return nil, refusal("api.required", "the cluster declares no node", "declare spec.nodes on "+cluster.Identity())
+		return nil, refusalAt("api.required", "$.spec.nodes", "the cluster declares no node", "declare spec.nodes on "+cluster.Identity())
 	}
 	return projections, nil
 }
@@ -534,4 +525,8 @@ func timeAddresses(catalog api.Catalog, cluster api.Object, needs *Requirements)
 
 func refusal(code, message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
+}
+
+func refusalAt(code, field, message, remediation string) error {
+	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: code, Field: field, Message: message, Remediation: remediation}}}
 }

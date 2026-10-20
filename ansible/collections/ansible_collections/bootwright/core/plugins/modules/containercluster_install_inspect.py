@@ -21,7 +21,8 @@ description:
     names no identity.
   - The installer's own waits load its file, not the kept copy, so O(restore)
     puts the kept copy back in its place, in one rename, when that file is
-    within the bound and names no identity, as a write the installer was
+    within the bound and names no identity, or its last 8 KiB show a cut
+    rewrite past the bound, as a write the installer was
     killed in leaves it, and the kept copy names this installation's identity.
   - Without O(keep) or O(restore) it performs no change and is safe to repeat.
   - O(registered) reads which declared nodes the assisted service on the
@@ -45,7 +46,8 @@ options:
     description:
       - Replace the installer's own kubeconfig with the kept copy, in one
         rename, when that file is a regular file within the bound that names
-        no identity, and the kept copy names O(identity).
+        no identity, or a larger file whose last 8 KiB do not end with the
+        complete client-key-data line, and the kept copy names O(identity).
       - A kept copy that names no identity or another one is never written
         there; the result then reports the restore refused.
       - Exclusive with O(keep).
@@ -375,6 +377,29 @@ def keep(request, check_mode=False):
     return True
 
 
+def cut_kubeconfig(path):
+    """Whether one regular installer file is a truncated write, reading a bounded window."""
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return False
+    with os.fdopen(descriptor, "rb") as handle:
+        try:
+            info = os.fstat(handle.fileno())
+            if not stat.S_ISREG(info.st_mode):
+                return False
+            if info.st_size <= MAX_KUBECONFIG:
+                data = handle.read(MAX_KUBECONFIG + 1)
+                return len(data) <= MAX_KUBECONFIG and not named(data)
+            handle.seek(-8192, os.SEEK_END)
+            tail = handle.read(8193)
+            if len(tail) != 8192 or os.fstat(handle.fileno()).st_size != info.st_size:
+                return False
+            return re.search(rb"\n    client-key-data: [A-Za-z0-9+/=]+\n\Z", tail) is None
+        except OSError:
+            return False
+
+
 def restore(request, anchor, check_mode=False):
     """What the installer's own kubeconfig needed before a wait: RESTORED, REFUSED or UNTOUCHED.
 
@@ -383,15 +408,15 @@ def restore(request, anchor, check_mode=False):
     path with filepath.Join(assetDir, "auth", "kubeconfig"), and
     pkg/agent/cluster.go NewCluster ends in logrus.Fatal when
     NewClusterKubeAPIClient cannot load it, release-4.21), so a file a kill cut
-    short stops every later wait. Only a regular file within the bound that
-    names no identity is replaced, and only by a kept copy that names the
+    short stops every later wait. A regular file within the bound that names
+    no identity, or a larger file whose last 8 KiB show it cut short, is
+    replaced only by a kept copy that names the
     identity the apply took from it before its first effect. A file naming an
-    identity, past the bound, missing or not a regular file is left as it is.
+    identity, a whole tail past the bound, missing or not a regular file is left as it is.
     """
     work = request["workRoot"]
     target = os.path.join(work, KUBECONFIG)
-    current = bounded(target)
-    if current is None or named(current):
+    if not cut_kubeconfig(target):
         return UNTOUCHED
     kept = bounded(os.path.join(work, KEPT))
     if not anchor or kept is None or named(kept) != anchor:

@@ -150,7 +150,7 @@ and N volumes, beside the work area's and the publication's copies of the same
 image. The emulator first writes the download to its container's temporary
 directory, so container storage needs the image size too. Observed by the v1
 implementation (main-v1) at about 1.3 GiB per agent image; re-verify on this
-tree. [B700](../../specs/milestones/m1.md#b700) owns the capacity admission this
+tree. [B700](../../specs/milestones/delivered.md#b700) owns the capacity admission this
 informs.
 
 ## Host firewall

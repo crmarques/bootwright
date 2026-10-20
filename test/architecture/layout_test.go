@@ -19,7 +19,6 @@ func stubCapabilities() map[string]bool {
 		"internal/addons/catalog":                true,
 		"internal/addons/preflight":              true,
 		"internal/containercluster/installation": true,
-		"internal/containercluster/preflight":    true,
 		"internal/environment/preflight":         true,
 		"internal/nativeartifacts/rendering":     true,
 		"internal/storage/rendering":             true,

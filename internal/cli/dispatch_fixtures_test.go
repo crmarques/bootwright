@@ -217,8 +217,8 @@ func (s environmentSpy) ClusterExec(ctx context.Context, request environmentacce
 
 type containerPreflightSpy struct{ record *dispatchRecord }
 
-func (s containerPreflightSpy) Check(ctx context.Context, request containerpreflight.PreflightRequest) error {
-	return s.record.called(ctx, "preflight container-cluster", request)
+func (s containerPreflightSpy) Check(ctx context.Context, request containerpreflight.PreflightRequest) (*containerpreflight.Report, error) {
+	return s.record.result.storagePreflight, s.record.called(ctx, "preflight container-cluster", request)
 }
 
 type storagePreflightSpy struct{ record *dispatchRecord }

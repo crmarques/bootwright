@@ -306,3 +306,48 @@ func TestVirtctlLatestRefusesUnstableOrUnprovenPublisherAssets(t *testing.T) {
 		})
 	}
 }
+
+type boundToolArea struct {
+	prerequisites.BundleArea
+	entries []prerequisites.BundleEntry
+}
+
+func (a boundToolArea) Entries(context.Context) ([]prerequisites.BundleEntry, error) {
+	return a.entries, nil
+}
+
+func TestContextLatestIgnoresANewerReleaseRetainedByAnotherContext(t *testing.T) {
+	request := controller.ToolRequest{Kind: "helm", Version: "latest"}
+	sources := []prerequisites.DependencySource{}
+	for _, version := range []string{"v4.2.3", "v4.2.4"} {
+		endpoint, _, err := sourceURL(request, version)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sources = append(sources, prerequisites.DependencySource{ID: toolSourcePrefix(request) + version, URL: endpoint, SHA256: strings.Repeat("a", 64), Bytes: 1024})
+	}
+	view := prerequisites.StorageView{Context: prerequisites.SetupContext{Name: "example"}, State: prerequisites.HostState{ToolSources: sources, Bindings: []prerequisites.ControllerBinding{{Context: "example", Tools: "bound-area"}}}, OpenBundle: func(_ context.Context, id string) (prerequisites.BundleArea, error) {
+		if id != "bound-area" {
+			t.Fatalf("opened %s", id)
+		}
+		return boundToolArea{entries: []prerequisites.BundleEntry{{Path: "sources/" + sources[0].ID}}}, nil
+	}}
+	selected, complete, err := prerequisites.SelectContextTools(context.Background(), &ToolCatalog{}, view, []controller.ToolRequest{request})
+	if err != nil || !complete || len(selected) != 1 || selected[0].Version != "v4.2.3" {
+		t.Fatalf("context selection: %+v %v %v", selected, complete, err)
+	}
+	view.State.Bindings = nil
+	selected, complete, err = prerequisites.SelectContextTools(context.Background(), &ToolCatalog{}, view, []controller.ToolRequest{request})
+	if err != nil || complete || len(selected) != 0 {
+		t.Fatalf("unbound context reused another context: %+v %v %v", selected, complete, err)
+	}
+}
+
+func TestOpenShiftToolRequestsRequireTheSharedExactReleaseGrammar(t *testing.T) {
+	for _, version := range []string{"4.21", "4.22.0-rc.1"} {
+		_, err := toolRequests([]controller.ToolRequest{{Kind: "openshift-install", Compatibility: "openshift", Version: version}}, frozenMirror)
+		if (err == nil) != (version == "4.22.0-rc.1") {
+			t.Fatalf("release %s: %v", version, err)
+		}
+	}
+}

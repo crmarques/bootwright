@@ -11,6 +11,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -594,22 +595,19 @@ func TestANodeOffTheArtifactServersHostRefusesBeforeRegistration(t *testing.T) {
 	}
 }
 
-// The rule is that the node's provider host is the server's placement Machine,
-// not that both are the controller: a node on hv-01 booted from a server on
-// hv-01 is not refused by it. Derivation still refuses that server, because the
-// image is built where the installer is, on the controller.
-func TestANodeOnTheArtifactServersHostIsNotRefusedForItsFetch(t *testing.T) {
+// A server placed with the provider still refuses if the installer is elsewhere.
+func TestAnOffControllerServerRefusesBeforeRegistration(t *testing.T) {
 	objects := append(append(base(), hypervisor()...), onRemote(guest("sno-01", "198.51.100.21/24")), servedBy("far-artifacts",
 		cluster("sno",
 			installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
 			node("master-0", "master", "sno-01", "master-0.sno.lab.example.test"))))
 	catalog := api.NewCatalog(objects)
-	if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 0 {
+	if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 1 {
 		t.Fatalf("unsupported = %v", unsupported)
 	}
 	_, _, _, err := Requests(catalog, "controller", testContext)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
+	if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" ||
 		reported[0].Message != "a cluster's boot image is built on the controller, so the server it is published through is placed there" {
 		t.Fatalf("refusal = %#v", reported)
 	}
@@ -831,5 +829,74 @@ func TestTheInstallRequestCarriesNoRootDeviceHint(t *testing.T) {
 	}
 	if !bytes.Equal(hintedBytes, compactBytes) {
 		t.Fatalf("the install request changed with the hints:\n%s\n%s", hintedBytes, compactBytes)
+	}
+}
+
+func TestProjectionRefusesUnnormalizedNetworksWithClusterIdentity(t *testing.T) {
+	for _, field := range []string{"clusterNetwork", "serviceNetwork"} {
+		catalog := singleNodeCatalog()
+		objects := catalog.Objects()
+		for i, object := range objects {
+			if object.Kind() == api.ContainerCluster {
+				objects[i] = object.WithSpec(object.Spec().WithPath(api.ListValue(), "networking", field))
+			}
+		}
+		_, _, _, err := Requests(api.NewCatalog(objects), "controller", testContext)
+		got := diagnostics.Of(err)
+		if len(got) != 1 || got[0].Code != "lifecycle.state" || got[0].Object == nil || got[0].Object.Name != "sno" || !strings.Contains(got[0].Remediation, "spec.networking") {
+			t.Fatalf("%s: %#v", field, got)
+		}
+	}
+}
+
+func TestAuthoredResolverListWithoutSelectionReachesInstaller(t *testing.T) {
+	catalog := singleNodeCatalog()
+	configuration, _ := catalog.Find(api.NetworkConfig, "lab-guests")
+	configuration = configuration.WithSpec(configuration.Spec().With("dns", api.ListValue()).WithPath(api.StringList("192.0.2.53", "192.0.2.54"), "nmstate", "dns-resolver", "config", "server"))
+	objects := catalog.Objects()
+	for i, object := range objects {
+		if object.Identity() == configuration.Identity() {
+			objects[i] = configuration
+		}
+	}
+	media, _, _ := onlyRequests(t, api.NewCatalog(objects))
+	host := media.AgentConfig["hosts"].([]any)[0].(map[string]any)
+	projected := host["networkConfig"].(map[string]any)
+	want := `{"config":{"server":["192.0.2.53","192.0.2.54"]}}`
+	if got := encoded(t, projected["dns-resolver"]); got != want {
+		t.Fatalf("resolver = %s", got)
+	}
+}
+
+func TestPublishedEndpointNamesAgreeWithInstallerProbes(t *testing.T) {
+	catalog := compactCatalog()
+	_, install, _ := onlyRequests(t, catalog)
+	records := managedservice.ClusterRecords(catalog)
+	for _, endpoint := range install.Endpoints {
+		found := slices.ContainsFunc(records, func(record managedservice.Record) bool {
+			matches := endpoint.Name == record.Name || record.Subtree && strings.HasSuffix(endpoint.Name, "."+record.Name)
+			return matches && slices.Contains(record.Addresses, endpoint.Address)
+		})
+		if !found {
+			t.Fatalf("installer endpoint %#v has no matching DNS record in %#v", endpoint, records)
+		}
+	}
+}
+
+func TestPlanningRefusalsNameClusterAndSelectedField(t *testing.T) {
+	for _, path := range [][]string{{"install", "pullSecretRef"}, {"install", "nodeSSH"}, {"install", "endpoints"}} {
+		catalog := singleNodeCatalog()
+		objects := catalog.Objects()
+		for i, object := range objects {
+			if object.Kind() == api.ContainerCluster {
+				objects[i] = object.WithSpec(object.Spec().WithPath(api.MapValue(), path...))
+			}
+		}
+		_, _, _, err := Requests(api.NewCatalog(objects), "controller", testContext)
+		got := diagnostics.Of(err)
+		field := "$.spec." + strings.Join(path, ".")
+		if len(got) != 1 || got[0].Object == nil || got[0].Object.Kind != "ContainerCluster" || got[0].Object.Name != "sno" || got[0].Field != field || !strings.Contains(got[0].Remediation, strings.TrimPrefix(field, "$.")) {
+			t.Fatalf("%s refusal = %#v", field, got)
+		}
 	}
 }

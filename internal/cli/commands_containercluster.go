@@ -11,7 +11,7 @@ import (
 )
 
 func containerPreflightCommand() commandSpec {
-	return commandSpec{path: "preflight container-cluster", short: "Check ContainerCluster readiness", flags: preflightFlags()}
+	return available(commandSpec{path: "preflight container-cluster", short: "Check ContainerCluster readiness", flags: []flagSpec{clustersFlag(), dryRunFlag()}})
 }
 
 func installerRenderCommand() commandSpec {
@@ -27,7 +27,7 @@ func containerAccessCommands() []commandSpec {
 }
 
 type ContainerPreflightService interface {
-	Check(context.Context, containerpreflight.PreflightRequest) error
+	Check(context.Context, containerpreflight.PreflightRequest) (*containerpreflight.Report, error)
 }
 
 type InstallerService interface {
@@ -40,21 +40,22 @@ type ClusterAccessService interface {
 	Kubeconfig(context.Context, containeraccess.KubeconfigRequest) (*containeraccess.KubeconfigResult, error)
 }
 
-func (s Services) invokeContainerPreflight(ctx context.Context, path string, values *requestValues, args []string) error {
+func (s Services) invokeContainerPreflight(ctx context.Context, path string, values *requestValues, args []string) (commandResult, error) {
 	if s.ContainerPreflight == nil {
-		return errMissingService
+		return commandResult{}, errMissingService
 	}
 	switch path {
 	case "preflight container-cluster":
-		return invokeRequest(ctx, values, containerpreflight.PreflightRequest{
+		report, err := invokeResult(ctx, values, containerpreflight.PreflightRequest{
 			ContextName:     values.text("context"),
 			Clusters:        values.names("clusters"),
 			DryRun:          values.boolean("dry-run"),
-			TrustOnFirstUse: values.boolean("trust-on-first-use"),
+			TrustOnFirstUse: values.optionalBoolean("trust-on-first-use"),
 			SSH:             values.ssh(),
 		}, s.ContainerPreflight.Check)
+		return commandResult{storagePreflight: report}, err
 	default:
-		return errors.New("command has no application dispatch")
+		return commandResult{}, errors.New("command has no application dispatch")
 	}
 }
 

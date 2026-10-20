@@ -5,6 +5,8 @@ import (
 	"errors"
 	"math"
 	"testing"
+
+	"github.com/crmarques/bootwright/internal/substrate/capacity"
 )
 
 type observeFunc func(context.Context, Target) (Facts, error)
@@ -12,14 +14,16 @@ type observeFunc func(context.Context, Target) (Facts, error)
 func (f observeFunc) Observe(ctx context.Context, target Target) (Facts, error) {
 	return f(ctx, target)
 }
-func fixtureBudget() Budget {
-	return Budget{Observer: observeFunc(func(context.Context, Target) (Facts, error) {
-		return Facts{Available: Quantities{8, 100, 1000}, CPUKnown: true, MemoryKnown: true, DiskKnown: true, DiskIdentity: "disk"}, nil
-	}), Reserves: func(Target) Reserve { return Reserve{Configured: true, Quantities: Quantities{1, 10, 100}} }}
+func fixtureBudget() capacity.Budget {
+	return capacity.Budget{Observer: observeFunc(func(context.Context, Target) (Facts, error) {
+		return Facts{Available: Quantities{CPU: 8, Memory: 100, Disk: 1000}, CPUKnown: true, MemoryKnown: true, DiskKnown: true, DiskIdentity: "disk"}, nil
+	}), Reserves: func(Target) Reserve {
+		return Reserve{Configured: true, Quantities: Quantities{CPU: 1, Memory: 10, Disk: 100}}
+	}}
 }
 func TestCapacityAggregatesSharedHostAndFilesystem(t *testing.T) {
 	b := fixtureBudget()
-	allocations := []Allocation{{Machine: "b", Host: "host", Pool: "/b", Quantities: Quantities{3, 40, 450}}, {Machine: "a", Host: "host", Pool: "/a", Quantities: Quantities{4, 50, 450}}}
+	allocations := []Allocation{{Machine: "b", Host: "host", Pool: "/b", Quantities: Quantities{CPU: 3, Memory: 40, Disk: 450}}, {Machine: "a", Host: "host", Pool: "/a", Quantities: Quantities{CPU: 4, Memory: 50, Disk: 450}}}
 	rows, err := b.Check(context.Background(), allocations, false)
 	if err != nil {
 		t.Fatal(err)
@@ -44,19 +48,19 @@ func TestCapacityAggregatesSharedHostAndFilesystem(t *testing.T) {
 	}
 }
 func TestCapacityNeverPassesUnprovedFactsOrReserve(t *testing.T) {
-	allocations := []Allocation{{Machine: "a", Host: "host", Pool: "/a", Quantities: Quantities{1, 1, 1}}}
+	allocations := []Allocation{{Machine: "a", Host: "host", Pool: "/a", Quantities: Quantities{CPU: 1, Memory: 1, Disk: 1}}}
 	for _, mode := range []string{"dry-run", "reserve", "missing", "contradictory", "negative"} {
 		t.Run(mode, func(t *testing.T) {
 			b := fixtureBudget()
 			calls := 0
 			b.Observer = observeFunc(func(context.Context, Target) (Facts, error) {
 				calls++
-				facts := Facts{Available: Quantities{8, 100, 1000}, CPUKnown: true, MemoryKnown: true, DiskKnown: true, DiskIdentity: "disk"}
+				facts := Facts{Available: Quantities{CPU: 8, Memory: 100, Disk: 1000}, CPUKnown: true, MemoryKnown: true, DiskKnown: true, DiskIdentity: "disk"}
 				switch mode {
 				case "missing":
 					return Facts{}, errors.New("private cause must not escape")
 				case "negative":
-					facts.Available = Quantities{-1, -1, -1}
+					facts.Available = Quantities{CPU: -1, Memory: -1, Disk: -1}
 				case "contradictory":
 					facts.CPUKnown = false
 					facts.MemoryKnown = false
@@ -85,7 +89,7 @@ func TestCapacityNeverPassesUnprovedFactsOrReserve(t *testing.T) {
 }
 func TestCapacityRejectsDuplicateOverflowAndCancellation(t *testing.T) {
 	b := fixtureBudget()
-	a := Allocation{Machine: "a", Host: "host", Pool: "/a", Quantities: Quantities{1, 1, 1}}
+	a := Allocation{Machine: "a", Host: "host", Pool: "/a", Quantities: Quantities{CPU: 1, Memory: 1, Disk: 1}}
 	if _, err := b.Check(context.Background(), []Allocation{a, a}, false); err == nil {
 		t.Fatal("duplicate Machine accepted")
 	}
@@ -104,9 +108,9 @@ func TestCapacityRejectsDuplicateOverflowAndCancellation(t *testing.T) {
 func TestAllocatedCapacityNeedsLiveCreditAndNeverDoubleCharges(t *testing.T) {
 	b := fixtureBudget()
 	b.Observer = observeFunc(func(context.Context, Target) (Facts, error) {
-		return Facts{Available: Quantities{8, 10, 100}, CPUKnown: true, MemoryKnown: true, DiskKnown: true, DiskIdentity: "disk", Reusable: map[string]Quantities{"a": {Memory: 90, Disk: 900}}}, nil
+		return Facts{Available: Quantities{CPU: 8, Memory: 10, Disk: 100}, CPUKnown: true, MemoryKnown: true, DiskKnown: true, DiskIdentity: "disk", Reusable: map[string]Quantities{"a": {Memory: 90, Disk: 900}}}, nil
 	})
-	rows, err := b.Check(context.Background(), []Allocation{{Machine: "a", Host: "host", Pool: "/a", Allocated: true, Quantities: Quantities{7, 90, 900}}}, false)
+	rows, err := b.Check(context.Background(), []Allocation{{Machine: "a", Host: "host", Pool: "/a", Allocated: true, Quantities: Quantities{CPU: 7, Memory: 90, Disk: 900}}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,9 +147,9 @@ func TestFailedOrPartialMachineWithoutReuseProofUsesOnlyFreeCapacity(t *testing.
 		status   string
 		deficit  int64
 	}{
-		{"failed-before-domain-sufficient", Quantities{7, 90, 900}, Passed, 0},
-		{"partial-disks-sufficient", Quantities{7, 80, 800}, Passed, 0},
-		{"partial-disks-insufficient", Quantities{7, 91, 901}, Failed, 1},
+		{"failed-before-domain-sufficient", Quantities{CPU: 7, Memory: 90, Disk: 900}, Passed, 0},
+		{"partial-disks-sufficient", Quantities{CPU: 7, Memory: 80, Disk: 800}, Passed, 0},
+		{"partial-disks-insufficient", Quantities{CPU: 7, Memory: 91, Disk: 901}, Failed, 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			rows, err := fixtureBudget().Check(context.Background(), []Allocation{{Machine: "attempted", Host: "host", Pool: "/pool", Allocated: true, Quantities: test.required}}, false)
@@ -174,16 +178,16 @@ func TestUnprovedReuseMakesADeficitUnknownNotFailed(t *testing.T) {
 		required Quantities
 		statuses map[string]string
 	}{
-		{"runtime-unproved-deficit", map[string]Quantities{"m1": {Disk: 900}}, Quantities{7, 91, 900}, map[string]string{"capacity.memory": Unknown, "capacity.disk": Passed}},
-		{"runtime-unproved-ample", map[string]Quantities{"m1": {Disk: 900}}, Quantities{7, 90, 900}, map[string]string{"capacity.memory": Passed, "capacity.disk": Passed}},
-		{"runtime-unproved-disk-deficit", map[string]Quantities{"m1": {Disk: 900}}, Quantities{7, 90, 1801}, map[string]string{"capacity.memory": Passed, "capacity.disk": Failed}},
-		{"config-unproved-deficit", nil, Quantities{7, 91, 901}, map[string]string{"capacity.memory": Unknown, "capacity.disk": Unknown}},
-		{"config-unproved-ample", nil, Quantities{7, 90, 900}, map[string]string{"capacity.memory": Passed, "capacity.disk": Passed}},
+		{"runtime-unproved-deficit", map[string]Quantities{"m1": {Disk: 900}}, Quantities{CPU: 7, Memory: 91, Disk: 900}, map[string]string{"capacity.memory": Unknown, "capacity.disk": Passed}},
+		{"runtime-unproved-ample", map[string]Quantities{"m1": {Disk: 900}}, Quantities{CPU: 7, Memory: 90, Disk: 900}, map[string]string{"capacity.memory": Passed, "capacity.disk": Passed}},
+		{"runtime-unproved-disk-deficit", map[string]Quantities{"m1": {Disk: 900}}, Quantities{CPU: 7, Memory: 90, Disk: 1801}, map[string]string{"capacity.memory": Passed, "capacity.disk": Failed}},
+		{"config-unproved-deficit", nil, Quantities{CPU: 7, Memory: 91, Disk: 901}, map[string]string{"capacity.memory": Unknown, "capacity.disk": Unknown}},
+		{"config-unproved-ample", nil, Quantities{CPU: 7, Memory: 90, Disk: 900}, map[string]string{"capacity.memory": Passed, "capacity.disk": Passed}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			b := fixtureBudget()
 			b.Observer = observeFunc(func(context.Context, Target) (Facts, error) {
-				return Facts{Available: Quantities{8, 100, 1000}, CPUKnown: true, MemoryKnown: true, DiskKnown: true, DiskIdentity: "disk", Reusable: test.reusable, Unproved: map[string]string{"m1": "the runtime process changed during observation"}}, nil
+				return Facts{Available: Quantities{CPU: 8, Memory: 100, Disk: 1000}, CPUKnown: true, MemoryKnown: true, DiskKnown: true, DiskIdentity: "disk", Reusable: test.reusable, Unproved: map[string]string{"m1": "the runtime process changed during observation"}}, nil
 			})
 			rows, err := b.Check(context.Background(), []Allocation{{Machine: "m1", Host: "host", Pool: "/pool", Allocated: true, Quantities: test.required}}, false)
 			if err != nil {
@@ -220,7 +224,7 @@ func TestUnprovedReuseInALaterPoolMakesTheSharedDeficitUnknown(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			b := fixtureBudget()
 			b.Observer = observeFunc(func(_ context.Context, target Target) (Facts, error) {
-				facts := Facts{Available: Quantities{8, 100, 1000}, CPUKnown: true, MemoryKnown: true, DiskKnown: true, DiskIdentity: "disk"}
+				facts := Facts{Available: Quantities{CPU: 8, Memory: 100, Disk: 1000}, CPUKnown: true, MemoryKnown: true, DiskKnown: true, DiskIdentity: "disk"}
 				if !test.shared {
 					facts.DiskIdentity = "disk" + target.Pool
 				}
@@ -229,7 +233,7 @@ func TestUnprovedReuseInALaterPoolMakesTheSharedDeficitUnknown(t *testing.T) {
 				}
 				return facts, nil
 			})
-			allocations := []Allocation{{Machine: "m0", Host: "host", Pool: "/a", Quantities: Quantities{3, 50, 50}}, {Machine: "m1", Host: "host", Pool: "/b", Allocated: true, Quantities: Quantities{3, 41, 901}}}
+			allocations := []Allocation{{Machine: "m0", Host: "host", Pool: "/a", Quantities: Quantities{CPU: 3, Memory: 50, Disk: 50}}, {Machine: "m1", Host: "host", Pool: "/b", Allocated: true, Quantities: Quantities{CPU: 3, Memory: 41, Disk: 901}}}
 			rows, err := b.Check(context.Background(), allocations, false)
 			if err != nil {
 				t.Fatal(err)

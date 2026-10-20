@@ -332,7 +332,7 @@ func TestKubernetesLabelsAndRepeatedTaints(t *testing.T) {
 			t.Fatal("invalid label accepted", key)
 		}
 	}
-	if !labelKey("kubernetes.io/role") || !labelValue("") || labelValue("bad value") {
+	if !api.ValidLexical("kubernetes-label-key", "kubernetes.io/role") || !api.ValidLexical("kubernetes-label-value", "") || api.ValidLexical("kubernetes-label-value", "bad value") {
 		t.Fatal("label grammar")
 	}
 }
@@ -482,7 +482,7 @@ func TestTopologyRefusesComputeBesideOneMaster(t *testing.T) {
 }
 
 func TestTopologyAppliesTheGeneralRuleToEveryReleaseMinor(t *testing.T) {
-	for version, minor := range map[string]string{"4.20.3": "4.20", "4.22.18": "4.22", "4.23.0": "4.23", "5.0.1": "5.0", "latest": "latest"} {
+	for version, minor := range map[string]string{"4.20.3": "4.20", "4.22.18": "4.22", "4.23.0": "4.23", "5.0.1": "5.0"} {
 		t.Run(version, func(t *testing.T) {
 			release := func(spec api.Value) api.Value {
 				spec = spec.WithPath(api.StringValue("stable-"+minor), "distribution", "release", "channel")
@@ -653,4 +653,16 @@ func hasField(issues []api.Issue, field string) bool {
 		}
 	}
 	return false
+}
+
+func TestReleaseVersionRequiresAPatchAndAcceptsPublisherPrereleases(t *testing.T) {
+	for _, version := range []string{"4.21", "4.22.0-rc.1"} {
+		object, catalog := roster("libvirt", []string{"master", "master", "master"}, func(spec api.Value) api.Value {
+			return spec.WithPath(api.StringValue(version), "distribution", "release", "version")
+		})
+		issues := Validate(object, catalog)
+		if (len(issues) == 0) != (version == "4.22.0-rc.1") {
+			t.Fatalf("release %s: %+v", version, issues)
+		}
+	}
 }

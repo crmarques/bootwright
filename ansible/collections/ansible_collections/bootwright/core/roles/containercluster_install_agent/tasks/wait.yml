@@ -97,5 +97,6 @@
                                is search(containercluster_install_agent_timeout_pattern))
                            else containercluster_install_agent_unclassified_hint))) }}
       The installer did not reach {{ containercluster_install_agent_milestone }} for
-      {{ bootwright_cluster_install_request.identity.cluster }}.
+      {{ bootwright_cluster_install_request.identity.cluster }}.{{ " This apply restored the installer's kubeconfig from the kept copy before waiting."
+         if containercluster_install_agent_restored | default(false) | bool else '' }}
   when: containercluster_install_agent_wait.rc != 0

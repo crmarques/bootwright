@@ -7,6 +7,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/secrets/material"
 )
 
 // An attempt that holds no retained controller areas names the setup and the
@@ -32,12 +33,11 @@ func TestAnUnboundAdministrationKeyNamesTheCommandThatReopensIt(t *testing.T) {
 		if continuation == "" {
 			want = "run bootwright status --context lab and repeat the command it names, which reopens this operation's Secret bindings"
 		}
-		for code, material := range map[string]map[string]secrets.Material{
+		for code, bound := range map[string]map[string]secrets.Material{
 			"secret.store": {},
-			"secret.part":  {reference: secrets.NewMaterial(map[secrets.Part][]byte{secrets.PrivateKeyPart: []byte("private")})},
 		} {
-			execution := lifecycle.Execution{Context: "lab", Continuation: continuation, Material: material}
-			_, err := publicHalf(execution, reference)
+			execution := lifecycle.Execution{Context: "lab", Continuation: continuation, Material: bound}
+			_, err := NewMedia(nil, material.AuthorizedKey).publicHalf(execution, reference)
 			if got := diagnostics.Of(err); len(got) != 1 || got[0].Code != code || got[0].Remediation != want {
 				t.Fatalf("continuation %q, %s: refused with %#v, want the remedy %q", continuation, code, got, want)
 			}

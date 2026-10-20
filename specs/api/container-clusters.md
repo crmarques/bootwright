@@ -7,6 +7,9 @@ installing one does. [The compiler boundary](../api.md#compiler-boundary)
 applies; `platform.external` remains inert until validated by a
 release-specific consumer.
 
+ContainerCluster `metadata.name` is limited to 47 bytes so its installation
+block identity fits the 63-byte bound.
+
 ## Shape
 
 ```yaml
@@ -52,7 +55,7 @@ spec:
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `spec.distribution.type` | string | no | `openshift` | `openshift` or `okd`. |
-| `spec.distribution.release.version` | string | conditional | — | Release version; required unless a pinned `image` is present. |
+| `spec.distribution.release.version` | string | conditional | — | Exact `major.minor.patch` publisher release, including prereleases such as `4.22.0-rc.1`; required unless a pinned `image` is present. |
 | `spec.distribution.release.channel` | string | no | derived for OpenShift | OpenShift-only. With OpenShift `version` and no `image`, omission defaults to `stable-<major>.<minor>`. |
 | `spec.distribution.release.image` | string | conditional | — | Release-image pull spec pinned by a version tag or SHA-256 digest; untagged and `latest` selections are rejected. |
 
@@ -282,9 +285,9 @@ whole; key-pair and split-key choices are never combined through defaults.
 The reference must still resolve. Public-only material is sufficient to
 declare installation but cannot authorize a cluster SSH command.
 
-Not yet met: an opaque public-only `publicKeyRef` passes admission and planning
-but the media apply reads only an `sshKeyPair` public part and fails; tracked
-as [B306](../milestones/m3.md#b306).
+Media projection reads one authorized-key line from the `sshKeyPair` public
+part or the opaque `publicKeyRef` value. A malformed value refuses before the
+adapter runs and names the Secret to correct.
 
 `servingCertificates` admits only:
 

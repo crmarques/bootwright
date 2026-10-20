@@ -5,6 +5,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 // Runner performs one authorized operation through the fixed Ansible
@@ -22,3 +23,5 @@ type Runner interface {
 type Identities interface {
 	PinnedIdentity(name string, proved []lifecycle.BlockEvidence) (machine.HardwareIdentity, bool, error)
 }
+
+type AuthorizedKey func(secrets.Material, string) (string, error)

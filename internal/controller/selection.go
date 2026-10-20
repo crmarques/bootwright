@@ -20,6 +20,7 @@ type Selection struct {
 	libvirtClient    bool
 	hypervisor       bool
 	installerMedia   bool
+	nmstate          bool
 	route            Route
 	versions         DependencyVersions
 }
@@ -29,6 +30,7 @@ func (s Selection) MachineName() string          { return s.machineName }
 func (s Selection) ContainerRuntime() bool       { return s.containerRuntime }
 func (s Selection) LibvirtClient() bool          { return s.libvirtClient }
 func (s Selection) Hypervisor() bool             { return s.hypervisor }
+func (s Selection) NMState() bool                { return s.nmstate }
 func (s Selection) InstallerMedia() bool         { return s.installerMedia }
 func (s Selection) Route() Route                 { return s.route }
 func (s Selection) Versions() DependencyVersions { return s.versions }
@@ -38,7 +40,7 @@ func (s Selection) Versions() DependencyVersions { return s.versions }
 // hypervisor closure or the installer-media tooling, and a context selecting
 // none of them has nothing for it to run.
 func HasStage(selection Selection, tools []ToolRequest) bool {
-	return len(tools) != 0 || selection.LibvirtClient() || selection.Hypervisor() || selection.InstallerMedia()
+	return len(tools) != 0 || selection.LibvirtClient() || selection.Hypervisor() || selection.InstallerMedia() || selection.NMState()
 }
 
 // Route contains explicit setup acquisition policy without Secret references or
@@ -129,7 +131,7 @@ func Select(catalog api.Catalog) (Selection, error) {
 		environmentName: environment.Name(), machineName: machine.Name(),
 		containerRuntime: containerRuntime, libvirtClient: requiresLibvirtClient(catalog, machine),
 		hypervisor: requiresHypervisor(catalog, machine), installerMedia: requiresInstallerMedia(catalog, machine),
-		route: route, versions: versions,
+		route: route, versions: versions, nmstate: requiresNMState(catalog),
 	}, nil
 }
 
@@ -396,4 +398,18 @@ func refuseSelection(object api.Object, code, field, message, remediation string
 		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(object.Kind()), Name: object.Name()}
 	}
 	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{diagnostic}}
+}
+
+func requiresNMState(catalog api.Catalog) bool {
+	for _, cluster := range catalog.OfKind(api.ContainerCluster) {
+		if cluster.Spec().Get("install", "method").Text() != "agent" {
+			continue
+		}
+		for _, node := range cluster.Spec().Get("nodes").Items() {
+			if _, found := catalog.Find(api.Machine, node.Get("machineRef").Text()); found {
+				return true
+			}
+		}
+	}
+	return false
 }

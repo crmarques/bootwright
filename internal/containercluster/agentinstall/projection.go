@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/containercluster"
+	environmentdomain "github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -17,12 +19,7 @@ const (
 	agentConfigKind      = "AgentConfig"
 )
 
-// The network defaults the API normalizes to, repeated here only as the values
-// a cluster installs with when it declares none.
 const (
-	defaultNetworkCIDR   = "10.128.0.0/14"
-	defaultHostPrefix    = 23
-	defaultServiceCIDR   = "172.30.0.0/16"
 	defaultComputePool   = "worker"
 	defaultControlPlane  = "master"
 	placeholderPullToken = ""
@@ -33,10 +30,10 @@ const (
 // bundles the cluster selects are named in the request and substituted by the
 // attempt that writes this document.
 func installConfig(catalog api.Catalog, cluster api.Object, nodes []nodeProjection) (map[string]any, error) {
-	zone := containerClusterZone(catalog)
+	zone := environmentdomain.ContainerClusterDomain(catalog)
 	if zone == "" {
-		return nil, refusal("api.required", "the Environment declares no zone for container clusters",
-			"set spec.domains.base or spec.domains.containerClusters")
+		return nil, refusalAt("api.required", "$.spec.install", "the Environment declares no zone for container clusters",
+			"set spec.domains.base or spec.domains.containerClusters on the Environment")
 	}
 	platform, err := installPlatform(cluster, nodes)
 	if err != nil {
@@ -94,13 +91,12 @@ func installPlatform(cluster api.Object, nodes []nodeProjection) (map[string]any
 		}
 		return map[string]any{"baremetal": arm}, nil
 	}
-	return nil, refusal("lifecycle.state", "this executable installs no cluster on the declared platform",
+	return nil, refusalAt("lifecycle.state", "$.spec.install.platform", "this executable installs no cluster on the declared platform",
 		"declare a baremetal platform, or none, on "+cluster.Identity())
 }
 
 // multiNodePlatform reports whether a cluster of more than one node installs on
-// the platform it declares: bare metal, or none, which is also what declaring
-// no platform selects. Selection refuses every other platform before
+// the platform it declares: bare metal or none. Selection refuses every other platform before
 // registration, so the refusal above is a guard that planning never reaches.
 func multiNodePlatform(declared string) bool {
 	return declared == "" || declared == "none" || declared == "baremetal"
@@ -158,10 +154,13 @@ func clusterNetworking(catalog api.Catalog, cluster api.Object, nodes []nodeProj
 		}
 	}
 	if len(machineNetworks) == 0 {
-		return nil, refusal("api.required", "the cluster's nodes declare no machine network",
-			"set spec.machineNetwork on the NetworkConfig of "+cluster.Identity())
+		return nil, refusalAt("api.required", "$.spec.nodes", "the cluster's nodes declare no machine network",
+			"set spec.network.inline.machineNetwork on each node Machine or spec.machineNetwork on its selected NetworkConfig in "+cluster.Identity())
 	}
 	networking := cluster.Spec().Get("networking")
+	if networking.Get("clusterNetwork").Len() == 0 || networking.Get("serviceNetwork").Len() == 0 {
+		return nil, refusalAt("lifecycle.state", "$.spec.networking", "normalized cluster networking is empty", "recompile "+cluster.Identity()+" with normalization before projecting spec.networking")
+	}
 	out := map[string]any{
 		"machineNetwork": machineNetworks,
 		"clusterNetwork": clusterNetworks(networking),
@@ -175,9 +174,6 @@ func clusterNetworking(catalog api.Catalog, cluster api.Object, nodes []nodeProj
 
 func clusterNetworks(networking api.Value) []any {
 	declared := networking.Get("clusterNetwork").Items()
-	if len(declared) == 0 {
-		return []any{map[string]any{"cidr": defaultNetworkCIDR, "hostPrefix": defaultHostPrefix}}
-	}
 	out := make([]any, 0, len(declared))
 	for _, network := range declared {
 		entry := map[string]any{"cidr": network.Get("cidr").Text()}
@@ -191,9 +187,6 @@ func clusterNetworks(networking api.Value) []any {
 
 func serviceNetworks(networking api.Value) []any {
 	declared := networking.Get("serviceNetwork").Strings()
-	if len(declared) == 0 {
-		return []any{defaultServiceCIDR}
-	}
 	out := make([]any, 0, len(declared))
 	for _, cidr := range declared {
 		out = append(out, cidr)
@@ -233,7 +226,7 @@ func agentConfig(cluster api.Object, nodes []nodeProjection, timeSources []strin
 		hosts = append(hosts, host)
 	}
 	if rendezvous == "" {
-		return nil, refusal("api.required", "the cluster declares no master node to rendezvous on",
+		return nil, refusalAt("api.required", "$.spec.nodes", "the cluster declares no master node to rendezvous on",
 			"declare one on "+cluster.Identity())
 	}
 	config := map[string]any{
@@ -360,35 +353,14 @@ func nativeValue(value api.Value) any {
 	return value.Text()
 }
 
-// containerClusterZone is the zone container clusters are named under.
-// Effective state materializes it, so this reads one field rather than
-// repeating the Environment's own defaulting.
-func containerClusterZone(catalog api.Catalog) string {
-	environments := catalog.OfKind(api.Environment)
-	if len(environments) != 1 {
-		return ""
-	}
-	return environments[0].Spec().Get("domains", "containerClusters").Text()
-}
-
-// endpointNames are the names the controller must resolve before any node is
-// booted. The applications name is probed through one name beneath it, because
-// that is how every route beneath the wildcard is reached.
-func endpointNames(cluster api.Catalog, object api.Object) []Endpoint {
-	zone := containerClusterZone(cluster)
-	if zone == "" {
-		return nil
-	}
-	suffix := "." + object.Name() + "." + zone
-	endpoints := object.Spec().Get("install", "endpoints")
+func endpointNames(catalog api.Catalog, object api.Object) []Endpoint {
 	var names []Endpoint
-	for _, slot := range []string{"api", "api-int"} {
-		if address := endpoints.Get(slot, "address").Text(); address != "" {
-			names = append(names, Endpoint{Address: address, Name: slot + suffix})
+	for _, endpoint := range containercluster.Endpoints(catalog, object) {
+		name := endpoint.Name
+		if endpoint.Subtree {
+			name = "console-openshift-console." + name
 		}
-	}
-	if address := endpoints.Get("ingress", "address").Text(); address != "" {
-		names = append(names, Endpoint{Address: address, Name: "console-openshift-console.apps" + suffix})
+		names = append(names, Endpoint{Name: name, Address: endpoint.Address})
 	}
 	slices.SortFunc(names, func(x, y Endpoint) int { return strings.Compare(x.Name, y.Name) })
 	return names

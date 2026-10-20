@@ -45,6 +45,12 @@
       "bootwright apply --context lab"
     ],
     "lifecycle": null,
+    "handoff": {
+      "ready": false,
+      "reasons": [
+        "no apply is recorded"
+      ]
+    },
     "contradictions": []
   },
   "diagnostics": [],

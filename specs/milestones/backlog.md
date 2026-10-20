@@ -432,7 +432,7 @@ A bounded run's rebind is limited to three bindings rather than closed, which a 
 
 The agent-install removal observation still resolves the openshift-install and oc paths although it runs no oc read; the destroy that follows needs them (found in X29). **Exit evidence:** an observation that resolves only what it runs.
 
-[B309](m3.md#b309) makes the installation block's tool-resolution failure deterministic; this item keeps the removal observation's resolution.
+[B309](delivered.md#b309) makes the installation block's tool-resolution failure deterministic; this item keeps the removal observation's resolution.
 
 ### B194
 
@@ -2044,6 +2044,12 @@ differing. **Outcome:** that test too is deterministic under concurrent gate
 runs or its cause is recorded. **Exit evidence:** repeated concurrent gate runs
 of the file with no mismatch.
 
+M3b's full gate on 2026-10-20 observed the same Python 3.9 `names0`
+failure. File bytes, inode, mode, ownership, size, modification time and change
+time matched; only access time differed after the read. Neither the test nor
+its production module is changed by M3b. This remains B633's follow-up rather
+than a change to the M3b implementation.
+
 ### B634
 
 The runbook's validation text and its Dashboard and IBM Call Home rows assume
@@ -2624,7 +2630,7 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | C27 | before 2026-09 | Delivered by [X3](delivered.md#x3--machine-ssh-sessions-and-host-trust). |
 | R1 | 2026-09-28 | Merged into [B19](delivered.md#x93--the-owner-run-of-2026-10-14) with C28, whose outcome it was. |
 | M2a, M2b, M3, M4, M5, M6 | 2026-09-28 | These rows became items whose Alias cells name them; the numbers M3 to M6 now name milestones. |
-| M1h, M5a, M4a, M1i | 2026-09-28 | Became [B72](delivered.md#x38--the-real-host-run-of-2026-10-05), [B73](m1.md#b73), [B61](m3.md#b61) and [B71](m3.md#b71); these M-letter IDs are no longer issued. |
+| M1h, M5a, M4a, M1i | 2026-09-28 | Became [B72](delivered.md#x38--the-real-host-run-of-2026-10-05), [B73](m1.md#b73), [B61](m3.md#b61) and [B71](delivered.md#b71); these M-letter IDs are no longer issued. |
 | N1 to N5, L2, L4, L5, L6 | 2026-09-28 | Became items whose Alias cells name them; L1 and L3 never existed. |
 | K01 to K73 | 2026-09-28 | The audit plan's cluster tokens, defined nowhere in the repository; the grouping stays in Git history. |
 | Phase 0 to Phase 4 | 2026-09-28 | The audit plan's ordering; slices carry order now. |
@@ -2650,7 +2656,7 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | B62 | 2026-10-20 | Alias L2. Folded under [D172](#decisions) into [B713](m3.md#b713) and each M3 item's own planning goldens; it named no bounded shape. |
 | B63 | 2026-10-20 | Alias L4. Folded under [D172](#decisions) into [B713](m3.md#b713); each later shape carries its own lifecycle journeys. |
 | B65 | 2026-10-20 | Alias L6. Retired under [D172](#decisions): every M3 item carries the contract, crash, replay, cancellation and real-system evidence of its own binding. |
-| B397 | 2026-10-20 | Folded under [D172](#decisions) into [B308](m3.md#b308), whose refusal-table rows include the off-controller boot-image server. |
+| B397 | 2026-10-20 | Folded under [D172](#decisions) into [B308](delivered.md#b308), whose refusal-table rows include the off-controller boot-image server. |
 
 ## Decisions
 

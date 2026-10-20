@@ -9,12 +9,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/secrets/material"
 	"go.yaml.in/yaml/v3"
 
 	"github.com/crmarques/bootwright/ansible"
 	controllerscope "github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -57,7 +59,7 @@ func planInput(verb reconciliation.Verb) lifecycle.PlanInput {
 
 func onlyBlock(t *testing.T, verb reconciliation.Verb) (reconciliation.BlockDefinition, lifecycle.CapabilityPlan) {
 	t.Helper()
-	plan, err := NewMedia(nil).Plan(context.Background(), planInput(verb))
+	plan, err := NewMedia(nil, material.AuthorizedKey).Plan(context.Background(), planInput(verb))
 	if err != nil {
 		t.Fatalf("planning: %v", err)
 	}
@@ -85,7 +87,7 @@ func mediaExecution(t *testing.T, digest string) (lifecycle.Execution, MediaRequ
 			}),
 			"openshift-pull-secret": secrets.NewMaterial(nil),
 			"sno-cluster-admin-ssh-key": secrets.NewMaterial(map[secrets.Part][]byte{
-				secrets.PublicKeyPart: []byte("ssh-ed25519 AAAAPUBLIC cluster\n"),
+				secrets.PublicKeyPart: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA cluster\n"),
 			}),
 		},
 		LocateTool: locatorOver(retainedController()),
@@ -188,7 +190,7 @@ func TestMediaDestroyPlanDescribesOnlyRemoval(t *testing.T) {
 		}
 	}
 	block := reconciliation.Block{BlockDefinition: definition}
-	removal, err := NewMedia(nil).Removal(context.Background(), applyRequest(t))
+	removal, err := NewMedia(nil, material.AuthorizedKey).Removal(context.Background(), applyRequest(t))
 	if err != nil {
 		t.Fatalf("removal: %v", err)
 	}
@@ -213,7 +215,7 @@ func applyRequest(t *testing.T) reconciliation.Block {
 func TestAnApplyCrossesTheAdapterWithItsInstallerAndBoundMaterial(t *testing.T) {
 	execution, _ := mediaExecution(t, testDigest)
 	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: mediaEvidence(t, testDigest, nil)}}
-	result, err := NewMedia(runner).Apply(context.Background(), execution)
+	result, err := NewMedia(runner, material.AuthorizedKey).Apply(context.Background(), execution)
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -233,7 +235,7 @@ func TestAnApplyCrossesTheAdapterWithItsInstallerAndBoundMaterial(t *testing.T) 
 		!strings.HasSuffix(request.MaterialValues["installer"], "/tools/openshift-install/openshift/4.21.15/openshift-install") {
 		t.Fatalf("installer = %q", request.MaterialValues["installer"])
 	}
-	if request.MaterialValues["sshKey"] != "ssh-ed25519 AAAAPUBLIC cluster" {
+	if request.MaterialValues["sshKey"] != "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA cluster" {
 		t.Fatalf("cluster key = %q", request.MaterialValues["sshKey"])
 	}
 	if !slices.ContainsFunc(request.Materials, func(file lifecycle.MaterialFile) bool {
@@ -254,7 +256,7 @@ func TestTheProbeVerifiesTheListenerAgainstTheBoundServingCertificate(t *testing
 		t.Fatalf("the request binds serving certificate %q", request.TLSCertificateRef)
 	}
 	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: mediaEvidence(t, testDigest, nil)}}
-	if _, err := NewMedia(runner).Apply(context.Background(), execution); err != nil {
+	if _, err := NewMedia(runner, material.AuthorizedKey).Apply(context.Background(), execution); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	var bound []lifecycle.MaterialFile
@@ -300,12 +302,12 @@ func TestTheMediaRunIsLentOnlyTheServingCertificateOfTheServersSecret(t *testing
 		}),
 		request.PullSecretRef: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(`{"auths":{}}`)}),
 		request.SSHKeyRef: secrets.NewMaterial(map[secrets.Part][]byte{
-			secrets.PublicKeyPart:  []byte("ssh-ed25519 AAAAPUBLIC cluster\n"),
+			secrets.PublicKeyPart:  []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA cluster\n"),
 			secrets.PrivateKeyPart: []byte("CLUSTER KEY"),
 		}),
 	}
 	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: mediaEvidence(t, testDigest, nil)}}
-	if _, err := NewMedia(runner).Apply(context.Background(), execution); err != nil {
+	if _, err := NewMedia(runner, material.AuthorizedKey).Apply(context.Background(), execution); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	lent := map[string][]secrets.Part{}
@@ -335,7 +337,7 @@ func TestEachTrustBundleReachesTheAdapterInTheOrderTheClusterSelects(t *testing.
 	}
 	execution.Block.ID, execution.Block.Request = MediaBlockID("ocp"), canonical
 	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: mediaEvidence(t, testDigest, nil)}}
-	if _, err := NewMedia(runner).Apply(context.Background(), execution); err != nil {
+	if _, err := NewMedia(runner, material.AuthorizedKey).Apply(context.Background(), execution); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	var bound []lifecycle.MaterialFile
@@ -366,7 +368,7 @@ func TestAnAbsentInstallerRefusesBeforeBuilding(t *testing.T) {
 		OpenBundle: func(context.Context, string) (prerequisites.BundleArea, error) { return nil, nil },
 	}, selected)
 	runner := &fakeRunner{}
-	if _, err := NewMedia(runner).Apply(context.Background(), execution); err == nil {
+	if _, err := NewMedia(runner, material.AuthorizedKey).Apply(context.Background(), execution); err == nil {
 		t.Fatal("an apply ran without the installer its release names")
 	} else if code := refusalCode(t, err); code != "controller.state" {
 		t.Fatalf("refusal = %s", code)
@@ -388,7 +390,7 @@ func TestEvidenceThatProvesAnotherBuildIsRefused(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			execution, _ := mediaExecution(t, testDigest)
 			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: mediaEvidence(t, testDigest, mutate)}}
-			result, err := NewMedia(runner).Apply(context.Background(), execution)
+			result, err := NewMedia(runner, material.AuthorizedKey).Apply(context.Background(), execution)
 			if err == nil {
 				t.Fatal("unproved evidence was accepted")
 			}
@@ -424,7 +426,7 @@ func TestObservationClassifiesWhatItFound(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			execution, _ := mediaExecution(t, testDigest)
 			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: mediaEvidence(t, testDigest, expectation.mutate)}}
-			observation, err := NewMedia(runner).Observe(context.Background(), execution)
+			observation, err := NewMedia(runner, material.AuthorizedKey).Observe(context.Background(), execution)
 			if err != nil {
 				t.Fatalf("observe: %v", err)
 			}
@@ -467,7 +469,7 @@ func TestAMediaRemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			execution, _ := mediaExecution(t, testDigest)
 			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: mediaEvidence(t, testDigest, expectation.mutate)}, err: expectation.err}
-			observation, err := NewMedia(runner).ObserveRemoval(context.Background(), execution)
+			observation, err := NewMedia(runner, material.AuthorizedKey).ObserveRemoval(context.Background(), execution)
 			if !errors.Is(err, expectation.err) || observation.Effect != expectation.effect {
 				t.Fatalf("removal observation = %+v (%v), want %q", observation, err, expectation.effect)
 			}
@@ -485,13 +487,13 @@ func TestAMediaRemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 // other run of this block declares an output (D124).
 func TestTheMediaRemovalKeepsTheInstallationsKubeconfig(t *testing.T) {
 	execution, _ := mediaExecution(t, testDigest)
-	entry, keeps, err := NewMedia(nil).Keeps(execution.Block)
+	entry, keeps, err := NewMedia(nil, material.AuthorizedKey).Keeps(execution.Block)
 	if err != nil || !keeps || entry != (lifecycle.KeptEntry{Block: InstallBlockID("sno"), Name: KubeconfigOutput}) {
 		t.Fatalf("keeps = %+v, %t (%v)", entry, keeps, err)
 	}
 	access := []lifecycle.Produced{{Name: KubeconfigOutput, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("apiVersion: v1\n")})}}
 	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: mediaEvidence(t, testDigest, nil), Produced: access}}
-	produced, err := NewMedia(runner).Keep(context.Background(), execution)
+	produced, err := NewMedia(runner, material.AuthorizedKey).Keep(context.Background(), execution)
 	defer lifecycle.ClearProduced(produced)
 	if err != nil || len(produced) != 1 || produced[0].Name != KubeconfigOutput {
 		t.Fatalf("keep = %+v (%v)", produced, err)
@@ -501,14 +503,14 @@ func TestTheMediaRemovalKeepsTheInstallationsKubeconfig(t *testing.T) {
 		t.Fatalf("adapter invocation = %+v", runner.requests)
 	}
 	failing := &fakeRunner{err: errors.New("unreachable")}
-	if produced, err := NewMedia(failing).Keep(context.Background(), execution); err == nil || len(produced) != 0 {
+	if produced, err := NewMedia(failing, material.AuthorizedKey).Keep(context.Background(), execution); err == nil || len(produced) != 0 {
 		t.Fatalf("a failed keep = %+v (%v)", produced, err)
 	}
 	other := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: mediaEvidence(t, testDigest, nil)}}
-	if _, err := NewMedia(other).ObserveRemoval(context.Background(), execution); err != nil || len(other.requests[0].Outputs) != 0 {
+	if _, err := NewMedia(other, material.AuthorizedKey).ObserveRemoval(context.Background(), execution); err != nil || len(other.requests[0].Outputs) != 0 {
 		t.Fatalf("the removal observation declared %+v (%v)", other.requests, err)
 	}
-	if _, err := NewMedia(other).Destroy(context.Background(), execution); len(other.requests) != 2 || len(other.requests[1].Outputs) != 0 {
+	if _, err := NewMedia(other, material.AuthorizedKey).Destroy(context.Background(), execution); len(other.requests) != 2 || len(other.requests[1].Outputs) != 0 {
 		t.Fatalf("the removal declared %+v (%v)", other.requests, err)
 	}
 }
@@ -516,7 +518,7 @@ func TestTheMediaRemovalKeepsTheInstallationsKubeconfig(t *testing.T) {
 // Removing this block takes back only what it published, so nothing it owns is
 // still in use when the gate asks.
 func TestTheBootMediaIsAlwaysQuiescent(t *testing.T) {
-	quiescence, err := NewMedia(nil).Quiescent(context.Background(), lifecycle.Probe{})
+	quiescence, err := NewMedia(nil, material.AuthorizedKey).Quiescent(context.Background(), lifecycle.Probe{})
 	if err != nil || !quiescence.Settled() {
 		t.Fatalf("quiescence = %+v (%v)", quiescence, err)
 	}
@@ -533,5 +535,35 @@ func TestTheSelectedClientsMatchTheDeclaredRelease(t *testing.T) {
 		return request.Kind == "openshift-install" && request.Version == "4.21.15" && request.Compatibility == "openshift"
 	}) {
 		t.Fatalf("tools = %+v", tools)
+	}
+}
+
+func TestPublicAdministrationKeyFormsReachInstaller(t *testing.T) {
+	const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA cluster"
+	for _, part := range []secrets.Part{secrets.PublicKeyPart, secrets.ValuePart} {
+		t.Run(string(part), func(t *testing.T) {
+			execution, request := mediaExecution(t, testDigest)
+			execution.Material[request.SSHKeyRef] = secrets.NewMaterial(map[secrets.Part][]byte{part: []byte(key + "\n"), secrets.PrivateKeyPart: []byte("must-not-leave")})
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: mediaEvidence(t, testDigest, nil)}}
+			if _, err := NewMedia(runner, material.AuthorizedKey).Apply(context.Background(), execution); err != nil {
+				t.Fatal(err)
+			}
+			if len(runner.requests) != 1 || runner.requests[0].MaterialValues["sshKey"] != key {
+				t.Fatalf("key projection = %#v", runner.requests)
+			}
+		})
+	}
+}
+
+func TestMalformedAdministrationKeyRefusesBeforeAdapter(t *testing.T) {
+	for _, value := range []string{"not a key", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "command=\"bad\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"} {
+		execution, request := mediaExecution(t, testDigest)
+		execution.Material[request.SSHKeyRef] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(value)})
+		runner := &fakeRunner{}
+		_, err := NewMedia(runner, material.AuthorizedKey).Apply(context.Background(), execution)
+		got := diagnostics.Of(err)
+		if len(got) != 1 || got[0].Object == nil || got[0].Object.Kind != "Secret" || got[0].Object.Name != request.SSHKeyRef || !strings.Contains(got[0].Remediation, "Secret/"+request.SSHKeyRef) || len(runner.requests) != 0 {
+			t.Fatalf("refusal = %#v, runs = %d", got, len(runner.requests))
+		}
 	}
 }

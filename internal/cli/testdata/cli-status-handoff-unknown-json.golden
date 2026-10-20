@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "status",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": {
+      "name": "example",
+      "mode": "ready"
+    },
+    "setupChecks": [],
+    "desired": {
+      "revision": "",
+      "environment": "",
+      "counts": {
+        "filesSeen": 0,
+        "objectsDecoded": 0
+      }
+    },
+    "clusters": [],
+    "storageClusters": [],
+    "shared": [],
+    "secrets": {
+      "declared": 0,
+      "bindings": 0
+    },
+    "nextSteps": [],
+    "lifecycle": {
+      "operation": "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",
+      "verb": "apply",
+      "state": "done",
+      "next": "none",
+      "anotherBuild": false,
+      "blocks": [
+        {
+          "id": "alpha",
+          "description": "install alpha",
+          "stage": "clusters",
+          "state": "unknown",
+          "attempts": 1
+        },
+        {
+          "id": "bravo",
+          "description": "install bravo",
+          "stage": "clusters",
+          "state": "done",
+          "attempts": 1
+        }
+      ],
+      "logs": []
+    },
+    "handoff": {
+      "ready": false,
+      "reasons": [
+        "block alpha is unknown, not done",
+        "block alpha has an unresolved unknown outcome"
+      ]
+    },
+    "contradictions": []
+  },
+  "diagnostics": [],
+  "logs": []
+}

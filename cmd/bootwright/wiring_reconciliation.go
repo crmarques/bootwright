@@ -24,6 +24,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
+	"github.com/crmarques/bootwright/internal/secrets/material"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
@@ -199,7 +200,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		capability: libvirt.NewHost(runner),
 	}, {
 		kind: agentinstall.Kind, implementation: agentinstall.MediaImplementation,
-		capability: agentinstall.NewMedia(runner),
+		capability: agentinstall.NewMedia(runner, material.AuthorizedKey),
 	}, {
 		kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation,
 		capability: agentinstall.NewInstall(runner).WithIdentities(provedIdentities{}),
@@ -243,7 +244,7 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 		capabilities = deps.Capabilities
 	}
 	options := lifecycleOptions(deps, clock, runner)
-	options.ApplyAdmission = storageCapacityAdmission
+	options.ApplyAdmission = libvirtCapacityAdmission
 	if controller.Lock != nil {
 		options.Lock = lifecycle.RuntimeLock{Digest: controller.Lock.Digest, AnsibleCore: controller.Lock.AnsibleCore}
 		if controller.Setup != nil && controller.Python != nil {

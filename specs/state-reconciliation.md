@@ -1797,9 +1797,6 @@ captured the material the block produces. A settled `apply` over unchanged
 input restores a latched log fault, as any later invocation does, before it
 reports; `status` never clears it.
 
-Not yet met: `status` reports no handoff section, and a settled apply does not
-restore a latched log fault; tracked as [B71](milestones/m3.md#b71).
-
 ## Mutation safety
 
 - Validate and plan the complete context before the first side effect.

@@ -370,10 +370,14 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 	if observes != "" {
 		values["observes"] = observes
 	}
-	for executable, tool := range map[string]Tool{
-		installerTool: request.Tool,
-		"oc":          {Compatibility: request.Release.Distribution, Kind: clientTool, Version: request.Release.Version},
+	for _, selected := range []struct {
+		executable string
+		tool       Tool
+	}{
+		{installerTool, request.Tool},
+		{"oc", Tool{Compatibility: request.Release.Distribution, Kind: clientTool, Version: request.Release.Version}},
 	} {
+		executable, tool := selected.executable, selected.tool
 		path, err := ToolPath(ctx, execution, tool, executable)
 		if err != nil {
 			return lifecycle.RunResult{}, err

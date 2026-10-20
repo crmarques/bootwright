@@ -42,3 +42,11 @@ read at master, not per release.
 - A bond member reports the bond's MAC address while the bond runs, so members
   are identified by their permanent MAC address (observed by the v1
   implementation (main-v1); re-verify on this tree).
+
+The OpenShift installer release-4.21 source at commit
+`080653d812dc25b2c624ff2a5b4108046276b0b2` confirms the host prerequisite:
+[`executeNMStatectl`](https://github.com/openshift/installer/blob/080653d812dc25b2c624ff2a5b4108046276b0b2/pkg/asset/agent/manifests/staticnetworkconfig/generator.go#L128-L135)
+looks up `nmstatectl` and invokes it with `gc` and the host YAML file. The
+[image ignition builder](https://github.com/openshift/installer/blob/080653d812dc25b2c624ff2a5b4108046276b0b2/pkg/asset/agent/image/ignition.go#L513-L522)
+calls this generator for static network configuration. This source verification
+does not establish a live image-build result.

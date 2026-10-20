@@ -3,6 +3,9 @@ package prerequisites
 import (
 	"slices"
 	"testing"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller"
 )
 
 func TestTheBaselineNamesSshAndPodmanAndNoNmstate(t *testing.T) {
@@ -83,5 +86,24 @@ func TestTheRequirementGrammarAdmitsNamesAndCapabilitiesOnly(t *testing.T) {
 		if ValidHostRequirement(refused) {
 			t.Errorf("%q is admitted", refused)
 		}
+	}
+}
+
+func TestAgentMediaSelectsNMStateFromItsClusterNodes(t *testing.T) {
+	objects := []api.Object{
+		api.NewObject(api.Environment, "example", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "controller", "machineRef")),
+		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue().With("capabilities", api.StringList("container-runtime")).WithPath(api.BoolValue(true), "os", "provided").WithPath(api.BoolValue(true), "access", "local").WithPath(api.MapValue(), "proxy", "direct")),
+		api.NewObject(api.Machine, "node", api.Value{}, api.MapValue()),
+		api.NewObject(api.ContainerCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("agent"), "install", "method").With("nodes", api.ListValue(api.MapValue().With("machineRef", api.StringValue("node"))))),
+	}
+	selected, err := controller.Select(api.NewCatalog(objects))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := StageRequirements(StageNativeOf(selected)); !slices.Equal(got, []string{"nmstate"}) {
+		t.Fatalf("agent media packages: %v", got)
+	}
+	if got := StageRequirements(StageNativeOf(controller.Baseline())); slices.Contains(got, "nmstate") {
+		t.Fatal("baseline selected nmstate")
 	}
 }

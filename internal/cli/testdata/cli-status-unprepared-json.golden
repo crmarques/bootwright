@@ -44,6 +44,12 @@
       "bootwright setup"
     ],
     "lifecycle": null,
+    "handoff": {
+      "ready": false,
+      "reasons": [
+        "no apply is recorded"
+      ]
+    },
     "contradictions": []
   },
   "diagnostics": [],

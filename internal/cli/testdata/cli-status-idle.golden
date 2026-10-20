@@ -23,3 +23,7 @@
   Next steps
     bootwright plan --context lab
     bootwright apply --context lab
+
+  Handoff
+    not ready
+    no apply is recorded

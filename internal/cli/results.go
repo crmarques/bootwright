@@ -40,7 +40,7 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		}
 	}
 	switch path {
-	case "preflight storage-cluster":
+	case "preflight storage-cluster", "preflight container-cluster":
 		if result.storagePreflight != nil {
 			return true, writeStoragePreflight(out, errOut, path, result.storagePreflight, nil, 0, selectedJSON(command))
 		}

@@ -28,7 +28,7 @@ func testService() Service {
 	cluster := api.NewObject(api.StorageCluster, "storage", api.Value{}, api.MapValue(api.FieldValue{Name: "ceph", Value: api.MapValue(api.FieldValue{Name: "topology", Value: api.MapValue(api.FieldValue{Name: "nodes", Value: api.ListValue(node)})})}))
 	host := api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue())
 	return Service{Graph: graphStub{api.NewCatalog([]api.Object{cluster, host})}, Ownership: ownedStub{}, Project: func(api.Catalog, string) ([]Allocation, error) {
-		return []Allocation{{Machine: "guest", Host: "controller", Pool: "/pool", Quantities: Quantities{1, 1, 1}}}, nil
+		return []Allocation{{Machine: "guest", Host: "controller", Pool: "/pool", Quantities: Quantities{CPU: 1, Memory: 1, Disk: 1}}}, nil
 	}, Capacity: fixtureBudget()}
 }
 func TestUninstalledGuestIsPendingWithoutProbe(t *testing.T) {

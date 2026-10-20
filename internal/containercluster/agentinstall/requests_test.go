@@ -9,6 +9,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/secrets/material"
 )
 
 // A frozen request is read back exactly as it was written, because the digest
@@ -102,7 +103,7 @@ func TestAFrozenPlacementOffTheControllerRefusesEveryVerb(t *testing.T) {
 			installRequest.Placement = placement
 			install.Block.Request = frozen(t, installRequest)
 			runner := &fakeRunner{}
-			mediaCapability, installCapability := NewMedia(runner), NewInstall(runner)
+			mediaCapability, installCapability := NewMedia(runner, material.AuthorizedKey), NewInstall(runner)
 			ctx := context.Background()
 			for verb, attempt := range map[string]func() error{
 				"media apply":           func() error { _, err := mediaCapability.Apply(ctx, media); return err },

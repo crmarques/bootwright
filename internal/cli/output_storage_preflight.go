@@ -52,7 +52,11 @@ func writeStoragePreflight(out, errOut io.Writer, command string, report *prefli
 	if jsonMode {
 		return writeEnvelope(out, commandEnvelope{SchemaVersion: "v1alpha1", Command: command, OK: exitCode == 0, ExitCode: exitCode, Result: result, Diagnostics: displayDiagnostics(diagnostics), Logs: []string{}})
 	}
-	if _, err := fmt.Fprintf(out, "Storage preflight  %s\n", result.Context); err != nil {
+	title := "Storage preflight"
+	if report.Target == "container-cluster" {
+		title = "Container-cluster preflight"
+	}
+	if _, err := fmt.Fprintf(out, "%s  %s\n", title, result.Context); err != nil {
 		return err
 	}
 	for _, check := range result.Checks {
@@ -81,7 +85,7 @@ func writeStoragePreflight(out, errOut io.Writer, command string, report *prefli
 }
 
 func (r *Runner) writeNegativeReadinessResults(command *cobra.Command, path string, result commandResult, diagnostics []diagnostic) (bool, error) {
-	if path == "preflight storage-cluster" && result.storagePreflight != nil {
+	if (path == "preflight storage-cluster" || path == "preflight container-cluster") && result.storagePreflight != nil {
 		return true, writeStoragePreflight(r.config.Out, r.config.ErrOut, path, result.storagePreflight, diagnostics, 1, selectedJSON(command))
 	}
 	return r.writeNegativeSecretCheck(command, path, result, diagnostics)

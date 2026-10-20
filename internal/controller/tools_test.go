@@ -243,3 +243,13 @@ func TestTargetToolsFollowDeclaredReleaseBesideAPinnedImage(t *testing.T) {
 		t.Fatalf("clients did not follow the declared release: %#v", tools)
 	}
 }
+
+func TestTargetToolsUseTheClusterReleaseGrammar(t *testing.T) {
+	for _, version := range []string{"4.21", "4.22.0-rc.1"} {
+		objects := []api.Object{api.NewObject(api.Environment, "example", api.Value{}, api.MapValue()), api.NewObject(api.ContainerCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue(version), "distribution", "release", "version"))}
+		_, err := controller.SelectTools(api.NewCatalog(objects))
+		if (err == nil) != (version == "4.22.0-rc.1") {
+			t.Fatalf("release %s: %v", version, err)
+		}
+	}
+}

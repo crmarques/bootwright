@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -38,6 +39,9 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 func normalizedDistribution(distribution api.Value) api.Value {
 	distribution = distribution.Default("type", api.StringValue("openshift"))
 	release := distribution.Get("release")
+	if image := release.Get("image"); image.Present() {
+		release = release.With("image", api.StringValue(api.CanonicalImage(image.Text())))
+	}
 	if distribution.Get("type").Text() == "openshift" && !release.Has("image") && !release.Has("channel") {
 		if channel, ok := releaseChannel(release.Get("version").Text()); ok {
 			release = release.With("channel", api.StringValue(channel))
@@ -116,17 +120,7 @@ func normalizedEndpoints(o api.Object, c api.Catalog, endpoints api.Value) api.V
 }
 
 func nodesWithFQDN(o api.Object, c api.Catalog, nodes []api.Value) []api.Value {
-	domain := ""
-	if envs := c.OfKind(api.Environment); len(envs) == 1 {
-		domains := envs[0].Spec().Get("domains")
-		domain = domains.Get("containerClusters").Text()
-		if domain == "" {
-			domain = domains.Get("clusters").Text()
-		}
-		if domain == "" {
-			domain = domains.Get("base").Text()
-		}
-	}
+	domain := environment.ContainerClusterDomain(c)
 	for i, node := range nodes {
 		if !node.Has("fqdn") && domain != "" && node.Get("name").Text() != "" {
 			nodes[i] = node.With("fqdn", api.StringValue(node.Get("name").Text()+"."+o.Name()+"."+domain))
@@ -184,7 +178,7 @@ func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
 		endpoint := o.Spec().Get("install", "endpoints", slot)
 		kind := sourceType(endpoint)
 		if endpoint.Has("address") && (kind == "loadBalancer" || kind == "node") {
-			issues = add(issues, invariant("$.spec.install.endpoints."+slot+".address", "load-balancer and node endpoint sources forbid authored addresses"))
+			issues = add(issues, invariantRemediation("$.spec.install.endpoints."+slot+".address", "load-balancer and node endpoint sources forbid authored addresses", "remove the authored spec.install.endpoints."+slot+".address; the selected source supplies it"))
 		}
 	}
 	return issues
@@ -209,7 +203,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	nodes := s.Get("nodes").Items()
 	if !install.Has("platform") && len(nodes) > 1 {
 		if _, ready := providerTypes(o, c); ready {
-			issues = add(issues, invariant("$.spec.install.platform", "mixed provider types require an explicit installation platform"))
+			issues = add(issues, invariantRemediation("$.spec.install.platform", "mixed provider types require an explicit installation platform", "set spec.install.platform.type and its matching configuration for the mixed node providers"))
 		}
 	}
 	baremetal := false
@@ -220,17 +214,22 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			continue
 		}
 		if !slices.Contains(bound.Spec().Get("capabilities").Strings(), "openshift-node") {
-			issues = add(issues, reference(path, "container nodes require openshift-node Machine capability"))
+			issues = add(issues, reference(path, "container nodes require openshift-node Machine capability", "add openshift-node to spec.capabilities on "+bound.Identity()))
 		}
 		if provided := bound.Spec().Get("os", "provided"); provided.Present() && provided.Bool() {
-			issues = add(issues, reference(path, "container installation requires a Machine whose OS is not provided"))
+			issues = add(issues, reference(path, "container installation requires a Machine whose OS is not provided", "set spec.os.provided to false on "+bound.Identity()))
 		}
 		if provider, ok := machine.Provider(bound, c); ok && substrate.RealizesPhysicalNICs(provider) {
 			baremetal = true
 		}
-		_, configured := machine.NetworkConfig(bound, c)
+		configuration, configured := machine.NetworkConfig(bound, c)
+		if configured && configuration.Get("dns").Len() > 0 {
+			if composed, problems := machine.ComposeNetwork(bound, c); len(problems) == 0 && composed.Has("dns-resolver", "config", "server") {
+				issues = add(issues, invariantRemediation(path, "node network declares both dns-resolver.config.server and selected dns name servers", "keep one of nmstate dns-resolver.config.server and dns on "+bound.Identity()+"; remove the other resolver declaration"))
+			}
+		}
 		if !configured && !bound.Spec().Get("network").Has("configRef") && !bound.Spec().Get("network").Has("inline") {
-			issues = add(issues, reference(path, "container installation requires configured Machine networking"))
+			issues = add(issues, reference(path, "container installation requires configured Machine networking", "set spec.network.configRef or spec.network.inline on "+bound.Identity()))
 		}
 		if _, selectionIssues := machine.InstallAddress(bound, c); len(selectionIssues) > 0 {
 			for _, issue := range selectionIssues {
@@ -241,17 +240,17 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		}
 	}
 	if baremetal && !install.Has("agent", "redfishVirtualMedia", "artifactServerEndpoint") {
-		issues = add(issues, invariant("$.spec.install.agent.redfishVirtualMedia.artifactServerEndpoint", "bare-metal nodes require a managed virtual-media artifact endpoint"))
+		issues = add(issues, invariantRemediation("$.spec.install.agent.redfishVirtualMedia.artifactServerEndpoint", "bare-metal nodes require a managed virtual-media artifact endpoint", "select a managed ArtifactServer endpoint in spec.install.agent.redfishVirtualMedia.artifactServerEndpoint"))
 	}
 	if install.Get("mode").Text() == "disconnected" {
 		if !install.Has("agent", "bootArtifacts", "artifactServerEndpoint") {
-			issues = add(issues, invariant("$.spec.install.agent.bootArtifacts.artifactServerEndpoint", "disconnected installation requires a managed boot-artifacts endpoint"))
+			issues = add(issues, invariantRemediation("$.spec.install.agent.bootArtifacts.artifactServerEndpoint", "disconnected installation requires a managed boot-artifacts endpoint", "select a managed ArtifactServer endpoint in spec.install.agent.bootArtifacts.artifactServerEndpoint"))
 		}
 		mirror := install.Get("registries", "mirror")
 		if !mirror.Present() {
-			issues = add(issues, invariant("$.spec.install.registries.mirror", "disconnected installation requires a registry mirror selection"))
+			issues = add(issues, invariantRemediation("$.spec.install.registries.mirror", "disconnected installation requires a registry mirror selection", "set spec.install.registries.mirror to a Registry selection"))
 		} else if registry, ok := c.Find(api.Registry, mirror.Get("registryRef").Text()); ok && !registry.Spec().Has("trustBundleRef") {
-			issues = add(issues, invariant("$.spec.install.registries.mirror.registryRef", "disconnected installation requires trustBundleRef on the selected Registry"))
+			issues = add(issues, invariantRemediation("$.spec.install.registries.mirror.registryRef", "disconnected installation requires trustBundleRef on the selected Registry", "set spec.trustBundleRef on the Registry selected by spec.install.registries.mirror.registryRef"))
 		}
 	}
 	for _, consumer := range []string{"redfishVirtualMedia", "bootArtifacts"} {
@@ -283,11 +282,14 @@ func validateLocal(o api.Object, partial bool) []api.Issue {
 	s := o.Spec()
 	install := s.Get("install")
 	issues := []api.Issue{}
+	if len(o.Name()) > 47 {
+		issues = add(issues, invariantRemediation("$.metadata.name", "ContainerCluster names must be at most 47 bytes so the installation block identity fits 63 bytes", "shorten metadata.name to at most 47 bytes"))
+	}
 	platform := install.Get("platform")
 	if platform.Has("type") {
 		for _, arm := range []string{"baremetal", "vsphere", "external"} {
 			if platform.Has(arm) && platform.Get("type").Text() != arm {
-				issues = add(issues, invariant("$.spec.install.platform."+arm, "platform configuration arm must match the selected platform type"))
+				issues = add(issues, invariantRemediation("$.spec.install.platform."+arm, "platform configuration arm must match the selected platform type", "remove spec.install.platform."+arm+" or set spec.install.platform.type to "+arm))
 			}
 		}
 	}
@@ -300,7 +302,7 @@ func validateLocal(o api.Object, partial bool) []api.Issue {
 		prefix, err := netip.ParsePrefix(entry.Get("cidr").Text())
 		host, ok := entry.Get("hostPrefix").Int64()
 		if err == nil && ok && (host <= int64(prefix.Bits()) || host > int64(prefix.Addr().BitLen())) {
-			issues = add(issues, invariant(fmt.Sprintf("$.spec.networking.clusterNetwork[%d].hostPrefix", i), "hostPrefix must be larger than the CIDR prefix and fit its address family"))
+			issues = add(issues, invariantRemediation(fmt.Sprintf("$.spec.networking.clusterNetwork[%d].hostPrefix", i), "hostPrefix must be larger than the CIDR prefix and fit its address family", fmt.Sprintf("set spec.networking.clusterNetwork[%d].hostPrefix above the CIDR prefix and at most %d", i, prefix.Addr().BitLen())))
 		}
 	}
 	return add(issues, validateInstallNames(o, install)...)
@@ -309,24 +311,19 @@ func validateLocal(o api.Object, partial bool) []api.Issue {
 func validateRelease(s api.Value, partial bool) []api.Issue {
 	distribution := s.Get("distribution")
 	kind := distribution.Get("type").Text()
-	if kind == "" && !partial {
-		kind = "openshift"
-	}
 	release := distribution.Get("release")
 	var issues []api.Issue
 	if !partial && !release.Has("version") && !release.Has("image") {
-		issues = add(issues, invariant("$.spec.distribution.release", "release requires version or a pinned image"))
+		issues = add(issues, invariantRemediation("$.spec.distribution.release", "release requires version or a pinned image", "set spec.distribution.release.version or a pinned spec.distribution.release.image"))
+	}
+	if release.Has("version") && !api.ValidLexical("cluster-release", release.Get("version").Text()) {
+		issues = add(issues, invariantRemediation("$.spec.distribution.release.version", "release version requires an exact major.minor.patch publisher release", "set spec.distribution.release.version to an exact publisher release, such as 4.22.0-rc.1"))
 	}
 	if kind == "okd" && release.Has("channel") {
-		issues = add(issues, invariant("$.spec.distribution.release.channel", "release channels apply only to OpenShift"))
-	}
-	if !partial && kind == "openshift" && release.Has("version") && !release.Has("image") && !release.Has("channel") {
-		if _, ok := releaseChannel(release.Get("version").Text()); !ok {
-			issues = add(issues, invariant("$.spec.distribution.release.version", "a numeric major and minor are required to derive the release channel"))
-		}
+		issues = add(issues, invariantRemediation("$.spec.distribution.release.channel", "release channels apply only to OpenShift", "remove spec.distribution.release.channel or select openshift in spec.distribution.type"))
 	}
 	if kind == "okd" && s.Get("security", "fips", "enabled").Bool() {
-		issues = add(issues, invariant("$.spec.security.fips.enabled", "FIPS requires OpenShift"))
+		issues = add(issues, invariantRemediation("$.spec.security.fips.enabled", "FIPS requires OpenShift", "disable spec.security.fips.enabled or select openshift in spec.distribution.type"))
 	}
 	return issues
 }
@@ -334,19 +331,16 @@ func validateRelease(s api.Value, partial bool) []api.Issue {
 func validateInstallChoices(install api.Value, partial bool) []api.Issue {
 	var issues []api.Issue
 	mode := install.Get("mode").Text()
-	if mode == "" && !partial {
-		mode = "connected"
-	}
 	if mode == "connected" && install.Has("agent", "bootArtifacts") {
-		issues = add(issues, invariant("$.spec.install.agent.bootArtifacts", "connected installation obtains boot artifacts from the release payload"))
+		issues = add(issues, invariantRemediation("$.spec.install.agent.bootArtifacts", "connected installation obtains boot artifacts from the release payload", "remove spec.install.agent.bootArtifacts or select disconnected in spec.install.mode"))
 	}
 	ssh := install.Get("nodeSSH")
 	if ssh.Present() {
 		if ssh.Has("keyPairRef") && (ssh.Has("publicKeyRef") || ssh.Has("privateKeyRef")) {
-			issues = add(issues, invariant("$.spec.install.nodeSSH", "key-pair and split SSH references are mutually exclusive"))
+			issues = add(issues, invariantRemediation("$.spec.install.nodeSSH", "key-pair and split SSH references are mutually exclusive", "keep either keyPairRef or the publicKeyRef/privateKeyRef references in spec.install.nodeSSH"))
 		}
 		if !partial && !ssh.Has("keyPairRef") && !ssh.Has("publicKeyRef") {
-			issues = add(issues, invariant("$.spec.install.nodeSSH.publicKeyRef", "split SSH material requires a public-key reference"))
+			issues = add(issues, invariantRemediation("$.spec.install.nodeSSH.publicKeyRef", "split SSH material requires a public-key reference", "set spec.install.nodeSSH.publicKeyRef or use spec.install.nodeSSH.keyPairRef"))
 		}
 	}
 	return issues
@@ -359,24 +353,24 @@ func validateNodes(s api.Value, nodes []api.Value, partial bool) []api.Issue {
 		roles[node.Get("role").Text()] = true
 		path := fmt.Sprintf("$.spec.nodes[%d]", i)
 		for _, label := range node.Get("labels").Fields() {
-			if !labelKey(label.Name) || !labelValue(label.Value.Text()) {
-				issues = add(issues, invariant(path+".labels", "node labels require Kubernetes label keys and values"))
+			if !api.ValidLexical("kubernetes-label-key", label.Name) || !api.ValidLexical("kubernetes-label-value", label.Value.Text()) {
+				issues = add(issues, invariantRemediation(path+".labels", "node labels require Kubernetes label keys and values", "correct the Kubernetes label keys and values in "+path+".labels"))
 			}
 		}
 		for j, taint := range node.Get("taints").Items() {
-			if (!partial || taint.Has("key")) && !labelKey(taint.Get("key").Text()) || taint.Has("value") && !labelValue(taint.Get("value").Text()) {
-				issues = add(issues, invariant(fmt.Sprintf("%s.taints[%d]", path, j), "node taints require Kubernetes label keys and values"))
+			if (!partial || taint.Has("key")) && !api.ValidLexical("kubernetes-label-key", taint.Get("key").Text()) || taint.Has("value") && !api.ValidLexical("kubernetes-label-value", taint.Get("value").Text()) {
+				issues = add(issues, invariantRemediation(fmt.Sprintf("%s.taints[%d]", path, j), "node taints require Kubernetes label keys and values", fmt.Sprintf("correct the Kubernetes key and value in %s.taints[%d]", path, j)))
 			}
 		}
 	}
 	issues = add(issues, validateTopology(s, partial)...)
 	if selected := s.Get("security", "diskEncryption", "roles"); selected.Present() && (!partial || s.Has("nodes")) {
 		if selected.Len() == 0 {
-			issues = add(issues, invariant("$.spec.security.diskEncryption.roles", "encryption role selection must select declared nodes"))
+			issues = add(issues, invariantRemediation("$.spec.security.diskEncryption.roles", "encryption role selection must select declared nodes", "set spec.security.diskEncryption.roles to at least one role declared in spec.nodes"))
 		}
 		for _, role := range selected.Strings() {
 			if !roles[role] {
-				issues = add(issues, invariant("$.spec.security.diskEncryption.roles", "every selected encryption role must have a declared node"))
+				issues = add(issues, invariantRemediation("$.spec.security.diskEncryption.roles", "every selected encryption role must have a declared node", "keep only roles declared in spec.nodes in spec.security.diskEncryption.roles"))
 			}
 		}
 	}
@@ -396,19 +390,19 @@ func validateEndpointSources(s api.Value, nodes []api.Value, partial bool) []api
 		if sourceKind != "loadBalancer" && (!partial || source.Has("type")) {
 			for _, key := range []string{"loadBalancerRef", "bindAddressRef"} {
 				if source.Has(key) {
-					issues = add(issues, invariant(path+".source."+key, "load-balancer selections require loadBalancer source"))
+					issues = add(issues, invariantRemediation(path+".source."+key, "load-balancer selections require loadBalancer source", "remove "+path+".source."+key+" or set "+path+".source.type to loadBalancer"))
 				}
 			}
 		}
 		if !partial && len(nodes) == 1 && sourceKind == "openshift" {
-			issues = add(issues, invariant(path+".source.type", "single-node clusters require node or external endpoint sources"))
+			issues = add(issues, invariantRemediation(path+".source.type", "single-node clusters require node or external endpoint sources", "set "+path+".source.type to node or external"))
 		}
 		if sourceKind == "node" && s.Has("nodes") && len(nodes) != 1 {
-			issues = add(issues, invariant(path+".source.type", "node endpoint source requires exactly one cluster node"))
+			issues = add(issues, invariantRemediation(path+".source.type", "node endpoint source requires exactly one cluster node", "change "+path+".source.type to a source supported by the cluster topology, or declare exactly one spec.nodes entry"))
 		}
 		if prefix := endpoint.Get("prefixLength"); prefix.Present() {
 			if !partial && !endpoint.Has("address") {
-				issues = add(issues, invariant(path+".prefixLength", "endpoint prefix length requires an address"))
+				issues = add(issues, invariantRemediation(path+".prefixLength", "endpoint prefix length requires an address", "set "+path+".address or remove "+path+".prefixLength"))
 			}
 			if address, err := netip.ParseAddr(endpoint.Get("address").Text()); err == nil {
 				bits, ok := prefix.Int64()
@@ -417,7 +411,7 @@ func validateEndpointSources(s api.Value, nodes []api.Value, partial bool) []api
 					maxBits = 32
 				}
 				if ok && (bits < 1 || bits > maxBits) {
-					issues = add(issues, invariant(path+".prefixLength", "endpoint prefix length must fit its IP family"))
+					issues = add(issues, invariantRemediation(path+".prefixLength", "endpoint prefix length must fit its IP family", fmt.Sprintf("set %s.prefixLength between 1 and %d", path, maxBits)))
 				}
 			}
 		}
@@ -434,7 +428,7 @@ func validateInstallNames(o api.Object, install api.Value) []api.Issue {
 	for _, entry := range install.Get("servingCertificates", "apiServer", "namedCertificates").Items() {
 		for _, name := range entry.Get("names").Strings() {
 			if internalNames[name] || strings.HasPrefix(name, "api-int."+o.Name()+".") {
-				issues = add(issues, invariant("$.spec.install.servingCertificates.apiServer.namedCertificates", "the internal API name cannot receive an API named certificate"))
+				issues = add(issues, invariantRemediation("$.spec.install.servingCertificates.apiServer.namedCertificates", "the internal API name cannot receive an API named certificate", "remove internal API names from spec.install.servingCertificates.apiServer.namedCertificates[].names"))
 			}
 		}
 	}
@@ -442,7 +436,7 @@ func validateInstallNames(o api.Object, install api.Value) []api.Issue {
 	for i, source := range install.Get("registries", "imageDigestSources").Items() {
 		name := source.Get("source").Text()
 		if name != "" && seenSources[name] {
-			issues = add(issues, invariant(fmt.Sprintf("$.spec.install.registries.imageDigestSources[%d].source", i), "image digest sources must be unique"))
+			issues = add(issues, invariantRemediation(fmt.Sprintf("$.spec.install.registries.imageDigestSources[%d].source", i), "image digest sources must be unique", fmt.Sprintf("remove or combine the duplicate spec.install.registries.imageDigestSources[%d].source", i)))
 		}
 		seenSources[name] = true
 	}
@@ -454,7 +448,7 @@ func endpointAddress(o api.Object, endpoint api.Value, c api.Catalog, path strin
 	switch sourceType(endpoint) {
 	case "loadBalancer":
 		if !source.Has("loadBalancerRef") {
-			return api.Value{}, source, []api.Issue{invariant(path+".source.loadBalancerRef", "load-balancer endpoint source requires a LoadBalancer reference")}
+			return api.Value{}, source, []api.Issue{invariantRemediation(path+".source.loadBalancerRef", "load-balancer endpoint source requires a LoadBalancer reference", "set "+path+".source.loadBalancerRef to the selected LoadBalancer name")}
 		}
 		balancer, ok := c.Find(api.LoadBalancer, source.Get("loadBalancerRef").Text())
 		if !ok {
@@ -466,7 +460,7 @@ func endpointAddress(o api.Object, endpoint api.Value, c api.Catalog, path strin
 			var ok bool
 			address, ok = named(addresses, ref.Text())
 			if !ok {
-				return api.Value{}, source, []api.Issue{reference(path+".source.bindAddressRef", "bind address must resolve inside the selected load balancer")}
+				return api.Value{}, source, []api.Issue{reference(path+".source.bindAddressRef", "bind address must resolve inside the selected load balancer", "set "+path+".source.bindAddressRef to a bindAddresses[].name on the selected LoadBalancer")}
 			}
 		} else if addresses.Len() == 1 {
 			address = addresses.Items()[0]
@@ -474,7 +468,7 @@ func endpointAddress(o api.Object, endpoint api.Value, c api.Catalog, path strin
 				source = source.With("bindAddressRef", address.Get("name"))
 			}
 		} else {
-			return api.Value{}, source, []api.Issue{invariant(path+".source.bindAddressRef", "multiple load-balancer bind addresses require an explicit selection")}
+			return api.Value{}, source, []api.Issue{invariantRemediation(path+".source.bindAddressRef", "multiple load-balancer bind addresses require an explicit selection", "set "+path+".source.bindAddressRef to one of the selected LoadBalancer bindAddresses[].name values")}
 		}
 		return address.Get("address"), source, nil
 	case "node":
@@ -504,6 +498,9 @@ func endpointAddress(o api.Object, endpoint api.Value, c api.Catalog, path strin
 
 func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 	issues := []api.Issue{}
+	if !o.Spec().Has("install", "endpoints", "api", "address") {
+		issues = add(issues, invariantRemediation("$.spec.install.endpoints.api.address", "installation requires an effective API endpoint address", "set spec.install.endpoints.api.address for an openshift or external source, or correct its node or loadBalancer source selection"))
+	}
 	networks, _ := machineNetworks(o, c)
 	nodes := o.Spec().Get("nodes").Items()
 	platform := o.Spec().Get("install", "platform", "type").Text()
@@ -532,20 +529,20 @@ func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 			}
 		}
 		if (source == "openshift" || source == "external") && !endpoint.Has("address") {
-			issues = add(issues, invariant(path+".address", "an openshift or external endpoint requires an IP address; resolution before boot proves only a frozen address"))
+			issues = add(issues, invariantRemediation(path+".address", "an openshift or external endpoint requires an IP address; resolution before boot proves only a frozen address", "set "+path+".address to the endpoint IP literal"))
 		}
 		address, err := netip.ParseAddr(endpoint.Get("address").Text())
 		if err != nil {
 			continue
 		}
 		if ipv4Compatible(address) {
-			issues = add(issues, invariant(path+".address", "an IPv4-compatible IPv6 endpoint address (::/96) prints differently in glibc; write the IPv4 address"))
+			issues = add(issues, invariantRemediation(path+".address", "an IPv4-compatible IPv6 endpoint address (::/96) prints differently in glibc; write the IPv4 address", "write "+path+".address as an IPv4 literal"))
 		}
 		if len(networks) > 0 && !contains(networks, address) {
-			issues = add(issues, invariant(path+".address", "endpoint IP must belong to a consumed machine network"))
+			issues = add(issues, invariantRemediation(path+".address", "endpoint IP must belong to a consumed machine network", "set "+path+".address to an IP in the bound Machines machineNetwork"))
 		}
 		if vip && nodeIPs[address] {
-			issues = add(issues, invariant(path+".address", "endpoint VIP must not collide with a node installation IP"))
+			issues = add(issues, invariantRemediation(path+".address", "endpoint VIP must not collide with a node installation IP", "set "+path+".address to an unused VIP distinct from every node installation IP"))
 		}
 		narrow := []netip.Prefix{}
 		for _, raw := range endpoint.Get("interfaceNetworks").Strings() {
@@ -554,7 +551,7 @@ func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 			}
 		}
 		if len(narrow) > 0 && !contains(narrow, address) {
-			issues = add(issues, invariant(path+".interfaceNetworks", "endpoint interface networks must contain the owned address"))
+			issues = add(issues, invariantRemediation(path+".interfaceNetworks", "endpoint interface networks must contain the owned address", "set "+path+".interfaceNetworks to CIDRs containing "+path+".address"))
 		}
 	}
 	return issues
@@ -615,7 +612,7 @@ func validateNetworks(o api.Object, c api.Catalog) []api.Issue {
 		}
 	}
 	if mixed {
-		return []api.Issue{invariant("$.spec.networking", "machine, cluster, service, node, and endpoint networks must use one address family")}
+		return []api.Issue{invariantRemediation("$.spec.networking", "machine, cluster, service, node, and endpoint networks must use one address family", "align spec.networking.clusterNetwork and serviceNetwork, spec.install.endpoints, and bound Machine networks to one address family")}
 	}
 	return nil
 }
@@ -757,36 +754,16 @@ func named(values api.Value, name string) (api.Value, bool) {
 	}
 	return found, count == 1
 }
-func labelKey(s string) bool {
-	parts := strings.Split(s, "/")
-	if len(parts) > 2 || len(parts) == 2 && !api.ValidLexical("dns", parts[0]) {
-		return false
-	}
-	return parts[len(parts)-1] != "" && labelValue(parts[len(parts)-1])
-}
-func labelValue(s string) bool {
-	if len(s) > 63 {
-		return false
-	}
-	if s == "" {
-		return true
-	}
-	alpha := func(c byte) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' }
-	if !alpha(s[0]) || !alpha(s[len(s)-1]) {
-		return false
-	}
-	for i := range len(s) {
-		if !alpha(s[i]) && s[i] != '-' && s[i] != '_' && s[i] != '.' {
-			return false
-		}
-	}
-	return true
-}
 func invariant(field, message string) api.Issue {
-	return api.Issue{Code: "api.invariant", Field: field, Message: message, Remediation: "make container-cluster intent consistent with its bound Machines and selected infrastructure"}
+	return api.Issue{Code: "api.invariant", Field: field, Message: message}
 }
-func reference(field, message string) api.Issue {
-	i := invariant(field, message)
+func invariantRemediation(field, message, remediation string) api.Issue {
+	issue := invariant(field, message)
+	issue.Remediation = remediation
+	return issue
+}
+func reference(field, message, remediation string) api.Issue {
+	i := invariantRemediation(field, message, remediation)
 	i.Code = "api.reference"
 	return i
 }

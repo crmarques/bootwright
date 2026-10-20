@@ -72,18 +72,24 @@ func LocateInstalledTool(ctx context.Context, view StorageView, tools []ToolDefi
 		return "", absent
 	}
 	area, err := view.OpenBundle(ctx, ToolsDigest(tools))
-	if err != nil || area == nil {
+	if err != nil {
+		return "", err
+	}
+	if area == nil {
 		return "", absent
 	}
 	entries, err := area.Entries(ctx)
-	if err != nil || !slices.ContainsFunc(entries, func(entry BundleEntry) bool {
+	if err != nil {
+		return "", err
+	}
+	if !slices.ContainsFunc(entries, func(entry BundleEntry) bool {
 		return entry.Path == member && !entry.Directory
 	}) {
 		return "", absent
 	}
 	location, err := area.Location(ctx)
 	if err != nil {
-		return "", absent
+		return "", err
 	}
 	return location.Path + "/" + member, nil
 }
@@ -103,4 +109,52 @@ func publishedMember(tools []ToolDefinition, tool controller.InstalledTool) (str
 		}
 	}
 	return "", false
+}
+
+func SelectContextTools(ctx context.Context, catalog TargetToolCatalog, view StorageView, requests []controller.ToolRequest) ([]ToolDefinition, bool, error) {
+	if view.Context.Name == "" {
+		return catalog.Select(requests, view.State.ToolSources)
+	}
+	bound := ""
+	for _, binding := range view.State.Bindings {
+		if binding.Context == view.Context.Name {
+			bound = binding.Tools
+			break
+		}
+	}
+	var retained []DependencySource
+	if bound != "" {
+		if view.OpenBundle == nil {
+			return nil, false, failure("controller.state", "the bound controller tool area is unavailable", "inspect the controller store")
+		}
+		area, err := view.OpenBundle(ctx, bound)
+		if err != nil {
+			return nil, false, err
+		}
+		if area != nil {
+			entries, err := area.Entries(ctx)
+			if err != nil {
+				return nil, false, err
+			}
+			for _, source := range view.State.ToolSources {
+				if slices.ContainsFunc(entries, func(entry BundleEntry) bool { return !entry.Directory && entry.Path == "sources/"+source.ID }) {
+					retained = append(retained, source)
+				}
+			}
+		}
+	}
+	tools, complete := []ToolDefinition{}, true
+	for _, request := range requests {
+		sources := view.State.ToolSources
+		if request.Version == "latest" && view.Context.Name != "" {
+			sources = retained
+		}
+		selected, found, err := catalog.Select([]controller.ToolRequest{request}, sources)
+		if err != nil {
+			return nil, false, err
+		}
+		tools = append(tools, selected...)
+		complete = complete && found
+	}
+	return tools, complete, nil
 }

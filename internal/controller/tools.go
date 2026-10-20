@@ -48,7 +48,7 @@ func SelectTools(catalog api.Catalog) ([]ToolRequest, error) {
 		// declared release still selects the clients; without one there is
 		// nothing to match and the controller stage refuses rather than
 		// inferring it.
-		if (kind != "openshift" && kind != "okd") || version == "" {
+		if (kind != "openshift" && kind != "okd") || !api.ValidLexical("cluster-release", version) {
 			return nil, selectionFailure(cluster, "controller.unsupported", "$.spec.distribution.release", "target tools require an exact supported release version; declare release.version for a cluster pinned to a release image")
 		}
 		for _, tool := range []string{"openshift-clients", "openshift-install"} {

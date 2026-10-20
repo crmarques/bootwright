@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "preflight container-cluster",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "synthetic",
+    "target": "container-cluster",
+    "checks": [
+      {
+        "id": "resolution.api",
+        "target": "api.sno.example.test",
+        "status": "passed",
+        "reason": "api.sno.example.test resolves to 192.0.2.10"
+      }
+    ],
+    "summary": {
+      "passed": 1,
+      "failed": 0,
+      "unknown": 0,
+      "pending": 0
+    }
+  },
+  "diagnostics": [],
+  "logs": []
+}

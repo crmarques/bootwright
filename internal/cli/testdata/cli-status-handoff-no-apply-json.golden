@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "status",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": {
+      "name": "example",
+      "mode": "ready"
+    },
+    "setupChecks": [],
+    "desired": {
+      "revision": "",
+      "environment": "",
+      "counts": {
+        "filesSeen": 0,
+        "objectsDecoded": 0
+      }
+    },
+    "clusters": [],
+    "storageClusters": [],
+    "shared": [],
+    "secrets": {
+      "declared": 0,
+      "bindings": 0
+    },
+    "nextSteps": [],
+    "lifecycle": null,
+    "handoff": {
+      "ready": false,
+      "reasons": [
+        "no apply is recorded"
+      ]
+    },
+    "contradictions": []
+  },
+  "diagnostics": [],
+  "logs": []
+}

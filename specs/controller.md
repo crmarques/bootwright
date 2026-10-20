@@ -372,11 +372,8 @@ compatibility inference is required. A tool's `latest` intent is resolved by
 the attempt that installs it and retained from then on; moving a retained
 `latest` client to a newer release requires declaring that release in
 `dependencyVersions`. A host package is whatever the host's repositories
-provide.
-
-Not yet met: stage recovery and context preflight can select a newer client
-release another context retained under the same `latest` intent; tracked as
-[B239](milestones/m3.md#b239).
+provide. Agent media with node network configurations selects the host's
+`nmstate` package for the installer's `nmstatectl gc` invocation.
 
 A context that selects nothing beyond the host
 baseline contributes no block at all.
@@ -426,10 +423,6 @@ each requirement's installed providers by NEVRA, and each published tool by
 kind, release and source digest. Presence is read through `rpm` alone, so a
 host that already holds every package runs no dnf; only the reading after an
 install also asks `dnf repoquery --installed` for each provider's repository.
-
-Not yet met: recovery after client publication but before sealing can prove the
-stage complete while its tool area remains writable; tracked as
-[B237](milestones/m3.md#b237).
 
 The `controller-prerequisites-v6` Ansible adapter acquires target tools and
 nothing else. It receives one frozen request with the block's request digest

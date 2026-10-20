@@ -220,6 +220,7 @@ func TestCompleteContainerGraphCompilation(t *testing.T) {
 
 func TestContainerSchemaAndAuthoredFailures(t *testing.T) {
 	cases := map[string]string{
+		"release without patch":    strings.Replace(clusterYAML, "version: 4.21.15", "version: 4.21", 1),
 		"retired pool":             strings.Replace(clusterYAML, "  nodes:\n", "  controlPlane: {}\n  nodes:\n", 1),
 		"nonmatching platform":     strings.Replace(clusterYAML, "  install:\n    endpoints:", "  install:\n    platform:\n      type: none\n      vsphere: {}\n    endpoints:", 1),
 		"derived address as input": strings.Replace(clusterYAML, "      api:\n        source:", "      api:\n        address: 192.0.2.10\n        source:", 1),

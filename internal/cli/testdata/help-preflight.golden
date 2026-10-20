@@ -9,7 +9,7 @@
   add-ons             Check add-on prerequisites (unavailable)
   all                 Check all prerequisites (unavailable)
   clusters            Check selected cluster readiness (unavailable)
-  container-cluster   Check ContainerCluster readiness (unavailable)
+  container-cluster   Check ContainerCluster readiness
   controller          Check controller prerequisites
   infra               Check infrastructure readiness (unavailable)
   storage-cluster     Check StorageCluster readiness

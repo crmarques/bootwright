@@ -72,7 +72,7 @@ func validateTopology(s api.Value, partial bool) []api.Issue {
 		}
 	}
 	if masters == 0 {
-		return add(issues, invariant("$.spec.nodes", "a container cluster requires at least one master node"))
+		return add(issues, invariantRemediation("$.spec.nodes", "a container cluster requires at least one master node", "declare at least one master in spec.nodes"))
 	}
 	if version != "" && !slices.Contains(row.controlPlane, masters) {
 		accepted := countList(row.controlPlane)

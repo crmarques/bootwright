@@ -112,3 +112,26 @@ func restore(ctx context.Context, store OperationStore, operation operationstore
 	}
 	return operation, log, nil
 }
+
+// restoreSettledApply re-proves the completed apply before restoring its log.
+func (s Service) restoreSettledApply(ctx context.Context, name string, decided transition) error {
+	return s.workspace.MutateLifecycle(ctx, name, func(tx Transaction) error {
+		store := s.store(tx)
+		operation, frozen, states, err := s.verifyBasis(ctx, store, decided.basis, func(current basis) error {
+			return contextChanged(decided.verb, decided.basis, current)
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := s.settleApply(ctx, tx, operation, frozen, states); err != nil {
+			return err
+		}
+		_, log, err := restore(ctx, store, operation)
+		if err != nil {
+			return err
+		}
+		boundary := newLogBoundary(store, operation.ID, nil)
+		boundary.close(ctx, log)
+		return boundary.err()
+	})
+}

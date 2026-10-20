@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	controllerscope "github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -671,4 +672,19 @@ func observed(c InstallCapability, execution lifecycle.Execution) ([]lifecycle.P
 func removalObserved(c InstallCapability, execution lifecycle.Execution) ([]lifecycle.Produced, error) {
 	observation, err := c.ObserveRemoval(context.Background(), execution)
 	return observation.Produced, err
+}
+
+func TestMissingInstallationToolsAlwaysNameTheInstallerFirst(t *testing.T) {
+	execution, request := installExecution(t, singleNodeCatalog(), testDigest)
+	for range 100 {
+		called := []string{}
+		execution.LocateTool = func(_ context.Context, tool controllerscope.InstalledTool) (string, error) {
+			called = append(called, tool.Executable)
+			return "", errors.New("missing " + tool.Executable)
+		}
+		_, err := NewInstall(nil).run(context.Background(), execution, "apply", request)
+		if err == nil || err.Error() != "missing openshift-install" || !slices.Equal(called, []string{"openshift-install"}) {
+			t.Fatalf("resolution order: %v (%v)", called, err)
+		}
+	}
 }

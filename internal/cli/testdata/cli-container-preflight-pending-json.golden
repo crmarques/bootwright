@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "preflight container-cluster",
+  "ok": false,
+  "exitCode": 1,
+  "result": {
+    "context": "synthetic",
+    "target": "container-cluster",
+    "checks": [
+      {
+        "id": "resolution.api",
+        "target": "api.sno.example.test",
+        "status": "pending",
+        "reason": "dry-run would resolve api.sno.example.test to 192.0.2.10",
+        "next": "route zone sno.example.test to DNSServer dns at 192.0.2.53"
+      }
+    ],
+    "summary": {
+      "passed": 0,
+      "failed": 0,
+      "unknown": 0,
+      "pending": 1
+    }
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "preflight.unknown",
+      "message": "container-cluster readiness is not proved"
+    }
+  ],
+  "logs": []
+}

@@ -171,35 +171,10 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 		}
 		return settled(identity, transition{verb: verb}, RecoveredRelease), nil
 	}
-	// A verb with nothing to do ends here. It registers nothing and performs
-	// no effect, so it needs neither authorization nor confirmation: there is
-	// no consequence to acknowledge and nothing a habitual token could
-	// pre-authorize, and repeating a completed verb stays safe. A finalization
-	// this invocation completed first is the only thing it did, and it says so.
-	//
-	// A destroy settles only over pristine evidence and no reservation, where
-	// no operation names a binding, so every binding it listed before it read
-	// that evidence is stranded and released, still without a transaction. An
-	// apply in flight that bound one of them raised the evidence before it
-	// bound, so a release lowered it since and that apply refuses at its
-	// re-proof rather than register the binding. A removal's finalization this
-	// invocation completed already collected what it listed after this one.
-	// A claim that holds nothing beside it is what an apply stopped before its
-	// running evidence landed leaves, and it is reclaimed in a transaction that
-	// does nothing else.
 	if decided.noop {
-		if decided.idle {
-			s.reclaimIdle(ctx, name)
-		}
-		if verb == reconciliation.Destroy && !finalized {
-			s.collect(ctx, name, stranded, nil)
-		}
-		recovered := ""
-		if finalized {
-			recovered = RecoveredFinalization
-		}
-		return settled(identity, decided, recovered), nil
+		return s.finishSettled(ctx, name, decided, identity, finalized, stranded)
 	}
+
 	if err := s.refuseLostBinding(ctx, name, decided, decided.basis); err != nil {
 		return nil, err
 	}
@@ -439,7 +414,8 @@ func (s Service) decideOver(ctx context.Context, view View, store OperationStore
 	}
 	if operation.Verb == reconciliation.Apply {
 		if verb == reconciliation.Apply {
-			return s.settleApply(ctx, view, operation, frozen, states)
+			decided, err := s.settleApply(ctx, view, operation, frozen, states)
+			return plannedFrom(decided, operation, states, attempts), err
 		}
 		owned, err := completedOwnership(name, operation, frozen, states)
 		if err != nil {
@@ -515,6 +491,39 @@ func completedOwnership(contextName string, operation operationstore.Operation, 
 			reviewStatus(contextName))
 	}
 	return reconciliation.OwnedSubset(frozen, states), nil
+}
+
+func (s Service) finishSettled(ctx context.Context, name string, decided transition, identity ContextIdentity, finalized bool, stranded []string) (*OperationResult, error) {
+	// A settle registers nothing and performs no host effect, so it needs no
+	// authorization or confirmation. It restores a latched apply log fault
+	// before reporting success and names a finalization it completed first.
+	//
+	// A destroy settles only over pristine evidence and no reservation, where
+	// no operation names a binding, so every binding it listed before it read
+	// that evidence is stranded and released, still without a transaction. An
+	// apply in flight that bound one of them raised the evidence before it
+	// bound, so a release lowered it since and that apply refuses at its
+	// re-proof rather than register the binding. A removal's finalization this
+	// invocation completed already collected what it listed after this one.
+	// A claim that holds nothing beside it is what an apply stopped before its
+	// running evidence landed leaves, and it is reclaimed in a transaction that
+	// does nothing else.
+	if decided.verb == reconciliation.Apply && decided.operation.LogFault {
+		if err := s.restoreSettledApply(ctx, name, decided); err != nil {
+			return nil, err
+		}
+	}
+	if decided.idle {
+		s.reclaimIdle(ctx, name)
+	}
+	if decided.verb == reconciliation.Destroy && !finalized {
+		s.collect(ctx, name, stranded, nil)
+	}
+	recovered := ""
+	if finalized {
+		recovered = RecoveredFinalization
+	}
+	return settled(identity, decided, recovered), nil
 }
 
 // settleApply is an apply over a completed apply. A changed input refuses by

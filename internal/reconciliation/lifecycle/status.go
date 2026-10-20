@@ -204,6 +204,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	}
 	result.SetupChecks = setupChecks(view, index.Current != "")
 	if index.Current == "" {
+		result.Handoff = handoff(operationstore.Operation{}, reconciliation.Plan{}, nil)
 		if result.Contradictions, err = unindexed(ctx, view, store); err != nil {
 			return nil, err
 		}
@@ -224,6 +225,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	result.Handoff = handoff(operation, plan, states)
 	if result.Contradictions, err = recordContradictions(ctx, store, operation, plan, states, attempts); err != nil {
 		return nil, err
 	}
@@ -310,6 +312,9 @@ func idleSteps(view View, unindexed []string) []string {
 func (s Service) offered(ctx context.Context, view View, store OperationStore, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, next string, contradicted []string) ([]string, error) {
 	steps := []string{}
 	if operation.State == reconciliation.OperationDone {
+		if operation.Verb == reconciliation.Apply && operation.LogFault && inputDrift(view, operation) == "" && len(unfinishedBlocks(frozen, states)) == 0 {
+			return []string{contextCommand(view.Identity().Name, string(reconciliation.Apply))}, nil
+		}
 		if operation.Verb != reconciliation.Destroy || len(unfinishedBlocks(frozen, states)) == 0 {
 			return steps, nil
 		}

@@ -227,6 +227,8 @@ func controllerActionLabel(id string) string {
 		return "Hypervisor"
 	case "installer-media":
 		return "Installer media"
+	case "nmstate":
+		return "NMState network configuration"
 	case "controller-binding":
 		return "Controller binding"
 	case "state-root":

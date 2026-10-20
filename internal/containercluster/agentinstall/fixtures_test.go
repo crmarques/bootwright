@@ -2,6 +2,7 @@ package agentinstall
 
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/containercluster"
 )
 
 const testContext = "lab"
@@ -160,12 +161,14 @@ func node(name, role, machine, fqdn string) api.Value {
 // cluster is one declared cluster in the shape admission leaves behind, with
 // its endpoints already resolved.
 func cluster(name string, install api.Value, nodes ...api.Value) api.Object {
-	return api.NewObject(api.ContainerCluster, name, api.Value{}, api.MapValue(
+	object := api.NewObject(api.ContainerCluster, name, api.Value{}, api.MapValue(
 		field("distribution", api.MapValue(text("type", "openshift"),
 			field("release", api.MapValue(text("version", "4.21.15"))))),
 		field("install", install),
 		field("nodes", api.ListValue(nodes...)),
 	))
+	normalized, _ := containercluster.Normalize(object, api.NewCatalog(base()))
+	return normalized
 }
 
 func installSelection(extra ...api.FieldValue) api.Value {

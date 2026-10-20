@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/secrets/material"
 	"go.yaml.in/yaml/v3"
 
 	"github.com/crmarques/bootwright/ansible"
@@ -40,7 +41,7 @@ func mediaRunDeadline(t *testing.T, request MediaRequest, operation string) time
 	execution.Block.Request = canonical
 	// The run itself is not under test: only the request it was handed.
 	runner := &fakeRunner{err: errors.New("stopped")}
-	capability := NewMedia(runner)
+	capability := NewMedia(runner, material.AuthorizedKey)
 	switch operation {
 	case "apply":
 		_, _ = capability.Apply(context.Background(), execution)

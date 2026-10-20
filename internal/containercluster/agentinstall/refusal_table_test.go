@@ -61,6 +61,10 @@ func TestContainerClusterRefusalTableMatchesUnsupported(t *testing.T) {
 	onNode := map[string]string{"<cluster>": "ContainerCluster/sno", "<machine>": "Machine/sno-01"}
 	onProvider := map[string]string{"<cluster>": "ContainerCluster/sno", "<provider>": "InfraProvider/lab-libvirt"}
 	cases := map[string]refusalCase{
+		"A boot-image server off the controller": {
+			api.NewCatalog(append(append(base(), hypervisor()...), onRemote(guest("sno-01", "198.51.100.21/24")), servedBy("far-artifacts", cluster("sno", installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")), node("master-0", "master", "sno-01", "master-0.sno.lab.example.test"))))),
+			"ContainerCluster/sno", map[string]string{"<server>": "ArtifactServer/far-artifacts"},
+		},
 		"An OKD cluster": {sno(func(spec api.Value) api.Value {
 			return spec.WithPath(api.StringValue("okd"), "distribution", "type")
 		}), "ContainerCluster/sno", onSNOCluster},

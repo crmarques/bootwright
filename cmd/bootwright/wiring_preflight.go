@@ -8,6 +8,8 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	containerpreflight "github.com/crmarques/bootwright/internal/containercluster/preflight"
+	containerpreflightlocal "github.com/crmarques/bootwright/internal/containercluster/preflightlocal"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/sshlocal"
@@ -15,22 +17,20 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/storage/preflight"
 	"github.com/crmarques/bootwright/internal/storage/preflightlocal"
+	"github.com/crmarques/bootwright/internal/substrate/capacity"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 )
 
 func wireStoragePreflight(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) preflight.Service {
-	return preflight.Service{Graph: effectiveGraph{state: state}, Ownership: machineOwnership{reconciler: reconciler}, Project: storageAllocations, Capacity: preflight.Budget{Observer: preflightlocal.Observer{}}, Guests: preflight.GuestChecks{Commands: preflightCommands(state, reconciler, deps)}, Selection: currentSelection(deps.Selection)}
+	return preflight.Service{Graph: effectiveGraph{state: state}, Ownership: machineOwnership{reconciler: reconciler}, Project: libvirtAllocations, Capacity: capacity.Budget{Observer: preflightlocal.Observer{}}, Guests: preflight.GuestChecks{Commands: preflightCommands(state, reconciler, deps)}, Selection: currentSelection(deps.Selection)}
 }
 
-func storageCapacityAdmission(ctx context.Context, contextName string, catalog api.Catalog, owned map[string]lifecycle.ObjectOwnership, starting []reconciliation.Block) error {
-	managed := false
-	for _, cluster := range catalog.OfKind(api.StorageCluster) {
-		managed = managed || cluster.Spec().Get("management").Text() == "managed"
-	}
-	if !managed {
-		return nil
-	}
-	allocations, err := storageAllocations(catalog, contextName)
+func libvirtCapacityAdmission(ctx context.Context, contextName string, catalog api.Catalog, owned map[string]lifecycle.ObjectOwnership, starting []reconciliation.Block) error {
+	return admitLibvirtCapacity(ctx, contextName, catalog, owned, starting, capacity.Budget{Observer: preflightlocal.Observer{}})
+}
+
+func admitLibvirtCapacity(ctx context.Context, contextName string, catalog api.Catalog, owned map[string]lifecycle.ObjectOwnership, starting []reconciliation.Block, checker capacity.CapacityChecker) error {
+	allocations, err := libvirtAllocations(catalog, contextName)
 	if err != nil {
 		return err
 	}
@@ -39,16 +39,17 @@ func storageCapacityAdmission(ctx context.Context, contextName string, catalog a
 	}) {
 		return nil
 	}
-	reserves := preflight.ReservesFromCatalog(catalog, allocations)
+	reserves := capacity.ReservesFromCatalog(catalog, allocations)
 	for i := range allocations {
 		a := &allocations[i]
-		_, a.Allocated = owned["Machine/"+a.Machine]
+		state, found := owned["Machine/"+a.Machine]
+		a.Allocated = found && !(state.Verb == "destroy" && state.State == "done")
 		a.Reserve = reserves(preflight.Target{Host: a.Host, Pool: a.Pool, Local: a.Local})
 	}
-	return preflight.Admit(ctx, preflight.Budget{Observer: preflightlocal.Observer{}}, allocations)
+	return capacity.Admit(ctx, checker, allocations)
 }
 
-func storageAllocations(catalog api.Catalog, contextName string) ([]preflight.Allocation, error) {
+func libvirtAllocations(catalog api.Catalog, contextName string) ([]preflight.Allocation, error) {
 	controller, err := lifecycle.ControllerMachine(catalog)
 	if err != nil {
 		return nil, err
@@ -110,4 +111,20 @@ func preflightCommands(state inventory.EffectiveState, reconciler lifecycle.Serv
 		}
 		return capture.Data, nil
 	})
+}
+
+func wireContainerPreflight(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) containerpreflight.Service {
+	return containerpreflight.Service{Graph: effectiveGraph{state: state}, Selection: currentSelection(deps.Selection), Ownership: machineOwnership{reconciler: reconciler}, Project: libvirtAllocations, Capacity: capacity.Budget{Observer: preflightlocal.Observer{}}, Resolver: containerpreflightlocal.Resolver{}, Blocks: func(ctx context.Context, name string) (map[string]string, error) {
+		result, err := reconciler.Status(ctx, lifecycle.StatusRequest{ContextName: name})
+		if err != nil {
+			return nil, err
+		}
+		states := map[string]string{}
+		if result.Lifecycle != nil && result.Lifecycle.Verb == "apply" {
+			for _, block := range result.Lifecycle.Blocks {
+				states[block.ID] = block.State
+			}
+		}
+		return states, nil
+	}}
 }

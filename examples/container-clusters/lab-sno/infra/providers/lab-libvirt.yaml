@@ -5,6 +5,11 @@ metadata:
 
 spec:
   libvirt:
+    capacityReserve:
+      cpu: 1
+      memoryMiB: 2048
+      diskGiB: 10
+
     machineRef: controller
     uri: qemu:///system
 

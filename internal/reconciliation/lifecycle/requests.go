@@ -360,6 +360,7 @@ type StatusResult struct {
 	Secrets         SecretSummary
 	NextSteps       []string
 	Lifecycle       *LifecycleSummary
+	Handoff         HandoffSummary
 	// Contradictions names what the context's records contradict, in the
 	// words a refusal that points at status names each of them.
 	Contradictions []string

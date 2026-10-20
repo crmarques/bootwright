@@ -920,7 +920,7 @@ func TestDecodeRefusesPackagesItsClosuresDoNotSelect(t *testing.T) {
 // Every version but the one this build writes refuses, and the refusal names
 // it so the remedy is the executable that registered the operation.
 func TestAFrozenStageRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"controller-clients-v0", "controller-clients-v1", "controller-clients-v2", "controller-clients-v4"} {
+	for _, version := range []string{"controller-clients-v0", "controller-clients-v1", "controller-clients-v2", "controller-clients-v3", "controller-clients-v5"} {
 		_, err := DecodeRequest([]byte(`{"version":"` + version + `"}`))
 		if err == nil {
 			t.Fatalf("version %q was accepted", version)
@@ -1028,5 +1028,71 @@ func TestLocateToolAnswersOnlyFromTheClosureTheStageProved(t *testing.T) {
 				t.Fatalf("a lookup without the stage's whole proved closure located %q (%v)", located, err)
 			}
 		})
+	}
+}
+
+func TestAnInterruptedPublicationNeedsAReplayToSeal(t *testing.T) {
+	selected := []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}
+	tools := &fakeTools{selected: selected, complete: true, present: true}
+	capability := stage(tools, newDnf(), &fakeSetup{}, &fakeInstaller{})
+	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
+	recorder := newRecorder(&fakeArea{})
+	digest := prerequisites.ToolsDigest(selected)
+	recorder.published[digest] = true
+	execution := recorder.execution(t, block, hostState())
+	observation, err := capability.Observe(context.Background(), execution)
+	if err != nil || observation.Effect != reconciliation.EffectNoEffect || len(recorder.sealed) != 0 {
+		t.Fatalf("unsealed observation: %+v %v", observation, err)
+	}
+	result, err := capability.Apply(context.Background(), execution)
+	if err != nil || result.Outcome != reconciliation.OutcomeUnchanged || !slices.Equal(recorder.sealed, []string{digest}) {
+		t.Fatalf("replay did not seal: %+v %v %v", result, err, recorder.sealed)
+	}
+}
+
+func TestInterruptedStageUsesItsPreparedSourcesBeforeAnyContextBinding(t *testing.T) {
+	selected := []prerequisites.ToolDefinition{toolDefinition("helm", "v4.2.3")}
+	newer := toolDefinition("helm", "v4.2.4")
+	tools := &fakeTools{selected: selected, complete: true, present: true}
+	capability := stage(tools, newDnf(), &fakeSetup{}, &fakeInstaller{})
+	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
+	recorder := newRecorder(&fakeArea{sealed: true})
+	recorder.published[prerequisites.ToolsDigest(selected)] = true
+	execution := recorder.execution(t, block, prerequisites.HostState{ToolSources: []prerequisites.DependencySource{selected[0].Source, newer.Source}})
+	execution.Stage.Setup.Context.Name = "example"
+	prepared, err := json.Marshal(prerequisites.StagePreparation{Packages: []string{}, AddedSources: []string{selected[0].Source.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution.ApplyPreparations = []json.RawMessage{prepared}
+	observation, err := capability.Observe(context.Background(), execution)
+	if err != nil || observation.Effect != reconciliation.EffectCompleted || !slices.Equal(tools.offered, []prerequisites.DependencySource{selected[0].Source}) {
+		t.Fatalf("prepared recovery: %+v %v sources=%+v", observation, err, tools.offered)
+	}
+}
+
+func TestFreshStageKeepsTheReleaseInItsContextBinding(t *testing.T) {
+	selected := []prerequisites.ToolDefinition{toolDefinition("helm", "v4.2.3")}
+	newer := toolDefinition("helm", "v4.2.4")
+	tools := &fakeTools{selected: selected, complete: true, present: true}
+	capability := stage(tools, newDnf(), &fakeSetup{}, &fakeInstaller{})
+	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime"), cluster()), reconciliation.Apply)
+	request, err := DecodeRequest(block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Tools = []ToolRequest{{Kind: "helm", Version: "latest"}}
+	block.Request, err = request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := prerequisites.ToolsDigest(selected)
+	recorder := newRecorder(&fakeArea{sealed: true, entries: []prerequisites.BundleEntry{{Path: "sources/" + selected[0].Source.ID}}})
+	recorder.published[digest] = true
+	execution := recorder.execution(t, block, prerequisites.HostState{ToolSources: []prerequisites.DependencySource{selected[0].Source, newer.Source}, Bindings: []prerequisites.ControllerBinding{{Context: "example", Tools: digest}}})
+	execution.Stage.Setup.Context.Name = "example"
+	result, err := capability.Apply(context.Background(), execution)
+	if err != nil || result.Outcome != reconciliation.OutcomeUnchanged || !slices.Equal(tools.offered, []prerequisites.DependencySource{selected[0].Source}) {
+		t.Fatalf("fresh stage: %+v %v sources=%+v", result, err, tools.offered)
 	}
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets/material"
 )
 
 type unresolvedCase struct {
@@ -42,7 +43,7 @@ func TestUnresolvedNamesTheRefusingCheck(t *testing.T) {
 		block.Object = "sno"
 		subject := "the agent media of ContainerCluster sno on Machine controller"
 		another := mediaEvidence(t, testDigest, func(e *MediaEvidence) { e.Installer = "4.21.14" })
-		requireUnresolved(t, NewMedia(nil), block, map[string]unresolvedCase{
+		requireUnresolved(t, NewMedia(nil, material.AuthorizedKey), block, map[string]unresolvedCase{
 			"an apply over another release's build": {reconciliation.Apply, another, lifecycle.Unresolved{
 				Reason: subject + " is not what its apply froze: the published image was built by another release's installer",
 				Remedy: "restore " + subject + " to what its frozen request names",

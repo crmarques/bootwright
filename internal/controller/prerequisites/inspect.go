@@ -132,6 +132,9 @@ func (i *inspection) declare(host HostInspector, lock RuntimeLock) {
 	if i.native.InstallerMedia {
 		checks = append(checks, Check{"installer-media", closureRequirement("installer-media"), "unverified", "unverified", ContextScope})
 	}
+	if i.native.NMState {
+		checks = append(checks, Check{"nmstate", closureRequirement("nmstate"), "unverified", "unverified", ContextScope})
+	}
 	if i.stored.Context.Name != "" {
 		checks = append(checks, Check{"controller-binding", i.selection.MachineName(), "unverified", "unverified", ContextScope})
 	}
@@ -165,7 +168,7 @@ func (s Service) selectContext(ctx context.Context, current *inspection) error {
 	if s.options.Tools == nil {
 		return failure("controller.unsupported", "target tool selection is not configured", "use a compatible executable")
 	}
-	current.tools, _, err = s.options.Tools.Select(current.toolRequests, current.stored.State.ToolSources)
+	current.tools, _, err = SelectContextTools(ctx, s.options.Tools, current.stored, current.toolRequests)
 	return InStage(err, current.stored.Context.Name)
 }
 
@@ -572,13 +575,15 @@ func (s Service) settleContext(ctx context.Context, current *inspection, settle 
 }
 
 func closureRequirements(id string) NativeRequirements {
-	return NativeRequirements{LibvirtClient: id == "libvirt-client", Hypervisor: id == "hypervisor", InstallerMedia: id == "installer-media"}
+	return NativeRequirements{LibvirtClient: id == "libvirt-client", Hypervisor: id == "hypervisor", InstallerMedia: id == "installer-media", NMState: id == "nmstate"}
 }
 
 func closureRequirement(id string) string {
 	switch id {
 	case "hypervisor":
 		return "hypervisor closure"
+	case "nmstate":
+		return "NMState network configuration generator"
 	case "installer-media":
 		return "installer-media tooling (lorax, xorriso)"
 	}

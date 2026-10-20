@@ -165,7 +165,7 @@ func toolRequests(requests []controller.ToolRequest, mirrorAdmitted func(string)
 				return nil, bundleFailure("generic tool request has unqualified compatibility metadata")
 			}
 		case "openshift-clients", "openshift-install":
-			if request.Version == "latest" || request.Compatibility != "openshift" && request.Compatibility != "okd" {
+			if !api.ValidLexical("cluster-release", request.Version) || request.Compatibility != "openshift" && request.Compatibility != "okd" {
 				return nil, bundleFailure("installer and client tools require the exact target distribution release")
 			}
 		case "virtctl":

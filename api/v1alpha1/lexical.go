@@ -13,11 +13,13 @@ import (
 )
 
 var labelPattern = regexp.MustCompile(`^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
+var kubernetesLabelPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[-_.A-Za-z0-9]{0,61}[A-Za-z0-9])?$`)
 var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 var userPattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]*[$]?$`)
 var digestPattern = regexp.MustCompile(`(?i)^(?:sha256:)?[a-f0-9]{64}$`)
 var imageTagPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
 var cliVersionPattern = regexp.MustCompile(`^(?:latest|v?[0-9][A-Za-z0-9._+-]*)$`)
+var clusterReleasePattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9][A-Za-z0-9._+-]*)?$`)
 var packageVersionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+~^:-]{0,95}$`)
 
 // ociPathComponentPattern is one repository path component of the OCI
@@ -51,6 +53,9 @@ const (
 )
 
 func ValidLexical(rule, value string) bool {
+	if rule == "kubernetes-label-value" && value == "" {
+		return true
+	}
 	if rule == "checksum" {
 		return digestPattern.MatchString(strings.TrimSpace(value))
 	}
@@ -58,6 +63,14 @@ func ValidLexical(rule, value string) bool {
 		return false
 	}
 	switch rule {
+	case "kubernetes-label-key":
+		prefix, name, qualified := strings.Cut(value, "/")
+		if qualified {
+			return validDNS(prefix) && kubernetesLabelPattern.MatchString(name)
+		}
+		return kubernetesLabelPattern.MatchString(value)
+	case "kubernetes-label-value":
+		return kubernetesLabelPattern.MatchString(value)
 	case "name":
 		return labelPattern.MatchString(value)
 	case "dns":
@@ -106,6 +119,8 @@ func ValidLexical(rule, value string) bool {
 		return len(value) > 0 && len(value) <= 1024 && utf8.ValidString(value) && strings.IndexFunc(value, func(r rune) bool { return unicode.IsControl(r) || r == 0x2028 || r == 0x2029 }) < 0
 	case "image-version":
 		return value != "latest" && (imageTagPattern.MatchString(value) || strings.HasPrefix(strings.ToLower(value), "sha256:") && digestPattern.MatchString(value))
+	case "cluster-release":
+		return len(value) <= 96 && clusterReleasePattern.MatchString(value)
 	case "cli-version":
 		return len(strings.TrimPrefix(value, "v")) <= 95 && cliVersionPattern.MatchString(value)
 	case "package-version":

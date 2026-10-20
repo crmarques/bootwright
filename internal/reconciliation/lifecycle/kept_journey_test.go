@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/secrets/material"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
@@ -223,7 +224,7 @@ func keptJourney(t *testing.T) (*lifecycle.CapabilityJourney, *keptHost) {
 		t.Fatal(err)
 	}
 	host := &keptHost{}
-	capabilities := clusterCapabilities{install: retainedInstaller{agentinstall.NewInstall(host)}, media: agentinstall.NewMedia(host)}
+	capabilities := clusterCapabilities{install: retainedInstaller{agentinstall.NewInstall(host)}, media: agentinstall.NewMedia(host, material.AuthorizedKey)}
 	journey := lifecycle.NewCapabilitiesJourney(t, capabilities, []lifecycle.CapabilityBinding{
 		{Kind: agentinstall.Kind, Implementation: agentinstall.MediaImplementation},
 		{Kind: agentinstall.Kind, Implementation: agentinstall.InstallImplementation},
@@ -241,7 +242,7 @@ func keptJourney(t *testing.T) (*lifecycle.CapabilityJourney, *keptHost) {
 		}},
 		Secrets: append(install.SecretReferences(), media.SecretReferences()...),
 	})
-	journey.Holding(media.SSHKeyRef, secrets.NewMaterial(map[secrets.Part][]byte{secrets.PublicKeyPart: []byte("ssh-ed25519 AAAA lab")}))
+	journey.Holding(media.SSHKeyRef, secrets.NewMaterial(map[secrets.Part][]byte{secrets.PublicKeyPart: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA lab")}))
 	journey.FailPublication(secretstore.Failure("store.conflict", "secret publication was not committed"))
 	_, err = journey.Service.Apply(context.Background(), lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true})
 	if got := diagnostics.Of(err); len(got) == 0 || got[0].Code != "secret.store.conflict" {

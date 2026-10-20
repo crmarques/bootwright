@@ -91,7 +91,7 @@ The three `media` commands follow the host-wide
 | `bootwright preflight controller` | none | [baseline or explicit-context controller readiness](../controller.md#the-setup-flow), including the acquisition route it resolved | bounded local observation; no state publication |
 | `bootwright preflight infra` | `--clusters <list>` default all; `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | infrastructure readiness checks | observe unless `--dry-run`, which is local-only |
 | `bootwright preflight clusters` | same flags as `preflight infra` | all selected cluster readiness checks | observe unless `--dry-run` |
-| `bootwright preflight container-cluster` | same flags as `preflight infra`, with ContainerCluster-only selection | container-cluster readiness checks | observe unless `--dry-run` |
+| `bootwright preflight container-cluster` | `--clusters`, `--dry-run`, with ContainerCluster-only selection | container-cluster readiness checks | observe unless `--dry-run` |
 | `bootwright preflight storage-cluster` | same flags as `preflight infra`, with StorageCluster-only selection | storage-cluster readiness checks | observe unless `--dry-run` |
 | `bootwright preflight add-ons` | `--clusters <list>` default all ContainerClusters | add-on prerequisite checks | bounded observation |
 | `bootwright preflight all` | `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | all controller, infrastructure, cluster, storage, and add-on checks | observe unless `--dry-run` |

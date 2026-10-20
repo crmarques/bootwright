@@ -894,3 +894,11 @@ def test_every_budget_clock_counts_true_seconds_across_a_daylight_saving_change(
         step = int(scope(INSTALL, now=clock, containercluster_install_agent_boot_deadline=start + 7200).template(
             stepping["timeout"]))
         assert step == 7200 - elapsed
+
+
+def test_a_failed_wait_names_the_kubeconfig_it_restored(tmp_path):
+    work = work_area(tmp_path / "work", kubeconfig()[:200], kubeconfig())
+    wait = Wait([(1, HOST_ERROR, 60)], work=work, identity=anchor())
+    message = wait.run()
+    assert wait.restores == [RESTORED]
+    assert "restored the installer's kubeconfig from the kept copy before waiting" in message

@@ -19,7 +19,7 @@ const (
 	Kind           = string(api.Environment)
 	Implementation = "controller-prerequisites"
 	BlockID        = "controller-prerequisites"
-	Version        = "controller-clients-v3"
+	Version        = "controller-clients-v4"
 )
 
 // ToolRequest is one declared client requirement, frozen in the plan before
@@ -47,6 +47,7 @@ type Request struct {
 	Libvirt        string        `json:"libvirt"`
 	LibvirtClient  bool          `json:"libvirtClient"`
 	Machine        string        `json:"machine"`
+	NMState        bool          `json:"nmstate,omitempty"`
 	Packages       []string      `json:"packages"`
 	Tools          []ToolRequest `json:"tools"`
 	Version        string        `json:"version"`
@@ -62,6 +63,7 @@ func NewRequest(selection controller.Selection, requests []controller.ToolReques
 		Egress:         prerequisites.SetupEgress{HTTPProxy: route.HTTPProxy(), HTTPSProxy: route.HTTPSProxy(), NoProxy: bypass},
 		Hypervisor:     selection.Hypervisor(),
 		InstallerMedia: selection.InstallerMedia(),
+		NMState:        selection.NMState(),
 		LibvirtClient:  selection.LibvirtClient(),
 		Machine:        selection.MachineName(),
 		Tools:          []ToolRequest{},
@@ -83,7 +85,7 @@ func NewRequest(selection controller.Selection, requests []controller.ToolReques
 // prerequisites.StageNativeOf reads it, so the stage and preflight ask the
 // host for the same requirements.
 func (r Request) native() prerequisites.StageNative {
-	return prerequisites.StageNative{LibvirtClient: r.LibvirtClient, Hypervisor: r.Hypervisor, InstallerMedia: r.InstallerMedia}
+	return prerequisites.StageNative{LibvirtClient: r.LibvirtClient, Hypervisor: r.Hypervisor, InstallerMedia: r.InstallerMedia, NMState: r.NMState}
 }
 
 // ToolRequests restores the catalog's own request shape from the frozen block.

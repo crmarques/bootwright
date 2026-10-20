@@ -273,3 +273,12 @@ func TestCLIVersionAdmitsLatestOrAnyExactPublisherReleaseTag(t *testing.T) {
 	lexicalRows(t, "cli-version", []string{"latest", "1.2.3", "v1.2.3", "v1.9.0-rc.0", "4.22.0-rc.1", "1.2.3+build", "1.02.3", "v1.2", "4.18.0-okd-scos.8", strings.Repeat("1", 95), "v" + strings.Repeat("1", 95)},
 		[]string{"", "v", "vlatest", "latest-1", "Latest", "-1.2.3", "1.2 3", "1.2.3/x", "1.2.3:x", "1.2.3~rc", "v1.2.3\n", strings.Repeat("1", 96), "v" + strings.Repeat("1", 96)})
 }
+
+func TestKubernetesLabelGrammar(t *testing.T) {
+	lexicalRows(t, "kubernetes-label-key", []string{"plain", "example.test/Zone_Name", "kubernetes.io/role", strings.Repeat("a", 63)}, []string{"", "bad/key/extra", "Upper.Example/key", "bad space", "/empty", "example.test/", strings.Repeat("a", 64)})
+	lexicalRows(t, "kubernetes-label-value", []string{"", "rack.A", "A_b-9", strings.Repeat("a", 63)}, []string{"bad value", "a/b", "_start", "end-", strings.Repeat("a", 64)})
+}
+
+func TestExactClusterReleaseGrammar(t *testing.T) {
+	lexicalRows(t, "cluster-release", []string{"4.21.15", "4.22.0-rc.1", "4.18.0-okd-scos.8"}, []string{"4.21", "latest", "4.22.0-", "4.22.0/evil", "v4.22.0"})
+}

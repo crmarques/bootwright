@@ -1,13 +1,12 @@
   bootwright / preflight container-cluster
-      Check ContainerCluster readiness. This command is recognized but not implemented.
+      Check ContainerCluster readiness
 
   Usage
     bootwright preflight container-cluster [flags]
 
   Command flags
-      --clusters            Select comma-separated cluster names (default: all)
-      --dry-run             Limit work to the command's dry-run boundary
-      --trust-on-first-use  Observe unknown SSH keys without accepting them · default true
+      --clusters  Select comma-separated cluster names (default: all)
+      --dry-run   Limit work to the command's dry-run boundary
 
   Common flags
       --ascii       Use ASCII status markers
@@ -21,3 +20,6 @@
 
   More detail
     Use --help --detail full to include SSH overrides.
+
+  Examples
+    bootwright preflight container-cluster --context lab --output json

@@ -1,0 +1,30 @@
+  ✓ Context example
+
+      Mode  ready
+
+  Desired
+      Revision         -
+      Environment      -
+      Files seen       0
+      Objects decoded  0
+
+  Secrets
+    Declared  0
+    Bindings  0
+
+  Next steps
+    bootwright apply --context example
+
+  Lifecycle
+    Operation  op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
+    Verb       apply
+    State      done
+    Next       none
+
+  Clusters
+    [DONE] install alpha
+    [DONE] install bravo
+
+  Handoff
+    not ready
+    the operation has a latched required-log fault

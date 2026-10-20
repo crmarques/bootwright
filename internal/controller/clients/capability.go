@@ -228,7 +228,7 @@ func (c Capability) observe(ctx context.Context, execution lifecycle.Execution) 
 	if err != nil {
 		return unknown, err
 	}
-	tools, complete, err := c.retained(execution, request)
+	tools, complete, err := c.retained(ctx, execution, request)
 	if err != nil {
 		return unknown, err
 	}
@@ -241,6 +241,17 @@ func (c Capability) observe(ctx context.Context, execution lifecycle.Execution) 
 	evidence, err := newEvidence(execution.Block.RequestDigest, prerequisites.ToolsDigest(tools), request.LibvirtClient, tools, installed).encode()
 	if err != nil {
 		return unknown, err
+	}
+	if ready && len(tools) != 0 {
+		area, err := execution.Stage.Setup.OpenBundle(ctx, prerequisites.ToolsDigest(tools))
+		if err != nil {
+			return unknown, err
+		}
+		location, err := area.Location(ctx)
+		if err != nil {
+			return unknown, err
+		}
+		ready = location.Sealed
 	}
 	if ready {
 		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
@@ -300,7 +311,7 @@ func (c Capability) apply(ctx context.Context, execution lifecycle.Execution) (l
 	if err != nil {
 		return failed, err
 	}
-	tools, complete, err := c.retained(execution, request)
+	tools, complete, err := c.retained(ctx, execution, request)
 	if err != nil {
 		return failed, err
 	}
@@ -309,8 +320,20 @@ func (c Capability) apply(ctx context.Context, execution lifecycle.Execution) (l
 		if published, err = c.published(ctx, execution, tools); err != nil {
 			return failed, err
 		}
-	} else if tools, err = c.tools.Resolve(ctx, request.ToolRequests(), request.Egress); err != nil {
-		return failed, err
+	} else {
+		missing := []controller.ToolRequest{}
+		for _, wanted := range request.ToolRequests() {
+			if !slices.ContainsFunc(tools, func(tool prerequisites.ToolDefinition) bool {
+				return tool.Kind == wanted.Kind && tool.Compatibility == wanted.Compatibility && (wanted.Version == "latest" || tool.Version == wanted.Version)
+			}) {
+				missing = append(missing, wanted)
+			}
+		}
+		resolved, err := c.tools.Resolve(ctx, missing, request.Egress)
+		if err != nil {
+			return failed, err
+		}
+		tools = append(tools, resolved...)
 	}
 	report(ctx, execution, "resolve-clients", "ok")
 	if published && len(missing) == 0 {
@@ -516,8 +539,28 @@ func (c Capability) verify(ctx context.Context, execution lifecycle.Execution, r
 // installed, so the block completes without acquisition or host effect; its
 // binding names the area it proved and the unnamed areas are retired.
 func (c Capability) settled(ctx context.Context, execution lifecycle.Execution, request Request, tools []prerequisites.ToolDefinition, installed []prerequisites.HostPackageEvidence) (lifecycle.Result, error) {
+	failureOutcome := reconciliation.OutcomeFailed
+	if len(tools) != 0 {
+		area, err := execution.Stage.Setup.OpenBundle(ctx, prerequisites.ToolsDigest(tools))
+		if err != nil {
+			return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+		}
+		location, err := area.Location(ctx)
+		if err != nil {
+			return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+		}
+		if !location.Sealed {
+			failureOutcome = reconciliation.OutcomeUnknown
+			if _, err := execution.Stage.ClientArea(ctx, prerequisites.ToolsDigest(tools)); err != nil {
+				return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
+			}
+			if err := execution.Stage.SealClientArea(ctx, prerequisites.ToolsDigest(tools)); err != nil {
+				return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
+			}
+		}
+	}
 	if err := execution.Stage.RetireToolAreas(ctx, current(tools, prerequisites.ToolsDigest(tools))); err != nil {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+		return lifecycle.Result{Outcome: failureOutcome}, err
 	}
 	report(ctx, execution, "verify-clients", "ok")
 	evidence, err := newEvidence(execution.Block.RequestDigest, prerequisites.ToolsDigest(tools), request.LibvirtClient, tools, installed).encode()
@@ -554,14 +597,30 @@ func toolSources(tools []prerequisites.ToolDefinition) []string {
 
 // retained recovers the exact closure from identities this host already holds.
 // It reads no publisher metadata, so an inspection never acquires anything.
-func (c Capability) retained(execution lifecycle.Execution, request Request) ([]prerequisites.ToolDefinition, bool, error) {
+func (c Capability) retained(ctx context.Context, execution lifecycle.Execution, request Request) ([]prerequisites.ToolDefinition, bool, error) {
 	if len(request.Tools) == 0 {
 		return []prerequisites.ToolDefinition{}, true, nil
 	}
 	if c.tools == nil {
 		return nil, false, refuse("controller.unsupported", "controller prerequisite installation is not configured", "use a compatible executable")
 	}
-	return c.tools.Select(request.ToolRequests(), execution.Stage.Setup.State.ToolSources)
+	for i := len(execution.ApplyPreparations) - 1; i >= 0; i-- {
+		preparation, err := reconciliation.DecodeEvidence[prerequisites.StagePreparation](execution.ApplyPreparations[i], 1<<20, "controller preparation")
+		if err != nil {
+			return nil, false, err
+		}
+		if len(preparation.AddedSources) == 0 {
+			continue
+		}
+		retained := []prerequisites.DependencySource{}
+		for _, source := range execution.Stage.Setup.State.ToolSources {
+			if slices.Contains(preparation.AddedSources, source.ID) {
+				retained = append(retained, source)
+			}
+		}
+		return c.tools.Select(request.ToolRequests(), retained)
+	}
+	return prerequisites.SelectContextTools(ctx, c.tools, execution.Stage.Setup, request.ToolRequests())
 }
 
 // LocateTool answers, for every other block of the plan this frozen stage

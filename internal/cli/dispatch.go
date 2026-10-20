@@ -105,7 +105,7 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 	case "cluster rsh", "cluster exec":
 		return s.invokeEnvironmentAccess(ctx, path, &values, args)
 	case "preflight container-cluster":
-		return commandResult{}, s.invokeContainerPreflight(ctx, path, &values, args)
+		return s.invokeContainerPreflight(ctx, path, &values, args)
 	case "preflight storage-cluster":
 		return s.invokeStoragePreflight(ctx, path, &values, args)
 	case "preflight add-ons":

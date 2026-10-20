@@ -173,6 +173,10 @@ spec:
   libvirt:
     machineRef: controller
     uri: qemu:///system
+    capacityReserve:
+      cpu: 1
+      memoryMiB: 2048
+      diskGiB: 10
     bmcEmulationDefaults:
       enabled: true
       protocol: redfish

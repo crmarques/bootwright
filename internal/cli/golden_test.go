@@ -290,6 +290,7 @@ func cliGoldens() []cliGolden {
 				{Kind: "Proxy", Name: "lab-proxy", Machine: "controller", Status: lifecycle.RealizationFailed},
 			},
 			Secrets: lifecycle.SecretSummary{Declared: 3, Bindings: 1},
+			Handoff: lifecycle.HandoffSummary{Reasons: []string{"the apply is failed, not done", "block proxy-lab-proxy is failed, not done", "block machine-rhel-01 is failed, not done", "block os-install-rhel-01 is pending, not done"}},
 			// The lost record refuses both the continuation and the removal,
 			// so nothing is offered.
 			NextSteps: []string{},
@@ -318,6 +319,7 @@ func cliGoldens() []cliGolden {
 		result := status()
 		result.NextSteps, result.Contradictions = []string{"bootwright apply --context lab", "bootwright destroy --context lab"}, []string{}
 		result.Lifecycle.State, result.Lifecycle.Next = "unknown", "resolve"
+		result.Handoff = lifecycle.HandoffSummary{Reasons: []string{"the apply is unknown, not done", "block proxy-lab-proxy is failed, not done", "block machine-rhel-01 is unknown, not done", "block os-install-rhel-01 is pending, not done", "block machine-rhel-01 has an unresolved unknown outcome"}}
 		result.Lifecycle.Blocks[3].State, result.Lifecycle.Blocks[3].Attempts = "unknown", 1
 		result.Lifecycle.Blocks[3].Unresolved = &lifecycle.Unresolved{
 			Reason: "domain bootwright-lab-rhel-01 on Machine hypervisor at 192.0.2.5 does not carry this context's ownership",
@@ -338,6 +340,7 @@ func cliGoldens() []cliGolden {
 			Shared:          []lifecycle.ServiceSummary{{Kind: "ArtifactServer", Name: "lab-artifacts", Machine: "controller", Status: lifecycle.RealizationPending}},
 			Secrets:         lifecycle.SecretSummary{Declared: 3},
 			NextSteps:       []string{"bootwright plan --context lab", "bootwright apply --context lab"},
+			Handoff:         lifecycle.HandoffSummary{Reasons: []string{"no apply is recorded"}},
 		}
 	}
 	// A context whose last removal completed and finalized: what it took
@@ -362,6 +365,7 @@ func cliGoldens() []cliGolden {
 			},
 			Secrets:   lifecycle.SecretSummary{Declared: 3},
 			NextSteps: []string{},
+			Handoff:   lifecycle.HandoffSummary{Reasons: []string{"the latest operation is a destroy"}},
 			// A build stamped with a commit and no version registered it.
 			Lifecycle: &lifecycle.LifecycleSummary{
 				Operation: operationID, Verb: "destroy", State: "done", Next: "none", Blocks: removed,
@@ -550,6 +554,13 @@ func cliGoldens() []cliGolden {
 			"nothing repairs it, because Bootwright never changes the owner or mode of an existing state root")
 	}
 	return append([]cliGolden{
+		{golden: "cli-container-preflight", args: "preflight container-cluster --context synthetic", record: func(r *dispatchRecord) { r.result.storagePreflight = containerPreflightReport(false) }},
+		{golden: "cli-container-preflight-json", args: "preflight container-cluster --context synthetic --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = containerPreflightReport(false) }},
+		{golden: "cli-container-preflight-pending-json", args: "preflight container-cluster --context synthetic --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
+			r.result.storagePreflight = containerPreflightReport(true)
+			r.err = diagnostics.NewFailure("preflight.unknown", "container-cluster readiness is not proved", "")
+		}},
+
 		{golden: "cli-storage-preflight", args: "preflight storage-cluster --context synthetic", record: func(r *dispatchRecord) { r.result.storagePreflight = successfulStoragePreflight() }},
 		{golden: "cli-storage-preflight-json", args: "preflight storage-cluster --context synthetic --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = successfulStoragePreflight() }},
 		{golden: "cli-storage-preflight-pending-json", args: "preflight storage-cluster --context synthetic --output json", code: 1, record: func(r *dispatchRecord) {
@@ -1030,7 +1041,7 @@ func cliGoldens() []cliGolden {
 				"    bootwright status is not implemented\n",
 		},
 		{golden: "cli-not-implemented-json", args: "status --output json", code: 1, record: func(r *dispatchRecord) { r.err = availability.ErrNotImplemented }},
-	}, append(clusterGoldens(), diffGoldens()...)...)
+	}, append(append(clusterGoldens(), diffGoldens()...), handoffGoldens()...)...)
 }
 
 // storedImage is the record a media confirmation shows before its prompt.
@@ -1294,4 +1305,14 @@ func successfulStoragePreflight() *storagepreflight.Report {
 
 func pendingStoragePreflight() *storagepreflight.Report {
 	return &storagepreflight.Report{Context: "synthetic", Target: "storage-cluster", Checks: []storagepreflight.Check{{ID: "host.prerequisites", Target: "guest", Status: "pending", Reason: "the Machine has not been installed", Next: "run bootwright apply --context synthetic --stage machines"}, {ID: "capacity.memory", Target: "controller", Status: "unknown", Reason: "the capacity read did not complete", Capacity: &storagepreflight.Capacity{Resource: "memory", Unit: "bytes", Required: 1024, Reserve: 1024}}}, Summary: storagepreflight.Summary{Unknown: 1, Pending: 1}}
+}
+
+func containerPreflightReport(pending bool) *storagepreflight.Report {
+	status, reason, next := "passed", "api.sno.example.test resolves to 192.0.2.10", ""
+	summary := storagepreflight.Summary{Passed: 1}
+	if pending {
+		status, reason, next = "pending", "dry-run would resolve api.sno.example.test to 192.0.2.10", "route zone sno.example.test to DNSServer dns at 192.0.2.53"
+		summary = storagepreflight.Summary{Pending: 1}
+	}
+	return &storagepreflight.Report{Context: "synthetic", Target: "container-cluster", Checks: []storagepreflight.Check{{ID: "resolution.api", Target: "api.sno.example.test", Status: status, Reason: reason, Next: next}}, Summary: summary}
 }

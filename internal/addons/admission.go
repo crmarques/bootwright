@@ -2,7 +2,6 @@ package addons
 
 import (
 	"path"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -28,6 +27,9 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 			s = s.With("inputs", sortedNamed(api.ListValue(inputs...), "name"))
 		}
 		if olm := s.Get("olm"); olm.Present() {
+			if image := olm.Get("catalogSource", "image"); image.Present() {
+				olm = olm.WithPath(api.StringValue(api.CanonicalImage(image.Text())), "catalogSource", "image")
+			}
 			if ns := olm.Get("namespace"); ns.Present() {
 				olm = olm.With("namespace", ns.Default("management", api.StringValue("managed")))
 			}
@@ -147,7 +149,7 @@ func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue 
 		}
 	}
 	for _, label := range olm.Get("namespace", "labels").Fields() {
-		if !validLabelKey(label.Name) || !validLabelValue(label.Value.Text()) {
+		if !api.ValidLexical("kubernetes-label-key", label.Name) || !api.ValidLexical("kubernetes-label-value", label.Value.Text()) {
 			issues = append(issues, addonIssue("api.value", "spec.olm.namespace.labels", "Namespace labels must have valid Kubernetes keys and values.", "use valid Kubernetes label keys and values in olm.namespace.labels"))
 			break
 		}
@@ -289,18 +291,6 @@ func hasEffect(input api.Value, effect string) bool {
 		}
 	}
 	return false
-}
-
-var labelValue = regexp.MustCompile(`^[A-Za-z0-9](?:[-_.A-Za-z0-9]{0,61}[A-Za-z0-9])?$`)
-
-func validLabelValue(value string) bool { return value == "" || labelValue.MatchString(value) }
-
-func validLabelKey(value string) bool {
-	prefix, name, qualified := strings.Cut(value, "/")
-	if qualified {
-		return api.ValidLexical("dns", prefix) && labelValue.MatchString(name)
-	}
-	return labelValue.MatchString(value)
 }
 
 func indexed(field string, index int) string { return field + "[" + strconv.Itoa(index) + "]" }

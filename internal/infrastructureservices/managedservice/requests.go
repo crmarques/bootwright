@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/containercluster"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
@@ -149,21 +150,12 @@ func MachineRecords(catalog api.Catalog) []Record {
 // endpoint that resolved no address contributes no record rather than one
 // pointing nowhere.
 func ClusterRecords(catalog api.Catalog) []Record {
-	zone := containerClusterZone(catalog)
-	if zone == "" {
-		return nil
-	}
 	var records []Record
 	for _, cluster := range catalog.OfKind(api.ContainerCluster) {
-		suffix := "." + cluster.Name() + "." + zone
-		endpoints := cluster.Spec().Get("install", "endpoints")
-		for _, slot := range []string{"api", "api-int"} {
-			if address := hostAddress(endpoints.Get(slot, "address").Text()); address != "" {
-				records = append(records, Record{Addresses: []string{address}, Name: slot + suffix})
+		for _, endpoint := range containercluster.Endpoints(catalog, cluster) {
+			if address := hostAddress(endpoint.Address); address != "" {
+				records = append(records, Record{Addresses: []string{address}, Name: endpoint.Name, Subtree: endpoint.Subtree})
 			}
-		}
-		if address := hostAddress(endpoints.Get("ingress", "address").Text()); address != "" {
-			records = append(records, Record{Addresses: []string{address}, Name: "apps" + suffix, Subtree: true})
 		}
 		for _, node := range cluster.Spec().Get("nodes").Items() {
 			name := node.Get("fqdn").Text()
@@ -189,17 +181,6 @@ func nodeAddress(catalog api.Catalog, reference string) string {
 		return ""
 	}
 	return hostAddress(selected.Get("address").Text())
-}
-
-// containerClusterZone is the zone container clusters are named under.
-// Effective state materializes it, so this reads one field rather than
-// repeating the Environment's own defaulting.
-func containerClusterZone(catalog api.Catalog) string {
-	environments := catalog.OfKind(api.Environment)
-	if len(environments) != 1 {
-		return ""
-	}
-	return environments[0].Spec().Get("domains", "containerClusters").Text()
 }
 
 func sortRecords(records []Record) []Record {

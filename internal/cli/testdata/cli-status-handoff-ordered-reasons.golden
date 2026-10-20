@@ -1,0 +1,31 @@
+  ✓ Context example
+
+      Mode  ready
+
+  Desired
+      Revision         -
+      Environment      -
+      Files seen       0
+      Objects decoded  0
+
+  Secrets
+    Declared  0
+    Bindings  0
+
+  Lifecycle
+    Operation  op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
+    Verb       apply
+    State      unknown
+    Next       none
+
+  Clusters
+    [UNKNOWN] install alpha
+    [PENDING] install bravo
+
+  Handoff
+    not ready
+    the apply is unknown, not done
+    block alpha is unknown, not done
+    block bravo is pending, not done
+    block alpha has an unresolved unknown outcome
+    the operation has a latched required-log fault

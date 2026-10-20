@@ -17,10 +17,16 @@ type statusResult struct {
 	Secrets         statusSecrets          `json:"secrets"`
 	NextSteps       []string               `json:"nextSteps"`
 	Lifecycle       *statusLifecycle       `json:"lifecycle"`
+	Handoff         statusHandoff          `json:"handoff"`
 	Contradictions  []string               `json:"contradictions"`
 }
 
 func (statusResult) documentedResult() {}
+
+type statusHandoff struct {
+	Ready   bool     `json:"ready"`
+	Reasons []string `json:"reasons"`
+}
 
 type statusCheck struct {
 	ID     string `json:"id"`
@@ -103,6 +109,7 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 		Shared:          make([]statusService, 0, len(result.Shared)),
 		Secrets:         statusSecrets{Declared: result.Secrets.Declared, Bindings: result.Secrets.Bindings},
 		NextSteps:       displayLines(result.NextSteps),
+		Handoff:         statusHandoff{Ready: result.Handoff.Ready, Reasons: displayLines(result.Handoff.Reasons)},
 		Contradictions:  displayLines(result.Contradictions),
 	}
 	for _, check := range result.SetupChecks {
@@ -188,6 +195,12 @@ func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMod
 		text.lines(result.NextSteps)
 	}
 	writeStatusLifecycle(&text, result)
+	text.section("Handoff")
+	if result.Handoff.Ready {
+		text.lines([]string{"ready"})
+	} else {
+		text.lines(append([]string{"not ready"}, result.Handoff.Reasons...))
+	}
 	if len(result.Contradictions) != 0 {
 		text.section("Contradictions")
 		text.lines(result.Contradictions)
