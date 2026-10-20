@@ -561,7 +561,7 @@ def test_smb_show_answers_one_resource_itself_or_in_a_list():
                 native.show()
 
 
-def test_cluster_readiness_does_not_wait_for_daemons():
+def test_cluster_observation_reads_no_daemons():
     value, monitor = request("ceph.smb.cluster"), Monitor()
     present(monitor, value)
     observed = worker(value, monitor, Markers(records(value, applied=True))).smb_observe()
