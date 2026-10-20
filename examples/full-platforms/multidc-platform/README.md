@@ -72,8 +72,10 @@ The [object gateway](clusters/ceph/object-gateways/odf-rgw-all.yaml) binds the
 cluster's native RGW service through `serviceRef`; its endpoint is the HTTPS
 ingress whose backend is that service. Admission accepts the gateway, its RGW
 and ingress services and their TLS binding; executing them is still
-unsupported. Native observability, Grafana Secret binding and consumer exports remain
-future intent; see [storage API](../../../specs/api/storage.md) and
+unsupported. Admission also accepts the native observability services and the
+Grafana Secret binding; planning refuses each service that needs an auxiliary
+image until that image can be selected. Consumer exports remain future intent;
+see [storage API](../../../specs/api/storage.md) and
 [native service qualification](../../../specs/storage-native-api.md).
 
 Add-on definitions declare typed inputs, readiness and effects; profiles compose
@@ -105,7 +107,6 @@ The expected result is failure with explicit diagnostics for:
 - Stretch topology and manager-module intent.
 - Unqualified global Ceph options, including missing members of the currently
   qualified pool-default pair.
-- The Grafana Secret binding path, which no binding row admits yet.
 - Four `StorageExport` objects.
 
 The exact diagnostic set is pinned by `TestActualCLIRefusesFutureReferenceFeatures`

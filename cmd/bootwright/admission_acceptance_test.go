@@ -236,6 +236,59 @@ func TestActualCLIRefusesFutureReferenceFeatures(t *testing.T) {
 	requireReferenceRefusals(t, result.Diagnostics, false)
 }
 
+// TestReferenceReadmeListsExactlyTheReferenceRefusals holds the reference
+// README's expected-failure bullets to referenceRefusals: each bullet claims
+// its diagnostics, every diagnostic belongs to exactly one bullet, and a bullet
+// that claims none or a bullet outside the table fails.
+func TestReferenceReadmeListsExactlyTheReferenceRefusals(t *testing.T) {
+	stretch := func(d diagnosticTuple) bool {
+		return d.field == "$.spec.ceph.mgrModules" || d.field == "$.spec.ceph.topology.stretch"
+	}
+	global := func(d diagnosticTuple) bool { return strings.HasPrefix(d.field, "$.spec.ceph.config.global.") }
+	export := func(d diagnosticTuple) bool { return d.kind == "StorageExport" }
+	bullets := map[string]func(diagnosticTuple) bool{
+		"Stretch topology and manager-module intent.":                                                              stretch,
+		"Unqualified global Ceph options, including missing members of the currently qualified pool-default pair.": global,
+		"Four `StorageExport` objects.":                                                                            export,
+	}
+	data, err := os.ReadFile(filepath.Join(examplePath(t, "multidc-platform"), "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, list, found := strings.Cut(string(data), "The expected result is failure with explicit diagnostics for:\n\n")
+	if !found {
+		t.Fatal("the reference README states no expected-failure list")
+	}
+	list, _, _ = strings.Cut(list, "\n\n")
+	listed := map[string]bool{}
+	for item := range strings.SplitSeq(strings.TrimPrefix(list, "- "), "\n- ") {
+		item = strings.Join(strings.Fields(item), " ")
+		if bullets[item] == nil {
+			t.Errorf("the reference README expects %q, which no reference refusal raises", item)
+		}
+		listed[item] = true
+	}
+	for bullet, claims := range bullets {
+		if !listed[bullet] {
+			t.Errorf("the reference README omits %q", bullet)
+		}
+		if !slices.ContainsFunc(referenceRefusals(), claims) {
+			t.Errorf("no reference refusal raises %q", bullet)
+		}
+	}
+	for _, d := range referenceRefusals() {
+		owners := 0
+		for _, claims := range bullets {
+			if claims(d) {
+				owners++
+			}
+		}
+		if owners != 1 {
+			t.Errorf("the reference refusal %s belongs to %d README bullets", d, owners)
+		}
+	}
+}
+
 // diagnosticTuple names one diagnostic by what an author reads: its code, the
 // object it is about and the field it points at.
 type diagnosticTuple struct{ code, kind, name, field string }
