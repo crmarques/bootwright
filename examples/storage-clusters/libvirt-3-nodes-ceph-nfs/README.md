@@ -1,12 +1,12 @@
 # Three-node Ceph NFS export on libvirt and sushy
 
-This example declares three managed RHEL guests and an IBM Storage Ceph cluster with one NFS export: size-2/min-size-2 CephFS metadata and data pools, a native `mds` service `mds.files` of two daemons, a CephFS filesystem `files` with the subvolume group `apps`, a 1 GiB subvolume `docs` in that group, a native `nfs` service `nfs.shares` of one daemon without an ingress, and the StorageNFSExport `docs` that serves that subvolume at the pseudo path `/docs` over NFSv4 to clients in `198.51.100.0/24`. Addresses and names are synthetic. Copy the input to an operator-owned directory before adjusting it; keep real inputs and credentials outside tracked files.
+This example declares three managed RHEL guests and an IBM Storage Ceph cluster with one NFS export: size-2/min-size-2 CephFS metadata and data pools, a native `mds` service `mds.files` of two daemons, a CephFS filesystem `files` with the subvolume group `apps`, a 1 GiB subvolume `docs` in that group, a native `nfs` service `nfs.shares` of one daemon without an ingress, and the StorageNFSExport `docs` that serves that subvolume at the pseudo path `/docs` over NFSv4. The export's own access is `NONE`; its first client entry denies `198.51.100.13` (`rhel-03`) and its second grants read-write to the rest of `198.51.100.0/24`, because NFS-Ganesha applies the first entry that matches a client. Addresses and names are synthetic. Copy the input to an operator-owned directory before adjusting it; keep real inputs and credentials outside tracked files.
 
 The cluster's settings block enables the `nfs` manager module, and the service-unit block `ceph-service-ceph-lab-nfs-shares` applies `nfs.shares`. After `ceph-subvolume-docs` has created the subvolume, the export block `ceph-nfs-export-docs` applies one export with `ceph nfs export apply shares -i -`. That export serves the path the subvolume's creation proof reports. The block records the export ID and the CephFS principal that the NFS manager generates, and it never adopts or overwrites an export that it did not create.
 
 ## Budget and setup
 
-The budget, host prerequisites, `setup`, `preflight controller`, media imports and entitlement are the [three-node example's](../libvirt-3-nodes-ceph/README.md#initial-setup); this example authors the same release coordinates, guests and disks. Review [cluster.yaml](storage/cluster.yaml), which owns the native MON, MGR, OSD, `mds.files` and `nfs.shares` services, [filesystem.yaml](storage/filesystem.yaml) and [subvolume.yaml](storage/subvolume.yaml), which own the filesystem and the subvolume, and [nfs-export.yaml](storage/nfs-export.yaml), which owns the export.
+The budget, host prerequisites, `setup`, `preflight controller`, media imports and entitlement are the [three-node example's](../libvirt-3-nodes-ceph/README.md#initial-setup); this example authors the same release coordinates, guests and disks, and adds `nfs-utils` to the guests' packages so that `rhel-02` and `rhel-03` can act as NFS clients. Review [cluster.yaml](storage/cluster.yaml), which owns the native MON, MGR, OSD, `mds.files` and `nfs.shares` services, [filesystem.yaml](storage/filesystem.yaml) and [subvolume.yaml](storage/subvolume.yaml), which own the filesystem and the subvolume, and [nfs-export.yaml](storage/nfs-export.yaml), which owns the export.
 
 ## Create the context and apply
 
@@ -42,7 +42,33 @@ Print the admin node and its Ceph command as the three-node example's [validatio
 <cephCommand> nfs export info shares /docs
 ```
 
-Require `HEALTH_OK`, or only the tolerated `CHA_ERROR_SENDING_REPORT` warning, one running `nfs.shares` daemon, and an export at `/docs` whose `path` lies under `/volumes/apps/docs/`, with `protocols` `[4]`, `transports` `["TCP"]` and the one client entry for `198.51.100.0/24`. Bootwright's readiness proves the same stored export. Mounting it with NFSv4 from a client inside `198.51.100.0/24` and writing a file is the operator's acceptance, not Bootwright's.
+Require `HEALTH_OK`, or only the tolerated `CHA_ERROR_SENDING_REPORT` warning, one running `nfs.shares` daemon, and an export at `/docs` whose `path` lies under `/volumes/apps/docs/`, with `access_type` `NONE`, `protocols` `[4]`, `transports` `["TCP"]` and the two client entries in their declared order. Bootwright's readiness proves the same stored export; client access is the operator's acceptance, not Bootwright's.
+
+Write the NFS daemon's host from the `orch ps` output as `<nfsHost>`. From the allowed client `rhel-02`, mount the export with NFSv4, write 1 MiB, read it back and unmount:
+
+```sh
+./bin/bootwright cluster exec --name ceph-lab --node rhel-02 -- sudo -n bash -s -- '<nfsHost>' <<'CHECK'
+set -euo pipefail
+check_dir=$(mktemp -d)
+trap 'umount "$check_dir/mnt" 2>/dev/null || true; rm -f -- "$check_dir/input"; rmdir -- "$check_dir/mnt" "$check_dir"' EXIT
+mkdir "$check_dir/mnt"
+mount -t nfs4 -o proto=tcp "$1:/docs" "$check_dir/mnt"
+head -c 1048576 /dev/urandom > "$check_dir/input"
+cp "$check_dir/input" "$check_dir/mnt/nfs-check"
+cmp "$check_dir/input" "$check_dir/mnt/nfs-check"
+rm -- "$check_dir/mnt/nfs-check"
+CHECK
+```
+
+From the denied client `rhel-03`, require the mount to fail with `access denied by server`:
+
+```sh
+./bin/bootwright cluster exec --name ceph-lab --node rhel-03 -- sudo -n bash -s -- '<nfsHost>' <<'CHECK'
+check_dir=$(mktemp -d)
+trap 'umount "$check_dir" 2>/dev/null || true; rmdir -- "$check_dir"' EXIT
+if mount -t nfs4 -o proto=tcp "$1:/docs" "$check_dir"; then echo 'the denied client mounted /docs'; exit 1; fi
+CHECK
+```
 
 ## Cleanup
 

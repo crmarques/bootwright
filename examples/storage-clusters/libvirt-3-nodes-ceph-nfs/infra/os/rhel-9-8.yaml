@@ -50,6 +50,7 @@ spec:
         - podman
         - lvm2
         - python3
+        - nfs-utils
 
     services:
       enabled:

@@ -9,3 +9,6 @@ spec:
   realm: objects
   zoneGroup: objects
   zone: objects
+
+  endpoint:
+    fqdn: s3.lab.example.test

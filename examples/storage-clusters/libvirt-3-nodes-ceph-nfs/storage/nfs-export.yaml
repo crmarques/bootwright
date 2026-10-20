@@ -10,7 +10,7 @@ spec:
 
   native:
     pseudo: /docs
-    access_type: RW
+    access_type: NONE
     squash: root_squash
 
     protocols:
@@ -20,6 +20,12 @@ spec:
       name: CEPH
 
     clients:
+      - access_type: NONE
+        squash: root_squash
+
+        addresses:
+          - 198.51.100.13
+
       - access_type: RW
         squash: root_squash
 

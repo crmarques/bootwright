@@ -85,7 +85,19 @@ spec:
           label: ceph-core
 
         spec:
-          rgw_frontend_port: 8080
+          rgw_frontend_port: 443
+          ssl: true
+          certificate_source: inline
+
+    serviceBindings:
+      - serviceRef: rgw.objects
+
+        secrets:
+          - path: /spec/ssl_cert
+            secretRef: rgw-objects-tls
+
+          - path: /spec/ssl_key
+            secretRef: rgw-objects-tls
 
     topology:
       nodes:

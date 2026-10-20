@@ -1,0 +1,21 @@
+base: libvirt-3-nodes-ceph-object
+
+edits:
+  - file: storage/cluster.yaml
+    replace: "          rgw_frontend_port: 443\n          ssl: true\n          certificate_source: inline\n"
+    with: "          rgw_frontend_port: 8080\n"
+
+  - file: storage/cluster.yaml
+    replace: "\n    serviceBindings:\n      - serviceRef: rgw.objects\n"
+    with: "\n      - service_type: ingress\n        service_id: rgw.objects\n\n        placement:\n          count: 2\n          label: ceph-core\n\n        spec:\n          backend_service: rgw.objects\n          virtual_ip: 198.51.100.50/24\n          frontend_port: 443\n          monitor_port: 1967\n          ssl: true\n          certificate_source: inline\n\n    serviceBindings:\n      - serviceRef: ingress.rgw.objects\n"
+
+expect:
+  - kind: StorageCluster
+    name: ceph-lab
+    service: ingress.rgw.objects
+    image: haproxy
+
+  - kind: StorageObjectGateway
+    name: objects
+    service: ingress.rgw.objects
+    image: haproxy

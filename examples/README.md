@@ -14,8 +14,8 @@ validate or import that directory, rather than its category or all of
 | `infra-components/` | [lab-services](infra-components/lab-services/README.md) | Run managed proxy, DNS, NTP and artifact services on the controller. |
 | `storage-clusters/` | [libvirt-3-nodes-ceph](storage-clusters/libvirt-3-nodes-ceph/README.md) | Install three RHEL guests and a core IBM Ceph cluster with an RBD pool and client. |
 | `storage-clusters/` | [libvirt-3-nodes-ceph-block-file](storage-clusters/libvirt-3-nodes-ceph-block-file/README.md) | Install three RHEL guests and an IBM Ceph cluster with a placement policy, an RBD image, a CephFS filesystem with an active and a standby MDS, a subvolume group and a subvolume, with block and file data and MDS failover checks. |
-| `storage-clusters/` | [libvirt-3-nodes-ceph-object](storage-clusters/libvirt-3-nodes-ceph-object/README.md) | Install three RHEL guests and an IBM Ceph cluster with an object gateway: its realm, zone group, zone, zone pools and two plain HTTP RGW daemons. |
-| `storage-clusters/` | [libvirt-3-nodes-ceph-nfs](storage-clusters/libvirt-3-nodes-ceph-nfs/README.md) | Install three RHEL guests and an IBM Ceph cluster with a CephFS subvolume served by one NFSv4 export of a direct NFS service. |
+| `storage-clusters/` | [libvirt-3-nodes-ceph-object](storage-clusters/libvirt-3-nodes-ceph-object/README.md) | Install three RHEL guests and an IBM Ceph cluster with an object gateway: its realm, zone group, zone, zone pools and two RGW daemons that serve its TLS endpoint, with certificate-name and daemon failover checks. |
+| `storage-clusters/` | [libvirt-3-nodes-ceph-nfs](storage-clusters/libvirt-3-nodes-ceph-nfs/README.md) | Install three RHEL guests and an IBM Ceph cluster with a CephFS subvolume served by one NFSv4 export of a direct NFS service, with allowed and denied client checks. |
 | `container-clusters/` | [lab-sno](container-clusters/lab-sno/README.md) | Install single-node OpenShift on a libvirt guest. |
 | `full-platforms/` | [multidc-platform](full-platforms/multidc-platform/README.md) | Authoring reference for a multi-datacenter platform; current admission refuses its unsupported features. |
 

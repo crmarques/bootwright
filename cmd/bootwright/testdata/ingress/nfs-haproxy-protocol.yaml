@@ -1,0 +1,37 @@
+base: libvirt-3-nodes-ceph-nfs
+
+edits:
+  - file: storage/cluster.yaml
+    replace: "      - service_type: nfs\n        service_id: shares\n\n        placement:\n          count: 1\n          label: ceph-core\n"
+    with: "      - service_type: nfs\n        service_id: shares\n\n        placement:\n          count: 2\n          label: ceph-core\n\n        spec:\n          port: 12049\n          enable_haproxy_protocol: true\n\n      - service_type: ingress\n        service_id: nfs.shares\n\n        placement:\n          count: 2\n          label: ceph-core\n\n        spec:\n          backend_service: nfs.shares\n          virtual_ip: 198.51.100.51/24\n          frontend_port: 2049\n          monitor_port: 9049\n          enable_haproxy_protocol: true\n"
+
+expect:
+  - kind: StorageCluster
+    name: ceph-lab
+    service: ingress.nfs.shares
+    image: haproxy
+
+  - kind: StorageFilesystem
+    name: files
+    service: ingress.nfs.shares
+    image: haproxy
+
+  - kind: StorageNFSExport
+    name: docs
+    service: ingress.nfs.shares
+    image: haproxy
+
+  - kind: StoragePool
+    name: cephfs-data
+    service: ingress.nfs.shares
+    image: haproxy
+
+  - kind: StoragePool
+    name: cephfs-metadata
+    service: ingress.nfs.shares
+    image: haproxy
+
+  - kind: StorageSubvolume
+    name: docs
+    service: ingress.nfs.shares
+    image: haproxy

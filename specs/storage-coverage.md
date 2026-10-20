@@ -305,6 +305,29 @@ keyring, MDS failover, interruption and continuation, replay, changed-intent
 refusal and retirement with the hosts. Erasure-coded pools and the larger
 CephFS shapes stay with P1 and P2.
 
+The [three-node object example](../examples/storage-clusters/libvirt-3-nodes-ceph-object/README.md)
+and the [three-node NFS example](../examples/storage-clusters/libvirt-3-nodes-ceph-nfs/README.md)
+are outside this catalog and claim no B484 row; their runbooks are inputs to
+P2's. The object example binds a StorageObjectGateway to an rgw service of two
+daemons that terminate TLS themselves with a generated `tlsCertificate` Secret
+naming the gateway's endpoint, over the eight derived zone pools. Its runbook
+records an HTTPS status line from each daemon through the endpoint name with
+the bound certificate as trust anchor, a failed name check through a host
+address, and one RGW daemon stopped and started while the other answers. The
+NFS example serves a subvolume through a direct `nfs` service and one export
+whose own access is `NONE`, with a denied client address listed before the
+allowed client network. Its runbook records an NFSv4 mount, write and read
+from an allowed guest and a refused mount from the denied guest. No tracked
+example authors an auxiliary image, because their values come from the owner
+for each release ([B477](milestones/m2.md#b477)), so ingress is covered offline
+only: `TestIngressFixturesRefuseUntilAuxiliaryImagesAreSelected` applies an RGW
+ingress on two hosts, an NFS keepalive-only ingress and an NFS haproxy-protocol
+ingress ([fixtures](../cmd/bootwright/testdata/ingress/)) to these examples and
+asserts the [refusal](storage.md#refusal-table) of a native service whose
+auxiliary image is not selected, and pins each fixture's effective
+StorageCluster. P2 keeps TLS ingress, VIP failover, multi-active NFS and the
+client guest.
+
 ### Profile runbooks
 
 Each P1 to P7 README has these `##` headings, each once and in this order.

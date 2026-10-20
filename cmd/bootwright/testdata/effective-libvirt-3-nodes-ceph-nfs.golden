@@ -214,6 +214,7 @@ spec:
         - podman
         - lvm2
         - python3
+        - nfs-utils
       excludeDocs: true
       installWeakDeps: false
     repositories:
@@ -531,8 +532,12 @@ spec:
   serviceID: shares
   subvolumeRef: docs
   native:
-    access_type: RW
+    access_type: NONE
     clients:
+      - access_type: NONE
+        addresses:
+          - 198.51.100.13
+        squash: root_squash
       - access_type: RW
         addresses:
           - 198.51.100.0/24

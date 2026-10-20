@@ -446,7 +446,16 @@ spec:
           label: ceph-core
           count: 2
         spec:
-          rgw_frontend_port: 8080
+          certificate_source: inline
+          rgw_frontend_port: 443
+          ssl: true
+    serviceBindings:
+      - serviceRef: rgw.objects
+        secrets:
+          - path: /spec/ssl_cert
+            secretRef: rgw-objects-tls
+          - path: /spec/ssl_key
+            secretRef: rgw-objects-tls
     topology:
       nodes:
         - name: rhel-01
@@ -475,6 +484,8 @@ spec:
   realm: objects
   zoneGroup: objects
   zone: objects
+  endpoint:
+    fqdn: s3.lab.example.test
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Secret
@@ -544,3 +555,16 @@ spec:
       ipAddresses:
         - 127.0.0.1
       validityDays: 365
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: rgw-objects-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: s3.lab.example.test
+      dnsNames:
+        - s3.lab.example.test
+      validityDays: 3650
