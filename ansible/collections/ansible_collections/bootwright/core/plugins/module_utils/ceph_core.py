@@ -25,6 +25,9 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 
 READINESS_TIMEOUT = 900
 READINESS_INTERVAL = 5
+# Each ingress host's read-only firewall check, all within one native call of the block's Go deadline.
+FIREWALL_CALL = 120
+FIREWALL_WINDOW = 600
 WORKER_CEILINGS = (640, 1920, 4285)
 # The bootstrap call's own launcher ceiling and worker budget; the cluster block's Go deadline (cephDeadline) adds the call.
 BOOTSTRAP_CEILING = 1920
@@ -52,6 +55,7 @@ CLUSTER_REASONS = (
     "foreign-rbd-image", "rbd-image-identity", "foreign-filesystem", "filesystem-identity", "filesystem-multiple-disabled", "foreign-subvolume-group",
     "mds-coverage", "foreign-subvolume", "subvolume-identity", "foreign-image", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign",
     "object-zone-pools", "object-endpoint-certificate", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape",
+    "ingress-firewall",
 )
 
 
@@ -764,11 +768,28 @@ def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, priv
         pause(min(READINESS_INTERVAL, remaining))
 
 
+def ingress_firewall(request, transport, found, now):
+    """Before the first effect of an apply: each host of the ingress proves, read-only, that an active firewall passes VRRP and the client
+    port. One native call of the block's Go deadline covers every host's check."""
+    if found is None:
+        return
+    hosts = {host["name"]: host for host in request["hosts"]}
+    deadline = now() + FIREWALL_WINDOW
+    for name in found[0]["placement"]["hosts"]:
+        remaining = deadline - now()
+        ceph_native.require(remaining > 0, "not-ready")
+        result = transport.call(hosts[name], "ingress_firewall", timeout=min(FIREWALL_CALL, remaining))
+        ceph_native.require(result == {"changed": False}, "evidence")
+
+
 def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause, phases=("unit",)):
-    """A service unit runs only on the bootstrap host: its preparation proof, its apply phases in order, then its own readiness wait."""
+    """A service unit runs its apply phases only on the bootstrap host: its preparation proof, with an ingress the firewall check on each
+    ingress host, its apply phases in order, then its own readiness wait."""
     changed = False
     if operation == "apply":
         transport.call(bootstrap, "prerequisites")
+        if request["action"] == "service":
+            ingress_firewall(request, transport, ceph_native_units.frontend(request), now)
         for phase in phases:
             produced = transport.call(bootstrap, phase)
             ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
@@ -785,12 +806,14 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
 
 
 def execute_gateway(request, operation, request_digest, transport, bootstrap, *, now, pause):
-    """An object gateway runs as a service unit does, on the bootstrap host only: zone, placement, then its services. With TLS the certificate
-    reaches every observation and removal, and the private key only the service apply."""
+    """An object gateway runs as a service unit does, its phases on the bootstrap host only: with an ingress the firewall check on each ingress
+    host first, then zone, placement and its services. With TLS the certificate reaches every observation and removal, and the private key only
+    the service apply."""
     seen = transport.gateway_material(False) if request["gateway"]["bindings"] else None
     changed = False
     if operation == "apply":
         transport.call(bootstrap, "prerequisites")
+        ingress_firewall(request, transport, ceph_native_object.frontend(request), now)
         for phase in ceph_native_object.APPLY_PHASES:
             private = transport.gateway_material(True) if seen and phase == "gateway_service" else None
             produced = transport.call(bootstrap, phase, private) if private else transport.call(bootstrap, phase)

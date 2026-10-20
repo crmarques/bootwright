@@ -425,6 +425,20 @@ hung and require unmount/remount. B478 qualifies ingress and session behavior
 per mode, including the required recovery action; it does not infer seamless
 failover from a VIP.
 
+Guest firewalls: when `firewalld.service` is enabled and running, upstream
+cephadm opens each deployed daemon's TCP endpoint ports with
+`firewall-cmd --permanent --add-port` in firewalld's default zone and then
+reloads ([cephadm.py](https://github.com/ceph/ceph/blob/v20.2.1/src/cephadm/cephadm.py#L976-L983),
+[firewalld.py](https://github.com/ceph/ceph/blob/v20.2.1/src/cephadm/cephadmlib/firewalld.py#L84-L119),
+[serve.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/serve.py#L1371-L1383)),
+and it never opens VRRP for keepalived, which has no firewalld service form
+([ingress.py](https://github.com/ceph/ceph/blob/v20.2.1/src/cephadm/cephadmlib/daemons/ingress.py#L150-L160)).
+Whether a managed guest runs firewalld depends on its install profile.
+Bootwright owns no host firewall: an ingress refuses `ingress-firewall` before
+effects when an ingress host's active firewalld would drop VRRP or the client
+port ([Resources, readiness and access](storage.md#resources-readiness-and-access)).
+Other families' listeners (NVMe-oF, SMB) are B484's live observation.
+
 [Erasure-code overwrites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-coding-overwrites)
 require BlueStore and explicit overwrite enablement for RBD/CephFS data, with
 replicated metadata and explicit data-pool/layout selection. RGW keeps its

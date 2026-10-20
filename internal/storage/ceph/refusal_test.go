@@ -262,6 +262,26 @@ func TestANFSExportPathEscapeRefusalNamesItsNextStep(t *testing.T) {
 	}
 }
 
+func TestAnIngressFirewallRefusalNamesItsNextStep(t *testing.T) {
+	const message = "a host that runs the ingress of a Ceph NFS service or StorageObjectGateway has an active firewalld that does not permit " +
+		"VRRP (IP protocol 112) or the ingress's client port on the interface that carries its virtual IP"
+	const remedy = "permit VRRP (IP protocol 112) and the port the native error names in the firewalld zone it names on the host it names, " +
+		"for example with firewall-cmd --permanent --zone=<zone> --add-protocol=vrrp --add-port=<port>/tcp and firewall-cmd --reload, " +
+		"or install that host without an active firewall, then apply again; Bootwright never changes a host's firewall, and this apply changed nothing before the check"
+	r := nfsUnitRequest()
+	observation, err := New(api.StorageCluster, &refusingRunner{reason: "ingress-firewall"}).Observe(context.Background(), withMaterial(executionFor(t, r), r))
+	unit := diagnostics.Of(err)
+	effect, gateway := gatewayRefusal(t, "ingress-firewall")
+	for _, d := range [][]diagnostics.Diagnostic{unit, gateway} {
+		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Message != message || d[0].Remediation != remedy {
+			t.Fatalf("an ingress-firewall refusal reached the operator as %+v", d)
+		}
+	}
+	if observation.Effect != reconciliation.EffectUnknown || effect != reconciliation.EffectUnknown {
+		t.Fatalf("an ingress-firewall refusal left the unit %s and the gateway %s", observation.Effect, effect)
+	}
+}
+
 // The module publishes only a reason its block names, and a token the block
 // does not name as unknown with the token in its detail, so each table names
 // exactly what ceph_core.py may publish for its block, unknown among them.
@@ -293,7 +313,7 @@ func TestEachCephBlockNamesExactlyTheRefusalsItsModuleMayPublish(t *testing.T) {
 func TestResourceRefusalsNameTheirNextStep(t *testing.T) {
 	refusals := adapterRefusals()
 	generic := diagnostics.Of(refusals["native-output"])[0].Remediation
-	for _, reason := range []string{"foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget", "foreign-rbd-image", "rbd-image-identity", "foreign-subvolume", "subvolume-identity", "pool-drift", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign", "object-zone-pools", "object-endpoint-certificate", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape"} {
+	for _, reason := range []string{"foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget", "foreign-rbd-image", "rbd-image-identity", "foreign-subvolume", "subvolume-identity", "pool-drift", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign", "object-zone-pools", "object-endpoint-certificate", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape", "ingress-firewall"} {
 		d := diagnostics.Of(refusals[reason])
 		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Remediation == generic || strings.Contains(d[0].Message, "could not prove its") {
 			t.Fatalf("%s reaches the operator as %+v", reason, d)

@@ -14,17 +14,36 @@ from __future__ import annotations
 # pylint: disable=unidiomatic-typecheck
 
 import collections
+import ipaddress
 import re
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_nfs, ceph_native_resources
-from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import canonical, named, require
+from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, canonical, named, require
 
-UnitType = collections.namedtuple("UnitType", ("validate", "check", "claim", "settle", "expected", "readiness", "daemon_types"))
+UnitType = collections.namedtuple("UnitType", ("validate", "check", "claim", "settle", "expected", "readiness", "daemon_types", "frontend"))
 UNIT_TYPES = {
     "nfs": UnitType(ceph_native_nfs.validate, ceph_native_nfs.check, ceph_native_nfs.claim, ceph_native_nfs.settle, ceph_native_nfs.expected,
-                    ceph_native_nfs.readiness, ceph_native_nfs.DAEMON_TYPES),
+                    ceph_native_nfs.readiness, ceph_native_nfs.DAEMON_TYPES, ceph_native_nfs.frontend),
 }
-PHASES = frozenset(("unit",))
+PHASES = frozenset(("unit", "ingress_firewall"))
+# The ingress firewall check reads only these host tools, never with a write, reload or query form.
+SYSTEMCTL = "/usr/bin/systemctl"
+FIREWALL_CMD = "/usr/bin/firewall-cmd"
+IP = "/usr/sbin/ip"
+FIREWALL_UNIT = "firewalld.service"
+FIREWALL_TIMEOUT = 20
+MAX_INTERFACES = 256
+MAX_ADDRESSES = 64
+MAX_CANDIDATES = 8
+MAX_SERVICES = 64
+VRRP = "VRRP (IP protocol 112)"
+VRRP_TOKENS = frozenset(("vrrp", "112"))
+UNIT_STATE = re.compile(r"[a-z-]{1,32}\Z")
+INTERFACE = re.compile(r"[A-Za-z0-9_.-]{1,15}\Z")
+ZONE_NAME = re.compile(r"[A-Za-z0-9_.+-]{1,64}\Z")
+PORT_TOKEN = re.compile(r"([0-9]{1,5})(?:-([0-9]{1,5}))?/tcp\Z")
+RICH_VRRP = re.compile(r'rule (?:family="(ipv4|ipv6)" )?protocol value="(?:vrrp|112)" accept\Z')
+RICH_PORT = re.compile(r'rule (?:family="(ipv4|ipv6)" )?port port="([0-9]{1,5})(?:-([0-9]{1,5}))?" protocol="tcp" accept\Z')
 DOCUMENT_MEMBERS = frozenset(("networks", "placement", "service_id", "service_type", "spec"))
 INPUTS_VERSION = "ceph-service-inputs-v1"
 MAX_DAEMONS = 256
@@ -60,6 +79,159 @@ def validate(request, hosts):
         require(name not in seen and delegated.get(name) == listed)
         seen.add(name)
     UNIT_TYPES[unit["type"]].validate(unit, request, hosts)
+
+
+def frontend(request):
+    """The unit's ingress document and client port, as its type names them; None without an ingress."""
+    return UNIT_TYPES[request["service"]["type"]].frontend(request["service"])
+
+
+def text(output):
+    return bytes(output).decode("utf-8", "replace")
+
+
+def firewall_active(worker):
+    """Whether firewalld filters here: inactive or failed does not, active or reloading does; any other state is unsettled and refuses."""
+    unused, output = worker.run([SYSTEMCTL, "is-active", FIREWALL_UNIT], timeout=FIREWALL_TIMEOUT)
+    state = bytes(output).decode("ascii", "replace").strip()
+    if state in ("inactive", "failed"):
+        return False
+    if state in ("active", "reloading"):
+        return True
+    shown = state if UNIT_STATE.fullmatch(state) else "unknown"
+    raise NativeFailure("ingress-firewall", worker.native_coordinate(), "host " + worker.host["name"] + ": " + FIREWALL_UNIT + " is " + shown)
+
+
+def address_networks(rows):
+    """Each interface name with the networks of its addresses, from `ip -json address show`."""
+    require(isinstance(rows, list) and len(rows) <= MAX_INTERFACES, "native-output")
+    found = []
+    for row in rows:
+        require(isinstance(row, dict) and isinstance(row.get("ifname"), str), "native-output")
+        entries = row.get("addr_info")
+        require(isinstance(entries, list) and len(entries) <= MAX_ADDRESSES, "native-output")
+        for entry in entries:
+            require(isinstance(entry, dict) and entry.get("family") in ("inet", "inet6") and isinstance(entry.get("local"), str)
+                    and type(entry.get("prefixlen")) is int, "native-output")
+            try:
+                found.append((row["ifname"], ipaddress.ip_interface(entry["local"] + "/" + str(entry["prefixlen"])).network))
+            except ValueError:
+                raise Refusal("native-output") from None
+    return found
+
+
+def vip_interfaces(worker, spec):
+    """The interfaces cephadm puts the virtual IP and VRRP on: those whose network holds it, else those on a listed virtual interface network."""
+    vip = ipaddress.ip_interface(spec["virtual_ip"]).ip
+    networks = address_networks(worker.command([IP, "-json", "address", "show"], timeout=FIREWALL_TIMEOUT))
+    candidates = {name for name, network in networks if vip in network}
+    if not candidates and "virtual_interface_networks" in spec:
+        candidates = {name for name, network in networks if str(network) in spec["virtual_interface_networks"]}
+    require(len(candidates) <= MAX_CANDIDATES and all(INTERFACE.fullmatch(name) is not None for name in candidates), "native-output")
+    return vip, sorted(candidates)
+
+
+def interface_zones(worker, candidates):
+    """Each candidate's runtime zone; an interface bound to no zone is in the default zone, read once."""
+    zones, default = {}, []
+    for name in candidates:
+        code, output = worker.run([FIREWALL_CMD, "--get-zone-of-interface=" + name], timeout=FIREWALL_TIMEOUT)
+        stdout, stderr = text(output).strip(), text(getattr(output, "stderr", b"")).strip()
+        if code == 0 and ZONE_NAME.fullmatch(stdout) is not None:
+            zones[name] = stdout
+        elif code != 0 and "no zone" in (stdout, stderr):
+            if not default:
+                zone = text(worker.command([FIREWALL_CMD, "--get-default-zone"], json_result=False, timeout=FIREWALL_TIMEOUT)).strip()
+                require(ZONE_NAME.fullmatch(zone) is not None, "native-output")
+                default.append(zone)
+            zones[name] = default[0]
+        else:
+            raise NativeFailure("native-command", worker.native_coordinate(), getattr(output, "stderr", b"") or output)
+    return zones
+
+
+def zone_fields(value):
+    """firewall-cmd's `--info-zone` or `--info-service` text: each two-space `key: value` line, and the tab lines after `rich rules`."""
+    fields, rules, rich = {}, [], False
+    for line in value.splitlines()[1:]:
+        if line.startswith("\t"):
+            if rich:
+                rules.append(line[1:].strip())
+            continue
+        rich = False
+        if line.startswith("  ") and not line.startswith("   ") and ":" in line:
+            key, unused, member = line[2:].partition(":")
+            fields[key] = member.strip()
+            rich = key == "rich rules"
+    return fields, rules
+
+
+def in_range(port, low, high):
+    return int(low) <= port <= int(high or low)
+
+
+def grants_vrrp(fields, rules, family):
+    return bool(VRRP_TOKENS & set(fields.get("protocols", "").split())) or any(
+        found is not None and found.group(1) in (None, family) for found in (RICH_VRRP.fullmatch(rule) for rule in rules))
+
+
+def grants_port(fields, rules, family, port):
+    tokens = (PORT_TOKEN.fullmatch(token) for token in fields.get("ports", "").split())
+    if any(found is not None and in_range(port, found.group(1), found.group(2)) for found in tokens):
+        return True
+    return any(found is not None and found.group(1) in (None, family) and in_range(port, found.group(2), found.group(3))
+               for found in (RICH_PORT.fullmatch(rule) for rule in rules))
+
+
+def service_grants(worker, zone, names, port, read, needs):
+    """Follow the zone's services and their includes while a need is unmet; only a service without a destination grants."""
+    queue, seen = list(names), set()
+    while queue and not all(needs):
+        name = queue.pop(0)
+        if name in seen:
+            continue
+        seen.add(name)
+        require(ZONE_NAME.fullmatch(name) is not None, "native-output")
+        if name not in read:
+            if len(read) >= MAX_SERVICES:
+                raise NativeFailure("ingress-firewall", worker.native_coordinate(),
+                                    "host " + worker.host["name"] + ": firewalld zone " + zone + " lists more than " + str(MAX_SERVICES) + " services")
+            argv = [FIREWALL_CMD, "--info-service=" + name]
+            read[name] = zone_fields(text(worker.command(argv, json_result=False, timeout=FIREWALL_TIMEOUT)))[0]
+        fields = read[name]
+        if not fields.get("destination"):
+            needs = [needs[0] or bool(VRRP_TOKENS & set(fields.get("protocols", "").split())), needs[1] or grants_port(fields, [], None, port)]
+        queue.extend(fields.get("includes", "").split())
+    return needs
+
+
+def zone_missing(worker, zone, vip, port, read):
+    """What the zone's runtime state does not permit of VRRP and the client port; target ACCEPT permits everything."""
+    fields, rules = zone_fields(text(worker.command([FIREWALL_CMD, "--info-zone=" + zone], json_result=False, timeout=FIREWALL_TIMEOUT)))
+    require("target" in fields, "native-output")
+    if fields["target"] == "ACCEPT":
+        return []
+    family = "ipv4" if vip.version == 4 else "ipv6"
+    needs = [grants_vrrp(fields, rules, family), grants_port(fields, rules, family, port)]
+    needs = service_grants(worker, zone, fields.get("services", "").split(), port, read, needs)
+    return ([] if needs[0] else [VRRP]) + ([] if needs[1] else [str(port) + "/tcp"])
+
+
+def firewall_check(worker, spec, port):
+    """Read-only: where an active firewalld filters, each interface that carries the virtual IP permits VRRP and the client port."""
+    if not firewall_active(worker):
+        return
+    vip, candidates = vip_interfaces(worker, spec)
+    zones = interface_zones(worker, candidates)
+    verdicts, read, clauses = {}, {}, []
+    for name in candidates:
+        zone = zones[name]
+        if zone not in verdicts:
+            verdicts[zone] = zone_missing(worker, zone, vip, port, read)
+        if verdicts[zone]:
+            clauses.append("interface " + name + " in firewalld zone " + zone + " does not permit " + " and ".join(verdicts[zone]))
+    if clauses:
+        raise NativeFailure("ingress-firewall", worker.native_coordinate(), "host " + worker.host["name"] + ": " + "; ".join(clauses))
 
 
 class UnitWorker(ceph_native_resources.ResourceWorker):
@@ -143,6 +315,17 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
                 self.markers.write("service-" + name + "-complete.json", {"scope": scope, "service": value})
         hooks.settle(self, unit)
         return {"changed": changed}
+
+    def ingress_frontend(self):
+        return frontend(self.request)
+
+    def ingress_firewall(self):
+        """Read-only, before any effect of this apply: on this ingress host an active firewalld permits VRRP and the client port where the
+        virtual IP lands; Bootwright never changes a host's firewall."""
+        found = self.ingress_frontend()
+        require(found is not None and self.host["name"] in found[0]["placement"]["hosts"])
+        firewall_check(self, found[0]["spec"], found[1])
+        return {"changed": False}
 
     def unfinished(self, evidence):
         if self.request["action"] != "service":

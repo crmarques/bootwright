@@ -262,7 +262,7 @@ func gatewayRequest(cluster, gateway api.Object, base Request) (Request, error) 
 }
 
 func gatewayDeadline(operation string) time.Duration {
-	budget := map[string]unitBudget{"apply": {calls: 4, waits: 1}, "observe": {calls: 1}, "destroy": {calls: 2}}[operation]
+	budget := map[string]unitBudget{"apply": {calls: 5, waits: 1}, "observe": {calls: 1}, "destroy": {calls: 2}}[operation]
 	return time.Duration(budget.calls*nativeCall+budget.waits*readinessWait+60) * time.Second
 }
 

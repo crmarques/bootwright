@@ -33,7 +33,7 @@ type unitType struct {
 }
 
 var unitTypes = map[string]unitType{
-	"nfs": {units: nfsUnits, dependencies: noUnitDependencies, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
+	"nfs": {units: nfsUnits, dependencies: noUnitDependencies, apply: unitBudget{calls: 3, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 }
 
 func noUnitDependencies(api.Object, ServiceUnit) []string { return nil }

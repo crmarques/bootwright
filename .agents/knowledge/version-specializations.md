@@ -132,6 +132,7 @@ page that owns its reasoning.
 | The zone pools and placement shape a build's `zone get` reports: a subset of the planned derived and declared pools is accepted, a pool outside them refuses, `placement_pools` reads as a list or a mapping | [StorageObjectGateway field record](../../specs/storage-resources.md#storageobjectgateway-field-record) |
 | A build's `orch ls --export` keeps a gateway service's inline `ssl_cert` and `ssl_key` or omits both: either is accepted when the stored leaves equal the bound ones, and the served leaf's SHA-256 is the postcondition | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
 | The NFS export readback: `fs subvolume getpath` prints the path with or without one trailing newline, `nfs export info` reads `{}` for an absent pseudo path, and the filtered readback projection, never the apply's answer alone, is the postcondition | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
+| Whether a build's cephadm opens daemon ports in firewalld: upstream opens each daemon's TCP endpoints in the default zone and never VRRP; the ingress check reads the zone's runtime state before effects instead | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
 
 ## Adding a specialization
 

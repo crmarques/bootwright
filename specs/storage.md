@@ -207,7 +207,7 @@ them:
   cluster and image blocks, on each of its derived zone pool blocks by ID and,
   when an ingress fronts its rgw service, on the settings block, and on each
   declared placement StoragePool through that pool; its deadline
-  is fixed (apply 3600 s, observe 720 s, destroy 1380 s) and does not grow with
+  is fixed (apply 4260 s, observe 720 s, destroy 1380 s) and does not grow with
   the host count.
 - An NFS export block `ceph-nfs-export-<export>` (Kind StorageNFSExport,
   exclusive `ceph/<cluster>`) realizes one StorageNFSExport on the bootstrap
@@ -566,7 +566,9 @@ hosts, and [B491](milestones/m2.md#b491) owns its online removal.
 A declared `nfs` service, with the `ingress` that fronts it when one is
 declared, is realized by its service-unit block
 `ceph-service-<cluster>-nfs-<id>`, which depends on the cluster, image and
-settings blocks and runs only on the bootstrap host. Its apply phase proves,
+settings blocks and runs its apply phases only on the bootstrap host; with an
+ingress, the firewall check below first runs on each ingress host. Its apply
+phase proves,
 before any write: the cluster's ownership record and FSID; the `nfs` manager
 module the settings block enabled (`nfs-module-disabled` when it is off; the
 unit never enables a module); the shared `.nfs` pool, which may exist only
@@ -593,7 +595,7 @@ when keepalive-only; a readiness timeout names `<daemon type>@<service>` and
 `vip@ingress.nfs.<id>` beside the blocking health checks. Observation never
 writes, and a stored specification, password or keyring never reaches
 evidence, which lists only each daemon's host, name and service. The block's
-deadline is fixed for its type (apply 2280 s, observe 720 s, destroy 1380 s).
+deadline is fixed for its type (apply 2940 s, observe 720 s, destroy 1380 s).
 
 A StorageNFSExport is realized by its export block `ceph-nfs-export-<export>`
 on the bootstrap host. A subvolume binding binds the path the subvolume's
@@ -625,8 +627,9 @@ NFS service, or changes a client key; it retires with the cluster's hosts, and
 is the operator's acceptance.
 
 A StorageObjectGateway's realm, zone group, zone, zone placement and rgw service
-are realized by its gateway block `ceph-gateway-<gateway>`, which runs only on
-the bootstrap host in three phases. Every `radosgw-admin` call that reaches the
+are realized by its gateway block `ceph-gateway-<gateway>`, which runs its
+three phases only on the bootstrap host, after the firewall check below when an
+ingress fronts its rgw service. Every `radosgw-admin` call that reaches the
 configuration store creates the shared `.rgw.root` pool when it is absent, so
 `gateway_zone` first proves the cluster's ownership record and FSID and
 `radosgw-admin` itself (the verified `ceph-common` package and the hash its
@@ -681,6 +684,32 @@ leaf's SHA-256 to equal the bound certificate's and an HTTP status line; a
 timeout names `tls@`, `vip@`, `haproxy@` or `keepalived@` the service. An
 ingress plans once its auxiliary images are authored
 ([refusal table](#refusal-table)).
+
+Before the first effect of every apply of an NFS service unit or a gateway
+whose request carries an ingress, a read-only check runs on each host of the
+ingress's placement. When `firewalld.service` is active there, the check finds
+the interfaces cephadm puts the virtual IP and VRRP on: those whose network
+contains the virtual IP, else those on a network listed in
+`virtual_interface_networks`. It reads each one's runtime firewalld zone, or the
+default zone for an interface bound to none, and refuses `ingress-firewall`,
+naming the host, the interface, the zone and what is missing, unless that zone
+permits both VRRP (IP protocol 112) and the client port: the ingress
+`frontend_port`, or the NFS `port` when the ingress is keepalive-only. A zone
+permits them through target `ACCEPT`, a listed protocol (`vrrp` or `112`) or
+TCP port or port range, a service without a destination that grants them
+(followed through its includes), or an unrestricted rich rule of the form
+`rule [family="ipv4"|"ipv6"] protocol value="vrrp" accept` or
+`rule [family=...] port port="<port>" protocol="tcp" accept`; rich rules of
+other forms, source-bound zones, policies and direct rules are not evaluated,
+so a permit given only that way refuses. An inactive or failed
+`firewalld.service` passes, and an unsettled one refuses `ingress-firewall`
+naming its state; a host with no such interface passes, because cephadm reports
+that itself. cephadm opens a deployed daemon's TCP ports only in the default
+zone, after this check, and never opens VRRP, so the check reads the current
+state and assumes neither. It never changes a firewall, and it runs again on
+every apply because a firewall changed later drops VRRP just the same. Each
+host's check is bounded by 120 s, all of them within a 600 s window that one
+native call of the block's deadline covers.
 
 Readiness reports bounded observations of FSID, quorum, orchestrator and host
 state, expected daemons, OSD membership, placement/capacity, pool protection,

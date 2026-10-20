@@ -115,6 +115,16 @@ def ingress_of(unit):
     return unit["documents"][0] if len(unit["documents"]) == 2 else None
 
 
+def frontend(unit):
+    """The ingress that fronts the unit and its client port: the nfs port when keepalive-only, else the ingress frontend port; None without one."""
+    ingress = ingress_of(unit)
+    if ingress is None:
+        return None
+    if ingress["spec"].get("keepalive_only"):
+        return ingress, unit["documents"][-1].get("spec", {}).get("port", NFS_PORT)
+    return ingress, ingress["spec"].get("frontend_port", NFS_PORT)
+
+
 def needed_images(unit):
     """The auxiliary images the unit's ingress runs: keepalived, and haproxy unless keepalive-only."""
     ingress = ingress_of(unit)
@@ -213,14 +223,10 @@ def readiness(worker, unit, blocking):
         clusters = worker.ceph("nfs", "cluster", "ls")
     require(isinstance(clusters, list) and len(clusters) <= 1024 and all(isinstance(name, str) for name in clusters), "native-output")
     ready = ready and unit["id"] in clusters
-    ingress = ingress_of(unit)
-    if ingress is not None:
-        spec = ingress["spec"]
-        if spec.get("keepalive_only"):
-            number = unit["documents"][-1].get("spec", {}).get("port", NFS_PORT)
-        else:
-            number = spec.get("frontend_port", NFS_PORT)
-        if not reachable(spec["virtual_ip"].partition("/")[0], number):
+    found = frontend(unit)
+    if found is not None:
+        ingress, number = found
+        if not reachable(ingress["spec"]["virtual_ip"].partition("/")[0], number):
             blocking.append("vip@ingress.nfs." + unit["id"])
             ready = False
     return ready

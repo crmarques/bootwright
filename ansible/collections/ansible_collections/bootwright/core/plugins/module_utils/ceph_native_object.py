@@ -33,7 +33,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, canonical, named, read_regular, require
 
 APPLY_PHASES = ("gateway_zone", "gateway_placement", "gateway_service")
-PHASES = frozenset(APPLY_PHASES)
+PHASES = frozenset(APPLY_PHASES + ("ingress_firewall",))
 RADOSGW_ADMIN = "/usr/bin/radosgw-admin"
 RGW_ROOT = ".rgw.root"
 ROOT_CLAIM = "rgw-root.json"
@@ -181,6 +181,12 @@ def validate(request, hosts):
     validate_bindings(gateway, documents)
 
 
+def frontend(request):
+    """The ingress that fronts the gateway and its client port, the ingress frontend port; None without one."""
+    documents = request["gateway"]["documents"]
+    return (documents[1], documents[1]["spec"]["frontend_port"]) if len(documents) == 2 else None
+
+
 def leaf(certificate):
     """The DER bytes of a bound certificate's first block."""
     require(isinstance(certificate, str) and len(certificate.encode("utf-8")) <= MAX_CERTIFICATE, "material")
@@ -302,6 +308,9 @@ class ObjectWorker(ceph_native_units.UnitWorker):
 
     def unit_key(self):
         return "gateway-" + self.gateway()["name"]
+
+    def ingress_frontend(self):
+        return frontend(self.request)
 
     def bound_service(self):
         bindings = self.gateway()["bindings"]

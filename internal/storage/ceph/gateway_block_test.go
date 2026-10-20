@@ -104,7 +104,7 @@ func TestGatewayBlockDependsOnDerivedPoolsAndCluster(t *testing.T) {
 func TestGatewayDeadlineCoversBoundedPhases(t *testing.T) {
 	for _, hosts := range []int{3, 6} {
 		r := gatewayOf(t, gatewayBlock(t, planCatalog(hosts, hosts, withPairAndHTTPRGW, objectGateway("objects"))))
-		for operation, want := range map[string]time.Duration{"apply": 3600 * time.Second, "observe": 720 * time.Second, "destroy": 1380 * time.Second} {
+		for operation, want := range map[string]time.Duration{"apply": 4260 * time.Second, "observe": 720 * time.Second, "destroy": 1380 * time.Second} {
 			if got, err := cephDeadline(r, operation); err != nil || got != want {
 				t.Fatalf("%d hosts %s deadline %s (%v), want %s", hosts, operation, got, err, want)
 			}

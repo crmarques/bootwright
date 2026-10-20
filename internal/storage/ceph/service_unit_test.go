@@ -91,7 +91,7 @@ func TestServiceUnitDeadlineIndependentOfHostCount(t *testing.T) {
 		if err != nil || len(units) != 1 || len(units[0].Hosts) != hosts {
 			t.Fatalf("%d hosts plan units %+v (%v)", hosts, units, err)
 		}
-		for operation, want := range map[string]time.Duration{"apply": 2280 * time.Second, "observe": 720 * time.Second, "destroy": 1380 * time.Second} {
+		for operation, want := range map[string]time.Duration{"apply": 2940 * time.Second, "observe": 720 * time.Second, "destroy": 1380 * time.Second} {
 			if got, err := cephDeadline(units[0], operation); err != nil || got != want {
 				t.Fatalf("with %d hosts the unit %s deadline is %v (%v), want %v", hosts, operation, got, err, want)
 			}
@@ -110,7 +110,7 @@ func TestUnitTypeRegistryCarriesHooksAndExtraDependencies(t *testing.T) {
 		t.Fatalf("the registry holds %v", keys)
 	}
 	nfs := unitTypes["nfs"]
-	if nfs.units == nil || nfs.dependencies == nil || nfs.apply != (unitBudget{2, 1}) || nfs.observe != (unitBudget{1, 0}) || nfs.destroy != (unitBudget{2, 0}) {
+	if nfs.units == nil || nfs.dependencies == nil || nfs.apply != (unitBudget{3, 1}) || nfs.observe != (unitBudget{1, 0}) || nfs.destroy != (unitBudget{2, 0}) {
 		t.Fatalf("the nfs unit type is %+v", nfs)
 	}
 	t.Cleanup(func() { delete(unitTypes, "synthetic") })

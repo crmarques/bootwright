@@ -701,7 +701,8 @@ class Transport:
 
 
 def test_gateway_native_call_count_within_budget(monkeypatch):
-    """The Go deadline budgets four worker round trips and one readiness wait for an apply (internal/storage/ceph/gateway.go)."""
+    """The Go deadline budgets five worker round trips (one covers every ingress host's firewall check) and one readiness wait for an apply
+    (internal/storage/ceph/gateway.go)."""
     monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = gateway_request()
     transport = Transport(request, ready_after=2)
