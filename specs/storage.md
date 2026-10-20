@@ -562,10 +562,14 @@ completes the last host, the license step. It writes the admitted hosts'
 attempt records, submits their documents in one multi-document
 `ceph orch apply -i` whose ceiling is 60 s per document, reads them back once
 and writes their completion records. The controller calls enrollment again
-while hosts remain, at most once per host. A call that admits no host refuses
-before any effect with a named token coded `lifecycle.unknown`; the bootstrap
-host stays `enrolling` and every other host `prepared`, which the next apply
-continues. The services phase never stops between its first daemon-deploying
+while hosts remain, at most once per host. A call that finds at least one
+request host not yet enrolled, and whose remaining worker budget admits none of
+them, refuses before any effect with a named token coded `lifecycle.unknown`;
+the bootstrap host stays `enrolling` and every other host `prepared`, which the
+next apply continues. A call that finds every request host enrolled admits
+none, runs the remaining license step and readback, and completes; on a
+continuing apply that call is its first enrollment call, so it does not raise
+the fresh apply's count of n enrollment calls. The services phase never stops between its first daemon-deploying
 apply and readiness except on a native failure.
 
 The cluster block's apply deadline is
