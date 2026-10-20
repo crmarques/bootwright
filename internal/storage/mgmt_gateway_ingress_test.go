@@ -76,3 +76,13 @@ func TestMgmtGatewayIngressRouterIDUsesItsPublicNetwork(t *testing.T) {
 	changed, all := withGraph(t, catalog, services)
 	requireOnly(t, Validate(changed, all), field, "api.invariant", fmt.Sprintf(routerIDMessage, rgwIngressAt), routerIDRemedy)
 }
+
+func TestBareGatewayVIPIsTakenBeforeAPrefixedIngress(t *testing.T) {
+	services := append(gatewayPair("192.0.2.61", "192.0.2.61"), graphServices()...)
+	services[3] = services[3].WithPath(api.NumberValue("53"), "spec", "first_virtual_router_id")
+	requireOnly(t, graphIssues(t, services), "$.spec.ceph.services[6].spec.virtual_ip", "api.invariant", vipTaken, "choose a virtual IP no other ingress uses")
+	ingress := gatewayPair("", "192.0.2.61", "first_virtual_router_id", 53)[1]
+	other := object(api.StorageCluster, "other", m("type", "ceph", "ceph", m("services", api.ListValue(ingress))))
+	cluster, catalog := withGraph(t, replace(bindingCatalog(), other), graphServices())
+	requireOnly(t, Validate(cluster, catalog), rgwIngressAt+".spec.virtual_ip", "api.invariant", vipTaken, "choose a virtual IP no other ingress uses")
+}
