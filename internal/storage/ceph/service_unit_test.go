@@ -106,7 +106,7 @@ func TestServiceUnitDeadlineIndependentOfHostCount(t *testing.T) {
 }
 
 func TestUnitTypeRegistryCarriesHooksAndExtraDependencies(t *testing.T) {
-	if keys := slices.Sorted(maps.Keys(unitTypes)); !slices.Equal(keys, []string{"nfs"}) {
+	if keys := slices.Sorted(maps.Keys(unitTypes)); !slices.Equal(keys, []string{"monitoring", "nfs"}) {
 		t.Fatalf("the registry holds %v", keys)
 	}
 	nfs := unitTypes["nfs"]

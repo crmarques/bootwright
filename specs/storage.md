@@ -200,7 +200,20 @@ them:
   one unit type (for NFS, one `nfs` service with the ingress that fronts it)
   and depends on the cluster, image and settings blocks by ID plus any blocks
   its type names; its deadline is fixed per type and does not grow with the
-  host count.
+  host count. For monitoring, every declared `prometheus`, `alertmanager`,
+  `grafana`, `node-exporter`, `ceph-exporter` and `snmp-gateway` service
+  forms one `ceph-service-<cluster>-monitoring` block, whose deadline is apply
+  2280 s, observe 720 s, destroy 1380 s; its singleton documents carry no
+  `service_id`. The unit request carries each grafana and snmp-gateway
+  credential binding only as a Secret reference (`service.bindings`), lent as
+  a protected file on apply alone; the core request never carries one. The
+  block lists as impacts, after its description, that Grafana grants anonymous
+  viewer access unless `anonymous_access` is `false`, that monitoring
+  endpoints are unauthenticated without a management gateway, and that
+  cephadm enables the prometheus manager module, whose exporter listens on
+  port 9283 of every MGR host, for a declared prometheus service. A cluster
+  name longer than 39 characters refuses, because the block identity holds at
+  most 63.
 - A gateway block `ceph-gateway-<gateway>` (Kind StorageObjectGateway,
   exclusive `ceph/<cluster>`) executes its gateway's realm, zone group, zone,
   zone placement and rgw service on the bootstrap host. It depends on the

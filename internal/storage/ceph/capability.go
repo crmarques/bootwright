@@ -85,6 +85,11 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 					plan.Secrets = append(plan.Secrets, b.SecretRef)
 				}
 			}
+			if r.Service != nil {
+				for _, b := range r.Service.Bindings {
+					plan.Secrets = append(plan.Secrets, b.SecretRef)
+				}
+			}
 		}
 	}
 	slices.Sort(plan.Secrets)
@@ -128,6 +133,10 @@ func (c Capability) definition(verb reconciliation.Verb, object api.Object, requ
 		impacts = []string{"remove Ceph " + subjectOf(request, object.Name())}
 		consumes = []string{reconciliation.AuthorizationDataLoss}
 	}
+	description := impacts[0]
+	if request.Service != nil && verb == reconciliation.Apply && unitTypes[request.Service.Type].impacts != nil {
+		impacts = append(impacts, unitTypes[request.Service.Type].impacts(object, *request.Service)...)
+	}
 	requires, dependencies := placement(object, request)
 	id := "ceph-" + request.Action + "-" + object.Name()
 	if request.Service != nil {
@@ -137,7 +146,7 @@ func (c Capability) definition(verb reconciliation.Verb, object api.Object, requ
 		suffix, _ := zonePoolSuffix(request.Pool.Name)
 		id = GatewayPoolBlockID(object.Name(), suffix)
 	}
-	return reconciliation.BlockDefinition{ID: id, Description: strings.Join(impacts, ""), Stage: reconciliation.StageClusters, Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph/" + request.Cluster}, Impacts: impacts, Consumes: consumes, Kind: string(c.kind), Object: object.Name(), Implementation: Implementation, ContentDigest: ContentDigest(), Request: canonical}, nil
+	return reconciliation.BlockDefinition{ID: id, Description: description, Stage: reconciliation.StageClusters, Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph/" + request.Cluster}, Impacts: impacts, Consumes: consumes, Kind: string(c.kind), Object: object.Name(), Implementation: Implementation, ContentDigest: ContentDigest(), Request: canonical}, nil
 }
 
 func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, []string) {

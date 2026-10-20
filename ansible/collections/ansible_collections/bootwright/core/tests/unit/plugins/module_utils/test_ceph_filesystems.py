@@ -43,7 +43,7 @@ def cluster(mds_count=None):
     mds = {"service_type": "mds", "service_id": "files", "placement": {"hosts": names}}
     if mds_count is not None:
         mds["placement"]["count"] = mds_count
-    return {"controller": "controller", "version": "ceph-core-v18", "action": "cluster", "cluster": "example", "owner": OWNER, "fsid": FSID,
+    return {"controller": "controller", "version": "ceph-core-v19", "action": "cluster", "cluster": "example", "owner": OWNER, "fsid": FSID,
             "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",

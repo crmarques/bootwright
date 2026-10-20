@@ -1,0 +1,340 @@
+{
+  "action": "service",
+  "ansiblePackageVersion": "5.0.3-1",
+  "auxiliary": [
+    {
+      "image": "cp.icr.io/synthetic/alertmanager@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "name": "alertmanager"
+    },
+    {
+      "image": "cp.icr.io/synthetic/grafana@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "name": "grafana"
+    },
+    {
+      "image": "cp.icr.io/synthetic/node_exporter@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "name": "node_exporter"
+    },
+    {
+      "image": "cp.icr.io/synthetic/prometheus@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "name": "prometheus"
+    },
+    {
+      "image": "cp.icr.io/synthetic/snmp_gateway@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "name": "snmp_gateway"
+    }
+  ],
+  "bootstrap": "node-1",
+  "callHome": "enabled",
+  "cephadm": {
+    "packageVersion": "20.2.1-405.el9cp",
+    "path": "/usr/sbin/cephadm"
+  },
+  "cluster": "example",
+  "clusterKeyRef": "cluster-key",
+  "clusterNetworks": [
+    "198.51.100.0/24"
+  ],
+  "clusterSSHTransport": "native",
+  "clusterSSHUser": "operator",
+  "config": {
+    "global": {
+      "osd_pool_default_min_size": "2",
+      "osd_pool_default_size": "2"
+    },
+    "osd": {
+      "osd_memory_target": "2147483648",
+      "osd_memory_target_autotune": "false"
+    }
+  },
+  "controller": "controller",
+  "delegated": [
+    {
+      "hosts": [
+        "node-1",
+        "node-2",
+        "node-3"
+      ],
+      "name": "alertmanager"
+    },
+    {
+      "hosts": [
+        "node-1",
+        "node-2",
+        "node-3"
+      ],
+      "name": "ceph-exporter"
+    },
+    {
+      "hosts": [
+        "node-1",
+        "node-2",
+        "node-3"
+      ],
+      "name": "grafana"
+    },
+    {
+      "hosts": [
+        "node-1",
+        "node-2",
+        "node-3"
+      ],
+      "name": "node-exporter"
+    },
+    {
+      "hosts": [
+        "node-1",
+        "node-2",
+        "node-3"
+      ],
+      "name": "prometheus"
+    },
+    {
+      "hosts": [
+        "node-1",
+        "node-2",
+        "node-3"
+      ],
+      "name": "snmp-gateway"
+    }
+  ],
+  "fsid": "5effe704-a878-5cae-8b43-c81f7112832a",
+  "hosts": [
+    {
+      "address": "192.0.2.1",
+      "devices": [
+        {
+          "path": "/dev/vdb",
+          "serial": "node-1",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "hostKeyRef": "node-1-host-key",
+      "labels": [
+        "storage"
+      ],
+      "location": {},
+      "machine": "node-1",
+      "name": "node-1",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    },
+    {
+      "address": "192.0.2.2",
+      "devices": [
+        {
+          "path": "/dev/vdb",
+          "serial": "node-2",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "hostKeyRef": "node-2-host-key",
+      "labels": [
+        "storage"
+      ],
+      "location": {},
+      "machine": "node-2",
+      "name": "node-2",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    },
+    {
+      "address": "192.0.2.3",
+      "devices": [
+        {
+          "path": "/dev/vdb",
+          "serial": "node-3",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "hostKeyRef": "node-3-host-key",
+      "labels": [
+        "storage"
+      ],
+      "location": {},
+      "machine": "node-3",
+      "name": "node-3",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    }
+  ],
+  "image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
+  "monIP": "192.0.2.1",
+  "nfsGaneshaPackageVersion": "synthetic-native-ganesha",
+  "owner": "apply-original",
+  "packageRepository": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64",
+  "publicNetworks": [
+    "192.0.2.0/24"
+  ],
+  "registry": "cp.icr.io",
+  "registryRef": "registry",
+  "release": "9.9.1.2",
+  "service": {
+    "bindings": [
+      {
+        "path": "/spec/initial_admin_password",
+        "secretRef": "grafana-admin",
+        "serviceRef": "grafana"
+      },
+      {
+        "path": "/spec/credentials/snmp_v3_auth_password",
+        "secretRef": "snmp-auth",
+        "serviceRef": "snmp-gateway"
+      },
+      {
+        "path": "/spec/credentials/snmp_v3_auth_username",
+        "secretRef": "snmp-auth",
+        "serviceRef": "snmp-gateway"
+      },
+      {
+        "path": "/spec/credentials/snmp_v3_priv_password",
+        "secretRef": "snmp-priv",
+        "serviceRef": "snmp-gateway"
+      }
+    ],
+    "documents": [
+      {
+        "placement": {
+          "count": 1,
+          "hosts": [
+            "node-1",
+            "node-2",
+            "node-3"
+          ]
+        },
+        "service_type": "alertmanager",
+        "spec": {
+          "user_data": {
+            "default_webhook_urls": [
+              "https://alerts.example.com/hook"
+            ]
+          }
+        }
+      },
+      {
+        "placement": {
+          "count": 1,
+          "hosts": [
+            "node-1",
+            "node-2",
+            "node-3"
+          ]
+        },
+        "service_type": "ceph-exporter",
+        "spec": {
+          "prio_limit": 5,
+          "stats_period": 10
+        }
+      },
+      {
+        "placement": {
+          "count": 1,
+          "hosts": [
+            "node-1",
+            "node-2",
+            "node-3"
+          ]
+        },
+        "service_type": "grafana",
+        "spec": {
+          "anonymous_access": false,
+          "protocol": "https"
+        }
+      },
+      {
+        "placement": {
+          "count": 1,
+          "hosts": [
+            "node-1",
+            "node-2",
+            "node-3"
+          ]
+        },
+        "service_type": "node-exporter",
+        "spec": {
+          "port": 9100
+        }
+      },
+      {
+        "placement": {
+          "count": 1,
+          "hosts": [
+            "node-1",
+            "node-2",
+            "node-3"
+          ]
+        },
+        "service_type": "prometheus",
+        "spec": {
+          "port": 9095,
+          "retention_size": "10GB",
+          "retention_time": "15d"
+        }
+      },
+      {
+        "placement": {
+          "count": 1,
+          "hosts": [
+            "node-1",
+            "node-2",
+            "node-3"
+          ]
+        },
+        "service_type": "snmp-gateway",
+        "spec": {
+          "auth_protocol": "SHA",
+          "engine_id": "8000c53f00000000",
+          "privacy_protocol": "AES",
+          "snmp_destination": "192.0.2.80:162",
+          "snmp_version": "V3"
+        }
+      }
+    ],
+    "id": "",
+    "type": "monitoring"
+  },
+  "services": [
+    {
+      "placement": {
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_id": "data",
+      "service_type": "osd",
+      "spec": {
+        "data_devices": {
+          "paths": [
+            "/dev/vdb"
+          ]
+        }
+      }
+    },
+    {
+      "placement": {
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_type": "mon"
+    },
+    {
+      "placement": {
+        "count": 2,
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_type": "mgr"
+    }
+  ],
+  "version": "ceph-core-v19"
+}

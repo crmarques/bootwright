@@ -348,3 +348,16 @@ func TestEvidencePolicyPartialNeedsDecimalRuleID(t *testing.T) {
 		}
 	}
 }
+
+func TestUnitDaemonsNameSingletonServices(t *testing.T) {
+	r := runtimeRequest()
+	r.Action = "service"
+	r.Service = &ServiceUnit{Type: "monitoring", Documents: []json.RawMessage{json.RawMessage(`{"placement":{"hosts":["node-1"]},"service_type":"prometheus"}`)}}
+	for service, want := range map[string]reconciliation.EffectState{"prometheus": reconciliation.EffectCompleted, "prometheus.": reconciliation.EffectUnknown} {
+		e := readyEvidence(r)
+		e.Daemons = []UnitDaemon{{Host: "node-1", Name: "prometheus.node-1", Service: service}}
+		if effect, err := EvaluateEvidence(evidenceBytes(t, e), r, "digest", false); effect != want || (want == reconciliation.EffectUnknown) != (err != nil) {
+			t.Fatalf("a prometheus daemon of service %q is %s (%v), want %s", service, effect, err, want)
+		}
+	}
+}

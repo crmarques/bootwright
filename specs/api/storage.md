@@ -25,8 +25,9 @@ bindings, through the gateway block and an nfs service through its unit; an
 ingress refuses until its auxiliary images can be selected
 ([refusal table](../storage.md#refusal-table)). A
 `spec.ceph.serviceBindings` entry is left to the gateway block only for an RGW
-service a StorageObjectGateway binds and for the ingress that fronts it; any
-other entry refuses at planning. An RGW document must be bound by a StorageObjectGateway of the same
+service a StorageObjectGateway binds and for the ingress that fronts it, and
+the credential bindings of a grafana or snmp-gateway service to the monitoring
+unit; any other entry refuses at planning. An RGW document must be bound by a StorageObjectGateway of the same
 cluster whose `spec.serviceRef` names it; an unbound one refuses at its
 `service_id`, because cephadm would deploy it before its realm, zone group and
 zone exist. `spec.ceph.mgrModules` admits `cephadm` and

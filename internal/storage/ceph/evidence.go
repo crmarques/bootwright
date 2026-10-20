@@ -295,7 +295,7 @@ func validDaemons(e Evidence, r Request) bool {
 	documents := unitDocuments(r)
 	seen := map[string]bool{}
 	for _, d := range e.Daemons {
-		at := slices.IndexFunc(documents, func(s unitDocument) bool { return s.ServiceType+"."+s.ServiceID == d.Service })
+		at := slices.IndexFunc(documents, func(s unitDocument) bool { return documentName(s) == d.Service })
 		if at < 0 || !slices.Contains(documents[at].Placement.Hosts, d.Host) || !unitDaemonName.MatchString(d.Name) || seen[d.Name] {
 			return false
 		}
@@ -307,7 +307,7 @@ func validDaemons(e Evidence, r Request) bool {
 func everyDocumentRuns(e Evidence, r Request) bool {
 	documents := unitDocuments(r)
 	for _, s := range documents {
-		if !slices.ContainsFunc(e.Daemons, func(d UnitDaemon) bool { return d.Service == s.ServiceType+"."+s.ServiceID }) {
+		if !slices.ContainsFunc(e.Daemons, func(d UnitDaemon) bool { return d.Service == documentName(s) }) {
 			return false
 		}
 	}

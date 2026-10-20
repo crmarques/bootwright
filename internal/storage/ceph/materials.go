@@ -74,8 +74,37 @@ func boundMaterial(e lifecycle.Execution, r Request, operation string, readers D
 		cleanup()
 		return e, nil, func() {}, err
 	}
+	unit, err := unitMaterial(e, r, operation)
+	if err != nil {
+		cleanup()
+		return e, nil, func() {}, err
+	}
 	e.Material = bound
-	return e, append(files, gateway...), cleanup, nil
+	return e, append(append(files, gateway...), unit...), cleanup, nil
+}
+
+func unitMaterial(e lifecycle.Execution, r Request, operation string) ([]lifecycle.MaterialFile, error) {
+	if r.Action != "service" || r.Service == nil || len(r.Service.Bindings) == 0 || operation != "apply" {
+		return nil, nil
+	}
+	types := map[string]string{}
+	for _, document := range unitDocuments(r) {
+		types[documentName(document)] = document.ServiceType
+	}
+	files := []lifecycle.MaterialFile{}
+	for _, b := range r.Service.Bindings {
+		leaf, known := monitoringLeaves[types[b.ServiceRef]+" "+b.Path]
+		if !known {
+			return nil, failure("lifecycle.state", "a Ceph service unit binds a credential leaf this build does not realize", "")
+		}
+		value, err := materialPart(e.Material, b.SecretRef, leaf.Part)
+		if err != nil {
+			return nil, err
+		}
+		clear(value)
+		files = append(files, lifecycle.MaterialFile{Name: leaf.File, Secret: b.SecretRef, Part: leaf.Part, Variable: leaf.Variable})
+	}
+	return files, nil
 }
 
 func gatewayMaterial(e lifecycle.Execution, r Request, operation string) ([]lifecycle.MaterialFile, error) {

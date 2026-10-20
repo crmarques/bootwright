@@ -1,5 +1,5 @@
 implementation: storage-ceph-core-v3
-content-digest: 23f2894228329f64c2432c2b181ebf126b7a9ef235e844ee6faf1b259465ed45
+content-digest: 0f40b20f2298b93575e17239beb397f183dfae6115163ccc4056b995eff8f03c
 automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v1, ceph-dashboard-port-attempt-v1, ceph-dashboard-port-repair-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-user-v1, ceph-device-identities-v1, ceph-filesystem-attempt-v1, ceph-host-cache-v1, ceph-native-teardown-v1, ceph-osd-device-intent-v1, ceph-policy-attempt-v1, ceph-pool-attempt-v2, ceph-rbd-image-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v3, ceph-service-inputs-v1, ceph-subvolume-attempt-v1, ceph-subvolume-group-attempt-v1, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v2
 request-schema:
   action string
@@ -171,6 +171,10 @@ request-schema:
   registryRef string
   release string
   service *struct ceph.ServiceUnit omitempty
+  service.bindings []struct ceph.ServiceBinding omitempty
+  service.bindings[].path string
+  service.bindings[].secretRef string
+  service.bindings[].serviceRef string
   service.documents []opaque
   service.id string
   service.type string

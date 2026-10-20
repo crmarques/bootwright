@@ -57,7 +57,7 @@ func matchesGoldenFile(t *testing.T, path string, data []byte, terminated bool) 
 	}
 }
 
-func TestFrozenRequestGolden(t *testing.T) {
+func frozenGoldenRequest() Request {
 	r := runtimeRequest()
 	r.Cephadm = Tool{Path: "/usr/sbin/cephadm", PackageVersion: "20.2.1-405.el9cp"}
 	r.Release = "9.9.1.2"
@@ -78,6 +78,11 @@ func TestFrozenRequestGolden(t *testing.T) {
 		r.Hosts[i].Location = map[string]string{}
 		r.Hosts[i].KnownHosts = ""
 	}
+	return r
+}
+
+func TestFrozenRequestGolden(t *testing.T) {
+	r := frozenGoldenRequest()
 	for _, action := range []string{"cluster", "policy", "pool", "client", "rbd", "subvolume", "settings", "service"} {
 		r.Action = action
 		r.Settings = nil

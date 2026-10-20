@@ -8,10 +8,19 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/storage"
 )
 
+type ServiceBinding struct {
+	Path       string `json:"path"`
+	SecretRef  string `json:"secretRef"`
+	ServiceRef string `json:"serviceRef"`
+}
+
 type ServiceUnit struct {
+	Bindings  []ServiceBinding  `json:"bindings,omitempty"`
 	Documents []json.RawMessage `json:"documents"`
 	ID        string            `json:"id"`
 	Type      string            `json:"type"`
@@ -29,14 +38,18 @@ type unitBudget struct{ calls, waits int }
 type unitType struct {
 	units                   func(cluster api.Object) ([]ServiceUnit, error)
 	dependencies            func(cluster api.Object, unit ServiceUnit) []string
+	impacts                 func(cluster api.Object, unit ServiceUnit) []string
 	apply, observe, destroy unitBudget
 }
 
 var unitTypes = map[string]unitType{
-	"nfs": {units: nfsUnits, dependencies: noUnitDependencies, apply: unitBudget{calls: 3, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
+	"monitoring": {units: monitoringUnits, dependencies: noUnitDependencies, impacts: monitoringImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
+	"nfs":        {units: nfsUnits, dependencies: noUnitDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 3, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 }
 
 func noUnitDependencies(api.Object, ServiceUnit) []string { return nil }
+
+func noUnitImpacts(api.Object, ServiceUnit) []string { return nil }
 
 func ServiceUnitBlockID(cluster string, u ServiceUnit) string {
 	id := "ceph-service-" + cluster + "-" + u.Type
@@ -91,9 +104,16 @@ func unitDeadline(r Request, operation string) (time.Duration, error) {
 type unitDocument struct {
 	Networks    []string        `json:"networks,omitempty"`
 	Placement   nativePlacement `json:"placement"`
-	ServiceID   string          `json:"service_id"`
+	ServiceID   string          `json:"service_id,omitempty"`
 	ServiceType string          `json:"service_type"`
 	Spec        any             `json:"spec,omitempty"`
+}
+
+func documentName(d unitDocument) string {
+	if d.ServiceID == "" {
+		return d.ServiceType
+	}
+	return d.ServiceType + "." + d.ServiceID
 }
 
 type nfsSpec struct {
@@ -147,6 +167,12 @@ var unitSpecMembers = map[string][]string{
 		"health_check_interval", "keepalive_only", "monitor_port", "virtual_ip", "virtual_interface_networks"},
 	"ingress-rgw": {"backend_service", "certificate_source", "first_virtual_router_id", "frontend_port", "health_check_interval", "monitor_port", "ssl",
 		"virtual_interface_networks", "virtual_ip"},
+	"prometheus":    {"only_bind_port_on_networks", "port", "retention_size", "retention_time"},
+	"alertmanager":  {"only_bind_port_on_networks", "port", "user_data"},
+	"grafana":       {"anonymous_access", "only_bind_port_on_networks", "port", "protocol"},
+	"node-exporter": {"port"},
+	"ceph-exporter": {"port", "prio_limit", "stats_period"},
+	"snmp-gateway":  {"auth_protocol", "engine_id", "port", "privacy_protocol", "snmp_destination", "snmp_version"},
 }
 
 func unitDocumentOf(cluster api.Object, svc api.Value, spec func(api.Value) any) (json.RawMessage, error) {
@@ -208,4 +234,196 @@ func nfsUnits(cluster api.Object) ([]ServiceUnit, error) {
 		units = append(units, ServiceUnit{Documents: append(unit.Documents, document), ID: unit.ID, Type: unit.Type})
 	}
 	return units, nil
+}
+
+var MonitoringTypes = []string{"alertmanager", "ceph-exporter", "grafana", "node-exporter", "prometheus", "snmp-gateway"}
+
+type prometheusSpec struct {
+	OnlyBindPortOnNetworks bool   `json:"only_bind_port_on_networks,omitempty"`
+	Port                   *int64 `json:"port,omitempty"`
+	RetentionSize          string `json:"retention_size,omitempty"`
+	RetentionTime          string `json:"retention_time,omitempty"`
+}
+
+type alertmanagerUserData struct {
+	DefaultWebhookURLs []string `json:"default_webhook_urls,omitempty"`
+}
+
+type alertmanagerSpec struct {
+	OnlyBindPortOnNetworks bool                  `json:"only_bind_port_on_networks,omitempty"`
+	Port                   *int64                `json:"port,omitempty"`
+	UserData               *alertmanagerUserData `json:"user_data,omitempty"`
+}
+
+type grafanaSpec struct {
+	AnonymousAccess        *bool  `json:"anonymous_access,omitempty"`
+	OnlyBindPortOnNetworks bool   `json:"only_bind_port_on_networks,omitempty"`
+	Port                   *int64 `json:"port,omitempty"`
+	Protocol               string `json:"protocol,omitempty"`
+}
+
+type portSpec struct {
+	Port *int64 `json:"port,omitempty"`
+}
+
+type cephExporterSpec struct {
+	Port        *int64 `json:"port,omitempty"`
+	PrioLimit   *int64 `json:"prio_limit,omitempty"`
+	StatsPeriod *int64 `json:"stats_period,omitempty"`
+}
+
+type snmpGatewaySpec struct {
+	AuthProtocol    string `json:"auth_protocol,omitempty"`
+	EngineID        string `json:"engine_id,omitempty"`
+	Port            *int64 `json:"port,omitempty"`
+	PrivacyProtocol string `json:"privacy_protocol,omitempty"`
+	SNMPDestination string `json:"snmp_destination"`
+	SNMPVersion     string `json:"snmp_version"`
+}
+
+func prometheusSpecOf(spec api.Value) any {
+	s := prometheusSpec{OnlyBindPortOnNetworks: spec.Get("only_bind_port_on_networks").Bool(), Port: integerOf(spec.Get("port")),
+		RetentionSize: spec.Get("retention_size").Text(), RetentionTime: spec.Get("retention_time").Text()}
+	if s == (prometheusSpec{}) {
+		return nil
+	}
+	return s
+}
+
+func alertmanagerSpecOf(spec api.Value) any {
+	s := alertmanagerSpec{OnlyBindPortOnNetworks: spec.Get("only_bind_port_on_networks").Bool(), Port: integerOf(spec.Get("port"))}
+	if urls := spec.Get("user_data", "default_webhook_urls").Strings(); len(urls) != 0 {
+		s.UserData = &alertmanagerUserData{DefaultWebhookURLs: urls}
+	}
+	if s == (alertmanagerSpec{}) {
+		return nil
+	}
+	return s
+}
+
+func grafanaSpecOf(spec api.Value) any {
+	s := grafanaSpec{OnlyBindPortOnNetworks: spec.Get("only_bind_port_on_networks").Bool(), Port: integerOf(spec.Get("port")), Protocol: spec.Get("protocol").Text()}
+	if access := spec.Get("anonymous_access"); access.Present() {
+		allowed := access.Bool()
+		s.AnonymousAccess = &allowed
+	}
+	if s == (grafanaSpec{}) {
+		return nil
+	}
+	return s
+}
+
+func portSpecOf(spec api.Value) any {
+	if s := (portSpec{Port: integerOf(spec.Get("port"))}); s.Port != nil {
+		return s
+	}
+	return nil
+}
+
+func cephExporterSpecOf(spec api.Value) any {
+	s := cephExporterSpec{Port: integerOf(spec.Get("port")), PrioLimit: integerOf(spec.Get("prio_limit")), StatsPeriod: integerOf(spec.Get("stats_period"))}
+	if s == (cephExporterSpec{}) {
+		return nil
+	}
+	return s
+}
+
+func snmpGatewaySpecOf(spec api.Value) any {
+	s := snmpGatewaySpec{AuthProtocol: spec.Get("auth_protocol").Text(), EngineID: spec.Get("engine_id").Text(), Port: integerOf(spec.Get("port")),
+		PrivacyProtocol: spec.Get("privacy_protocol").Text(), SNMPDestination: spec.Get("snmp_destination").Text(), SNMPVersion: spec.Get("snmp_version").Text()}
+	if s == (snmpGatewaySpec{}) {
+		return nil
+	}
+	return s
+}
+
+var monitoringSpecs = map[string]func(api.Value) any{"alertmanager": alertmanagerSpecOf, "ceph-exporter": cephExporterSpecOf, "grafana": grafanaSpecOf,
+	"node-exporter": portSpecOf, "prometheus": prometheusSpecOf, "snmp-gateway": snmpGatewaySpecOf}
+
+type monitoringLeaf struct {
+	Part     secrets.Part
+	Variable string
+	File     string
+}
+
+var monitoringLeaves = map[string]monitoringLeaf{
+	"grafana /spec/initial_admin_password":                 {Part: secrets.ValuePart, Variable: "grafanaAdminPassword", File: "grafana-admin-password"},
+	"snmp-gateway /spec/credentials/snmp_community":        {Part: secrets.ValuePart, Variable: "snmpCommunity", File: "snmp-community"},
+	"snmp-gateway /spec/credentials/snmp_v3_auth_username": {Part: secrets.UsernamePart, Variable: "snmpAuthUsername", File: "snmp-auth-username"},
+	"snmp-gateway /spec/credentials/snmp_v3_auth_password": {Part: secrets.PasswordPart, Variable: "snmpAuthPassword", File: "snmp-auth-password"},
+	"snmp-gateway /spec/credentials/snmp_v3_priv_password": {Part: secrets.ValuePart, Variable: "snmpPrivPassword", File: "snmp-priv-password"},
+}
+
+func monitoringBinding(cluster api.Object, binding api.Value) bool {
+	svc, found := storage.NativeService(cluster, binding.Get("serviceRef").Text())
+	t := svc.Get("service_type").Text()
+	if !found || t != "grafana" && t != "snmp-gateway" || binding.Get("secrets").Len() == 0 {
+		return false
+	}
+	for _, secret := range binding.Get("secrets").Items() {
+		if _, known := monitoringLeaves[t+" "+secret.Get("path").Text()]; !known {
+			return false
+		}
+	}
+	return true
+}
+
+func unrealizedBinding(ref string) error {
+	return failure("lifecycle.unsupported", "Bootwright does not realize the service binding of "+ref+"; it realizes only the TLS bindings of an rgw service that a StorageObjectGateway binds and of the ingress that fronts it, and the credential bindings of the grafana and snmp-gateway services",
+		"remove the spec.ceph.serviceBindings entry for "+ref)
+}
+
+func monitoringUnits(cluster api.Object) ([]ServiceUnit, error) {
+	services := slices.DeleteFunc(cluster.Spec().Get("ceph", "services").Items(), func(svc api.Value) bool {
+		return !slices.Contains(MonitoringTypes, svc.Get("service_type").Text())
+	})
+	if len(services) == 0 {
+		return []ServiceUnit{}, nil
+	}
+	unit := ServiceUnit{Documents: []json.RawMessage{}, Type: "monitoring"}
+	if !reconciliation.ValidSegment(ServiceUnitBlockID(cluster.Name(), unit)) {
+		return nil, failure("api.invariant", "StorageCluster "+cluster.Name()+" has a name too long to identify its monitoring service block, whose identity holds at most 63 characters",
+			"rename the StorageCluster to at most 39 characters")
+	}
+	slices.SortStableFunc(services, func(a, b api.Value) int {
+		return strings.Compare(storage.NativeServiceName(a), storage.NativeServiceName(b))
+	})
+	names := []string{}
+	for _, svc := range services {
+		document, err := unitDocumentOf(cluster, svc, monitoringSpecs[svc.Get("service_type").Text()])
+		if err != nil {
+			return nil, err
+		}
+		unit.Documents = append(unit.Documents, document)
+		names = append(names, storage.NativeServiceName(svc))
+	}
+	for _, binding := range gatewayBindings(cluster, names...) {
+		svc, _ := storage.NativeService(cluster, binding.ServiceRef)
+		if _, known := monitoringLeaves[svc.Get("service_type").Text()+" "+binding.Path]; !known {
+			return nil, unrealizedBinding(binding.ServiceRef)
+		}
+		unit.Bindings = append(unit.Bindings, ServiceBinding(binding))
+	}
+	return []ServiceUnit{unit}, nil
+}
+
+func monitoringImpacts(cluster api.Object, unit ServiceUnit) []string {
+	declared, anonymous := map[string]bool{}, false
+	for _, document := range unitDocuments(Request{Service: &unit}) {
+		declared[document.ServiceType] = true
+		spec, _ := document.Spec.(map[string]any)
+		access, authored := spec["anonymous_access"].(bool)
+		anonymous = anonymous || document.ServiceType == "grafana" && (!authored || access)
+	}
+	impacts := []string{}
+	if anonymous {
+		impacts = append(impacts, "Grafana grants anonymous viewer access")
+	}
+	if !slices.ContainsFunc(cluster.Spec().Get("ceph", "services").Items(), func(svc api.Value) bool { return svc.Get("service_type").Text() == "mgmt-gateway" }) {
+		impacts = append(impacts, "monitoring endpoints are unauthenticated without a management gateway")
+	}
+	if declared["prometheus"] {
+		impacts = append(impacts, "cephadm enables the prometheus manager module, whose exporter listens on port 9283 of every MGR host")
+	}
+	return impacts
 }

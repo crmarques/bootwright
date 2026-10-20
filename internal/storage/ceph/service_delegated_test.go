@@ -98,20 +98,32 @@ func TestClusterRequestRefusesOnlyUnexecutedBindings(t *testing.T) {
 	if err != nil || bytes.Contains(data, []byte("serviceBindings")) {
 		t.Fatalf("the core request carries a binding: %v", err)
 	}
-	for ref, services := range map[string][]api.Value{
-		"nfs.files":         {nfsService("files")},
-		"ingress.nfs.files": {nfsService("files"), ingressService("nfs.files")},
-		"rgw.other":         {rgwService("other")},
-		"grafana":           nil,
+	grafanaTLS := requestMap("serviceRef", "grafana", "secrets", api.ListValue(requestMap("path", "/spec/ssl_cert", "secretRef", "gateway-tls")))
+	for name, c := range map[string]struct {
+		ref      string
+		services []api.Value
+		binding  api.Value
+	}{
+		"nfs.files":               {"nfs.files", []api.Value{nfsService("files")}, tlsBinding("nfs.files", "gateway-tls")},
+		"ingress.nfs.files":       {"ingress.nfs.files", []api.Value{nfsService("files"), ingressService("nfs.files")}, tlsBinding("ingress.nfs.files", "gateway-tls")},
+		"rgw.other":               {"rgw.other", []api.Value{rgwService("other")}, tlsBinding("rgw.other", "gateway-tls")},
+		"undeclared grafana":      {"grafana", nil, tlsBinding("grafana", "gateway-tls")},
+		"grafana TLS binding":     {"grafana", []api.Value{auxiliaryService("grafana", "", api.Value{})}, grafanaTLS},
+		"grafana password beside": {"grafana", []api.Value{auxiliaryService("grafana", "", api.Value{})}, passwordAndTLS()},
 	} {
-		t.Run(ref, func(t *testing.T) {
-			catalog := delegatedCatalog(append([]api.Value{rgwService("objects")}, services...), []api.Value{tlsBinding("rgw.objects", "gateway-tls"), tlsBinding(ref, "gateway-tls")},
+		t.Run(name, func(t *testing.T) {
+			catalog := delegatedCatalog(append([]api.Value{rgwService("objects")}, c.services...), []api.Value{tlsBinding("rgw.objects", "gateway-tls"), c.binding},
 				childOf(api.StorageObjectGateway, "objects", "serviceRef", "rgw.objects"))
 			_, err := planned(t, catalog, api.StorageCluster, "example")
-			refusedWith(t, err, "lifecycle.unsupported", "Bootwright does not realize the service binding of "+ref+"; it realizes only the TLS bindings of an rgw service that a StorageObjectGateway binds and of the ingress that fronts it",
-				"remove the spec.ceph.serviceBindings entry for "+ref)
+			refusedWith(t, err, "lifecycle.unsupported", "Bootwright does not realize the service binding of "+c.ref+"; it realizes only the TLS bindings of an rgw service that a StorageObjectGateway binds and of the ingress that fronts it, and the credential bindings of the grafana and snmp-gateway services",
+				"remove the spec.ceph.serviceBindings entry for "+c.ref)
 		})
 	}
+}
+
+func passwordAndTLS() api.Value {
+	return requestMap("serviceRef", "grafana", "secrets", api.ListValue(requestMap("path", "/spec/initial_admin_password", "secretRef", "grafana-admin"),
+		requestMap("path", "/spec/ssl_cert", "secretRef", "gateway-tls")))
 }
 
 func TestClusterRequestNeverCarriesSecretLeaves(t *testing.T) {

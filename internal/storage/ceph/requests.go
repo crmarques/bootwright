@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v18"
+const Version = "ceph-core-v19"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -296,8 +296,8 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 		return Request{}, failure("lifecycle.unsupported", "the core adapter does not yet realize additional cluster configuration", "use only the qualified core MON/MGR/OSD profile")
 	}
 	for _, binding := range spec.Get("serviceBindings").Items() {
-		if ref := binding.Get("serviceRef").Text(); !gatewayExecuted(c, cluster, ref) {
-			return Request{}, failure("lifecycle.unsupported", "Bootwright does not realize the service binding of "+ref+"; it realizes only the TLS bindings of an rgw service that a StorageObjectGateway binds and of the ingress that fronts it", "remove the spec.ceph.serviceBindings entry for "+ref)
+		if ref := binding.Get("serviceRef").Text(); !gatewayExecuted(c, cluster, ref) && !monitoringBinding(cluster, binding) {
+			return Request{}, unrealizedBinding(ref)
 		}
 	}
 	if err := bindHosts(&r, c, cluster, contextName); err != nil {
