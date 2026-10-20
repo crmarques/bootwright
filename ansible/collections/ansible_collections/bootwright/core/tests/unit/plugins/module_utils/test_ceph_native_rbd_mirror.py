@@ -33,8 +33,9 @@ def contained_normalization(monkeypatch):
     monkeypatch.setattr(ceph_native.Worker, "cache_hold", lambda self: contextlib.nullcontext())
 
 
-def mirror_request():
-    return dict(units.cluster(), action="service", service={"documents": [copy.deepcopy(DOCUMENT)], "id": "", "type": "rbd-mirror"},
+def mirror_request(placement=None):
+    document = dict(copy.deepcopy(DOCUMENT), placement=placement) if placement else copy.deepcopy(DOCUMENT)
+    return dict(units.cluster(), action="service", service={"documents": [document], "id": "", "type": "rbd-mirror"},
                 delegated=[{"name": "rbd-mirror", "hosts": ["node-1", "node-2"]}])
 
 
@@ -69,6 +70,30 @@ def test_rbd_mirror_unit_ready_only_on_the_ceph_image(tmp_path):
     monitor.running = [row("node-1", request["image"]), row("node-2", OTHER_IMAGE)]
     with pytest.raises(ceph_native.Refusal, match="^artifact$"):
         monitoring.observing(monitor, markers)
+
+
+def test_rbd_mirror_unit_waits_for_its_placement_count_below_its_hosts(tmp_path):
+    request = mirror_request({"count": 1, "hosts": ["node-1", "node-2"]})
+    markers = units.markers_for(tmp_path, request)
+    monitor = monitoring.Monitor(request)
+    units.worker(monitor, markers).unit()
+    monitor.running = [row("node-1", request["image"])]
+    ready, blocking, unused = monitoring.observing(monitor, markers)
+    assert ready is True and blocking == []
+
+
+def test_rbd_mirror_unit_without_a_count_waits_for_every_host(tmp_path):
+    request = mirror_request({"hosts": ["node-1", "node-2"]})
+    assert ceph_native.validate(request) is request
+    markers = units.markers_for(tmp_path, request)
+    monitor = monitoring.Monitor(request)
+    units.worker(monitor, markers).unit()
+    monitor.running = [row("node-1", request["image"])]
+    ready, blocking, unused = monitoring.observing(monitor, markers)
+    assert ready is False and blocking == ["rbd-mirror@rbd-mirror"]
+    monitor.running = [row("node-1", request["image"]), row("node-2", request["image"])]
+    ready, blocking, unused = monitoring.observing(monitor, markers)
+    assert ready is True and blocking == []
 
 
 INVALID = {
