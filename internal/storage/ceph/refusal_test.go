@@ -328,8 +328,7 @@ func TestEachSMBBlockNamesExactlyTheRefusalsItsModuleMayPublish(t *testing.T) {
 	if slices.Sort(published); !slices.Equal(published, named) || !slices.Contains(published, "unknown") {
 		t.Fatalf("SMB_REASONS publishes %q, the SMB block names %q", published, named)
 	}
-	for _, reason := range []string{"smb-identity", "smb-result"} {
-		refusal := smbRefusals()[reason]
+	for reason, refusal := range smbRefusals() {
 		if d := diagnostics.Of(refusal); len(d) != 1 || d[0].Remediation == "" {
 			t.Fatalf("the SMB block names %q with no remedy: %+v", reason, d)
 		}
@@ -386,16 +385,18 @@ func TestSMBRefusalsNameOnlyNextStepsAFailedApplyCanTake(t *testing.T) {
 			"check the SMB manager's state with ceph smb show --password-filter hidden, correct what blocks the resource (an unknown cluster, a share name in use, a path that is not a " +
 				"directory in the volume, or a resource still in use) outside Bootwright, then apply again with the same input; when the StorageSMBResource itself must change, take back " +
 				"what this context owns with bootwright destroy --context <context>, which retires the cluster with its Machines, then apply"},
+		"foreign-service": {"an SMB cluster or smb service exists on the Ceph cluster that no StorageSMBResource of this cluster declares, or a daemon of a declared smb service runs on a host outside its placement",
+			"find it with ceph smb cluster ls, ceph orch ls --service_type smb and ceph orch ps --daemon_type smb; remove it outside Bootwright, then apply again with the same input; " +
+				"Bootwright never adopts an SMB cluster, service or daemon it did not create"},
 	} {
 		d := smbRefusal(t, reason)
 		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Message != want[0] || d[0].Remediation != want[1] {
 			t.Errorf("a %s refusal reached the operator as %+v", reason, d)
 		}
 	}
-	for _, reason := range []string{"smb-identity", "smb-result"} {
-		refusal := smbRefusals()[reason]
+	for reason, refusal := range smbRefusals() {
 		remedy := diagnostics.Of(refusal)[0].Remediation
-		for _, edit := range []string{"in the StorageSMBResource", "another ID"} {
+		for _, edit := range []string{"in the StorageSMBResource", "another ID", "declare it"} {
 			if strings.Contains(remedy, edit) {
 				t.Errorf("the %s remedy asks for an input edit a failed apply refuses: %q", reason, remedy)
 			}

@@ -19,8 +19,8 @@ func smbRefusals() map[string]error {
 			"check that the realm is reachable from the SMB hosts, that custom_dns resolves it, and that the join-auth account may join computers; then apply again"),
 		"smb-module-disabled": failure("lifecycle.unknown", "the Ceph cluster's smb manager module is disabled, although the cluster's settings block enabled it for its StorageSMBResource objects",
 			"enable it again outside Bootwright with ceph mgr module enable smb, then apply again; the settings block does not run again once it completed, and an SMB block never enables a manager module"),
-		"foreign-service": failure("lifecycle.unknown", "an SMB cluster or smb service exists on the Ceph cluster that no StorageSMBResource of this cluster declares",
-			"find it with ceph smb cluster ls and ceph orch ls --service_type smb; declare it with a StorageSMBResource or remove it outside Bootwright, then apply again; Bootwright never adopts an SMB cluster it did not create"),
+		"foreign-service": failure("lifecycle.unknown", "an SMB cluster or smb service exists on the Ceph cluster that no StorageSMBResource of this cluster declares, or a daemon of a declared smb service runs on a host outside its placement",
+			"find it with ceph smb cluster ls, ceph orch ls --service_type smb and ceph orch ps --daemon_type smb; remove it outside Bootwright, then apply again with the same input; Bootwright never adopts an SMB cluster, service or daemon it did not create"),
 		"foreign-image": adapterRefusals()["foreign-image"],
 	}
 	for _, reason := range []string{"request", "artifact", "ownership", "evidence", "material", "transport", "remote-refusal", "adapter-exception", "native-command", "native-timeout", "native-output", "unknown", "foreign-cluster"} {

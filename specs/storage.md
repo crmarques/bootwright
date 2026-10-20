@@ -761,7 +761,8 @@ bootstrap host. Before any effect it proves the cluster's ownership, that the
 `smb` manager module is enabled (`smb-module-disabled`), and for an SMB cluster
 or share that every SMB cluster `ceph smb cluster ls` lists and every `smb`
 service `ceph orch ls` lists is declared by a StorageSMBResource of the cluster
-(`foreign-service`) and that the settings block holds both samba image settings
+and, for a share, that every daemon of its `smb.<cluster_id>` service runs on
+that service's frozen hosts (`foreign-service`) and that the settings block holds both samba image settings
 at the frozen digests (`foreign-image`); it never writes them. It records its
 attempt, then runs `ceph smb apply -i - --password-filter=none
 --password-filter-out=hidden` with the one resource as JSON on stdin and the
