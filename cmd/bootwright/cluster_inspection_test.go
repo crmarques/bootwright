@@ -208,8 +208,9 @@ func inspectedClusterProofs(t *testing.T) []lifecycle.BlockEvidence {
 	bootstrap, err := json.Marshal(ceph.Evidence{
 		Version: ceph.EvidenceVersion, Request: "digest", Action: "cluster", Owner: "apply", FSID: "6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b", Owned: true, Exists: true, Ready: true,
 		Health: "HEALTH_OK", Hosts: []string{"rhel-01.lab.test"}, Monitors: []string{"rhel-01.lab.test"}, MGRActive: "rhel-01.lab.test", MGRStandbys: []string{}, OSDs: []ceph.OSDEvidence{}, Daemons: []ceph.UnitDaemon{},
-		MonAddrs:  []ceph.MonitorAddress{{Host: "rhel-01.lab.test", Address: "198.51.100.11"}},
-		Dashboard: ceph.DashboardEvidence{URL: "https://rhel-01.lab.test:8443/", CertificateSHA256: strings.Repeat("c", 64), Reachable: true},
+		MonAddrs:        []ceph.MonitorAddress{{Host: "rhel-01.lab.test", Address: "198.51.100.11"}},
+		Dashboard:       ceph.DashboardEvidence{URL: "https://rhel-01.lab.test:8443/", CertificateSHA256: strings.Repeat("c", 64), Reachable: true},
+		Specializations: []string{"ceph-bootstrap-license-call-continues"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -231,7 +232,8 @@ func TestCephInspectionReportsAReasonWithoutProofsAndTheFSIDWithThem(t *testing.
 	reader.proofs = map[string][]lifecycle.BlockEvidence{"StorageCluster/storage": inspectedClusterProofs(t)}
 	proof, err = (cephInspection{reconciler: reader}).ManagedCeph(context.Background(), "lab", catalog, cluster)
 	if err != nil || proof.Reason != "" || proof.FSID != "6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b" || proof.Image.Digest != digest || proof.Image.Platform != "linux/amd64" ||
-		len(proof.Monitors) != 1 || proof.Monitors[0].Host != "rhel-01" || proof.Monitors[0].FQDN != "rhel-01.lab.test" || proof.Monitors[0].Address != "198.51.100.11" {
+		len(proof.Monitors) != 1 || proof.Monitors[0].Host != "rhel-01" || proof.Monitors[0].FQDN != "rhel-01.lab.test" || proof.Monitors[0].Address != "198.51.100.11" ||
+		!slices.Equal(proof.Specializations, []string{"ceph-bootstrap-license-call-continues"}) {
 		t.Fatalf("proof = %+v (%v)", proof, err)
 	}
 	want := inspection.Dashboard{Status: "ready", User: "admin", CertificateSHA256: strings.Repeat("c", 64),
