@@ -148,8 +148,8 @@ inspection instead of `cephadm ls`, whose inspected logging initialization can
 create shared native files. It holds and re-proves protected directory and
 metadata bindings, checks the exact original FSID, unit and immutable image,
 and projects only existing public daemon fields. The admitted daemon
-directory types are those of the daemon-type table below: MON, MGR, OSD, MDS,
-crash and ceph-exporter. Beside the daemon
+directory types are those of the daemon-type table below: MON, MGR, OSD, MDS
+and ceph-exporter, and the delegated types, crash among them. Beside the daemon
 directories, the cluster directory may hold only cephadm's cache binary, its
 `config`, `crash` and `removed` directories and the root-owned `selinux`
 directory it makes for OSD and ceph-volume containers on an SELinux host. A
@@ -257,8 +257,8 @@ The cluster block applies MON, MGR, OSD and MDS services in its one services
 batch. Core observation admits a daemon only through its type's row in one
 daemon-type table, which names the executor, the host rule, whether the daemon
 counts toward readiness and the image rule. MON and MGR daemons map to their
-hosts through their native identity; OSD, crash and ceph-exporter daemons run
-on any frozen request host; an MDS daemon is admitted only on a host of the one
+hosts through their native identity; OSD and ceph-exporter daemons run on any
+frozen request host; an MDS daemon is admitted only on a host of the one
 declared MDS service its native daemon ID
 `<service_id>.<host short name>.<six lowercase letters>` names
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py#L922-L966)).
@@ -316,6 +316,26 @@ requires it to run the frozen Ceph image. In the host layout it is identified
 by that listed singleton, and its directory keeps the root-or-Ceph-user owner
 rule. Bootwright realizes only the daemon: no pool or image mirroring, peer or
 replication relationship comes from this service.
+
+Crash collection runs in its own service-unit block
+`ceph-service-<cluster>-crash`, which Bootwright derives for every
+StorageCluster; it is never authored. Its one document is
+`{"placement": {"hosts": [...]}, "service_type": "crash"}`, placing every
+cluster host's native name in name order, with no `service_id`, `spec`,
+`networks` or binding: cephadm has no `crash` ServiceSpec subclass, and
+`crash` is not among the types it assigns a `service_id`
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py#L801-L813)).
+It is applied through `orch apply -i -` and read back like every unit. The
+core request lists `crash` in `delegated` with every host. In the daemon-type
+table a `crash` daemon is admitted only when its `service_name` is `crash`,
+that service is listed and its host is among its hosts; it is never counted
+toward core readiness or compared with the Ceph image there. The unit block
+requires one crash daemon running the frozen Ceph image on every placed host,
+since cephadm runs crash on the Ceph image
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/utils.py#L23-L26)).
+In the host layout it is identified by that listed singleton and keeps the
+root-or-Ceph-user owner rule. The bootstrap passes `--skip-ssh`, so cephadm's
+bootstrap never applies crash; the unit is its one owner.
 
 `serviceRef` is a scalar exact reference to this registry in the already
 selected cluster. It is not a Bootwright object name, may contain native dots,
@@ -566,8 +586,8 @@ until single sign-on is realized, so a planned management gateway carries no
 Some native types refuse by type at `service_type`. Log collection (`loki`,
 `alloy`, `promtail`) is not realized yet; only the gated log-collection lane
 admits it (D161, OD6 (d1)). `crash` is a derived child of the StorageCluster
-that cephadm bootstrap creates on every host, so an authored one would be its
-second owner (D160, OD25, SD-X57-3). Tracing (`jaeger-*`, `elasticsearch`),
+that Bootwright applies on every host through its crash unit (above), so an
+authored one would be its second owner (D160, OD25). Tracing (`jaeger-*`, `elasticsearch`),
 `node-proxy`, `agent` and `container` are not realized.
 
 ## Hosts, placement and CRUSH

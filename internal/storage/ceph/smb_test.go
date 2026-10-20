@@ -724,7 +724,7 @@ func TestSMBDeadline(t *testing.T) {
 func TestSMBClustersAreDelegatedInTheCoreRequest(t *testing.T) {
 	hosts := []string{"node-1", "node-2", "node-3"}
 	got := smbBase(t, smbGraph(t)).Delegated
-	if want := []DelegatedService{{Name: "smb.files", Hosts: hosts}}; !reflect.DeepEqual(got, want) {
+	if want := []DelegatedService{{Name: "crash", Hosts: hosts}, {Name: "smb.files", Hosts: hosts}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("the core request delegates %+v, want %+v", got, want)
 	}
 	zeta := smbObject("smb-alpha", "native", requestMap("resource_type", api.SMBCluster, "cluster_id", "zeta", "auth_mode", "user",
@@ -736,12 +736,12 @@ func TestSMBClustersAreDelegatedInTheCoreRequest(t *testing.T) {
 		return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), nfsService("shares"))...), "ceph", "services")
 	}).Objects(), children...))
 	got = smbBase(t, catalog).Delegated
-	want := []DelegatedService{{Name: "nfs.shares", Hosts: hosts}, {Name: "smb.files", Hosts: hosts}, {Name: "smb.zeta", Hosts: hosts}}
+	want := []DelegatedService{{Name: "crash", Hosts: hosts}, {Name: "nfs.shares", Hosts: hosts}, {Name: "smb.files", Hosts: hosts}, {Name: "smb.zeta", Hosts: hosts}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("the core request delegates %+v, want %+v", got, want)
 	}
-	if plain := smbBase(t, pinnedCatalog(t, nil)).Delegated; plain != nil {
-		t.Fatalf("a cluster without SMB resources delegates %+v", plain)
+	if plain := smbBase(t, pinnedCatalog(t, nil)).Delegated; !reflect.DeepEqual(plain, []DelegatedService{{Name: "crash", Hosts: hosts}}) {
+		t.Fatalf("a cluster without SMB resources delegates %+v, want only its crash service", plain)
 	}
 }
 

@@ -127,7 +127,7 @@ func TestB479RefusalsNameTheirRemedy(t *testing.T) {
 		{"R12a port", "api.invariant", s3 + ".spec.https_address", "cephadm reserves port 4180 for oauth2-proxy whatever https_address names", "use port 4180 in spec.https_address or omit it", added(oauth2Proxy("https_address", "0.0.0.0:4181"), authGateway())},
 		{"R12a malformed", "api.invariant", s3 + ".spec.https_address", "https_address is host:port", "write spec.https_address as host:4180 or omit it", added(oauth2Proxy("https_address", "4180"), authGateway())},
 		{"R14", "api.invariant", s3 + ".service_type", "Bootwright does not realize log collection yet", "remove this service from spec.ceph.services; B479 tracks log collection", added(b479Service("loki"))},
-		{"R15a", "api.invariant", s3 + ".service_type", "cephadm bootstrap creates the crash service on every host as a derived child of the StorageCluster, so a declared crash service would be its second owner", "remove the crash service from spec.ceph.services; the cluster keeps its derived crash service", added(b479Service("crash"))},
+		{"R15a", "api.invariant", s3 + ".service_type", "Bootwright applies the crash service on every host as a derived child of the StorageCluster, so a declared crash service would be its second owner", "remove the crash service from spec.ceph.services; the cluster keeps its derived crash service", added(b479Service("crash"))},
 		{"R15b tracing", "api.invariant", s3 + ".service_type", "Bootwright does not realize tracing services", "remove this service from spec.ceph.services", added(b479Service("jaeger-agent"))},
 		{"R15b node-proxy", "api.invariant", s3 + ".service_type", "Bootwright does not realize this native service type", "remove this service from spec.ceph.services", added(b479Service("node-proxy"))},
 		{"alertmanager cluster port", "api.invariant", s3 + ".spec.port", "cephadm reserves port 9094 for the Alertmanager cluster listener", "choose another spec.port", added(b479Service("alertmanager", "port", 9094))},
@@ -223,14 +223,14 @@ func TestPrometheusModuleIsDerivedFromTheService(t *testing.T) {
 	}
 }
 
-func TestAuthoredCrashRefusesAsDerivedChild(t *testing.T) {
+func TestDeclaredCrashServiceRefusesNamingTheDerivedUnit(t *testing.T) {
 	cluster, catalog := withServices(t, fixtureCatalog(), b479Service("crash"))
 	for _, issues := range [][]api.Issue{Validate(cluster, catalog), ValidatePartial(cluster, catalog)} {
 		found := issuesAt(issues, "$.spec.ceph.services[3].service_type")
-		if len(found) != 1 || !strings.Contains(found[0].Message, "derived child of the StorageCluster") || found[0].Remediation != "remove the crash service from spec.ceph.services; the cluster keeps its derived crash service" {
+		if len(found) != 1 || found[0].Message != "Bootwright applies the crash service on every host as a derived child of the StorageCluster, so a declared crash service would be its second owner" || found[0].Remediation != "remove the crash service from spec.ceph.services; the cluster keeps its derived crash service" {
 			t.Fatalf("authored crash: %#v", found)
 		}
-		if text := found[0].Message + found[0].Remediation; strings.Contains(text, "does not realize") || strings.ContainsAny(text, "0123456789") {
+		if text := found[0].Message + found[0].Remediation; strings.Contains(text, "does not realize") || strings.Contains(text, "bootstrap creates") || strings.ContainsAny(text, "0123456789") {
 			t.Fatalf("crash refusal reads as unrealized or names a release: %q", text)
 		}
 	}

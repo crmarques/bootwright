@@ -169,7 +169,7 @@ func TestMonitoringUnitFollowsClusterAndImageBlocks(t *testing.T) {
 		t.Fatalf("the monitoring block is not ordered after the cluster block: %v", ids)
 	}
 	core, err := DecodeRequest(blockOf(t, plan, "ceph-cluster-example").Request)
-	if err != nil || len(core.Services) != 3 || len(core.Delegated) != 3 || core.Service != nil {
+	if err != nil || len(core.Services) != 3 || len(core.Delegated) != 4 || core.Service != nil {
 		t.Fatalf("the cluster block carries %+v (%v)", core, err)
 	}
 	removal, err := New(api.StorageCluster, nil).Removal(context.Background(), unit)
@@ -228,11 +228,11 @@ func TestMonitoringUnitDeadline(t *testing.T) {
 			t.Fatal(diagnostics.Of(err))
 		}
 		units, err := serviceUnitRequests(base, cluster)
-		if err != nil || len(units) != 1 || units[0].Service.Type != "monitoring" || len(units[0].Hosts) != hosts {
+		if err != nil || !slices.Equal(unitTypesOf(units), []string{"crash", "monitoring"}) || len(units[1].Hosts) != hosts {
 			t.Fatalf("%d hosts plan units %+v (%v)", hosts, units, err)
 		}
 		for operation, want := range map[string]time.Duration{"apply": 2280 * time.Second, "observe": 720 * time.Second, "destroy": 1380 * time.Second} {
-			if got, err := cephDeadline(units[0], operation); err != nil || got != want {
+			if got, err := cephDeadline(units[1], operation); err != nil || got != want {
 				t.Fatalf("with %d hosts the monitoring %s deadline is %v (%v), want %v", hosts, operation, got, err, want)
 			}
 		}
@@ -338,8 +338,8 @@ func TestUnrealizedMonitoringServicesKeepTheCoreRefusal(t *testing.T) {
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	if len(r.Delegated) != 1 || r.Delegated[0].Name != "prometheus" {
-		t.Fatalf("delegated %+v, want only prometheus", r.Delegated)
+	if len(r.Delegated) != 2 || r.Delegated[0].Name != "crash" || r.Delegated[1].Name != "prometheus" {
+		t.Fatalf("delegated %+v, want only crash and prometheus", r.Delegated)
 	}
 }
 
@@ -370,7 +370,7 @@ func TestCephExporterPlansItsMonitoringUnit(t *testing.T) {
 		t.Fatalf("a ceph-exporter cluster plans %v with dependencies %v", cephIDs(plan), unit.Dependencies)
 	}
 	r, err := DecodeRequest(unit.Request)
-	if err != nil || r.Service == nil || len(r.Service.Documents) != 1 || len(r.Auxiliary) != 0 || len(r.Delegated) != 1 || r.Delegated[0].Name != "ceph-exporter" {
+	if err != nil || r.Service == nil || len(r.Service.Documents) != 1 || len(r.Auxiliary) != 0 || len(r.Delegated) != 2 || r.Delegated[0].Name != "ceph-exporter" || r.Delegated[1].Name != "crash" {
 		t.Fatalf("the ceph-exporter unit request is %+v (%v)", r, err)
 	}
 	state := compilation.NewState(settingsCatalog(t, services), settingsCatalog(t, services), nil)

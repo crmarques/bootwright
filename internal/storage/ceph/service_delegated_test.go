@@ -73,7 +73,7 @@ func TestDelegatedServicesProjectIntoDelegated(t *testing.T) {
 		t.Fatalf("cluster services %v", got)
 	}
 	hosts := []string{"node-1", "node-2", "node-3"}
-	want := []DelegatedService{{Name: "ingress.rgw.objects", Hosts: hosts}, {Name: "nfs.files", Hosts: hosts}, {Name: "rgw.objects", Hosts: hosts}}
+	want := []DelegatedService{{Name: "crash", Hosts: hosts}, {Name: "ingress.rgw.objects", Hosts: hosts}, {Name: "nfs.files", Hosts: hosts}, {Name: "rgw.objects", Hosts: hosts}}
 	if !reflect.DeepEqual(r.Delegated, want) {
 		t.Fatalf("delegated %+v, want %+v", r.Delegated, want)
 	}
@@ -136,7 +136,7 @@ func TestClusterRequestNeverCarriesSecretLeaves(t *testing.T) {
 		if err != nil {
 			t.Fatal(object.kind, diagnostics.Of(err))
 		}
-		if len(r.Delegated) != 2 {
+		if len(r.Delegated) != 3 {
 			t.Fatalf("%s request lists %+v", object.kind, r.Delegated)
 		}
 		data, err := r.Canonical()

@@ -43,6 +43,7 @@ type unitType struct {
 }
 
 var unitTypes = map[string]unitType{
+	"crash":        {units: crashUnits, dependencies: noUnitDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 	"mgmt-gateway": {units: gatewayUnits, dependencies: gatewayDependencies, impacts: gatewayImpacts, apply: unitBudget{calls: 3, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 	"monitoring":   {units: monitoringUnits, dependencies: noUnitDependencies, impacts: monitoringImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 	"nfs":          {units: nfsUnits, dependencies: noUnitDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 3, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
@@ -447,6 +448,29 @@ func mirrorUnits(cluster api.Object) ([]ServiceUnit, error) {
 		unit.Documents = append(unit.Documents, document)
 	}
 	return []ServiceUnit{unit}, nil
+}
+
+func crashUnits(cluster api.Object) ([]ServiceUnit, error) {
+	unit := ServiceUnit{Documents: []json.RawMessage{}, Type: "crash"}
+	if !reconciliation.ValidSegment(ServiceUnitBlockID(cluster.Name(), unit)) {
+		return nil, failure("api.invariant", "StorageCluster "+cluster.Name()+" has a name too long to identify its crash service block, whose identity holds at most 63 characters",
+			"rename the StorageCluster to at most 44 characters")
+	}
+	document, err := json.Marshal(unitDocument{Placement: nativePlacement{Hosts: clusterHosts(cluster)}, ServiceType: "crash"})
+	if err != nil {
+		return nil, err
+	}
+	unit.Documents = append(unit.Documents, document)
+	return []ServiceUnit{unit}, nil
+}
+
+func clusterHosts(cluster api.Object) []string {
+	hosts := []string{}
+	for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
+		hosts = append(hosts, storage.NativeHostname(node))
+	}
+	slices.Sort(hosts)
+	return hosts
 }
 
 func monitoringImpacts(cluster api.Object, unit ServiceUnit) []string {

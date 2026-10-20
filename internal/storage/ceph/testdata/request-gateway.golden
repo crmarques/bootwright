@@ -30,6 +30,14 @@
         "node-2",
         "node-3"
       ],
+      "name": "crash"
+    },
+    {
+      "hosts": [
+        "node-1",
+        "node-2",
+        "node-3"
+      ],
       "name": "rgw.objects"
     }
   ],
@@ -186,5 +194,5 @@
       }
     }
   ],
-  "version": "ceph-core-v23"
+  "version": "ceph-core-v24"
 }

@@ -13,6 +13,19 @@
   "clusterSSHTransport": "native",
   "clusterSSHUser": "operator",
   "controller": "",
+  "delegated": [
+    {
+      "hosts": [
+        "node-1",
+        "node-2",
+        "node-3",
+        "node-4",
+        "node-5",
+        "node-6"
+      ],
+      "name": "crash"
+    }
+  ],
   "hosts": [
     {
       "address": "192.0.2.1",
@@ -242,5 +255,5 @@
       }
     }
   ],
-  "version": "ceph-core-v23"
+  "version": "ceph-core-v24"
 }

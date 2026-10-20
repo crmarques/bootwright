@@ -99,5 +99,17 @@
     "id": "ceph-rbd-disk",
     "implementation": "storage-ceph-core-v3",
     "stage": "clusters"
+  },
+  {
+    "dependencies": [
+      "ceph-cluster-example",
+      "ceph-image-example"
+    ],
+    "exclusive": [
+      "ceph/example"
+    ],
+    "id": "ceph-service-example-crash",
+    "implementation": "storage-ceph-core-v3",
+    "stage": "clusters"
   }
 ]

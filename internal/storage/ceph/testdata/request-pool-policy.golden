@@ -23,6 +23,16 @@
     }
   },
   "controller": "",
+  "delegated": [
+    {
+      "hosts": [
+        "node-1",
+        "node-2",
+        "node-3"
+      ],
+      "name": "crash"
+    }
+  ],
   "hosts": [
     {
       "address": "192.0.2.1",
@@ -167,5 +177,5 @@
       }
     }
   ],
-  "version": "ceph-core-v23"
+  "version": "ceph-core-v24"
 }

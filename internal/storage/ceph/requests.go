@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v23"
+const Version = "ceph-core-v24"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -333,6 +333,7 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 		return Request{}, err
 	}
 	r.Delegated = append(r.Delegated, delegated...)
+	r.Delegated = append(r.Delegated, DelegatedService{Name: "crash", Hosts: hostNames(r)})
 	slices.SortStableFunc(r.Delegated, func(a, b DelegatedService) int { return strings.Compare(a.Name, b.Name) })
 
 	selectDevices(&r)

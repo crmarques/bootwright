@@ -104,7 +104,7 @@ DAEMON_TYPES = {
     "mon": ("cluster", "identity", True, "ceph"),
     "mgr": ("cluster", "identity", True, "ceph"),
     "osd": ("cluster", "request", True, "ceph"),
-    "crash": ("cluster", "request", True, "ceph"),
+    "crash": ("delegated", "delegated", False, "none"),
     "ceph-exporter": ("cluster", "request", True, "ceph"),
     "mds": ("cluster", "service", True, "ceph"),
     "rgw": ("delegated", "delegated", False, "none"),
@@ -121,9 +121,9 @@ DAEMON_TYPES = {
     "rbd-mirror": ("delegated", "delegated", False, "none"),
 }
 # A service another block executes, listed by its cephadm service_name: rgw.<id>, ingress.<id>, nfs.<id>, smb.<id> or a singleton's type,
-# rbd-mirror among them.
+# crash and rbd-mirror among them.
 DELEGATED_SERVICE = re.compile(r"(?:(?:rgw|ingress|nfs|smb)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}"
-                               r"|alertmanager|ceph-exporter|grafana|mgmt-gateway|node-exporter|prometheus|rbd-mirror|snmp-gateway)\Z")
+                               r"|alertmanager|ceph-exporter|crash|grafana|mgmt-gateway|node-exporter|prometheus|rbd-mirror|snmp-gateway)\Z")
 
 
 def supported_transport(request):
@@ -532,7 +532,7 @@ def host_scope(request):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v23")
+    require(request["version"] == "ceph-core-v24")
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])

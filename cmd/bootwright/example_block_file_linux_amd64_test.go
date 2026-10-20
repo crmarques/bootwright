@@ -42,7 +42,7 @@ func TestExampleBlockFilePlansAllBlocks(t *testing.T) {
 	slices.Sort(ids)
 	want := []string{
 		"ceph-client-rbd-canary", "ceph-cluster-ceph-lab", "ceph-filesystem-files", "ceph-policy-ssd-hosts",
-		"ceph-pool-cephfs-data", "ceph-pool-cephfs-metadata", "ceph-pool-rbd-data", "ceph-rbd-rbd-disk", "ceph-subvolume-docs",
+		"ceph-pool-cephfs-data", "ceph-pool-cephfs-metadata", "ceph-pool-rbd-data", "ceph-rbd-rbd-disk", "ceph-service-ceph-lab-crash", "ceph-subvolume-docs",
 	}
 	if !slices.Equal(ids, want) {
 		t.Fatalf("the core Ceph capability plans %q, want %q", ids, want)

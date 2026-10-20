@@ -522,7 +522,7 @@ def test_monitoring_tables_agree():
     types = set(observability.MONITORING_TYPES)
     assert list(observability.MONITORING_TYPES) == sorted(types) and observability.DAEMON_TYPES == observability.MONITORING_TYPES
     gateways = set(observability.GATEWAY_TYPES)
-    assert set(observability.IMAGES) == types == set(observability.MEMBERS) and observe.LISTED_SINGLETONS == types | gateways | {"rbd-mirror"}
+    assert set(observability.IMAGES) == types == set(observability.MEMBERS) and observe.LISTED_SINGLETONS == types | gateways | {"crash", "rbd-mirror"}
     assert observe.SINGLETONS == types - {"ceph-exporter"} | gateways and all(observe.DELEGATED_TYPES[kind] == kind for kind in observe.SINGLETONS)
     assert all(ceph_native.DAEMON_TYPES[kind] == ("delegated", "delegated", False, "none") for kind in observe.SINGLETONS)
     assert ceph_native.DAEMON_TYPES["ceph-exporter"] == ("cluster", "request", True, "ceph") and "ceph-exporter" in observe.CLUSTER_TYPES

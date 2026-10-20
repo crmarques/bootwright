@@ -178,12 +178,14 @@ func TestNoClusterNetworksKeepsThePublicOnlyPlan(t *testing.T) {
 			if err != nil {
 				t.Fatal(diagnostics.Of(err))
 			}
-			if len(plan.Definitions) != 1 {
+			if len(plan.Definitions) != 2 || plan.Definitions[1].ID != "ceph-service-example-crash" {
 				t.Fatalf("planned %d definitions", len(plan.Definitions))
 			}
-			var r Request
-			if err := json.Unmarshal(plan.Definitions[0].Request, &r); err != nil || len(r.ClusterNetworks) != 0 {
-				t.Fatalf("public-only plan froze %v (%v)", r.ClusterNetworks, err)
+			for _, definition := range plan.Definitions {
+				var r Request
+				if err := json.Unmarshal(definition.Request, &r); err != nil || len(r.ClusterNetworks) != 0 {
+					t.Fatalf("public-only plan froze %v (%v)", r.ClusterNetworks, err)
+				}
 			}
 		})
 	}

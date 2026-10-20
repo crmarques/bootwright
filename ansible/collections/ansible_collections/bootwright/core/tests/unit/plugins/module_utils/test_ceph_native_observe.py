@@ -169,6 +169,22 @@ def test_host_layout_admits_a_listed_rbd_mirror_daemon(fixture, change):
     assert result[1]["state"] == ("unknown" if change == "no-unit-files" else "running")
 
 
+@pytest.mark.parametrize("change", ["listed", "no-unit-files", "unlisted", "other-host"])
+def test_host_layout_admits_a_listed_crash_daemon(fixture, change):
+    assert not observe.CLUSTER_TYPES & set(observe.DELEGATED_TYPES)
+    listed = ["nfs.files"] if change == "unlisted" else ["crash"]
+    hosts = ("node-2",) if change == "other-host" else ("node-1",)
+    service = None if change == "no-unit-files" else "crash"
+    run = delegated(fixture, "crash.node-1", service, listed, hosts, unit_files=change != "no-unit-files")
+    if change in ("unlisted", "other-host"):
+        with pytest.raises(observe.ObservationRefusal):
+            observe.daemons(fixture[2], os.getuid(), run, owned=True, host="node-1")
+        return
+    result = observe.daemons(fixture[2], os.getuid(), run, owned=True, host="node-1")
+    assert [item["name"] for item in result] == ["crash.node-1", "mgr.host.abcdef"]
+    assert result[0]["state"] == ("unknown" if change == "no-unit-files" else "running")
+
+
 def cache(fixture):
     path = fixture[1].parent / ("cephadm." + "d" * 64)
     path.write_bytes(b"synthetic provider binary which must never be read")

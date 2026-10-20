@@ -7,6 +7,7 @@ apply:
   5 ceph-policy-ssd-hosts
   5 ceph-pool-cephfs-data
   5 ceph-pool-cephfs-metadata
+  5 ceph-service-ceph-lab-crash
   6 ceph-filesystem-files
   6 ceph-pool-rbd-data
   7 ceph-client-rbd-canary
@@ -15,6 +16,7 @@ apply:
 destroy:
   0 ceph-client-rbd-canary
   0 ceph-rbd-rbd-disk
+  0 ceph-service-ceph-lab-crash
   0 ceph-subvolume-docs
   1 ceph-filesystem-files
   1 ceph-pool-rbd-data

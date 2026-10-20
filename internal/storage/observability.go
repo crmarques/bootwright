@@ -63,7 +63,7 @@ var unnetworkedServiceTypes = []string{"ceph-exporter", "snmp-gateway"}
 
 var unrealizedServiceTypes = []refusedMember{
 	{names: []string{"loki", "alloy", "promtail"}, message: "Bootwright does not realize log collection yet", remedy: "remove this service from spec.ceph.services; B479 tracks log collection"},
-	{names: []string{"crash"}, message: "cephadm bootstrap creates the crash service on every host as a derived child of the StorageCluster, so a declared crash service would be its second owner", remedy: "remove the crash service from spec.ceph.services; the cluster keeps its derived crash service"},
+	{names: []string{"crash"}, message: "Bootwright applies the crash service on every host as a derived child of the StorageCluster, so a declared crash service would be its second owner", remedy: "remove the crash service from spec.ceph.services; the cluster keeps its derived crash service"},
 	{names: []string{"jaeger-agent", "jaeger-collector", "jaeger-query", "jaeger-tracing", "elasticsearch"}, message: "Bootwright does not realize tracing services", remedy: "remove this service from spec.ceph.services"},
 	{names: []string{"node-proxy", "agent", "container"}, message: "Bootwright does not realize this native service type", remedy: "remove this service from spec.ceph.services"},
 }

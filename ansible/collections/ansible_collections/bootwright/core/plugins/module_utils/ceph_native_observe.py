@@ -26,15 +26,15 @@ ROOT_UID = 0
 MAX_DAEMONS = 1024
 MAX_ENTRIES = 4096
 MAX_METADATA = 4096
-CLUSTER_TYPES = frozenset(("mon", "mgr", "osd", "crash", "ceph-exporter", "mds"))
+CLUSTER_TYPES = frozenset(("mon", "mgr", "osd", "ceph-exporter", "mds"))
 # Each daemon type another block executes, mapped to its cephadm service type (orchestrator daemon_type_to_service).
-DELEGATED_TYPES = {"alertmanager": "alertmanager", "grafana": "grafana", "haproxy": "ingress", "keepalived": "ingress", "mgmt-gateway": "mgmt-gateway",
-                   "nfs": "nfs", "node-exporter": "node-exporter", "prometheus": "prometheus", "rgw": "rgw", "rbd-mirror": "rbd-mirror",
-                   "smb": "smb", "snmp-gateway": "snmp-gateway"}
+DELEGATED_TYPES = {"alertmanager": "alertmanager", "crash": "crash", "grafana": "grafana", "haproxy": "ingress", "keepalived": "ingress",
+                   "mgmt-gateway": "mgmt-gateway", "nfs": "nfs", "node-exporter": "node-exporter", "prometheus": "prometheus", "rgw": "rgw",
+                   "rbd-mirror": "rbd-mirror", "smb": "smb", "snmp-gateway": "snmp-gateway"}
 # Singletons on an auxiliary image: cephadm names the service by its type, and each daemon directory may belong to the image's own user.
 SINGLETONS = frozenset(("alertmanager", "grafana", "mgmt-gateway", "node-exporter", "prometheus", "snmp-gateway"))
-# Services listed by their type alone: the auxiliary singletons and the Ceph-image ceph-exporter and rbd-mirror.
-LISTED_SINGLETONS = SINGLETONS | {"ceph-exporter", "rbd-mirror"}
+# Services listed by their type alone: the auxiliary singletons and the Ceph-image ceph-exporter, crash and rbd-mirror.
+LISTED_SINGLETONS = SINGLETONS | {"ceph-exporter", "crash", "rbd-mirror"}
 TYPES = CLUSTER_TYPES | frozenset(DELEGATED_TYPES)
 NAME = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
 IMAGE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}\Z")

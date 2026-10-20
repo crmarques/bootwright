@@ -44,6 +44,14 @@ func documentsOf(u ServiceUnit) []string {
 	return out
 }
 
+func unitTypesOf(units []Request) []string {
+	types := []string{}
+	for _, unit := range units {
+		types = append(types, unit.Service.Type)
+	}
+	return types
+}
+
 func unitRequest(r Request) Request {
 	r.Action = "service"
 	r.Service = &ServiceUnit{Type: "nfs", ID: "files", Documents: []json.RawMessage{
@@ -89,11 +97,11 @@ func TestServiceUnitDeadlineIndependentOfHostCount(t *testing.T) {
 			t.Fatal(diagnostics.Of(err))
 		}
 		units, err := serviceUnitRequests(base, cluster)
-		if err != nil || len(units) != 1 || len(units[0].Hosts) != hosts {
+		if err != nil || !slices.Equal(unitTypesOf(units), []string{"crash", "nfs"}) || len(units[1].Hosts) != hosts {
 			t.Fatalf("%d hosts plan units %+v (%v)", hosts, units, err)
 		}
 		for operation, want := range map[string]time.Duration{"apply": 2940 * time.Second, "observe": 720 * time.Second, "destroy": 1380 * time.Second} {
-			if got, err := cephDeadline(units[0], operation); err != nil || got != want {
+			if got, err := cephDeadline(units[1], operation); err != nil || got != want {
 				t.Fatalf("with %d hosts the unit %s deadline is %v (%v), want %v", hosts, operation, got, err, want)
 			}
 		}
@@ -107,7 +115,7 @@ func TestServiceUnitDeadlineIndependentOfHostCount(t *testing.T) {
 }
 
 func TestUnitTypeRegistryCarriesHooksAndExtraDependencies(t *testing.T) {
-	if keys := slices.Sorted(maps.Keys(unitTypes)); !slices.Equal(keys, []string{"mgmt-gateway", "monitoring", "nfs", "rbd-mirror"}) {
+	if keys := slices.Sorted(maps.Keys(unitTypes)); !slices.Equal(keys, []string{"crash", "mgmt-gateway", "monitoring", "nfs", "rbd-mirror"}) {
 		t.Fatalf("the registry holds %v", keys)
 	}
 	nfs := unitTypes["nfs"]
@@ -315,11 +323,11 @@ func TestRBDMirrorUnitDeadlineAndIdentity(t *testing.T) {
 			t.Fatal(diagnostics.Of(err))
 		}
 		units, err := serviceUnitRequests(base, cluster)
-		if err != nil || len(units) != 1 || units[0].Service.Type != "rbd-mirror" {
+		if err != nil || !slices.Equal(unitTypesOf(units), []string{"crash", "rbd-mirror"}) {
 			t.Fatalf("%d hosts plan units %+v (%v)", hosts, units, err)
 		}
 		for operation, want := range map[string]time.Duration{"apply": 2280 * time.Second, "observe": 720 * time.Second, "destroy": 1380 * time.Second} {
-			if got, err := cephDeadline(units[0], operation); err != nil || got != want {
+			if got, err := cephDeadline(units[1], operation); err != nil || got != want {
 				t.Fatalf("with %d hosts the rbd-mirror %s deadline is %v (%v), want %v", hosts, operation, got, err, want)
 			}
 		}
@@ -330,6 +338,126 @@ func TestRBDMirrorUnitDeadlineAndIdentity(t *testing.T) {
 		fits := api.NewObject(api.StorageCluster, strings.Repeat("c", 39), api.Value{}, cluster.Spec())
 		if units, err := mirrorUnits(fits); err != nil || len(units) != 1 || len(ServiceUnitBlockID(fits.Name(), units[0])) != 63 {
 			t.Fatalf("a 39-character cluster plans %+v (%+v)", units, diagnostics.Of(err))
+		}
+	}
+}
+
+func reversedNodes(spec api.Value) api.Value {
+	nodes := spec.Get("ceph", "topology", "nodes").Items()
+	slices.Reverse(nodes)
+	return spec.WithPath(api.ListValue(nodes...), "ceph", "topology", "nodes")
+}
+
+func crashUnitOf(t *testing.T, units []Request) Request {
+	t.Helper()
+	if len(units) == 0 || units[0].Service.Type != "crash" || units[0].Service.ID != "" {
+		t.Fatalf("the first unit is not the crash unit: %+v", units)
+	}
+	return units[0]
+}
+
+func TestEveryClusterPlansOneDerivedCrashUnit(t *testing.T) {
+	plan := cephPlan(t, pinnedCatalog(t, reversedNodes))
+	crash := []string{}
+	for _, id := range cephIDs(plan) {
+		if strings.HasPrefix(id, "ceph-service-example-crash") {
+			crash = append(crash, id)
+		}
+	}
+	if !slices.Equal(crash, []string{"ceph-service-example-crash"}) {
+		t.Fatalf("the plan holds crash blocks %v", crash)
+	}
+	unit := blockOf(t, plan, "ceph-service-example-crash")
+	if unit.Kind != string(api.StorageCluster) || unit.Object != "example" || !slices.Equal(unit.Exclusive, []string{"ceph/example"}) || len(unit.Requires) != 0 ||
+		!slices.Equal(unit.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) || !slices.Equal(unit.Impacts, []string{"realize Ceph service crash of example"}) {
+		t.Fatalf("the crash block is %+v", unit.BlockDefinition)
+	}
+	if ids := cephIDs(plan); slices.Index(ids, unit.ID) < slices.Index(ids, "ceph-cluster-example") {
+		t.Fatalf("the crash block is not ordered after the cluster block: %v", ids)
+	}
+	core, err := DecodeRequest(blockOf(t, plan, "ceph-cluster-example").Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hosts := hostNames(core)
+	if !slices.Equal(hosts, []string{"node-1", "node-2", "node-3"}) || !slices.ContainsFunc(core.Delegated, func(d DelegatedService) bool { return d.Name == "crash" && slices.Equal(d.Hosts, hosts) }) {
+		t.Fatalf("the cluster request delegates %+v over %v", core.Delegated, hosts)
+	}
+	for _, raw := range core.Services {
+		if strings.Contains(string(raw), `"crash"`) {
+			t.Fatalf("the cluster request carries %s", raw)
+		}
+	}
+	r, err := DecodeRequest(unit.Request)
+	if err != nil || r.Service == nil || r.Service.Type != "crash" || r.Service.ID != "" || len(r.Service.Bindings) != 0 || len(r.Service.Documents) != 1 {
+		t.Fatalf("the crash request is %+v (%v)", r.Service, err)
+	}
+	want, _ := json.Marshal(map[string]any{"placement": map[string]any{"hosts": hosts}, "service_type": "crash"})
+	if string(r.Service.Documents[0]) != string(want) {
+		t.Fatalf("the crash document is %s, want %s", r.Service.Documents[0], want)
+	}
+	removal, err := New(api.StorageCluster, nil).Removal(context.Background(), unit)
+	if err != nil || removal.Description != "remove Ceph service crash of example" {
+		t.Fatalf("the crash removal is %+v (%v)", removal, err)
+	}
+	mirrored := cephIDs(cephPlan(t, settingsCatalog(t, []api.Value{rbdMirrorRequestService()})))
+	if !slices.Contains(mirrored, "ceph-service-example-crash") || !slices.Contains(mirrored, "ceph-service-example-rbd-mirror") {
+		t.Fatalf("a cluster with an rbd-mirror service plans %v", mirrored)
+	}
+}
+
+func TestCrashUnitRequestGolden(t *testing.T) {
+	catalog := poolRequestCatalog(3, 3)
+	cluster, _ := catalog.Find(api.StorageCluster, "example")
+	reversed := cluster.WithSpec(reversedNodes(cluster.Spec()))
+	objects := catalog.Objects()
+	for i := range objects {
+		if objects[i].Identity() == reversed.Identity() {
+			objects[i] = reversed
+		}
+	}
+	base, err := New(api.StorageCluster, nil).request(api.NewCatalog(objects), reversed, "synthetic")
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	units, err := serviceUnitRequests(base, reversed)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	data, err := crashUnitOf(t, units).Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	matchesGolden(t, "request-service-crash", data, false)
+	if _, err := DecodeRequest(data); err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+}
+
+func TestCrashUnitDeadlineAndIdentity(t *testing.T) {
+	for _, hosts := range []int{3, 6} {
+		catalog := planCatalog(hosts, hosts, nil)
+		cluster, _ := catalog.Find(api.StorageCluster, "example")
+		base, err := New(api.StorageCluster, nil).request(catalog, cluster, "synthetic")
+		if err != nil {
+			t.Fatal(diagnostics.Of(err))
+		}
+		units, err := serviceUnitRequests(base, cluster)
+		if err != nil || len(units) != 1 || len(crashUnitOf(t, units).Hosts) != hosts {
+			t.Fatalf("%d hosts plan units %+v (%v)", hosts, units, err)
+		}
+		for operation, want := range map[string]time.Duration{"apply": 2280 * time.Second, "observe": 720 * time.Second, "destroy": 1380 * time.Second} {
+			if got, err := cephDeadline(units[0], operation); err != nil || got != want {
+				t.Fatalf("with %d hosts the crash %s deadline is %v (%v), want %v", hosts, operation, got, err, want)
+			}
+		}
+		long := api.NewObject(api.StorageCluster, strings.Repeat("c", 45), api.Value{}, cluster.Spec())
+		_, err = crashUnits(long)
+		refusedWith(t, err, "api.invariant", "StorageCluster "+long.Name()+" has a name too long to identify its crash service block, whose identity holds at most 63 characters",
+			"rename the StorageCluster to at most 44 characters")
+		fits := api.NewObject(api.StorageCluster, strings.Repeat("c", 44), api.Value{}, cluster.Spec())
+		if units, err := crashUnits(fits); err != nil || len(units) != 1 || len(ServiceUnitBlockID(fits.Name(), units[0])) != 63 {
+			t.Fatalf("a 44-character cluster plans %+v (%+v)", units, diagnostics.Of(err))
 		}
 	}
 }

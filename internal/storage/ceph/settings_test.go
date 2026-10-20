@@ -283,12 +283,14 @@ func TestSettingsBlockInsertsWithoutReorderingRemoval(t *testing.T) {
 		t.Fatal(err)
 	}
 	drop := func(ids []string) []string {
-		return slices.DeleteFunc(ids, func(id string) bool { return id == "ceph-settings-example" || id == "ceph-service-example-nfs-files" })
+		return slices.DeleteFunc(ids, func(id string) bool {
+			return id == "ceph-settings-example" || id == "ceph-service-example-nfs-files" || id == "ceph-service-example-crash"
+		})
 	}
-	if got, want := drop(cephIDs(with)), cephIDs(without); !slices.Equal(got, want) {
+	if got, want := drop(cephIDs(with)), drop(cephIDs(without)); !slices.Equal(got, want) {
 		t.Fatalf("the settings block reorders the apply: %v, want %v", got, want)
 	}
-	if got, want := drop(cephIDs(withRemoval)), cephIDs(withoutRemoval); !slices.Equal(got, want) {
+	if got, want := drop(cephIDs(withRemoval)), drop(cephIDs(withoutRemoval)); !slices.Equal(got, want) {
 		t.Fatalf("the settings block reorders the removal: %v, want %v", got, want)
 	}
 	for _, block := range withRemoval.Blocks {

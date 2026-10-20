@@ -299,11 +299,11 @@ func TestGatewayUnitDeadline(t *testing.T) {
 			t.Fatal(diagnostics.Of(err))
 		}
 		units, err := serviceUnitRequests(base, cluster)
-		if err != nil || len(units) != 1 || units[0].Service.Type != "mgmt-gateway" || len(units[0].Hosts) != hosts {
+		if err != nil || !slices.Equal(unitTypesOf(units), []string{"crash", "mgmt-gateway"}) || len(units[1].Hosts) != hosts {
 			t.Fatalf("%d hosts plan units %+v (%v)", hosts, units, err)
 		}
 		for operation, want := range map[string]time.Duration{"apply": 2940 * time.Second, "observe": 720 * time.Second, "destroy": 1380 * time.Second} {
-			if got, err := cephDeadline(units[0], operation); err != nil || got != want {
+			if got, err := cephDeadline(units[1], operation); err != nil || got != want {
 				t.Fatalf("with %d hosts the gateway %s deadline is %v (%v), want %v", hosts, operation, got, err, want)
 			}
 		}

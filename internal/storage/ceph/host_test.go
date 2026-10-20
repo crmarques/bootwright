@@ -549,7 +549,7 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := withoutMembers(t, scoped), withoutMembers(t, full, "action", "pool", "client"); got != want {
+	if got, want := withoutMembers(t, scoped), withoutMembers(t, full, "action", "pool", "client", "delegated"); got != want {
 		t.Fatalf("scopeOf lost a member:\n%s\n%s", got, want)
 	}
 }

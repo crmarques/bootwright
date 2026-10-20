@@ -191,6 +191,35 @@ def test_observe_cluster_tolerates_rbd_mirror_only_as_a_delegated_unit_daemon(co
     assert native.markers.writes == []
 
 
+def crash_daemon(core_request, host, service="crash"):
+    """One `ceph orch ps` row of a crash daemon on the frozen Ceph image (cephadm/utils.py CEPH_TYPES): cephadm names the service by its
+    type; the daemon_id is a stand-in the core observation never reads."""
+    return {"daemon_type": "crash", "daemon_id": host.split(".")[0], "service_name": service, "hostname": host, "status": 1,
+            "container_image_digests": [core_request["image"]]}
+
+
+@pytest.mark.parametrize("change", ["listed", "unlisted", "outside-hosts", "with-service-id", "wrong-type"])
+def test_core_observation_tolerates_crash_daemons_only_through_the_unit(core_request, change):
+    with_delegated(core_request)
+    hosts = [host["name"] for host in core_request["hosts"]]
+    if change != "unlisted":
+        core_request["delegated"] = sorted(core_request["delegated"] + [{"name": "crash", "hosts": hosts[:2]}], key=lambda entry: entry["name"])
+    assert ceph_native.validate(core_request) is core_request
+    answers = core_fixtures.memory_observation_answers(core_request)
+    rows = {"listed": [crash_daemon(core_request, host) for host in hosts[:2]], "unlisted": [crash_daemon(core_request, hosts[0])],
+            "outside-hosts": [crash_daemon(core_request, hosts[2])], "with-service-id": [crash_daemon(core_request, hosts[0], "crash.a")],
+            "wrong-type": [crash_daemon(core_request, hosts[0], "nfs.files")]}[change]
+    answers[("orch", "ps")] += rows
+    native, unused = core_fixtures.worker(core_request, answers)
+    if change == "listed":
+        assert native.observe()["ready"] is True
+    else:
+        with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
+            native.observe()
+    assert native.markers.writes == []
+    assert ceph_native.DELEGATED_SERVICE.fullmatch("crash") and not ceph_native.DELEGATED_SERVICE.fullmatch("crash.a")
+
+
 @pytest.mark.parametrize("change", ["empty", "cluster-family", "unknown-host", "duplicate-host", "no-hosts", "unsorted", "duplicate-name",
                                     "extra-key", "not-a-list"])
 def test_validate_refuses_malformed_delegated(core_request, change):

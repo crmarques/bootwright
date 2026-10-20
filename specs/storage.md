@@ -252,6 +252,15 @@ them:
   carries no `service_id` or `spec`; its daemons run the Ceph image, so it
   needs no auxiliary image, and its deadline is apply 2280 s, observe 720 s,
   destroy 1380 s. A cluster name longer than 39 characters refuses.
+  Every StorageCluster plans one derived `ceph-service-<cluster>-crash` block,
+  whether or not it declares a service: its one singleton `crash` document
+  carries no `service_id`, `spec` or `networks` and places every cluster host
+  in name order; it runs the Ceph image, needs no auxiliary image, depends on
+  the cluster and image blocks (and the settings block when one is planned),
+  and its deadline is apply 2280 s, observe 720 s, destroy 1380 s. A cluster
+  name longer than 44 characters refuses. It is ready when every placed host
+  runs one crash daemon on the frozen Ceph image. It retires with its cluster;
+  removing it alone is [B491](milestones/m2.md#b491)'s.
 - A StorageCluster that declares an `oauth2-proxy` service, and each child
   planned through it, refuses at planning with `lifecycle.unsupported`
   "StorageCluster <cluster> declares an oauth2-proxy service, and Bootwright

@@ -29,6 +29,8 @@ UnitType = collections.namedtuple("UnitType", ("validate", "check", "claim", "se
                                                "leaves", "singletons", "endpoint"))
 # The RBD mirror daemon runs the Ceph image as a singleton service without a service_id, spec member or listener.
 MIRROR_TYPES = ("rbd-mirror",)
+# The crash collector runs the Ceph image on every cluster host as a singleton service without a service_id, spec member or listener.
+CRASH_TYPES = ("crash",)
 
 
 def mirror_validate(unit, request, hosts):
@@ -42,17 +44,17 @@ def mirror_validate(unit, request, hosts):
 
 
 def mirror_check(worker, unit):
-    """The RBD mirror unit runs the Ceph image, so it reads no auxiliary image setting before its apply."""
+    """A Ceph-image singleton unit reads no auxiliary image setting before its apply."""
     del worker, unit
 
 
 def mirror_claim(worker, unit, checked):
-    """The RBD mirror unit claims nothing before its apply."""
+    """A Ceph-image singleton unit claims nothing before its apply."""
     del worker, unit, checked
 
 
 def mirror_settle(worker, unit):
-    """The RBD mirror unit settles nothing after its apply."""
+    """A Ceph-image singleton unit settles nothing after its apply."""
     del worker, unit
 
 
@@ -69,11 +71,39 @@ def mirror_readiness(worker, unit, blocking):
 
 
 def mirror_frontend(unit):
-    """The RBD mirror unit has no ingress."""
+    """A Ceph-image singleton unit has no ingress."""
     del unit
 
 
+def crash_validate(unit, request, hosts):
+    """The one crash document: no service_id, spec, networks or binding, placed on every request host in request order."""
+    del request
+    require(unit["id"] == "" and "bindings" not in unit and len(unit["documents"]) == 1)
+    document = unit["documents"][0]
+    require(set(document) == {"placement", "service_type"} and document["service_type"] == "crash")
+    require(document["placement"] == {"hosts": [host["name"] for host in hosts]})
+
+
+def crash_expected(unit):
+    """One crash daemon per placed host."""
+    return {("crash", "crash"): len(unit["documents"][0]["placement"]["hosts"])}
+
+
+def crash_readiness(worker, unit, blocking):
+    """Every placed host runs one crash daemon on the frozen Ceph image; a count alone never proves it."""
+    hosts = unit["documents"][0]["placement"]["hosts"]
+    started = [row["hostname"] for row in worker.unit_rows if row.get("service_name") == "crash" and row.get("daemon_type") == "crash"
+               and type(row.get("status")) is int and row["status"] == 1 and worker.request["image"] in (row.get("container_image_digests") or [])]
+    if sorted(started) == sorted(hosts):
+        return True
+    if "crash@crash" not in blocking:
+        blocking.append("crash@crash")
+    return False
+
+
 UNIT_TYPES = {
+    "crash": UnitType(crash_validate, mirror_check, mirror_claim, mirror_settle, crash_expected, crash_readiness, CRASH_TYPES, mirror_frontend,
+                      {"crash": None}, {}, frozenset(CRASH_TYPES), None),
     "monitoring": UnitType(ceph_native_observability.validate, ceph_native_observability.check, ceph_native_observability.claim,
                            ceph_native_observability.settle, ceph_native_observability.expected, ceph_native_observability.readiness,
                            ceph_native_observability.DAEMON_TYPES, ceph_native_observability.frontend, ceph_native_observability.IMAGES,
@@ -115,7 +145,7 @@ INPUTS_VERSION = "ceph-service-inputs-v1"
 MAX_DAEMONS = 256
 PENDING = re.compile(r"(?:(?:" + "|".join(sorted({name for unit in UNIT_TYPES.values() for name in unit.daemon_types} | {"vip", "module"}))
                      + r")@(?:(?:nfs|ingress)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}|"
-                     + "|".join(ceph_native_observability.MONITORING_TYPES + ceph_native_observability.GATEWAY_TYPES + MIRROR_TYPES)
+                     + "|".join(ceph_native_observability.MONITORING_TYPES + ceph_native_observability.GATEWAY_TYPES + MIRROR_TYPES + CRASH_TYPES)
                      + r")|(?:tls|http)@(?:" + "|".join(ceph_native_observability.GATEWAY_TYPES) + r"))\Z")
 BINDING_MEMBERS = frozenset(("path", "secretRef", "serviceRef"))
 # The non-secret stand-in a bound leaf holds wherever the worker normalizes, records or compares a document.
@@ -391,6 +421,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
     """The core worker with one service unit's apply phase and observation."""
 
     bound = None
+    unit_rows = ()
 
     @staticmethod
     def image_key(name):
@@ -553,6 +584,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         present = {name: stored[name] for name in names if name in stored}
         require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows), "native-output")
         running = [row for row in rows if row.get("service_name") in names]
+        self.unit_rows = running
         require(owned or not present and not running, "foreign-service")
         evidence["owned"] = owned
         evidence["exists"] = owned or bool(present) or bool(running)
