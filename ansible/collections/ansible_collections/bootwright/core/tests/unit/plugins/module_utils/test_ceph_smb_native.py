@@ -11,18 +11,22 @@ Every request, record and native answer here is a synthetic fixture. The scripte
 - `orch ps` rows as DaemonDescription.to_json emits them (src/pybind/mgr/orchestrator/_interface.py:1471-1500), cephadm's daemon type
   for SMB being `smb` (src/cephadm/cephadmlib/daemons/smb.py:552-555);
 - `config dump` and `mgr module ls` as the settings block's tests describe them (test_ceph_settings.py).
+The controller half drives a recording transport or the real Transport over a fake SSH runner; no material reaches a host.
 """
 
 from __future__ import annotations
 
+import builtins
 import copy
 import json
+import os
 
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_core, ceph_native, ceph_native_nfs, ceph_native_observe, ceph_native_worker, ceph_smb_native, ceph_tunnel_staging,
 )
+from ansible_collections.bootwright.core.plugins.modules import ceph_smb
 
 FSID = "4c0a4300-aa43-458c-86d7-ac2256d1fc00"
 OWNER = "apply-123"
@@ -756,3 +760,360 @@ def test_core_keeps_the_smb_names_as_aliases():
     assert ceph_core.SMB_TYPES is ceph_smb_native.TYPES
     value = request("ceph.smb.share")
     assert ceph_core.smb_request(copy.deepcopy(value)) == value
+
+
+SENTINEL = "SMB-SENTINEL-VALUE"
+SHARE_DAEMONS = [{"host": "node-1", "name": "smb.files.0.0.node-1.abcdef", "service": "smb.files"}]
+
+
+def observation(value, ready, blocking=(), directory=False, daemons=None):
+    """What the remote `smb_observe` answers: the evidence members without `request`, its pending entries and the directory flag."""
+    return {"daemons": list(SHARE_DAEMONS if daemons is None else daemons), "exists": True, "fsid": FSID, "owned": True, "owner": OWNER,
+            "partial": not ready, "ready": ready, "removed": False, "resource": name_of(value), "version": "ceph-smb-evidence-v1",
+            "blocking": list(blocking), "directory": directory}
+
+
+class Remote:
+    """A recording transport: `smb_apply` answers changed, each `smb_observe` the next scripted observation (the last repeats)."""
+
+    def __init__(self, value, observations):
+        self.value, self.observations, self.calls, self.reads = value, list(observations), [], 0
+
+    def smb_material(self):
+        self.reads += 1
+        return private_of(self.value)
+
+    def smb(self, host, phase, value, private=None, *, timeout=660):
+        self.calls.append((host["name"], phase, copy.deepcopy(private), timeout))
+        if phase == "smb_apply":
+            return {"changed": True}
+        return copy.deepcopy(self.observations.pop(0) if len(self.observations) > 1 else self.observations[0])
+
+
+class Clock:
+    def __init__(self):
+        self.value, self.pauses = 0.0, []
+
+    def now(self):
+        return self.value
+
+    def pause(self, seconds):
+        self.pauses.append(seconds)
+        self.value += seconds
+
+
+def material_files(directory, values):
+    """The runner's protected material files: the SSH pair, then one password file per binding, each holding its value."""
+    paths = {}
+    for name, data in [("sshKey", "PRIVATE-KEY-SENTINEL"), ("knownHosts", "node-1 ssh-ed25519 PUBLIC")] + list(values.items()):
+        path = directory / name
+        path.write_text(data, encoding="utf-8")
+        path.chmod(0o600)
+        paths[name] = str(path)
+    return paths
+
+
+def answering(calls):
+    """A fake SSH runner: the worker's answer for the phase on stdin, a ready observation for `smb_observe`."""
+    def run(argv, data, timeout):
+        calls.append((argv, data, timeout))
+        payload = json.loads(data)["payload"]
+        if payload["phase"] == "smb_apply":
+            return 0, b'{"ok":true,"result":{"changed":true}}'
+        observed = observation(payload["request"], True, daemons=[])
+        return 0, json.dumps({"ok": True, "result": observed}).encode()
+    return run
+
+
+def test_smb_transport_puts_secrets_only_on_stdin(tmp_path):
+    value = request("ceph.smb.join.auth")
+    calls = []
+    material = material_files(tmp_path, {"smbSecret0": JOIN_SECRET})
+    transport = ceph_core.Transport(value["scope"], material, run=answering(calls), scope=True, smb_secrets=1)
+    result = ceph_core.execute_smb(copy.deepcopy(value), "apply", DIGEST, transport)
+    assert result["changed"] is True and result["evidence"]["ready"] is True and JOIN_SECRET not in repr(result)
+    assert [json.loads(data)["payload"]["phase"] for unused, data, unused in calls] == ["smb_apply", "smb_observe"]
+    for argv, data, unused in calls:
+        assert JOIN_SECRET not in " ".join(argv) and "PRIVATE-KEY-SENTINEL" not in " ".join(argv)
+    assert json.loads(calls[0][1])["payload"]["private"] == {"smbSecret0": JOIN_SECRET}
+    assert json.loads(calls[1][1])["payload"]["private"] == {} and JOIN_SECRET.encode() not in calls[1][1]
+    unbound = ceph_core.Transport(value["scope"], material, run=answering(calls), scope=True)
+    with pytest.raises(ceph_native.Refusal, match="^material$"):
+        unbound.smb(value["scope"]["hosts"][0], "smb_observe", value)
+    with pytest.raises(ceph_native.Refusal, match="^transport$"):
+        transport.smb(value["scope"]["hosts"][0], "observe", value)
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("secret", ["", "a\nb", "a\rb", "a\x00b", "x" * 1025])
+def test_smb_material_refuses_a_password_that_is_not_one_short_line(tmp_path, secret):
+    value = request("ceph.smb.join.auth")
+    material = material_files(tmp_path, {"smbSecret0": "placeholder"})
+    with open(material["smbSecret0"], "wb") as handle:
+        handle.write(secret.encode("utf-8"))
+    transport = ceph_core.Transport(value["scope"], material, run=answering([]), scope=True, smb_secrets=1)
+    with pytest.raises(ceph_native.Refusal, match="^(material|file)$"):
+        transport.smb_material()
+
+
+@pytest.mark.parametrize("kind", ["ceph.smb.cluster", "ceph.smb.join.auth", "ceph.smb.usersgroups"])
+def test_cluster_readiness_does_not_wait_for_daemons(kind):
+    value, clock = request(kind), Clock()
+    remote = Remote(value, [observation(value, True, daemons=[])])
+    result = ceph_core.execute_smb(copy.deepcopy(value), "apply", DIGEST, remote, now=clock.now, pause=clock.pause)
+    assert result["changed"] is True and result["evidence"]["ready"] is True
+    assert [phase for unused, phase, unused, unused in remote.calls] == ["smb_apply", "smb_observe"] and clock.pauses == []
+    assert remote.calls[0][2] == private_of(value) and remote.calls[1][2] is None
+    remote = Remote(value, [observation(value, False, daemons=[])])
+    with pytest.raises(ceph_native.Refusal, match="^smb-result$"):
+        ceph_core.execute_smb(copy.deepcopy(value), "apply", DIGEST, remote, now=clock.now, pause=clock.pause)
+    assert [phase for unused, phase, unused, unused in remote.calls] == ["smb_apply", "smb_observe"] and clock.pauses == []
+
+
+def test_share_readiness_waits_for_generated_service_on_eligible_hosts():
+    value, clock = request("ceph.smb.share"), Clock()
+    pending = observation(value, False, blocking=["smb@smb.files"], daemons=[])
+    remote = Remote(value, [pending, pending, observation(value, True)])
+    result = ceph_core.execute_smb(copy.deepcopy(value), "apply", DIGEST, remote, now=clock.now, pause=clock.pause)
+    assert result["evidence"]["ready"] is True and result["evidence"]["daemons"] == SHARE_DAEMONS and result["evidence"]["request"] == DIGEST
+    assert [phase for unused, phase, unused, unused in remote.calls] == ["smb_apply", "smb_observe", "smb_observe", "smb_observe"]
+    assert clock.pauses == [ceph_core.READINESS_INTERVAL] * 2 and remote.reads == 0
+    assert all(host == "node-1" for host, unused, unused, unused in remote.calls)
+
+
+@pytest.mark.parametrize("directory, reason", [(True, "smb-directory"), (False, "smb-unavailable")])
+def test_ad_cluster_daemon_start_failure_refuses_smb_directory(directory, reason):
+    value, clock = request("ceph.smb.share"), Clock()
+    stuck = [{"host": NATIVE_SENTINEL, "name": "smb.files.0.0.node-1.abcdef", "service": "smb.files"}]
+    remote = Remote(value, [observation(value, False, blocking=["smb@smb.files", "vip@smb.files"], directory=directory, daemons=stuck)])
+    with pytest.raises(ceph_native.Refusal) as caught:
+        ceph_core.execute_smb(copy.deepcopy(value), "apply", DIGEST, remote, now=clock.now, pause=clock.pause)
+    assert clock.value >= ceph_core.READINESS_TIMEOUT and sum(clock.pauses) == ceph_core.READINESS_TIMEOUT
+    assert all(0 < timeout <= 660 for unused, unused, unused, timeout in remote.calls)
+    named, detail = ceph_core.refusal(caught.value, ceph_core.SMB_REASONS)
+    assert named == reason and detail.startswith(reason + "@ceph_core.wait_smb:")
+    assert NATIVE_SENTINEL not in detail and "smb@" not in detail and "vip@" not in detail
+
+
+@pytest.mark.parametrize("change", [{"owned": False}, {"exists": False, "partial": False, "resource": "", "daemons": []}])
+def test_share_wait_refuses_identity_for_a_resource_it_does_not_own(change):
+    value, clock = request("ceph.smb.share"), Clock()
+    remote = Remote(value, [dict(observation(value, False), **change)])
+    with pytest.raises(ceph_native.Refusal, match="^smb-identity$"):
+        ceph_core.execute_smb(copy.deepcopy(value), "apply", DIGEST, remote, now=clock.now, pause=clock.pause)
+    assert clock.pauses == []
+
+
+@pytest.mark.parametrize("change", [{"blocking": ["HEALTH_WARN"]}, {"blocking": ["smb@smb.files"] * 17}, {"directory": 1}, {"password": "x"},
+                                    {"request": "e" * 64}])
+def test_an_smb_observation_outside_its_closed_shape_refuses_evidence(change):
+    value = request("ceph.smb.share")
+    remote = Remote(value, [dict(observation(value, True), **change)])
+    with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+        ceph_core.execute_smb(copy.deepcopy(value), "observe", DIGEST, remote)
+
+
+def test_observe_runs_one_observation_without_material():
+    value = request("ceph.smb.usersgroups")
+    remote = Remote(value, [observation(value, True, daemons=[])])
+    result = ceph_core.execute_smb(copy.deepcopy(value), "observe", DIGEST, remote)
+    assert result["changed"] is False and result["evidence"]["ready"] is True
+    assert [phase for unused, phase, unused, unused in remote.calls] == ["smb_observe"] and remote.reads == 0
+
+
+def test_worker_payload_stays_under_max_input(tmp_path):
+    def sized(users):
+        paths = sorted("/values/users/" + str(index) + "/password" for index in range(users))
+        value = request("ceph.smb.usersgroups")
+        value["native"]["values"]["users"] = [{"name": "user" + str(index)} for index in range(users)]
+        value["bindings"] = [{"path": path, "secretRef": "smb-user-password"} for path in paths]
+        directory = tmp_path / str(users)
+        directory.mkdir()
+        material = material_files(directory, {"smbSecret" + str(index): "p" * 1024 for index in range(users)})
+        calls = []
+        transport = ceph_core.Transport(value["scope"], material, run=answering(calls), scope=True, smb_secrets=users)
+        return value, transport, calls
+
+    value, transport, calls = sized(64)
+    assert transport.smb(value["scope"]["hosts"][0], "smb_apply", value, transport.smb_material()) == {"changed": True}
+    assert len(calls) == 1 and len(calls[0][1]) <= ceph_native.MAX_INPUT and len(value["scope"]["hosts"]) == 3
+    value, transport, calls = sized(3000)
+    with pytest.raises(ceph_native.Refusal, match="^material$"):
+        transport.smb(value["scope"]["hosts"][0], "smb_apply", value, transport.smb_material())
+    assert calls == []
+
+
+def test_smb_destroy_refuses_before_any_read(monkeypatch, tmp_path):
+    value = request("ceph.smb.share")
+
+    class Untouched:
+        def __getattr__(self, name):
+            raise AssertionError("the destroy path reached the transport: " + name)
+
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_core.execute_smb(copy.deepcopy(value), "destroy", DIGEST, Untouched())
+    failure = published(monkeypatch, value, "destroy", material(value, "destroy", tmp_path))
+    assert failure["reason"] == "request" and SENTINEL not in json.dumps(failure)
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("kind, operation, secrets", [("ceph.smb.usersgroups", "apply", 2), ("ceph.smb.usersgroups", "observe", 0),
+                                                      ("ceph.smb.share", "apply", 0)])
+def test_the_module_lends_each_bound_password_file_only_to_an_apply(monkeypatch, tmp_path, kind, operation, secrets):
+    value = request(kind)
+    reached = {}
+
+    def executed(frozen, chosen, digest, transport):
+        reached.update(operation=chosen, digest=digest, secrets=transport.smb_secrets, request=frozen)
+        return {"changed": False, "evidence": {"version": "ceph-smb-evidence-v1"}}
+
+    monkeypatch.setattr(ceph_core, "execute_smb", executed)
+    result = completed(monkeypatch, value, operation, material(value, operation, tmp_path))
+    assert result == {"changed": False, "evidence": {"version": "ceph-smb-evidence-v1"}}
+    assert reached == {"operation": operation, "digest": DIGEST, "secrets": secrets, "request": value}
+
+
+def material(value, operation, directory):
+    """The material names the Go capability binds, each a path whose name carries the sentinel and which does not exist."""
+    names = ["sshKey", "knownHosts"] + (["smbSecret" + str(index) for index in range(len(value["bindings"]))] if operation == "apply" else [])
+    return {name: os.path.join(str(directory), SENTINEL + "-" + name) for name in names}
+
+
+def module_run(monkeypatch, value, operation, bound, digest):
+    """Run the module once with every file open refused, so a read before the transport would surface."""
+    reached = {}
+
+    class Module:
+        def __init__(self, **options):
+            del options
+            self.params = {"request": value, "operation": operation, "digest": digest, "material": bound}
+
+        def fail_json(self, **failure):
+            reached["failure"] = failure
+            raise SystemExit(1)
+
+        def exit_json(self, **result):
+            reached["result"] = result
+            raise SystemExit(0)
+
+    def refused(*arguments, **options):
+        raise AssertionError("the module read a file: %r %r" % (arguments, options))
+
+    monkeypatch.setattr(ceph_smb, "AnsibleModule", Module)
+    monkeypatch.setattr(builtins, "open", refused)
+    monkeypatch.setattr(os, "open", refused)
+    with pytest.raises(SystemExit):
+        ceph_smb.main()
+    monkeypatch.setattr(builtins, "open", BUILTIN_OPEN)
+    monkeypatch.setattr(os, "open", OS_OPEN)
+    return reached
+
+
+BUILTIN_OPEN, OS_OPEN = builtins.open, os.open
+
+
+def published(monkeypatch, value, operation, bound, digest=DIGEST):
+    """The one failure the module hands Ansible."""
+    reached = module_run(monkeypatch, value, operation, bound, digest)
+    assert "result" not in reached, reached
+    assert reached["failure"]["msg"] == "Ceph SMB operation refused"
+    return reached["failure"]
+
+
+def completed(monkeypatch, value, operation, bound, digest=DIGEST):
+    reached = module_run(monkeypatch, value, operation, bound, digest)
+    assert "failure" not in reached, reached
+    return reached["result"]
+
+
+@pytest.mark.parametrize("change", [
+    lambda value: value.pop("scope"),
+    lambda value: value.update(unsent="member"),
+    lambda value: value.update(version="ceph-smb-v0"),
+    lambda value: value.pop("images"),
+    lambda value: value.update(images=list(reversed(value["images"]))),
+    lambda value: value.update(images=[dict(IMAGES[0], image="other.example.test/samba@sha256:" + "b" * 64), IMAGES[1]]),
+    lambda value: value.update(machines=["machine-2", "machine-1"]),
+    lambda value: value.update(id="other"),
+    lambda value: value.update(resourceType="ceph.smb.tls.credential"),
+    lambda value: value["native"].update(resource_type="ceph.smb.cluster"),
+    lambda value: value["service"].update(name="smb.other"),
+    lambda value: value.update(clusterIDs=[]),
+    lambda value: value.update(bindings=[{"path": "/auth/password", "secretRef": "join-password"}]),
+    lambda value: value["scope"].update(version="ceph-core-v0"),
+    lambda value: value["scope"].update(cluster="other"),
+])
+def test_a_malformed_share_request_refuses_request(monkeypatch, tmp_path, change):
+    value = request("ceph.smb.share")
+    change(value)
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_core.smb_request(copy.deepcopy(value))
+    failure = published(monkeypatch, value, "apply", material(request("ceph.smb.share"), "apply", tmp_path))
+    assert failure["reason"] == "request" and SENTINEL not in json.dumps(failure)
+
+
+@pytest.mark.parametrize("resource_type, change", [
+    ("ceph.smb.join.auth", lambda value: value.update(images=IMAGES)),
+    ("ceph.smb.join.auth", lambda value: value.update(bindings=[])),
+    ("ceph.smb.usersgroups", lambda value: value.update(bindings=list(reversed(value["bindings"])))),
+    ("ceph.smb.usersgroups", lambda value: value["bindings"][0].update(path="/values/users/01/password")),
+    ("ceph.smb.usersgroups", lambda value: value.update(service=service())),
+    ("ceph.smb.cluster", lambda value: value.update(bindings=[{"path": "/auth/password", "secretRef": "join-password"}])),
+])
+def test_each_type_keeps_its_own_members(resource_type, change):
+    value = request(resource_type)
+    change(value)
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_core.smb_request(value)
+
+
+@pytest.mark.parametrize("resource_type", ["ceph.smb.join.auth", "ceph.smb.usersgroups"])
+def test_an_apply_without_each_bound_secret_refuses_material(monkeypatch, tmp_path, resource_type):
+    value = request(resource_type)
+    for missing in ["smbSecret0", "sshKey"]:
+        bound = material(value, "apply", tmp_path)
+        del bound[missing]
+        assert published(monkeypatch, value, "apply", bound)["reason"] == "material"
+    assert published(monkeypatch, value, "observe", material(value, "apply", tmp_path))["reason"] == "material"
+
+
+def test_a_malformed_digest_refuses_request(monkeypatch, tmp_path):
+    value = request("ceph.smb.cluster")
+    assert published(monkeypatch, value, "observe", material(value, "observe", tmp_path), digest="D" * 64)["reason"] == "request"
+
+
+def evidence(**changes):
+    value = {"daemons": [], "exists": False, "fsid": FSID, "owned": True, "owner": OWNER, "partial": False,
+             "ready": False, "removed": False, "request": DIGEST, "resource": "", "version": "ceph-smb-evidence-v1"}
+    value.update(changes)
+    return value
+
+
+@pytest.mark.parametrize("value", [
+    evidence(),
+    evidence(removed=True),
+    evidence(exists=True, ready=True, resource="ceph.smb.cluster.files"),
+    evidence(exists=True, ready=True, resource="ceph.smb.share.files.docs", daemons=SHARE_DAEMONS),
+    evidence(exists=True, partial=True, resource="ceph.smb.share.files.docs"),
+    evidence(owned=False, exists=True, resource="ceph.smb.usersgroups.users"),
+])
+def test_smb_evidence_admits_the_closed_shapes(value):
+    assert ceph_core.smb_evidence(copy.deepcopy(value), DIGEST, request("ceph.smb.share")) == value
+
+
+@pytest.mark.parametrize("value, digest", [
+    (dict(evidence(), password="x"), DIGEST),
+    (evidence(owner="apply-456"), DIGEST),
+    (evidence(fsid="4c0a4300-aa43-458c-86d7-ac2256d1fc01"), DIGEST),
+    (evidence(version="ceph-smb-evidence-v0"), DIGEST),
+    (evidence(), "e" * 64),
+    (evidence(ready=True, removed=True), DIGEST),
+    (evidence(ready=1), DIGEST),
+    (evidence(resource="r" * 257), DIGEST),
+    (evidence(daemons=[dict(SHARE_DAEMONS[0], name="smb")]), DIGEST),
+    (evidence(daemons=[dict(SHARE_DAEMONS[0], extra="x")]), DIGEST),
+    (evidence(daemons=SHARE_DAEMONS * 129), DIGEST),
+])
+def test_smb_evidence_refuses_anything_else(value, digest):
+    with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+        ceph_core.smb_evidence(value, digest, request("ceph.smb.share"))

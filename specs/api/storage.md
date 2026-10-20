@@ -70,8 +70,7 @@ export block.
 `StorageSMBResource` is admitted under its
 [field record](../storage-resources.md#storagesmbresource); its SMB block
 plans it; until its samba images can be selected, planning refuses the
-StorageCluster it names (see the [refusal table](../storage.md#refusal-table)),
-and this build does not yet apply SMB effects.
+StorageCluster it names (see the [refusal table](../storage.md#refusal-table)).
 Other P2 resource additions remain target contracts, not admitted kinds.
 Future storage export feature families are refused by current pure
 admission.

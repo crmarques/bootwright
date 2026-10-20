@@ -22,8 +22,6 @@ func smbRefusals() map[string]error {
 		"foreign-service": failure("lifecycle.unknown", "an SMB cluster or smb service exists on the Ceph cluster that no StorageSMBResource of this cluster declares",
 			"find it with ceph smb cluster ls and ceph orch ls --service_type smb; declare it with a StorageSMBResource or remove it outside Bootwright, then apply again; Bootwright never adopts an SMB cluster it did not create"),
 		"foreign-image": adapterRefusals()["foreign-image"],
-		"smb-unrealized": failure("lifecycle.unsupported", "this build plans StorageSMBResource blocks but does not realize their native effects",
-			"remove the StorageSMBResource objects from the selected Environment, or apply with a build that realizes them"),
 	}
 	for _, reason := range []string{"request", "artifact", "ownership", "evidence", "material", "transport", "remote-refusal", "adapter-exception", "native-command", "native-timeout", "native-output", "unknown", "foreign-cluster"} {
 		out[reason] = failure("lifecycle.unknown", "the Ceph SMB adapter could not prove its "+reason+" boundary", "inspect the retained operation evidence before continuing")

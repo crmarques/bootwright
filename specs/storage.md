@@ -751,8 +751,39 @@ cluster and image proofs of the original apply. Evidence carries its flags,
 owner, FSID, the native resource name and, for a share, the generated daemons'
 host, name and service only. The block retires with every Machine of its
 cluster and refuses removal while any survives
-([B491](milestones/m2.md#b491)). This build plans the block but refuses its run
-(`smb-unrealized`).
+([B491](milestones/m2.md#b491)). The block runs its native calls on the
+bootstrap host. Before any effect it proves the cluster's ownership, that the
+`smb` manager module is enabled (`smb-module-disabled`), and for an SMB cluster
+or share that every SMB cluster `ceph smb cluster ls` lists and every `smb`
+service `ceph orch ls` lists is declared by a StorageSMBResource of the cluster
+(`foreign-service`) and that the settings block holds both samba image settings
+at the frozen digests (`foreign-image`); it never writes them. It records its
+attempt, then runs `ceph smb apply -i - --password-filter=none
+--password-filter-out=hidden` with the one resource as JSON on stdin and the
+bound passwords spliced in memory, and reads every resource with
+`ceph smb show <name> --password-filter=hidden`; no password reaches an
+argument, a record, evidence or a diagnostic. An answer that is not one
+successful result for the resource refuses `smb-result` without quoting the
+manager, whose answer can echo its input. A resource without this operation's
+attempt record, or one this operation applied that is gone or changed, refuses
+`smb-identity`; Bootwright never adopts an SMB resource. The readback compares
+every admitted leaf after the manager's defaults (a share's name defaults to
+its ID, `readonly` false, `browseable` true, `restrict_access` false,
+`cephfs.path` `/`, `cephfs.provider` `samba-vfs`, an omitted `subvolumegroup`
+or `subvolume` empty, a source's `source_type` `resource`, a login entry's
+`category` `user` and `access` `read`), requires each leaf admission refuses to
+be unset and ignores leaves Bootwright does not author. An SMB cluster, join
+auth or users-and-groups resource is ready once it reads back equal; the SMB
+manager generates the `smb.<cluster_id>` service only when the cluster has a
+share, so a share is ready only when, in addition, that service runs its
+daemons, as many as the placement count or else one per placement host, on the
+SMB cluster's hosts with the frozen samba image, and each `public_addrs`
+address of a clustered SMB cluster accepts TCP port 445 from the bootstrap
+host. A share not ready within 900 seconds refuses `smb-directory` for an
+active-directory cluster, whose daemons join the directory before they start,
+and `smb-unavailable` otherwise. The core request lists each declared SMB
+cluster's `smb.<cluster_id>` service with its hosts among the services other
+blocks execute, so core observation tolerates exactly those daemons.
 
 A StorageObjectGateway's realm, zone group, zone, zone placement and rgw service
 are realized by its gateway block `ceph-gateway-<gateway>`, which runs its

@@ -61,7 +61,7 @@ CLUSTER_REASONS = (
 SMB_REASONS = (
     "request", "artifact", "ownership", "evidence", "material", "transport", "remote-refusal", "adapter-exception", "native-command",
     "native-timeout", "native-output", "unknown", "foreign-cluster", "foreign-image", "foreign-service", "smb-identity", "smb-result",
-    "smb-unavailable", "smb-directory", "smb-module-disabled", "smb-unrealized",
+    "smb-unavailable", "smb-directory", "smb-module-disabled",
 )
 
 
@@ -345,16 +345,19 @@ def ssh_argv(host, key, known_hosts, source, worker_budget=None, *, worker_ceili
 class Transport:
     """No material value appears in arguments, environment, errors or logs."""
 
-    def __init__(self, request, material, run=ceph_native.bounded_command, *, scope=False):
+    def __init__(self, request, material, run=ceph_native.bounded_command, *, scope=False, smb_secrets=0):
         self.request = ceph_native.validate_scope(request) if scope else ceph_native.validate(request)
+        ceph_native.require(type(smb_secrets) is int and 0 <= smb_secrets <= 10000, "material")
         self.material = material
         self.run = run
+        self.smb_secrets = smb_secrets
 
     def _call(self, host, source, payload, timeout, worker_budget=None, *, worker_ceiling=640, failures=NATIVE_FAILURES):
         ceph_native.require(isinstance(self.material, dict), "material")
         package_material = {"packageCA" + str(i) for i in range(len(self.request.get("packages", {}).get("sources", [])))}
         allowed = {"sshKey", "knownHosts", "clusterPrivateKey", "clusterPublicKey", "registryJSON", "gatewayCertificate", "gatewayKey"}
         allowed |= ceph_native_units.MATERIAL_VARIABLES
+        allowed |= {"smbSecret" + str(index) for index in range(self.smb_secrets)}
         ceph_native.require(set(self.material) <= allowed | package_material, "material")
         ceph_native.require(set(self.material) >= {"sshKey", "knownHosts"}, "material")
         with tempfile.TemporaryDirectory(prefix="bootwright-ceph-") as scratch:
@@ -419,6 +422,30 @@ class Transport:
         source = ceph_native_worker.launcher(inspect.getsource(ceph_native_worker)) + "s['main']()"
         return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": budget}, timeout,
                           worker_budget=budget)
+
+    def smb(self, host, phase, request, private=None, *, timeout=660):
+        """One SMB phase on the bootstrap host; the bound passwords travel only in the worker's stdin payload."""
+        ceph_native.require(type(timeout) in (int, float) and 0 < timeout <= 660, "transport")
+        ceph_native.require(phase in ceph_smb_native.PHASES, "transport")
+        budget = min(640, timeout - 2) if timeout > 2 else timeout / 2
+        payload = {"request": request, "host": host["name"], "phase": phase, "private": private or {}}
+        source = ceph_native_worker.launcher(inspect.getsource(ceph_native_worker)) + "s['main']()"
+        return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": budget}, timeout,
+                          worker_budget=budget)
+
+    def smb_material(self):
+        """Every bound SMB password, read from the runner's private files: one line of 1 to 1024 bytes of UTF-8 each."""
+        result = {}
+        for name in ("smbSecret" + str(index) for index in range(self.smb_secrets)):
+            ceph_native.require(isinstance(self.material, dict) and name in self.material, "material")
+            data = ceph_native.read_regular(self.material[name], private=True)
+            try:
+                value = data.decode("utf-8")
+            except UnicodeError:
+                raise ceph_native.Refusal("material") from None
+            ceph_native.require(1 <= len(data) <= ceph_smb_native.MAX_SECRET and not any(char in value for char in "\x00\r\n"), "material")
+            result[name] = value
+        return result
 
     def gateway_material(self, key):
         """A gateway's bound certificate, and its private key for the service apply, read from the runner's private files."""
@@ -990,3 +1017,53 @@ def smb_evidence(value, request_digest, request=None):
         ceph_native.require(value["owner"] == scope["owner"] and value["fsid"] == scope["fsid"], "evidence")
     ceph_native.require(len(ceph_native.canonical(value)) <= 16000, "evidence")
     return value
+
+
+def observe_smb(request, request_digest, bootstrap, transport, timeout=660):
+    """One SMB observation: the closed evidence, the pending generated daemons or addresses, and whether its cluster joins a directory."""
+    observed = transport.smb(bootstrap, "smb_observe", request, timeout=timeout)
+    ceph_native.require(isinstance(observed, dict) and "request" not in observed, "evidence")
+    observed = dict(observed)
+    blocking, directory = observed.pop("blocking", None), observed.pop("directory", None)
+    ceph_native.require(isinstance(blocking, list) and len(blocking) <= 16 and type(directory) is bool, "evidence")
+    ceph_native.require(all(isinstance(entry, str) and ceph_smb_native.PENDING.fullmatch(entry) is not None for entry in blocking), "evidence")
+    observed["request"] = request_digest
+    return smb_evidence(observed, request_digest, request), blocking, directory
+
+
+def wait_smb(request, request_digest, bootstrap, transport, now, pause):
+    """Poll a share until its generated service runs; a timeout names only whether the SMB cluster joins a directory, never a native message."""
+    deadline = now() + READINESS_TIMEOUT
+    directory = False
+    while True:
+        remaining = deadline - now()
+        if remaining > 0:
+            observed, unused, directory = observe_smb(request, request_digest, bootstrap, transport, min(660, remaining))
+            if observed["ready"]:
+                return observed
+            ceph_native.require(observed["owned"] and observed["exists"], "smb-identity")
+            remaining = deadline - now()
+        if remaining <= 0:
+            raise ceph_native.Refusal("smb-directory" if directory else "smb-unavailable")
+        pause(min(READINESS_INTERVAL, remaining))
+
+
+def execute_smb(request, operation, request_digest, transport, *, now=time.monotonic, pause=time.sleep):
+    """An SMB block runs on its cluster's bootstrap host: apply then prove the resource, a share until its generated service runs; or observe.
+    Removal is the cluster's retirement, never this block's."""
+    request = smb_request(request)
+    ceph_native.require(ceph_native.digest(request_digest) and operation in ("apply", "observe"), "request")
+    scope = request["scope"]
+    bootstrap = next((host for host in scope["hosts"] if host["name"] == scope["bootstrap"]), None)
+    ceph_native.require(bootstrap is not None, "request")
+    if operation == "observe":
+        return {"changed": False, "evidence": observe_smb(request, request_digest, bootstrap, transport)[0]}
+    private = transport.smb_material() if request["bindings"] else {}
+    produced = transport.smb(bootstrap, "smb_apply", request, private)
+    ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
+    if request["resourceType"] == "ceph.smb.share":
+        observation = wait_smb(request, request_digest, bootstrap, transport, now, pause)
+    else:
+        observation = observe_smb(request, request_digest, bootstrap, transport)[0]
+        ceph_native.require(observation["ready"], "smb-result")
+    return {"changed": produced["changed"], "evidence": observation}

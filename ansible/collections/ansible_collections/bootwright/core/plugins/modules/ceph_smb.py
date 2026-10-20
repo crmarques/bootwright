@@ -9,7 +9,8 @@ short_description: Realize one Ceph SMB manager resource of its frozen cluster
 version_added: "0.1.0"
 description:
   - Admits the completed SMB block request, its cluster scope and the private material files its operation binds.
-  - This build realizes no SMB effect, reads no material file and refuses every operation with smb-unrealized.
+  - Applies or observes one SMB manager resource on the cluster's bootstrap host through isolated controller SSH; passwords reach the host
+    only on the worker's stdin and are read back masked.
 options:
   request:
     description: Completed Ceph SMB request with its cluster scope and resolved samba images.
@@ -65,7 +66,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, 
 
 
 def admitted(params):
-    """The request, digest and material names an operation binds, each checked before the refusal; no material file is read."""
+    """The request, digest and material names an operation binds, each checked before any material file is read."""
     request = ceph_core.smb_request(params["request"])
     ceph_native.require(ceph_native.digest(params["digest"]))
     expected = {"sshKey", "knownHosts"}
@@ -73,7 +74,7 @@ def admitted(params):
         expected |= {"smbSecret" + str(index) for index in range(len(request["bindings"]))}
     material = params["material"]
     ceph_native.require(isinstance(material, dict) and set(material) == expected, "material")
-    raise ceph_native.Refusal("smb-unrealized")
+    return request
 
 
 def main():
@@ -86,8 +87,12 @@ def main():
         },
         supports_check_mode=False,
     )
+    params = module.params
     try:
-        admitted(module.params)
+        request = admitted(params)
+        secrets = len(request["bindings"]) if params["operation"] == "apply" else 0
+        transport = ceph_core.Transport(request["scope"], params["material"], scope=True, smb_secrets=secrets)
+        result = ceph_core.execute_smb(request, params["operation"], params["digest"], transport)
     except Exception as error:
         reason, detail = ceph_core.refusal(error, ceph_core.SMB_REASONS)
         failure = {"reason": reason}
@@ -97,6 +102,7 @@ def main():
         if detail:
             failure["detail"] = detail
         module.fail_json(msg="Ceph SMB operation refused", **failure)
+    module.exit_json(**result)
 
 
 if __name__ == "__main__":

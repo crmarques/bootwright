@@ -142,12 +142,30 @@ IMAGE = {
 HOST = {"cluster": {key: value for key, value in CORE.items() if key not in ("action", "delegated", "gateway", "service", "settings")},
         "host": "node-1", "version": "ceph-host-v3"}
 
+SMB = {
+    "bindings": [],
+    "cluster": "example",
+    "clusterIDs": ["files"],
+    "controller": "controller",
+    "id": "docs",
+    "images": [{"image": "cp.icr.io/cp/ibm-ceph/samba-synthetic@sha256:" + "b" * 64, "name": "samba"},
+               {"image": "cp.icr.io/cp/ibm-ceph/samba-metrics-synthetic@sha256:" + "c" * 64, "name": "samba_metrics"}],
+    "machines": ["machine-1"],
+    "native": {"cephfs": {"subvolume": "docs", "volume": "files"}, "cluster_id": "files", "resource_type": "ceph.smb.share", "share_id": "docs"},
+    "object": "smb-docs",
+    "resourceType": "ceph.smb.share",
+    "scope": HOST["cluster"],
+    "service": {"clustered": False, "hosts": ["node-1"], "name": "smb.files"},
+    "version": "ceph-smb-v1",
+}
+
 # Role, its entry points, the request variable and the request carrying every
 # member the Go side encodes, with the variables its entry point also requires.
 ROLE_REQUESTS = (
     ("storage_ceph_core", ("apply", "observe", "destroy"), "bootwright_ceph", CORE),
     ("storage_ceph_image", ("resolve", "observe", "destroy"), "bootwright_ceph_image", IMAGE),
     ("storage_ceph_host", ("prepare", "observe", "destroy"), "bootwright_ceph_host", HOST),
+    ("storage_ceph_smb", ("apply", "observe", "destroy"), "bootwright_ceph_smb", SMB),
 )
 
 ENTRY_POINTS = [(role, entry, prefix, request) for role, entries, prefix, request in ROLE_REQUESTS
