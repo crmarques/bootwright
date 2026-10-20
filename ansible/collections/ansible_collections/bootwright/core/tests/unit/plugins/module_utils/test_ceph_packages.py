@@ -13,10 +13,12 @@ import json
 import os
 from pathlib import Path
 import signal
+import ssl
 import stat
 import subprocess
 import sys
 import time
+import urllib.error
 from types import SimpleNamespace
 
 import pytest
@@ -447,6 +449,31 @@ def test_signer_rule_unchanged_for_a_mirror(package_request, monkeypatch, tmp_pa
     for url in (mirror + "/repodata/repomd.xml", sources.IBM_KEY, dvd):
         acquisition.stream(url, io.BytesIO(), 7)
     assert seen == [("repository", mirror + "/repodata/repomd.xml"), ("public", sources.IBM_KEY), ("local", dvd)]
+
+
+@pytest.mark.parametrize("trust, trust_ref, anchor", [(None, None, "the host trust store"), ("bundle", "repository-ca", "trust bundle Secret repository-ca")])
+def test_a_failed_key_connection_names_the_key_location_never_the_repository(package_request, monkeypatch, trust, trust_ref, anchor):
+    recording_openers(monkeypatch)
+    mirror = "https://mirror.example.test/ceph"
+    acquisition = sources.Acquisition(package_request["packages"]["sources"][0], "public-certificate", repository=mirror, trust=trust, trust_ref=trust_ref)
+    def unverified(request, timeout):
+        raise urllib.error.URLError(ssl.SSLCertVerificationError("unknown authority"))
+
+    failing = SimpleNamespace(open=unverified)
+    acquisition.public = failing
+    if trust is None:
+        acquisition.repository_opener = failing
+    with pytest.raises(sources.RepositoryTrustFailure) as failure:
+        acquisition.stream(sources.IBM_KEY, io.BytesIO(), 7)
+    assert str(failure.value) == "TLS verification of the publisher key " + sources.IBM_KEY + " failed against the host trust store"
+    assert mirror not in str(failure.value)
+    acquisition.repository_opener = failing
+    with pytest.raises(sources.RepositoryTrustFailure) as failure:
+        acquisition.stream(mirror + "/repodata/repomd.xml", io.BytesIO(), 7)
+    assert str(failure.value) == "TLS verification of the package repository " + mirror + " failed against " + anchor
+    acquisition.local = failing
+    with pytest.raises(urllib.error.URLError):
+        acquisition.stream(package_request["packages"]["sources"][0]["url"] + "/BaseOS/repodata/repomd.xml", io.BytesIO(), 7)
 
 
 class Constructed(Exception):

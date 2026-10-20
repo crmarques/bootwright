@@ -162,7 +162,8 @@ redirect and never from another repository; it verifies that repository
 against `ceph.packageRepositoryTrustBundleRef` alone when it is set and
 against the host trust store otherwise, and a connection the anchor does not
 verify fails the package phase with a native error that names the repository
-and the anchor, never a credential. Continuation uses that decision and
+and the anchor, never a credential; a publisher key connection that does not
+verify names the key location and the host trust store, never the repository. Continuation uses that decision and
 refuses an unrelated inventory or changed installed payload. An explicitly
 accepted IBM license authorizes only the provider's required `ACCEPT_EULA=yes`
 transaction environment; missing acceptance refuses before package effects.

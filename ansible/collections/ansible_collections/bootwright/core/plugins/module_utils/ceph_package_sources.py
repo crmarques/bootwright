@@ -129,14 +129,14 @@ class Acquisition:
         remaining = self.deadline - time.monotonic()
         ceph_native.require(remaining > 0, "package-timeout")
         if url.startswith(prefix):
-            opener = self.local
+            opener, origin = self.local, None
         elif url == IBM_KEY:
-            opener = self.public
+            opener, origin = self.public, ("the publisher key " + IBM_KEY, "the host trust store")
         else:
-            opener = self.repository_opener
+            opener, origin = self.repository_opener, ("the package repository " + self.repository_base, self.anchor)
         request = urllib.request.Request(url, headers={"Accept-Encoding": "identity"})
         hasher, count = hashlib.sha256(), 0
-        with self.open(opener, request, min(60, remaining)) as response:
+        with self.open(opener, request, min(60, remaining), origin) as response:
             ceph_native.require(response.status == 200 and response.geturl() == url, "packages")
             ceph_native.require(response.headers.get("Content-Encoding", "identity") == "identity", "packages")
             while True:
@@ -152,8 +152,8 @@ class Acquisition:
         ceph_native.require(count > 0 and (size is None or count == size) and (expected is None or hasher.hexdigest() == expected), "packages")
         return hasher.hexdigest()
 
-    def open(self, opener, request, timeout):
-        if opener is not self.repository_opener:
+    def open(self, opener, request, timeout, origin=None):
+        if origin is None:
             return opener.open(request, timeout=timeout)
         try:
             return opener.open(request, timeout=timeout)
@@ -162,7 +162,7 @@ class Acquisition:
                 raise
         except ssl.SSLCertVerificationError:
             pass
-        raise RepositoryTrustFailure("TLS verification of the package repository " + self.repository_base + " failed against " + self.anchor)
+        raise RepositoryTrustFailure("TLS verification of " + origin[0] + " failed against " + origin[1])
 
     def bytes(self, url, limit):
         import io
