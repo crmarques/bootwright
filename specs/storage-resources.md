@@ -924,8 +924,9 @@ spec:
       secretRef: files-smb-user
 ```
 
-StorageSMBResource is admitted; no capability realizes it yet, so planning
-refuses each one as an unclaimed kind.
+StorageSMBResource is admitted and realized by its SMB block once the samba
+images of its StorageCluster are authored under `spec.ceph.images`; until then
+planning refuses it as the [refusal table](storage.md#refusal-table) states.
 
 ## Remaining resource families and consuming gates
 
