@@ -3601,6 +3601,8 @@ def dispatch(envelope):
             or (gateway and phase in ceph_native_object.PHASES))
     if phase not in CORE_READ_ONLY_PHASES and phase not in ceph_native_resources.READ_ONLY_PHASES:
         require(supported_transport(worker.request), "unsupported-release")
+    if gateway:
+        worker.tls = ceph_native_object.material(worker.request, phase, envelope["private"])
     if phase in ("bootstrap", "authorize", "tunnel_configure"):
         return getattr(worker, phase)(envelope["private"])
     if phase == "services":

@@ -127,29 +127,12 @@ func undeployedDelegated(cluster api.Object) (string, string, bool) {
 	})
 	for _, svc := range services {
 		name := storage.NativeServiceName(svc)
-		switch svc.Get("service_type").Text() {
-		case "ingress":
-			if family := serviceFamily(cluster, svc); family == "" || family == "rgw" {
-				return "Bootwright does not deploy the native service " + name + " yet",
-					"remove " + name + " from spec.ceph.services, together with its spec.ceph.serviceBindings entries", true
-			}
-		case "rgw":
-			if svc.Get("spec", "ssl").Bool() || serviceBound(cluster, name) {
-				return "Bootwright does not realize TLS on the rgw service " + name + " yet",
-					"set spec.ssl to false or omit it on " + name + " in spec.ceph.services, and remove its spec.ceph.serviceBindings entries", true
-			}
+		if svc.Get("service_type").Text() == "ingress" && serviceFamily(cluster, svc) == "" {
+			return "Bootwright does not deploy the native service " + name + " yet",
+				"remove " + name + " from spec.ceph.services, together with its spec.ceph.serviceBindings entries", true
 		}
 	}
 	return "", "", false
-}
-
-func serviceBound(cluster api.Object, name string) bool {
-	for _, binding := range cluster.Spec().Get("ceph", "serviceBindings").Items() {
-		if binding.Get("serviceRef").Text() == name {
-			return true
-		}
-	}
-	return false
 }
 
 func unselectedAuxiliary(cluster api.Object) (string, string, bool) {

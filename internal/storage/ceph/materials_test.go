@@ -31,7 +31,49 @@ func withMaterial(e lifecycle.Execution, r Request) lifecycle.Execution {
 	for _, h := range r.Hosts {
 		e.Material[h.HostKeyRef] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.PublicKeyPart: hostPublicKey(), secrets.PrivateKeyPart: []byte("host-private-never-lent")})
 	}
+	if secret := gatewayTLSSecret(r.Gateway); secret != "" {
+		e.Material[secret] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: []byte(gatewayCertificatePEM), secrets.PrivateKeyPart: []byte(gatewayKeyPEM)})
+	}
 	return e
+}
+
+const gatewayCertificatePEM = "-----BEGIN CERTIFICATE-----\nZ2F0ZXdheS1sZWFm\n-----END CERTIFICATE-----\n"
+const gatewayKeyPEM = "-----BEGIN PRIVATE KEY-----\nZ2F0ZXdheS1rZXk=\n-----END PRIVATE KEY-----\n"
+
+func TestGatewayMaterialFilesNeverInRequest(t *testing.T) {
+	r := coreRequest()
+	r.Action, r.Gateway = "gateway", gatewayRuntimeRequest().Gateway
+	r.Gateway.Bindings = []GatewayBinding{{Path: "/spec/ssl_cert", SecretRef: "gateway-tls", ServiceRef: "rgw.objects"}, {Path: "/spec/ssl_key", SecretRef: "gateway-tls", ServiceRef: "rgw.objects"}}
+	e := withMaterial(executionFor(t, r), r)
+	certificate := lifecycle.MaterialFile{Name: "gateway-certificate", Secret: "gateway-tls", Part: secrets.CertificatePart, Variable: "gatewayCertificate"}
+	key := lifecycle.MaterialFile{Name: "gateway-key", Secret: "gateway-tls", Part: secrets.PrivateKeyPart, Variable: "gatewayKey"}
+	for operation, want := range map[string][]lifecycle.MaterialFile{"apply": {certificate, key}, "observe": {certificate}, "destroy": {certificate}} {
+		_, files, cleanup, err := boundMaterial(e, r, operation, dependencyProofs{})
+		if err != nil {
+			t.Fatalf("%s: %v", operation, err)
+		}
+		cleanup()
+		gateway := []lifecycle.MaterialFile{}
+		for _, file := range files {
+			if file.Secret == "gateway-tls" {
+				gateway = append(gateway, file)
+			}
+		}
+		if !reflect.DeepEqual(gateway, want) {
+			t.Fatalf("%s binds %+v, want %+v", operation, gateway, want)
+		}
+	}
+	for _, leaked := range []string{"BEGIN", "Z2F0ZXdheS1sZWFm", "Z2F0ZXdheS1rZXk"} {
+		if strings.Contains(string(e.Block.Request), leaked) {
+			t.Fatalf("the gateway request holds %q", leaked)
+		}
+	}
+	e.Material["gateway-tls"] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: []byte(gatewayCertificatePEM)})
+	if _, _, _, err := boundMaterial(e, r, "observe", dependencyProofs{}); err != nil {
+		t.Fatalf("observation needs the key: %v", err)
+	}
+	_, _, _, err := boundMaterial(e, r, "apply", dependencyProofs{})
+	refusedWith(t, err, "lifecycle.state", "a required Ceph credential component is not bound", "")
 }
 
 func TestMaterialProjectionUsesProvedPublicKeysAndPrivateFiles(t *testing.T) {

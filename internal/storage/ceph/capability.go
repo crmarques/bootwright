@@ -77,6 +77,13 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 				plan.Secrets = append(plan.Secrets, h.HostKeyRef)
 			}
 		}
+		for _, r := range requests {
+			if r.Gateway != nil {
+				for _, b := range r.Gateway.Bindings {
+					plan.Secrets = append(plan.Secrets, b.SecretRef)
+				}
+			}
+		}
 	}
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
@@ -174,6 +181,9 @@ func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, 
 		}
 		for _, pool := range declaredPlacementPools(object) {
 			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: pool})
+		}
+		if request.Gateway != nil && len(request.Gateway.Documents) > 1 && len(request.Auxiliary) != 0 {
+			dependencies = append(dependencies, SettingsBlockID(request.Cluster))
 		}
 	}
 	slices.Sort(dependencies)

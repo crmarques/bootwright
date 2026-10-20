@@ -130,6 +130,7 @@ page that owns its reasoning.
 | The default package repository `rhel9`, a source default | [Storage API](../../specs/api/storage.md) |
 | Native transport stays refused; no specialization lifts it | [Release qualification](../../specs/storage-coverage.md#release-qualification) |
 | The zone pools and placement shape a build's `zone get` reports: a subset of the planned derived and declared pools is accepted, a pool outside them refuses, `placement_pools` reads as a list or a mapping | [StorageObjectGateway field record](../../specs/storage-resources.md#storageobjectgateway-field-record) |
+| A build's `orch ls --export` keeps a gateway service's inline `ssl_cert` and `ssl_key` or omits both: either is accepted when the stored leaves equal the bound ones, and the served leaf's SHA-256 is the postcondition | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
 
 ## Adding a specialization
 

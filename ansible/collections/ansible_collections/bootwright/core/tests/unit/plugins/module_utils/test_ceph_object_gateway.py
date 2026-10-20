@@ -16,8 +16,10 @@ The scripted monitor answers the upstream v20.2.1 shapes the worker reads:
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import copy
+import hashlib
 import json
 import os
 import uuid
@@ -98,6 +100,7 @@ class Monitor:
         self.zone_extra = {}
         self.placement_sticks = True
         self.log, self.mutations, self.batches, self.on_radosgw = [], [], [], None
+        self.config, self.apply_error = [], None
 
     def run(self, argv, data=b"", timeout=60):
         del timeout
@@ -112,11 +115,14 @@ class Monitor:
                 self.pools.append({"pool_name": ".rgw.root", "pool_id": 1, "application_metadata": {"rgw": {}}})
             return self.radosgw(command)
         answers = {("fsid",): {"fsid": FSID}, ("osd", "pool", "ls", "detail"): self.pools,
-                   ("orch", "ls", "--export"): [dict(value, service_name=name) for name, value in self.specs.items()], ("orch", "ps"): self.running}
+                   ("orch", "ls", "--export"): [dict(value, service_name=name) for name, value in self.specs.items()], ("orch", "ps"): self.running,
+                   ("config", "dump"): self.config}
         if command in answers:
             return 0, json.dumps(answers[command]).encode()
         self.mutations.append((tool, command))
         assert command == ("orch", "apply", "-i", "-")
+        if self.apply_error is not None:
+            return 22, ceph_native.NativeOutput(b"", self.apply_error(data))
         batch = [json.loads(part) for part in data.split(b"---\n")]
         self.batches.append(batch)
         for value in batch:
@@ -680,7 +686,8 @@ class Transport:
         self.request, self.calls, self.ready_after = request, [], ready_after
         self.observed = dict(observed or {})
 
-    def call(self, host, phase, timeout=None):
+    def call(self, host, phase, private=None, *, timeout=None):
+        assert private is None
         self.calls.append((host["name"], phase))
         if phase == "observe":
             assert timeout is None or 0 < timeout <= 660
@@ -770,3 +777,379 @@ def test_core_evidence_admits_only_a_gateway_endpoint():
                          (dict(plain, endpoint={"certificateSHA256": "", "reachable": True}), tls)):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
             ceph_core.evidence(copy.deepcopy(bad), "d" * 64, against)
+
+
+def pem(kind, payload):
+    """Synthetic PEM text around arbitrary bytes, in short lines no opaque-run redaction would catch."""
+    body = base64.b64encode(payload).decode()
+    return "-----BEGIN " + kind + "-----\n" + "\n".join(body[i:i + 24] for i in range(0, len(body), 24)) + "\n-----END " + kind + "-----\n"
+
+
+LEAF = b"synthetic gateway leaf certificate for s3.example.test"
+CERT = pem("CERTIFICATE", LEAF) + pem("CERTIFICATE", b"synthetic issuing authority")
+KEY = pem("PRIVATE KEY", b"private key material only the gateway holds")
+OTHER_CERT = pem("CERTIFICATE", b"another leaf the Secret does not hold")
+OTHER_KEY = pem("PRIVATE KEY", b"another private key")
+LEAF_SHA256 = hashlib.sha256(LEAF).hexdigest()
+MARKS = [line for text in (CERT, KEY) for line in text.splitlines() if "-----" not in line]
+ENDPOINT = "s3.example.test"
+INGRESS = "ingress.rgw.objects"
+
+
+def leaked(value):
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="replace")
+    return [mark for mark in MARKS if mark in value or json.dumps(mark)[1:-1] in value]
+
+
+def bindings(service, secret="gateway-tls"):
+    return [{"path": "/spec/ssl_cert", "secretRef": secret, "serviceRef": service}, {"path": "/spec/ssl_key", "secretRef": secret, "serviceRef": service}]
+
+
+def ingress_document(**spec):
+    value = {"backend_service": "rgw.objects", "frontend_port": 443, "monitor_port": 1967, "ssl": True, "virtual_ip": "192.0.2.50/24"}
+    value.update(spec)
+    return {"placement": {"count": 2, "hosts": list(HOSTS)}, "service_id": "rgw.objects", "service_type": "ingress", "spec": value}
+
+
+def tls_request(ingress=False, ssl=True):
+    """Direct TLS on the rgw service, or an ingress in front of plain rgw, terminating TLS when ssl."""
+    if not ingress:
+        return gateway_request(spec={"ssl": True}, endpoint=ENDPOINT, bindings=bindings("rgw.objects"))
+    request = gateway_request(endpoint=ENDPOINT, bindings=bindings(INGRESS) if ssl else [])
+    request["gateway"]["documents"].append(ingress_document() if ssl else ingress_document(ssl=False))
+    request["delegated"] = [{"name": INGRESS, "hosts": list(HOSTS)}, {"name": "rgw.objects", "hosts": list(HOSTS)}]
+    request["auxiliary"] = copy.deepcopy(settings.AUXILIARY)
+    return request
+
+
+def images_held(monitor):
+    monitor.config = [settings.entry(settings.HAPROXY_KEY, settings.HAPROXY), settings.entry(settings.KEEPALIVED_KEY, settings.KEEPALIVED)]
+    return monitor
+
+
+def tls_worker(monitor, markers, phase="observe"):
+    native = worker(monitor, markers)
+    if monitor.request["gateway"]["bindings"]:
+        native.tls = {"gateway_service": {"gatewayCertificate": CERT, "gatewayKey": KEY}, "observe": {"gatewayCertificate": CERT}}.get(phase, {})
+    return native
+
+
+def apply_tls(monitor, markers):
+    return [getattr(tls_worker(monitor, markers, phase), phase)() for phase in ceph_native_object.APPLY_PHASES]
+
+
+def ingress_daemon(request, kind, host, image, status=1):
+    return {"daemon_type": kind, "daemon_id": "rgw.objects." + host + ".xyzabc", "hostname": host, "service_name": INGRESS, "status": status,
+            "container_image_digests": [image]}
+
+
+def ingress_rows(request, image=None):
+    return [ingress_daemon(request, kind, host, image or {"haproxy": settings.HAPROXY, "keepalived": settings.KEEPALIVED}[kind])
+            for kind in ("haproxy", "keepalived") for host in ("node-1", "node-2")]
+
+
+def ready_tls(tmp_path, request):
+    markers = markers_for(tmp_path, request)
+    monitor = images_held(Monitor(request))
+    apply_tls(monitor, markers)
+    monitor.running = [daemon(request, host) for host in ("node-1", "node-2")]
+    if len(request["gateway"]["documents"]) == 2:
+        monitor.running += ingress_rows(request)
+    return markers, monitor
+
+
+def observe_tls(monitor, markers):
+    native = tls_worker(monitor, markers)
+    evidence = native.empty_evidence()
+    return native.observe_resource(evidence, True), native.blocking, evidence
+
+
+def with_documents(request, change):
+    change(request["gateway"]["documents"], request)
+    return request
+
+
+TLS_INVALID = {
+    "one leaf only": lambda: gateway_request(spec={"ssl": True}, endpoint=ENDPOINT, bindings=bindings("rgw.objects")[:1]),
+    "two Secrets": lambda: gateway_request(spec={"ssl": True}, endpoint=ENDPOINT,
+                                           bindings=[bindings("rgw.objects")[0], bindings("rgw.objects", "other-tls")[1]]),
+    "binding on a service without ssl": lambda: gateway_request(endpoint=ENDPOINT, bindings=bindings("rgw.objects")),
+    "ssl without bindings": lambda: gateway_request(spec={"ssl": True}, endpoint=ENDPOINT),
+    "rgw ssl with an ingress": lambda: with_documents(tls_request(True), lambda documents, request: documents[0]["spec"].update(ssl=True)),
+    "ingress of another rgw": lambda: with_documents(tls_request(True), lambda documents, request: documents[1]["spec"].update(backend_service="rgw.other")),
+    "keepalive_only ingress": lambda: with_documents(tls_request(True), lambda documents, request: documents[1]["spec"].update(keepalive_only=True)),
+    "bindings with an empty endpoint": lambda: gateway_request(spec={"ssl": True}, bindings=bindings("rgw.objects")),
+    "cephadm-signed source": lambda: gateway_request(spec={"ssl": True, "certificate_source": "cephadm-signed"}, endpoint=ENDPOINT,
+                                                     bindings=bindings("rgw.objects")),
+    "ssl_cert in a frozen spec": lambda: gateway_request(spec={"ssl": True, "ssl_cert": CERT}, endpoint=ENDPOINT, bindings=bindings("rgw.objects")),
+    "ingress without its haproxy image": lambda: with_documents(tls_request(True), lambda documents, request: request.update(
+        auxiliary=[entry for entry in settings.AUXILIARY if entry["name"] != "haproxy"])),
+    "ingress without a monitor port": lambda: with_documents(tls_request(True), lambda documents, request: documents[1]["spec"].pop("monitor_port")),
+    "ingress virtual IP without a prefix": lambda: with_documents(tls_request(True), lambda documents, request: documents[1]["spec"].update(
+        virtual_ip="192.0.2.50")),
+    "ingress not in delegated": lambda: with_documents(tls_request(True), lambda documents, request: request.update(delegated=request["delegated"][1:])),
+    "bindings out of order": lambda: gateway_request(spec={"ssl": True}, endpoint=ENDPOINT, bindings=bindings("rgw.objects")[::-1]),
+    "ingress bound while rgw terminates": lambda: with_documents(tls_request(True), lambda documents, request: request["gateway"].update(
+        bindings=bindings("rgw.objects"))),
+}
+
+
+@pytest.mark.parametrize("case", sorted(TLS_INVALID))
+def test_gateway_tls_request_validation(case):
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate(TLS_INVALID[case]())
+
+
+def test_gateway_tls_request_admits_the_frozen_shapes():
+    direct = gateway_request(spec={"ssl": True, "certificate_source": "inline", "rgw_frontend_port": 8443}, endpoint=ENDPOINT, bindings=bindings("rgw.objects"))
+    assert ceph_native.validate(direct) is direct
+    fronted = tls_request(True)
+    fronted["gateway"]["documents"][1]["spec"].update(certificate_source="inline", first_virtual_router_id=50, health_check_interval="2s",
+                                                      virtual_interface_networks=["192.0.2.0/24"])
+    assert ceph_native.validate(fronted) is fronted
+    plain = tls_request(True, ssl=False)
+    assert ceph_native.validate(plain) is plain
+
+
+def test_gateway_private_material_is_admitted_per_phase(monkeypatch):
+    reached = []
+    for phase in ceph_native_object.APPLY_PHASES:
+        monkeypatch.setattr(ceph_native_object.ObjectWorker, phase, lambda self, phase=phase: reached.append((phase, self.tls)) or {"changed": False})
+    monkeypatch.setattr(ceph_native_object.ObjectWorker, "observe", lambda self: reached.append(("observe", self.tls)) or {})
+    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
+    request = tls_request()
+
+    def dispatch(phase, private):
+        return ceph_native.dispatch({"request": request, "host": "node-1", "phase": phase, "private": private})
+
+    both, certificate = {"gatewayCertificate": CERT, "gatewayKey": KEY}, {"gatewayCertificate": CERT}
+    dispatch("gateway_service", both)
+    dispatch("observe", certificate)
+    dispatch("gateway_zone", {})
+    assert reached == [("gateway_service", both), ("observe", certificate), ("gateway_zone", {})]
+    for phase, private in (("gateway_service", certificate), ("observe", both), ("gateway_zone", certificate), ("gateway_placement", both),
+                           ("gateway_service", dict(both, gatewayCertificate="not a certificate")),
+                           ("gateway_service", dict(both, gatewayKey="-----BEGIN CERTIFICATE-----")),
+                           ("observe", {"gatewayCertificate": "-----BEGIN CERTIFICATE-----\n!!!!\n-----END CERTIFICATE-----\n"}),
+                           ("observe", dict(certificate, extra=CERT))):
+        with pytest.raises(ceph_native.Refusal, match="^material$"):
+            dispatch(phase, private)
+    with pytest.raises(ceph_native.Refusal, match="^material$"):
+        ceph_native.dispatch({"request": gateway_request(), "host": "node-1", "phase": "observe", "private": certificate})
+
+
+def test_ingress_ssl_material_spliced_only_in_memory(tmp_path, monkeypatch):
+    contained = []
+    monkeypatch.setattr(ceph_host_runtime.HostRuntime, "contained",
+                        lambda self, image, user, script, arguments=(), **options: contained.append(arguments) or json.loads(arguments[0]))
+    request = tls_request(True)
+    markers = markers_for(tmp_path, request)
+    monitor = images_held(Monitor(request))
+    assert apply_tls(monitor, markers)[-1] == {"changed": True}
+    applies = [data for tool, command, data in monitor.log if command[:2] == ("orch", "apply")]
+    assert len(applies) == 1 and leaked(applies[0]) == MARKS
+    stream = [json.loads(part) for part in applies[0].split(b"---\n")]
+    assert [value["service_type"] for value in stream] == ["rgw", "ingress"]
+    assert stream[1]["spec"]["ssl_cert"] == CERT and stream[1]["spec"]["ssl_key"] == KEY and "ssl_cert" not in stream[0]["spec"]
+    assert not any(leaked(" ".join(command)) for tool, command, unused in monitor.log)
+    assert contained and not any(leaked(" ".join(arguments)) for arguments in contained)
+    for root, unused, files in os.walk(str(tmp_path)):
+        for name in files:
+            with open(os.path.join(root, name), "rb") as handle:
+                assert not leaked(handle.read()), name
+    placeholders = {"ssl_cert": "bootwright-bound:/spec/ssl_cert", "ssl_key": "bootwright-bound:/spec/ssl_key"}
+    for name in ("service-" + INGRESS + "-attempt.json", "service-" + INGRESS + "-complete.json"):
+        assert {key: markers.read(name)["service"]["spec"][key] for key in placeholders} == placeholders
+    inputs = markers.read("gateway-objects-inputs.json")
+    assert {key: inputs["services"][1][0]["spec"][key] for key in placeholders} == placeholders
+
+
+@pytest.mark.parametrize("exported", ["with leaves", "without leaves"])
+def test_gateway_replay_after_apply_before_endpoint_ready(tmp_path, exported):
+    request = tls_request()
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    apply_tls(monitor, markers)
+    os.unlink(os.path.join(markers.path, "service-rgw.objects-complete.json"))
+    if exported == "without leaves":
+        for key in ("ssl_cert", "ssl_key"):
+            del monitor.specs["rgw.objects"]["spec"][key]
+    monitor.mutations.clear()
+    assert tls_worker(monitor, markers, "gateway_service").gateway_service() == {"changed": False}
+    assert monitor.mutations == [] and markers.read("service-rgw.objects-complete.json") is not None
+
+
+@pytest.mark.parametrize("stored", ["other certificate", "other key", "certificate only", "key only"])
+def test_stored_certificate_other_than_bound_refuses(tmp_path, stored):
+    request = tls_request()
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    apply_tls(monitor, markers)
+    spec = monitor.specs["rgw.objects"]["spec"]
+    {"other certificate": lambda: spec.update(ssl_cert=OTHER_CERT), "other key": lambda: spec.update(ssl_key=OTHER_KEY),
+     "certificate only": lambda: spec.pop("ssl_key"), "key only": lambda: spec.pop("ssl_cert")}[stored]()
+    os.unlink(os.path.join(markers.path, "service-rgw.objects-complete.json"))
+    monitor.mutations.clear()
+    with pytest.raises(ceph_native.NativeFailure, match="^object-endpoint-certificate$") as caught:
+        tls_worker(monitor, markers, "gateway_service").gateway_service()
+    assert caught.value.native_error["cause"] == "rgw.objects" and monitor.mutations == []
+    if stored != "other key":
+        monitor.running = [daemon(request, host) for host in ("node-1", "node-2")]
+        with pytest.raises(ceph_native.NativeFailure, match="^object-endpoint-certificate$") as caught:
+            observe_tls(monitor, markers)
+        assert caught.value.native_error["cause"] == "rgw.objects"
+
+
+@pytest.mark.parametrize("ingress", [False, True])
+def test_endpoint_fingerprint_must_equal_bound_certificate(tmp_path, monkeypatch, ingress):
+    request = tls_request(ingress)
+    markers, monitor = ready_tls(tmp_path, request)
+    probes, replies = [], []
+    monkeypatch.setattr(ceph_native_object, "served", lambda address, number, name: probes.append((address, number, name)) or replies.pop(0))
+    targets = [("192.0.2.50", 443, ENDPOINT)] if ingress else [("192.0.2.1", 443, ENDPOINT), ("192.0.2.2", 443, ENDPOINT)]
+    service = INGRESS if ingress else "rgw.objects"
+    other = b"another served leaf"
+    replies[:] = [(other, True)] * len(targets)
+    ready, blocking, evidence = observe_tls(monitor, markers)
+    assert ready is False and blocking == ["tls@" + service] and evidence["endpoint"] == {"certificateSHA256": "", "reachable": False}
+    assert probes == targets
+    replies[:] = [(LEAF, True)] * len(targets)
+    ready, blocking, evidence = observe_tls(monitor, markers)
+    assert ready is True and blocking == [] and evidence["endpoint"] == {"certificateSHA256": LEAF_SHA256, "reachable": True}
+    replies[:] = [(LEAF, False)] * len(targets)
+    ready, blocking, evidence = observe_tls(monitor, markers)
+    assert ready is False and blocking == [("vip@" if ingress else "http@") + service] and evidence["endpoint"]["reachable"] is False
+    assert all(ceph_core.blocking_entry(entry) for entry in ("tls@rgw.objects", "tls@" + INGRESS, "vip@" + INGRESS, "haproxy@" + INGRESS))
+
+
+@pytest.mark.parametrize("config", ["foreign haproxy", "missing keepalived"])
+def test_gateway_refuses_ingress_when_image_keys_differ(tmp_path, config):
+    request = tls_request(True)
+    markers = markers_for(tmp_path, request)
+    monitor = images_held(Monitor(request))
+    if config == "foreign haproxy":
+        monitor.config[0]["value"] = "registry.example.test/ceph/haproxy@sha256:" + "d" * 64
+    else:
+        monitor.config = monitor.config[:1]
+    before = records(markers)
+    with pytest.raises(ceph_native.NativeFailure, match="^foreign-image$") as caught:
+        tls_worker(monitor, markers, "gateway_zone").gateway_zone()
+    assert caught.value.native_error["cause"] == (settings.HAPROXY_KEY if config == "foreign haproxy" else settings.KEEPALIVED_KEY)
+    assert records(markers) == before and monitor.radosgw_calls() == [] and monitor.mutations == []
+    held = images_held(Monitor(request))
+    apply_tls(held, markers_for(tmp_path / "held", request))
+    assert not any(command[:1] == ("config",) and command[1:2] != ("dump",) for unused, command, unused in held.log)
+
+
+def test_ingress_daemons_run_on_the_frozen_auxiliary_images(tmp_path):
+    request = tls_request(True, ssl=False)
+    markers, monitor = ready_tls(tmp_path, request)
+    ready, blocking, evidence = observe(monitor, markers)
+    assert ready is True and blocking == [] and evidence["endpoint"] == {"certificateSHA256": "", "reachable": True}
+    assert PROBES[-1] == ("192.0.2.50", 443)
+    assert {row["service"] for row in evidence["daemons"]} == {"rgw.objects", INGRESS}
+    monitor.running[-1]["container_image_digests"] = ["registry.example.test/ceph/keepalived@sha256:" + "d" * 64]
+    with pytest.raises(ceph_native.Refusal, match="^artifact$"):
+        observe(monitor, markers)
+    monitor.running[-1]["container_image_digests"] = [settings.KEEPALIVED]
+    monitor.running = [row for row in monitor.running if not (row["daemon_type"] == "haproxy" and row["hostname"] == "node-2")]
+    ready, blocking, unused = observe(monitor, markers)
+    assert ready is False and blocking == ["haproxy@" + INGRESS]
+
+
+def test_gateway_tls_material_never_reaches_a_refusal_detail(tmp_path):
+    request = tls_request()
+    markers = markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    monitor.apply_error = lambda data: b"Error EINVAL: cannot parse " + data
+    tls_worker(monitor, markers, "gateway_zone").gateway_zone()
+    tls_worker(monitor, markers, "gateway_placement").gateway_placement()
+    with pytest.raises(ceph_native.NativeFailure, match="^native-command$") as caught:
+        tls_worker(monitor, markers, "gateway_service").gateway_service()
+    assert caught.value.native_error["cause"].startswith("Error EINVAL: cannot parse") and not leaked(json.dumps(caught.value.native_error))
+
+    def write(name, data):
+        path = str(tmp_path / name)
+        ceph_native.private_write(path, data.encode())
+        return path
+
+    material = {"sshKey": write("identity", "fleet-private"), "knownHosts": write("known", "node-1 ssh-ed25519 AAAA\n"),
+                "gatewayCertificate": write("certificate", CERT), "gatewayKey": write("key", KEY)}
+    flattened = " ".join(KEY.splitlines())
+    sent = []
+
+    def run(argv, data=b"", timeout=None):
+        del timeout
+        sent.append((argv, data))
+        return 0, json.dumps({"ok": False, "reason": "native-refusal",
+                              "nativeError": {"coordinate": "registry.example.test/ceph", "cause": "orch apply failed: " + flattened}}).encode()
+
+    transport = ceph_core.Transport(request, material, run=run)
+    with pytest.raises(ceph_native.RemoteRefusal) as caught:
+        transport.call(request["hosts"][0], "gateway_service", transport.gateway_material(True))
+    assert caught.value.native_error["cause"].startswith("orch apply failed:") and not leaked(caught.value.native_error["cause"])
+    assert not leaked(" ".join(sent[0][0])) and leaked(sent[0][1]) == MARKS
+
+
+class TLSTransport(Transport):
+    """The coordinator's view: which private material each phase received."""
+
+    def __init__(self, request, digest=LEAF_SHA256, **options):
+        super().__init__(request, **options)
+        self.private, self.digest = [], digest
+
+    def gateway_material(self, key):
+        return {"gatewayCertificate": CERT, "gatewayKey": KEY} if key else {"gatewayCertificate": CERT}
+
+    def call(self, host, phase, private=None, *, timeout=None):
+        self.private.append((phase, sorted(private or {})))
+        result = super().call(host, phase, timeout=timeout)
+        if phase == "observe":
+            result["endpoint"] = {"certificateSHA256": self.digest if result["ready"] else "", "reachable": result["ready"]}
+            result["resource"] = dict(result["resource"], path=ENDPOINT) if result["ready"] else result["resource"]
+        return result
+
+
+def test_execute_gateway_passes_bound_material_per_phase(monkeypatch):
+    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
+    request = tls_request()
+    transport = TLSTransport(request, ready_after=2)
+    result = ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)
+    assert result["evidence"]["endpoint"] == {"certificateSHA256": LEAF_SHA256, "reachable": True}
+    certificate = ["gatewayCertificate"]
+    assert transport.private == [("prerequisites", []), ("gateway_zone", []), ("gateway_placement", []),
+                                 ("gateway_service", ["gatewayCertificate", "gatewayKey"]), ("observe", certificate), ("observe", certificate)]
+    assert len([call for call in transport.calls if call[1] != "observe"]) == 4
+    transport = TLSTransport(request)
+    ceph_core.execute(request, "observe", "d" * 64, transport)
+    assert transport.private == [("observe", certificate)]
+    removed = {"exists": False, "ready": False, "removed": True, "partial": False, "daemons": [], "resource": {"id": "", "path": ""}}
+    transport = TLSTransport(request, observed=removed)
+    ceph_core.execute(request, "destroy", "d" * 64, transport)
+    assert transport.private == [("destroy", certificate), ("observe", certificate)]
+    with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+        ceph_core.execute(request, "observe", "d" * 64, TLSTransport(request, digest="a" * 64))
+
+
+def test_transport_admits_the_gateway_material(tmp_path):
+    def write(name):
+        path = str(tmp_path / name)
+        ceph_native.private_write(path, name.encode())
+        return path
+
+    request = gateway_request()
+    material = {"sshKey": write("identity"), "knownHosts": write("known"), "gatewayCertificate": write("certificate"), "gatewayKey": write("key")}
+    calls = []
+
+    def run(argv, data=b"", timeout=None):
+        calls.append(argv)
+        return 0, json.dumps({"ok": True, "result": {"changed": False}}).encode()
+
+    assert ceph_core.Transport(request, material, run=run).call(request["hosts"][0], "gateway_zone") == {"changed": False}
+    assert ceph_core.Transport(request, material, run=run).gateway_material(True) == {"gatewayCertificate": "certificate", "gatewayKey": "key"}
+    with pytest.raises(ceph_native.Refusal, match="^material$"):
+        ceph_core.Transport(request, dict(material, gatewayChain=write("chain")), run=run).call(request["hosts"][0], "gateway_zone")
+    with pytest.raises(ceph_native.Refusal, match="^material$"):
+        ceph_core.Transport(request, {"sshKey": material["sshKey"], "knownHosts": material["knownHosts"]}, run=run).gateway_material(False)
+    assert len(calls) == 1

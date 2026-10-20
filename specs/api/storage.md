@@ -15,9 +15,9 @@ of the same cluster binds by name. StorageFilesystem is admitted under
 core request lists each of them only by its qualified name and eligible hosts,
 outside the host request, so that core observation
 [tolerates its daemons](../storage-native-api.md#service-identity-and-references);
-planning realizes an rgw service a StorageObjectGateway binds through the
-gateway block and an nfs service through its unit; an ingress that fronts an
-rgw service and rgw TLS still refuse `lifecycle.unsupported`
+planning realizes an rgw service a StorageObjectGateway binds, with its TLS
+bindings, through the gateway block and an nfs service through its unit; an
+ingress refuses until its auxiliary images can be selected
 ([refusal table](../storage.md#refusal-table)). A
 `spec.ceph.serviceBindings` entry is left to the gateway block only for an RGW
 service a StorageObjectGateway binds and for the ingress that fronts it; any
@@ -70,8 +70,8 @@ that adaptation neither approves nor refuses a selection.
 Ordinary apply realizes the core cluster, placement policies, replicated and
 erasure-coded pools, RBD images, CephFS filesystems with their subvolume
 groups, CephFS subvolumes, native `nfs` services and the client over
-`verified-tunnel`; an ingress that fronts an `nfs` service refuses until its
-auxiliary images can be selected.
+`verified-tunnel`; an ingress refuses until its auxiliary images can be
+selected.
 `ceph.release` is the operator's release label;
 `ceph.packageVersion` selects the Ceph/cephadm RPM roots and
 `ceph.cephadm.ansible.packageVersion` selects the actual cephadm-ansible RPM.

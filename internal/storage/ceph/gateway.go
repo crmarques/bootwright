@@ -1,7 +1,10 @@
 package ceph
 
 import (
+	"context"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"slices"
 	"strings"
@@ -9,6 +12,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/storage"
 )
 
@@ -124,6 +128,49 @@ func gatewayTLSSecret(g *Gateway) string {
 		return ""
 	}
 	return g.Bindings[0].SecretRef
+}
+
+func (c Capability) ProveBinding(ctx context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if c.kind != api.StorageObjectGateway {
+		return nil
+	}
+	r, err := DecodeRequest(block.Request)
+	if err != nil {
+		return err
+	}
+	secret := gatewayTLSSecret(r.Gateway)
+	if secret == "" {
+		return nil
+	}
+	value, found := material[secret]
+	if !found {
+		return failure("lifecycle.state", "the TLS Secret a StorageObjectGateway binds is not bound to this apply", "")
+	}
+	name, fqdn := r.Gateway.Name, r.Gateway.Endpoint
+	set := secrets.Command(contextName, "set") + " --name " + secret + " --certificate-file <path> --private-key-file <path>"
+	leaf, ok := boundLeaf(value)
+	if !ok {
+		return secrets.Refusal("part", "the certificate of Secret "+secret+" that StorageObjectGateway "+name+" binds cannot be read", contextName, secret, "store a readable certificate and its private key with "+set+", then apply again")
+	}
+	if leaf.VerifyHostname(fqdn) != nil {
+		return secrets.Refusal("part", "the certificate of Secret "+secret+" does not name "+fqdn+", the endpoint of StorageObjectGateway "+name+" that clients and its readiness proof connect to", contextName, secret,
+			"store a certificate whose subject alternative names include "+fqdn+" (a DNS name or a matching wildcard) with "+set+", or set spec.endpoint.fqdn of StorageObjectGateway "+name+" to a name the certificate holds, then apply again")
+	}
+	return nil
+}
+
+func boundLeaf(value secrets.Material) (*x509.Certificate, bool) {
+	certificate, _ := value.Part(secrets.CertificatePart)
+	defer clear(certificate)
+	block, _ := pem.Decode(certificate)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return nil, false
+	}
+	leaf, err := x509.ParseCertificate(block.Bytes)
+	return leaf, err == nil
 }
 
 func gatewayBindings(cluster api.Object, services ...string) []GatewayBinding {

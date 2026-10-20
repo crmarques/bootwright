@@ -205,6 +205,17 @@ func TestAnObjectZonePoolsRefusalNamesItsNextStep(t *testing.T) {
 	}
 }
 
+func TestAnObjectEndpointCertificateRefusalNamesItsNextStep(t *testing.T) {
+	effect, d := gatewayRefusal(t, "object-endpoint-certificate")
+	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+		d[0].Message != "a TLS service of a StorageObjectGateway holds a certificate or private key other than the one its bound Secret holds" ||
+		d[0].Remediation != "find the service the native error names with ceph orch ls; Bootwright never replaces the certificate of a deployed gateway service: "+
+			"store the deployed certificate and key in the Secret again with bootwright secret set --name <secret> --certificate-file <path> --private-key-file <path>, "+
+			"or take back what this context owns with bootwright destroy --context <context>, then apply" {
+		t.Fatalf("an object-endpoint-certificate refusal reached the operator as %s %+v", effect, d)
+	}
+}
+
 // The module publishes only a reason its block names, and a token the block
 // does not name as unknown with the token in its detail, so each table names
 // exactly what ceph_core.py may publish for its block, unknown among them.
@@ -236,7 +247,7 @@ func TestEachCephBlockNamesExactlyTheRefusalsItsModuleMayPublish(t *testing.T) {
 func TestResourceRefusalsNameTheirNextStep(t *testing.T) {
 	refusals := adapterRefusals()
 	generic := diagnostics.Of(refusals["native-output"])[0].Remediation
-	for _, reason := range []string{"foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget", "foreign-rbd-image", "rbd-image-identity", "foreign-subvolume", "subvolume-identity", "pool-drift", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign", "object-zone-pools"} {
+	for _, reason := range []string{"foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget", "foreign-rbd-image", "rbd-image-identity", "foreign-subvolume", "subvolume-identity", "pool-drift", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign", "object-zone-pools", "object-endpoint-certificate"} {
 		d := diagnostics.Of(refusals[reason])
 		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Remediation == generic || strings.Contains(d[0].Message, "could not prove its") {
 			t.Fatalf("%s reaches the operator as %+v", reason, d)

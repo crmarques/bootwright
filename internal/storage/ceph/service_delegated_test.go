@@ -190,12 +190,11 @@ func TestDelegatedServiceRefusesUntilItsBlockLands(t *testing.T) {
 	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{httpRGWService("objects")}, gateway)); len(got) != 0 {
 		t.Fatalf("a plain rgw service a gateway binds refuses %+v", got)
 	}
-	want := []lifecycle.Refusal{{Kind: string(api.StorageCluster), Name: "example", Reason: "Bootwright does not realize TLS on the rgw service rgw.objects yet",
-		Remediation: "set spec.ssl to false or omit it on rgw.objects in spec.ceph.services, and remove its spec.ceph.serviceBindings entries"}}
-	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{rgwService("objects")}, gateway)); !reflect.DeepEqual(got, want) {
-		t.Fatalf("rgw.objects with ssl: refuses %+v, want %+v", got, want)
+	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{rgwService("objects")}, gateway)); len(got) != 0 {
+		t.Fatalf("an ssl rgw service a gateway binds refuses %+v", got)
 	}
-	want = []lifecycle.Refusal{{Kind: string(api.StorageCluster), Name: "example", Reason: "Bootwright does not deploy the native service ingress.rgw.objects yet",
+	want := []lifecycle.Refusal{{Kind: string(api.StorageCluster), Name: "example",
+		Reason:      "no auxiliary image is selected for the ingress service ingress.rgw.objects; its daemons need cephadm's container_image_haproxy, and Bootwright keeps no default",
 		Remediation: "remove ingress.rgw.objects from spec.ceph.services, together with its spec.ceph.serviceBindings entries"}}
 	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{httpRGWService("objects"), ingressService("rgw.objects")}, gateway)); !reflect.DeepEqual(got, want) {
 		t.Fatalf("ingress.rgw.objects: refuses %+v, want %+v", got, want)

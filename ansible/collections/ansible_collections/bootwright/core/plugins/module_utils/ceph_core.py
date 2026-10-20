@@ -51,7 +51,7 @@ CLUSTER_REASONS = (
     "remote-refusal", "adapter-exception", "foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget",
     "foreign-rbd-image", "rbd-image-identity", "foreign-filesystem", "filesystem-identity", "filesystem-multiple-disabled", "foreign-subvolume-group",
     "mds-coverage", "foreign-subvolume", "subvolume-identity", "foreign-image", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign",
-    "object-zone-pools",
+    "object-zone-pools", "object-endpoint-certificate",
 )
 
 
@@ -328,8 +328,8 @@ class Transport:
     def _call(self, host, source, payload, timeout, worker_budget=None, *, worker_ceiling=640, failures=NATIVE_FAILURES):
         ceph_native.require(isinstance(self.material, dict), "material")
         package_material = {"packageCA" + str(i) for i in range(len(self.request.get("packages", {}).get("sources", [])))}
-        ceph_native.require(set(self.material) <= {"sshKey", "knownHosts", "clusterPrivateKey", "clusterPublicKey", "registryJSON"} | package_material,
-                            "material")
+        allowed = {"sshKey", "knownHosts", "clusterPrivateKey", "clusterPublicKey", "registryJSON", "gatewayCertificate", "gatewayKey"}
+        ceph_native.require(set(self.material) <= allowed | package_material, "material")
         ceph_native.require(set(self.material) >= {"sshKey", "knownHosts"}, "material")
         with tempfile.TemporaryDirectory(prefix="bootwright-ceph-") as scratch:
             key = os.path.join(scratch, "identity")
@@ -392,6 +392,15 @@ class Transport:
         source = ceph_native_worker.launcher(inspect.getsource(ceph_native_worker)) + "s['main']()"
         return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": budget}, timeout,
                           worker_budget=budget)
+
+    def gateway_material(self, key):
+        """A gateway's bound certificate, and its private key for the service apply, read from the runner's private files."""
+        names = ("gatewayCertificate", "gatewayKey") if key else ("gatewayCertificate",)
+        ceph_native.require(isinstance(self.material, dict) and all(name in self.material for name in names), "material")
+        try:
+            return {name: ceph_native.read_regular(self.material[name], private=True).decode("utf-8") for name in names}
+        except UnicodeError:
+            raise ceph_native.Refusal("material") from None
 
     def host_profile(self, host):
         """The one long call: pull the frozen digest, then prove its contained runtime."""
@@ -702,9 +711,12 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
     return {"changed": changed, "evidence": observation}
 
 
-def observe_unit(request, request_digest, bootstrap, transport, timeout=None, blocking=None):
+def observe_unit(request, request_digest, bootstrap, transport, timeout=None, blocking=None, *, private=None):
     """One read-only observation of a service unit on the bootstrap host; no other host is called."""
-    observed = transport.call(bootstrap, "observe") if timeout is None else transport.call(bootstrap, "observe", timeout=timeout)
+    options = {} if timeout is None else {"timeout": timeout}
+    if private:
+        options["private"] = private
+    observed = transport.call(bootstrap, "observe", **options)
     ceph_native.require(isinstance(observed, dict), "evidence")
     observed = dict(observed)
     checks = observed.pop("blocking", [])
@@ -715,7 +727,7 @@ def observe_unit(request, request_digest, bootstrap, transport, timeout=None, bl
     return evidence(observed, request_digest, request)
 
 
-def wait_unit(request, request_digest, bootstrap, transport, now, pause):
+def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, private=None):
     """Poll the unit's own observation until ready; a timeout names the daemons, endpoint or health checks still blocking."""
     deadline = now() + READINESS_TIMEOUT
     blocking = []
@@ -724,7 +736,7 @@ def wait_unit(request, request_digest, bootstrap, transport, now, pause):
         if remaining <= 0:
             raise ReadinessRefusal(blocking)
         try:
-            observed = observe_unit(request, request_digest, bootstrap, transport, min(660, remaining), blocking)
+            observed = observe_unit(request, request_digest, bootstrap, transport, min(660, remaining), blocking, private=private)
         except ceph_native.RemoteRefusal as error:
             if not unsettled(error):
                 raise
@@ -760,8 +772,29 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
 
 
 def execute_gateway(request, operation, request_digest, transport, bootstrap, *, now, pause):
-    """An object gateway runs as a service unit does, on the bootstrap host only: zone, placement, then its rgw service."""
-    return execute_unit(request, operation, request_digest, transport, bootstrap, now=now, pause=pause, phases=ceph_native_object.APPLY_PHASES)
+    """An object gateway runs as a service unit does, on the bootstrap host only: zone, placement, then its services. With TLS the certificate
+    reaches every observation and removal, and the private key only the service apply."""
+    seen = transport.gateway_material(False) if request["gateway"]["bindings"] else None
+    changed = False
+    if operation == "apply":
+        transport.call(bootstrap, "prerequisites")
+        for phase in ceph_native_object.APPLY_PHASES:
+            private = transport.gateway_material(True) if seen and phase == "gateway_service" else None
+            produced = transport.call(bootstrap, phase, private) if private else transport.call(bootstrap, phase)
+            ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
+            changed = produced["changed"] or changed
+        observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen)
+        ceph_native.require(observation["ready"], "not-ready")
+    elif operation == "destroy":
+        changed = (transport.call(bootstrap, "destroy", seen) if seen else transport.call(bootstrap, "destroy"))["changed"]
+        observation = observe_unit(request, request_digest, bootstrap, transport, private=seen)
+        ceph_native.require(observation["removed"], "not-removed")
+    else:
+        observation = observe_unit(request, request_digest, bootstrap, transport, private=seen)
+    if seen:
+        bound = hashlib.sha256(ceph_native_object.leaf(seen["gatewayCertificate"])).hexdigest()
+        ceph_native.require(observation["endpoint"]["certificateSHA256"] in ("", bound), "evidence")
+    return {"changed": changed, "evidence": observation}
 
 
 def dashboard_phase(request, operation, request_digest, bootstrap, transport, observation, output, *, now, pause, connect):

@@ -128,9 +128,9 @@ and no creation is ever forced.
 
 [B477](milestones/m2.md#b477) owns this record. Admission is current; the
 [gateway block](storage.md#resources-readiness-and-access) realizes the realm,
-zone group, zone, zone placement and its rgw service without TLS; TLS bindings
-and an ingress refuse at plan until they are realized, and per-resource removal
-is [B491](milestones/m2.md#b491)'s.
+zone group, zone, zone placement, its rgw service with or without TLS and the
+ingress that fronts it, which plans once its auxiliary images are authored;
+per-resource removal is [B491](milestones/m2.md#b491)'s.
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -202,7 +202,9 @@ graph, against every storage node hostname and every other gateway's FQDN,
 and it is not published to DNS. The terminating service is the ingress whose
 `spec.backend_service` is the bound rgw service, else that rgw service; an
 HTTPS terminating service needs its `/spec/ssl_cert` and `/spec/ssl_key`
-bindings ([native services](storage-native-api.md)).
+bindings ([native services](storage-native-api.md)). A terminating service with
+TLS needs `spec.endpoint`: the certificate must name its FQDN, and readiness
+proves the served leaf by SHA-256 with that FQDN as SNI.
 
 Retired fields refuse at decode with their replacement: `spec.serviceID`
 becomes `spec.serviceRef`; `spec.placement` and `spec.frontendPort` become the

@@ -204,8 +204,9 @@ them:
 - A gateway block `ceph-gateway-<gateway>` (Kind StorageObjectGateway,
   exclusive `ceph/<cluster>`) executes its gateway's realm, zone group, zone,
   zone placement and rgw service on the bootstrap host. It depends on the
-  cluster and image blocks and on each of its derived zone pool blocks by ID,
-  and on each declared placement StoragePool through that pool; its deadline
+  cluster and image blocks, on each of its derived zone pool blocks by ID and,
+  when an ingress fronts its rgw service, on the settings block, and on each
+  declared placement StoragePool through that pool; its deadline
   is fixed (apply 3600 s, observe 720 s, destroy 1380 s) and does not grow with
   the host count.
 
@@ -258,8 +259,7 @@ links each matrix combination that this table refuses.
 | --- | --- | --- | --- |
 | Incomplete or unsafe Ceph coordinates or transport | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring an empty `ceph.release`, `ceph.packageVersion`, `ceph.cephadm.ansible.packageVersion` or `ceph.image.version`, an empty `ceph.image.base`, or a `ceph.cephadm.clusterSSH.transport` other than `verified-tunnel`, an omitted transport included | `the selected Ceph coordinates or cluster SSH transport are incomplete or unsafe` | `declare bounded version strings, an image repository and verified-tunnel transport; native transport is refused and host-key verification cannot be disabled` |
 | A replication network that a Ceph host has no address inside | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring `ceph.networks.clusterCIDRs` while the Machine of a `ceph.topology.nodes[]` entry declares no IP address inside any of them, a Machine whose addresses are assigned at runtime included; `<host>` is the first such node's native hostname in declaration order, `<machine>` its Machine and `<cidrs>` the declared networks joined by a comma and a space | `Ceph host <host> (Machine <machine>) has no address inside the replication networks <cidrs>` | `add an address inside one of <cidrs> to the network of <machine>, or remove spec.ceph.networks.clusterCIDRs` |
-| An ingress that fronts an rgw service, or that resolves to no declared service | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` an `ingress` whose `spec.backend_service` names an `rgw` service or resolves to no declared service; `<service>` is the first such ingress's qualified name in name order | `Bootwright does not deploy the native service <service> yet` | `remove <service> from spec.ceph.services, together with its spec.ceph.serviceBindings entries` |
-| TLS on an rgw service | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` an `rgw` service with `spec.ssl: true`, or a `ceph.serviceBindings` entry whose `serviceRef` names an `rgw` service; `<service>` is the first such service's qualified name in name order; the two rows are checked together in name order | `Bootwright does not realize TLS on the rgw service <service> yet` | `set spec.ssl to false or omit it on <service> in spec.ceph.services, and remove its spec.ceph.serviceBindings entries` |
+| An ingress that resolves to no declared service | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` an `ingress` whose `spec.backend_service` resolves to no declared service; `<service>` is the first such ingress's qualified name in name order | `Bootwright does not deploy the native service <service> yet` | `remove <service> from spec.ceph.services, together with its spec.ceph.serviceBindings entries` |
 | A native service whose auxiliary image is not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that the previous row does not refuse; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type` and `<name>` the first image name it needs in name order, `keepalived` for an `ingress` with `spec.keepalive_only` | `no auxiliary image is selected for the <family> service <service>; its daemons need cephadm's container_image_<name>, and Bootwright keeps no default` | `remove <service> from spec.ceph.services, together with its spec.ceph.serviceBindings entries` |
 
 ## Bootstrap identity and continuation
@@ -623,9 +623,28 @@ while `.rgw.root` is absent; evidence carries the zone ID, the endpoint FQDN,
 each daemon's host, name and service, and an `endpoint` member holding whether
 the terminating service answered and, with TLS, the SHA-256 of the leaf it
 served, never zone keys, a stored specification, TLS material or user data. The block never reads or creates an object user
-(cephadm's own `dashboard` user is tolerated). TLS and an ingress refuse at
-plan until they are realized ([refusal table](#refusal-table)), and the block
-retires only with the cluster's hosts.
+(cephadm's own `dashboard` user is tolerated), and the block retires only with
+the cluster's hosts.
+
+The gateway request carries the TLS bindings of its rgw service or of the
+ingress that fronts it as Secret references only, and the ingress document
+after the rgw document. Before an apply registers, the bound certificate must
+name the endpoint FQDN in its subject alternative names (a DNS name or a
+matching wildcard), or the apply refuses naming the Secret. The certificate is
+bound to every operation of the block and the private key to apply only; the
+worker normalizes the documents with placeholder leaves, splices the leaves
+into the one `ceph orch apply -i -` stream in memory, and keeps them out of
+every record, argument and result. A stored service whose leaves differ from
+the bound Secret's refuses `object-endpoint-certificate`; one whose exported
+specification omits them is accepted. With an ingress, the frozen
+`container_image_haproxy` and `container_image_keepalived` settings must hold
+before any record is written (`foreign-image`), haproxy and keepalived run on
+those images, and the endpoint is the virtual IP at `frontend_port`. Endpoint
+readiness opens TLS with SNI equal to the endpoint FQDN, requires the served
+leaf's SHA-256 to equal the bound certificate's and an HTTP status line; a
+timeout names `tls@`, `vip@`, `haproxy@` or `keepalived@` the service. An
+ingress plans once its auxiliary images are authored
+([refusal table](#refusal-table)).
 
 Readiness reports bounded observations of FSID, quorum, orchestrator and host
 state, expected daemons, OSD membership, placement/capacity, pool protection,

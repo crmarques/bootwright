@@ -69,8 +69,35 @@ func boundMaterial(e lifecycle.Execution, r Request, operation string, readers D
 		clear(registry)
 		files = append(files, lifecycle.MaterialFile{Name: "cluster-private", Secret: r.ClusterKeyRef, Part: secrets.PrivateKeyPart, Variable: "clusterPrivateKey"}, lifecycle.MaterialFile{Name: "cluster-public", Secret: r.ClusterKeyRef, Part: secrets.PublicKeyPart, Variable: "clusterPublicKey"}, lifecycle.MaterialFile{Name: "registry", Secret: registryMaterial, Part: secrets.ValuePart, Variable: "registryJSON"})
 	}
+	gateway, err := gatewayMaterial(e, r, operation)
+	if err != nil {
+		cleanup()
+		return e, nil, func() {}, err
+	}
 	e.Material = bound
-	return e, files, cleanup, nil
+	return e, append(files, gateway...), cleanup, nil
+}
+
+func gatewayMaterial(e lifecycle.Execution, r Request, operation string) ([]lifecycle.MaterialFile, error) {
+	secret := ""
+	if r.Action == "gateway" {
+		secret = gatewayTLSSecret(r.Gateway)
+	}
+	if secret == "" {
+		return nil, nil
+	}
+	files := []lifecycle.MaterialFile{{Name: "gateway-certificate", Secret: secret, Part: secrets.CertificatePart, Variable: "gatewayCertificate"}}
+	if operation == "apply" {
+		files = append(files, lifecycle.MaterialFile{Name: "gateway-key", Secret: secret, Part: secrets.PrivateKeyPart, Variable: "gatewayKey"})
+	}
+	for _, file := range files {
+		value, err := materialPart(e.Material, secret, file.Part)
+		if err != nil {
+			return nil, err
+		}
+		clear(value)
+	}
+	return files, nil
 }
 
 func (c Capability) run(ctx context.Context, e lifecycle.Execution, operation string, r Request) (lifecycle.RunResult, error) {
@@ -169,6 +196,7 @@ func adapterRefusals() map[string]error {
 	out["nfs-pool-foreign"] = failure("lifecycle.unknown", "a Ceph pool named .nfs exists that this operation's NFS services did not create, or it is not the pool they recorded", "find the .nfs pool with ceph osd pool ls detail; if nothing uses it, remove it outside Bootwright and apply again, or take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright never adopts a .nfs pool it did not create")
 	out["object-realm-foreign"] = failure("lifecycle.unknown", "the cluster holds RGW configuration this operation did not create: a .rgw.root pool without this operation's claim, or a realm, zone group or zone of the StorageObjectGateway's names without its creation record, or one it created that is gone or changed", "find what the native error names with ceph osd pool ls and radosgw-admin realm list, zonegroup list and zone list; for a foreign name, rename spec.realm, spec.zoneGroup or spec.zone of the StorageObjectGateway, or remove the foreign configuration outside Bootwright, then apply again; when the native error says one this operation created is gone or changed, take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright never adopts RGW configuration it did not create")
 	out["object-zone-pools"] = failure("lifecycle.unknown", "the zone a StorageObjectGateway created names a pool Bootwright did not plan, or its default placement does not hold the pools the gateway froze", "inspect the zone with radosgw-admin zone get --rgw-realm <realm> --rgw-zone <zone>; the native error names the pool; take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright creates every zone pool before RGW starts and never lets RGW create a pool it did not plan")
+	out["object-endpoint-certificate"] = failure("lifecycle.unknown", "a TLS service of a StorageObjectGateway holds a certificate or private key other than the one its bound Secret holds", "find the service the native error names with ceph orch ls; Bootwright never replaces the certificate of a deployed gateway service: store the deployed certificate and key in the Secret again with bootwright secret set --name <secret> --certificate-file <path> --private-key-file <path>, or take back what this context owns with bootwright destroy --context <context>, then apply")
 	out["pg-budget"] = failure("lifecycle.unknown", "the monitor refused the pool: placement groups per OSD on its CRUSH rule would exceed mon_max_pg_per_osd", "add OSDs, lower pgNumMin or targetSizeRatio, or declare fewer pools on that CRUSH rule, then apply again")
 	out["pool-drift"] = failure("lifecycle.unknown", "a setting this operation completed on the Ceph pool (size, min_size, a quota, a compression option, erasure-coded overwrites or its application) no longer has the value its StoragePool or StorageObjectGateway froze", "compare ceph osd pool ls detail with the StoragePool and set that setting back to its frozen value outside Bootwright, then apply again; or take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright never rewrites a completed pool setting")
 	for _, reason := range []string{"request", "artifact", "ownership", "evidence", "material", "packages", "package-artifact", "package-drift", "package-journal", "package-license", "package-limit", "package-timeout", "package-platform", "package-host", "call-home-drift", "config-drift", "partial-cluster", "not-ready", "not-removed", "cluster-unavailable", "device", "foreign-cluster", "native-command", "native-timeout", "native-output", "unknown", "transport", "remote-refusal", "adapter-exception"} {
