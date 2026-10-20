@@ -361,6 +361,53 @@ def test_unsuccessful_apply_result_refuses_without_native_message(index, stored)
     assert [name for name, unused in markers.writes] == ["smb-attempt." + name_of(value) + ".json"]
 
 
+REWRITTEN = {
+    "ceph.smb.cluster": {"auth_mode": "active-directory"},
+    "ceph.smb.share": {"readonly": True},
+    "ceph.smb.join.auth": {"auth": {"username": "other", "password": "x"}},
+    "ceph.smb.usersgroups": {"values": {"users": [{"name": "smbuser", "password": "x"}], "groups": []}},
+}
+
+
+@pytest.mark.parametrize("rewritten", [False, True])
+@pytest.mark.parametrize("kind", TYPES)
+def test_successful_apply_answer_without_the_resource_read_back_refuses_result(kind, rewritten):
+    value, monitor, markers = request(kind), Monitor(), Markers()
+    good = {"resource": masked(simplified(value["native"])), "success": True}
+    monitor.answer, monitor.stores_answered = (0, json.dumps({"results": [good], "success": True}).encode(), b""), rewritten
+    original = monitor.store
+
+    def store(data):
+        stored = original(data)
+        monitor.resources[name_of(value)].update(copy.deepcopy(REWRITTEN[kind]))
+        return stored
+
+    monitor.store = store
+    with pytest.raises(ceph_native.Refusal, match="^smb-result$") as caught:
+        worker(value, monitor, markers).smb_apply(private_of(value))
+    assert caught.type is ceph_native.Refusal and not hasattr(caught.value, "native_error")
+    assert len(applies(monitor)) == 1 and (name_of(value) in monitor.resources) is rewritten
+    assert [name for name, unused in markers.writes] == ["smb-attempt." + name_of(value) + ".json"]
+
+
+REFUSED_LEAVES = {
+    "ceph.smb.cluster": {"client_compat": "strict"},
+    "ceph.smb.share": {"custom_smb_share_options": {"x": "y"}},
+    "ceph.smb.join.auth": {"linked_to_cluster": "files"},
+    "ceph.smb.usersgroups": {"linked_to_cluster": "files"},
+}
+
+
+@pytest.mark.parametrize("kind", TYPES)
+def test_observing_an_attempted_resource_with_a_refused_leaf_refuses_identity(kind):
+    value, monitor = request(kind), Monitor()
+    present(monitor, value)
+    monitor.resources[name_of(value)].update(REFUSED_LEAVES[kind])
+    with pytest.raises(ceph_native.NativeFailure, match="^smb-identity$") as caught:
+        worker(value, monitor, Markers(records(value))).smb_observe()
+    assert caught.value.native_error["cause"] == name_of(value) + " holds a field Bootwright does not realize"
+
+
 @pytest.mark.parametrize("kind", ["ceph.smb.cluster", "ceph.smb.share"])
 @pytest.mark.parametrize("foreign", ["cluster", "service"])
 def test_undeclared_smb_cluster_refuses_foreign_service(kind, foreign):
@@ -526,6 +573,9 @@ def test_share_daemons_must_run_on_eligible_hosts_with_the_frozen_image(monkeypa
     result = observed_share([daemon("node-1"), daemon("node-2", status=0, digests=())])
     assert result["ready"] is False and result["partial"] is True and result["blocking"] == ["smb@smb.files"]
     assert NATIVE_SENTINEL not in json.dumps(result)
+    for stopped in (0, -1, "1", None):
+        result = observed_share([daemon("node-1"), daemon("node-2", status=stopped)])
+        assert result["ready"] is False and result["blocking"] == ["smb@smb.files"] and len(result["daemons"]) == 2
     one = cluster_resource(placement={"count": 1, "hosts": ["node-1", "node-2"]})
     assert observed_share([daemon("node-1")], cluster=one)["ready"] is True
     clustered = service(clustered=True)
