@@ -231,6 +231,10 @@ Alias cell.
 | [B679](#b679) | new, 2026-10-19 (X102) | enabling | Storage and State reconciliation | The edges X102's lanes and reviews left untested, unmeasured or unreconciled are tested or recorded | Found in X102; each is hardening of a path no known input reaches |
 | [B680](#b680) | new, 2026-10-19 (X103) | defect | Container clusters | OpenShift admission of `distribution.release.version` accepts an exact publisher release such as a release candidate, and any stable-only screen found is removed | Found by X103; unverified, because X103 changed only the CLI tool pins and the installer download |
 | [B681](#b681) | new, 2026-10-19 (X103) | enabling | CLI, Substrate and Docs | The edges X103's lanes and reviews left untested, unmeasured or unreconciled are tested or recorded | Found in X103; each is hardening of output or removal paths no known input breaks |
+| [B682](#b682) | new, 2026-10-20 (X57; parked by D160, OD7, kept by D161) | product | Storage and Secrets | A StorageCluster binds the direct MGR dashboard's certificate | The management gateway fronts the dashboard with a bound certificate; X70's self-signed dashboard certificate stays |
+| [B683](#b683) | new, 2026-10-20 (X57; parked by D160, OD7, kept by D161) | product | Storage and Secrets | Declared dashboard roles and local users with protected passwords | No approved API; SSO grants only system roles, and X70's administrator stays |
+| [B684](#b684) | new, 2026-10-20 (X57) | product | Storage | The manager prometheus exporter serves external scrapers without a Prometheus service | No consumer; without a declared service the module would have no owner, so `spec.ceph.mgrModules` refuses it |
+| [B685](#b685) | new, 2026-10-20 (X57; parked by D160, OD26) | product | Storage | Monitoring and gateway certificates that cephadm signs or that a certificate source selects, with the cephadm root CA reported | Bound certificates cover the gateway; cephadm-signed sources and root-CA retrieval have no documented native contract |
 
 ### B82
 
@@ -2453,6 +2457,64 @@ or a recorded reason it needs none. **Requires:** none. **Definition:**
 `Specified`. **Exit evidence:** the named tests, mutation-checked, and the
 recorded measurements.
 
+### B682
+
+Today the direct MGR dashboard serves the self-signed certificate that
+[X70](delivered.md#x70--ceph-through-the-ordinary-staged-apply) creates. The
+native surface is `ceph dashboard set-ssl-certificate -i -` and
+`set-ssl-certificate-key -i -`, followed by a MGR redeploy
+([upstream dashboard module](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/dashboard/module.py)).
+
+**Outcome:** a `tlsCertificate` binding for the dashboard, applied on stdin,
+with the served leaf's SHA-256 proved. **Why parked:** D160 (OD7 (a)), kept by
+D161; the management gateway already fronts the dashboard with a bound
+certificate. **Requires:** an owner request. **Definition:** `Needs
+definition`. **Exit evidence:** a plan test that the material never leaves the
+binding, an apply test of the stdin-only path, and a live served-leaf check
+under B484.
+
+### B683
+
+Dashboard roles reached through SSO map only onto system roles (upstream
+[`map_to_system_roles`](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/dashboard/services/access_control.py)).
+Custom roles therefore need local users (`ac-role-create`, and `ac-user-create`,
+which reads the password from `-i`).
+
+**Outcome:** typed roles and local users with passwords bound to Secrets. **Why
+parked:** D160 (OD7 (a)), kept by D161; no API is approved. **Requires:** an
+owner decision on the API. **Definition:** `Needs definition`. **Exit
+evidence:** admission and binding tests, plus a live denied-access and role
+check under B484.
+
+### B684
+
+`spec.ceph.mgrModules` refuses `prometheus` with or without a declared
+prometheus service (`internal/storage/observability.go`); cephadm enables the
+module only for a declared service. See the
+[knowledge](../../.agents/knowledge/ibm-ceph-monitoring.md).
+
+**Outcome:** a declared owner for the manager exporter without a Prometheus
+service, or a recorded reason none is needed. **Why parked:** no consumer; an
+ownerless module would break one owner per fact. **Requires:** none.
+**Definition:** `Candidate`. **Exit evidence:** an admission test of the chosen
+owner and a readiness test that reads `mgr services`.
+
+### B685
+
+`custom_sans` and `certificate_source` on `mgmt-gateway` refuse today, as do
+`ssl` and `certificate_source` on the monitoring services
+(`internal/storage/observability.go`); the
+[native records](../../specs/storage-native-api.md#observability-and-management-gateway-records)
+say "Parked by D160 (OD26)". Without a binding, the gateway reports only the
+cephadm-signed leaf's digest, and upstream certmgr documents no root CA
+retrieval and never renews user-provided certificates. See the
+[knowledge](../../.agents/knowledge/ibm-ceph-monitoring.md).
+
+**Outcome:** these fields are realized, or each is recorded as refused, and a
+cephadm-signed endpoint names its root CA. **Why parked:** D160 (OD26 (a)); no
+documented native contract. **Requires:** none. **Definition:** `Needs
+definition`. **Exit evidence:** admission tests per field and a live CA-chain
+check under B484.
 
 ## Retired
 

@@ -175,7 +175,7 @@ The last column names the item that owns the implementation and its evidence.
 | CephFS | Replicated metadata, replicated or supported EC data, multiple data pools and explicit default/layout, MDS placement and standby/replay, subvolume groups, subvolumes and service-consumer references | [B492](milestones/m2.md#b492) |
 | RGW | Service placement, realm/zonegroup/zone bootstrap, pools, users/buckets/credentials needed to prove S3 access, backend ports, TLS public endpoints and HA ingress | [B477](milestones/m2.md#b477) |
 | NFS | NFS-Ganesha placement, supported CephFS/RGW exports, client restrictions and squash, ingress transport and VIP failover; native release decides backend/TLS support | [B478](milestones/m2.md#b478) |
-| Observability and management | Dashboard, Prometheus, Grafana, Alertmanager, node and Ceph exporters, supported log collection and SNMP gateway, management gateway, TLS, OAuth2/SSO and access roles, retention and health/alert checks | [B479](milestones/m2.md#b479) |
+| Observability and management | Dashboard, Prometheus, Grafana, Alertmanager, node and Ceph exporters, supported log collection and SNMP gateway, management gateway, TLS, OAuth2/SSO and access roles, retention and health/alert checks; the prometheus manager module and `crash` are derived children with named owners and are never authored; the direct dashboard certificate ([B682](milestones/backlog.md#b682)), local dashboard roles and users ([B683](milestones/backlog.md#b683)), the manager exporter without a Prometheus service ([B684](milestones/backlog.md#b684)) and cephadm-signed or selected certificate sources ([B685](milestones/backlog.md#b685)) are parked | [B479](milestones/m2.md#b479) |
 | NVMe-oF | Gateway groups and HA, listeners, subsystem/NQN identities, namespaces backed by owned RBD images, authorized clients and supported authentication/TLS, ANA and client failover | [B480](milestones/m2.md#b480) |
 | iSCSI | Release support status, gateways and HA, targets/LUNs, RBD images, initiator groups, authentication and multipath; no assumption that an upstream service is IBM-supported | [B481](milestones/m2.md#b481) |
 | SMB | Supported SMB cluster/domain/authentication modes, CephFS subvolumes and shares, HA/CTDB and client tests; AD is an explicitly declared external dependency | [B482](milestones/m2.md#b482) |
@@ -493,6 +493,22 @@ authored under a second owner.
 [Dashboard OAuth2](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=dashboard-enabling-oauth2-single-sign)
 requires the management gateway, OAuth2 proxy, a qualified identity provider
 and user-role mapping; configuring a redirect alone is not SSO acceptance.
+
+Monitoring and the management gateway ([B479](milestones/m2.md#b479)) follow the
+[native records](storage-native-api.md#observability-and-management-gateway-records).
+Three upstream v20.2.1 mechanics shape them.
+[`PrometheusService.config`](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L480-L489)
+enables the prometheus manager module and the monitor respawns the active
+manager, so the module is the declared service's derived effect. The
+[gateway](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/mgmt_gateway.py#L54-L78)
+keeps the first certificate pair it stores, and a generated certificate's IP
+SAN is the bare `virtual_ip`, so one gateway owns one pair, and a bound pair
+travels in the first apply and is proved from the served leaf.
+[certmgr](https://github.com/ceph/ceph/blob/v20.2.1/doc/cephadm/certmgr.rst)
+does not renew user-provided certificates. The `cephadm.workarounds` list stays
+retired: the management gateway needed no provider-defect specialization.
+Acceptance rows record the tested coordinates as evidence, never as an
+allowlist. See [the lessons](../.agents/knowledge/ibm-ceph-monitoring.md).
 
 ## Unsupported combinations
 
