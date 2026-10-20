@@ -1019,3 +1019,25 @@ def test_broker_bundle_that_does_not_verify_names_registry_and_secret(tmp_path, 
         assert all(value not in cause for value in (PASSWORD, TOKEN, DELIVERY, "certificate verify failed"))
     else:
         assert up.calls == 0 and cause == ""
+
+
+def leaf_certificate(tmp_path):
+    """A self-signed end-entity certificate: parseable, but never a CA anchor."""
+    key, cert = tmp_path / "leaf.key", tmp_path / "leaf.crt"
+    openssl(["/usr/bin/openssl", "req", "-new", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=leaf.example.test",
+             "-addext", "basicConstraints=critical,CA:FALSE", "-keyout", str(key), "-out", str(cert)], 30, 65536)
+    return cert.read_text(encoding="ascii")
+
+
+@pytest.mark.parametrize("kind", ["empty", "no-certificate", "malformed", "oversized", "leaf-only", "not-text"])
+def test_bundle_context_refuses_a_bundle_without_a_ca_anchor(tmp_path, kind):
+    bundles = {
+        "empty": "",
+        "no-certificate": "# a comment and no certificate block\n",
+        "malformed": "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n",
+        "oversized": SYNTHETIC_CA + "#" * broker.MAX_TRUST,
+        "not-text": SYNTHETIC_CA.encode("ascii"),
+    }
+    bundle = leaf_certificate(tmp_path) if kind == "leaf-only" else bundles[kind]
+    with pytest.raises(broker.BrokerError):
+        broker.bundle_context(bundle)

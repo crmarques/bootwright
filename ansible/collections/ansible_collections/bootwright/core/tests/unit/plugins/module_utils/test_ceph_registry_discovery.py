@@ -1118,3 +1118,34 @@ def test_every_frozen_auxiliary_reference_resolves_through_the_bound_bundle(tmp_
     assert [anchor for unused_context, anchor, unused_base in seen] == ["trust bundle Secret registry-ca"] * 3
     assert len({id(context) for context, unused_anchor, unused_base in seen}) == 1
     assert isinstance(seen[0][0], ssl.SSLContext) and seen[0][0].get_ca_certs() == synthetic_ca_certs()
+
+
+@pytest.mark.parametrize(
+    "content,mode",
+    [
+        (b"# a comment and no certificate block\n", 0o600),
+        (SYNTHETIC_CA.replace(SYNTHETIC_BLOCK.splitlines()[1].encode(), b"not*base64"), 0o600),
+        (b"-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n", 0o600),
+        (b"\xff\xfe-----BEGIN CERTIFICATE-----\n", 0o600),
+        (SYNTHETIC_CA, 0o640),
+        (SYNTHETIC_CA + b"#" * ceph_pull_broker.MAX_TRUST, 0o600),
+    ],
+    ids=["no-certificate", "malformed-base64", "invalid-der", "not-utf8", "group-readable", "oversized"],
+)
+def test_bound_bundle_that_cannot_be_projected_refuses_material(tmp_path, monkeypatch, content, mode):
+    registry, bundle = private_loans(tmp_path)
+    pathlib.Path(bundle).write_bytes(content)
+    pathlib.Path(bundle).chmod(mode)
+    monkeypatch.setattr(discovery, "tls_proof", lambda *args: pytest.fail("host trust store with a bound bundle"))
+    monkeypatch.setattr(discovery, "Registry", lambda *args: pytest.fail("registry before the bundle is proven"))
+    with pytest.raises(discovery.DiscoveryRefusal, match="^material$"):
+        discovery.execute("apply", BOUND_REQUEST, GOLDEN["digest"], {"registryJSON": registry, "registryCA": bundle})
+
+
+@pytest.mark.parametrize("value", ["", "Bad Name", "a\nb", 5, "-leading"])
+def test_bound_bundle_reference_must_be_a_name(monkeypatch, value):
+    monkeypatch.setattr(discovery, "tls_proof", lambda *args: pytest.fail("TLS before admission"))
+    monkeypatch.setattr(discovery, "bundle_proof", lambda *args: pytest.fail("bundle before admission"))
+    with pytest.raises(discovery.DiscoveryRefusal, match="^request$"):
+        discovery.execute("apply", dict(BOUND_REQUEST, registryTrustBundleRef=value), GOLDEN["digest"],
+                          {"registryJSON": "/owned/loan", "registryCA": "/owned/bundle"})

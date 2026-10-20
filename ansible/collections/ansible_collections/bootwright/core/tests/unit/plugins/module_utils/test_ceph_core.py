@@ -16,7 +16,7 @@ import pytest
 import yaml
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_host_worker, ceph_native, ceph_native_resources, ceph_native_worker, ceph_tunnel_staging,
+    ceph_core, ceph_host_worker, ceph_native, ceph_native_resources, ceph_native_worker, ceph_pull_broker, ceph_tunnel_staging,
 )
 from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics, native_specializations
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_native_specializations as specs
@@ -2075,3 +2075,24 @@ def test_host_profile_relays_the_bound_bundle(core_request, tmp_path):
         with pytest.raises(ceph_native.Refusal, match="^material$"):
             ceph_core.Transport(request_value, private, run=run, scope=True).host_profile(request_value["hosts"][0])
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("value", ["", "Bad Name", "a\nb", 5])
+def test_scope_refuses_a_bundle_reference_that_is_not_a_name(core_request, value):
+    scope = {key: item for key, item in core_request.items() if key != "action"}
+    assert ceph_native.validate_scope(dict(scope, registryTrustBundleRef="registry-ca")) is not None
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate_scope(dict(scope, registryTrustBundleRef=value))
+
+
+def test_host_profile_refuses_an_oversized_bound_bundle_before_the_run(core_request, tmp_path):
+    scope = dict({key: value for key, value in core_request.items() if key != "action"}, registryTrustBundleRef="registry-ca")
+    paths = {"sshKey": "PRIVATE-KEY-SENTINEL", "knownHosts": "node-1 ssh-ed25519 PUBLIC",
+             "registryJSON": json.dumps({"url": scope["registry"], "username": "registry-user", "password": PASSWORD}),
+             "registryCA": "#" * (ceph_pull_broker.MAX_TRUST + 1)}
+    for name, text in paths.items():
+        (tmp_path / name).write_text(text)
+        (tmp_path / name).chmod(0o600)
+    transport = ceph_core.Transport(scope, {name: str(tmp_path / name) for name in paths}, run=lambda *args: pytest.fail("run"), scope=True)
+    with pytest.raises(ceph_native.Refusal, match="^material$"):
+        transport.host_profile(scope["hosts"][0])
