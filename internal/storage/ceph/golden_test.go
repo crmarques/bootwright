@@ -134,7 +134,23 @@ func TestFrozenRequestGolden(t *testing.T) {
 			t.Fatal("frozen request did not round-trip")
 		}
 	}
-	r.Action, r.Subvolume, r.Settings, r.Service, r.Auxiliary = "cluster", nil, nil, nil, nil
+	r.Action, r.Subvolume, r.Settings, r.Service, r.Auxiliary, r.Delegated = "client", nil, nil, nil, nil, nil
+	for name, client := range map[string]*Client{
+		"client-filesystem": {Access: "read-only", DataPools: []string{}, Filesystem: "files", Name: "reader"},
+		"client-subvolume":  {Access: "read-write", DataPools: []string{}, Filesystem: "files", Group: "csi", Name: "writer", Subvolume: "docs"},
+	} {
+		r.Client = client
+		data, err := r.Canonical()
+		if err != nil {
+			t.Fatal(err)
+		}
+		matchesGolden(t, "request-"+name, data, false)
+		decoded, err := DecodeRequest(data)
+		if err != nil || !reflect.DeepEqual(decoded.Client, client) {
+			t.Fatalf("frozen %s did not round-trip: %+v %v", name, decoded.Client, err)
+		}
+	}
+	r.Action, r.Client = "cluster", nil
 	r.Delegated = []DelegatedService{{Name: "ingress.rgw.objects", Hosts: []string{"node-1", "node-2"}}, {Name: "rgw.objects", Hosts: []string{"node-1", "node-2"}}}
 	data, err := r.Canonical()
 	if err != nil {

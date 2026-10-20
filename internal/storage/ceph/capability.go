@@ -174,10 +174,7 @@ func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, 
 			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePlacementPolicy), Object: ref})
 		}
 	case "client":
-		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: request.Client.Pool})
-		for _, pool := range request.Client.DataPools {
-			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: pool})
-		}
+		requires = append(requires, clientRequires(*request.Client)...)
 	case "rbd":
 		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: request.RBD.Pool})
 		if request.RBD.DataPool != "" {
@@ -313,7 +310,7 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 		action = r.Action
 	}
 	if action == "" || r.Action != action || (r.Action == "settings") != (r.Settings != nil) || (r.Action == "service") != (r.Service != nil) || (r.Action == "gateway") != (r.Gateway != nil) ||
-		(r.Action == "nfs-export") != (r.NFSExport != nil) || r.NFSExport != nil && r.NFSExport.SubvolumePath != "" || e.Block.Kind != string(c.kind) || e.Block.Object != object {
+		(r.Action == "nfs-export") != (r.NFSExport != nil) || r.NFSExport != nil && r.NFSExport.SubvolumePath != "" || r.Client != nil && r.Client.SubvolumePath != "" || e.Block.Kind != string(c.kind) || e.Block.Object != object {
 		return Request{}, failure("lifecycle.state", "Ceph request does not match its frozen resource identity", "")
 	}
 	if r.Owner != "" || r.FSID != "" || e.ApplyOperation == "" {
@@ -351,7 +348,33 @@ func (c Capability) prepare(ctx context.Context, e lifecycle.Execution) (Request
 		}
 		r.NFSExport.SubvolumePath = path
 	}
+	if r.Client != nil && r.Client.Subvolume != "" {
+		path, filesystem, group, err := ProvedSubvolume(proofs, r.Client.Subvolume)
+		if err != nil {
+			return Request{}, err
+		}
+		if filesystem != r.Client.Filesystem || group != r.Client.Group {
+			return Request{}, failure("lifecycle.state", "the creation proof of StorageSubvolume "+r.Client.Subvolume+" names another filesystem or group than StorageClient "+r.Client.Name+" froze", "restore the original apply evidence")
+		}
+		client := *r.Client
+		client.SubvolumePath = path
+		r.Client = &client
+	}
 	return r, nil
+}
+
+func clientRequires(c Client) []reconciliation.ObjectRef {
+	switch {
+	case c.Subvolume != "":
+		return []reconciliation.ObjectRef{{Kind: string(api.StorageSubvolume), Object: c.Subvolume}}
+	case c.Filesystem != "":
+		return []reconciliation.ObjectRef{{Kind: string(api.StorageFilesystem), Object: c.Filesystem}}
+	}
+	requires := []reconciliation.ObjectRef{{Kind: string(api.StoragePool), Object: c.Pool}}
+	for _, pool := range c.DataPools {
+		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: pool})
+	}
+	return requires
 }
 func (c Capability) Apply(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
 	return c.mutate(ctx, e, "apply")

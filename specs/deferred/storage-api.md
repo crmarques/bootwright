@@ -98,10 +98,11 @@ leaf is qualified. Stretch and future families remain refused by the
 
 ## StorageClient
 
-Required scalar `clusterRef`, `poolRef` and `access` (`read-only` or
-`read-write`) declare one same-cluster RBD principal. The
-[resource contract](../storage-resources.md#storageclient) owns its protected
-custody semantics. Native execution remains gated.
+Required scalar `clusterRef` and `access` (`read-only` or `read-write`) and
+exactly one same-cluster scope, `poolRef`, `filesystemRef` or `subvolumeRef`,
+declare one principal. The
+[resource contract](../storage-resources.md#storageclient) owns its scope rule,
+its capabilities and its protected custody semantics.
 
 ## StoragePlacementPolicy
 

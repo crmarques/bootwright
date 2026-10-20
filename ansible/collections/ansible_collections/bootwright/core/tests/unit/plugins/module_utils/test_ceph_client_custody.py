@@ -46,14 +46,32 @@ class Markers:
         self.after(name, value)
 
 
+SUBVOLUME_PATH = "/volumes/csi/docs/0f8fad5b-d9cb-469f-a165-70867728950e"
+# `ceph fs dump` with the members fs_dump reads (src/mds/FSMap.cc:131-176, src/mds/MDSMap.cc:190-273).
+FS_DUMP = {"epoch": 9, "feature_flags": {"enable_multiple": True, "ever_enabled_multiple": True}, "standbys": [], "compat": {},
+           "filesystems": [{"id": 1, "mdsmap": {"fs_name": "files", "metadata_pool": 2, "data_pools": [3], "max_mds": 1, "standby_count_wanted": 0,
+                                                "flags_state": {"allow_standby_replay": False}, "info": {}}}]}
+
+
+def scoped_client(arm):
+    """The frozen client of one arm: a list names an RBD pool's derived data pools, a word names a CephFS arm."""
+    if arm == "filesystem":
+        return {"name": "consumer", "pool": "", "access": "read-write", "dataPools": [], "filesystem": "files", "group": "", "subvolume": ""}
+    if arm == "subvolume":
+        return {"name": "consumer", "pool": "", "access": "read-write", "dataPools": [], "filesystem": "files", "group": "csi", "subvolume": "docs",
+                "subvolumePath": SUBVOLUME_PATH}
+    return {"name": "consumer", "pool": "volumes", "access": "read-write", "dataPools": list(arm), "filesystem": "", "group": "", "subvolume": ""}
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch, request):
-    data_pools = list(getattr(request, "param", []))
+    arm = getattr(request, "param", [])
+    data_pools = list(arm) if isinstance(arm, list) else []
     hosts = [{"name": "node-" + str(i), "machine": "machine-" + str(i), "address": "192.0.2." + str(i),
               "user": "operator", "port": 22, "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}],
               "labels": [], "location": {}, "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    request = {"controller": "controller", "version": "ceph-core-v24", "action": "client", "cluster": "example", "owner": "apply-example",
+    request = {"controller": "controller", "version": "ceph-core-v25", "action": "client", "cluster": "example", "owner": "apply-example",
                "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
                "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
                "release": "9.1", "ansiblePackageVersion": "3.2.0",
@@ -64,7 +82,7 @@ def client(tmp_path, monkeypatch, request):
                "services": [{"service_type": "mon", "placement": {"hosts": names}},
                             {"service_type": "mgr", "placement": {"hosts": names, "count": 2}},
                             {"service_type": "osd", "service_id": "data", "placement": {"hosts": names}, "spec": {"data_devices": {"paths": ["/dev/vdb"]}}}],
-               "client": {"name": "consumer", "pool": "volumes", "access": "read-write", "dataPools": data_pools}}
+               "client": scoped_client(arm)}
     root = tmp_path / "root"
     root.mkdir(mode=0o755)
     directory = root
@@ -93,9 +111,15 @@ def client(tmp_path, monkeypatch, request):
         markers.records["pool-" + name + ".json"] = {"name": name}
         markers.records["pool-id-" + name + ".json"] = {"id": number}
         native_pools.append({"pool_name": name, "pool_id": number, "application_metadata": {"rbd": {}}})
+    if not isinstance(arm, list):
+        markers.records.update({"filesystem-files.json": {"name": "files"}, "filesystem-id.files.json": {"id": 1},
+                                "subvolume-docs.json": {"name": "docs", "filesystem": "files", "group": "csi", "pool": "fs-data", "mode": "755", "uid": 0,
+                                                        "gid": 0, "sizeBytes": 0},
+                                "subvolume-path.docs.json": {"path": SUBVOLUME_PATH}})
     key = base64.b64encode(b"synthetic-original-client-secret").decode("ascii")
     state = SimpleNamespace(auth=None, key=key, generated=0, added=0, calls=[], lose_add=False, fail_generation=False,
-                            pool_id=4, data_pools=native_pools[1:], fsid=request["fsid"], generation_hook=lambda: None, add_hook=lambda: None)
+                            pool_id=4, data_pools=native_pools[1:], fsid=request["fsid"], generation_hook=lambda: None, add_hook=lambda: None,
+                            fs_dump=copy.deepcopy(FS_DUMP), getpath=SUBVOLUME_PATH + "\n")
     native = None
 
     def run(argv, data=b"", timeout=60):
@@ -116,6 +140,12 @@ def client(tmp_path, monkeypatch, request):
             value = {"fsid": state.fsid}
         elif args == ["osd", "pool", "ls", "detail"]:
             value = [{"pool_name": "volumes", "pool_id": state.pool_id, "application_metadata": {"rbd": {}}}] + copy.deepcopy(state.data_pools)
+        elif args == ["fs", "dump"]:
+            value = copy.deepcopy(state.fs_dump)
+        elif args == ["fs", "subvolume", "getpath", "files", "docs", "--group_name", "csi"]:
+            # The volumes module answers the path as text (src/pybind/mgr/volumes/fs/volume.py:484-498), here with one trailing newline.
+            assert data == b""
+            return 0, state.getpath.encode()
         elif args == ["auth", "ls"]:
             value = {"auth_dump": [] if state.auth is None else copy.deepcopy(state.auth)}
         elif args == ["auth", "get", "client.consumer"]:
@@ -167,7 +197,7 @@ def test_client_original_material_is_retained_before_native_effect_and_no_secret
     assert client.state.generated == client.state.added == 1
 
 
-@pytest.mark.parametrize("client", [[], ["archive", "ec-data"]], indirect=True)
+@pytest.mark.parametrize("client", [[], ["archive", "ec-data"], "filesystem", "subvolume"], indirect=True)
 def test_lost_auth_creation_reply_recovers_exact_original_identity(client):
     client.state.lose_add = True
     with pytest.raises(ceph_native.Refusal, match="native-command"):
@@ -536,3 +566,94 @@ def test_generator_requires_exact_package_owner_and_pins_only_binary_identity(cl
     native.command = lambda *args, **kwargs: b"foreign-package 2 20.2.2 349.el9cp x86_64"
     with pytest.raises(ceph_native.Refusal, match="artifact"):
         ceph_native_resources.ResourceWorker.verify_client_generator(native)
+
+
+@pytest.mark.parametrize("client", ["subvolume"], indirect=True)
+def test_cephfs_client_binds_proved_path(client):
+    assert client.native.caps()["mds"] == "allow rw fsname=files path=" + SUBVOLUME_PATH
+    client.native.client()
+    added = [data for argv, data in client.state.calls if argv[-5:] == ["auth", "add", "client.consumer", "-i", "-"]]
+    assert len(added) == 1 and ('caps mds = "allow rw fsname=files path=' + SUBVOLUME_PATH + '"').encode() in added[0]
+
+
+def foreign_path(client):
+    client.state.getpath = "/volumes/csi/docs/1f8fad5b-d9cb-469f-a165-70867728950e\n"
+
+
+def foreign_marker(client):
+    client.markers.records["subvolume-path.docs.json"] = {"path": "/volumes/csi/docs/1f8fad5b-d9cb-469f-a165-70867728950e"}
+
+
+def missing_subvolume(client):
+    del client.markers.records["subvolume-docs.json"]
+
+
+def other_group(client):
+    client.markers.records["subvolume-docs.json"]["group"] = "other"
+
+
+def other_filesystem_id(client):
+    client.markers.records["filesystem-id.files.json"] = {"id": 2}
+
+
+@pytest.mark.parametrize("client", ["subvolume"], indirect=True)
+@pytest.mark.parametrize("change, reason", [(foreign_path, "subvolume-identity"), (foreign_marker, "subvolume-identity"),
+                                            (missing_subvolume, "subvolume-identity"), (other_group, "subvolume-identity"),
+                                            (other_filesystem_id, "filesystem-identity")])
+def test_cephfs_client_refuses_an_unproved_scope_before_any_key(client, change, reason):
+    change(client)
+    with pytest.raises(ceph_native.Refusal, match="^" + reason + "$"):
+        client.native.client()
+    assert not [call for call in client.state.calls if call[0][0] == "/usr/bin/ceph-authtool" or "add" in call[0]]
+    assert client.state.generated == client.state.added == 0
+    assert "client-reserved-consumer.json" not in client.markers.records
+
+
+@pytest.mark.parametrize("client, access, caps", [
+    ([], "read-write", {"mon": "profile rbd", "mgr": "profile rbd pool=volumes", "osd": "profile rbd pool=volumes"}),
+    ("filesystem", "read-write", {"mds": "allow rw fsname=files", "mon": "allow r fsname=files", "osd": "allow rw tag cephfs data=files"}),
+    ("filesystem", "read-only", {"mds": "allow r fsname=files", "mon": "allow r fsname=files", "osd": "allow r tag cephfs data=files"}),
+    ("subvolume", "read-write",
+     {"mds": "allow rw fsname=files path=" + SUBVOLUME_PATH, "mon": "allow r fsname=files", "osd": "allow rw tag cephfs data=files"}),
+    ("subvolume", "read-only", {"mds": "allow r fsname=files path=" + SUBVOLUME_PATH, "mon": "allow r fsname=files", "osd": "allow r tag cephfs data=files"}),
+], indirect=["client"])
+def test_client_caps_per_arm(client, access, caps):
+    client.native.request["client"]["access"] = access
+    assert client.native.caps() == caps
+
+
+def shaped(arm, **changes):
+    value = scoped_client(arm)
+    for name, member in changes.items():
+        if member is None:
+            del value[name]
+        else:
+            value[name] = member
+    return value
+
+
+@pytest.mark.parametrize("value", [
+    shaped("filesystem", pool="volumes"),
+    shaped("subvolume", pool="volumes"),
+    shaped("filesystem", dataPools=["fs-data"]),
+    shaped("subvolume", dataPools=["fs-data"]),
+    shaped("subvolume", subvolumePath=None),
+    shaped("subvolume", subvolumePath="/volumes/csi/docs/not-a-uuid"),
+    shaped("subvolume", subvolumePath="/volumes/csi/other/0f8fad5b-d9cb-469f-a165-70867728950e"),
+    shaped("subvolume", subvolumePath="/volumes/_nogroup/docs/0f8fad5b-d9cb-469f-a165-70867728950e"),
+    shaped("filesystem", subvolumePath=SUBVOLUME_PATH),
+    shaped([], subvolumePath=SUBVOLUME_PATH),
+    shaped("filesystem", group="csi"),
+    shaped("subvolume", filesystem=""),
+    shaped([], filesystem="files"),
+    shaped("filesystem", filesystem=None),
+    shaped("filesystem", extra=""),
+])
+def test_client_request_shape_per_arm(value):
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native_resources.validate_client(value)
+
+
+@pytest.mark.parametrize("arm", [[], ["archive", "ec-data"], "filesystem", "subvolume"])
+def test_client_request_admits_each_arm(arm):
+    ceph_native_resources.validate_client(scoped_client(arm))

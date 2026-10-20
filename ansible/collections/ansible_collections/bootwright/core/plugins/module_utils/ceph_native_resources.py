@@ -42,6 +42,8 @@ DERIVED_MODULES = (
     "smb",
 )
 SUBVOLUME_MEMBERS = frozenset(("filesystem", "gid", "group", "mode", "name", "pool", "sizeBytes", "uid"))
+# One scope per principal: an RBD pool, a CephFS filesystem or a CephFS subvolume, whose path prepare binds from its creation proof.
+CLIENT_MEMBERS = frozenset(("access", "dataPools", "filesystem", "group", "name", "pool", "subvolume"))
 # A subvolume's user metadata key: printable ASCII, stored lower case (doc/cephfs/fs-volumes.rst:572-575).
 OWNER_KEY = "bootwright-owner"
 FILESYSTEM_MEMBERS = frozenset(("activeCount", "dataPools", "defaultDataPool", "groups", "mdsService", "metadataPool", "name", "standbyCountWanted",
@@ -94,13 +96,7 @@ def validate(request, hosts):
         require("pool" not in request and "client" not in request)
         validate_policy(request.get("policy"), osd_hosts)
     elif request["action"] == "client":
-        client = request.get("client")
-        require(isinstance(client, dict) and set(client) == {"name", "pool", "access", "dataPools"})
-        require(named(client["name"]) and named(client["pool"]))
-        data_pools = client["dataPools"]
-        require(isinstance(data_pools, list) and all(named(pool) for pool in data_pools))
-        require(data_pools == sorted(set(data_pools)) and client["pool"] not in data_pools)
-        require(client["access"] in ("read-only", "read-write"))
+        validate_client(request.get("client"))
         require("pool" not in request and "policy" not in request)
     elif request["action"] == "rbd":
         require("pool" not in request and "client" not in request and "policy" not in request)
@@ -114,6 +110,26 @@ def validate(request, hosts):
     elif request["action"] == "settings":
         require(not {"pool", "client", "policy", "rbd", "filesystem", "subvolume"} & set(request))
         validate_settings(request)
+
+
+def validate_client(client):
+    """The one scope the Go plan froze: an RBD pool with its derived data pools, a filesystem, or a subvolume with the path its creation proved."""
+    require(isinstance(client, dict) and CLIENT_MEMBERS <= set(client) <= CLIENT_MEMBERS | {"subvolumePath"})
+    require(named(client["name"]) and client["access"] in ("read-only", "read-write"))
+    data_pools = client["dataPools"]
+    require(isinstance(data_pools, list) and all(named(pool) for pool in data_pools))
+    if client["pool"] != "":
+        require(named(client["pool"]) and data_pools == sorted(set(data_pools)) and client["pool"] not in data_pools)
+        require(client["filesystem"] == client["group"] == client["subvolume"] == "" and "subvolumePath" not in client)
+        return
+    require(named(client["filesystem"]) and data_pools == [])
+    if client["subvolume"] == "":
+        require(client["group"] == "" and "subvolumePath" not in client)
+        return
+    require(named(client["subvolume"]) and (client["group"] == "" or named(client["group"])))
+    path = client.get("subvolumePath")
+    match = ceph_native.SUBVOLUME_PATH.fullmatch(path) if isinstance(path, str) else None
+    require(match is not None and path == "/volumes/" + (client["group"] or "_nogroup") + "/" + client["subvolume"] + "/" + match.group(1))
 
 
 def validate_settings(request):
@@ -270,7 +286,14 @@ class ResourceWorker(ceph_native.Worker):
     """The core worker with one pool, placement policy or client resource's phases and observation."""
 
     def caps(self):
+        """The caps `ceph fs authorize` renders for a CephFS scope (doc/cephfs/client-auth.rst); RBD's profiles otherwise."""
         client = self.request["client"]
+        if client["filesystem"]:
+            grant = "r" if client["access"] == "read-only" else "rw"
+            mds = "allow " + grant + " fsname=" + client["filesystem"]
+            if client["subvolume"]:
+                mds += " path=" + client["subvolumePath"]
+            return {"mds": mds, "mon": "allow r fsname=" + client["filesystem"], "osd": "allow " + grant + " tag cephfs data=" + client["filesystem"]}
         profile = "rbd-read-only" if client["access"] == "read-only" else "rbd"
         osd = ", ".join("profile " + profile + " pool=" + name for name in [client["pool"]] + client["dataPools"])
         return {"mon": "profile rbd", "mgr": "profile " + profile + " pool=" + client["pool"], "osd": osd}
@@ -634,6 +657,8 @@ class ResourceWorker(ceph_native.Worker):
         require(self.request["action"] == "client" and self.markers.owned() and self.host["name"] == self.request["bootstrap"], "ownership")
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
         client = self.request["client"]
+        if client["filesystem"]:
+            return self.cephfs_client_scope(client)
         pool = self.markers.read("pool-" + client["pool"] + ".json")
         require(isinstance(pool, dict) and pool.get("name") == client["pool"], "pool-unowned")
         identifier = self.markers.read("pool-id-" + client["pool"] + ".json")
@@ -646,6 +671,32 @@ class ResourceWorker(ceph_native.Worker):
         for name in client["dataPools"]:
             self.owned_pool(name, entries=pools)
         return {"owner": self.request["owner"], "fsid": self.request["fsid"], "host": self.host["name"], "client": dict(client), "poolID": identifier["id"]}
+
+    def cephfs_client_scope(self, client):
+        """The filesystem this operation created, and for a subvolume the path its creation recorded and the volumes module still reports."""
+        name = client["filesystem"]
+        marker = self.markers.read("filesystem-" + name + ".json")
+        require(isinstance(marker, dict) and marker.get("name") == name, "filesystem-identity")
+        entry = next((item for item in self.fs_dump()["filesystems"] if item["mdsmap"]["fs_name"] == name), None)
+        require(entry is not None and self.markers.read("filesystem-id." + name + ".json") == {"id": entry["id"]}, "filesystem-identity")
+        if client["subvolume"]:
+            subvolume = self.markers.read("subvolume-" + client["subvolume"] + ".json")
+            require(isinstance(subvolume, dict) and subvolume.get("name") == client["subvolume"] and subvolume.get("filesystem") == name
+                    and subvolume.get("group") == client["group"], "subvolume-identity")
+            require(self.markers.read("subvolume-path." + client["subvolume"] + ".json") == {"path": client["subvolumePath"]}, "subvolume-identity")
+            require(self.client_subvolume_path() == client["subvolumePath"], "subvolume-identity")
+        return {"owner": self.request["owner"], "fsid": self.request["fsid"], "host": self.host["name"], "client": dict(client), "filesystemID": entry["id"]}
+
+    def client_subvolume_path(self):
+        """`fs subvolume getpath` (src/pybind/mgr/volumes/fs/volume.py:484-498) prints the path as text; never `--group_name _nogroup`."""
+        client = self.request["client"]
+        group = ("--group_name", client["group"]) if client["group"] else ()
+        output = self.manager_retry(self.ceph, "fs", "subvolume", "getpath", client["filesystem"], client["subvolume"], *group, json_result=False)
+        try:
+            text = bytes(output).decode("utf-8")
+        except UnicodeError:
+            raise Refusal("native-output") from None
+        return text[:-1] if text.endswith("\n") else text
 
     def client_store(self):
         return Custody(self, "client", "-" + self.request["client"]["name"], 65536, self.client_material_decode)

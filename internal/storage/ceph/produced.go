@@ -74,6 +74,15 @@ func validateProduced(produced []lifecycle.Produced, r Request, present bool) er
 }
 
 func clientCaps(c Client) (map[string]string, bool) {
+	if c.Pool != "" && c.Filesystem != "" || c.Group != "" && c.Subvolume == "" || c.Subvolume != "" && c.Filesystem == "" || (c.Subvolume != "") != (c.SubvolumePath != "") {
+		return nil, false
+	}
+	if c.Filesystem != "" {
+		return cephFSClientCaps(c)
+	}
+	if c.Pool == "" {
+		return nil, false
+	}
 	profile := "rbd"
 	if c.Access == "read-only" {
 		profile = "rbd-read-only"
@@ -85,6 +94,18 @@ func clientCaps(c Client) (map[string]string, bool) {
 		grants = append(grants, "profile "+profile+" pool="+pool)
 	}
 	return map[string]string{"mon": "profile rbd", "mgr": "profile " + profile + " pool=" + c.Pool, "osd": strings.Join(grants, ", ")}, true
+}
+
+func cephFSClientCaps(c Client) (map[string]string, bool) {
+	grant := map[string]string{"read-only": "r", "read-write": "rw"}[c.Access]
+	if grant == "" || len(c.DataPools) != 0 {
+		return nil, false
+	}
+	mds := "allow " + grant + " fsname=" + c.Filesystem
+	if c.Subvolume != "" {
+		mds += " path=" + c.SubvolumePath
+	}
+	return map[string]string{"mds": mds, "mon": "allow r fsname=" + c.Filesystem, "osd": "allow " + grant + " tag cephfs data=" + c.Filesystem}, true
 }
 
 func strictlyAscending(values []string) bool {

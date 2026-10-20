@@ -1,0 +1,153 @@
+{
+  "action": "client",
+  "ansiblePackageVersion": "5.0.3-1",
+  "bootstrap": "node-1",
+  "callHome": "enabled",
+  "cephadm": {
+    "packageVersion": "20.2.1-405.el9cp",
+    "path": "/usr/sbin/cephadm"
+  },
+  "client": {
+    "access": "read-only",
+    "dataPools": [],
+    "filesystem": "files",
+    "group": "",
+    "name": "reader",
+    "pool": "",
+    "subvolume": ""
+  },
+  "cluster": "example",
+  "clusterKeyRef": "cluster-key",
+  "clusterNetworks": [
+    "198.51.100.0/24"
+  ],
+  "clusterSSHTransport": "native",
+  "clusterSSHUser": "operator",
+  "config": {
+    "global": {
+      "osd_pool_default_min_size": "2",
+      "osd_pool_default_size": "2"
+    },
+    "osd": {
+      "osd_memory_target": "2147483648",
+      "osd_memory_target_autotune": "false"
+    }
+  },
+  "controller": "controller",
+  "fsid": "5effe704-a878-5cae-8b43-c81f7112832a",
+  "hosts": [
+    {
+      "address": "192.0.2.1",
+      "devices": [
+        {
+          "path": "/dev/vdb",
+          "serial": "node-1",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "hostKeyRef": "node-1-host-key",
+      "labels": [
+        "storage"
+      ],
+      "location": {},
+      "machine": "node-1",
+      "name": "node-1",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    },
+    {
+      "address": "192.0.2.2",
+      "devices": [
+        {
+          "path": "/dev/vdb",
+          "serial": "node-2",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "hostKeyRef": "node-2-host-key",
+      "labels": [
+        "storage"
+      ],
+      "location": {},
+      "machine": "node-2",
+      "name": "node-2",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    },
+    {
+      "address": "192.0.2.3",
+      "devices": [
+        {
+          "path": "/dev/vdb",
+          "serial": "node-3",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "hostKeyRef": "node-3-host-key",
+      "labels": [
+        "storage"
+      ],
+      "location": {},
+      "machine": "node-3",
+      "name": "node-3",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    }
+  ],
+  "image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
+  "monIP": "192.0.2.1",
+  "nfsGaneshaPackageVersion": "synthetic-native-ganesha",
+  "owner": "apply-original",
+  "packageRepository": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64",
+  "publicNetworks": [
+    "192.0.2.0/24"
+  ],
+  "registry": "cp.icr.io",
+  "registryRef": "registry",
+  "release": "9.9.1.2",
+  "services": [
+    {
+      "placement": {
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_id": "data",
+      "service_type": "osd",
+      "spec": {
+        "data_devices": {
+          "paths": [
+            "/dev/vdb"
+          ]
+        }
+      }
+    },
+    {
+      "placement": {
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_type": "mon"
+    },
+    {
+      "placement": {
+        "count": 2,
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_type": "mgr"
+    }
+  ],
+  "version": "ceph-core-v25"
+}

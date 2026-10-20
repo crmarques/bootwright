@@ -36,7 +36,7 @@ def core_request():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v24", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v25", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -731,7 +731,8 @@ def test_an_unproved_pool_id_still_refuses_observation(core_request, case):
 
 
 def test_client_caps_and_legacy_hash_binding_refuse_unproved_identity(core_request, monkeypatch):
-    core_request.update(action="client", client={"name": "reader", "pool": "volumes", "access": "read-only", "dataPools": []})
+    core_request.update(action="client", client={"name": "reader", "pool": "volumes", "access": "read-only", "dataPools": [],
+                                                 "filesystem": "", "group": "", "subvolume": ""})
     marks = Markers()
     marks.records["pool-volumes.json"] = {"name": "volumes"}
     marks.records["client-reader.json"] = core_request["client"]
@@ -781,7 +782,7 @@ def test_bounded_process_timeout_never_returns_a_native_transcript():
 
 def test_client_recovery_reads_only_the_owned_principal(core_request, monkeypatch):
     core_request["action"] = "client"
-    core_request["client"] = {"name": "consumer", "pool": "volumes", "access": "read-only", "dataPools": []}
+    core_request["client"] = {"name": "consumer", "pool": "volumes", "access": "read-only", "dataPools": [], "filesystem": "", "group": "", "subvolume": ""}
     markers = Markers()
     markers.records["client-consumer.json"] = core_request["client"]
     key = "PRIVATE-KEY-SENTINEL"
@@ -833,7 +834,8 @@ def test_owned_cluster_without_daemons_does_not_prove_cleanup(core_request):
 @pytest.mark.parametrize("phase", ["observe", "host_state", "client_read"])
 def test_native_reads_require_unchanged_artifacts_before_observation(core_request, phase):
     if phase == "client_read":
-        core_request.update(action="client", client={"name": "consumer", "pool": "volumes", "access": "read-only", "dataPools": []})
+        core_request.update(action="client", client={"name": "consumer", "pool": "volumes", "access": "read-only", "dataPools": [],
+                                                     "filesystem": "", "group": "", "subvolume": ""})
     native, calls = worker(core_request, {})
 
     def refuse_artifact():
@@ -1236,7 +1238,8 @@ def test_observation_proves_each_owned_osd_effective_memory(core_request):
 def test_absent_native_resource_retains_owned_cleanup_work(core_request, action, owned):
     core_request.update(action=action, config=memory_config())
     resource = (replicated_pool()
-                if action == "pool" else {"name": "consumer", "pool": "volumes", "access": "read-only", "dataPools": []})
+                if action == "pool" else {"name": "consumer", "pool": "volumes", "access": "read-only", "dataPools": [],
+                                          "filesystem": "", "group": "", "subvolume": ""})
     core_request[action] = resource
     answers = memory_observation_answers(core_request)
     answers[("osd", "pool", "ls", "detail") if action == "pool" else ("auth", "ls")] = [] if action == "pool" else {"auth_dump": []}

@@ -13,8 +13,11 @@
       "archive",
       "ec-data"
     ],
+    "filesystem": "",
+    "group": "",
     "name": "consumer",
-    "pool": "volumes"
+    "pool": "volumes",
+    "subvolume": ""
   },
   "cluster": "example",
   "clusterKeyRef": "cluster-key",
@@ -149,5 +152,5 @@
       "service_type": "mgr"
     }
   ],
-  "version": "ceph-core-v24"
+  "version": "ceph-core-v25"
 }

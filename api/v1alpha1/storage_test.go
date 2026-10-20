@@ -216,10 +216,15 @@ func TestNativeCoreSchemaAndBindingsUseOneClosedAuthoringPath(t *testing.T) {
 		t.Fatal("future family schema must be qualified by its owning slice")
 	}
 	client := Schema(StorageClient)
-	pool, _ := client.Field("poolRef")
+	for name, kind := range map[string]Kind{"poolRef": StoragePool, "filesystemRef": StorageFilesystem, "subvolumeRef": StorageSubvolume} {
+		if scope, ok := client.Field(name); !ok || scope.Required || scope.Shape.Reference[0] != kind {
+			t.Fatalf("client scope %s must be an optional reference to %s", name, kind)
+		}
+	}
+	cluster, _ := client.Field("clusterRef")
 	access, _ := client.Field("access")
-	if !pool.Required || pool.Shape.Reference[0] != StoragePool || !access.Required || len(access.Shape.Enums) != 2 {
-		t.Fatal("minimal client must bind one pool and explicit bounded access")
+	if !cluster.Required || !access.Required || len(access.Shape.Enums) != 2 {
+		t.Fatal("client must bind its cluster and explicit bounded access")
 	}
 }
 func TestRBDImageSchemaIsClosedWithExactBounds(t *testing.T) {

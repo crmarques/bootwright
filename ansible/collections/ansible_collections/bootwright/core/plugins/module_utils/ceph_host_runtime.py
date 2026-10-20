@@ -39,7 +39,7 @@ VERSION = "ceph-host-v5"
 PROFILE_VERSION = "ceph-runtime-profile-v3"
 ROUTE_VERSION = "ceph-host-route-v2"
 DEVICES_VERSION = "ceph-device-identities-v1"
-EVIDENCE_VERSION = "ceph-host-evidence-v1"
+EVIDENCE_VERSION = "ceph-host-evidence-v2"
 PROFILE = "runtime-profile.json"
 PAYLOAD = "cephadm-payload"
 ROUTE = "route.json"
@@ -920,7 +920,7 @@ def route_cases(value):
 @contextlib.contextmanager
 def staged(directory, synthetic, uid, gid):
     """Retain the synthetic bytes outside the read-only mounted children."""
-    request = {"version": "ceph-core-v24", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
+    request = {"version": "ceph-core-v25", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
                "clusterSSHTransport": "verified-tunnel", "clusterSSHUser": probe.USER,
                "hosts": [{"name": probe.HOST, "address": probe.ADDRESS, "port": probe.OUTER_PORT}]}
     known = ("[" + probe.ADDRESS + "]:" + str(probe.OUTER_PORT) + " " + synthetic["keys"]["outer"]["public"] + "\n").encode()

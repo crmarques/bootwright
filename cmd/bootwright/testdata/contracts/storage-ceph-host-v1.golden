@@ -1,5 +1,5 @@
 implementation: storage-ceph-host-v1
-content-digest: 40cd013e5e36a1ffd275441b6e51722a6079560135435c602accb00ebd17c7bd
+content-digest: 59ab1918f6bcb591df86375062b893e245690e47bca561f9ac1e3fcfc5e119fb
 automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v1, ceph-host-route-v2, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-runtime-profile-v3
 request-schema:
   cluster struct ceph.ClusterScope
@@ -81,5 +81,6 @@ evidence-schema:
   removed bool
   request string
   route bool
+  specializations []string omitempty
   uid int
   version string

@@ -55,11 +55,14 @@ service families, options with unqualified effects and protected leaves
 without a release-qualified binding refuse explicitly. There is no arbitrary
 provider-command escape hatch.
 
-`StorageClient` is admitted with required `clusterRef`, `poolRef` and
-`access: read-only|read-write`. The pool must be a same-cluster RBD pool; no
-implicit administrator capability is granted. Its OSD caps also name the
-`dataPoolRef` pools of the StorageRBDImages on that pool
-([StorageClient](../storage-resources.md#storageclient)). `StoragePlacementPolicy` and
+`StorageClient` is admitted with required `clusterRef` and
+`access: read-only|read-write` and exactly one same-cluster scope: an RBD
+`poolRef`, a StorageFilesystem `filesystemRef` or a StorageSubvolume
+`subvolumeRef`. Two or three scopes refuse at `$.spec` with `api.invariant`,
+also in a defaults fragment, and no scope refuses at `$.spec` with
+`api.required`. No implicit administrator capability is granted. An RBD
+client's OSD caps also name the `dataPoolRef` pools of the StorageRBDImages on
+that pool ([StorageClient](../storage-resources.md#storageclient)). `StoragePlacementPolicy` and
 `StoragePool` are admitted under
 [pool protection and erasure coding](#pool-protection-and-erasure-coding),
 `StorageRBDImage` under [RBD images](#rbd-images), `StorageFilesystem` under
@@ -99,7 +102,8 @@ that adaptation neither approves nor refuses a selection.
 Ordinary apply realizes the core cluster, placement policies, replicated and
 erasure-coded pools, RBD images, CephFS filesystems with their subvolume
 groups, CephFS subvolumes, native `nfs` services, NFS exports of a CephFS
-filesystem or subvolume and the client over `verified-tunnel`; an ingress
+filesystem or subvolume and StorageClients of an RBD pool, a CephFS
+filesystem or a CephFS subvolume over `verified-tunnel`; an ingress
 plans once its auxiliary images are authored under `spec.ceph.images` and
 refuses at planning without them.
 `ceph.release` is the operator's release label;
@@ -175,7 +179,11 @@ Core request v11 refuses continuation of v10 operations, image request v2 and
 package request v2 refuse continuation of older operations, and core
 evidence v3 and host request v2 refuse continuation of operations an
 earlier build made; finish or remove old contexts with their original
-applying build. A host preparation request carries only its cluster's
+applying build. The CephFS StorageClient scopes move the core request again
+and the optional specializations evidence member moves the host evidence; a
+context or incomplete operation an earlier build planned is finished or
+destroyed with that build, while a core evidence record without the member
+still reads. A host preparation request carries only its cluster's
 scope, never the core request's resource action, pool, client or image,
 so a resource change never moves it.
 
@@ -216,7 +224,7 @@ provider sizing and measured resource acceptance remain separate.
 | --- | --- |
 | `StorageCluster` | One managed Ceph cluster or one externally managed Ceph identity. `spec.type` is exactly `ceph`; `spec.management` is `managed` (default) or `external`; `spec.ceph` is required for `managed` and forbidden for `external`. |
 | `StoragePlacementPolicy` | A reusable CRUSH placement policy and replicated defaults for one managed cluster. |
-| `StorageClient` | One pool-scoped RBD CephX principal with required same-cluster `poolRef` and explicit access; its OSD caps also name the data pools of the StorageRBDImages on that pool. |
+| `StorageClient` | One CephX principal with exactly one same-cluster scope: an RBD `poolRef` (its OSD caps also name the data pools of the StorageRBDImages on that pool), a `filesystemRef` or a `subvolumeRef`; explicit access. |
 | `StoragePool` | One pool. `spec.type` is `replicated` (default) or `erasure` and selects protection; the referenced cluster selects the storage engine. |
 | `StorageRBDImage` | One RBD image: same-cluster replicated rbd `poolRef`, exact `sizeBytes`, optional rbd `dataPoolRef` and a closed feature set; image format 2. |
 | `StorageFilesystem` | One CephFS filesystem: a same-cluster `cephfs-metadata` pool, one or more ordered `cephfs-data` pools (the default replicated), its rank and standby policy, subvolume groups, and the native MDS service it binds through `mdsServiceRef`. |

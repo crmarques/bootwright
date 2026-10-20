@@ -75,6 +75,8 @@ func (a *admission) intrinsic() {
 		a.gatewayPoolRoles(spec.Get("pools"))
 	case api.StorageNFSExport:
 		a.nfsExportIntrinsic()
+	case api.StorageClient:
+		a.clientIntrinsic()
 	case api.StorageSMBResource:
 		a.smbIntrinsic()
 	case api.StorageExport:

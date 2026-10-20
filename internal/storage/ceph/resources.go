@@ -288,6 +288,31 @@ func ratio(value api.Value) string {
 }
 
 func clientRequest(c api.Catalog, client api.Object, contextName string) (Request, error) {
+	spec := client.Spec()
+	frozen := &Client{Access: spec.Get("access").Text(), DataPools: []string{}, Name: client.Name()}
+	var r Request
+	var err error
+	switch {
+	case spec.Has("subvolumeRef"):
+		subvolume, _ := c.Find(api.StorageSubvolume, spec.Get("subvolumeRef").Text())
+		if r, err = subvolumeRequest(c, subvolume, contextName); err != nil {
+			return Request{}, err
+		}
+		frozen.Filesystem, frozen.Group, frozen.Subvolume = r.Subvolume.Filesystem, r.Subvolume.Group, r.Subvolume.Name
+	case spec.Has("filesystemRef"):
+		fs, _ := c.Find(api.StorageFilesystem, spec.Get("filesystemRef").Text())
+		if r, err = filesystemRequest(c, fs, contextName); err != nil {
+			return Request{}, err
+		}
+		frozen.Filesystem = r.Filesystem.Name
+	default:
+		return poolClientRequest(c, client, contextName)
+	}
+	r.Action, r.Pool, r.Filesystem, r.Subvolume, r.Client = "client", nil, nil, nil, frozen
+	return r, nil
+}
+
+func poolClientRequest(c api.Catalog, client api.Object, contextName string) (Request, error) {
 	pool, _ := c.Find(api.StoragePool, client.Spec().Get("poolRef").Text())
 	r, err := poolRequest(c, pool, contextName)
 	if err != nil {

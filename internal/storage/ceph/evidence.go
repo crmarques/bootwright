@@ -70,28 +70,29 @@ type UnitDaemon struct {
 }
 
 type Evidence struct {
-	Action      string            `json:"action"`
-	Client      string            `json:"client"`
-	Daemons     []UnitDaemon      `json:"daemons"`
-	Dashboard   DashboardEvidence `json:"dashboard"`
-	Endpoint    EndpointEvidence  `json:"endpoint"`
-	Exists      bool              `json:"exists"`
-	FSID        string            `json:"fsid"`
-	Health      string            `json:"health"`
-	Hosts       []string          `json:"hosts"`
-	MGRActive   string            `json:"mgrActive"`
-	MGRStandbys []string          `json:"mgrStandbys"`
-	MonAddrs    []MonitorAddress  `json:"monAddrs"`
-	Monitors    []string          `json:"monitors"`
-	OSDs        []OSDEvidence     `json:"osds"`
-	Owned       bool              `json:"owned"`
-	Owner       string            `json:"owner"`
-	Partial     bool              `json:"partial"`
-	Ready       bool              `json:"ready"`
-	Removed     bool              `json:"removed"`
-	Request     string            `json:"request"`
-	Resource    ResourceEvidence  `json:"resource"`
-	Version     string            `json:"version"`
+	Action          string            `json:"action"`
+	Client          string            `json:"client"`
+	Daemons         []UnitDaemon      `json:"daemons"`
+	Dashboard       DashboardEvidence `json:"dashboard"`
+	Endpoint        EndpointEvidence  `json:"endpoint"`
+	Exists          bool              `json:"exists"`
+	FSID            string            `json:"fsid"`
+	Health          string            `json:"health"`
+	Hosts           []string          `json:"hosts"`
+	MGRActive       string            `json:"mgrActive"`
+	MGRStandbys     []string          `json:"mgrStandbys"`
+	MonAddrs        []MonitorAddress  `json:"monAddrs"`
+	Monitors        []string          `json:"monitors"`
+	OSDs            []OSDEvidence     `json:"osds"`
+	Owned           bool              `json:"owned"`
+	Owner           string            `json:"owner"`
+	Partial         bool              `json:"partial"`
+	Ready           bool              `json:"ready"`
+	Removed         bool              `json:"removed"`
+	Request         string            `json:"request"`
+	Resource        ResourceEvidence  `json:"resource"`
+	Specializations []string          `json:"specializations,omitempty"`
+	Version         string            `json:"version"`
 }
 
 func evidenceFailure() error {
@@ -104,7 +105,7 @@ func decodeEvidence(data []byte) (Evidence, error) {
 		return e, err
 	}
 	fields, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](data, 60*1024, "Ceph members")
-	if err != nil || len(fields) != 22 {
+	if err != nil || len(fields) != 22 && (len(fields) != 23 || !validSpecializationsMember(fields)) {
 		return Evidence{}, evidenceFailure()
 	}
 	required := []string{"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs", "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons"}
@@ -157,6 +158,29 @@ func decodeEvidence(data []byte) (Evidence, error) {
 		return Evidence{}, evidenceFailure()
 	}
 	return e, nil
+}
+
+var specializationID = regexp.MustCompile(`\A[a-z][a-z0-9]*(?:-[a-z0-9]+)*\z`)
+
+func validSpecializationsMember(fields map[string]json.RawMessage) bool {
+	raw, ok := fields["specializations"]
+	if !ok {
+		return false
+	}
+	ids, err := reconciliation.DecodeEvidence[[]string](raw, 60*1024, "Ceph specializations")
+	return string(raw) != "null" && err == nil && validSpecializations(ids)
+}
+
+func validSpecializations(ids []string) bool {
+	if len(ids) == 0 || len(ids) > 32 || !strictlyAscending(ids) {
+		return false
+	}
+	for _, id := range ids {
+		if len(id) > 64 || !specializationID.MatchString(id) {
+			return false
+		}
+	}
+	return true
 }
 
 func closedMembers(members map[string]json.RawMessage, keys ...string) bool {

@@ -80,7 +80,8 @@ func storageClusterSchema() *Shape {
 }
 
 func storageClientSchema() *Shape {
-	return record(required("clusterRef", ref(StorageCluster)), required("poolRef", ref(StoragePool)), required("access", enumeration("read-only", "read-write")))
+	return record(required("clusterRef", ref(StorageCluster)), field("poolRef", ref(StoragePool)), field("filesystemRef", ref(StorageFilesystem)),
+		field("subvolumeRef", ref(StorageSubvolume)), required("access", enumeration("read-only", "read-write")))
 }
 
 func storageRBDImageSchema() *Shape {

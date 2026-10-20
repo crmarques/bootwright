@@ -169,14 +169,47 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 	case api.StorageSubvolume:
 		a.subvolume(owner)
 	case api.StorageClient:
-		a.required(object.Spec(), "poolRef", "$.spec")
-		a.required(object.Spec(), "access", "$.spec")
-		a.poolRole(textOf(object.Spec(), "poolRef"), "$.spec.poolRef", "rbd", owner)
-		if access := textOf(object.Spec(), "access"); access != "read-only" && access != "read-write" {
-			a.invalid("$.spec.access", "client access must be read-only or read-write")
-		}
+		a.client(owner)
 	}
 	return a.issues
+}
+
+const clientScopes = "a StorageClient grants exactly one scope, so it declares exactly one of spec.poolRef, spec.filesystemRef and spec.subvolumeRef"
+
+func (a *admission) clientScopeCount() int {
+	count := 0
+	for _, key := range []string{"poolRef", "filesystemRef", "subvolumeRef"} {
+		if a.object.Spec().Has(key) {
+			count++
+		}
+	}
+	return count
+}
+
+func (a *admission) clientIntrinsic() {
+	if a.clientScopeCount() > 1 {
+		a.issue("api.invariant", "$.spec", clientScopes, "keep only one of spec.poolRef, spec.filesystemRef and spec.subvolumeRef; declare another StorageClient for another scope")
+	}
+}
+
+func (a *admission) client(owner api.Object) {
+	spec := a.object.Spec()
+	a.required(spec, "access", "$.spec")
+	if access := textOf(spec, "access"); access != "read-only" && access != "read-write" {
+		a.invalid("$.spec.access", "client access must be read-only or read-write")
+	}
+	if spec.Has("poolRef") {
+		a.poolRole(textOf(spec, "poolRef"), "$.spec.poolRef", "rbd", owner)
+	}
+	if spec.Has("filesystemRef") {
+		a.sameOwner(api.StorageFilesystem, textOf(spec, "filesystemRef"), "$.spec.filesystemRef", owner)
+	}
+	if spec.Has("subvolumeRef") {
+		a.sameOwner(api.StorageSubvolume, textOf(spec, "subvolumeRef"), "$.spec.subvolumeRef", owner)
+	}
+	if a.clientScopeCount() == 0 && !a.partial {
+		a.issue("api.required", "$.spec", clientScopes, "set spec.poolRef, spec.filesystemRef or spec.subvolumeRef")
+	}
 }
 
 func (a *admission) uniqueValues(values []string, field, message string) {

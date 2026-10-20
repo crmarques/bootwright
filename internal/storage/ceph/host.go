@@ -18,7 +18,7 @@ import (
 
 const HostImplementation = "storage-ceph-host-v1"
 const HostVersion = "ceph-host-v5"
-const HostEvidenceVersion = "ceph-host-evidence-v1"
+const HostEvidenceVersion = "ceph-host-evidence-v2"
 const SharedLabel = "system_u:object_r:container_file_t:s0"
 const maxHostEvidence = 16384
 
@@ -114,23 +114,24 @@ type HostDevice struct {
 }
 
 type HostEvidence struct {
-	CephadmSHA256 string       `json:"cephadmSHA256"`
-	Devices       []HostDevice `json:"devices"`
-	FSID          string       `json:"fsid"`
-	GID           int          `json:"gid"`
-	Host          string       `json:"host"`
-	Image         string       `json:"image"`
-	ImageID       string       `json:"imageID"`
-	Label         string       `json:"label"`
-	Owner         string       `json:"owner"`
-	PlanDigest    string       `json:"planDigest"`
-	PolicySHA256  string       `json:"policySHA256"`
-	Ready         bool         `json:"ready"`
-	Removed       bool         `json:"removed"`
-	Request       string       `json:"request"`
-	Route         bool         `json:"route"`
-	UID           int          `json:"uid"`
-	Version       string       `json:"version"`
+	CephadmSHA256   string       `json:"cephadmSHA256"`
+	Devices         []HostDevice `json:"devices"`
+	FSID            string       `json:"fsid"`
+	GID             int          `json:"gid"`
+	Host            string       `json:"host"`
+	Image           string       `json:"image"`
+	ImageID         string       `json:"imageID"`
+	Label           string       `json:"label"`
+	Owner           string       `json:"owner"`
+	PlanDigest      string       `json:"planDigest"`
+	PolicySHA256    string       `json:"policySHA256"`
+	Ready           bool         `json:"ready"`
+	Removed         bool         `json:"removed"`
+	Request         string       `json:"request"`
+	Route           bool         `json:"route"`
+	Specializations []string     `json:"specializations,omitempty"`
+	UID             int          `json:"uid"`
+	Version         string       `json:"version"`
 }
 
 func hex64(value string) bool {
@@ -156,6 +157,10 @@ func decodeHostEvidence(data []byte, digest string) (HostEvidence, error) {
 	}
 	if evidence.Version != HostEvidenceVersion || digest == "" || evidence.Request != digest {
 		return HostEvidence{}, failure("lifecycle.state", "Ceph host evidence names another request", "")
+	}
+	members, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](data, maxHostEvidence, "Ceph host members")
+	if raw, present := members["specializations"]; err != nil || present && (string(raw) == "null" || !validSpecializations(evidence.Specializations)) {
+		return HostEvidence{}, failure("lifecycle.state", "Ceph host evidence names malformed specialization ids", "")
 	}
 	return evidence, nil
 }

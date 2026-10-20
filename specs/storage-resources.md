@@ -7,7 +7,7 @@ and their bindings; [Storage](storage.md) owns lifecycle, device safety and
 custody. [Provider coverage](storage-coverage.md) owns release qualification.
 
 **Current:** `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage`,
-`StorageFilesystem`, `StorageSubvolume`, minimal `StorageClient` and
+`StorageFilesystem`, `StorageSubvolume`, `StorageClient` and
 `StorageNFSExport`, under its [field record](#storagenfsexport), are admitted
 and realized. `StorageSMBResource` is admitted under its
 [field record](#storagesmbresource) and realized by its SMB block once its
@@ -330,23 +330,34 @@ Not admitted, as unknown fields:
 
 ## StorageClient
 
-The minimal RBD journey declares its CephX principal independently; it never
-borrows the cluster administrator or invents an implicit lab identity.
-[B80](milestones/m2.md#b80) owns this first consumer and protected produced
-custody. [B489](milestones/m2.md#b489) extends the client model to other resource
-scopes and public access/handoff after their field contracts are qualified.
+A StorageClient declares one CephX principal independently; it never borrows
+the cluster administrator or invents an implicit lab identity.
+[B80](milestones/m2.md#b80) owns the first RBD consumer and protected produced
+custody. [B489](milestones/m2.md#b489) extends the client model to further
+resource scopes and public access/handoff after their field contracts are
+qualified.
 
-| Field | Minimal target rule |
+Each principal grants exactly one scope (least privilege, one custody entry,
+one removal), so a StorageClient declares exactly one of `poolRef`,
+`filesystemRef` and `subvolumeRef`. Admission refuses two or three of them at
+`$.spec`, also in a defaults fragment, and refuses none at `$.spec` in the
+effective object; a consumer that needs another scope declares another
+StorageClient.
+
+| Field | Target rule |
 | --- | --- |
 | `clusterRef` | Required managed cluster reference. |
-| `poolRef` | Required same-cluster initialized RBD pool. |
+| `poolRef` | RBD arm: a same-cluster initialized pool of role `rbd`. |
+| `filesystemRef` | CephFS filesystem arm: a same-cluster StorageFilesystem. |
+| `subvolumeRef` | CephFS subvolume arm: a same-cluster StorageSubvolume. |
 | `access` | Required `read-only` or `read-write`; no implicit administrator access. |
 
 The native principal is `client.<metadata.name>`, with collision and ownership
-checks before `get-or-create`. Pool-scoped native RBD profiles are derived from
-the selected access, and exact monitor/manager/OSD capabilities are frozen and
-observed. The permission covers the declared pool, not only one image; the
-plan reports that scope.
+checks before the key is applied with `auth add` (never `auth import`,
+`auth get-or-create`, `auth caps` or `fs authorize`) and read back exactly with
+`auth get`. The capabilities are derived from the selected access and the
+frozen scope, frozen and observed. The RBD permission covers the declared pool,
+not only one image; the plan reports each arm's scope from the frozen request.
 
 The client has no data-pool field: a StorageRBDImage's `spec.dataPoolRef` is
 the single owner of that fact. Plan derives the distinct `dataPoolRef` values
@@ -373,7 +384,28 @@ data pool. An image later added to or removed from the pool changes the
 client's frozen request, which follows the destroy/fresh-apply rule of
 [lifecycle and migration gates](#lifecycle-and-migration-gates).
 User-supplied arbitrary capabilities and imported keys are not part of the
-minimal shape.
+StorageClient shape.
+
+The CephFS arms freeze the filesystem name, and the subvolume arm also its
+group and subvolume name; they carry no data pool and no `mgr` cap. Their caps
+are spelled exactly as `ceph fs authorize` renders them
+([CephFS client capabilities](https://docs.ceph.com/en/tentacle/cephfs/client-auth/)),
+where `<a>` is `rw` for `read-write` and `r` for `read-only`, `<fs>` is the
+StorageFilesystem's name and `<path>` is the path the StorageSubvolume's
+creation proof reports:
+
+| Arm | `mon` | `osd` | `mds` |
+| --- | --- | --- | --- |
+| `filesystemRef` | `allow r fsname=<fs>` | `allow <a> tag cephfs data=<fs>` | `allow <a> fsname=<fs>` |
+| `subvolumeRef` | `allow r fsname=<fs>` | `allow <a> tag cephfs data=<fs>` | `allow <a> fsname=<fs> path=<path>` |
+
+The subvolume path is never constructed: the plan freezes none, and each apply,
+observation and removal binds the path the subvolume's creation evidence
+reports, refusing when that proof is missing or names another filesystem or
+group. Before generating a key the worker proves the filesystem's recorded
+native ID and, for a subvolume, its recorded marker, its recorded path and the
+path `fs subvolume getpath` reports now. A client of a filesystem or subvolume
+plan propagates that resource's plan refusals and orders after its block.
 
 The generated key enters produced-material custody before client readiness;
 a lost response requires safe recapture of the same principal/key. No native
@@ -395,6 +427,20 @@ spec:
   clusterRef: ceph-example
   poolRef: block-data
   access: read-only
+```
+
+A CephFS consumer of one subvolume:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: StorageClient
+metadata:
+  name: documents-writer
+
+spec:
+  clusterRef: ceph-example
+  subvolumeRef: documents
+  access: read-write
 ```
 
 ## StorageFilesystem
@@ -943,7 +989,7 @@ provisioning rows remain required by the coverage matrix.
 | Object realm/zonegroup/zone, B477/B483 | Resource identity includes the owned realm/zonegroup/zone IDs and parent references; zone pool layout references owned StoragePools. An object gateway binds its zone and native RGW service. | No ambient default realm/zone or untracked pools. One owner publishes shared realm/period state; peers reference it. |
 | Object accounts/users, B477 | Native account/user identity scoped by gateway/realm and tenant where supported; explicit account relationship and principal purpose. | No implicit administrator or account adoption. Bound or generated keys enter custody once; retries do not rotate them. |
 | Object buckets/policies, B477 | Gateway scope, explicit owning principal/account, native bucket name and recorded native identity; policy principal/resource references resolve declared owners. | Supported native policy documents retain their format. No ambient owner, untracked generated user or guessed tenant. Bucket deletion needs data-loss authorization and proved child ownership; foreign objects/dependents prevent unqualified cascade. |
-| CephX/client access, B80/B489 | `StorageClient` owns the minimal RBD principal; B489 extends references to owned pools, filesystems, subvolumes or gateway resources and explicit access scope. | No default full administrator caps. Qualified caps derive from requested resource access or validated native capability syntax; unrestricted caps need an explicit privileged purpose. Manager-generated NFS/SMB principals are derived children, not duplicate resources. |
+| CephX/client access, B80/B489 | `StorageClient` owns one principal with exactly one scope: an RBD pool with its derived data pools, a StorageFilesystem or a StorageSubvolume; B489 extends references to gateway resources and explicit access scope. | No default full administrator caps. Qualified caps derive from requested resource access or validated native capability syntax; unrestricted caps need an explicit privileged purpose. Manager-generated NFS/SMB principals are derived children, not duplicate resources. |
 | NVMe-oF gateway resources, B480 | Native service/group, subsystem NQN, listener address/transport, namespace ID and `StorageRBDImage` reference; initiator NQN/host authorization links to the subsystem. | No automatic unowned image creation or wildcard host access. Defaults and generated IDs are frozen/captured. Listener reachability, ANA/HA and release-supported security are qualified together. |
 | iSCSI resources, B481 | Not realized: no iSCSI kind exists, and admission refuses `service_type: iscsi` at that field. | Refused before any effect; block access over the network uses NVMe-oF (B480). No NVMe field substitutes for an iSCSI one. |
 | Replication peers, B483 | Explicit source and destination cluster/resource references, protocol/replication mode, peer identity, endpoint trust and credential ownership. | Both endpoints are declared managed resources. One relationship owner coordinates bootstrap and removal; no ambient peer lookup, context crossing or foreign adoption. |

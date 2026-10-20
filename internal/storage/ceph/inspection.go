@@ -601,7 +601,18 @@ func clientScopeText(r Request) string {
 	if r.Client == nil {
 		return ""
 	}
-	scope := "client." + r.Client.Name + " " + r.Client.Access + " on pool " + r.Client.Pool
+	prefix := "client." + r.Client.Name + " " + r.Client.Access + " on "
+	if r.Client.Subvolume != "" {
+		group := ""
+		if r.Client.Group != "" {
+			group = " in group " + r.Client.Group
+		}
+		return prefix + "subvolume " + r.Client.Subvolume + group + " of filesystem " + r.Client.Filesystem
+	}
+	if r.Client.Filesystem != "" {
+		return prefix + "filesystem " + r.Client.Filesystem
+	}
+	scope := prefix + "pool " + r.Client.Pool
 	if len(r.Client.DataPools) != 0 {
 		scope += ", data pools " + strings.Join(r.Client.DataPools, " ")
 	}
