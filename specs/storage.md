@@ -771,7 +771,11 @@ argument, a record, evidence or a diagnostic. An answer that is not one
 successful result for the resource refuses `smb-result` without quoting the
 manager, whose answer can echo its input. A resource without this operation's
 attempt record, or one this operation applied that is gone or changed, refuses
-`smb-identity`; Bootwright never adopts an SMB resource. The readback compares
+`smb-identity`; Bootwright never adopts an SMB resource. The remedies of
+these refusals name only corrections outside Bootwright followed by an apply
+with the same input, or a destroy before a changed StorageSMBResource, because
+a failed apply continues only with the input it froze
+([state machine](state-reconciliation.md#state-machine)). The readback compares
 every admitted leaf after the manager's defaults (a share's name defaults to
 its ID, `readonly` false, `browseable` true, `restrict_access` false,
 `cephfs.path` `/`, `cephfs.provider` `samba-vfs`, an omitted `subvolumegroup`

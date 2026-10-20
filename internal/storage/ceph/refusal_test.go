@@ -328,7 +328,8 @@ func TestEachSMBBlockNamesExactlyTheRefusalsItsModuleMayPublish(t *testing.T) {
 	if slices.Sort(published); !slices.Equal(published, named) || !slices.Contains(published, "unknown") {
 		t.Fatalf("SMB_REASONS publishes %q, the SMB block names %q", published, named)
 	}
-	for reason, refusal := range smbRefusals() {
+	for _, reason := range []string{"smb-identity", "smb-result"} {
+		refusal := smbRefusals()[reason]
 		if d := diagnostics.Of(refusal); len(d) != 1 || d[0].Remediation == "" {
 			t.Fatalf("the SMB block names %q with no remedy: %+v", reason, d)
 		}
@@ -364,5 +365,40 @@ func TestAPoolDriftRefusalNamesTheSettingsAndBothRemedies(t *testing.T) {
 	if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Message != message ||
 		!strings.Contains(d[0].Remediation, "outside Bootwright") || !strings.Contains(d[0].Remediation, "bootwright destroy --context <context>") {
 		t.Fatalf("a pool-drift refusal reached the operator as %+v", d)
+	}
+}
+
+func smbRefusal(t *testing.T, reason string) []diagnostics.Diagnostic {
+	t.Helper()
+	catalog := smbGraph(t)
+	r := builtSMB(t, catalog, sambaBase(t, catalog), "smb-docs")
+	_, err := NewSMB(&refusingRunner{reason: reason}).Apply(context.Background(), smbExecution(t, r, "pw"))
+	return diagnostics.Of(err)
+}
+
+func TestSMBRefusalsNameOnlyNextStepsAFailedApplyCanTake(t *testing.T) {
+	for reason, want := range map[string][2]string{
+		"smb-identity": {"an SMB resource of the StorageSMBResource's type and ID exists that this operation did not create, or the one it created is gone or no longer matches its frozen document",
+			"find the resource the native error names with ceph smb show <name> --password-filter hidden; for a resource this operation did not create, remove it outside Bootwright, " +
+				"then apply again with the same input; when the one this operation created is gone or changed, or the StorageSMBResource must change, take back what this context owns with " +
+				"bootwright destroy --context <context>, which retires the cluster with its Machines, then apply; Bootwright never adopts an SMB resource it did not create"},
+		"smb-result": {"the SMB manager did not apply the StorageSMBResource's resource: its answer was not one successful result for that resource",
+			"check the SMB manager's state with ceph smb show --password-filter hidden, correct what blocks the resource (an unknown cluster, a share name in use, a path that is not a " +
+				"directory in the volume, or a resource still in use) outside Bootwright, then apply again with the same input; when the StorageSMBResource itself must change, take back " +
+				"what this context owns with bootwright destroy --context <context>, which retires the cluster with its Machines, then apply"},
+	} {
+		d := smbRefusal(t, reason)
+		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Message != want[0] || d[0].Remediation != want[1] {
+			t.Errorf("a %s refusal reached the operator as %+v", reason, d)
+		}
+	}
+	for _, reason := range []string{"smb-identity", "smb-result"} {
+		refusal := smbRefusals()[reason]
+		remedy := diagnostics.Of(refusal)[0].Remediation
+		for _, edit := range []string{"in the StorageSMBResource", "another ID"} {
+			if strings.Contains(remedy, edit) {
+				t.Errorf("the %s remedy asks for an input edit a failed apply refuses: %q", reason, remedy)
+			}
+		}
 	}
 }
