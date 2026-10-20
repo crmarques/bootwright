@@ -47,6 +47,7 @@ class Markers:
 
 
 SUBVOLUME_PATH = "/volumes/csi/docs/0f8fad5b-d9cb-469f-a165-70867728950e"
+NOGROUP_PATH = "/volumes/_nogroup/docs/0f8fad5b-d9cb-469f-a165-70867728950e"
 # `ceph fs dump` with the members fs_dump reads (src/mds/FSMap.cc:131-176, src/mds/MDSMap.cc:190-273).
 FS_DUMP = {"epoch": 9, "feature_flags": {"enable_multiple": True, "ever_enabled_multiple": True}, "standbys": [], "compat": {},
            "filesystems": [{"id": 1, "mdsmap": {"fs_name": "files", "metadata_pool": 2, "data_pools": [3], "max_mds": 1, "standby_count_wanted": 0,
@@ -60,6 +61,9 @@ def scoped_client(arm):
     if arm == "subvolume":
         return {"name": "consumer", "pool": "", "access": "read-write", "dataPools": [], "filesystem": "files", "group": "csi", "subvolume": "docs",
                 "subvolumePath": SUBVOLUME_PATH}
+    if arm == "subvolume-nogroup":
+        return {"name": "consumer", "pool": "", "access": "read-write", "dataPools": [], "filesystem": "files", "group": "", "subvolume": "docs",
+                "subvolumePath": NOGROUP_PATH}
     return {"name": "consumer", "pool": "volumes", "access": "read-write", "dataPools": list(arm), "filesystem": "", "group": "", "subvolume": ""}
 
 
@@ -111,15 +115,18 @@ def client(tmp_path, monkeypatch, request):
         markers.records["pool-" + name + ".json"] = {"name": name}
         markers.records["pool-id-" + name + ".json"] = {"id": number}
         native_pools.append({"pool_name": name, "pool_id": number, "application_metadata": {"rbd": {}}})
+    group = "" if arm == "subvolume-nogroup" else "csi"
+    path = NOGROUP_PATH if arm == "subvolume-nogroup" else SUBVOLUME_PATH
+    getpath = ["fs", "subvolume", "getpath", "files", "docs"] + (["--group_name", group] if group else [])
     if not isinstance(arm, list):
         markers.records.update({"filesystem-files.json": {"name": "files"}, "filesystem-id.files.json": {"id": 1},
-                                "subvolume-docs.json": {"name": "docs", "filesystem": "files", "group": "csi", "pool": "fs-data", "mode": "755", "uid": 0,
+                                "subvolume-docs.json": {"name": "docs", "filesystem": "files", "group": group, "pool": "fs-data", "mode": "755", "uid": 0,
                                                         "gid": 0, "sizeBytes": 0},
-                                "subvolume-path.docs.json": {"path": SUBVOLUME_PATH}})
+                                "subvolume-path.docs.json": {"path": path}})
     key = base64.b64encode(b"synthetic-original-client-secret").decode("ascii")
     state = SimpleNamespace(auth=None, key=key, generated=0, added=0, calls=[], lose_add=False, fail_generation=False,
                             pool_id=4, data_pools=native_pools[1:], fsid=request["fsid"], generation_hook=lambda: None, add_hook=lambda: None,
-                            fs_dump=copy.deepcopy(FS_DUMP), getpath=SUBVOLUME_PATH + "\n")
+                            fs_dump=copy.deepcopy(FS_DUMP), getpath=path + "\n")
     native = None
 
     def run(argv, data=b"", timeout=60):
@@ -142,8 +149,9 @@ def client(tmp_path, monkeypatch, request):
             value = [{"pool_name": "volumes", "pool_id": state.pool_id, "application_metadata": {"rbd": {}}}] + copy.deepcopy(state.data_pools)
         elif args == ["fs", "dump"]:
             value = copy.deepcopy(state.fs_dump)
-        elif args == ["fs", "subvolume", "getpath", "files", "docs", "--group_name", "csi"]:
-            # The volumes module answers the path as text (src/pybind/mgr/volumes/fs/volume.py:484-498), here with one trailing newline.
+        elif args == getpath:
+            # The volumes module answers the path as text (src/pybind/mgr/volumes/fs/volume.py:484-498), here with one trailing newline;
+            # a subvolume of the default group is asked for without --group_name (an explicit _nogroup refuses EPERM).
             assert data == b""
             return 0, state.getpath.encode()
         elif args == ["auth", "ls"]:
@@ -197,7 +205,7 @@ def test_client_original_material_is_retained_before_native_effect_and_no_secret
     assert client.state.generated == client.state.added == 1
 
 
-@pytest.mark.parametrize("client", [[], ["archive", "ec-data"], "filesystem", "subvolume"], indirect=True)
+@pytest.mark.parametrize("client", [[], ["archive", "ec-data"], "filesystem", "subvolume", "subvolume-nogroup"], indirect=True)
 def test_lost_auth_creation_reply_recovers_exact_original_identity(client):
     client.state.lose_add = True
     with pytest.raises(ceph_native.Refusal, match="native-command"):
@@ -568,12 +576,15 @@ def test_generator_requires_exact_package_owner_and_pins_only_binary_identity(cl
         ceph_native_resources.ResourceWorker.verify_client_generator(native)
 
 
-@pytest.mark.parametrize("client", ["subvolume"], indirect=True)
-def test_cephfs_client_binds_proved_path(client):
-    assert client.native.caps()["mds"] == "allow rw fsname=files path=" + SUBVOLUME_PATH
+@pytest.mark.parametrize("client, path", [("subvolume", SUBVOLUME_PATH), ("subvolume-nogroup", NOGROUP_PATH)], indirect=["client"])
+def test_cephfs_client_binds_proved_path(client, path):
+    ceph_native_resources.validate_client(client.native.request["client"])
+    assert client.native.caps()["mds"] == "allow rw fsname=files path=" + path
     client.native.client()
     added = [data for argv, data in client.state.calls if argv[-5:] == ["auth", "add", "client.consumer", "-i", "-"]]
-    assert len(added) == 1 and ('caps mds = "allow rw fsname=files path=' + SUBVOLUME_PATH + '"').encode() in added[0]
+    assert len(added) == 1 and ('caps mds = "allow rw fsname=files path=' + path + '"').encode() in added[0]
+    getpath = [argv[argv.index("--format") + 2:] for argv, data in client.state.calls if "getpath" in argv]
+    assert getpath and all(("--group_name" in args) == (path == SUBVOLUME_PATH) for args in getpath)
 
 
 def foreign_path(client):
@@ -616,6 +627,8 @@ def test_cephfs_client_refuses_an_unproved_scope_before_any_key(client, change, 
     ("subvolume", "read-write",
      {"mds": "allow rw fsname=files path=" + SUBVOLUME_PATH, "mon": "allow r fsname=files", "osd": "allow rw tag cephfs data=files"}),
     ("subvolume", "read-only", {"mds": "allow r fsname=files path=" + SUBVOLUME_PATH, "mon": "allow r fsname=files", "osd": "allow r tag cephfs data=files"}),
+    ("subvolume-nogroup", "read-write",
+     {"mds": "allow rw fsname=files path=" + NOGROUP_PATH, "mon": "allow r fsname=files", "osd": "allow rw tag cephfs data=files"}),
 ], indirect=["client"])
 def test_client_caps_per_arm(client, access, caps):
     client.native.request["client"]["access"] = access
@@ -641,6 +654,8 @@ def shaped(arm, **changes):
     shaped("subvolume", subvolumePath="/volumes/csi/docs/not-a-uuid"),
     shaped("subvolume", subvolumePath="/volumes/csi/other/0f8fad5b-d9cb-469f-a165-70867728950e"),
     shaped("subvolume", subvolumePath="/volumes/_nogroup/docs/0f8fad5b-d9cb-469f-a165-70867728950e"),
+    shaped("subvolume-nogroup", subvolumePath=SUBVOLUME_PATH),
+    shaped("subvolume-nogroup", subvolumePath="/volumes//docs/0f8fad5b-d9cb-469f-a165-70867728950e"),
     shaped("filesystem", subvolumePath=SUBVOLUME_PATH),
     shaped([], subvolumePath=SUBVOLUME_PATH),
     shaped("filesystem", group="csi"),
@@ -654,6 +669,6 @@ def test_client_request_shape_per_arm(value):
         ceph_native_resources.validate_client(value)
 
 
-@pytest.mark.parametrize("arm", [[], ["archive", "ec-data"], "filesystem", "subvolume"])
+@pytest.mark.parametrize("arm", [[], ["archive", "ec-data"], "filesystem", "subvolume", "subvolume-nogroup"])
 def test_client_request_admits_each_arm(arm):
     ceph_native_resources.validate_client(scoped_client(arm))

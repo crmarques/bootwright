@@ -15,7 +15,10 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-const clientSubvolumePath = "/volumes/csi/docs/0f8fad5b-d9cb-469f-a165-70867728950e"
+const (
+	clientSubvolumePath = "/volumes/csi/docs/0f8fad5b-d9cb-469f-a165-70867728950e"
+	clientNoGroupPath   = "/volumes/_nogroup/docs/0f8fad5b-d9cb-469f-a165-70867728950e"
+)
 
 func filesystemClientCatalog() api.Catalog {
 	return filesystemCatalog(withMDS, filesystemOf(), childOf(api.StorageClient, "reader", "filesystemRef", "files", "access", "read-only"))
@@ -24,6 +27,10 @@ func filesystemClientCatalog() api.Catalog {
 func subvolumeClientCatalog(change func(api.Value) api.Value) api.Catalog {
 	return filesystemCatalog(change, filesystemOf("subvolumeGroups", api.ListValue(requestMap("name", "csi"))), subvolumeOf("group", "csi"),
 		childOf(api.StorageClient, "writer", "subvolumeRef", "docs", "access", "read-write"))
+}
+
+func noGroupClientCatalog() api.Catalog {
+	return filesystemCatalog(withMDS, filesystemOf(), subvolumeOf(), childOf(api.StorageClient, "writer", "subvolumeRef", "docs", "access", "read-write"))
 }
 
 func TestClientCapsPerArm(t *testing.T) {
@@ -49,6 +56,8 @@ func TestClientCapsPerArm(t *testing.T) {
 			map[string]string{"mds": "allow rw fsname=files path=" + clientSubvolumePath, "mon": "allow r fsname=files", "osd": "allow rw tag cephfs data=files"}},
 		{"subvolume read-only", change(subvolume, readOnly),
 			map[string]string{"mds": "allow r fsname=files path=" + clientSubvolumePath, "mon": "allow r fsname=files", "osd": "allow r tag cephfs data=files"}},
+		{"subvolume without group", change(subvolume, func(c *Client) { c.Group, c.SubvolumePath = "", clientNoGroupPath }),
+			map[string]string{"mds": "allow rw fsname=files path=" + clientNoGroupPath, "mon": "allow r fsname=files", "osd": "allow rw tag cephfs data=files"}},
 		{"bad access", change(filesystem, func(c *Client) { c.Access = "rw" }), nil},
 		{"pool with filesystem", change(filesystem, func(c *Client) { c.Pool = "volumes" }), nil},
 		{"group without subvolume", change(filesystem, func(c *Client) { c.Group = "csi" }), nil},
@@ -126,6 +135,8 @@ func TestClientPlanStatesScope(t *testing.T) {
 			Client{Access: "read-only", Filesystem: "files", Name: "reader"}, "client.reader read-only on filesystem files"},
 		{subvolumeClientCatalog(withMDS), "writer", reconciliation.ObjectRef{Kind: string(api.StorageSubvolume), Object: "docs"},
 			Client{Access: "read-write", Filesystem: "files", Group: "csi", Name: "writer", Subvolume: "docs"}, "client.writer read-write on subvolume docs in group csi of filesystem files"},
+		{noGroupClientCatalog(), "writer", reconciliation.ObjectRef{Kind: string(api.StorageSubvolume), Object: "docs"},
+			Client{Access: "read-write", Filesystem: "files", Name: "writer", Subvolume: "docs"}, "client.writer read-write on subvolume docs of filesystem files"},
 	} {
 		definition := clientPlan(t, tt.catalog)
 		r, err := DecodeRequest(definition.Request)
@@ -199,6 +210,11 @@ func TestClientPrepareBindsTheProvedSubvolumePath(t *testing.T) {
 	refusedWith(t, err, "lifecycle.state", other, otherRemedy)
 	_, err = New(api.StorageClient, nil).prepare(context.Background(), cephfsClientExecution(t, r))
 	refusedWith(t, err, "lifecycle.state", "StorageSubvolume docs lacks its applied creation proof", "apply StorageSubvolume docs first; a consumer binds the path its creation reported and never constructs one")
+	noGroup := cephfsClientExecution(t, plannedClient(t, noGroupClientCatalog(), "writer"))
+	noGroup.ApplyProved = append(noGroup.ApplyProved, subvolumeProof(t, "docs", "", clientNoGroupPath))
+	if prepared, err := New(api.StorageClient, nil).prepare(context.Background(), noGroup); err != nil || prepared.Client.SubvolumePath != clientNoGroupPath {
+		t.Fatalf("the client without a group bound %+v (%v)", prepared.Client, diagnostics.Of(err))
+	}
 	fs := plannedClient(t, filesystemClientCatalog(), "reader")
 	if prepared, err := New(api.StorageClient, nil).prepare(context.Background(), cephfsClientExecution(t, fs)); err != nil || prepared.Client.SubvolumePath != "" {
 		t.Fatalf("the filesystem client prepared %+v (%v)", prepared.Client, diagnostics.Of(err))
