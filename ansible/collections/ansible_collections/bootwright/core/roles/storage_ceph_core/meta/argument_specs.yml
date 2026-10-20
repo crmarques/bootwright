@@ -96,6 +96,8 @@ argument_specs:
           registryRef:
             type: str
             required: true
+          registryTrustBundleRef:
+            type: str
           services:
             type: list
             elements: dict
@@ -109,7 +111,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [ceph-core-v20]
+            choices: [ceph-core-v21]
       bootwright_ceph_digest:
         type: str
         required: true

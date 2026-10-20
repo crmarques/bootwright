@@ -199,7 +199,7 @@ refuse at installation.
 | --- | --- | --- | --- | --- |
 | `url` | string | no | `registry.redhat.io` for `redhat-ceph`; `cp.icr.io/cp` for `ibm-storage-ceph` | Scheme-less `host[:port][/namespace]`. |
 | `credentialsRef` | string | conditional | — | Required for `redhat-ceph` and `ibm-storage-ceph`; `usernamePassword` registry credential Secret. |
-| `trustBundleRef` | string | no | — | `caBundle` Secret for registry trust. A Ceph StorageCluster that names this Entitlement refuses at planning while it is set ([refusal table](../storage.md#refusal-table)); Ceph image resolution and pulls do not use it yet. |
+| `trustBundleRef` | string | no | — | `caBundle` Secret. When set, it is the only TLS anchor that Ceph image resolution and the guest pull broker use for this registry, for the Ceph image and every auxiliary image; without it they verify against the host trust store ([storage](../storage.md#bootstrap-identity-and-continuation)). |
 
 A registry address contains no scheme, inline credentials, query, fragment,
 whitespace, leading or trailing slash, empty path segment, `.` segment, or

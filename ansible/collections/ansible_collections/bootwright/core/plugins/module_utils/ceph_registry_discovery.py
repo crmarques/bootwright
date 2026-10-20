@@ -28,7 +28,7 @@ import urllib.parse
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_worker, ceph_pull_broker, native_diagnostics
 
 PLATFORM = "linux/amd64"
-VERSION = "ceph-image-v3"
+VERSION = "ceph-image-v4"
 OPERATIONS = ("apply", "observe", "destroy")
 REQUEST = ("base", "cluster", "controller", "image", "registry", "registryRef", "release", "tag", "version")
 # cephadm's container_image_<name> settings an auxiliary image may fill, in name order.

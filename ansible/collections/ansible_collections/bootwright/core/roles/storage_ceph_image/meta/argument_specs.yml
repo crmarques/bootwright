@@ -27,6 +27,8 @@ argument_specs:
           registryRef:
             type: str
             required: true
+          registryTrustBundleRef:
+            type: str
           release:
             type: str
             required: true
@@ -36,7 +38,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [ceph-image-v3]
+            choices: [ceph-image-v4]
       bootwright_ceph_image_digest:
         type: str
         required: true

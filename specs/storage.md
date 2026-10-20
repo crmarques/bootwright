@@ -71,7 +71,9 @@ with the required coordinate and recovery action.
 
 Registry and repository entitlement, transport trust, cluster SSH trust and
 required publisher authenticity are explicit inputs. Registry login cannot
-weaken TLS verification, and a supplied digest does not substitute for required
+weaken TLS verification, and a declared Entitlement `registry.trustBundleRef`
+is the only TLS anchor of that registry for image resolution and guest pulls,
+and a supplied digest does not substitute for required
 publisher trust. FIPS, CephX, encryption and call-home choices retain their
 independent API, trust and authorization requirements. Native tools determine
 whether the selected versions can realize those choices; Bootwright does not
@@ -327,7 +329,6 @@ links each matrix combination that this table refuses.
 | A native service whose auxiliary image is not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that `ceph.images` does not set, and that the previous row does not refuse; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type`, `<name>` the first image it needs in name order that `ceph.images` does not set (only `keepalived` for an `ingress` with `spec.keepalive_only`) and `<cluster>` the StorageCluster | `the <family> service <service> needs cephadm's container_image_<name>, and spec.ceph.images.<name> is not set; Bootwright keeps no default` | `set spec.ceph.images.<name> of StorageCluster <cluster> to an image beneath its Entitlement registry, or remove <service> from its spec.ceph.services, together with its spec.ceph.serviceBindings entries` |
 | StorageSMBResource objects whose samba images are not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, that a StorageSMBResource of any resource type names in its `clusterRef` while `ceph.images` does not set both `samba` and `samba_metrics`, and that neither of the two previous rows refuses; `<smb>` is the first such StorageSMBResource in name order, `<name>` is `samba` unless `ceph.images` sets it, else `samba_metrics`, and `<cluster>` the StorageCluster | `StorageSMBResource <smb> needs cephadm's container_image_<name>, and spec.ceph.images.<name> is not set; Bootwright keeps no default` | `set spec.ceph.images.<name> of StorageCluster <cluster> to an image beneath its Entitlement registry, or remove every StorageSMBResource whose spec.clusterRef is <cluster> from the selected Environment` |
 | An auxiliary image that no declared service needs | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, setting `ceph.images.<name>` for an image that no service in `ceph.services` and no StorageSMBResource naming it needs (per the auxiliary image table, with `samba` and `samba_metrics` for a StorageSMBResource) and that none of the three previous rows refuses; `<name>` is the first such name in name order and `<cluster>` the StorageCluster | `spec.ceph.images.<name> is set, but no declared service or StorageSMBResource of StorageCluster <cluster> needs cephadm's container_image_<name>` | `remove spec.ceph.images.<name> from StorageCluster <cluster>` |
-| A registry trust bundle that Ceph image resolution and pulls do not use yet | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, whose `ceph.entitlementRef` names an Entitlement that sets `registry.trustBundleRef`; `<cluster>` is the StorageCluster and `<entitlement>` the Entitlement | `StorageCluster <cluster> names Entitlement <entitlement>, which sets spec.registry.trustBundleRef, and Bootwright does not verify a Ceph image registry with a declared trust bundle yet` | `remove spec.registry.trustBundleRef from Entitlement <entitlement>, or name an Entitlement without it in spec.ceph.entitlementRef of StorageCluster <cluster>` |
 | A package repository trust bundle that package acquisition does not use yet | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, setting `ceph.packageRepositoryTrustBundleRef`; `<cluster>` is the StorageCluster | `StorageCluster <cluster> sets spec.ceph.packageRepositoryTrustBundleRef, and Bootwright does not verify a Ceph package repository with a declared trust bundle yet` | `remove spec.ceph.packageRepositoryTrustBundleRef from StorageCluster <cluster>` |
 
 ## Bootstrap identity and continuation
@@ -382,7 +383,13 @@ hold no credential. Guest pull credentials enter only the invocation-local
 registry broker over protected stdin. Podman receives an empty authfile and
 an ephemeral mutual-TLS identity; upstream entitlement and bearer credentials
 remain broker-owned. Authentication, token exchanges and manifest reads connect
-only to the frozen registry authority with ordinary host TLS verification;
+only to the frozen registry authority. Every upstream connection, the delivery
+hop included, verifies TLS against the Entitlement's `registry.trustBundleRef`
+alone when it is set (no host trust store, default path or environment
+override), and against the host trust store otherwise; one anchor serves the
+Ceph image and every auxiliary image. A connection that does not verify fails
+the pull, and its native error names the registry authority and the anchor,
+never a credential, token or delivery location;
 foreign token realms and manifest redirects refuse. The broker admits only
 bounded reads within its one frozen repository; one broker serves each member
 of the frozen image set, and a reference outside the set refuses before any
@@ -397,7 +404,8 @@ it never sends the Location to the native client. The destination must be
 HTTPS on port 443, without userinfo or a fragment. Every resolved address must
 be public unicast; a private, reserved, mixed, scoped, IPv4-mapped or IPv6
 tunneling answer refuses the complete result. Connections use only those validated
-numeric addresses and verify TLS against the original delivery hostname.
+numeric addresses and verify TLS against the original delivery hostname with
+the same anchor.
 Redirect URLs, including signed queries, remain invocation-local private data.
 Delivery requests contain no registry authorization, cookie, proxy credential
 or Referer. A delivery authentication challenge or further redirect refuses

@@ -519,7 +519,7 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 	}
 	want := []string{"ansiblePackageVersion", "auxiliary", "bootstrap", "callHome", "cephadm", "cluster", "clusterKeyRef", "clusterNetworks", "clusterSSHTransport", "clusterSSHUser",
 		"config", "controller", "fsid", "hosts", "image", "monIP", "nfsGaneshaPackageVersion", "owner", "packageRepository", "packages", "publicNetworks", "registry",
-		"registryRef", "release", "services", "version"}
+		"registryRef", "registryTrustBundleRef", "release", "services", "version"}
 	slices.Sort(want)
 	if got := jsonNames(reflect.TypeFor[ClusterScope]()); !slices.Equal(got, want) {
 		t.Fatalf("ClusterScope members %v, want %v", got, want)
@@ -532,6 +532,7 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 	r.Auxiliary = []AuxiliaryReference{{Name: "haproxy", Image: PinnedRegistry + "/cp/ibm-ceph/haproxy-synthetic@sha256:" + strings.Repeat("d", 64)}}
 	r.PackageRepository, r.NFSGaneshaPackageVersion = "https://publisher.example.test/ceph", "synthetic-ganesha-1"
 	r.MonIP, r.ClusterSSHUser, r.CallHome = "192.0.2.1", "operator", "enabled"
+	r.RegistryTrustBundleRef = "registry-ca"
 	r.PublicNetworks, r.ClusterNetworks = []string{"192.0.2.0/24"}, []string{"198.51.100.0/24"}
 	r.Action, r.Pool, r.Client = "pool", &Pool{Name: "volumes"}, &Client{Name: "consumer", Pool: "volumes", Access: "read-only"}
 	scope := scopeOf(r)
@@ -550,5 +551,45 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 	}
 	if got, want := withoutMembers(t, scoped), withoutMembers(t, full, "action", "pool", "client"); got != want {
 		t.Fatalf("scopeOf lost a member:\n%s\n%s", got, want)
+	}
+}
+
+func TestHostRequestCarriesTheRegistryTrustBundle(t *testing.T) {
+	catalog := withRegistryTrust(pinnedCatalog(t, nil))
+	plan, err := NewHost(nil).Plan(context.Background(), lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"})
+	if err != nil || len(plan.Definitions) != 3 || !slices.Contains(plan.Secrets, "registry-ca") {
+		t.Fatalf("host plan %v %v", plan.Secrets, diagnostics.Of(err))
+	}
+	for _, definition := range plan.Definitions {
+		if r, err := DecodeHostRequest(definition.Request); err != nil || r.Cluster.RegistryTrustBundleRef != "registry-ca" {
+			t.Fatalf("host request %q %v", r.Cluster.RegistryTrustBundleRef, err)
+		}
+	}
+	e, r, proofs := hostExecution(t, "node-2")
+	r.Cluster.RegistryTrustBundleRef = "registry-ca"
+	canonical, err := r.canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Block.Request = canonical
+	if e.Block.RequestDigest, err = reconciliation.RequestDigest(e.Block.BlockDefinition); err != nil {
+		t.Fatal(err)
+	}
+	runner := &capturingRunner{recordingRunner: recordingRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: preparedEvidence(t, e, r, nil)}}}
+	if _, err := NewHost(runner).WithProofs(proofs).Apply(context.Background(), e); err == nil || runner.calls != 0 {
+		t.Fatalf("host preparation ran without its bound trust bundle: %v", err)
+	}
+	e.Material["registry-ca"] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: []byte(gatewayCertificatePEM)})
+	if _, err := NewHost(runner).WithProofs(proofs).Apply(context.Background(), e); err != nil || runner.calls != 1 {
+		t.Fatalf("host apply %v", diagnostics.Of(err))
+	}
+	index, _ := r.source()
+	variables := []string{}
+	for _, file := range runner.request.Materials {
+		variables = append(variables, file.Variable)
+	}
+	last := runner.request.Materials[len(runner.request.Materials)-1]
+	if !slices.Equal(variables, []string{"sshKey", "knownHosts", packageCertificateVariable(index), "registryJSON", "registryCA"}) || last.Secret != "registry-ca" || last.Part != secrets.CertificatePart {
+		t.Fatalf("host material %+v", runner.request.Materials)
 	}
 }

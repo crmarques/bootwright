@@ -118,11 +118,12 @@ CORE = {
     "rbd": {"dataPool": "", "features": ["layering"], "name": "disk", "pool": "data", "sizeBytes": 1073741824},
     "registry": "cp.icr.io",
     "registryRef": "ibm-registry",
+    "registryTrustBundleRef": "registry-ca",
     "service": {"documents": [{"placement": {"hosts": ["node-1"]}, "service_id": "files", "service_type": "nfs"}], "id": "files", "type": "nfs"},
     "services": [{"placement": {"count": 2, "hosts": ["node-1"]}, "service_type": "mgr"}],
     "settings": {"modules": ["nfs"]},
     "subvolume": {"filesystem": "files", "gid": 0, "group": "", "mode": "755", "name": "docs", "pool": "files-data", "sizeBytes": 0, "uid": 0},
-    "version": "ceph-core-v20",
+    "version": "ceph-core-v21",
 }
 
 IMAGE = {
@@ -134,13 +135,14 @@ IMAGE = {
     "image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
     "registry": "cp.icr.io",
     "registryRef": "ibm-registry",
+    "registryTrustBundleRef": "registry-ca",
     "release": "9.9.1.2",
     "tag": "v9.9.1-25074",
-    "version": "ceph-image-v3",
+    "version": "ceph-image-v4",
 }
 
 HOST = {"cluster": {key: value for key, value in CORE.items() if key not in ("action", "delegated", "gateway", "service", "settings")},
-        "host": "node-1", "version": "ceph-host-v3"}
+        "host": "node-1", "version": "ceph-host-v4"}
 
 SMB = {
     "bindings": [],

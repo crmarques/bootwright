@@ -25,7 +25,7 @@ from ansible_collections.bootwright.core.plugins.modules import ceph_image_resol
 
 COLLECTION = pathlib.Path(__file__).resolve().parents[4]
 GOLDEN = json.loads((COLLECTION / "tests" / "fixtures" / "ceph-image-call.golden").read_text())
-GOLDEN["request"]["version"] = "ceph-image-v3"
+GOLDEN["request"]["version"] = "ceph-image-v4"
 REPOSITORY = GOLDEN["request"]["base"]
 NAMESPACE = REPOSITORY.split("/", 1)[1]
 TAG_NAME = GOLDEN["request"]["tag"]

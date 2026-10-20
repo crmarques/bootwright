@@ -346,3 +346,47 @@ func TestAFrozenImageRequestWhoseBaseIsTheRegistryHostDoesNotDecode(t *testing.T
 		}
 	}
 }
+
+func TestImageRequestBindsTheEntitlementTrustBundle(t *testing.T) {
+	plan := func(catalog api.Catalog) (lifecycle.CapabilityPlan, reconciliation.Block) {
+		t.Helper()
+		input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+		plan, err := NewImage(&recordingRunner{}).Plan(context.Background(), input)
+		if err != nil || len(plan.Definitions) != 1 {
+			t.Fatalf("image plan %+v %v", plan, diagnostics.Of(err))
+		}
+		digest, err := reconciliation.RequestDigest(plan.Definitions[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		return plan, reconciliation.Block{BlockDefinition: plan.Definitions[0], RequestDigest: digest}
+	}
+	plain, block := plan(pinnedCatalog(t, nil))
+	if !slices.Equal(plain.Secrets, []string{"registry"}) || bytes.Contains(block.Request, []byte("registryTrustBundleRef")) {
+		t.Fatalf("a plan without a bundle: %v %s", plain.Secrets, block.Request)
+	}
+	trusted, block := plan(withRegistryTrust(pinnedCatalog(t, nil)))
+	request, err := DecodeImageRequest(block.Request)
+	if err != nil || request.RegistryTrustBundleRef != "registry-ca" || !slices.Equal(trusted.Secrets, []string{"registry", "registry-ca"}) {
+		t.Fatalf("a plan with a bundle: %+v %v %v", request, trusted.Secrets, err)
+	}
+	matchesGolden(t, "request-image-trust-bundle", block.Request, false)
+	runner := &recordingRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: resolvedEvidence(t, block.RequestDigest, resolvedDigest)}}
+	e := imageExecution(block)
+	if _, err := NewImage(runner).Apply(context.Background(), e); err == nil || runner.calls != 0 {
+		t.Fatalf("resolution ran without its bound trust bundle: %v", err)
+	}
+	e.Material["registry-ca"] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: []byte(gatewayCertificatePEM)})
+	if result, err := NewImage(runner).Apply(context.Background(), e); err != nil || result.Outcome != reconciliation.OutcomeUnchanged || runner.calls != 1 {
+		t.Fatalf("resolution refused: %+v %v", result, diagnostics.Of(err))
+	}
+	want := []lifecycle.MaterialFile{{Name: "registry", Secret: registryMaterial, Part: secrets.ValuePart, Variable: "registryJSON"},
+		{Name: "registry-ca", Secret: "registry-ca", Part: secrets.CertificatePart, Variable: "registryCA"}}
+	if !slices.Equal(runner.request.Materials, want) {
+		t.Fatalf("resolution material %+v", runner.request.Materials)
+	}
+	runner.result = lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(`{"absent":true,"postcondition":true,"request":"` + block.RequestDigest + `"}`)}
+	if _, err := NewImage(runner).Observe(context.Background(), e); err != nil || len(runner.request.Materials) != 0 {
+		t.Fatalf("observe lent %+v %v", runner.request.Materials, err)
+	}
+}

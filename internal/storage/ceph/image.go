@@ -19,7 +19,7 @@ import (
 )
 
 const ImageImplementation = "storage-ceph-image-v1"
-const ImageVersion = "ceph-image-v3"
+const ImageVersion = "ceph-image-v4"
 const imageDeadline = 4 * time.Minute
 const maxImageEvidence = 16384
 
@@ -39,16 +39,17 @@ type AuxiliaryEvidence struct {
 }
 
 type ImageRequest struct {
-	Auxiliary   []AuxiliaryImage `json:"auxiliary,omitempty"`
-	Base        string           `json:"base"`
-	Cluster     string           `json:"cluster"`
-	Controller  string           `json:"controller"`
-	Image       string           `json:"image"`
-	Registry    string           `json:"registry"`
-	RegistryRef string           `json:"registryRef"`
-	Release     string           `json:"release"`
-	Tag         string           `json:"tag"`
-	Version     string           `json:"version"`
+	Auxiliary              []AuxiliaryImage `json:"auxiliary,omitempty"`
+	Base                   string           `json:"base"`
+	Cluster                string           `json:"cluster"`
+	Controller             string           `json:"controller"`
+	Image                  string           `json:"image"`
+	Registry               string           `json:"registry"`
+	RegistryRef            string           `json:"registryRef"`
+	RegistryTrustBundleRef string           `json:"registryTrustBundleRef,omitempty"`
+	Release                string           `json:"release"`
+	Tag                    string           `json:"tag"`
+	Version                string           `json:"version"`
 }
 
 func (r ImageRequest) Canonical() ([]byte, error) { return reconciliation.Freeze(r, "Ceph image") }
@@ -197,7 +198,7 @@ func (c ImageCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 		if ValidImageDigest(tag) {
 			tag = ""
 		}
-		request := ImageRequest{Version: ImageVersion, Cluster: r.Cluster, Controller: input.Controller, Release: r.Release, Base: base, Tag: tag, Image: r.Image, Registry: r.Registry, RegistryRef: r.RegistryRef}
+		request := ImageRequest{Version: ImageVersion, Cluster: r.Cluster, Controller: input.Controller, Release: r.Release, Base: base, Tag: tag, Image: r.Image, Registry: r.Registry, RegistryRef: r.RegistryRef, RegistryTrustBundleRef: r.RegistryTrustBundleRef}
 		if request.Auxiliary, err = authoredAuxiliary(catalog, object); err != nil {
 			return plan, err
 		}
@@ -209,6 +210,9 @@ func (c ImageCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: ImageBlockID(r.Cluster), Description: description, Stage: reconciliation.StageClusters, Impacts: impacts, Consumes: []string{},
 			Kind: string(api.StorageCluster), Object: r.Cluster, Implementation: ImageImplementation, ContentDigest: ImageContentDigest(), Request: canonical})
 		plan.Secrets = append(plan.Secrets, r.RegistryRef)
+		if r.RegistryTrustBundleRef != "" {
+			plan.Secrets = append(plan.Secrets, r.RegistryTrustBundleRef)
+		}
 	}
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
@@ -281,7 +285,11 @@ func (c ImageCapability) run(ctx context.Context, e lifecycle.Execution, operati
 		defer registry.Clear()
 		e.Material = maps.Clone(e.Material)
 		e.Material[registryMaterial] = registry
-		files = []lifecycle.MaterialFile{{Name: "registry", Secret: registryMaterial, Part: secrets.ValuePart, Variable: "registryJSON"}}
+		trust, err := registryTrustFile(e, r.RegistryTrustBundleRef)
+		if err != nil {
+			return lifecycle.RunResult{}, r, err
+		}
+		files = append([]lifecycle.MaterialFile{{Name: "registry", Secret: registryMaterial, Part: secrets.ValuePart, Variable: "registryJSON"}}, trust...)
 	}
 	result, err := c.runner.Run(ctx, lifecycle.RunFor(e, lifecycle.Invocation{Implementation: ImageImplementation, Operation: operation, Variable: "bootwright_ceph_image", Canonical: canonical,
 		Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Controller}, Materials: files, Refusals: imageRefusals(), NativeErrors: true, Deadline: imageDeadline}))

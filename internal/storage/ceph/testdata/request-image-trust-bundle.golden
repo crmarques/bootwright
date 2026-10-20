@@ -1,0 +1,12 @@
+{
+  "base": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9",
+  "cluster": "example",
+  "controller": "controller",
+  "image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
+  "registry": "cp.icr.io",
+  "registryRef": "registry",
+  "registryTrustBundleRef": "registry-ca",
+  "release": "9.9.1.2",
+  "tag": "v9.9.1-25074",
+  "version": "ceph-image-v4"
+}

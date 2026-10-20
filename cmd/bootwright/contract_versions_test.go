@@ -143,12 +143,12 @@ func automationFormats() map[string]automationFormat {
 		// The bytes the label probe writes in its own scratch and reads back.
 		"bootwright-contained-public-label-probe-v1": {class: formatTransient},
 
-		"ceph-host-v3":                {class: formatMirrored},
+		"ceph-host-v4":                {class: formatMirrored},
 		"ceph-host-evidence-v1":       {class: formatMirrored},
-		"ceph-core-v20":               {class: formatMirrored},
+		"ceph-core-v21":               {class: formatMirrored},
 		"ceph-core-evidence-v8":       {class: formatMirrored},
 		"ceph-packages-v2":            {class: formatMirrored},
-		"ceph-image-v3":               {class: formatMirrored},
+		"ceph-image-v4":               {class: formatMirrored},
 		"ceph-smb-v1":                 {class: formatMirrored},
 		"ceph-smb-evidence-v1":        {class: formatMirrored},
 		"os-package-tree-evidence-v1": {class: formatMirrored},

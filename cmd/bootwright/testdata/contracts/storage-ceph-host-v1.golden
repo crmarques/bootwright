@@ -1,5 +1,5 @@
 implementation: storage-ceph-host-v1
-content-digest: 33ab3c7848d4ca757d23cdf07be2bcd7a24ee5cacb1bec8ef20d358da84ef5a1
+content-digest: dec02f189489a07bbbc206f232e4f38ac208d2985e7422ebeb9f5e40e98e576f
 automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v1, ceph-host-route-v2, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-runtime-profile-v3
 request-schema:
   cluster struct ceph.ClusterScope
@@ -55,6 +55,7 @@ request-schema:
   cluster.publicNetworks []string
   cluster.registry string
   cluster.registryRef string
+  cluster.registryTrustBundleRef string omitempty
   cluster.release string
   cluster.services []opaque
   cluster.version string

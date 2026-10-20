@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -47,7 +48,7 @@ func TestCoreConfigIsFrozenAcrossClusterChildrenAndChangedIntent(t *testing.T) {
 		if err != nil || bytes.Equal(original, next) {
 			t.Fatal("changed memory target did not change frozen request")
 		}
-		old := bytes.Replace(original, []byte(`"version":"ceph-core-v20"`), []byte(`"version":"ceph-core-v19"`), 1)
+		old := bytes.Replace(original, []byte(`"version":"ceph-core-v21"`), []byte(`"version":"ceph-core-v20"`), 1)
 		if _, err := DecodeRequest(old); err == nil {
 			t.Fatal("old frozen request silently migrated")
 		}
@@ -299,23 +300,44 @@ func TestAnImageBaseThatIsOnlyTheRegistryHostRefusesAtPlanning(t *testing.T) {
 	}
 }
 
-func TestDeclaredTrustRefusesAtPlanUntilConsumed(t *testing.T) {
-	trusted := func(catalog api.Catalog) api.Catalog {
-		objects := catalog.Objects()
-		for i, object := range objects {
-			if object.Kind() == api.Entitlement && object.Name() == "ibm" {
-				objects[i] = object.WithSpec(object.Spec().WithPath(api.StringValue("registry-ca"), "registry", "trustBundleRef"))
-			}
+func withRegistryTrust(catalog api.Catalog) api.Catalog {
+	objects := catalog.Objects()
+	for i, object := range objects {
+		if object.Kind() == api.Entitlement && object.Name() == "ibm" {
+			objects[i] = object.WithSpec(object.Spec().WithPath(api.StringValue("registry-ca"), "registry", "trustBundleRef"))
 		}
-		return api.NewCatalog(objects)
 	}
+	return api.NewCatalog(objects)
+}
+
+func TestDeclaredRegistryTrustBundlePlansOnceConsumed(t *testing.T) {
+	catalog := withRegistryTrust(pinnedCatalog(t, nil))
+	r, err := baseRequest(catalog, catalog.OfKind(api.StorageCluster)[0], "synthetic")
+	if err != nil || r.RegistryTrustBundleRef != "registry-ca" {
+		t.Fatalf("base request: %q %v", r.RegistryTrustBundleRef, err)
+	}
+	state := compilation.NewState(catalog, catalog, nil)
+	runner := &recordingRunner{}
+	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool, api.StorageClient} {
+		if got := New(kind, runner).Unsupported(state); len(got) != 0 {
+			t.Fatalf("%s: refuses %+v", kind, got)
+		}
+	}
+	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: state, Controller: "controller"}
+	plan, err := New(api.StorageCluster, runner).Plan(context.Background(), input)
+	if err != nil || len(plan.Definitions) == 0 || slices.Contains(plan.Secrets, "registry-ca") {
+		t.Fatalf("core plan: %v %v", plan.Secrets, err)
+	}
+	if runner.calls != 0 {
+		t.Fatalf("the runner ran %d times", runner.calls)
+	}
+}
+
+func TestDeclaredTrustRefusesAtPlanUntilConsumed(t *testing.T) {
 	cases := map[string]struct {
 		catalog        api.Catalog
 		reason, remedy string
 	}{
-		"registry": {trusted(pinnedCatalog(t, nil)),
-			"StorageCluster example names Entitlement ibm, which sets spec.registry.trustBundleRef, and Bootwright does not verify a Ceph image registry with a declared trust bundle yet",
-			"remove spec.registry.trustBundleRef from Entitlement ibm, or name an Entitlement without it in spec.ceph.entitlementRef of StorageCluster example"},
 		"package repository": {pinnedCatalog(t, func(spec api.Value) api.Value {
 			return spec.WithPath(api.StringValue("https://packages.example.test/ceph"), "ceph", "packageRepository").WithPath(api.StringValue("repository-ca"), "ceph", "packageRepositoryTrustBundleRef")
 		}),

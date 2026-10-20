@@ -17,7 +17,7 @@ import (
 )
 
 const HostImplementation = "storage-ceph-host-v1"
-const HostVersion = "ceph-host-v3"
+const HostVersion = "ceph-host-v4"
 const HostEvidenceVersion = "ceph-host-evidence-v1"
 const SharedLabel = "system_u:object_r:container_file_t:s0"
 const maxHostEvidence = 16384
@@ -46,6 +46,7 @@ type ClusterScope struct {
 	PublicNetworks           []string                     `json:"publicNetworks"`
 	Registry                 string                       `json:"registry"`
 	RegistryRef              string                       `json:"registryRef"`
+	RegistryTrustBundleRef   string                       `json:"registryTrustBundleRef,omitempty"`
 	Release                  string                       `json:"release"`
 	Services                 []json.RawMessage            `json:"services"`
 	Version                  string                       `json:"version"`
@@ -257,6 +258,9 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 			if host.HostKeyRef != "" {
 				plan.Secrets = append(plan.Secrets, host.HostKeyRef)
 			}
+			if cluster.RegistryTrustBundleRef != "" {
+				plan.Secrets = append(plan.Secrets, cluster.RegistryTrustBundleRef)
+			}
 		}
 	}
 	slices.Sort(plan.Secrets)
@@ -372,6 +376,12 @@ func hostMaterial(e lifecycle.Execution, r HostRequest, operation string, reader
 		}
 		bound[registryMaterial] = registry
 		files = append(files, lifecycle.MaterialFile{Name: "registry", Secret: registryMaterial, Part: secrets.ValuePart, Variable: "registryJSON"})
+		trust, err := registryTrustFile(e, r.Cluster.RegistryTrustBundleRef)
+		if err != nil {
+			cleanup()
+			return e, nil, func() {}, err
+		}
+		files = append(files, trust...)
 	}
 	e.Material = bound
 	return e, files, cleanup, nil

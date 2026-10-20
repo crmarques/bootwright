@@ -50,7 +50,11 @@ an admission requirement.
 Apply resolves the authored tag or digest in a controller-local image block,
 using the declared licensed Entitlement and its protected registry Secret, before any
 native effect. Resolution authenticates the selected manifest and platform
-from the declared registry origin. A direct digest selects that artifact
+from the declared registry origin. Its TLS verifies that origin against the
+Entitlement's `registry.trustBundleRef` alone when it is set, and against the
+host trust store otherwise, for the Ceph image and each auxiliary image; an
+origin the anchor does not verify refuses resolution before any effect, and
+the native error names the registry and the anchor. A direct digest selects that artifact
 without resolving or comparing it to a build-pinned tag. Resolution evidence
 identifies the authored reference, selected digest and platform, and the cluster,
 pool and client blocks depend on it. The result is frozen: continuation never
@@ -64,7 +68,8 @@ installation media are a separate prerequisite.
 Guest pull credentials are confined by the invocation-local broker described
 in [storage](storage.md); the native client receives no real
 registry credential or token. Synthetic boundary tests include foreign realms,
-redirects, uncredentialed bypass and local mutual-TLS access.
+redirects, uncredentialed bypass, local mutual-TLS access, and a registry trust
+bundle that verifies, one that does not, and none.
 
 Each host-preparation block derives account, code and crypto-policy facts from
 the exact immutable image pulled with the original registry binding. Its

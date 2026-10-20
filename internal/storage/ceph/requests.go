@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v20"
+const Version = "ceph-core-v21"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -214,6 +214,7 @@ type Request struct {
 	RBD                      *RBDImage                    `json:"rbd,omitempty"`
 	Registry                 string                       `json:"registry"`
 	RegistryRef              string                       `json:"registryRef"`
+	RegistryTrustBundleRef   string                       `json:"registryTrustBundleRef,omitempty"`
 	Release                  string                       `json:"release"`
 	Service                  *ServiceUnit                 `json:"service,omitempty"`
 	Services                 []json.RawMessage            `json:"services"`
@@ -232,7 +233,7 @@ func scopeOf(r Request) ClusterScope {
 		ClusterKeyRef: r.ClusterKeyRef, ClusterNetworks: r.ClusterNetworks, ClusterSSHTransport: r.ClusterSSHTransport, ClusterSSHUser: r.ClusterSSHUser,
 		Config: r.Config, Controller: r.Controller, FSID: r.FSID, Hosts: r.Hosts, Image: r.Image, MonIP: r.MonIP,
 		NFSGaneshaPackageVersion: r.NFSGaneshaPackageVersion, Owner: r.Owner, PackageRepository: r.PackageRepository, Packages: r.Packages,
-		PublicNetworks: r.PublicNetworks, Registry: r.Registry, RegistryRef: r.RegistryRef, Release: r.Release, Services: r.Services, Version: r.Version}
+		PublicNetworks: r.PublicNetworks, Registry: r.Registry, RegistryRef: r.RegistryRef, RegistryTrustBundleRef: r.RegistryTrustBundleRef, Release: r.Release, Services: r.Services, Version: r.Version}
 }
 
 func FSIDFor(operation, cluster string) string {
@@ -264,16 +265,13 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	if !strings.HasPrefix(base, registry+"/") {
 		return Request{}, failure("lifecycle.unsupported", "the Ceph image base names only the Entitlement registry host, not a repository under it", "set ceph.image.base to a repository under the Entitlement registry, such as "+registry+"/<repository>")
 	}
-	if reason, remedy, gap := undeliveredRegistryTrust(c, cluster); gap {
-		return Request{}, failure("lifecycle.unsupported", reason, remedy)
-	}
 	if reason, remedy, gap := undeliveredRepositoryTrust(cluster); gap {
 		return Request{}, failure("lifecycle.unsupported", reason, remedy)
 	}
 	r := Request{Version: Version, Action: "cluster", Cluster: cluster.Name(), Image: reference,
 		Cephadm: Tool{Path: "/usr/sbin/cephadm", PackageVersion: spec.Get("packageVersion").Text()}, Release: spec.Get("release").Text(), AnsiblePackageVersion: spec.Get("cephadm", "ansible", "packageVersion").Text(), NFSGaneshaPackageVersion: spec.Get("nfsGanesha", "packageVersion").Text(),
 		ClusterSSHUser: spec.Get("cephadm", "clusterSSH", "user").Text(), ClusterKeyRef: spec.Get("cephadm", "clusterSSH", "keyRef").Text(),
-		RegistryRef: ent.Spec().Get("registry", "credentialsRef").Text(), Registry: registry, CallHome: spec.Get("ibm", "callHome").Text(),
+		RegistryRef: ent.Spec().Get("registry", "credentialsRef").Text(), RegistryTrustBundleRef: ent.Spec().Get("registry", "trustBundleRef").Text(), Registry: registry, CallHome: spec.Get("ibm", "callHome").Text(),
 		PublicNetworks: spec.Get("networks", "publicCIDRs").Strings(), ClusterNetworks: spec.Get("networks", "clusterCIDRs").Strings(), Hosts: []Host{}, Services: []json.RawMessage{}}
 	authored, err := authoredAuxiliary(c, cluster)
 	if err != nil {
@@ -445,15 +443,6 @@ func replicationNetworkGap(c api.Catalog, cluster api.Object) (string, string, b
 			"add an address inside one of " + listed + " to the network of " + m.Name() + ", or remove spec.ceph.networks.clusterCIDRs", true
 	}
 	return "", "", false
-}
-
-func undeliveredRegistryTrust(c api.Catalog, cluster api.Object) (string, string, bool) {
-	ent, found := c.Find(api.Entitlement, cluster.Spec().Get("ceph", "entitlementRef").Text())
-	if !found || !ent.Spec().Has("registry", "trustBundleRef") {
-		return "", "", false
-	}
-	return "StorageCluster " + cluster.Name() + " names Entitlement " + ent.Name() + ", which sets spec.registry.trustBundleRef, and Bootwright does not verify a Ceph image registry with a declared trust bundle yet",
-		"remove spec.registry.trustBundleRef from Entitlement " + ent.Name() + ", or name an Entitlement without it in spec.ceph.entitlementRef of StorageCluster " + cluster.Name(), true
 }
 
 func undeliveredRepositoryTrust(cluster api.Object) (string, string, bool) {
