@@ -46,3 +46,18 @@ func TestOnlyDestroyAcceptsUnregistered(t *testing.T) {
 		t.Fatalf("apply --unregistered: code=%d calls=%d stderr=%q", code, record.calls, errOut)
 	}
 }
+
+func TestAnEmptyUnregisteredMemberIsRefusedBeforeElevation(t *testing.T) {
+	for _, args := range [][]string{
+		{"--context", "lab", "destroy", "--unregistered", "a,"},
+		{"--context", "lab", "destroy", "--unregistered", "a,,b"},
+		{"--context", "lab", "destroy", "--unregistered", "a", "--unregistered", " "},
+	} {
+		if class := ClassifyInvocation(args); class.RequiresRoot {
+			t.Errorf("%v requires root, want a usage error before elevation", args)
+		}
+	}
+	if class := ClassifyInvocation([]string{"--context", "lab", "destroy", "--unregistered", "a, b"}); !class.RequiresRoot {
+		t.Fatal("a destroy naming Machines does not require root")
+	}
+}

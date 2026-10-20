@@ -3,9 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
-	"slices"
 
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -62,14 +60,10 @@ func (s Services) invokeLifecycle(ctx context.Context, path string, values *requ
 			SSH:              values.ssh(),
 		}, s.Lifecycle.Apply)
 	case "destroy":
-		unregistered := values.unregistered()
-		if slices.Contains(unregistered, "") {
-			return commandResult{}, emptyUnregistered()
-		}
 		result.lifecycleOperation, err = invokeResult(ctx, values, lifecycle.DestroyRequest{
 			ContextName:      values.text("context"),
 			Authorizations:   values.authorizations(),
-			Unregistered:     unregistered,
+			Unregistered:     values.unregistered(),
 			SkipConfirmation: values.boolean("yes"),
 			SSH:              values.ssh(),
 		}, s.Lifecycle.Destroy)
@@ -77,11 +71,4 @@ func (s Services) invokeLifecycle(ctx context.Context, path string, values *requ
 		return commandResult{}, errors.New("command has no application dispatch")
 	}
 	return result, err
-}
-
-func emptyUnregistered() error {
-	return &diagnostics.Failure{Usage: true, Diagnostics: []diagnostics.Diagnostic{{
-		Severity: "error", Code: "cli.usage", Message: "--unregistered must not contain an empty member",
-		Remediation: "name each Machine once in --unregistered, separated by commas",
-	}}}
 }

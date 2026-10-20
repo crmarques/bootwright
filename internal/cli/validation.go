@@ -192,6 +192,13 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 				seen = true
 			}
 		}
+		for _, occurrence := range arrayValue(flags, "unregistered") {
+			for _, name := range strings.Split(occurrence, ",") {
+				if strings.TrimSpace(name) == "" {
+					return "--unregistered must not contain an empty member"
+				}
+			}
+		}
 	case "add-ons add", "add-ons delete":
 		return validateAddonSelection(flags)
 	case "secret set":
