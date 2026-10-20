@@ -80,16 +80,17 @@ func TestB479UnknownSpecMembersRefuse(t *testing.T) {
 
 func TestB479MinimalDocumentsAdmit(t *testing.T) {
 	minimal := b479Minimal()
-	groups := [][]api.Value{
-		{minimal["prometheus"], minimal["alertmanager"], minimal["grafana"], minimal["node-exporter"], minimal["ceph-exporter"]},
-		{minimal["snmp-gateway"], minimal["alertmanager"]},
-		{authGateway(), minimal["oauth2-proxy"]},
+	type group struct{ services, bindings []api.Value }
+	groups := []group{
+		{services: []api.Value{minimal["prometheus"], minimal["alertmanager"], minimal["grafana"], minimal["node-exporter"], minimal["ceph-exporter"]}},
+		{services: []api.Value{minimal["snmp-gateway"], minimal["alertmanager"]}, bindings: []api.Value{leaves("snmp-gateway", "/spec/credentials/snmp_community", "opaque-a")}},
+		{services: []api.Value{authGateway(), minimal["oauth2-proxy"]}, bindings: []api.Value{leaves("oauth2-proxy", "/spec/client_secret", "opaque-a", "/spec/cookie_secret", "opaque-a")}},
 	}
 	for _, name := range []string{"prometheus", "alertmanager", "grafana", "node-exporter", "ceph-exporter", "mgmt-gateway"} {
-		groups = append(groups, []api.Value{minimal[name]})
+		groups = append(groups, group{services: []api.Value{minimal[name]}})
 	}
 	for _, group := range groups {
-		cluster, catalog := withServices(t, fixtureCatalog(), group...)
+		cluster, catalog := withGraph(t, b479BindingCatalog(), group.services, group.bindings...)
 		if found := addedServiceIssues(Validate(cluster, catalog)); len(found) != 0 {
 			t.Fatalf("admitted documents refused: %#v", found)
 		}
@@ -257,7 +258,7 @@ func TestMgmtGatewayVirtualIPIsBareAndPublic(t *testing.T) {
 	gateway := func(address string) (api.Object, api.Catalog) {
 		return withServices(t, fixtureCatalog(), b479Service("mgmt-gateway", "port", 9443, "virtual_ip", address))
 	}
-	cluster, catalog := gateway("192.0.2.50")
+	cluster, catalog := withServices(t, fixtureCatalog(), gatewayPair("192.0.2.50", "192.0.2.50")...)
 	if found := addedServiceIssues(Validate(cluster, catalog)); len(found) != 0 {
 		t.Fatalf("public bare VIP refused: %#v", found)
 	}

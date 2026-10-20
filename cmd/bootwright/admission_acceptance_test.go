@@ -268,7 +268,6 @@ func referenceRefusals() []diagnosticTuple {
 		{"api.required", storageClusterKind, multidcCluster, "$.spec.ceph.config.global.osd_pool_default_size"},
 		cluster("$.spec.ceph.mgrModules"),
 		cluster("$.spec.ceph.topology.stretch"),
-		cluster("$.spec.ceph.serviceBindings[0].secrets[0].path"),
 		family("StorageExport", "ceph-multidc-01-odf-hub-multidc-01"),
 		family("StorageExport", "ceph-multidc-01-odf-hub-multidc-02"),
 		family("StorageExport", "ceph-multidc-01-odf-ocp-multidc-01"),

@@ -88,7 +88,7 @@ func TestIngressBackendMustResolveDeclaredService(t *testing.T) {
 	requireGraphAdmits(t, graphIssues(t, graphServices()))
 	const unresolved = "ingress backend_service must resolve to one declared service of this cluster"
 	for _, tt := range []struct{ name, backend, message string }{
-		{"no arm", "mgr", "ingress backend_service must name a declared rgw or nfs service of this cluster"},
+		{"no arm", "mgr", "ingress backend_service must name a declared rgw, nfs or mgmt-gateway service of this cluster"},
 		{"absent", "rgw.absent", unresolved},
 		{"type only", "rgw", unresolved},
 	} {
@@ -112,7 +112,7 @@ func TestIngressArmMembersFollowTheBackend(t *testing.T) {
 		index             int
 		value             any
 	}{
-		{"keepalive on rgw", "keepalive_only", "nfs", 1, true},
+		{"keepalive on rgw", "keepalive_only", "nfs or mgmt-gateway", 1, true},
 		{"peer port on rgw", "haproxy_peer_communication_port", "nfs", 1, 1025},
 		{"ssl on nfs", "ssl", "rgw", 3, false},
 		{"certificate source on nfs", "certificate_source", "rgw", 3, "inline"},

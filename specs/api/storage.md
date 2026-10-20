@@ -415,12 +415,24 @@ checks:
 - ingress virtual IPs are `address/prefix` inside a declared public CIDR with
   its prefix length, neither its network nor its broadcast address, and
   equal, after parsing, to no Machine address and no other ingress virtual
-  IP;
+  IP; a management gateway ingress instead carries a bare address inside a
+  declared public CIDR, equal after parsing to the gateway's `virtual_ip`;
 - the listener registry resolves every native listener with the release
   defaults before comparing (IBM's `get_port_start`): on every storage host
   the Ceph monitors (3300, 6789), the messenger range 6800-7568
   ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/common/options/global.yaml.in#L1221-L1234))
-  and ceph-exporter (9926); an RGW service's `rgw_frontend_port` (80, or 443
+  and, unless a ceph-exporter service is declared, ceph-exporter (9926); on
+  the MGR service's hosts the MGR dashboard (8443), cephadm service discovery
+  (8765) and, when a prometheus service is declared, the prometheus manager
+  module (9283)
+  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L476));
+  on the management gateway's hosts its internal listener (29443)
+  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/mgmt_gateway.py#L21));
+  the `port` of prometheus (9095), alertmanager (9093), grafana (3000),
+  node-exporter (9100), ceph-exporter (9926), snmp-gateway (9464) and the
+  management gateway (required, no default), the Alertmanager cluster
+  listener (9094) and oauth2-proxy (4180, whatever `https_address` names), as
+  IBM's ServiceSpec defaults them; an RGW service's `rgw_frontend_port` (80, or 443
   with `ssl`); an NFS service's `port` (2049), `monitoring_port` (9587) and
   its fixed cluster QoS listener (31311); and an ingress service's
   `frontend_port`, `monitor_port` and HAProxy peer port (1024 for an NFS
@@ -434,6 +446,10 @@ checks:
   an RGW service with `only_bind_port_on_networks` binds the host's Machine
   address inside its `networks` when one is declared
   ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/cephadmservice.py#L1139-L1150)),
+  and so do grafana
+  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L62-L67))
+  and prometheus
+  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L591-L596)),
   and every other listener binds all addresses. Two listeners on one port of
   one host refuse unless both bind distinct specific addresses; the refusal
   names the host and the other listener;

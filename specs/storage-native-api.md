@@ -363,7 +363,8 @@ binds the text verbatim
 
 Ingress value rules: `health_check_interval` is digits followed by `s`, `m`
 or `h`, as IBM's `IngressSpec.validate` requires; `virtual_ip` is
-`address/prefix` without a zone or IPv4-mapped form; each
+`address/prefix` without a zone or IPv4-mapped form, except for an ingress
+whose backend is the management gateway, where it is a bare address; each
 `virtual_interface_networks` entry is a network prefix without host bits,
 because cephadm compares it with the host's network keys as text
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/ingress.py#L322-L325)),
@@ -384,9 +385,10 @@ not list refuses at its field.
 | --- | --- | --- |
 | `rgw` | `ssl`, `certificate_source` | TLS terminates at the ingress through the `/spec/ssl_cert` and `/spec/ssl_key` [bindings](#secret-bindings), with the RGW `certificate_source` rules |
 | `nfs` | `keepalive_only`, `enable_haproxy_protocol`, `haproxy_peer_communication_port` | the NFS mode below |
+| `mgmt-gateway` | `keepalive_only` (must be true) | keepalived only: no HAProxy, so `frontend_port` and `monitor_port` refuse; `virtual_ip` is the gateway's bare address, equal after parsing |
 
-Other backends wait for their owning item (B479 adds the management
-gateway's arm). An RGW service behind an ingress selects at least two
+A backend of any other type refuses. An arm-only member that several arms
+list names each of them in its refusal. An RGW service behind an ingress selects at least two
 eligible hosts, its `placement.count` is absent or at least 2, and it keeps
 `ssl` false: TLS terminates at the ingress (IBM's high-availability guide for
 the Ceph Object Gateway).
@@ -413,7 +415,10 @@ the canonical form. An ingress `virtual_ip` lies inside a declared public CIDR
 and carries that CIDR's prefix length; it is neither the CIDR's network
 address nor, for IPv4 below `/31`, its broadcast address; and its address
 equals no declared Machine address and no other ingress `virtual_ip` of any
-StorageCluster. Diagnostics name the field, never the authored address.
+StorageCluster. A management gateway ingress's bare `virtual_ip` instead lies
+inside a declared public CIDR of any prefix length; that containing CIDR is
+its network for the network and broadcast rule and for keepalived virtual
+router ID overlap. Diagnostics name the field, never the authored address.
 
 The `nfs` manager module is derived from the declared NFS services (D159
 clause 9): `spec.ceph.mgrModules` refuses it at its entry, and Bootwright
@@ -454,8 +459,8 @@ member of the schema refuses at its own field with an owner:
 - Inline credentials (grafana `initial_admin_password`, snmp-gateway
   `credentials`, oauth2-proxy `client_secret` and `cookie_secret`) and inline
   TLS material (mgmt-gateway and oauth2-proxy `ssl_cert` and `ssl_key`) never
-  appear in a native document; they belong to
-  [secret bindings](#secret-bindings), where no row admits them yet.
+  appear in a native document; they belong to their
+  [secret binding rows](#secret-bindings).
 - Parked by D160 (OD26): cephadm-signed certificates (`custom_sans`) and the
   management gateway's `certificate_source`.
 - TLS options of the monitoring services and oauth2-proxy (`ssl`,
@@ -494,6 +499,18 @@ Across services, an snmp-gateway needs an alertmanager service, an
 oauth2-proxy needs a mgmt-gateway with `enable_auth: true`, and a
 mgmt-gateway with `enable_auth: true` needs an oauth2-proxy. The management
 gateway is a singleton, so a second one refuses as a duplicate identity.
+A grafana with `anonymous_access: false` needs the
+`/spec/initial_admin_password` binding, as IBM's `GrafanaSpec.validate`
+requires; the other required and refused binding leaves are in the
+[binding rows](#secret-bindings). A
+mgmt-gateway `virtual_ip` needs exactly one ingress with `backend_service:
+mgmt-gateway`, `keepalive_only: true` and an equal bare `virtual_ip`, compared
+after parsing, because "the `virtual_ip` parameter must be identical in both"
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/doc/cephadm/services/mgmt-gateway.rst#L81-L107));
+the gateway's `virtual_ip` without such an ingress refuses at that field, and
+the ingress refuses at its own `virtual_ip` when the gateway declares none or
+a different address. That ingress runs keepalived only, so it refuses
+`frontend_port` and `monitor_port`.
 
 Some native types refuse by type at `service_type`. Log collection (`loki`,
 `alloy`, `promtail`) is not realized yet; only the gated log-collection lane
@@ -620,6 +637,39 @@ and the ingress that fronts one take no bindings: NFS over TLS and kmip are
 parked by D160 (OD26). The adapter
 never guesses from a field's suffix or permits an operator
 to splice arbitrary secrets into command arguments or custom config.
+
+The observability and management gateway services bind their credentials and
+TLS material through these rows. "Value" means the value part of an `opaque`
+or `token` Secret.
+
+| Service | Path | Secret type and part | Pair | Required | Refused |
+| --- | --- | --- | --- | --- | --- |
+| `grafana` | `/spec/initial_admin_password` | value | | with `anonymous_access: false`, at that field | |
+| `snmp-gateway` | `/spec/credentials/snmp_community` | value | | with `snmp_version: V2c`, at `snmp_version` | unless `snmp_version: V2c` |
+| `snmp-gateway` | `/spec/credentials/snmp_v3_auth_username` | `usernamePassword` username | `/spec/credentials/snmp_v3_auth_password` | with `snmp_version: V3`, at `snmp_version` | unless `snmp_version: V3` |
+| `snmp-gateway` | `/spec/credentials/snmp_v3_auth_password` | `usernamePassword` password | `/spec/credentials/snmp_v3_auth_username` | with its pair | unless `snmp_version: V3` |
+| `snmp-gateway` | `/spec/credentials/snmp_v3_priv_password` | value | | with `snmp_version: V3` and a `privacy_protocol`, at `privacy_protocol` | unless both hold |
+| `mgmt-gateway` | `/spec/ssl_cert` | `tlsCertificate` certificate | `/spec/ssl_key` | no: without the pair cephadm generates the certificate | |
+| `mgmt-gateway` | `/spec/ssl_key` | `tlsCertificate` private key | `/spec/ssl_cert` | with its pair | |
+| `oauth2-proxy` | `/spec/client_secret` | value | | always, at the service | |
+| `oauth2-proxy` | `/spec/cookie_secret` | value | | always, at the service | |
+| `oauth2-proxy` | `/spec/ssl_cert` | `tlsCertificate` certificate | `/spec/ssl_key` | no | |
+| `oauth2-proxy` | `/spec/ssl_key` | `tlsCertificate` private key | `/spec/ssl_cert` | with its pair | |
+
+cephadm reads these credential keys per SNMP version: V2c needs
+`snmp_community`, V3 needs the two auth keys and, with a `privacy_protocol`,
+`snmp_v3_priv_password` (IBM's `SNMPGatewaySpec.validate`). The two SNMP V3
+auth leaves take the username and password parts of one `usernamePassword`
+Secret, and each pair of leaves binds one Secret together. cephadm generates
+an absent `cookie_secret`; Bootwright requires it anyway, so continuation
+never depends on a value cephadm generated into the stored spec. The
+management gateway's ingress takes no binding, because cephadm generates its
+keepalived password. Admission checks the leaf, the Secret type, the pairing
+and these required and refused conditions, and only for whole documents,
+because a later file of partial input may add the binding. Binding time, not
+admission, checks the part's byte bound, the UTF-8 encoding of value parts,
+PEM certificate parsing and the decoded length of `cookie_secret` (16, 24 or
+32 bytes, as IBM's `OAuth2ProxySpec.validate` requires).
 
 Admission validates descriptor/reference types and the native payload with
 the declared binding slots. It does not open the secret store. Required native

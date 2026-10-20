@@ -44,13 +44,58 @@ type listenerSource func(cluster api.Object, catalog api.Catalog, service api.Va
 var reservedListeners = []reservedListener{
 	{label: "the Ceph monitors (3300 and 6789)", ranges: [][2]int64{{3300, 3300}, {6789, 6789}}, hosts: topologyNodeNames},
 	{label: "the Ceph messenger range 6800-7568 of OSD, MGR and MDS daemons", ranges: [][2]int64{{6800, 7568}}, hosts: topologyNodeNames},
-	{label: "ceph-exporter (9926)", ranges: [][2]int64{{9926, 9926}}, hosts: topologyNodeNames},
+	{label: "ceph-exporter (9926)", ranges: [][2]int64{{9926, 9926}}, hosts: undeclaredExporterHosts},
+	{label: "the MGR dashboard (8443)", ranges: [][2]int64{{8443, 8443}}, hosts: declaredHosts("mgr")},
+	{label: "cephadm service discovery (8765)", ranges: [][2]int64{{8765, 8765}}, hosts: declaredHosts("mgr")},
+	{label: "the prometheus manager module (9283)", ranges: [][2]int64{{9283, 9283}}, hosts: declaredHosts("mgr", "prometheus")},
+	{label: "the management gateway internal listener (29443)", ranges: [][2]int64{{29443, 29443}}, hosts: declaredHosts("mgmt-gateway")},
 }
 
 var nativeListeners = map[string]listenerSource{
-	"rgw":     rgwListeners,
-	"nfs":     nfsListeners,
-	"ingress": ingressListeners,
+	"rgw":           rgwListeners,
+	"nfs":           nfsListeners,
+	"ingress":       ingressListeners,
+	"prometheus":    portListener(9095, true),
+	"alertmanager":  alertmanagerListeners,
+	"grafana":       portListener(3000, true),
+	"node-exporter": portListener(9100, false),
+	"ceph-exporter": portListener(9926, false),
+	"snmp-gateway":  portListener(9464, false),
+	"mgmt-gateway":  portListener(0, false),
+	"oauth2-proxy":  oauth2ProxyListeners,
+}
+
+func declaredServices(cluster api.Object, serviceType string) []api.Value {
+	out := []api.Value{}
+	for _, service := range cluster.Spec().Get("ceph", "services").Items() {
+		if textOf(service, "service_type") == serviceType {
+			out = append(out, service)
+		}
+	}
+	return out
+}
+
+func undeclaredExporterHosts(cluster api.Object) []string {
+	if len(declaredServices(cluster, "ceph-exporter")) != 0 {
+		return nil
+	}
+	return topologyNodeNames(cluster)
+}
+
+func declaredHosts(serviceType string, alongside ...string) func(api.Object) []string {
+	return func(cluster api.Object) []string {
+		for _, other := range alongside {
+			if len(declaredServices(cluster, other)) == 0 {
+				return nil
+			}
+		}
+		out := []string{}
+		for _, service := range declaredServices(cluster, serviceType) {
+			hosts, _ := ResolveServicePlacement(cluster, service)
+			out = append(out, hosts...)
+		}
+		return out
+	}
 }
 
 func topologyNodeNames(cluster api.Object) []string {
@@ -137,14 +182,49 @@ func rgwListeners(cluster api.Object, catalog api.Catalog, service api.Value, fi
 	if !ok {
 		return nil
 	}
+	return []listener{serviceListener(field+".spec.rgw_frontend_port", index, port, networkBinds(cluster, catalog, service))}
+}
+
+func networkBinds(cluster api.Object, catalog api.Catalog, service api.Value) map[string]netip.Addr {
 	hosts, _ := ResolveServicePlacement(cluster, service)
 	binds := bindAll(hosts, netip.Addr{})
-	if spec.Get("only_bind_port_on_networks").Bool() {
+	if service.Get("spec", "only_bind_port_on_networks").Bool() {
 		for _, host := range hosts {
 			binds[host] = nodeNetworkAddress(cluster, catalog, host, service.Get("networks"))
 		}
 	}
-	return []listener{serviceListener(field+".spec.rgw_frontend_port", index, port, binds)}
+	return binds
+}
+
+func portListener(fallback int64, networks bool) listenerSource {
+	return func(cluster api.Object, catalog api.Catalog, service api.Value, field string, index int) []listener {
+		port, ok := listenerPort(service.Get("spec"), "port", fallback)
+		if !ok {
+			return nil
+		}
+		hosts, _ := ResolveServicePlacement(cluster, service)
+		binds := bindAll(hosts, netip.Addr{})
+		if networks {
+			binds = networkBinds(cluster, catalog, service)
+		}
+		return []listener{serviceListener(field+".spec.port", index, port, binds)}
+	}
+}
+
+func labelledListener(cluster api.Object, service api.Value, field string, index int, port int64, label string) listener {
+	hosts, _ := ResolveServicePlacement(cluster, service)
+	out := serviceListener(field+".placement", index, port, bindAll(hosts, netip.Addr{}))
+	out.label = label + " of " + field
+	return out
+}
+
+func alertmanagerListeners(cluster api.Object, catalog api.Catalog, service api.Value, field string, index int) []listener {
+	out := portListener(9093, false)(cluster, catalog, service, field, index)
+	return append(out, labelledListener(cluster, service, field, index, 9094, "the Alertmanager cluster listener (9094)"))
+}
+
+func oauth2ProxyListeners(cluster api.Object, _ api.Catalog, service api.Value, field string, index int) []listener {
+	return []listener{labelledListener(cluster, service, field, index, 4180, "oauth2-proxy (4180)")}
 }
 
 func nfsListeners(cluster api.Object, _ api.Catalog, service api.Value, field string, index int) []listener {
@@ -216,7 +296,7 @@ func (a *admission) listenerConflicts(cluster api.Object) {
 			if at.field == "" || reported[at.field] {
 				continue
 			}
-			if earlier.service >= 0 && earlier.service == later.service && textOf(services[later.service], "service_type") == "ingress" {
+			if earlier.service >= 0 && earlier.service == later.service && slices.Contains([]string{"ingress", "alertmanager"}, textOf(services[later.service], "service_type")) {
 				continue
 			}
 			if host, ok := listenerClash(earlier, later); ok {
@@ -249,13 +329,25 @@ type routerID struct {
 	networks []netip.Prefix
 }
 
-func ingressRouterID(service api.Value, ref string) (routerID, bool) {
+func ingressRouterID(cluster api.Object, catalog api.Catalog, service api.Value, ref string) (routerID, bool) {
 	spec := service.Get("spec")
-	prefix, ok := ParseVirtualIP(textOf(spec, "virtual_ip"), true)
+	address, ok := ingressAddress(service)
 	if textOf(service, "service_type") != "ingress" || !ok {
 		return routerID{}, false
 	}
-	out := routerID{ref: ref, id: 50, networks: []netip.Prefix{prefix.Masked()}}
+	out := routerID{ref: ref, id: 50}
+	if prefix, ok := ParseVirtualIP(textOf(spec, "virtual_ip"), true); ok {
+		out.networks = []netip.Prefix{prefix.Masked()}
+	} else {
+		for _, network := range declaredPublicNetworks(cluster, catalog) {
+			if network.Contains(address) {
+				out.networks = append(out.networks, network)
+			}
+		}
+		if len(out.networks) == 0 {
+			out.networks = []netip.Prefix{netip.PrefixFrom(address, address.BitLen())}
+		}
+	}
 	if id, ok := spec.Get("first_virtual_router_id").Int64(); ok {
 		out.id = id
 	}
@@ -267,10 +359,10 @@ func ingressRouterID(service api.Value, ref string) (routerID, bool) {
 	return out, true
 }
 
-func clusterRouterIDs(cluster api.Object, prefix string) []routerID {
+func clusterRouterIDs(cluster api.Object, catalog api.Catalog, prefix string) []routerID {
 	out := []routerID{}
 	for i, service := range cluster.Spec().Get("ceph", "services").Items() {
-		if entry, ok := ingressRouterID(service, prefix+indexed("$.spec.ceph.services", i)); ok {
+		if entry, ok := ingressRouterID(cluster, catalog, service, prefix+indexed("$.spec.ceph.services", i)); ok {
 			out = append(out, entry)
 		}
 	}
@@ -278,10 +370,10 @@ func clusterRouterIDs(cluster api.Object, prefix string) []routerID {
 }
 
 func (a *admission) routerIDConflicts(cluster api.Object) {
-	own, foreign := clusterRouterIDs(cluster, ""), []routerID{}
+	own, foreign := clusterRouterIDs(cluster, a.catalog, ""), []routerID{}
 	for _, other := range a.catalog.OfKind(api.StorageCluster) {
 		if other.Name() != cluster.Name() {
-			foreign = append(foreign, clusterRouterIDs(other, other.Identity()+" ")...)
+			foreign = append(foreign, clusterRouterIDs(other, a.catalog, other.Identity()+" ")...)
 		}
 	}
 	for j, entry := range own {

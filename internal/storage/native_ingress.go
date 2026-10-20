@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"regexp"
 	"slices"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
@@ -24,13 +25,25 @@ var ingressRefusedMembers = []refusedMember{
 var healthCheckInterval = regexp.MustCompile(`^\d+(s|m|h)$`)
 
 type ingressArm struct {
-	backend string
-	members []string
+	backend   string
+	members   []string
+	refused   []string
+	keepalive bool
 }
 
 var ingressArms = []ingressArm{
 	{backend: "rgw", members: []string{"ssl", "certificate_source"}},
 	{backend: "nfs", members: []string{"keepalive_only", "enable_haproxy_protocol", "haproxy_peer_communication_port"}},
+	{backend: "mgmt-gateway", members: []string{"keepalive_only"}, refused: []string{"frontend_port", "monitor_port"}, keepalive: true},
+}
+
+func ingressBackendList() string {
+	names := []string{}
+	for _, arm := range ingressArms {
+		names = append(names, arm.backend)
+	}
+	last := len(names) - 1
+	return strings.Join(names[:last], ", ") + " or " + names[last]
 }
 
 func ParseVirtualIP(text string, prefixed bool) (netip.Prefix, bool) {
@@ -67,7 +80,12 @@ func (a *admission) ingressRecord(service api.Value, field string, placed []api.
 	if spec.Has("health_check_interval") && !healthCheckInterval.MatchString(textOf(spec, "health_check_interval")) {
 		a.issue("api.invariant", field+".spec.health_check_interval", "health_check_interval must be a whole number of seconds, minutes or hours", "write spec.health_check_interval as digits followed by s, m or h")
 	}
-	if vip := spec.Get("virtual_ip"); vip.Type() == api.String {
+	gateway := ingressBackendType(a.object, service) == "mgmt-gateway"
+	if vip := spec.Get("virtual_ip"); vip.Type() == api.String && gateway {
+		if _, ok := ParseVirtualIP(vip.Text(), false); !ok {
+			a.issue("api.invariant", field+".spec.virtual_ip", "an ingress virtual_ip for the management gateway is a bare address without a prefix length", "write spec.virtual_ip as the management gateway's spec.virtual_ip, without a prefix length")
+		}
+	} else if vip.Type() == api.String {
 		if _, ok := ParseVirtualIP(vip.Text(), true); !ok {
 			a.issue("api.invariant", field+".spec.virtual_ip", "an ingress virtual_ip is an address with its network prefix length", "write spec.virtual_ip as address/prefix, for example 192.0.2.10/24")
 		}
@@ -86,7 +104,7 @@ func (a *admission) ingressRecord(service api.Value, field string, placed []api.
 		return
 	}
 	for _, port := range []string{"frontend_port", "monitor_port"} {
-		if !keepalive && !spec.Has(port) {
+		if !keepalive && !gateway && !spec.Has(port) {
 			a.issue("api.required", field+".spec."+port, "an ingress that runs HAProxy needs "+port, "supply spec."+port)
 		}
 	}
@@ -149,6 +167,8 @@ func (a *admission) nativeServiceGraph(ceph api.Value) {
 			} else {
 				a.nfsDirect(service, field)
 			}
+		case "mgmt-gateway":
+			a.gatewayVirtualIP(service, field, fronted, services[at], indexed("$.spec.ceph.services", at))
 		}
 	}
 }
@@ -157,39 +177,66 @@ func (a *admission) ingressBackend(service api.Value, field string) (api.Value, 
 	spec := service.Get("spec")
 	backend, ok := NativeService(a.object, textOf(spec, "backend_service"))
 	if !ok {
-		a.issue("api.invariant", field+".spec.backend_service", "ingress backend_service must resolve to one declared service of this cluster", "set spec.backend_service to the qualified name of a declared rgw or nfs service")
+		a.issue("api.invariant", field+".spec.backend_service", "ingress backend_service must resolve to one declared service of this cluster", "set spec.backend_service to the qualified name of a declared "+ingressBackendList()+" service")
 		return api.Value{}, false
 	}
 	at := slices.IndexFunc(ingressArms, func(arm ingressArm) bool { return arm.backend == textOf(backend, "service_type") })
 	if at < 0 {
-		a.issue("api.invariant", field+".spec.backend_service", "ingress backend_service must name a declared rgw or nfs service of this cluster", "set spec.backend_service to a declared rgw or nfs service; other ingress backends wait for their owning item (B479 for the management gateway)")
+		a.issue("api.invariant", field+".spec.backend_service", "ingress backend_service must name a declared "+ingressBackendList()+" service of this cluster", "set spec.backend_service to a declared "+ingressBackendList()+" service")
 		return api.Value{}, false
 	}
-	for _, other := range ingressArms {
-		for _, member := range other.members {
-			if spec.Has(member) && !slices.Contains(ingressArms[at].members, member) {
-				a.issue("api.invariant", field+".spec."+member, "spec."+member+" applies only to an ingress whose backend is a "+other.backend+" service", "omit spec."+member+" for this backend")
-			}
-		}
-	}
+	a.ingressArmMembers(spec, field, ingressArms[at])
 	if ingressArms[at].backend == "rgw" {
 		a.tlsBindingRules(service, field, true)
 	}
 	return backend, true
 }
 
+func (a *admission) ingressArmMembers(spec api.Value, field string, arm ingressArm) {
+	seen := map[string]bool{}
+	for _, other := range ingressArms {
+		for _, member := range other.members {
+			if !spec.Has(member) || slices.Contains(arm.members, member) || seen[member] {
+				continue
+			}
+			seen[member] = true
+			owners := []string{}
+			for _, owner := range ingressArms {
+				if slices.Contains(owner.members, member) {
+					owners = append(owners, owner.backend)
+				}
+			}
+			a.issue("api.invariant", field+".spec."+member, "spec."+member+" applies only to an ingress whose backend is a "+strings.Join(owners, " or ")+" service", "omit spec."+member+" for this backend")
+		}
+	}
+	for _, member := range arm.refused {
+		if spec.Has(member) {
+			a.issue("api.invariant", field+".spec."+member, "a keepalive-only management gateway ingress runs no HAProxy, so spec."+member+" has no listener", "omit spec."+member)
+		}
+	}
+	if arm.keepalive && !spec.Get("keepalive_only").Bool() {
+		a.issue("api.invariant", field+".spec.keepalive_only", "an ingress whose backend is the management gateway is keepalive-only; the gateway serves its own port", "set spec.keepalive_only: true")
+	}
+}
+
 func (a *admission) ingressVIP(service api.Value, field string, earlier []api.Value) {
-	prefix, ok := ParseVirtualIP(textOf(service, "spec", "virtual_ip"), true)
+	gateway := ingressBackendType(a.object, service) == "mgmt-gateway"
+	prefix, ok := ParseVirtualIP(textOf(service, "spec", "virtual_ip"), !gateway)
 	if !ok {
 		return
 	}
 	address, at := prefix.Addr(), field+".spec.virtual_ip"
 	networks := declaredPublicNetworks(a.object, a.catalog)
-	index := slices.IndexFunc(networks, func(network netip.Prefix) bool { return network.Contains(address) && network.Bits() == prefix.Bits() })
-	if index < 0 {
+	index := slices.IndexFunc(networks, func(network netip.Prefix) bool {
+		return network.Contains(address) && (gateway || network.Bits() == prefix.Bits())
+	})
+	switch {
+	case index < 0 && gateway:
+		a.issue("api.invariant", at, "an ingress virtual_ip must lie inside a declared public CIDR", "choose a free address inside one of spec.ceph.networks.publicCIDRs")
+	case index < 0:
 		a.issue("api.invariant", at, "an ingress virtual_ip must lie inside a declared public CIDR and carry that CIDR's prefix length", "choose a free address inside one of spec.ceph.networks.publicCIDRs and use its prefix length")
-	} else if network := networks[index]; address == network.Addr() || (address.Is4() && network.Bits() < 31 && address == broadcastAddress(network)) {
-		a.issue("api.invariant", at, "an ingress virtual_ip cannot be the network or broadcast address of its public CIDR", "choose a host address inside the public CIDR")
+	default:
+		a.networkAddressVIP(address, networks[index], at)
 	}
 	if slices.Contains(machineAddresses(a.catalog), address) {
 		a.issue("api.invariant", at, "an ingress virtual_ip equals a declared Machine address", "choose an address that no Machine declares")
@@ -205,6 +252,39 @@ func (a *admission) ingressVIP(service api.Value, field string, earlier []api.Va
 	}
 }
 
+func (a *admission) networkAddressVIP(address netip.Addr, network netip.Prefix, at string) {
+	if address == network.Addr() || (address.Is4() && network.Bits() < 31 && address == broadcastAddress(network)) {
+		a.issue("api.invariant", at, "an ingress virtual_ip cannot be the network or broadcast address of its public CIDR", "choose a host address inside the public CIDR")
+	}
+}
+
+func (a *admission) gatewayVirtualIP(gateway api.Value, field string, fronted bool, ingress api.Value, ingressField string) {
+	text, declared := stringMember(gateway.Get("spec"), "virtual_ip")
+	prefix, gatewayOK := ParseVirtualIP(text, false)
+	gatewayOK = declared && gatewayOK && slices.ContainsFunc(declaredPublicNetworks(a.object, a.catalog), func(network netip.Prefix) bool { return network.Contains(prefix.Addr()) })
+	switch {
+	case gatewayOK && !fronted:
+		a.issue("api.invariant", field+".spec.virtual_ip", "a management gateway virtual_ip works only through a keepalive-only ingress that fronts the gateway", "declare an ingress service with spec.backend_service: mgmt-gateway, spec.keepalive_only: true and the same spec.virtual_ip")
+	case fronted && !declared:
+		a.issue("api.invariant", ingressField+".spec.virtual_ip", "a management gateway ingress carries the gateway's virtual_ip, and the gateway declares none", "set the management gateway's spec.virtual_ip to this ingress's address, or remove this ingress")
+	case fronted && gatewayOK:
+		if other, ok := ParseVirtualIP(textOf(ingress, "spec", "virtual_ip"), false); ok && other.Addr() != prefix.Addr() {
+			a.issue("api.invariant", ingressField+".spec.virtual_ip", "a management gateway ingress virtual_ip must equal the gateway's virtual_ip", "set spec.virtual_ip to the management gateway's spec.virtual_ip")
+		}
+	}
+}
+
+func ingressAddress(service api.Value) (netip.Addr, bool) {
+	text := textOf(service, "spec", "virtual_ip")
+	if prefix, ok := ParseVirtualIP(text, true); ok {
+		return prefix.Addr(), true
+	}
+	if prefix, ok := ParseVirtualIP(text, false); ok {
+		return prefix.Addr(), true
+	}
+	return netip.Addr{}, false
+}
+
 func frontedByIngress(cluster api.Object, service api.Value) bool {
 	name := NativeServiceName(service)
 	return slices.ContainsFunc(cluster.Spec().Get("ceph", "services").Items(), func(ingress api.Value) bool {
@@ -214,8 +294,8 @@ func frontedByIngress(cluster api.Object, service api.Value) bool {
 
 func ingressUses(address netip.Addr) func(api.Value) bool {
 	return func(service api.Value) bool {
-		prefix, ok := ParseVirtualIP(textOf(service, "spec", "virtual_ip"), true)
-		return textOf(service, "service_type") == "ingress" && ok && prefix.Addr() == address
+		other, ok := ingressAddress(service)
+		return textOf(service, "service_type") == "ingress" && ok && other == address
 	}
 }
 

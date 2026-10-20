@@ -248,6 +248,7 @@ func (a *admission) observabilityGraph(ceph api.Value) {
 	}
 	for i, service := range services {
 		field := indexed("$.spec.ceph.services", i)
+		a.requiredBindings(service, field)
 		switch textOf(service, "service_type") {
 		case "snmp-gateway":
 			if !declared["alertmanager"] {

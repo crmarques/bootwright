@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"slices"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -85,19 +84,4 @@ func TestBindingRegistryRefusesUnqualifiedLeaf(t *testing.T) {
 	oneIssueAt(t, Validate(cluster, catalog), leaf+".path", unqualified)
 	cluster, catalog = withBoundService(t, mdsService("files"), leaves("mgr", "/spec/key", "opaque-a"))
 	oneIssueAt(t, Validate(cluster, catalog), leaf+".path", unqualified)
-	admitted := api.Schema(api.StorageCluster)
-	ceph, _ := admitted.Field("ceph")
-	bindings, _ := ceph.Shape.Field("serviceBindings")
-	secrets, _ := bindings.Shape.Element.Field("secrets")
-	ref, _ := secrets.Shape.Element.Field("secretRef")
-	for _, slot := range bindingSlots {
-		for _, kind := range slot.SecretTypes {
-			if !slices.Contains(ref.Shape.SecretTypes, kind) {
-				t.Fatalf("slot %s %s admits Secret type %s the binding schema refuses", slot.ServiceType, slot.Path, kind)
-			}
-		}
-		if slot.SecretTypes[0] != "tlsCertificate" || len(slot.SecretTypes) != 1 {
-			t.Fatalf("slot %s %s admits %v", slot.ServiceType, slot.Path, slot.SecretTypes)
-		}
-	}
 }

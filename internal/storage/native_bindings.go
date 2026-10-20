@@ -8,6 +8,13 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
+type BindingRule struct {
+	Holds   func(spec api.Value) bool
+	Field   string
+	Message string
+	Remedy  string
+}
+
 type BindingSlot struct {
 	ServiceType string
 	Backend     string
@@ -16,6 +23,8 @@ type BindingSlot struct {
 	Part        secrets.Part
 	Pair        string
 	Requires    string
+	Required    *BindingRule
+	Allowed     *BindingRule
 }
 
 var bindingSlots = []BindingSlot{
@@ -23,7 +32,38 @@ var bindingSlots = []BindingSlot{
 	{ServiceType: "rgw", Path: "/spec/ssl_key", SecretTypes: []string{"tlsCertificate"}, Part: secrets.PrivateKeyPart, Pair: "/spec/ssl_cert", Requires: "ssl"},
 	{ServiceType: "ingress", Backend: "rgw", Path: "/spec/ssl_cert", SecretTypes: []string{"tlsCertificate"}, Part: secrets.CertificatePart, Pair: "/spec/ssl_key", Requires: "ssl"},
 	{ServiceType: "ingress", Backend: "rgw", Path: "/spec/ssl_key", SecretTypes: []string{"tlsCertificate"}, Part: secrets.PrivateKeyPart, Pair: "/spec/ssl_cert", Requires: "ssl"},
+	{ServiceType: "grafana", Path: "/spec/initial_admin_password", SecretTypes: valueSecretTypes, Part: secrets.ValuePart, Required: &BindingRule{Holds: anonymousAccessOff, Field: "spec.anonymous_access", Message: "Grafana without anonymous access needs the /spec/initial_admin_password binding"}},
+	{ServiceType: "snmp-gateway", Path: "/spec/credentials/snmp_community", SecretTypes: valueSecretTypes, Part: secrets.ValuePart, Required: &BindingRule{Holds: snmpVersion("V2c"), Field: "spec.snmp_version", Message: "SNMP V2c notifications need the /spec/credentials/snmp_community binding"}, Allowed: &BindingRule{Holds: snmpVersion("V2c"), Message: "snmp_community is read only for snmp_version V2c", Remedy: "remove this binding; SNMP V3 binds /spec/credentials/snmp_v3_auth_username and /spec/credentials/snmp_v3_auth_password"}},
+	{ServiceType: "snmp-gateway", Path: "/spec/credentials/snmp_v3_auth_username", SecretTypes: []string{"usernamePassword"}, Part: secrets.UsernamePart, Pair: "/spec/credentials/snmp_v3_auth_password", Required: snmpV3Auth, Allowed: &BindingRule{Holds: snmpVersion("V3"), Message: "snmp_v3_auth_username is read only for snmp_version V3", Remedy: snmpV2cRemedy}},
+	{ServiceType: "snmp-gateway", Path: "/spec/credentials/snmp_v3_auth_password", SecretTypes: []string{"usernamePassword"}, Part: secrets.PasswordPart, Pair: "/spec/credentials/snmp_v3_auth_username", Required: snmpV3Auth, Allowed: &BindingRule{Holds: snmpVersion("V3"), Message: "snmp_v3_auth_password is read only for snmp_version V3", Remedy: snmpV2cRemedy}},
+	{ServiceType: "snmp-gateway", Path: "/spec/credentials/snmp_v3_priv_password", SecretTypes: valueSecretTypes, Part: secrets.ValuePart, Required: &BindingRule{Holds: snmpPrivacy, Field: "spec.privacy_protocol", Message: "an SNMP V3 privacy_protocol needs the /spec/credentials/snmp_v3_priv_password binding"}, Allowed: &BindingRule{Holds: snmpPrivacy, Message: "snmp_v3_priv_password is read only with snmp_version V3 and a privacy_protocol", Remedy: "remove this binding or set spec.privacy_protocol on an SNMP V3 gateway"}},
+	{ServiceType: "mgmt-gateway", Path: "/spec/ssl_cert", SecretTypes: []string{"tlsCertificate"}, Part: secrets.CertificatePart, Pair: "/spec/ssl_key"},
+	{ServiceType: "mgmt-gateway", Path: "/spec/ssl_key", SecretTypes: []string{"tlsCertificate"}, Part: secrets.PrivateKeyPart, Pair: "/spec/ssl_cert"},
+	{ServiceType: "oauth2-proxy", Path: "/spec/client_secret", SecretTypes: valueSecretTypes, Part: secrets.ValuePart, Required: &BindingRule{Holds: always, Message: "oauth2-proxy needs the /spec/client_secret binding"}},
+	{ServiceType: "oauth2-proxy", Path: "/spec/cookie_secret", SecretTypes: valueSecretTypes, Part: secrets.ValuePart, Required: &BindingRule{Holds: always, Message: "oauth2-proxy needs the /spec/cookie_secret binding, so continuation never depends on a secret cephadm generated"}},
+	{ServiceType: "oauth2-proxy", Path: "/spec/ssl_cert", SecretTypes: []string{"tlsCertificate"}, Part: secrets.CertificatePart, Pair: "/spec/ssl_key"},
+	{ServiceType: "oauth2-proxy", Path: "/spec/ssl_key", SecretTypes: []string{"tlsCertificate"}, Part: secrets.PrivateKeyPart, Pair: "/spec/ssl_cert"},
 }
+
+const snmpV2cRemedy = "remove this binding; SNMP V2c binds /spec/credentials/snmp_community"
+
+var (
+	valueSecretTypes = []string{"opaque", "token"}
+	snmpV3Auth       = &BindingRule{Holds: snmpVersion("V3"), Field: "spec.snmp_version", Message: "SNMP V3 notifications need the /spec/credentials/snmp_v3_auth_username and /spec/credentials/snmp_v3_auth_password bindings of one usernamePassword Secret"}
+)
+
+func always(api.Value) bool { return true }
+
+func anonymousAccessOff(spec api.Value) bool {
+	access := spec.Get("anonymous_access")
+	return access.Type() == api.Boolean && !access.Bool()
+}
+
+func snmpVersion(version string) func(api.Value) bool {
+	return func(spec api.Value) bool { return textOf(spec, "snmp_version") == version }
+}
+
+func snmpPrivacy(spec api.Value) bool { return snmpVersion("V3")(spec) && spec.Has("privacy_protocol") }
 
 func NativeBindingSlot(cluster api.Object, serviceRef, path string) (BindingSlot, bool) {
 	service, ok := NativeService(cluster, serviceRef)
@@ -74,6 +114,9 @@ func (a *admission) bindingLeaves(binding, service api.Value, field string, part
 			if slot.Requires != "" && !service.Get("spec", slot.Requires).Bool() {
 				a.issue("api.invariant", leaf+".path", "this TLS binding takes effect only when its service sets "+slot.Requires+": true", "set spec."+slot.Requires+": true on the bound service or remove this binding")
 			}
+			if slot.Allowed != nil && !slot.Allowed.Holds(service.Get("spec")) {
+				a.issue("api.invariant", leaf+".path", slot.Allowed.Message, slot.Allowed.Remedy)
+			}
 		}
 		leaves = append(leaves, boundLeaf{field: leaf, ref: ref, slot: slot})
 	}
@@ -82,11 +125,14 @@ func (a *admission) bindingLeaves(binding, service api.Value, field string, part
 			continue
 		}
 		at := slices.IndexFunc(leaves, func(other boundLeaf) bool { return other.slot.Path == leaf.slot.Pair })
+		lead, follower := pairOrder(leaf.slot)
+		names := lastToken(lead.Path) + " and " + lastToken(follower.Path)
+		paths, kind := lead.Path+" and "+follower.Path, leaf.slot.SecretTypes[0]
 		switch {
 		case at < 0:
-			a.issue("api.invariant", leaf.field+".path", "ssl_cert and ssl_key are bound together", "bind both /spec/ssl_cert and /spec/ssl_key to one tlsCertificate Secret")
-		case leaf.slot.Part == secrets.PrivateKeyPart && leaves[at].ref != leaf.ref:
-			a.issue("api.invariant", leaf.field+".secretRef", "ssl_cert and ssl_key must bind the certificate and private key of one tlsCertificate Secret", "bind /spec/ssl_cert and /spec/ssl_key to the same tlsCertificate Secret")
+			a.issue("api.invariant", leaf.field+".path", names+" are bound together", "bind both "+paths+" to one "+kind+" Secret")
+		case pairFollower(leaf.slot) && leaves[at].ref != leaf.ref:
+			a.issue("api.invariant", leaf.field+".secretRef", names+" must bind the "+partWords(lead.Part)+" and "+partWords(follower.Part)+" of one "+kind+" Secret", "bind "+paths+" to the same "+kind+" Secret")
 		}
 	}
 }
@@ -104,4 +150,54 @@ func serviceBindsLeaves(cluster api.Object, service api.Value, paths ...string) 
 		return !slices.ContainsFunc(paths, func(path string) bool { return !slices.Contains(bound, path) })
 	}
 	return false
+}
+
+func pairFollower(slot BindingSlot) bool {
+	return slot.Part == secrets.PrivateKeyPart || slot.Part == secrets.PasswordPart
+}
+
+func pairOrder(slot BindingSlot) (BindingSlot, BindingSlot) {
+	partner := slot
+	for _, other := range bindingSlots {
+		if other.ServiceType == slot.ServiceType && other.Backend == slot.Backend && other.Path == slot.Pair {
+			partner = other
+		}
+	}
+	if pairFollower(slot) {
+		return partner, slot
+	}
+	return slot, partner
+}
+
+func lastToken(pointer string) string { return pointer[strings.LastIndex(pointer, "/")+1:] }
+
+func partWords(part secrets.Part) string { return strings.ReplaceAll(string(part), "-", " ") }
+
+func (a *admission) requiredBindings(service api.Value, field string) {
+	for _, slot := range bindingSlots {
+		if slot.ServiceType != textOf(service, "service_type") || slot.Required == nil || pairFollower(slot) || !slot.Required.Holds(service.Get("spec")) {
+			continue
+		}
+		at := field
+		if slot.Required.Field != "" {
+			at += "." + slot.Required.Field
+		}
+		target := slot.Path + " to " + article(slot.SecretTypes[0]) + strings.Join(slot.SecretTypes, " or ") + " Secret"
+		paths := []string{slot.Path}
+		if slot.Pair != "" {
+			lead, follower := pairOrder(slot)
+			target = lead.Path + " and " + follower.Path + " to one " + slot.SecretTypes[0] + " Secret"
+			paths = append(paths, slot.Pair)
+		}
+		if !serviceBindsLeaves(a.object, service, paths...) {
+			a.issue("api.invariant", at, slot.Required.Message, "add a spec.ceph.serviceBindings entry for this service that binds "+target)
+		}
+	}
+}
+
+func article(word string) string {
+	if strings.ContainsRune("aeiou", rune(word[0])) {
+		return "an "
+	}
+	return "a "
 }
