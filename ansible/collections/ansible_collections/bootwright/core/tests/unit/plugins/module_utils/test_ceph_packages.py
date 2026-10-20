@@ -456,6 +456,7 @@ def test_a_failed_key_connection_names_the_key_location_never_the_repository(pac
     recording_openers(monkeypatch)
     mirror = "https://mirror.example.test/ceph"
     acquisition = sources.Acquisition(package_request["packages"]["sources"][0], "public-certificate", repository=mirror, trust=trust, trust_ref=trust_ref)
+
     def unverified(request, timeout):
         raise urllib.error.URLError(ssl.SSLCertVerificationError("unknown authority"))
 
