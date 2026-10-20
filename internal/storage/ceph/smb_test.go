@@ -621,25 +621,37 @@ func TestSMBPlanRefusesANameTooLongForItsBlock(t *testing.T) {
 
 func TestSMBPlanNamesItsSecretsAndSubjects(t *testing.T) {
 	catalog := smbGraph(t)
-	input := lifecycle.PlanInput{Verb: reconciliation.Destroy, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
-	plan, err := NewSMB(nil).Plan(context.Background(), input)
-	if err != nil {
-		t.Fatal(diagnostics.Of(err))
-	}
-	if want := []string{"alice-password", "bob-password", "fleet-key"}; !slices.Equal(plan.Secrets, want) {
-		t.Fatalf("the SMB plan binds %v, want %v", plan.Secrets, want)
-	}
-	descriptions := []string{}
-	for _, d := range plan.Definitions {
-		descriptions = append(descriptions, d.Description)
-		if !slices.Equal(d.Consumes, []string{reconciliation.AuthorizationDataLoss}) {
-			t.Fatalf("%s consumes %v", d.ID, d.Consumes)
+	subjects := []string{"SMB cluster files of smb-files", "SMB share docs of smb-docs", "SMB users and groups users of smb-users"}
+	for verb, want := range map[reconciliation.Verb]struct {
+		action   string
+		consumes []string
+	}{reconciliation.Apply: {"realize", []string{}}, reconciliation.Destroy: {"remove", []string{reconciliation.AuthorizationDataLoss}}} {
+		input := lifecycle.PlanInput{Verb: verb, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+		plan, err := NewSMB(nil).Plan(context.Background(), input)
+		if err != nil {
+			t.Fatal(diagnostics.Of(err))
 		}
-	}
-	slices.Sort(descriptions)
-	want := []string{"remove Ceph SMB cluster files of smb-files", "remove Ceph SMB share docs of smb-docs", "remove Ceph SMB users and groups users of smb-users"}
-	if !slices.Equal(descriptions, want) {
-		t.Fatalf("descriptions %v, want %v", descriptions, want)
+		if want := []string{"alice-password", "bob-password", "fleet-key"}; !slices.Equal(plan.Secrets, want) {
+			t.Fatalf("%s: the SMB plan binds %v, want %v", verb, plan.Secrets, want)
+		}
+		descriptions := []string{}
+		for _, d := range plan.Definitions {
+			descriptions = append(descriptions, d.Description)
+			if !slices.Equal(d.Impacts, []string{d.Description}) {
+				t.Fatalf("%s: %s impacts %v, described %q", verb, d.ID, d.Impacts, d.Description)
+			}
+			if d.Consumes == nil || !slices.Equal(d.Consumes, want.consumes) {
+				t.Fatalf("%s: %s consumes %v, want %v", verb, d.ID, d.Consumes, want.consumes)
+			}
+		}
+		slices.Sort(descriptions)
+		wantDescriptions := []string{}
+		for _, subject := range subjects {
+			wantDescriptions = append(wantDescriptions, want.action+" Ceph "+subject)
+		}
+		if !slices.Equal(descriptions, wantDescriptions) {
+			t.Fatalf("%s: descriptions %v, want %v", verb, descriptions, wantDescriptions)
+		}
 	}
 }
 
