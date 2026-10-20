@@ -75,6 +75,8 @@ func (a *admission) intrinsic() {
 		a.gatewayPoolRoles(spec.Get("pools"))
 	case api.StorageNFSExport:
 		a.nfsExportIntrinsic()
+	case api.StorageSMBResource:
+		a.smbIntrinsic()
 	case api.StorageExport:
 		if spec.Has("dataFoundation") && spec.Has("externalDetails") {
 			a.invalid("$.spec", "storage export ownership modes are mutually exclusive")

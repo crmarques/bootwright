@@ -152,6 +152,22 @@ func selectionRows() []selectionRow {
 	}
 }
 
+func TestStorageClosureRetainsSMBResources(t *testing.T) {
+	smb := func(name, cluster string) api.Object {
+		return selectionObject(api.StorageSMBResource, name, "clusterRef", cluster, "secrets", api.ListValue(selectionValue("path", "/auth/password", "secretRef", "smb-pass")), "native", selectionValue("resource_type", api.SMBJoinAuth))
+	}
+	objects := selectionFixture(selectionEnvironment("env", "storageClusters", []string{"s2"}), selectionObject(api.Secret, "smb-pass"), smb("s1-join", "s1"), smb("s2-join", "s2"))
+	kept := selectionIdentities(environment.Select(api.NewCatalog(objects), nil).Catalog.Objects())
+	for _, identity := range []string{"StorageSMBResource/s2-join", "Secret/smb-pass"} {
+		if !slices.Contains(kept, identity) {
+			t.Errorf("the storage closure dropped %s: %v", identity, kept)
+		}
+	}
+	if slices.Contains(kept, "StorageSMBResource/s1-join") {
+		t.Errorf("an excluded storage cluster kept its SMB resource: %v", kept)
+	}
+}
+
 func selectionFixture(extra ...api.Object) []api.Object {
 	objects := []api.Object{
 		selectionObject(api.Machine, "ctl", "substrate", selectionValue("providerRef", "prov-ctl")),

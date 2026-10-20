@@ -67,6 +67,11 @@ func TestResourceScopeRendersEachKindFromItsFrozenRequest(t *testing.T) {
 		declaredScopeObject(api.StorageExport, "foundation", api.FieldValue{Name: "dataFoundation", Value: api.MapValue(
 			scopeText("rbdPoolRef", "rbd-meta"), scopeText("filesystemRef", "files"), scopeText("objectGatewayRef", "objects"))}),
 		declaredScopeObject(api.StorageExport, "bare"),
+		declaredScopeObject(api.StorageSMBResource, "smb-files", api.FieldValue{Name: "native", Value: api.MapValue(scopeText("resource_type", api.SMBCluster), scopeText("cluster_id", "files"), scopeText("auth_mode", "user"))}),
+		declaredScopeObject(api.StorageSMBResource, "smb-docs", api.FieldValue{Name: "native", Value: api.MapValue(scopeText("resource_type", api.SMBShare), scopeText("cluster_id", "files"), scopeText("share_id", "docs"), scopeText("name", "Docs"))}),
+		declaredScopeObject(api.StorageSMBResource, "smb-join", api.FieldValue{Name: "native", Value: api.MapValue(scopeText("resource_type", api.SMBJoinAuth), scopeText("auth_id", "join"), api.FieldValue{Name: "auth", Value: api.MapValue(scopeText("username", "svc-join"))})}),
+		declaredScopeObject(api.StorageSMBResource, "smb-users", api.FieldValue{Name: "native", Value: api.MapValue(scopeText("resource_type", api.SMBUsersGroups), scopeText("users_groups_id", "users"))}),
+		declaredScopeObject(api.StorageSMBResource, "smb-tls", api.FieldValue{Name: "native", Value: api.MapValue(scopeText("resource_type", "ceph.smb.tls.credential"), scopeText("tls_credential_id", "tls"))}),
 	})
 	gateway := frozenScopeBlock(t, api.StorageObjectGateway, "objects", Request{Version: Version, Action: "gateway", Gateway: &Gateway{
 		Name: "objects", Realm: "r1", ZoneGroup: "zg1", Zone: "z1"}})
@@ -101,6 +106,11 @@ func TestResourceScopeRendersEachKindFromItsFrozenRequest(t *testing.T) {
 		{api.StorageExport, "foundation", nil, "export of pool rbd-meta, filesystem files, object gateway objects"},
 		{api.StorageExport, "bare", nil, "export"},
 		{api.StorageExport, "missing", nil, ""},
+		{api.StorageSMBResource, "smb-files", nil, "smb cluster files, user"},
+		{api.StorageSMBResource, "smb-docs", nil, "share docs on smb cluster files"},
+		{api.StorageSMBResource, "smb-join", nil, "join auth join"},
+		{api.StorageSMBResource, "smb-users", nil, "users and groups users"},
+		{api.StorageSMBResource, "smb-tls", nil, ""},
 		{api.StorageCluster, "ceph", frozen, ""},
 	} {
 		if got := ResourceScope(declared, tt.kind, tt.name, tt.frozen); got != tt.want {

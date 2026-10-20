@@ -6,8 +6,8 @@ import (
 )
 
 func TestServiceKindsReplaceGenericCatalog(t *testing.T) {
-	if len(Kinds()) != 29 || Schema(Kind("InfraComponent")) != nil || KindIndex(Kind("InfraComponent")) != -1 {
-		t.Fatal("desired-state catalog must expose exactly 29 current kinds")
+	if len(Kinds()) != 30 || Schema(Kind("InfraComponent")) != nil || KindIndex(Kind("InfraComponent")) != -1 {
+		t.Fatal("desired-state catalog must expose exactly 30 current kinds")
 	}
 	for _, kind := range []Kind{Proxy, DNSServer, NTPServer, ArtifactServer, Registry, LoadBalancer} {
 		schema := Schema(kind)

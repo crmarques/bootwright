@@ -364,3 +364,56 @@ spec:
   clusterRef: ceph-multidc-01
   filesystemRef: odf-cephfs
   sizeBytes: 10737418240
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: acceptance-smb-user
+
+spec:
+  type: opaque
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageSMBResource
+metadata:
+  name: acceptance-smb-users
+
+spec:
+  clusterRef: ceph-multidc-01
+
+  native:
+    resource_type: ceph.smb.usersgroups
+    users_groups_id: acceptance
+    values:
+      users:
+        - name: smbuser
+      groups: []
+
+  secrets:
+    - path: /values/users/0/password
+      secretRef: acceptance-smb-user
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageSMBResource
+metadata:
+  name: acceptance-smb
+
+spec:
+  clusterRef: ceph-multidc-01
+  resourceRefs:
+    - acceptance-smb-users
+
+  native:
+    resource_type: ceph.smb.cluster
+    cluster_id: acceptance
+    auth_mode: user
+    user_group_settings:
+      - source_type: resource
+        ref: acceptance
+    placement:
+      hosts:
+        - node-03.ceph-multidc-01.clusters.example.com
+      count: 1

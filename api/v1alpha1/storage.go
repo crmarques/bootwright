@@ -9,6 +9,7 @@ func init() {
 	register(StorageSubvolume, storageSubvolumeSchema)
 	register(StorageObjectGateway, storageObjectGatewaySchema)
 	register(StorageNFSExport, storageNFSExportSchema)
+	register(StorageSMBResource, storageSMBResourceSchema)
 	register(StorageExport, storageExportSchema)
 	register(StorageClient, storageClientSchema)
 }

@@ -625,7 +625,17 @@ ingress that fronts it, to the gateway block, and refuses every other entry.
 
 For a native resource wrapper, `spec.secrets` uses this same pair and resolves
 paths relative to that resource's `native` payload. No `serviceRef` is needed
-there because the resource envelope already identifies the owner.
+there because the resource envelope already identifies the owner. The
+StorageSMBResource wrapper qualifies these leaves, each taking the value part
+of an `opaque` or `token` Secret:
+
+| Resource type | Path | Secret type and part | Required |
+| --- | --- | --- | --- |
+| `ceph.smb.join.auth` | `/auth/password` | value | required |
+| `ceph.smb.usersgroups` | `/values/users/<i>/password` for an existing user `<i>` | value | required for every user |
+
+An authored password at either leaf refuses; binding time checks the value's
+UTF-8 encoding and its bound.
 
 This partial cluster binds Grafana's initial password without changing the
 native placement or authentication field names:

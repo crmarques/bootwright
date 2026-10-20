@@ -9,7 +9,9 @@ custody. [Provider coverage](storage-coverage.md) owns release qualification.
 **Current:** `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage`,
 `StorageFilesystem`, `StorageSubvolume`, minimal `StorageClient` and
 `StorageNFSExport`, under its [field record](#storagenfsexport), are admitted
-and realized. Native effects remain artifact-gated. **Not yet met:** later P2
+and realized. `StorageSMBResource` is admitted under its
+[field record](#storagesmbresource) and not yet realized. Native effects
+remain artifact-gated. **Not yet met:** later P2
 kinds and their qualified lifecycles. [Storage admission](api/storage.md)
 states current refusals.
 The target additions and migrations below belong to
@@ -694,30 +696,93 @@ boundary. The resource-type discriminator remains native; Bootwright does not
 rename cluster/share/auth fields or expose the generated daemon as a second
 managed service.
 
-| Field | Target rule |
+| Field | Contract |
 | --- | --- |
-| `clusterRef` | Required managed Ceph cluster reference. |
-| `native` | Required single native resource mapping, including `resource_type` and its native ID fields. |
-| `smbClusterRef` | Required for a share; refers to a same-Ceph-cluster `StorageSMBResource` whose native type is `ceph.smb.cluster`. |
-| `filesystemRef` | Share backing alternative: selects an owned same-cluster CephFS filesystem for a native filesystem/path share. |
-| `subvolumeRef` | Share backing alternative: selects an owned same-cluster CephFS subvolume. |
-| `resourceRefs` | Optional set of other same-cluster `StorageSMBResource` names for native auth/usersgroups dependencies. Each must be consumed by a matching native reference. |
-| `secrets` | Protected leaf bindings under the [shared secret-binding contract](storage-native-api.md#secret-bindings); no inline passwords or private keys. |
+| `clusterRef` | Required managed StorageCluster; an external cluster refuses. |
+| `native` | Required mapping holding one native SMB manager resource; its `resource_type` selects the closed per-type record below. |
+| `smbClusterRef` | Required on a `ceph.smb.share`, forbidden on every other type; names a `StorageSMBResource` whose native type is `ceph.smb.cluster`. |
+| `filesystemRef` | Share backing: a StorageFilesystem of the same cluster. Forbidden on every type but `ceph.smb.share`. |
+| `subvolumeRef` | Share backing: a StorageSubvolume of the same cluster. Forbidden on every type but `ceph.smb.share`. |
+| `resourceRefs` | Optional set of `StorageSMBResource` names, admitted only on a `ceph.smb.cluster`, naming its `ceph.smb.join.auth` and `ceph.smb.usersgroups` resources. |
+| `secrets` | Required on `ceph.smb.join.auth` and `ceph.smb.usersgroups`, forbidden elsewhere; the leaves in [secret bindings](storage-native-api.md#secret-bindings). Each binding names an `opaque` or `token` Secret. |
 
-The initial qualified types are `ceph.smb.cluster`, `ceph.smb.share`,
-`ceph.smb.join.auth` and `ceph.smb.usersgroups`; B482 adds other supported
-native types only with their identity, references, secret and removal record.
-The native discriminator decides required/forbidden fields. A share's
-`cluster_id` must agree with `smbClusterRef`; its CephFS volume/group/subvolume
-names must agree with its backing reference. Exactly one of `filesystemRef`
-and `subvolumeRef` is required for a share, preserving the provider's support
-for both filesystem/path and subvolume shares. A filesystem reference cannot
-smuggle an unbound subvolume name into the native payload. The binding can
-supply omitted native reference leaves; copied explicit matching values remain
-valid. Native `cephfs.path` keeps its meaning within the selected filesystem or
-subvolume and cannot escape that backing. B482 checks protocol-exposure
-restrictions against resolved backing paths; a filesystem/path share cannot
-bypass a forbidden NFS/SMB overlap by omitting a subvolume reference.
+Exactly one of `filesystemRef` and `subvolumeRef` is required for a share;
+both, or neither, refuse.
+
+The `native` mapping keeps the SMB manager module's snake_case spelling, its
+types and its enumerations. `resource_type` selects one closed record:
+
+| Type | Members |
+| --- | --- |
+| `ceph.smb.cluster` | Required `cluster_id`, `auth_mode` (`user` or `active-directory`) and `placement` (the native placement grammar); optional `intent`, `domain_settings` (required `realm` and `join_sources[]` of `source_type: resource` and a required `ref`), `user_group_settings[]` (`source_type` and a required `ref`), `custom_dns` (a set), `clustering` (`default`, `always` or `never`) and `public_addrs[]` (a required `address`). |
+| `ceph.smb.share` | Required `cluster_id` and `share_id`; optional `intent`, `name`, `readonly`, `browseable`, `cephfs` (`volume`, `path`, `subvolumegroup`, `subvolume` and `provider`), `restrict_access` and `login_control[]` (a required `name`, `category` `user` or `group`, and `access`). |
+| `ceph.smb.join.auth` | Required `auth_id` and `auth` with a required `username`; optional `intent`. |
+| `ceph.smb.usersgroups` | Required `users_groups_id` and `values` with required `users[]` and `groups[]`, each entry a required `name`; optional `intent`. |
+
+A member outside its record refuses as not in the supported schema at its
+parent field. `ceph.smb.tls.credential` refuses because Bootwright does not
+realize TLS credential resources; any other type refuses with the four
+admitted types as the next step. The share's `cephfs` and its `volume` are
+optional although the manager requires them: the binding supplies omitted
+`cephfs` reference leaves.
+
+Native members Bootwright does not realize refuse at their own field, before
+the closed-record check, and no refusal echoes a value:
+
+| Type | Member | Reason | Next step |
+| --- | --- | --- | --- |
+| cluster | `custom_smb_global_options` | Bootwright does not realize custom Samba global options. | Omit it. |
+| cluster | `client_compat` | Bootwright does not realize client_compat. | Omit it. |
+| cluster | `custom_ports` | Bootwright does not realize custom SMB ports. | Omit it. |
+| cluster | `bind_addrs` | Bootwright does not realize SMB bind addresses. | Omit it. |
+| cluster | `remote_control` | Bootwright does not realize the SMB remote control service. | Omit it. |
+| cluster | `public_addrs[i].destination` | Bootwright does not realize public address destinations. | Omit `destination` from that entry. |
+| share | `comment` | Bootwright does not realize SMB share comments. | Omit it. |
+| share | `max_connections` | Bootwright does not realize SMB share connection limits. | Omit it. |
+| share | `custom_smb_share_options` | Bootwright does not realize custom Samba share options. | Omit it. |
+| join.auth, usersgroups | `linked_to_cluster` | Bootwright does not realize linked SMB auth resources; each StorageSMBResource applies and removes its own native resource. | Omit it; the SMB cluster names the resource in its `spec.resourceRefs`. |
+| join.auth | `auth.password` | An SMB password is never written in `spec.native`. | Bind `/auth/password` through `spec.secrets`. |
+| usersgroups | `values.users[i].password` | An SMB password is never written in `spec.native`. | Bind `/values/users/<i>/password` through `spec.secrets`. |
+
+Value rules, each at its field:
+
+- `cluster_id`, `share_id`, `auth_id`, `users_groups_id` and every native
+  `ref` are 1 to 18 letters, digits or inner hyphens, the manager's ID
+  grammar.
+- A share `name` starts with a letter, digit or underscore and holds at most
+  64 letters, digits, spaces, dots, underscores or hyphens. Login, user and
+  group names hold no space, tab or newline and at most 128 characters, and
+  are unique in their list (a login entry by its `category`, default `user`,
+  and `name`). A usersgroups resource declares at least one user.
+- `domain_settings.realm` is a DNS domain name in any case; each `custom_dns`
+  entry is a literal IP address, in either authentication mode.
+- `cephfs.path` is clean and absolute, `/` for the root of the backing.
+  `cephfs.provider` is `samba-vfs` or omitted; another provider refuses as not
+  realized. A login `access` of `r` or `rw` refuses: the manager stores the
+  long spelling `read` or `read-write`, which observation compares.
+- `intent: removed` refuses: it is not apply-time removal authorization, and
+  deletion comes only from the authorized removal lifecycle. `present` and
+  omission are admitted.
+- `auth_mode: user` takes no `domain_settings` and needs a non-empty
+  `user_group_settings`; `auth_mode: active-directory` takes no
+  `user_group_settings` and needs `domain_settings` with at least one join
+  source. A `user_group_settings` entry with `source_type: empty` refuses as
+  not realized: a user-mode cluster binds a usersgroups resource.
+- `placement.count_per_host` above 1 refuses: one SMB daemon per host binds
+  the SMB port. `clustering: never` refuses with more than one daemon; the
+  daemon count is `placement.count`, else the eligible host count.
+  `default` clusters unless `placement.count` is 1, as the manager module
+  decides.
+- A share with `restrict_access: true` needs at least one `login_control`
+  entry.
+
+**Target:** [B482](milestones/m2.md#b482) adds the cross-object rules: a
+share's `cluster_id` agrees with its `smbClusterRef` and its CephFS
+volume/group/subvolume names agree with its backing reference, so a
+filesystem reference cannot smuggle an unbound subvolume name; native IDs and
+share names are unique per cluster; `cephfs.path` cannot escape the selected
+backing; and a filesystem/path share cannot bypass a forbidden NFS/SMB overlap
+by omitting a subvolume reference.
 
 Native auth references resolve by native resource type and ID within the
 objects named by `resourceRefs`; unused, ambiguous or foreign references
@@ -759,6 +824,58 @@ spec:
       path: /
     readonly: false
 ```
+
+The SMB cluster and its users-and-groups resource; the cluster's
+`user_group_settings` names the `users_groups_id`, and the user's password is
+bound from a Secret:
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: StorageSMBResource
+metadata:
+  name: files-smb
+
+spec:
+  clusterRef: ceph-example
+  resourceRefs:
+    - files-users
+
+  native:
+    resource_type: ceph.smb.cluster
+    cluster_id: files
+    auth_mode: user
+    user_group_settings:
+      - source_type: resource
+        ref: files
+    placement:
+      hosts:
+        - node-03.ceph-example.clusters.example.com
+      count: 1
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageSMBResource
+metadata:
+  name: files-users
+
+spec:
+  clusterRef: ceph-example
+
+  native:
+    resource_type: ceph.smb.usersgroups
+    users_groups_id: files
+    values:
+      users:
+        - name: smbuser
+      groups: []
+
+  secrets:
+    - path: /values/users/0/password
+      secretRef: files-smb-user
+```
+
+StorageSMBResource is admitted; no capability realizes it yet, so planning
+refuses each one as an unclaimed kind.
 
 ## Remaining resource families and consuming gates
 

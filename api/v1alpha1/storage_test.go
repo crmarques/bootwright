@@ -6,7 +6,7 @@ import (
 )
 
 func TestStorageWireShapesAreClosedAndVariantsAreExplicit(t *testing.T) {
-	for _, kind := range []Kind{StorageCluster, StoragePlacementPolicy, StoragePool, StorageRBDImage, StorageClient, StorageFilesystem, StorageSubvolume, StorageObjectGateway, StorageNFSExport, StorageExport} {
+	for _, kind := range []Kind{StorageCluster, StoragePlacementPolicy, StoragePool, StorageRBDImage, StorageClient, StorageFilesystem, StorageSubvolume, StorageObjectGateway, StorageNFSExport, StorageSMBResource, StorageExport} {
 		schema := Schema(kind)
 		if schema == nil || schema.Type != Mapping || schema.Open {
 			t.Fatalf("%s is not a registered closed object", kind)
@@ -86,6 +86,57 @@ func TestNFSExportSchemaShape(t *testing.T) {
 	squash, _ := record.Field("squash")
 	if protocols.Shape.Element.Minimum != "3" || protocols.Shape.Element.Maximum != "4" || len(squash.Shape.Enums) != 14 || !slices.Contains(squash.Shape.Enums, "all_anomnymous") {
 		t.Fatal("protocols and squash must follow the native validation lists")
+	}
+}
+
+func TestSMBResourceSchemaShape(t *testing.T) {
+	schema := Schema(StorageSMBResource)
+	names := []string{}
+	for _, field := range schema.Fields {
+		names = append(names, field.Name)
+	}
+	if !slices.Equal(names, []string{"clusterRef", "smbClusterRef", "filesystemRef", "subvolumeRef", "resourceRefs", "secrets", "native"}) {
+		t.Fatalf("StorageSMBResource fields = %v", names)
+	}
+	if native, _ := schema.Field("native"); !native.Required || !native.Shape.Open || !native.Shape.Atomic {
+		t.Fatal("native must be a required open atomic mapping checked by admission")
+	}
+	secrets, _ := schema.Field("secrets")
+	ref, _ := secrets.Shape.Element.Field("secretRef")
+	if secrets.Shape.NameKey != "path" || secrets.Shape.MinLength != 1 || !slices.Equal(ref.Shape.SecretTypes, []string{"opaque", "token"}) {
+		t.Fatal("SMB password bindings take value Secrets only")
+	}
+	refused := map[string][]string{
+		SMBCluster:     {"custom_smb_global_options", "client_compat", "custom_ports", "bind_addrs", "remote_control", "linked_to_cluster"},
+		SMBShare:       {"comment", "max_connections", "custom_smb_share_options", "linked_to_cluster"},
+		SMBJoinAuth:    {"linked_to_cluster"},
+		SMBUsersGroups: {"linked_to_cluster"},
+	}
+	for resourceType, members := range refused {
+		record := StorageSMBResourceNativeSchema(resourceType)
+		if record == nil || record.Open {
+			t.Fatalf("%s has no closed native record", resourceType)
+		}
+		checkStorageShape(t, record)
+		for _, member := range members {
+			if _, ok := record.Field(member); ok {
+				t.Fatalf("%s admits refused member %s", resourceType, member)
+			}
+		}
+	}
+	auth, _ := StorageSMBResourceNativeSchema(SMBJoinAuth).Field("auth")
+	values, _ := StorageSMBResourceNativeSchema(SMBUsersGroups).Field("values")
+	users, _ := values.Shape.Field("users")
+	addresses, _ := StorageSMBResourceNativeSchema(SMBCluster).Field("public_addrs")
+	for _, at := range []*Shape{auth.Shape, users.Shape.Element, addresses.Shape.Element} {
+		for _, member := range []string{"password", "destination"} {
+			if _, ok := at.Field(member); ok {
+				t.Fatalf("a native SMB record admits %s", member)
+			}
+		}
+	}
+	if StorageSMBResourceNativeSchema("ceph.smb.tls.credential") != nil {
+		t.Fatal("TLS credential resources must have no native record")
 	}
 }
 

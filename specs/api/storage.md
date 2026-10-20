@@ -38,7 +38,8 @@ cluster whose `spec.serviceRef` names it; an unbound one refuses at its
 `service_id`, because cephadm would deploy it before its realm, zone group and
 zone exist. `spec.ceph.mgrModules` admits `cephadm` and
 `rbd_support`; `nfs` and `prometheus` refuse as derived from a declared NFS or
-prometheus service (D159 clause 9); every other module refuses until its
+prometheus service (D159 clause 9), and `smb` refuses as derived from a
+declared StorageSMBResource cluster; every other module refuses until its
 service owner. Retired daemon helpers, topology roles/devices and drivegroup
 wrappers refuse with their replacement path, and the retired
 `ceph.cephadm.workarounds` list refuses with its reason. Machine bindings,
@@ -66,6 +67,9 @@ implicit administrator capability is granted. Its OSD caps also name the
 `StorageNFSExport` is admitted under its
 [field record](../storage-resources.md#storagenfsexport) and realized by its
 export block.
+`StorageSMBResource` is admitted under its
+[field record](../storage-resources.md#storagesmbresource); no capability
+realizes it yet, so planning refuses each one as an unclaimed kind.
 Other P2 resource additions remain target contracts, not admitted kinds.
 Future storage export feature families are refused by current pure
 admission.
@@ -185,6 +189,7 @@ provider sizing and measured resource acceptance remain separate.
 | `StorageSubvolume` | One CephFS subvolume in a same-cluster `filesystemRef`, optionally in one of its declared groups, with an optional quota, layout pool, owner and mode. |
 | `StorageObjectGateway` | One logical object gateway bound to one declared rgw service through `serviceRef`: its realm, zone group and zone, its zone placement pools and its optional endpoint FQDN. Placement, frontend and ingress belong to the native services. |
 | `StorageNFSExport` | One NFS export of one declared nfs service, backed by a same-cluster StorageFilesystem or StorageSubvolume, with its native export under `native`. Daemon placement, ports and ingress belong to the native services. |
+| `StorageSMBResource` | One native SMB manager resource (`ceph.smb.cluster`, `ceph.smb.share`, `ceph.smb.join.auth` or `ceph.smb.usersgroups`) under `native`, with its share backing, auth references and password bindings. |
 | `StorageExport` | One downstream storage surface: the `dataFoundation` arm for a managed cluster, `externalDetails` for an external one. |
 
 ## References
@@ -203,6 +208,8 @@ on the already selected Machine.
 | `serviceRef` | native service registry, exactly one rgw service |
 | `serviceID` (StorageNFSExport) | native service registry, exactly `nfs.<serviceID>` |
 | `subvolumeRef` | `StorageSubvolume` |
+| `smbClusterRef` | `StorageSMBResource` whose native type is `ceph.smb.cluster` |
+| `resourceRefs` (StorageSMBResource) | `StorageSMBResource` of type `ceph.smb.join.auth` or `ceph.smb.usersgroups` |
 | `objectGatewayRef` | `StorageObjectGateway` |
 | `machineRef` | `Machine` |
 | entitlement refs | `Entitlement` |

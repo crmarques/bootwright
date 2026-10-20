@@ -388,7 +388,7 @@ func TestActualCompilerRefusesFutureKindsAndAdditionalVariants(t *testing.T) {
 		t.Fatal("future reference unexpectedly compiled")
 	}
 	requireReferenceRefusals(t, diagnostics.Of(err), true)
-	if len(api.Kinds()) != 29 {
+	if len(api.Kinds()) != 30 {
 		t.Fatalf("kind catalog changed: %d", len(api.Kinds()))
 	}
 }
@@ -401,7 +401,7 @@ func TestActualCompilerRefusesFutureKindsAndAdditionalVariants(t *testing.T) {
 func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testing.T) {
 	state, report := compileAcceptance(t, admissibleExampleSources(t, true))
 	kinds := api.Kinds()
-	if len(kinds) != 29 {
+	if len(kinds) != 30 {
 		t.Fatalf("kind catalog changed: %d; cover the new kind in the reference or the extras", len(kinds))
 	}
 	for _, kind := range kinds {
@@ -413,7 +413,7 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 			t.Errorf("kind %s has no full-wiring positive admission coverage", kind)
 		}
 	}
-	if report.Counts != (compilation.Counts{FilesSeen: 92, ObjectsDecoded: 121}) {
+	if report.Counts != (compilation.Counts{FilesSeen: 92, ObjectsDecoded: 124}) {
 		t.Errorf("projection counts: %#v", report.Counts)
 	}
 	if len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "api.deferred" || report.Diagnostics[0].Object == nil || report.Diagnostics[0].Object.Name != "acceptance-playbook" {

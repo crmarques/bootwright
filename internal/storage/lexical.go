@@ -11,13 +11,16 @@ import (
 )
 
 var (
-	exactOSS      = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
-	checksum      = regexp.MustCompile(`(?i)^(?:sha256:)?[0-9a-f]{64}$`)
-	retentionTime = regexp.MustCompile(`^([0-9]+)(y|w|d|h|m|s)$`)
-	retentionSize = regexp.MustCompile(`^([0-9]+)(B|KB|MB|GB|TB|PB|EB)$`)
-	storageSize   = regexp.MustCompile(`^([0-9]+)(B|K|M|G|T|P|E|KB|MB|GB|TB|PB|EB)?$`)
-	deviceSize    = regexp.MustCompile(`^([0-9]+)(M|G|T|MB|GB|TB)$`)
-	fileMode      = regexp.MustCompile(`^0?[0-7]{3}$`)
+	exactOSS        = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
+	checksum        = regexp.MustCompile(`(?i)^(?:sha256:)?[0-9a-f]{64}$`)
+	retentionTime   = regexp.MustCompile(`^([0-9]+)(y|w|d|h|m|s)$`)
+	retentionSize   = regexp.MustCompile(`^([0-9]+)(B|KB|MB|GB|TB|PB|EB)$`)
+	storageSize     = regexp.MustCompile(`^([0-9]+)(B|K|M|G|T|P|E|KB|MB|GB|TB|PB|EB)?$`)
+	deviceSize      = regexp.MustCompile(`^([0-9]+)(M|G|T|MB|GB|TB)$`)
+	fileMode        = regexp.MustCompile(`^0?[0-7]{3}$`)
+	smbID           = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,16}[a-zA-Z0-9])?$`)
+	smbShareName    = regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9. _-]{0,63}$`)
+	smbUserPassword = regexp.MustCompile(`^/values/users/(0|[1-9][0-9]*)/password$`)
 )
 
 func quantity(value string, grammar *regexp.Regexp) (*big.Int, bool) {
@@ -117,6 +120,10 @@ func (a *admission) osdLexical(osd api.Value, field string) {
 		value := osd.Get(key, "size")
 		a.lexical(value, field+"."+key+".size", validDeviceRange(value.Text()))
 	}
+}
+
+func validSMBLoginName(name string) bool {
+	return !strings.ContainsAny(name, " \t\n") && utf8.RuneCountInString(name) <= 128
 }
 
 // NativeVersion bounds transport without interpreting a provider's version grammar.

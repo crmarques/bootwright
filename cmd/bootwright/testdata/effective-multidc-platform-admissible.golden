@@ -2983,6 +2983,43 @@ spec:
       - TCP
 ---
 apiVersion: bootwright.io/v1alpha1
+kind: StorageSMBResource
+metadata:
+  name: acceptance-smb
+spec:
+  clusterRef: ceph-multidc-01
+  resourceRefs:
+    - acceptance-smb-users
+  native:
+    auth_mode: user
+    cluster_id: acceptance
+    placement:
+      count: 1
+      hosts:
+        - node-03.ceph-multidc-01.clusters.example.com
+    resource_type: ceph.smb.cluster
+    user_group_settings:
+      - ref: acceptance
+        source_type: resource
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageSMBResource
+metadata:
+  name: acceptance-smb-users
+spec:
+  clusterRef: ceph-multidc-01
+  secrets:
+    - path: /values/users/0/password
+      secretRef: acceptance-smb-user
+  native:
+    resource_type: ceph.smb.usersgroups
+    users_groups_id: acceptance
+    values:
+      groups: []
+      users:
+        - name: smbuser
+---
+apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddon
 metadata:
   name: nmstate
@@ -3228,6 +3265,13 @@ metadata:
   name: acceptance-provider-credentials
 spec:
   type: usernamePassword
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: acceptance-smb-user
+spec:
+  type: opaque
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Secret

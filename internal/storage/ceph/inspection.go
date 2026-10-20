@@ -476,7 +476,23 @@ var scopeRows = map[api.Kind]func(api.Catalog, string, []reconciliation.Block) s
 	api.StorageSubvolume:       frozenScope(api.StorageSubvolume, "subvolume", subvolumeScopeText),
 	api.StorageObjectGateway:   frozenScope(api.StorageObjectGateway, "gateway", gatewayScopeText),
 	api.StorageNFSExport:       frozenScope(api.StorageNFSExport, "nfs-export", nfsExportScopeText),
+	api.StorageSMBResource:     declaredScope(api.StorageSMBResource, smbScopeText),
 	api.StorageExport:          declaredScope(api.StorageExport, exportScopeText),
+}
+
+func smbScopeText(spec api.Value) string {
+	native := spec.Get("native")
+	switch native.Get("resource_type").Text() {
+	case api.SMBCluster:
+		return "smb cluster " + native.Get("cluster_id").Text() + ", " + native.Get("auth_mode").Text()
+	case api.SMBShare:
+		return "share " + native.Get("share_id").Text() + " on smb cluster " + native.Get("cluster_id").Text()
+	case api.SMBJoinAuth:
+		return "join auth " + native.Get("auth_id").Text()
+	case api.SMBUsersGroups:
+		return "users and groups " + native.Get("users_groups_id").Text()
+	}
+	return ""
 }
 
 func ResourceScope(catalog api.Catalog, kind api.Kind, name string, frozen []reconciliation.Block) string {
