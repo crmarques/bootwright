@@ -15,8 +15,10 @@ of the same cluster binds by name. StorageFilesystem is admitted under
 Prometheus, Alertmanager, Grafana, node-exporter, ceph-exporter, snmp-gateway,
 mgmt-gateway and oauth2-proxy documents are admitted under their
 [native records](../storage-native-api.md#observability-and-management-gateway-records);
-planning refuses each until its auxiliary image can be selected, and
-ceph-exporter until its lifecycle is delivered. The
+planning refuses each that needs an auxiliary image until it can be selected;
+ceph-exporter runs the Ceph image, and it and the other monitoring services
+realize through the
+[monitoring unit](../storage.md#resources-readiness-and-access). The
 core request lists each of them only by its qualified name and eligible hosts,
 outside the host request, so that core observation
 [tolerates its daemons](../storage-native-api.md#service-identity-and-references);

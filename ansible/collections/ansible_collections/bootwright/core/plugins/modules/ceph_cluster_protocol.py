@@ -28,7 +28,7 @@ options:
       not-removed, cluster-unavailable, device, dashboard-manager, foreign-pool, foreign-profile, foreign-rule, crush-capacity, pg-budget, foreign-rbd-image,
       rbd-image-identity, foreign-filesystem, filesystem-identity, filesystem-multiple-disabled, foreign-subvolume-group, mds-coverage,
       foreign-subvolume, subvolume-identity, foreign-image, nfs-module-disabled, nfs-pool-foreign, object-realm-foreign, object-zone-pools,
-      object-endpoint-certificate, nfs-export-foreign, nfs-export-apply, nfs-export-path-escape, ingress-firewall]
+      object-endpoint-certificate, nfs-export-foreign, nfs-export-apply, nfs-export-path-escape, ingress-firewall, service-credential-foreign]
   detail:
     description: Non-secret refusal cause, a refusal name or an exception type and code site.
     type: str

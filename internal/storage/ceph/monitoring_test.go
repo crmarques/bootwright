@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -331,7 +332,7 @@ func TestNoBoundMaterialInPlanRequestEvidence(t *testing.T) {
 }
 
 func TestUnrealizedMonitoringServicesKeepTheCoreRefusal(t *testing.T) {
-	for _, serviceType := range []string{"ceph-exporter", "mgmt-gateway", "oauth2-proxy"} {
+	for _, serviceType := range []string{"mgmt-gateway", "oauth2-proxy"} {
 		t.Run(serviceType, func(t *testing.T) {
 			_, err := planned(t, delegatedCatalog([]api.Value{auxiliaryService(serviceType, "", api.Value{})}, nil), api.StorageCluster, "example")
 			refusedWith(t, err, "lifecycle.unsupported", "a selected service has no core lifecycle", "use only MON, MGR, OSD and MDS services until its feature item is delivered")
@@ -343,5 +344,41 @@ func TestUnrealizedMonitoringServicesKeepTheCoreRefusal(t *testing.T) {
 	}
 	if len(r.Delegated) != 1 || r.Delegated[0].Name != "prometheus" {
 		t.Fatalf("delegated %+v, want only prometheus", r.Delegated)
+	}
+}
+
+const observabilityModule = "collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native_observability.py"
+
+func TestMonitoringTypesMatchTheWorker(t *testing.T) {
+	if got := pythonTuple(t, observabilityModule, "MONITORING_TYPES"); !slices.Equal(got, MonitoringTypes) {
+		t.Fatalf("the worker realizes %v, the plan %v", got, MonitoringTypes)
+	}
+}
+
+func TestMonitoringLeavesMatchTheWorker(t *testing.T) {
+	want := []string{}
+	for _, key := range slices.Sorted(maps.Keys(monitoringLeaves)) {
+		serviceType, path, _ := strings.Cut(key, " ")
+		want = append(want, serviceType, path, monitoringLeaves[key].Variable)
+	}
+	if got := pythonTuple(t, observabilityModule, "MONITORING_LEAVES"); !slices.Equal(got, want) {
+		t.Fatalf("the worker binds %v, the plan %v", got, want)
+	}
+}
+
+func TestCephExporterPlansItsMonitoringUnit(t *testing.T) {
+	services := []api.Value{auxiliaryService("ceph-exporter", "", requestMap("stats_period", 10))}
+	plan := cephPlan(t, settingsCatalog(t, services))
+	unit := blockOf(t, plan, "ceph-service-example-monitoring")
+	if slices.Contains(cephIDs(plan), "ceph-settings-example") || !slices.Equal(unit.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) {
+		t.Fatalf("a ceph-exporter cluster plans %v with dependencies %v", cephIDs(plan), unit.Dependencies)
+	}
+	r, err := DecodeRequest(unit.Request)
+	if err != nil || r.Service == nil || len(r.Service.Documents) != 1 || len(r.Auxiliary) != 0 || len(r.Delegated) != 1 || r.Delegated[0].Name != "ceph-exporter" {
+		t.Fatalf("the ceph-exporter unit request is %+v (%v)", r, err)
+	}
+	state := compilation.NewState(settingsCatalog(t, services), settingsCatalog(t, services), nil)
+	if got := New(api.StorageCluster, nil).Unsupported(state); len(got) != 0 {
+		t.Fatalf("a ceph-exporter cluster refuses %+v", got)
 	}
 }

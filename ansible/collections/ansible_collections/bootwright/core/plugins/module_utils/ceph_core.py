@@ -18,8 +18,9 @@ import tempfile
 import time
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    adapter_protocol, ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_nfs, ceph_native_resources,
-    ceph_native_observe, ceph_native_units, ceph_native_object, ceph_native_worker, ceph_package_sources, ceph_package_worker, ceph_packages, ceph_tunnel,
+    adapter_protocol, ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_nfs, ceph_native_observability,
+    ceph_native_resources, ceph_native_observe, ceph_native_units, ceph_native_object, ceph_native_worker, ceph_package_sources, ceph_package_worker,
+    ceph_packages, ceph_tunnel,
     ceph_tunnel_staging, ceph_tunnel_custody, native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
 )
 
@@ -55,7 +56,7 @@ CLUSTER_REASONS = (
     "foreign-rbd-image", "rbd-image-identity", "foreign-filesystem", "filesystem-identity", "filesystem-multiple-disabled", "foreign-subvolume-group",
     "mds-coverage", "foreign-subvolume", "subvolume-identity", "foreign-image", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign",
     "object-zone-pools", "object-endpoint-certificate", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape",
-    "ingress-firewall",
+    "ingress-firewall", "service-credential-foreign",
 )
 
 
@@ -212,7 +213,7 @@ def daemon_evidence(value, request=None):
     if request is not None:
         ceph_native.require(request["action"] == value["action"], "evidence")
         documents = request[value["action"]]["documents"]
-        hosts = {document["service_type"] + "." + document["service_id"]: document["placement"]["hosts"] for document in documents}
+        hosts = {ceph_native_units.service_name(document): document["placement"]["hosts"] for document in documents}
     names = set()
     for daemon in daemons:
         ceph_native.require(isinstance(daemon, dict) and set(daemon) == {"host", "name", "service"} and ceph_native.named(daemon["host"]), "evidence")
@@ -344,6 +345,7 @@ class Transport:
         ceph_native.require(isinstance(self.material, dict), "material")
         package_material = {"packageCA" + str(i) for i in range(len(self.request.get("packages", {}).get("sources", [])))}
         allowed = {"sshKey", "knownHosts", "clusterPrivateKey", "clusterPublicKey", "registryJSON", "gatewayCertificate", "gatewayKey"}
+        allowed |= ceph_native_units.MATERIAL_VARIABLES
         ceph_native.require(set(self.material) <= allowed | package_material, "material")
         ceph_native.require(set(self.material) >= {"sshKey", "knownHosts"}, "material")
         with tempfile.TemporaryDirectory(prefix="bootwright-ceph-") as scratch:
@@ -384,7 +386,8 @@ class Transport:
     @staticmethod
     def native_sources():
         modules = (native_diagnostics, native_specializations, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
-                   ceph_native_resources, ceph_native_nfs, ceph_native_units, ceph_native_object, ceph_host_route_probe, ceph_pull_broker, ceph_host_runtime)
+                   ceph_native_resources, ceph_native_nfs, ceph_native_observability, ceph_native_units, ceph_native_object, ceph_host_route_probe,
+                   ceph_pull_broker, ceph_host_runtime)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
         ceph_native.require(tuple(sources) == ceph_native_worker.MODULES, "transport")
         return sources
@@ -411,6 +414,15 @@ class Transport:
     def gateway_material(self, key):
         """A gateway's bound certificate, and its private key for the service apply, read from the runner's private files."""
         names = ("gatewayCertificate", "gatewayKey") if key else ("gatewayCertificate",)
+        ceph_native.require(isinstance(self.material, dict) and all(name in self.material for name in names), "material")
+        try:
+            return {name: ceph_native.read_regular(self.material[name], private=True).decode("utf-8") for name in names}
+        except UnicodeError:
+            raise ceph_native.Refusal("material") from None
+
+    def unit_material(self):
+        """A service unit's bound credential leaves, those its bindings name, read from the runner's private files for its apply phase."""
+        names = sorted(ceph_native_units.material_names(self.request))
         ceph_native.require(isinstance(self.material, dict) and all(name in self.material for name in names), "material")
         try:
             return {name: ceph_native.read_regular(self.material[name], private=True).decode("utf-8") for name in names}
@@ -790,8 +802,9 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
         transport.call(bootstrap, "prerequisites")
         if request["action"] == "service":
             ingress_firewall(request, transport, ceph_native_units.frontend(request), now)
+        bound = transport.unit_material() if request["action"] == "service" and request["service"].get("bindings") else {}
         for phase in phases:
-            produced = transport.call(bootstrap, phase)
+            produced = transport.call(bootstrap, phase, bound) if bound and phase == "unit" else transport.call(bootstrap, phase)
             ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
             changed = produced["changed"] or changed
         observation = wait_unit(request, request_digest, bootstrap, transport, now, pause)

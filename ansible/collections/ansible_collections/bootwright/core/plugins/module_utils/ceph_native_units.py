@@ -14,16 +14,26 @@ from __future__ import annotations
 # pylint: disable=unidiomatic-typecheck
 
 import collections
+import hmac
 import ipaddress
+import json
 import re
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_nfs, ceph_native_resources
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_nfs, ceph_native_observability, ceph_native_resources
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, canonical, named, require
 
-UnitType = collections.namedtuple("UnitType", ("validate", "check", "claim", "settle", "expected", "readiness", "daemon_types", "frontend"))
+# Each unit type's hooks, its daemon types' frozen image names (None runs the Ceph image), its bound credential leaves keyed by
+# (service type, JSON pointer) with their runner material variable, and whether its documents are singletons without a service_id.
+UnitType = collections.namedtuple("UnitType", ("validate", "check", "claim", "settle", "expected", "readiness", "daemon_types", "frontend", "images",
+                                               "leaves", "singleton"))
 UNIT_TYPES = {
+    "monitoring": UnitType(ceph_native_observability.validate, ceph_native_observability.check, ceph_native_observability.claim,
+                           ceph_native_observability.settle, ceph_native_observability.expected, ceph_native_observability.readiness,
+                           ceph_native_observability.DAEMON_TYPES, ceph_native_observability.frontend, ceph_native_observability.IMAGES,
+                           {(kind, path): variable for kind, path, variable in ceph_native_observability.MONITORING_LEAVES}, True),
     "nfs": UnitType(ceph_native_nfs.validate, ceph_native_nfs.check, ceph_native_nfs.claim, ceph_native_nfs.settle, ceph_native_nfs.expected,
-                    ceph_native_nfs.readiness, ceph_native_nfs.DAEMON_TYPES, ceph_native_nfs.frontend),
+                    ceph_native_nfs.readiness, ceph_native_nfs.DAEMON_TYPES, ceph_native_nfs.frontend,
+                    {"nfs": None, "haproxy": "haproxy", "keepalived": "keepalived"}, {}, False),
 }
 PHASES = frozenset(("unit", "ingress_firewall"))
 # The ingress firewall check reads only these host tools, never with a write, reload or query form.
@@ -47,19 +57,91 @@ RICH_PORT = re.compile(r'rule (?:family="(ipv4|ipv6)" )?port port="([0-9]{1,5})(
 DOCUMENT_MEMBERS = frozenset(("networks", "placement", "service_id", "service_type", "spec"))
 INPUTS_VERSION = "ceph-service-inputs-v1"
 MAX_DAEMONS = 256
-PENDING = re.compile(r"(?:" + "|".join(sorted({name for unit in UNIT_TYPES.values() for name in unit.daemon_types} | {"vip"}))
-                     + r")@(?:nfs|ingress)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
+PENDING = re.compile(r"(?:" + "|".join(sorted({name for unit in UNIT_TYPES.values() for name in unit.daemon_types} | {"vip", "module"}))
+                     + r")@(?:(?:nfs|ingress)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}|" + "|".join(ceph_native_observability.MONITORING_TYPES) + r")\Z")
+BINDING_MEMBERS = frozenset(("path", "secretRef", "serviceRef"))
+# The non-secret stand-in a bound leaf holds wherever the worker normalizes, records or compares a document.
+BOUND = "bootwright-bound:"
+MATERIAL_VARIABLES = frozenset(variable for unit in UNIT_TYPES.values() for variable in unit.leaves.values())
+MAX_MATERIAL = 4096
 
 
 def service_name(document):
-    return document["service_type"] + "." + document["service_id"]
+    """cephadm's service name: the type alone for a singleton without a service_id."""
+    return document["service_type"] + ("." + document["service_id"] if "service_id" in document else "")
+
+
+def validate_bindings(unit):
+    """No bindings, or each a bound leaf of a document of this unit, once, in (service, path) order."""
+    if "bindings" not in unit:
+        return
+    bindings = unit["bindings"]
+    leaves = UNIT_TYPES[unit["type"]].leaves
+    types = {service_name(document): document["service_type"] for document in unit["documents"]}
+    require(isinstance(bindings, list) and 1 <= len(bindings) <= len(leaves))
+    for binding in bindings:
+        require(isinstance(binding, dict) and set(binding) == BINDING_MEMBERS and named(binding["secretRef"]))
+        require(isinstance(binding["serviceRef"], str) and binding["serviceRef"] in types and isinstance(binding["path"], str))
+        require((types[binding["serviceRef"]], binding["path"]) in leaves)
+    keys = [(binding["serviceRef"], binding["path"]) for binding in bindings]
+    require(keys == sorted(set(keys)))
+
+
+def material_names(request):
+    """The runner material variables the unit's bindings name."""
+    unit = request["service"]
+    leaves = UNIT_TYPES[unit["type"]].leaves
+    types = {service_name(document): document["service_type"] for document in unit["documents"]}
+    return frozenset(leaves[(types[binding["serviceRef"]], binding["path"])] for binding in unit.get("bindings", []))
+
+
+def material_value(value):
+    try:
+        size = len(value.encode("utf-8")) if isinstance(value, str) else 0
+    except UnicodeError:
+        size = 0
+    return 0 < size <= MAX_MATERIAL and "\x00" not in value
+
+
+def material(request, phase, private):
+    """The bound leaves a phase may hold: exactly those the unit's bindings name, to its apply phase only."""
+    require(isinstance(private, dict), "material")
+    expected = material_names(request) if phase == "unit" else frozenset()
+    require(set(private) == expected and all(material_value(value) for value in private.values()), "material")
+    return dict(private)
+
+
+def placed(document, paths):
+    """A copy of the document with each bound leaf's placeholder at its pointer."""
+    if not paths:
+        return document
+    value = json.loads(canonical(document))
+    for path in paths:
+        parts = path.split("/")[1:]
+        target = value
+        for part in parts[:-1]:
+            target = target.setdefault(part, {})
+        target[parts[-1]] = BOUND + path
+    return value
+
+
+def leaf(value, path):
+    """(present, leaf) at a JSON pointer; an ancestor that is not an object is present and holds no leaf."""
+    for part in path.split("/")[1:]:
+        if not isinstance(value, dict):
+            return True, None
+        if part not in value:
+            return False, None
+        value = value[part]
+    return True, value
 
 
 def validate(request, hosts):
     """One unit of a known type: 1 to 8 placed documents, each listed in `delegated` with exactly its hosts."""
     unit = request.get("service")
-    require(isinstance(unit, dict) and set(unit) == {"documents", "id", "type"})
+    require(isinstance(unit, dict) and {"documents", "id", "type"} <= set(unit) <= {"bindings", "documents", "id", "type"})
     require(isinstance(unit["type"], str) and unit["type"] in UNIT_TYPES)
+    singleton = UNIT_TYPES[unit["type"]].singleton
     require(unit["id"] == "" or isinstance(unit["id"], str) and ceph_native.NAME.fullmatch(unit["id"]) is not None)
     documents = unit["documents"]
     require(isinstance(documents, list) and 1 <= len(documents) <= 8)
@@ -67,8 +149,8 @@ def validate(request, hosts):
     delegated = {entry["name"]: entry["hosts"] for entry in request.get("delegated", [])}
     seen = set()
     for document in documents:
-        require(isinstance(document, dict) and {"placement", "service_id", "service_type"} <= set(document) <= DOCUMENT_MEMBERS)
-        require(named(document["service_type"]) and named(document["service_id"]))
+        require(isinstance(document, dict) and {"placement", "service_type"} <= set(document) <= DOCUMENT_MEMBERS)
+        require(named(document["service_type"]) and ("service_id" not in document if singleton else named(document.get("service_id"))))
         placement = document["placement"]
         require(isinstance(placement, dict) and "hosts" in placement and set(placement) <= {"hosts", "count"})
         listed = placement["hosts"]
@@ -78,6 +160,7 @@ def validate(request, hosts):
         name = service_name(document)
         require(name not in seen and delegated.get(name) == listed)
         seen.add(name)
+    validate_bindings(unit)
     UNIT_TYPES[unit["type"]].validate(unit, request, hosts)
 
 
@@ -237,6 +320,8 @@ def firewall_check(worker, spec, port):
 class UnitWorker(ceph_native_resources.ResourceWorker):
     """The core worker with one service unit's apply phase and observation."""
 
+    bound = None
+
     @staticmethod
     def image_key(name):
         """The settings block's manager option for one auxiliary image; a unit only reads it."""
@@ -246,8 +331,55 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         unit = self.request["service"]
         return "unit-" + unit["type"] + ("-" + unit["id"] if unit["id"] else "")
 
+    def bound_leaves(self):
+        """Each bound document's (pointer, material variable) pairs, by service name."""
+        unit = self.request["service"]
+        leaves = UNIT_TYPES[unit["type"]].leaves
+        types = {service_name(document): document["service_type"] for document in unit["documents"]}
+        result = {}
+        for binding in unit.get("bindings", []):
+            result.setdefault(binding["serviceRef"], []).append((binding["path"], leaves[(types[binding["serviceRef"]], binding["path"])]))
+        return result
+
     def unit_groups(self):
-        return [[document] for document in self.request["service"]["documents"]]
+        """Each document; a bound one holds the placeholders, so the SDK, the records and every comparison see no leaf."""
+        bound = self.bound_leaves()
+        return [[placed(document, [path for path, unused in bound.get(service_name(document), ())])] for document in self.request["service"]["documents"]]
+
+    def splice_bound(self, value):
+        """The apply stream's copy of one normalized document, the bound leaves in place of their placeholders; never recorded."""
+        pairs = self.bound_leaves().get(service_name(value), ())
+        if not pairs:
+            return value
+        value = json.loads(canonical(value))
+        for path, variable in pairs:
+            parts = path.split("/")[1:]
+            present, found = leaf(value, path)
+            require(present and found == BOUND + path, "native-output")
+            require(isinstance(self.bound, dict) and variable in self.bound, "material")
+            target = value
+            for part in parts[:-1]:
+                target = target[part]
+            target[parts[-1]] = self.bound[variable]
+        return value
+
+    def bound_specs(self, stored):
+        """The stored specifications with each bound document in placeholder form: its bound leaves all omitted, or each a string
+        equal to the bound one where this phase holds it; any other stored leaf is not its Secret's."""
+        result = dict(stored)
+        held = self.bound if isinstance(self.bound, dict) else {}
+        for name, pairs in self.bound_leaves().items():
+            value = stored.get(name)
+            if not isinstance(value, dict):
+                continue
+            found = [(path, variable) + leaf(value, path) for path, variable in pairs]
+            for path, variable, present, current in found:
+                same = isinstance(current, str) and bool(current) and (variable not in held or hmac.compare_digest(
+                    current.encode("utf-8", "surrogatepass"), held[variable].encode("utf-8", "surrogatepass")))
+                if any(item[2] for item in found) and not (present and same):
+                    raise NativeFailure("service-credential-foreign", self.native_coordinate(), name + " " + path, secrets=tuple(held.values()))
+            result[name] = placed(value, [path for path, unused in pairs])
+        return result
 
     def unit_names(self):
         return [service_name(document) for document in self.request["service"]["documents"]]
@@ -297,7 +429,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         checked = hooks.check(self, unit)
         values = [group[0] for group in self.normalized_services(self.unit_groups(), record=self.unit_key() + "-inputs.json")]
         scope = self.recovery_scope()
-        observed = self.unit_specs()
+        observed = self.bound_specs(self.unit_specs())
         self.unit_records(values, observed, scope)
         hooks.claim(self, unit, checked)
         names = self.unit_names()
@@ -307,8 +439,9 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
                 self.markers.write("service-" + name + "-attempt.json", {"scope": scope, "service": value})
         changed = bool(missing)
         if missing:
-            self.tunnel_effect("orch", "apply", "-i", "-", data=b"---\n".join(canonical(value) + b"\n" for unused, value in missing), json_result=False)
-            observed = self.unit_specs()
+            data = b"---\n".join(canonical(self.splice_bound(value)) + b"\n" for unused, value in missing)
+            self.tunnel_effect("orch", "apply", "-i", "-", data=data, json_result=False)
+            observed = self.bound_specs(self.unit_specs())
             require(all(observed.get(name) == value for name, value in zip(names, values)), "not-ready")
         for name, value in zip(names, values):
             if self.markers.read("service-" + name + "-complete.json") is None:
@@ -343,10 +476,10 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         names = self.unit_names()
         values = self.unit_inputs()
         owned = values is not None
-        stored = self.unit_specs()
-        present = {name: stored[name] for name in names if name in stored}
         with self.manager_served():
+            stored = self.bound_specs(self.unit_specs())
             rows = self.ceph("orch", "ps")
+        present = {name: stored[name] for name in names if name in stored}
         require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows), "native-output")
         running = [row for row in rows if row.get("service_name") in names]
         require(owned or not present and not running, "foreign-service")
@@ -371,9 +504,11 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
     def unit_daemons(self, expected, running):
         """Each expected (service, daemon type) runs its count of daemons on its frozen image; a row on another image refuses."""
         auxiliary = {entry["name"]: entry["image"] for entry in self.request.get("auxiliary", [])}
+        frozen_names = UNIT_TYPES[self.request["service"]["type"]].images if "service" in self.request else {}
         ready = True
         for (service, kind), count in expected.items():
-            frozen = self.request["image"] if kind == "nfs" else auxiliary.get(kind)
+            name = frozen_names.get(kind, kind)
+            frozen = self.request["image"] if name is None else auxiliary.get(name)
             started = 0
             for row in running:
                 if row["service_name"] != service or row.get("daemon_type") != kind:

@@ -283,6 +283,24 @@ exist, by the one listed service whose ID prefixes its daemon name
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py#L922-L966));
 none or more than one such service refuses.
 
+The monitoring services run in one service-unit block. The core request lists
+each declared `prometheus`, `alertmanager`, `grafana`, `node-exporter`,
+`ceph-exporter` and `snmp-gateway` service in `delegated` by its type name, the
+singleton's service name, with its eligible hosts. cephadm names their daemons
+`<type>.<host short name>` without a random suffix
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py#L922-L966)).
+In the daemon-type table, `prometheus`, `alertmanager`, `grafana`,
+`node-exporter` and `snmp-gateway` daemons are admitted only when their
+`service_name` equals their type, that service is listed and their host is
+among its hosts; like the other delegated daemons they are never counted
+toward readiness or compared with the Ceph image. `ceph-exporter` keeps its
+row: it runs the Ceph image on any frozen request host. In the host layout, a
+listed monitoring singleton's daemon directory is admitted on a host of its
+entry and, as cephadm makes it, may be owned by the user of its own image; it
+is still a directory that is not a link and that neither group nor others may
+write, re-proved unchanged after use. Its `unit.meta` and `unit.image` keep the
+root-or-Ceph-user owner rule, and no other daemon type gains this.
+
 `serviceRef` is a scalar exact reference to this registry in the already
 selected cluster. It is not a Bootwright object name, may contain native dots,
 and is resolved through the registry rather than guessed by splitting an
@@ -437,9 +455,10 @@ under closed records whose members and spelling follow IBM's
 python3-ceph-common 20.2.1-405 ServiceSpec schema (the source read for these
 records, not a pinned build). Each is a singleton whose `service_id` is
 forbidden ([service identity](#service-identity-and-references)). Planning
-refuses each of them until its auxiliary image can be selected
-([refusal table](storage.md#refusal-table)), and `ceph-exporter` until its
-lifecycle is delivered.
+refuses each that needs an auxiliary image until it can be selected
+([refusal table](storage.md#refusal-table)); `ceph-exporter` runs the Ceph
+image, and it and the other monitoring services realize through the
+[monitoring unit](storage.md#resources-readiness-and-access).
 
 | Type | Admitted `spec` members |
 | --- | --- |

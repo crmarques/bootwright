@@ -28,7 +28,12 @@ MAX_ENTRIES = 4096
 MAX_METADATA = 4096
 CLUSTER_TYPES = frozenset(("mon", "mgr", "osd", "crash", "ceph-exporter", "mds"))
 # Each daemon type another block executes, mapped to its cephadm service type (orchestrator daemon_type_to_service).
-DELEGATED_TYPES = {"haproxy": "ingress", "keepalived": "ingress", "nfs": "nfs", "rgw": "rgw"}
+DELEGATED_TYPES = {"alertmanager": "alertmanager", "grafana": "grafana", "haproxy": "ingress", "keepalived": "ingress", "nfs": "nfs",
+                   "node-exporter": "node-exporter", "prometheus": "prometheus", "rgw": "rgw", "snmp-gateway": "snmp-gateway"}
+# Monitoring singletons: cephadm names the service by its type and makes each daemon's directory the image's own user's.
+SINGLETONS = frozenset(("alertmanager", "grafana", "node-exporter", "prometheus", "snmp-gateway"))
+# Services listed by their type alone: the singletons and the Ceph-image ceph-exporter.
+LISTED_SINGLETONS = SINGLETONS | {"ceph-exporter"}
 TYPES = CLUSTER_TYPES | frozenset(DELEGATED_TYPES)
 NAME = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
 IMAGE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}\Z")
@@ -118,10 +123,11 @@ def root_directory(uid=None):
 
 
 @contextlib.contextmanager
-def child_directory(parent, name, owners):
+def child_directory(parent, name, owners, own=False):
+    """A non-link directory of the given owners, or with `own` of whichever user it belongs to, re-proved unchanged after use."""
     require(isinstance(name, str) and NAME.fullmatch(name) is not None)
     before = current(name, parent)
-    safe_directory(before, owners)
+    safe_directory(before, tuple(owners) + ((before.st_uid,) if own else ()))
     try:
         descriptor = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent)
     except FileNotFoundError:
@@ -275,7 +281,11 @@ def delegated_service(name, service, listed):
     """The listed service a delegated daemon belongs to: cephadm names it <type>.<service_id>.<suffix> (get_unique_name with
     prefix=service_id), and its unit.meta, once written, must name that same listed service."""
     kind = name.split(".", 1)[0]
-    matches = [entry for entry in listed if entry.split(".", 1)[0] == DELEGATED_TYPES[kind] and name.startswith(kind + "." + entry.split(".", 1)[1] + ".")]
+    if kind in SINGLETONS:
+        matches = [entry for entry in listed if entry == kind]
+    else:
+        matches = [entry for entry in listed
+                   if "." in entry and entry.split(".", 1)[0] == DELEGATED_TYPES[kind] and name.startswith(kind + "." + entry.split(".", 1)[1] + ".")]
     if service is None:
         require(len(matches) == 1)
         return matches[0]
@@ -354,7 +364,8 @@ def daemons(request, uid, command, *, owned, cache_uid=None, clock=time.monotoni
 def listed_services(request, host):
     """The delegated services the request lists on this host; none without a host."""
     delegated = request.get("delegated", [])
-    require(isinstance(delegated, list) and all(isinstance(entry, dict) and isinstance(entry.get("name"), str) and "." in entry["name"]
+    require(isinstance(delegated, list) and all(isinstance(entry, dict) and isinstance(entry.get("name"), str)
+                                                and ("." in entry["name"] or entry["name"] in LISTED_SINGLETONS)
                                                 and isinstance(entry.get("hosts"), list) for entry in delegated))
     return [] if host is None else [entry["name"] for entry in delegated if host in entry["hosts"]]
 
@@ -401,7 +412,7 @@ def snapshot(request, uid, command, *, owned, cache_uid=None, host=None):
                 require(len({name.replace(".", "-") for name in selected}) == len(selected))
                 result = []
                 for name in selected:
-                    with child_directory(cluster, name, owners) as directory:
+                    with child_directory(cluster, name, owners, own=name.split(".", 1)[0] in SINGLETONS) as directory:
                         result.append(daemon(directory, request, name, owners, command, listed))
                 require(entries(cluster) == names and entries(root) == before, changed=True)
                 return result

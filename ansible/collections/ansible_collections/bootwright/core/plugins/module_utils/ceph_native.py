@@ -111,9 +111,15 @@ DAEMON_TYPES = {
     "haproxy": ("delegated", "delegated", False, "none"),
     "keepalived": ("delegated", "delegated", False, "none"),
     "nfs": ("delegated", "delegated", False, "none"),
+    "alertmanager": ("delegated", "delegated", False, "none"),
+    "grafana": ("delegated", "delegated", False, "none"),
+    "node-exporter": ("delegated", "delegated", False, "none"),
+    "prometheus": ("delegated", "delegated", False, "none"),
+    "snmp-gateway": ("delegated", "delegated", False, "none"),
 }
-# A service another block executes, listed by its cephadm service_name: rgw.<id>, ingress.<id> or nfs.<id>.
-DELEGATED_SERVICE = re.compile(r"(?:rgw|ingress|nfs)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
+# A service another block executes, listed by its cephadm service_name: rgw.<id>, ingress.<id>, nfs.<id> or a monitoring singleton's type.
+DELEGATED_SERVICE = re.compile(r"(?:(?:rgw|ingress|nfs)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}"
+                               r"|alertmanager|ceph-exporter|grafana|node-exporter|prometheus|snmp-gateway)\Z")
 
 
 def supported_transport(request):
@@ -496,7 +502,11 @@ def delegated_daemon(daemon, request):
     delegated = {entry["name"]: entry["hosts"] for entry in request.get("delegated", [])}
     service = daemon.get("service_name")
     require(isinstance(service, str) and service in delegated, "foreign-service")
-    require(service.startswith(ceph_native_observe.DELEGATED_TYPES[daemon["daemon_type"]] + "."), "foreign-service")
+    kind = daemon["daemon_type"]
+    if kind in ceph_native_observe.SINGLETONS:
+        require(service == kind, "foreign-service")
+    else:
+        require(service.startswith(ceph_native_observe.DELEGATED_TYPES[kind] + "."), "foreign-service")
     require(daemon["hostname"] in delegated[service], "foreign-service")
 
 
@@ -3610,6 +3620,8 @@ def dispatch(envelope):
         require(supported_transport(worker.request), "unsupported-release")
     if gateway:
         worker.tls = ceph_native_object.material(worker.request, phase, envelope["private"])
+    if unit:
+        worker.bound = ceph_native_units.material(worker.request, phase, envelope["private"])
     if phase in ("bootstrap", "authorize", "tunnel_configure"):
         return getattr(worker, phase)(envelope["private"])
     if phase == "services":

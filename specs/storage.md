@@ -610,6 +610,37 @@ writes, and a stored specification, password or keyring never reaches
 evidence, which lists only each daemon's host, name and service. The block's
 deadline is fixed for its type (apply 2940 s, observe 720 s, destroy 1380 s).
 
+The declared `prometheus`, `alertmanager`, `grafana`, `node-exporter`,
+`ceph-exporter` and `snmp-gateway` services are realized by the one
+service-unit block `ceph-service-<cluster>-monitoring`, whose apply phase runs
+only on the bootstrap host. Before any write it proves the cluster's ownership
+record and FSID and reads, never writes, the frozen `container_image_*`
+setting of every auxiliary image its daemons run (`foreign-image` names one the
+settings block no longer holds); ceph-exporter runs the Ceph image. The grafana
+`initial_admin_password` and snmp-gateway `credentials` leaves that its
+bindings name are normalized as fixed placeholders, so the normalization
+input, the unit's inputs record and every attempt and completion record hold
+placeholders only. The bound values, lent from the runner's private material
+to that apply phase alone, are spliced in memory into the one
+`ceph orch apply -i -` stream and never reach arguments, records, evidence or
+refusals. A stored specification whose bound leaves equal the bound values, or
+which omits them all, is the applied document; a stored leaf of another value,
+an empty one, or some leaves without the others refuses
+`service-credential-foreign`, because Bootwright never replaces a credential of
+a deployed service. A lost reply continues with the same material and never
+sends a stored document again. Readiness needs every document completed, each
+type's daemon count running on its frozen image (the Ceph image for
+ceph-exporter) and, with a prometheus service, an available MGR and a
+non-empty `prometheus` endpoint in `ceph mgr services`: cephadm enables the
+prometheus manager module itself for that service, and Bootwright never
+enables a module. The stored specifications and `ceph orch ps` are read as one
+manager-served observation, so the MGR restart that enable causes leaves the
+observation unfinished rather than refused. A readiness timeout names
+`<type>@<service>` and `module@prometheus` beside the blocking health checks.
+Observation never writes, and no credential or stored specification reaches
+evidence, which lists only each daemon's host, name and service. The block's
+deadline is fixed for its type (apply 2280 s, observe 720 s, destroy 1380 s).
+
 A StorageNFSExport is realized by its export block `ceph-nfs-export-<export>`
 on the bootstrap host. A subvolume binding binds the path the subvolume's
 applied creation proof reports and never constructs one. Before any write the
@@ -808,8 +839,9 @@ custody and never regenerates. A user with no attempt marker, or a password
 changed outside Bootwright, refuses as drift naming the custodied password and
 is never reset. The proof is a controller-side TLS connect to the active MGR
 URL, comparing the certificate SHA-256 with the stored certificate; an
-unreachable port reports the dashboard unproved. Certificates, roles, SSO and
-the monitoring stack remain [B479](milestones/m2.md#b479).
+unreachable port reports the dashboard unproved. Certificates, roles and SSO
+remain [B479](milestones/m2.md#b479); the monitoring stack is realized by its
+service-unit block above.
 
 The client-data test is operator-run through `cluster exec` with the
 bootstrap node's administrator keyring. It writes, flushes, reads and compares
