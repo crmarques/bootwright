@@ -1,0 +1,26 @@
+  bootwright / cluster keyring
+      Export the raw sensitive Ceph keyring bytes of one StorageClient to standard output.
+      Applicable to managed Ceph StorageClusters only.
+
+  Usage
+    bootwright cluster keyring [flags]
+
+  Command flags
+      --client  Select the exact StorageClient name (required)
+      --name    Select the exact object name (required)
+
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
+
+  More detail
+    Use --help --detail full to include SSH overrides.
+
+  Examples
+    bootwright cluster keyring --context lab --name storage --client vm-disks

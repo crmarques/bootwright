@@ -125,6 +125,7 @@ The three `media` commands follow the host-wide
 | `bootwright cluster oc` | required `--name <cluster>` and non-empty `<command>...` | bounded `oc` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubectl` | required `--name <cluster>` and non-empty `<command>...` | bounded `kubectl` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubeconfig` | required `--name <cluster>` | kubeconfig through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
+| `bootwright cluster keyring` | required `--name <cluster>`; required `--client <client>` | the Ceph keyring of one StorageClient through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
 | `bootwright version` | none | version, commit, source state, Go runtime and target, and embedded dependency-bundle identity | none |
 | `bootwright help [command ...]` | no local flags | help for the exact resolved command, human or structured | none |
 | `bootwright completion bash` | `--no-descriptions` false | Bash completion script | none |
@@ -139,7 +140,8 @@ in the selected context; that of `cluster info` and `cluster exec` is a
 comma-separated list under the [list rules](../cli.md#parsing-and-input-conventions). The following table owns applicability. Target
 resolution, readiness and diagnostics of `cluster kubeconfig` live in the
 [administrator access export](../cli.md#administrator-access-export); those of
-`cluster rsh` and `cluster exec` in the
+`cluster keyring` in the [client keyring export](../cli.md#client-keyring-export);
+those of `cluster rsh` and `cluster exec` in the
 [cluster sessions](../cli.md#cluster-sessions); those of `cluster info
 --secrets` on a managed Ceph cluster in the
 [storage dashboard access](../cli.md#storage-dashboard-access); those of
@@ -151,6 +153,7 @@ resolution, readiness and diagnostics of `cluster kubeconfig` live in the
 | `cluster list`, `cluster info` | All selected ContainerClusters and StorageClusters, including external storage clusters. |
 | `cluster rsh`, `cluster exec` | OpenShift/OKD ContainerClusters and managed Ceph StorageClusters with declared nodes. External StorageClusters have no declared node roster and are inapplicable. |
 | `cluster oc`, `cluster kubectl`, `cluster kubeconfig` | OpenShift/OKD ContainerClusters only. |
+| `cluster keyring` | Managed Ceph StorageClusters only. |
 
 Applicability does not establish implementation availability, access readiness,
 identity, or ownership. Missing access material on an applicable target is an
@@ -168,8 +171,8 @@ The short description and detailed help for `cluster oc` and `cluster kubectl`
 state that success prints an access descriptor for independent operator
 execution and does not launch a client or connect. Cluster command help
 includes its applicable target kinds and variants from the table above.
-`cluster kubeconfig` help states that success exports raw sensitive bytes to
-standard output.
+`cluster kubeconfig` and `cluster keyring` help state that success exports raw
+sensitive bytes to standard output.
 
 The short description and detailed help for `machine rsh`, `machine exec`,
 `cluster rsh` and `cluster exec` state that the session runs on the Machine,

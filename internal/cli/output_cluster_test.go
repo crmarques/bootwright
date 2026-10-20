@@ -13,12 +13,14 @@ const (
 	clusterNotImplementedSessions = "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
 	clusterNotImplementedHandoff  = "this handoff is not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
 	clusterContainerOnly          = "applies to OpenShift and OKD ContainerClusters only"
+	clusterManagedCephOnly        = "applies to managed Ceph StorageClusters only"
 )
 
 func containerAccess(kubeconfig inspection.AccessCommand) []inspection.AccessCommand {
 	kubeconfig.Command = inspection.CommandKubeconfig
 	return []inspection.AccessCommand{
 		{Command: inspection.CommandExec, Status: inspection.StatusNotImplemented, Reason: clusterNotImplementedSessions},
+		{Command: inspection.CommandKeyring, Status: inspection.StatusNotApplicable, Reason: clusterManagedCephOnly},
 		kubeconfig,
 		{Command: inspection.CommandKubectl, Status: inspection.StatusNotImplemented, Reason: clusterNotImplementedHandoff},
 		{Command: inspection.CommandOC, Status: inspection.StatusNotImplemented, Reason: clusterNotImplementedHandoff},
@@ -26,11 +28,18 @@ func containerAccess(kubeconfig inspection.AccessCommand) []inspection.AccessCom
 	}
 }
 
-func cephAccess(session inspection.AccessCommand) []inspection.AccessCommand {
+func cephAccess(session inspection.AccessCommand, ceph *inspection.ManagedCeph) []inspection.AccessCommand {
 	exec, rsh := session, session
 	exec.Command, rsh.Command = inspection.CommandExec, inspection.CommandRsh
+	keyring := inspection.AccessCommand{Command: inspection.CommandKeyring, Status: inspection.StatusUnavailable, Reason: "the StorageCluster storage declares no StorageClient"}
+	for _, resource := range ceph.Resources {
+		if resource.Kind == "StorageClient" && resource.Status == inspection.ResourceDone {
+			keyring = inspection.AccessCommand{Command: inspection.CommandKeyring, Status: inspection.StatusReady}
+		}
+	}
 	return []inspection.AccessCommand{
 		exec,
+		keyring,
 		{Command: inspection.CommandKubeconfig, Status: inspection.StatusNotApplicable, Reason: clusterContainerOnly},
 		{Command: inspection.CommandKubectl, Status: inspection.StatusNotApplicable, Reason: clusterContainerOnly},
 		{Command: inspection.CommandOC, Status: inspection.StatusNotApplicable, Reason: clusterContainerOnly},
@@ -42,6 +51,7 @@ func externalAccess() []inspection.AccessCommand {
 	roster := "the external StorageCluster archive declares no node roster; sessions apply to managed Ceph StorageClusters"
 	return []inspection.AccessCommand{
 		{Command: inspection.CommandExec, Status: inspection.StatusNotApplicable, Reason: roster},
+		{Command: inspection.CommandKeyring, Status: inspection.StatusNotApplicable, Reason: clusterManagedCephOnly},
 		{Command: inspection.CommandKubeconfig, Status: inspection.StatusNotApplicable, Reason: clusterContainerOnly},
 		{Command: inspection.CommandKubectl, Status: inspection.StatusNotApplicable, Reason: clusterContainerOnly},
 		{Command: inspection.CommandOC, Status: inspection.StatusNotApplicable, Reason: clusterContainerOnly},
@@ -116,7 +126,7 @@ func revealedCeph(unproved bool) *inspection.ManagedCeph {
 
 func storageOnly(ceph *inspection.ManagedCeph) *inspection.InfoResult {
 	return &inspection.InfoResult{Context: "lab", Clusters: []inspection.ContainerEntry{}, Storage: []inspection.StorageEntry{
-		{Name: "storage", Kind: inspection.KindStorageCluster, AccessCommands: cephAccess(inspection.AccessCommand{Status: inspection.StatusReady, Node: "rhel-01"}), Ceph: ceph},
+		{Name: "storage", Kind: inspection.KindStorageCluster, AccessCommands: cephAccess(inspection.AccessCommand{Status: inspection.StatusReady, Node: "rhel-01"}, ceph), Ceph: ceph},
 	}}
 }
 
@@ -138,7 +148,7 @@ func clusterInfoResult(ceph *inspection.ManagedCeph, session inspection.AccessCo
 		},
 		Storage: []inspection.StorageEntry{
 			{Name: "archive", Kind: inspection.KindStorageCluster, AccessCommands: externalAccess()},
-			{Name: "storage", Kind: inspection.KindStorageCluster, AccessCommands: cephAccess(session), Ceph: ceph},
+			{Name: "storage", Kind: inspection.KindStorageCluster, AccessCommands: cephAccess(session, ceph), Ceph: ceph},
 		},
 	}
 }
@@ -170,5 +180,14 @@ func clusterGoldens() []cliGolden {
 		{golden: "cli-cluster-info-secrets-json", args: "cluster info --name storage --secrets --output json", record: revealed},
 		{golden: "cli-cluster-info-unproved", args: "cluster info --name storage --secrets", record: unproved, stderr: warning},
 		{golden: "cli-cluster-info-unproved-json", args: "cluster info --name storage --secrets --output json", record: unproved},
+		{golden: "cli-cluster-keyring", args: "cluster keyring --name storage --client vm-disks", quoted: true, record: func(r *dispatchRecord) { r.result.keyring = keyringResult(false) }},
+		{golden: "cli-cluster-keyring-json", args: "cluster keyring --name storage --client vm-disks --output json", record: func(r *dispatchRecord) { r.result.keyring = keyringResult(false) }},
+		{
+			args: "cluster keyring --name storage --client missing", code: 1, record: func(r *dispatchRecord) { r.err = keyringTargetRefusal },
+			stderr: "  error  access.target\n" +
+				"    the context lab selects no StorageClient named missing\n" +
+				"    Next: bootwright cluster info --context lab --name storage lists the StorageClients of\n" +
+				"    storage\n",
+		},
 	}
 }

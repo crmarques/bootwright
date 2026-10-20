@@ -5,6 +5,7 @@
       cluster exec  not-implemented
       sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
       reached through bootwright cluster kubeconfig
+      cluster keyring  not-applicable
       cluster kubeconfig  ready
       bootwright cluster kubeconfig --context lab --name edge
       cluster kubectl  not-implemented
@@ -24,6 +25,7 @@
       cluster exec  not-implemented
       sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
       reached through bootwright cluster kubeconfig
+      cluster keyring  not-applicable
       cluster kubeconfig  ready
       bootwright cluster kubeconfig --context lab --name okd-lab
       cluster kubectl  not-implemented
@@ -41,6 +43,7 @@
       Type  StorageCluster
     Access
       cluster exec  not-applicable
+      cluster keyring  not-applicable
       cluster kubeconfig  not-applicable
       cluster kubectl  not-applicable
       cluster oc  not-applicable
@@ -55,6 +58,8 @@
     Access
       cluster exec  ready
       bootwright cluster exec --context lab --name storage --node rhel-01 -- <command>...
+      cluster keyring  ready
+      bootwright cluster keyring --context lab --name storage --client <client>
       cluster kubeconfig  not-applicable
       cluster kubectl  not-applicable
       cluster oc  not-applicable

@@ -203,6 +203,10 @@ func (s environmentSpy) ClusterInfo(ctx context.Context, request inspection.Clus
 	return s.record.result.clusterInfo, s.record.called(ctx, "cluster info", request)
 }
 
+func (s environmentSpy) ClientKeyring(ctx context.Context, request inspection.KeyringRequest) (*inspection.KeyringResult, error) {
+	return s.record.result.keyring, s.record.called(ctx, "cluster keyring", request)
+}
+
 func (s environmentSpy) ClusterRsh(ctx context.Context, request environmentaccess.ClusterRshRequest) (*machine.SessionResult, error) {
 	return s.record.result.session, s.record.called(ctx, "cluster rsh", request)
 }
@@ -349,7 +353,7 @@ func dispatchSpies(record *dispatchRecord) Services {
 func dispatchFlags() *pflag.FlagSet {
 	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	for name, value := range map[string]string{
-		"context": "example", "name": "demo", "ssh-id-file": "key.pem",
+		"context": "example", "name": "demo", "client": "vm-disks", "ssh-id-file": "key.pem",
 		"ssh-user": "operator", "clusters": "first,second", "machines": "node-a,node-b",
 		"replace": "node-b", "node": "node-a", "version": "", "part": "private-key",
 		"from-file": "", "from-url": "https://example.invalid/image.iso",

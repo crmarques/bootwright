@@ -1127,12 +1127,12 @@ install an add-on.
 Produced storage material is not an authored Secret and cannot be revealed
 through Secret commands under the [custody contract](secrets.md#produced-material).
 The dashboard administrator password is revealed only as
-[storage dashboard access](cli.md#storage-dashboard-access) defines. Client and
-export access need a Storage-owned
-boundary with selected cluster and resource identity, permitted material,
-sensitive-output behavior and removal semantics. Its public interface remains
-pending owner approval under [B489](milestones/m2.md#b489); this contract adds
-no other command or implicit reveal.
+[storage dashboard access](cli.md#storage-dashboard-access) defines, and one
+StorageClient's Ceph keyring only as the
+[client keyring export](cli.md#client-keyring-export) defines: one selected
+managed cluster and one of its declared clients, settled before any custody
+read, in the native keyring form, until the destroy that completes the
+removal withdraws it. This contract adds no other command or implicit reveal.
 
 ## Removal and concurrency
 

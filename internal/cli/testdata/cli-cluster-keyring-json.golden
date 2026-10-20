@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "cluster keyring",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "export": {
+      "mediaType": "text/plain",
+      "encoding": "utf-8",
+      "content": "[client.vm-disks]\n\tkey = AQBx57l5Y2FuYXJ5LWNsaWVudC1rZXk9PQ==\n"
+    }
+  },
+  "diagnostics": [],
+  "logs": []
+}

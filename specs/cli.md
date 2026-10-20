@@ -791,15 +791,18 @@ context-owned artifacts, and durable ownership evidence. A name can locate an
 entry but never proves identity or ownership. `cluster list` and `cluster info`
 report each selected cluster under the
 [cluster discovery contract](cli/output.md#cluster-discovery). Access to a
-cluster is one of three contracts: the
+cluster is one of four contracts: the
 [administrator access export](#administrator-access-export) of a
 ContainerCluster, the [cluster sessions](#cluster-sessions) of a managed Ceph
-cluster, and that cluster's [storage dashboard access](#storage-dashboard-access).
+cluster, that cluster's [storage dashboard access](#storage-dashboard-access),
+and the [client keyring export](#client-keyring-export) of one of its
+StorageClients.
 The `oc` and `kubectl` handoffs and the sessions on a ContainerCluster are
 [deferred](deferred/cli-access-and-rendering.md) to the parked item
 [B101](milestones/backlog.md#b101).
 
-`secret show` and `cluster kubeconfig` are raw sensitive-byte exports.
+`secret show`, `cluster kubeconfig` and `cluster keyring` are raw
+sensitive-byte exports.
 They require an exact context and object, perform no implicit fallback, emit
 only the requested material, and add no status prefix or suffix. A
 `cluster info --secrets` result is instead structured and explicitly sensitive
@@ -1168,6 +1171,49 @@ reachable is revealed with exactly one `access.unproved` warning naming the
 cluster, and its `dashboard.status` is `unproved`. The value occurs only in
 the `passwordValue` field, and is never copied to a diagnostic, log, evidence
 record, plan or second stream.
+
+### Client keyring export
+
+`cluster keyring --name <cluster> --client <client>` reveals the Ceph keyring
+of one StorageClient that an apply left in the context's
+[custody](secrets.md#produced-material) as the produced output `client` of the
+client's block. It resolves the explicit `--context`, or the current context,
+once; compiles that context's effective state; and resolves `--name` in the
+selected graph's shared ContainerCluster/StorageCluster name namespace and
+`--client` among the selected StorageClients. It reveals one client of one
+cluster, never searches outside the selected graph and never selects another
+cluster or client. The checks run in this order, each before the next:
+
+| Condition | Diagnostic, exit `1` | Next action |
+| --- | --- | --- |
+| `--name` is empty | `access.target`, saying the command requires one cluster name | `bootwright cluster info --context <context>` lists the clusters the context selects |
+| `--client` is empty | `access.target`, saying the command requires one StorageClient name | `bootwright cluster info --context <context> --name <cluster>` lists the StorageClients of the cluster |
+| No selected ContainerCluster or StorageCluster has the name | `access.target`, naming the context and the name | name a managed Ceph StorageCluster the context selects; `bootwright cluster info --context <context>` lists them |
+| The name is a ContainerCluster | `cluster.not-applicable`, naming `bootwright cluster keyring`, the cluster, its kind and the applicable targets, managed Ceph StorageClusters | `bootwright cluster info --context <context>` lists the clusters the context selects and their kinds |
+| The name is an external Ceph StorageCluster | `cluster.not-applicable`, as above | as above |
+| No selected StorageClient has the client name | `access.target`, naming the context and the client | `bootwright cluster info --context <context> --name <cluster>` lists the StorageClients of the cluster |
+| The StorageClient's `spec.clusterRef` names another cluster | `access.target`, naming the client, the cluster it belongs to and the named cluster | as above |
+| The context's custody holds no keyring for the client | `access.unavailable`, naming the client and the cluster | `bootwright apply --context <context> --stage clusters` |
+| The custodied entry is not exactly one credential of `client.<client>` | `secret.store.corrupt`, naming the client | read it natively with the administrator command `cluster info --context <context> --name <cluster>` prints, followed by `auth get client.<client>` |
+
+The target, its applicability and the client's cluster are settled from the
+compiled graph before any custody read, so a refusal of the first seven kinds
+reads no credential bytes. A store this build cannot open refuses with its own
+[`secret.store.*` diagnostic](secrets.md#local-keyring-v4). In default text
+mode, successful standard output is exactly the native keyring form
+`[client.<client>]`, LF, a tab, `key = <key>` and one final LF, as
+`ceph auth get-or-create` prints it without its caps lines, and nothing else.
+Standard error is empty, or, for a copy custody holds unproved, holds exactly
+one `access.unproved` warning naming the client and the cluster and saying its
+access was not proved; on any failure, standard output is empty and standard
+error holds exactly one diagnostic. Explicit JSON or YAML output wraps the same
+bytes in the [structured export envelope](cli/output.md#streams-and-exit-status)
+with media type `text/plain`, places any unproved-access warning in envelope
+diagnostics, and leaves standard error empty. The entry exists from the apply
+that creates the client
+([produced material custody](state-reconciliation.md#produced-material-custody))
+until the destroy that completes the context's removal withdraws it, and
+`context delete --purge --allow-orphans` removes it with the keyring.
 
 ### Host-key trust
 

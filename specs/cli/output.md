@@ -227,7 +227,7 @@ Successful result objects have stable top-level fields:
 | --- | --- |
 | `help` and explicit help | `command`, `usage`, `description`, `commands`, `flags` |
 | `version` | `version`, `commit`, `source`, `go`, `target`, `dependencyBundle` |
-| `completion <shell>`, `secret show`, `cluster kubeconfig` | `export` |
+| `completion <shell>`, `secret show`, `cluster kubeconfig`, `cluster keyring` | `export` |
 | `context init`, `context update` | `context`, `counts`, `filesCopied`, `inputChanged` |
 | `context use`, `context current` | `context` |
 | `context list` | `contexts` |
@@ -520,8 +520,8 @@ field that carries a secret. Its contract, refusals and warning are the
 [storage dashboard access](../cli.md#storage-dashboard-access).
 
 `accessCommands` contains exactly one entry for each canonical command, ordered
-`cluster exec`, `cluster kubeconfig`, `cluster kubectl`, `cluster oc`, then
-`cluster rsh`. Each entry orders these fields:
+`cluster exec`, `cluster keyring`, `cluster kubeconfig`, `cluster kubectl`,
+`cluster oc`, then `cluster rsh`. Each entry orders these fields:
 
 | Field | Contract |
 | --- | --- |
@@ -548,8 +548,14 @@ Within an available `cluster info` result, evaluate each entry as follows:
 
 SSH entries describe the default node selected under
 [cluster sessions](../cli.md#cluster-sessions); readiness for that node makes no
-claim about other nodes. Inspection opens no credential bytes by default and
-performs no live probes to populate these fields. Secret declarations alone do
+claim about other nodes. The `cluster keyring` entry of a managed Ceph cluster
+derives from its StorageClient resource rows and reads no custody: no
+StorageClient row is `unavailable`, saying the cluster declares no
+StorageClient; client rows none of which is `done` are `unavailable` with the
+`bootwright apply --context <context> --stage clusters` remedy; otherwise it is
+`ready`, with no node, and its template ends in `--client <client>`. Ready
+says one client of the cluster completed an apply; it claims nothing about any
+other client. Inspection opens no credential bytes by default and performs no live probes to populate these fields. Secret declarations alone do
 not prove that access material is available. Sensitive `cluster info --secrets`
 retains its separate explicit disclosure boundary.
 

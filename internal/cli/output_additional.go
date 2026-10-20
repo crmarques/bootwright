@@ -186,6 +186,13 @@ func writeAdditionalStructuredResult(out io.Writer, command *cobra.Command, path
 			return false, nil
 		}
 		shown, reported = exportedResult("application/yaml", value), kubeconfigWarnings(r)
+	case path == "cluster keyring" && result.keyring != nil:
+		value, ok := keyringValue(result.keyring)
+		if !ok {
+			return false, nil
+		}
+		defer clear(value)
+		shown, reported = exportedResult("text/plain", value), keyringWarnings(result.keyring)
 	default:
 		return false, nil
 	}

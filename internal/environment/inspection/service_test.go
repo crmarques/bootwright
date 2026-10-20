@@ -35,6 +35,9 @@ type fixture struct {
 	failure   error
 	passwords map[string]Custodied
 	custody   []string
+	keyrings  map[string]Custodied
+	clients   []string
+	clientErr error
 	readError error
 	rows      map[string][]Resource
 	rowCalls  int
@@ -124,14 +127,20 @@ func (f *fixture) DashboardPassword(_ context.Context, contextName, cluster stri
 	return found, ok, f.readError
 }
 
+func (f *fixture) ClientKeyring(_ context.Context, contextName, client string) (Custodied, bool, error) {
+	f.clients = append(f.clients, contextName+"/"+client)
+	found, ok := f.keyrings[client]
+	return found, ok, f.clientErr
+}
+
 func (f *fixture) service(current string) Service {
 	return New(f, f, f, f, func(context.Context) (string, error) { return current, nil }, f)
 }
 
 func (f *fixture) untouched() {
 	f.t.Helper()
-	if f.cephCalls != 0 || f.rowCalls != 0 || f.installs != 0 || f.keyReads != 0 || len(f.custody) != 0 {
-		f.t.Fatalf("a refusal read evidence: ceph %d, resources %d, installs %d, host keys %d, custody %v", f.cephCalls, f.rowCalls, f.installs, f.keyReads, f.custody)
+	if f.cephCalls != 0 || f.rowCalls != 0 || f.installs != 0 || f.keyReads != 0 || len(f.custody) != 0 || len(f.clients) != 0 {
+		f.t.Fatalf("a refusal read evidence: ceph %d, resources %d, installs %d, host keys %d, custody %v, client custody %v", f.cephCalls, f.rowCalls, f.installs, f.keyReads, f.custody, f.clients)
 	}
 }
 
@@ -188,7 +197,7 @@ func TestClusterInfoReportsEachKindFromDesiredStateAndEvidence(t *testing.T) {
 	if !slices.Equal(names, []string{"edge", "okd-lab", "archive", "storage"}) {
 		t.Fatalf("order = %v", names)
 	}
-	order := []string{CommandExec, CommandKubeconfig, CommandKubectl, CommandOC, CommandRsh}
+	order := []string{CommandExec, CommandKeyring, CommandKubeconfig, CommandKubectl, CommandOC, CommandRsh}
 	for _, entry := range result.Clusters {
 		if !slices.Equal(commandNames(entry.AccessCommands), order) || entry.Kind != KindContainerCluster {
 			t.Fatalf("%s access = %+v", entry.Name, entry.AccessCommands)
@@ -199,7 +208,7 @@ func TestClusterInfoReportsEachKindFromDesiredStateAndEvidence(t *testing.T) {
 		edge[CommandRsh] != StatusNotImplemented || edge[CommandOC] != StatusNotImplemented {
 		t.Fatalf("container statuses edge %v okd %v", edge, okd)
 	}
-	if reason := result.Clusters[1].AccessCommands[1].Reason; !strings.Contains(reason, "bootwright apply --context lab") {
+	if reason := result.Clusters[1].AccessCommands[2].Reason; !strings.Contains(reason, "bootwright apply --context lab") {
 		t.Fatalf("unavailable kubeconfig reason = %q", reason)
 	}
 	archive := result.Storage[0]
@@ -214,10 +223,10 @@ func TestClusterInfoReportsEachKindFromDesiredStateAndEvidence(t *testing.T) {
 	managed := result.Storage[1]
 	statuses := commandStatuses(managed.AccessCommands)
 	if statuses[CommandExec] != StatusReady || statuses[CommandRsh] != StatusReady || statuses[CommandKubeconfig] != StatusNotApplicable ||
-		statuses[CommandOC] != StatusNotApplicable || statuses[CommandKubectl] != StatusNotApplicable {
+		statuses[CommandOC] != StatusNotApplicable || statuses[CommandKubectl] != StatusNotApplicable || statuses[CommandKeyring] != StatusUnavailable {
 		t.Fatalf("managed statuses = %v", statuses)
 	}
-	if managed.AccessCommands[0].Node != "rhel-01" || managed.AccessCommands[4].Node != "rhel-01" || managed.AccessCommands[0].Reason != "" {
+	if managed.AccessCommands[0].Node != "rhel-01" || managed.AccessCommands[5].Node != "rhel-01" || managed.AccessCommands[0].Reason != "" {
 		t.Fatalf("managed sessions = %+v", managed.AccessCommands)
 	}
 	wantCommand := "bootwright cluster exec --context lab --name storage --node rhel-01 -- sudo -n ceph --conf /var/lib/bootwright/ceph/" + testFSID +
@@ -235,7 +244,7 @@ func TestClusterInfoReportsEachKindFromDesiredStateAndEvidence(t *testing.T) {
 	if f.cephCalls != 1 {
 		t.Fatalf("the external cluster read Ceph evidence: %d calls", f.cephCalls)
 	}
-	if len(f.custody) != 0 || managed.Ceph.Dashboard.Revealed || len(managed.Ceph.Dashboard.Password.Parts()) != 0 {
+	if len(f.custody) != 0 || len(f.clients) != 0 || managed.Ceph.Dashboard.Revealed || len(managed.Ceph.Dashboard.Password.Parts()) != 0 {
 		t.Fatalf("cluster info without --secrets read custody %v", f.custody)
 	}
 }

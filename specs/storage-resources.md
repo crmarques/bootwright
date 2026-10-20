@@ -380,8 +380,9 @@ a lost response requires safe recapture of the same principal/key. No native
 keyring is emitted through ordinary render, status or evidence. No Bootwright
 harness consumes the key: B476's client-data test runs through `cluster exec`
 with the bootstrap node's administrator keyring
-([storage contract](storage.md#resources-readiness-and-access)), and this
-introduces no public credential-export command. Removal waits for declared consumers to be quiescent, revokes the
+([storage contract](storage.md#resources-readiness-and-access)). An operator
+exports one client's keyring only through the
+[client keyring export](cli.md#client-keyring-export). Removal waits for declared consumers to be quiescent, revokes the
 owned principal and withdraws its material through the lifecycle transaction.
 
 ```yaml
@@ -946,7 +947,7 @@ provisioning rows remain required by the coverage matrix.
 | NVMe-oF gateway resources, B480 | Native service/group, subsystem NQN, listener address/transport, namespace ID and `StorageRBDImage` reference; initiator NQN/host authorization links to the subsystem. | No automatic unowned image creation or wildcard host access. Defaults and generated IDs are frozen/captured. Listener reachability, ANA/HA and release-supported security are qualified together. |
 | iSCSI resources, B481 | Not realized: no iSCSI kind exists, and admission refuses `service_type: iscsi` at that field. | Refused before any effect; block access over the network uses NVMe-oF (B480). No NVMe field substitutes for an iSCSI one. |
 | Replication peers, B483 | Explicit source and destination cluster/resource references, protocol/replication mode, peer identity, endpoint trust and credential ownership. | Both endpoints are declared managed resources. One relationship owner coordinates bootstrap and removal; no ambient peer lookup, context crossing or foreign adoption. |
-| Access material/handoff, B489 | Declared principal/resource set, selected trust/endpoints and produced-material identity; managed `StorageExport` material (its produced schema, principals and custody) belongs to [B86](milestones/m4.md#b86), which reuses this boundary; `StorageExport` retains its own consumer shape. | Material is scoped, privately captured and withdrawn through custody. Its sensitive-output interface remains B489's separate approval gate; P2 authorizes no reveal command. |
+| Access material/handoff, B489 | Declared principal/resource set, selected trust/endpoints and produced-material identity; managed `StorageExport` material (its produced schema, principals and custody) belongs to [B86](milestones/m4.md#b86), which reuses this boundary; `StorageExport` retains its own consumer shape. | Material is scoped, privately captured and withdrawn through custody. A StorageClient's keyring is revealed only through the [client keyring export](cli.md#client-keyring-export); no other reveal command exists. |
 
 A native name in an imperative provider request is always projected from this
 declared identity/reference graph. These records also settle availability of

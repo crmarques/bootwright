@@ -13,6 +13,9 @@
   ○ Command | info
       PURPOSE  Show cluster details and static access applicability
 
+  ○ Command | keyring
+      PURPOSE  Export a StorageClient's raw sensitive Ceph keyring bytes to standard output
+
   ○ Command | kubeconfig
       PURPOSE  Export raw sensitive kubeconfig bytes to standard output
 

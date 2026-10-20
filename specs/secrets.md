@@ -329,7 +329,9 @@ initialized refuses a capture with `secret.store.uninitialized` and holds
 nothing to withdraw. No secret command lists, checks, reveals, sets, generates,
 deletes or matches it to a declaration of the same name; `cluster kubeconfig`
 reveals an installation's entry under the [explicit sensitive-output
-boundary](cli.md#administrator-access-export). Its parts count in `materialParts`,
+boundary](cli.md#administrator-access-export), and `cluster keyring` reveals
+one StorageClient's entry in its native keyring form under the
+[client keyring export](cli.md#client-keyring-export). Its parts count in `materialParts`,
 rotation re-encrypts it with every other version, and it is removed with the
 keyring.
 

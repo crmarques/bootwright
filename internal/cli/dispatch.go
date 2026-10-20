@@ -57,6 +57,7 @@ type commandResult struct {
 	encryptionStatus   *encryption.StatusResult
 
 	kubeconfig *containeraccess.KubeconfigResult
+	keyring    *inspection.KeyringResult
 
 	clusterList *inspection.ListResult
 	clusterInfo *inspection.InfoResult
@@ -68,6 +69,9 @@ func (r commandResult) clearSensitive() {
 	}
 	if r.kubeconfig != nil {
 		r.kubeconfig.Material.Clear()
+	}
+	if r.keyring != nil {
+		r.keyring.Material.Clear()
 	}
 }
 
@@ -96,7 +100,7 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 		return s.invokeController(ctx, path, &values, args)
 	case "preflight infra", "preflight clusters", "preflight all":
 		return commandResult{}, s.invokeEnvironmentPreflight(ctx, path, &values, args)
-	case "cluster list", "cluster info":
+	case "cluster list", "cluster info", "cluster keyring":
 		return s.invokeEnvironmentInspection(ctx, path, &values, args)
 	case "cluster rsh", "cluster exec":
 		return s.invokeEnvironmentAccess(ctx, path, &values, args)

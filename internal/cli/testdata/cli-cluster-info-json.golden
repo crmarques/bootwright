@@ -16,6 +16,11 @@
             "reason": "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
           },
           {
+            "command": "cluster keyring",
+            "status": "not-applicable",
+            "reason": "applies to managed Ceph StorageClusters only"
+          },
+          {
             "command": "cluster kubeconfig",
             "status": "ready"
           },
@@ -44,6 +49,11 @@
             "command": "cluster exec",
             "status": "not-implemented",
             "reason": "sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is reached through bootwright cluster kubeconfig"
+          },
+          {
+            "command": "cluster keyring",
+            "status": "not-applicable",
+            "reason": "applies to managed Ceph StorageClusters only"
           },
           {
             "command": "cluster kubeconfig",
@@ -78,6 +88,11 @@
             "reason": "the external StorageCluster archive declares no node roster; sessions apply to managed Ceph StorageClusters"
           },
           {
+            "command": "cluster keyring",
+            "status": "not-applicable",
+            "reason": "applies to managed Ceph StorageClusters only"
+          },
+          {
             "command": "cluster kubeconfig",
             "status": "not-applicable",
             "reason": "applies to OpenShift and OKD ContainerClusters only"
@@ -107,6 +122,10 @@
             "command": "cluster exec",
             "status": "ready",
             "node": "rhel-01"
+          },
+          {
+            "command": "cluster keyring",
+            "status": "ready"
           },
           {
             "command": "cluster kubeconfig",

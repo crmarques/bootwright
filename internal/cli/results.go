@@ -105,7 +105,7 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		}
 	case "cluster list", "cluster info":
 		return writeClusterResult(out, errOut, path, result, selectedJSON(command))
-	case "secret show", "cluster kubeconfig":
+	case "secret show", "cluster kubeconfig", "cluster keyring":
 		return writeReveal(out, errOut, command, path, result)
 	case "secret encryption init", "secret encryption rotate":
 		if validEncryptionMutation(result.encryptionMutation) {
@@ -175,6 +175,12 @@ func writeReveal(out, errOut io.Writer, command *cobra.Command, path string, res
 			return false, nil
 		}
 		return true, writeKubeconfig(out, errOut, result.kubeconfig)
+	}
+	if path == "cluster keyring" {
+		if result.keyring == nil {
+			return false, nil
+		}
+		return true, writeKeyring(out, errOut, result.keyring)
 	}
 	part := secrets.Part(stringValue(command.Flags(), "part"))
 	if result.secretReveal != nil && result.secretReveal.Part == part && validSecretPart(part) {

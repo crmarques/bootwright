@@ -5,6 +5,7 @@
       cluster exec  not-implemented
       sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
       reached through bootwright cluster kubeconfig
+      cluster keyring  not-applicable
       cluster kubeconfig  ready
       bootwright cluster kubeconfig --context lab --name edge
       cluster kubectl  not-implemented
@@ -24,6 +25,7 @@
       cluster exec  not-implemented
       sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
       reached through bootwright cluster kubeconfig
+      cluster keyring  not-applicable
       cluster kubeconfig  unavailable
       this context holds no administrator kubeconfig for okd-lab until an apply proves its
       installation complete; run bootwright apply --context lab
@@ -42,6 +44,7 @@
       Type  StorageCluster
     Access
       cluster exec  not-applicable
+      cluster keyring  not-applicable
       cluster kubeconfig  not-applicable
       cluster kubectl  not-applicable
       cluster oc  not-applicable
@@ -56,6 +59,8 @@
       cluster exec  unavailable
       the Machine rhel-01, which runs node rhel-01, has no proved host key; bootwright apply
       --context lab --stage machines records it
+      cluster keyring  unavailable
+      the StorageCluster storage declares no StorageClient
       cluster kubeconfig  not-applicable
       cluster kubectl  not-applicable
       cluster oc  not-applicable

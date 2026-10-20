@@ -17,10 +17,10 @@ type Service struct {
 	installs  InstallEvidence
 	keys      HostKeys
 	selection CurrentSelection
-	custody   DashboardCustody
+	custody   Custody
 }
 
-func New(graph Graph, ceph CephEvidence, installs InstallEvidence, keys HostKeys, selection CurrentSelection, custody DashboardCustody) Service {
+func New(graph Graph, ceph CephEvidence, installs InstallEvidence, keys HostKeys, selection CurrentSelection, custody Custody) Service {
 	return Service{graph: graph, ceph: ceph, installs: installs, keys: keys, selection: selection, custody: custody}
 }
 
@@ -231,6 +231,7 @@ func (s Service) containerEntry(ctx context.Context, selected string, cluster ap
 	}
 	return ContainerEntry{Name: cluster.Name(), Kind: KindContainerCluster, AccessCommands: []AccessCommand{
 		{Command: CommandExec, Status: StatusNotImplemented, Reason: sessions},
+		{Command: CommandKeyring, Status: StatusNotApplicable, Reason: managedCephOnly},
 		kubeconfig,
 		{Command: CommandKubectl, Status: StatusNotImplemented, Reason: handoff},
 		{Command: CommandOC, Status: StatusNotImplemented, Reason: handoff},
@@ -251,6 +252,7 @@ func (s Service) storageEntry(ctx context.Context, selected string, catalog api.
 		roster := "the external StorageCluster " + cluster.Name() + " declares no node roster; sessions apply to managed Ceph StorageClusters"
 		return StorageEntry{Name: cluster.Name(), Kind: KindStorageCluster, AccessCommands: []AccessCommand{
 			{Command: CommandExec, Status: StatusNotApplicable, Reason: roster},
+			{Command: CommandKeyring, Status: StatusNotApplicable, Reason: managedCephOnly},
 			{Command: CommandKubeconfig, Status: StatusNotApplicable, Reason: containerOnly},
 			{Command: CommandKubectl, Status: StatusNotApplicable, Reason: containerOnly},
 			{Command: CommandOC, Status: StatusNotApplicable, Reason: containerOnly},
@@ -269,11 +271,28 @@ func (s Service) storageEntry(ctx context.Context, selected string, catalog api.
 	}
 	return StorageEntry{Name: cluster.Name(), Kind: KindStorageCluster, Ceph: &ceph, AccessCommands: []AccessCommand{
 		exec,
+		keyringAccess(selected, cluster.Name(), resources),
 		{Command: CommandKubeconfig, Status: StatusNotApplicable, Reason: containerOnly},
 		{Command: CommandKubectl, Status: StatusNotApplicable, Reason: containerOnly},
 		{Command: CommandOC, Status: StatusNotApplicable, Reason: containerOnly},
 		rsh,
 	}}, nil
+}
+
+const managedCephOnly = "applies to managed Ceph StorageClusters only"
+
+func keyringAccess(selected, cluster string, resources []Resource) AccessCommand {
+	access := AccessCommand{Command: CommandKeyring, Status: StatusUnavailable, Reason: "the StorageCluster " + cluster + " declares no StorageClient"}
+	for _, resource := range resources {
+		if resource.Kind != string(api.StorageClient) {
+			continue
+		}
+		if resource.Status == ResourceDone {
+			return AccessCommand{Command: CommandKeyring, Status: StatusReady}
+		}
+		access.Reason = "no StorageClient of " + cluster + " has a completed apply; run bootwright apply --context " + selected + " --stage clusters"
+	}
+	return access
 }
 
 func (s Service) sessionAccess(ctx context.Context, selected string, cluster api.Object) (AccessCommand, error) {

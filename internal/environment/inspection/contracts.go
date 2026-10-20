@@ -31,6 +31,15 @@ type DashboardCustody interface {
 	DashboardPassword(ctx context.Context, contextName, cluster string) (Custodied, bool, error)
 }
 
+type ClientCustody interface {
+	ClientKeyring(ctx context.Context, contextName, client string) (Custodied, bool, error)
+}
+
+type Custody interface {
+	DashboardCustody
+	ClientCustody
+}
+
 type CephEvidence interface {
 	ManagedCeph(ctx context.Context, contextName string, catalog api.Catalog, cluster api.Object) (CephProof, error)
 	Resources(ctx context.Context, contextName string, catalog api.Catalog) (map[string][]Resource, error)

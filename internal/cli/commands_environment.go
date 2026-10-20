@@ -67,6 +67,7 @@ type EnvironmentPreflightService interface {
 type EnvironmentInspectionService interface {
 	ListClusters(context.Context, inspection.ListClustersRequest) (*inspection.ListResult, error)
 	ClusterInfo(context.Context, inspection.ClusterInfoRequest) (*inspection.InfoResult, error)
+	ClientKeyring(context.Context, inspection.KeyringRequest) (*inspection.KeyringResult, error)
 }
 
 type EnvironmentAccessService interface {
@@ -124,6 +125,13 @@ func (s Services) invokeEnvironmentInspection(ctx context.Context, path string, 
 			Secrets:     values.boolean("secrets"),
 		}, s.EnvironmentInspection.ClusterInfo)
 		return commandResult{clusterInfo: result}, err
+	case "cluster keyring":
+		result, err := invokeResult(ctx, values, inspection.KeyringRequest{
+			ContextName: values.text("context"),
+			Name:        values.text("name"),
+			Client:      values.text("client"),
+		}, s.EnvironmentInspection.ClientKeyring)
+		return commandResult{keyring: result}, err
 	default:
 		return commandResult{}, errors.New("command has no application dispatch")
 	}

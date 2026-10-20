@@ -256,13 +256,52 @@ func (p *producedFake) ReadProduced(_ context.Context, contextName, block, name 
 
 func TestDashboardCustodyReadsTheClusterBlocksDashboardEntry(t *testing.T) {
 	reader := &producedFake{material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("Xq7-Lm2_Rv9.Tk4-Wz8_Hn3.Pb6-Jd5_")}), unproved: true, found: true}
-	got, found, err := (dashboardCustody{reader: reader}).DashboardPassword(context.Background(), "lab", "storage")
+	got, found, err := (inspectionCustody{reader: reader}).DashboardPassword(context.Background(), "lab", "storage")
 	value, _ := got.Material.Part(secrets.ValuePart)
 	if err != nil || !found || !got.Unproved || string(value) != "Xq7-Lm2_Rv9.Tk4-Wz8_Hn3.Pb6-Jd5_" || !slices.Equal(reader.reads, []string{"lab/ceph-cluster-storage/dashboard"}) {
 		t.Fatalf("custody = %+v %t (%v) after %v", got, found, err, reader.reads)
 	}
 	failure := errors.New("the custody store is unreadable")
-	if _, _, err := (dashboardCustody{reader: &producedFake{failed: failure}}).DashboardPassword(context.Background(), "lab", "storage"); !errors.Is(err, failure) {
+	if _, _, err := (inspectionCustody{reader: &producedFake{failed: failure}}).DashboardPassword(context.Background(), "lab", "storage"); !errors.Is(err, failure) {
+		t.Fatalf("custody failure = %v", err)
+	}
+}
+
+func zeroed(material secrets.Material) bool {
+	for _, part := range material.Parts() {
+		if value, _ := material.Part(part); len(value) == 0 || strings.Trim(string(value), "\x00") != "" {
+			return false
+		}
+	}
+	return len(material.Parts()) != 0
+}
+
+func TestClientCustodyReadsTheClientBlocksEntry(t *testing.T) {
+	const key = "AQBx57l5Y2FuYXJ5LWNsaWVudC1rZXk9PQ=="
+	entry := `[{"caps":{"mgr":"profile rbd pool=volumes","mon":"profile rbd","osd":"profile rbd pool=volumes"},"entity":"client.vm-disks","key":"` + key + `"}]`
+	source := secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(entry)})
+	reader := &producedFake{material: source, unproved: true, found: true}
+	got, found, err := (inspectionCustody{reader: reader}).ClientKeyring(context.Background(), "lab", "vm-disks")
+	value, _ := got.Material.Part(secrets.ValuePart)
+	if err != nil || !found || !got.Unproved || string(value) != "[client.vm-disks]\n\tkey = "+key+"\n" || !slices.Equal(reader.reads, []string{"lab/ceph-client-vm-disks/client"}) || !zeroed(source) {
+		t.Fatalf("custody = %q %t %t (%v) after %v", value, got.Unproved, found, err, reader.reads)
+	}
+	for name, material := range map[string]secrets.Material{
+		"another client": secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(strings.Replace(entry, "client.vm-disks", "client.other", 1))}),
+		"a keyring":      secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("[client.vm-disks]\n\tkey = " + key + "\n")}),
+		"another part":   secrets.NewMaterial(map[secrets.Part][]byte{secrets.PasswordPart: []byte(entry)}),
+		"two parts":      secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(entry), secrets.PasswordPart: []byte("x")}),
+	} {
+		got, _, err := (inspectionCustody{reader: &producedFake{material: material, found: true}}).ClientKeyring(context.Background(), "lab", "vm-disks")
+		if !errors.Is(err, inspection.ErrClientMaterial) || len(got.Material.Parts()) != 0 || !zeroed(material) {
+			t.Fatalf("%s: custody = %+v (%v)", name, got, err)
+		}
+	}
+	if _, found, err := (inspectionCustody{reader: &producedFake{}}).ClientKeyring(context.Background(), "lab", "vm-disks"); found || err != nil {
+		t.Fatalf("absent entry = %t (%v)", found, err)
+	}
+	failure := errors.New("the custody store is unreadable")
+	if _, _, err := (inspectionCustody{reader: &producedFake{failed: failure}}).ClientKeyring(context.Background(), "lab", "vm-disks"); !errors.Is(err, failure) {
 		t.Fatalf("custody failure = %v", err)
 	}
 }

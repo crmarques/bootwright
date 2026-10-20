@@ -15,6 +15,7 @@ const (
 	ManagementExternal = "external"
 
 	CommandExec       = "cluster exec"
+	CommandKeyring    = "cluster keyring"
 	CommandKubeconfig = "cluster kubeconfig"
 	CommandKubectl    = "cluster kubectl"
 	CommandOC         = "cluster oc"

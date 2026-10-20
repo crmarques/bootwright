@@ -88,6 +88,7 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"cluster oc", containeraccess.OCRequest{ContextName: "example", Name: "demo", Command: []string{"get", "--help", ""}}},
 		{"cluster kubectl", containeraccess.KubectlRequest{ContextName: "example", Name: "demo", Command: []string{"get", "--help", ""}}},
 		{"cluster kubeconfig", containeraccess.KubeconfigRequest{ContextName: "example", Name: "demo"}},
+		{"cluster keyring", inspection.KeyringRequest{ContextName: "example", Name: "demo", Client: "vm-disks"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
@@ -128,7 +129,7 @@ func TestEnvironmentCapabilitiesAreIndependent(t *testing.T) {
 		{"preflight", []string{"preflight infra", "preflight clusters", "preflight all"}, func(record *dispatchRecord) Services {
 			return Services{EnvironmentPreflight: environmentSpy{record}}
 		}},
-		{"inspection", []string{"cluster list", "cluster info"}, func(record *dispatchRecord) Services {
+		{"inspection", []string{"cluster list", "cluster info", "cluster keyring"}, func(record *dispatchRecord) Services {
 			return Services{EnvironmentInspection: environmentSpy{record}}
 		}},
 		{"access", []string{"cluster rsh", "cluster exec"}, func(record *dispatchRecord) Services {

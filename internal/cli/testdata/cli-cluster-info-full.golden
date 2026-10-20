@@ -6,6 +6,8 @@
       sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
       reached through bootwright cluster kubeconfig
       template (not-implemented): bootwright cluster exec --context lab --name edge --node <node> -- <command>...
+      cluster keyring  not-applicable
+      applies to managed Ceph StorageClusters only
       cluster kubeconfig  ready
       bootwright cluster kubeconfig --context lab --name edge
       cluster kubectl  not-implemented
@@ -29,6 +31,8 @@
       sessions on an OpenShift or OKD ContainerCluster are not yet implemented; the cluster is
       reached through bootwright cluster kubeconfig
       template (not-implemented): bootwright cluster exec --context lab --name okd-lab --node <node> -- <command>...
+      cluster keyring  not-applicable
+      applies to managed Ceph StorageClusters only
       cluster kubeconfig  ready
       bootwright cluster kubeconfig --context lab --name okd-lab
       cluster kubectl  not-implemented
@@ -51,6 +55,8 @@
       cluster exec  not-applicable
       the external StorageCluster archive declares no node roster; sessions apply to managed
       Ceph StorageClusters
+      cluster keyring  not-applicable
+      applies to managed Ceph StorageClusters only
       cluster kubeconfig  not-applicable
       applies to OpenShift and OKD ContainerClusters only
       cluster kubectl  not-applicable
@@ -70,6 +76,8 @@
     Access
       cluster exec  ready
       bootwright cluster exec --context lab --name storage --node rhel-01 -- <command>...
+      cluster keyring  ready
+      bootwright cluster keyring --context lab --name storage --client <client>
       cluster kubeconfig  not-applicable
       applies to OpenShift and OKD ContainerClusters only
       cluster kubectl  not-applicable

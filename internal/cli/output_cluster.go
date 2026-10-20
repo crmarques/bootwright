@@ -113,7 +113,7 @@ func (clusterInfoPresentation) documentedResult() {}
 var accessStatuses = []string{inspection.StatusNotApplicable, inspection.StatusNotImplemented, inspection.StatusUnavailable, inspection.StatusReady}
 
 func validAccessCommands(commands []inspection.AccessCommand) bool {
-	wantOrder := []string{inspection.CommandExec, inspection.CommandKubeconfig, inspection.CommandKubectl, inspection.CommandOC, inspection.CommandRsh}
+	wantOrder := []string{inspection.CommandExec, inspection.CommandKeyring, inspection.CommandKubeconfig, inspection.CommandKubectl, inspection.CommandOC, inspection.CommandRsh}
 	if len(commands) != len(wantOrder) {
 		return false
 	}
@@ -586,6 +586,8 @@ func accessTemplate(contextName, cluster string, command inspection.AccessComman
 		}
 	case inspection.CommandOC, inspection.CommandKubectl:
 		base += " -- <command>..."
+	case inspection.CommandKeyring:
+		base += " --client <client>"
 	}
 	return base
 }

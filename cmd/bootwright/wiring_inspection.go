@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -32,18 +33,37 @@ type hostKeyReader interface {
 
 func wireInspection(state inventory.EffectiveState, reconciler lifecycle.Service, binder *custody.Service, selection contexts.SelectionStore) inspection.Service {
 	return inspection.New(effectiveGraph{state: state}, cephInspection{reconciler: reconciler}, installProofs{reconciler: reconciler},
-		hostKeyProofs{keys: machineHostKeys{reconciler: reconciler}}, currentSelection(selection), dashboardCustody{reader: producedReader{binder: binder}})
+		hostKeyProofs{keys: machineHostKeys{reconciler: reconciler}}, currentSelection(selection), inspectionCustody{reader: producedReader{binder: binder}})
 }
 
 type producedEntries interface {
 	ReadProduced(ctx context.Context, contextName, block, name string) (containeraccess.Custodied, bool, error)
 }
 
-type dashboardCustody struct{ reader producedEntries }
+type inspectionCustody struct{ reader producedEntries }
 
-func (d dashboardCustody) DashboardPassword(ctx context.Context, contextName, cluster string) (inspection.Custodied, bool, error) {
+func (d inspectionCustody) DashboardPassword(ctx context.Context, contextName, cluster string) (inspection.Custodied, bool, error) {
 	read, found, err := d.reader.ReadProduced(ctx, contextName, ceph.DashboardBlock(cluster), ceph.DashboardOutput)
 	return inspection.Custodied{Material: read.Material, Unproved: read.Unproved}, found, err
+}
+
+func (d inspectionCustody) ClientKeyring(ctx context.Context, contextName, client string) (inspection.Custodied, bool, error) {
+	read, found, err := d.reader.ReadProduced(ctx, contextName, ceph.ClientBlockID(client), ceph.ClientOutput)
+	if err != nil || !found {
+		return inspection.Custodied{Material: read.Material, Unproved: read.Unproved}, found, err
+	}
+	defer read.Material.Clear()
+	value, ok := read.Material.Part(secrets.ValuePart)
+	defer clear(value)
+	if !ok || !slices.Equal(read.Material.Parts(), []secrets.Part{secrets.ValuePart}) {
+		return inspection.Custodied{}, true, inspection.ErrClientMaterial
+	}
+	keyring, ok := ceph.ClientKeyring(value, client)
+	defer clear(keyring)
+	if !ok {
+		return inspection.Custodied{}, true, inspection.ErrClientMaterial
+	}
+	return inspection.Custodied{Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: keyring}), Unproved: read.Unproved}, true, nil
 }
 
 type cephInspection struct{ reconciler cephReader }

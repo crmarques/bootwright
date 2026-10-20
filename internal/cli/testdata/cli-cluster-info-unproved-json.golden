@@ -17,6 +17,10 @@
             "node": "rhel-01"
           },
           {
+            "command": "cluster keyring",
+            "status": "ready"
+          },
+          {
             "command": "cluster kubeconfig",
             "status": "not-applicable",
             "reason": "applies to OpenShift and OKD ContainerClusters only"

@@ -175,6 +175,7 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"cluster oc", []string{"--name", "demo", "--", "get", "nodes"}, ignoresRoute},
 		{"cluster kubectl", []string{"--name", "demo", "--", "get", "nodes"}, ignoresRoute},
 		{"cluster kubeconfig", []string{"--name", "demo"}, ignoresRoute},
+		{"cluster keyring", []string{"--name", "demo", "--client", "vm-disks"}, ignoresRoute},
 		{"version", nil, notAdmitted},
 		{"help", nil, notAdmitted},
 		{"completion bash", nil, notAdmitted},
