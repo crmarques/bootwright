@@ -313,6 +313,11 @@ than copy its placement, TLS, ports or daemon configuration. For example, a
 filesystem binds its MDS service; an object gateway binds RGW and optional
 ingress. Native manager-generated SMB services remain derived children of the
 SMB resource owner and cannot also appear as independently managed entries.
+An authored `service_type: smb` refuses at its `service_type` because the SMB
+manager module generates that service from a StorageSMBResource, and
+`service_type: iscsi` refuses because Bootwright does not realize the iSCSI
+gateway; block access over the network goes through the NVMe-oF gateway
+([B481](milestones/m2.md#b481)).
 The [resource contract](storage-resources.md) owns those relationships.
 
 ### RGW, ingress and NFS records

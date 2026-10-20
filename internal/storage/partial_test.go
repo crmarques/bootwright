@@ -100,6 +100,8 @@ func TestPartialValidationIssuesAlsoRefuseTheCompleteObject(t *testing.T) {
 		{"native grafana inline password", appendService(m("service_type", "grafana", "placement", m("label", "mgr"), "spec", m("initial_admin_password", "material")))},
 		{"native tracing service", appendService(m("service_type", "jaeger-agent", "placement", m("label", "mgr")))},
 		{"native authored crash", appendService(m("service_type", "crash", "placement", m("label", "mgr")))},
+		{"native iSCSI gateway", appendService(m("service_type", "iscsi", "service_id", "gw", "placement", m("label", "mgr")))},
+		{"native SMB generated service", appendService(m("service_type", "smb", "service_id", "files", "placement", m("label", "mgr")))},
 		{"native alertmanager webhook key", appendService(m("service_type", "alertmanager", "placement", m("label", "mgr"), "spec", m("user_data", m("webhook_urls", api.StringList("https://hooks.example.test/a")))))},
 		{"native prometheus retention", appendService(m("service_type", "prometheus", "placement", m("label", "mgr"), "spec", m("retention_time", "14days")))},
 		{"native retired workarounds", edit(api.StorageCluster, "storage", func(s api.Value) api.Value {
