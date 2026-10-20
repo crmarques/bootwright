@@ -86,3 +86,19 @@ func TestBareGatewayVIPIsTakenBeforeAPrefixedIngress(t *testing.T) {
 	cluster, catalog := withGraph(t, replace(bindingCatalog(), other), graphServices())
 	requireOnly(t, Validate(cluster, catalog), rgwIngressAt+".spec.virtual_ip", "api.invariant", vipTaken, "choose a virtual IP no other ingress uses")
 }
+
+func TestMgmtGatewayIngressVIPKeepsAddressGuards(t *testing.T) {
+	const gatewayVIP, ingressVIP = "$.spec.ceph.services[3].spec.virtual_ip", "$.spec.ceph.services[4].spec.virtual_ip"
+	for address, message := range map[string]string{
+		"192.0.2.0":   "an ingress virtual_ip cannot be the network or broadcast address of its public CIDR",
+		"192.0.2.255": "an ingress virtual_ip cannot be the network or broadcast address of its public CIDR",
+		"192.0.2.1":   "an ingress virtual_ip equals a declared Machine address",
+	} {
+		issues := graphIssues(t, gatewayPair(address, address))
+		requireOnly(t, issues, ingressVIP, "api.invariant", message, "")
+		requireNoIssueAt(t, issues, gatewayVIP)
+	}
+	issues := graphIssues(t, gatewayPair("198.51.100.7", "198.51.100.7"))
+	requireOnly(t, issues, ingressVIP, "api.invariant", "an ingress virtual_ip must lie inside a declared public CIDR", "choose a free address inside one of spec.ceph.networks.publicCIDRs")
+	requireOnly(t, issues, gatewayVIP, "api.invariant", "a management gateway virtual_ip lies inside a declared public network, so a host interface carries it", "")
+}

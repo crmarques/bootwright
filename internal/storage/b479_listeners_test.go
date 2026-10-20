@@ -49,3 +49,14 @@ func TestB479OmittedPortReservesItsDefault(t *testing.T) {
 		})
 	}
 }
+
+func TestB479NetworkBoundListenersCoexistWithAVIP(t *testing.T) {
+	const at = "$.spec.ceph.services[7].spec.port"
+	for _, serviceType := range []string{"grafana", "prometheus"} {
+		t.Run(serviceType, func(t *testing.T) {
+			bound := b479Service(serviceType, "port", 2049, "only_bind_port_on_networks", true).With("networks", api.StringList("192.0.2.0/24"))
+			requireGraphAdmits(t, graphIssues(t, append(keepaliveServices(), bound)))
+			requireBound(t, graphIssues(t, append(keepaliveServices(), b479Service(serviceType, "port", 2049))), at, "node-1", nfsAt+".spec.port")
+		})
+	}
+}
