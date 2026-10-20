@@ -99,8 +99,9 @@ func (c cephInspection) ManagedCeph(ctx context.Context, contextName string, cat
 		return inspection.CephProof{Reason: reason}, nil
 	}
 	proof := inspection.CephProof{
-		FSID:  found.FSID,
-		Image: inspection.Image{Reference: found.Image.Reference, Digest: found.Image.Digest, Platform: found.Image.Platform},
+		FSID:            found.FSID,
+		Image:           inspection.Image{Reference: found.Image.Reference, Digest: found.Image.Digest, Platform: found.Image.Platform},
+		Specializations: found.Specializations,
 	}
 	for _, monitor := range found.Monitors {
 		proof.Monitors = append(proof.Monitors, inspection.Monitor{Host: monitor.Host, FQDN: monitor.FQDN, Address: monitor.Address})

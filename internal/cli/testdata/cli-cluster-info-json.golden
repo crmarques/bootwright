@@ -156,6 +156,9 @@
           "digest": "sha256:4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f",
           "platform": "linux/amd64"
         },
+        "specializations": [
+          "ceph-bootstrap-license-call-continues"
+        ],
         "monitors": [
           {
             "host": "rhel-01",

@@ -177,10 +177,19 @@ def builtin_exception(name):
     return isinstance(value, type) and issubclass(value, BaseException)
 
 
+def applied_ids(value):
+    """A sorted, duplicate-free list of 1 to 32 bounded specialization ids."""
+    return (isinstance(value, list) and 0 < len(value) <= 32
+            and all(isinstance(name, str) and re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", name) is not None and len(name.encode()) <= 64
+                    for name in value)
+            and value == sorted(set(value)))
+
+
 def result_bytes(value):
     require(isinstance(value, dict) and type(value.get("ok")) is bool)
     if value["ok"]:
-        require(set(value) == {"ok", "result"} and isinstance(value["result"], dict))
+        require(set(value) in ({"ok", "result"}, {"ok", "result", "specializations"}) and isinstance(value["result"], dict))
+        require("specializations" not in value or applied_ids(value["specializations"]))
     else:
         require({"ok", "reason"} <= set(value) <= {"ok", "reason", "cause", "nativeError"}
                 and value["reason"] in ("native-unknown", "native-refusal", "native-timeout"))
@@ -219,7 +228,11 @@ def work(started=None, ceiling=REMOTE_LIMIT, loader=load):
         os.dup2(quiet, 2)
         native = loader(payload["sources"])
         try:
-            return {"ok": True, "result": native.dispatch(payload["payload"])}
+            answer = {"ok": True, "result": native.dispatch(payload["payload"])}
+            applied = list(getattr(native, "APPLIED", ()))
+            if applied:
+                answer["specializations"] = applied
+            return answer
         except native.Refusal as error:
             return failure("native-refusal", error)
     except RemoteDeadline:

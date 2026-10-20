@@ -49,19 +49,20 @@ type storagePresentation struct {
 }
 
 type managedCephPresentation struct {
-	Management  string                 `json:"management"`
-	Release     string                 `json:"release"`
-	FSID        string                 `json:"fsid,omitempty"`
-	Image       *imagePresentation     `json:"image,omitempty"`
-	Monitors    []monitorPresentation  `json:"monitors,omitempty"`
-	AdminNode   string                 `json:"adminNode,omitempty"`
-	CephCommand string                 `json:"cephCommand,omitempty"`
-	Status      string                 `json:"status"`
-	Reason      string                 `json:"reason,omitempty"`
-	Remedy      string                 `json:"remedy,omitempty"`
-	Dashboard   *dashboardPresentation `json:"dashboard,omitempty"`
-	Resources   []resourcePresentation `json:"resources"`
-	Endpoints   []endpointPresentation `json:"endpoints"`
+	Management      string                 `json:"management"`
+	Release         string                 `json:"release"`
+	FSID            string                 `json:"fsid,omitempty"`
+	Image           *imagePresentation     `json:"image,omitempty"`
+	Specializations []string               `json:"specializations,omitempty"`
+	Monitors        []monitorPresentation  `json:"monitors,omitempty"`
+	AdminNode       string                 `json:"adminNode,omitempty"`
+	CephCommand     string                 `json:"cephCommand,omitempty"`
+	Status          string                 `json:"status"`
+	Reason          string                 `json:"reason,omitempty"`
+	Remedy          string                 `json:"remedy,omitempty"`
+	Dashboard       *dashboardPresentation `json:"dashboard,omitempty"`
+	Resources       []resourcePresentation `json:"resources"`
+	Endpoints       []endpointPresentation `json:"endpoints"`
 }
 
 type endpointPresentation struct {
@@ -311,6 +312,9 @@ func displayManagedCeph(ceph *inspection.ManagedCeph) *managedCephPresentation {
 			Reference: escapeDisplayLine(ceph.Image.Reference), Digest: escapeDisplayLine(ceph.Image.Digest), Platform: escapeDisplayLine(ceph.Image.Platform),
 		}
 	}
+	for _, id := range ceph.Specializations {
+		shown.Specializations = append(shown.Specializations, escapeDisplayLine(id))
+	}
 	for _, monitor := range ceph.Monitors {
 		shown.Monitors = append(shown.Monitors, monitorPresentation{
 			Host: escapeDisplayLine(monitor.Host), FQDN: escapeDisplayLine(monitor.FQDN), Address: escapeDisplayLine(monitor.Address),
@@ -463,7 +467,7 @@ func writeManagedCeph(text *display, contextName, cluster string, ceph *inspecti
 		fields = append(fields, field{Label: "Reason", Value: ceph.Reason}, field{Label: "Next", Value: ceph.Remedy})
 	} else if full {
 		fields = append(fields, field{Label: "FSID", Value: ceph.FSID}, field{Label: "Image", Value: ceph.Image.Reference},
-			field{Label: "Digest", Value: ceph.Image.Digest}, field{Label: "Platform", Value: ceph.Image.Platform})
+			field{Label: "Digest", Value: ceph.Image.Digest}, field{Label: "Platform", Value: ceph.Image.Platform}, specializationsField(ceph.Specializations))
 	}
 	text.mutedFields(fields...)
 	writeResources(text, ceph.Resources, full)
@@ -478,6 +482,13 @@ func writeManagedCeph(text *display, contextName, cluster string, ceph *inspecti
 		text.subsection("Custody")
 		text.mutedFields(field{Label: "User", Value: d.User}, field{Label: "Password", Value: password})
 	}
+}
+
+func specializationsField(ids []string) field {
+	if len(ids) == 0 {
+		return field{Label: "Specializations", Value: "none"}
+	}
+	return field{Label: "Specializations", Value: strings.Join(ids, ", ")}
 }
 
 func writeResources(text *display, resources []inspection.Resource, full bool) {

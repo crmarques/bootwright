@@ -106,11 +106,12 @@
       Endpoint  rgw.objects  unproved: the apply did not prove this endpoint reachable
                 https://objects.lab.test:8443/
     Evidence
-      Status    ready
-      FSID      6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b
-      Image     cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074
-      Digest    sha256:4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f
-      Platform  linux/amd64
+      Status           ready
+      FSID             6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b
+      Image            cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074
+      Digest           sha256:4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f
+      Platform         linux/amd64
+      Specializations  ceph-bootstrap-license-call-continues
     Resources
       StoragePool/rbd-data          done  replicated size 2/min 2, application rbd
       StorageClient/rbd-canary      done  client.rbd-canary read-write on pool rbd-data

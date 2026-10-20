@@ -85,6 +85,7 @@ func newFixture(t *testing.T) *fixture {
 		cephFor: map[string]CephProof{"storage": {
 			FSID: testFSID, Image: Image{Reference: "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074", Digest: "sha256:" + strings.Repeat("a", 64), Platform: "linux/amd64"},
 			Monitors: []Monitor{{Host: "rhel-01", FQDN: "rhel-01.lab.test", Address: "192.0.2.11"}}, Dashboard: testDashboard(),
+			Specializations: []string{"ceph-bootstrap-license-call-continues"},
 		}},
 		passwords: map[string]Custodied{"storage": {Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(testPassword)})}},
 		installed: map[string]bool{"edge": true},
@@ -233,10 +234,11 @@ func TestClusterInfoReportsEachKindFromDesiredStateAndEvidence(t *testing.T) {
 		"/ceph.conf --keyring /var/lib/bootwright/ceph/" + testFSID + "/ceph.client.admin.keyring"
 	want := ManagedCeph{
 		Management: ManagementManaged, Release: "9.9.1.2", FSID: testFSID, Status: StatusReady, AdminNode: "rhel-01", CephCommand: wantCommand,
-		Image:     &Image{Reference: "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074", Digest: "sha256:" + strings.Repeat("a", 64), Platform: "linux/amd64"},
-		Monitors:  []Monitor{{Host: "rhel-01", FQDN: "rhel-01.lab.test", Address: "192.0.2.11"}},
-		Dashboard: &Dashboard{Status: DashboardReady, User: "admin", CertificateSHA256: strings.Repeat("c", 64), URLs: testDashboard().URLs},
-		Resources: []Resource{}, Endpoints: []Endpoint{},
+		Image:           &Image{Reference: "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074", Digest: "sha256:" + strings.Repeat("a", 64), Platform: "linux/amd64"},
+		Specializations: []string{"ceph-bootstrap-license-call-continues"},
+		Monitors:        []Monitor{{Host: "rhel-01", FQDN: "rhel-01.lab.test", Address: "192.0.2.11"}},
+		Dashboard:       &Dashboard{Status: DashboardReady, User: "admin", CertificateSHA256: strings.Repeat("c", 64), URLs: testDashboard().URLs},
+		Resources:       []Resource{}, Endpoints: []Endpoint{},
 	}
 	if !reflect.DeepEqual(*managed.Ceph, want) {
 		t.Fatalf("ceph = %+v, want %+v", *managed.Ceph, want)
@@ -313,7 +315,7 @@ func TestIncompleteProofsNeverReportReady(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		if ceph := result.Storage[0].Ceph; ceph.Status != StatusUnavailable || ceph.CephCommand != "" || ceph.Reason == "" {
+		if ceph := result.Storage[0].Ceph; ceph.Status != StatusUnavailable || ceph.CephCommand != "" || ceph.Reason == "" || ceph.Specializations != nil {
 			t.Fatalf("%s: ceph = %+v", name, *ceph)
 		}
 	}

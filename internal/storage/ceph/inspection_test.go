@@ -257,3 +257,28 @@ func TestInspectReportsAnUnreachableOrUnservedDashboardUnproved(t *testing.T) {
 		})
 	}
 }
+
+func TestInspectNamesTheAppliedSpecializations(t *testing.T) {
+	catalog, cluster := inspectedCluster()
+	hostApplied := func(ids ...string) lifecycle.BlockEvidence {
+		proof := hostProof(t, "node-2", func(e *HostEvidence) { e.Specializations = ids })
+		proof.Object = "storage"
+		return proof
+	}
+	proofs := provedPair(t)
+	proofs[1] = inspectedProof(Implementation, reconciliation.Apply, reconciliation.BlockDone, inspectedClusterEvidence(t, func(e *Evidence) {
+		e.Specializations = []string{"ceph-bootstrap-license-call-continues", "ceph-mgr-without-license-contract"}
+	}))
+	undecodable := hostApplied("ceph-call-home-opt-in")
+	undecodable.Block.RequestDigest = "another"
+	proofs = append(proofs, hostApplied("ceph-mgr-without-license-contract"), hostApplied("ceph-call-home-opt-in", "ceph-mgr-without-license-contract"), hostApplied(), undecodable)
+	got, reason := Inspect(catalog, cluster, proofs)
+	want := []string{"ceph-bootstrap-license-call-continues", "ceph-call-home-opt-in", "ceph-mgr-without-license-contract"}
+	if reason != "" || got.Dashboard.Status != DashboardReady || !reflect.DeepEqual(got.Specializations, want) {
+		t.Fatalf("specializations = %q (%q), want %q", got.Specializations, reason, want)
+	}
+	plain, reason := Inspect(catalog, cluster, append(provedPair(t), hostApplied(), undecodable))
+	if reason != "" || plain.Specializations != nil {
+		t.Fatalf("an execution that applied none names %q (%q)", plain.Specializations, reason)
+	}
+}

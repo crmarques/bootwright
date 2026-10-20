@@ -24,6 +24,8 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_tunnel_staging, ceph_tunnel_custody, native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
 )
 
+# Every id the shipped specialization registry declares; a worker answer or a record naming any other id is refused.
+SPECIALIZATION_IDS = frozenset(record.id for record in native_specializations.SPECIALIZATIONS)
 READINESS_TIMEOUT = 900
 READINESS_INTERVAL = 5
 # Each ingress host's read-only firewall check, all within one native call of the block's Go deadline.
@@ -155,13 +157,28 @@ def nfs_export_resource(resource, request):
     ceph_native.require(request is None or request["action"] == "nfs-export" and resource["path"] == request["nfsExport"]["native"]["pseudo"], "evidence")
 
 
+def specialization_ids(value):
+    """A sorted, duplicate-free list of 1 or more ids the shipped registry declares."""
+    return (isinstance(value, list) and 0 < len(value) <= len(SPECIALIZATION_IDS)
+            and all(isinstance(name, str) and name in SPECIALIZATION_IDS for name in value) and value == sorted(set(value)))
+
+
+def recorded(observation, transport, request_digest, request):
+    """The block's evidence naming the specialization ids this execution's native phases applied; absent when none."""
+    applied = getattr(transport, "applied", None)
+    if not applied:
+        return observation
+    return evidence(dict(observation, specializations=sorted(applied)), request_digest, request)
+
+
 def evidence(value, request_digest, request=None):
     """The closed public projection, checked before any result publication."""
     if isinstance(value, dict) and value.get("version") == ceph_host_runtime.EVIDENCE_VERSION:
         return host_evidence(value, request_digest, request)
     fields = {"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs",
               "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons"}
-    ceph_native.require(isinstance(value, dict) and set(value) == fields, "evidence")
+    ceph_native.require(isinstance(value, dict) and set(value) in (fields, fields | {"specializations"}), "evidence")
+    ceph_native.require("specializations" not in value or specialization_ids(value["specializations"]), "evidence")
     ceph_native.require(value["version"] == ceph_native.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
                         "evidence")
     dashboard_evidence(value)
@@ -331,6 +348,7 @@ class Transport:
         self.smb_secrets = smb_secrets
         self.policy = policy
         self.preflighted = False
+        self.applied = set()
 
     def ssh_policy(self):
         """The controller's SSH crypto policy, evaluated once on first use; a block that opens no session never evaluates it."""
@@ -394,7 +412,10 @@ class Transport:
                 value = result["nativeError"]
                 error.native_error = native_diagnostics.error_detail(value["coordinate"], value["cause"], secrets=private)
             raise error
-        ceph_native.require(set(result) == {"ok", "result"} and isinstance(result["result"], dict), "transport")
+        ceph_native.require(set(result) in ({"ok", "result"}, {"ok", "result", "specializations"}) and isinstance(result["result"], dict), "transport")
+        if "specializations" in result:
+            ceph_native.require(specialization_ids(result["specializations"]), "transport")
+            self.applied.update(result["specializations"])
         return result["result"]
 
     @staticmethod
@@ -802,7 +823,7 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         observation, effect = dashboard_phase(request, operation, request_digest, bootstrap, transport, observation, outputs["dashboard"],
                                               now=now, pause=pause, connect=connect)
         changed = effect or changed
-    return {"changed": changed, "evidence": observation}
+    return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
 
 
 def observe_unit(request, request_digest, bootstrap, transport, timeout=None, blocking=None, *, private=None):
@@ -886,7 +907,7 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
     if "mgmtGatewayCertificate" in seen:
         bound = hashlib.sha256(ceph_native_observability.leaf(seen["mgmtGatewayCertificate"])).hexdigest()
         ceph_native.require(observation["endpoint"]["certificateSHA256"] in ("", bound), "evidence")
-    return {"changed": changed, "evidence": observation}
+    return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
 
 
 def execute_gateway(request, operation, request_digest, transport, bootstrap, *, now, pause):
@@ -914,7 +935,7 @@ def execute_gateway(request, operation, request_digest, transport, bootstrap, *,
     if seen:
         bound = hashlib.sha256(ceph_native_observability.leaf(seen["gatewayCertificate"])).hexdigest()
         ceph_native.require(observation["endpoint"]["certificateSHA256"] in ("", bound), "evidence")
-    return {"changed": changed, "evidence": observation}
+    return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
 
 
 def dashboard_phase(request, operation, request_digest, bootstrap, transport, observation, output, *, now, pause, connect):
@@ -954,7 +975,8 @@ def host_evidence(value, request_digest, request=None):
     """The closed host block projection; no credential, path or vendor text."""
     fields = {"version", "request", "host", "owner", "fsid", "image", "ready", "removed", "imageID", "uid", "gid", "label", "policySHA256",
               "cephadmSHA256", "planDigest", "route", "devices"}
-    ceph_native.require(isinstance(value, dict) and set(value) == fields, "evidence")
+    ceph_native.require(isinstance(value, dict) and set(value) in (fields, fields | {"specializations"}), "evidence")
+    ceph_native.require("specializations" not in value or specialization_ids(value["specializations"]), "evidence")
     ceph_native.require(value["version"] == ceph_host_runtime.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
                         "evidence")
     ceph_native.require(all(type(value[key]) is bool for key in ("ready", "removed", "route")), "evidence")
@@ -1009,7 +1031,7 @@ def execute_host(request, operation, request_digest, transport):
     observation = host_evidence(dict(observed, request=request_digest), request_digest, request)
     if operation == "apply":
         ceph_native.require(observation["ready"] and observation["planDigest"] == packages["planDigest"], "not-ready")
-    return {"changed": changed, "evidence": observation}
+    return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
 
 
 SMB_VERSION = ceph_smb_native.VERSION

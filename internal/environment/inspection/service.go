@@ -340,6 +340,7 @@ func (s Service) cephEntry(ctx context.Context, selected string, catalog api.Cat
 	root := "/var/lib/bootwright/ceph/" + proof.FSID
 	entry.Status, entry.FSID = StatusReady, proof.FSID
 	entry.Image = &proof.Image
+	entry.Specializations = proof.Specializations
 	entry.Monitors = proof.Monitors
 	dashboard := proof.Dashboard
 	entry.Dashboard = &dashboard

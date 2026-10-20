@@ -40,10 +40,11 @@ type DashboardInspection struct {
 }
 
 type Inspection struct {
-	FSID      string
-	Image     ImageInspection
-	Monitors  []MonitorInspection
-	Dashboard DashboardInspection
+	FSID            string
+	Image           ImageInspection
+	Monitors        []MonitorInspection
+	Dashboard       DashboardInspection
+	Specializations []string
 }
 
 const (
@@ -75,7 +76,25 @@ func Inspect(catalog api.Catalog, cluster api.Object, proofs []lifecycle.BlockEv
 	if reason != "" {
 		return Inspection{}, reason
 	}
-	return Inspection{FSID: evidence.FSID, Image: image, Monitors: monitors, Dashboard: dashboard}, ""
+	return Inspection{FSID: evidence.FSID, Image: image, Monitors: monitors, Dashboard: dashboard, Specializations: clusterSpecializations(cluster.Name(), evidence, proofs)}, ""
+}
+
+func clusterSpecializations(cluster string, evidence Evidence, proofs []lifecycle.BlockEvidence) []string {
+	ids := slices.Clone(evidence.Specializations)
+	for _, proof := range proofs {
+		if proof.Kind != string(api.StorageCluster) || proof.Object != cluster || proof.Implementation != HostImplementation ||
+			proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone {
+			continue
+		}
+		if host, err := decodeHostEvidence(proof.Evidence, proof.Block.RequestDigest); err == nil {
+			ids = append(ids, host.Specializations...)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	slices.Sort(ids)
+	return slices.Compact(ids)
 }
 
 func inspectDashboard(cluster api.Object, evidence Evidence) (DashboardInspection, string) {

@@ -493,6 +493,7 @@ A managed Ceph StorageCluster entry adds these fields, in this order, after its
 | `release` | The declared Ceph release. |
 | `fsid` | The cluster FSID its bootstrap evidence proves. |
 | `image` | `{reference, digest, platform}` of the [frozen image](../storage.md#frozen-release-and-trust), from the cluster's image evidence. |
+| `specializations` | The sorted [version specialization](../../.agents/knowledge/version-specializations.md) ids that the cluster's bootstrap apply evidence and its ceph-host apply evidence name; omitted when none and on an unavailable entry. |
 | `monitors` | `[{host, fqdn, address}]`, one per monitor in its cluster-block evidence, mapped to the declared node it runs on. |
 | `adminNode` | The declared name of the bootstrap node, which holds the administrator keyring. |
 | `cephCommand` | The exact prefix that runs the Ceph CLI as the administrator through `cluster exec`: `bootwright cluster exec --context <context> --name <cluster> --node <adminNode> -- sudo -n ceph --conf /var/lib/bootwright/ceph/<fsid>/ceph.conf --keyring /var/lib/bootwright/ceph/<fsid>/ceph.client.admin.keyring`. The operator appends the Ceph arguments. |
@@ -570,7 +571,9 @@ SSH node, and gives context- and cluster-qualified invocation templates for
 applicable commands, including `--node` for SSH and `-- <command>...` for a
 required payload. A managed Ceph entry also shows its release, FSID, image
 reference and digest, monitors, administrator command and dashboard URLs, user
-and status. Access lists each endpoint after the dashboard with its service and
+and status. Full detail of a ready managed Ceph entry also shows a
+`Specializations` line naming those ids, `none` when the evidence names none.
+Access lists each endpoint after the dashboard with its service and
 status, and its reason when unproved; full detail adds its URLs and, for a ready
 TLS endpoint, its certificate SHA-256 and issuer. Unavailable and unimplemented
 templates are visibly labeled;

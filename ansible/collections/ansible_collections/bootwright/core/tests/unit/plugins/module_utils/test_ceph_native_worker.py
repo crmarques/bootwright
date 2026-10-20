@@ -127,6 +127,19 @@ def test_work_accepts_only_a_bounded_controller_allowance():
         assert unknown(run_work(payload))
 
 
+def test_work_returns_applied_specializations_beside_the_result():
+    sources = source_bundle()
+    sources["ceph_native"] = ("class Refusal(ValueError): pass\nAPPLIED = []\ndef dispatch(value):\n"
+                              "    APPLIED[:] = value['applied']\n    return {'phase': 'observe'}\n")
+    applied = run_work({"sources": sources, "payload": {"applied": ["ceph-mgr-without-license-contract"]}, "budget": 1})
+    assert applied == {"ok": True, "result": {"phase": "observe"}, "specializations": ["ceph-mgr-without-license-contract"]}
+    assert run_work({"sources": sources, "payload": {"applied": []}, "budget": 1}) == {"ok": True, "result": {"phase": "observe"}}
+    assert run_work({"sources": source_bundle(), "payload": {}, "budget": 1}) == {"ok": True, "result": {"session": False, "source": True}}
+    for value in ([], ["b-id", "a-id"], ["a-id", "a-id"], ["Bad_Id"], "a-id", None, ["a" * 65], ["id-%02d" % index for index in range(33)]):
+        with pytest.raises(ValueError, match="^fixed native worker$"):
+            ceph_native_worker.result_bytes({"ok": True, "result": {}, "specializations": value})
+
+
 def test_envelope_cannot_raise_the_argv_ceiling_before_source_loading(tmp_path):
     effect = tmp_path / "effect"
     sources = source_bundle()

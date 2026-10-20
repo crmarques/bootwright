@@ -10,7 +10,9 @@ provable capability. Rows are tested scope, never approved versions
 The catalog records no version pairing or compatibility rule between
 components, and choosing versions is the operator's responsibility (D163).
 A registry and this page are kept equal by `TestDocsVersionSpecializationCatalogMatchesRegistries` in
-`test/architecture`, which `make docs-check` runs.
+`test/architecture`, which `make docs-check` runs. The ids a run applied
+appear in the refusal coordinate, in the `specializations` member of the Ceph
+core and ceph-host block evidence, and on the full `cluster info` line.
 
 Path abbreviations in the code and test cells: `P/` is
 `ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/`

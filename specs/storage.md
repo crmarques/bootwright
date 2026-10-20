@@ -507,7 +507,12 @@ requested coordinate and useful native cause without reflecting raw output.
 The coordinate may end with the ids of the
 [version specializations](architecture.md#implementations-and-version-variation)
 applied in that run; within its bound, that suffix is truncated before the
-image and package part.
+image and package part. The same ids appear in the block's evidence: the Ceph
+core and ceph-host evidence carry an optional `specializations` member naming,
+sorted, the specializations the native phases of the execution that wrote it
+applied, absent when none applied. The member is informational: no effect,
+ownership, readiness or identity decision reads it, and it enters no intent or
+digest.
 
 A named refusal ends the attempt with its entry's code. An entry coded
 `lifecycle.unknown` leaves the block's attempt outcome unknown rather than

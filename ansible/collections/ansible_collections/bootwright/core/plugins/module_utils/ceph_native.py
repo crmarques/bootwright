@@ -75,6 +75,8 @@ CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "tu
                          "cache", "enroll", "services", "dashboard", "dashboard_read", "observe", "bootstrap_state", "host_state", "destroy"))
 CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "tunnel_preflight", "observe", "bootstrap_state", "host_state", "dashboard_read"))
 EVIDENCE_VERSION = "ceph-core-evidence-v8"
+# The specialization ids the last dispatched phase's worker applied; the remote wrapper reads it once per process.
+APPLIED = []
 DASHBOARD_USER = "admin"
 DASHBOARD_PORT = 8443
 DASHBOARD_LENGTH = 32
@@ -3626,6 +3628,7 @@ class Worker:
 
 
 def dispatch(envelope):
+    APPLIED.clear()
     phase = envelope.get("phase") if isinstance(envelope, dict) else None
     if phase == "services" and isinstance(envelope, dict) and "devices" in envelope:
         devices = envelope["devices"]
@@ -3664,13 +3667,16 @@ def dispatch(envelope):
     if unit:
         worker.bound = ceph_native_units.material(worker.request, phase, envelope["private"])
     if phase in ("tunnel_preflight", "bootstrap", "authorize", "tunnel_configure"):
-        return getattr(worker, phase)(envelope["private"])
-    if phase == "services":
-        return worker.services(devices, service)
-    if phase == "observe":
+        result = getattr(worker, phase)(envelope["private"])
+    elif phase == "services":
+        result = worker.services(devices, service)
+    elif phase == "observe":
         # The health checks that kept readiness unproved travel beside the closed evidence, for the refusal's detail only.
-        return dict(worker.observe(), blocking=list(worker.blocking))
-    return getattr(worker, phase)()
+        result = dict(worker.observe(), blocking=list(worker.blocking))
+    else:
+        result = getattr(worker, phase)()
+    APPLIED[:] = sorted(worker.selection.applied)
+    return result
 
 
 def main():
@@ -3678,7 +3684,10 @@ def main():
         data = sys.stdin.buffer.read(MAX_INPUT + 1)
         require(len(data) <= MAX_INPUT)
         result = dispatch(json.loads(data))
-        encoded = canonical({"ok": True, "result": result})
+        answer = {"ok": True, "result": result}
+        if APPLIED:
+            answer["specializations"] = list(APPLIED)
+        encoded = canonical(answer)
         require(len(encoded) <= MAX_OUTPUT, "native-output")
     except Refusal as error:
         encoded = canonical({"ok": False, "reason": str(error)})

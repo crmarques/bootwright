@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"bytes"
+	"io"
 	"strings"
+	"testing"
 
 	"github.com/crmarques/bootwright/internal/environment/inspection"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -84,6 +87,7 @@ func readyCeph() *inspection.ManagedCeph {
 			Reference: "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
 			Digest:    "sha256:4c1f8e2b9d7a6c5e3f0b1a2d4e6f8a0c2b4d6e8f0a1c3e5b7d9f1a3c5e7b9d0f", Platform: "linux/amd64",
 		},
+		Specializations: []string{"ceph-bootstrap-license-call-continues"},
 		Monitors: []inspection.Monitor{
 			{Host: "rhel-01", FQDN: "rhel-01.lab.test", Address: "192.0.2.11"},
 			{Host: "rhel-02", FQDN: "rhel-02.lab.test", Address: "192.0.2.12"},
@@ -119,6 +123,7 @@ func revealedCeph(unproved bool) *inspection.ManagedCeph {
 	ceph.Dashboard.Revealed = true
 	if unproved {
 		ceph.Dashboard.Status, ceph.Dashboard.Warn = inspection.DashboardUnproved, true
+		ceph.Specializations = nil
 		ceph.Dashboard.Reason = "the apply's controller-side TLS connect to the active manager's dashboard port did not present the stored certificate"
 	}
 	return ceph
@@ -189,5 +194,27 @@ func clusterGoldens() []cliGolden {
 				"    Next: bootwright cluster info --context lab --name storage lists the StorageClients of\n" +
 				"    storage\n",
 		},
+	}
+}
+
+func TestClusterInfoShowsNoneWithoutSpecializations(t *testing.T) {
+	ceph := readyCeph()
+	ceph.Specializations = nil
+	render := func(options PresentationOptions) string {
+		var out bytes.Buffer
+		if err := writeClusterInfo(WithPresentation(&out, options), io.Discard, "cluster info", storageOnly(ceph), options.Format == "json"); err != nil {
+			t.Fatal(err)
+		}
+		return out.String()
+	}
+	full := render(PresentationOptions{Format: "text", Width: 220, Detail: "full"})
+	if !strings.Contains(full, "\n      Specializations  none\n") {
+		t.Fatalf("full detail without specializations:\n%s", full)
+	}
+	if compact := render(PresentationOptions{Format: "text", Width: 220, Detail: "compact"}); strings.Contains(compact, "Specializations") {
+		t.Fatalf("compact detail shows specializations:\n%s", compact)
+	}
+	if structured := render(PresentationOptions{Format: "json"}); strings.Contains(structured, "specializations") {
+		t.Fatalf("json names absent specializations:\n%s", structured)
 	}
 }

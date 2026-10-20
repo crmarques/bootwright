@@ -91,19 +91,20 @@ type Dashboard struct {
 }
 
 type ManagedCeph struct {
-	Management  string
-	Release     string
-	FSID        string
-	Image       *Image
-	Monitors    []Monitor
-	AdminNode   string
-	CephCommand string
-	Status      string
-	Reason      string
-	Remedy      string
-	Dashboard   *Dashboard
-	Resources   []Resource
-	Endpoints   []Endpoint
+	Management      string
+	Release         string
+	FSID            string
+	Image           *Image
+	Specializations []string
+	Monitors        []Monitor
+	AdminNode       string
+	CephCommand     string
+	Status          string
+	Reason          string
+	Remedy          string
+	Dashboard       *Dashboard
+	Resources       []Resource
+	Endpoints       []Endpoint
 }
 
 type Resource struct {

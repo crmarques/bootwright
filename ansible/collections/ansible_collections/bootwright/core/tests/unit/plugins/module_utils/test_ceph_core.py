@@ -288,6 +288,100 @@ def test_dispatch_reaches_osd_prepare_only_over_a_supported_transport(core_reque
     assert reached == ["node-1"]
 
 
+def test_dispatch_records_the_ids_its_worker_applied(core_request, monkeypatch):
+    def observe(worker):
+        worker.selection.applied.update(("ceph-mgr-without-license-contract", "ceph-call-home-opt-in"))
+        return observation(core_request)
+
+    monkeypatch.setattr(ceph_native.Worker, "observe", observe)
+    result = ceph_native.dispatch({"request": core_request, "host": "node-1", "phase": "observe", "private": {}})
+    assert result["blocking"] == [] and ceph_native.APPLIED == ["ceph-call-home-opt-in", "ceph-mgr-without-license-contract"]
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime
+    monkeypatch.setattr(ceph_host_runtime, "dispatch", lambda envelope: {"changed": False})
+    assert ceph_native.dispatch({"request": core_request, "host": "node-1", "phase": "host_observe", "private": {}}) == {"changed": False}
+    assert ceph_native.APPLIED == []
+
+
+def specialized_transport(core_request, tmp_path, answers):
+    key = tmp_path / "key"
+    known = tmp_path / "known"
+    key.write_text("PRIVATE-KEY-SENTINEL")
+    known.write_text("192.0.2.1 ssh-ed25519 PUBLIC")
+    key.chmod(0o600)
+    known.chmod(0o600)
+    pending = list(answers)
+    return ceph_core.Transport(core_request, {"sshKey": str(key), "knownHosts": str(known)}, run=lambda argv, data, timeout: (0, pending.pop(0)))
+
+
+def test_transport_collects_applied_specializations_and_refuses_unknown_ids(core_request, tmp_path):
+    answers = [b'{"ok":true,"result":{"changed":false},"specializations":["ceph-mgr-without-license-contract"]}',
+               b'{"ok":true,"result":{"changed":true},"specializations":["ceph-call-home-opt-in","ceph-mgr-without-license-contract"]}',
+               b'{"ok":true,"result":{"changed":false}}']
+    transport = specialized_transport(core_request, tmp_path, answers)
+    assert [transport.call(core_request["hosts"][0], "observe")["changed"] for unused in answers] == [False, True, False]
+    assert transport.applied == {"ceph-call-home-opt-in", "ceph-mgr-without-license-contract"}
+    for value in (["ceph-unknown-specialization"], [], ["ceph-mgr-without-license-contract", "ceph-call-home-opt-in"],
+                  ["ceph-call-home-opt-in", "ceph-call-home-opt-in"], "ceph-call-home-opt-in", None):
+        refused = specialized_transport(core_request, tmp_path, [json.dumps({"ok": True, "result": {}, "specializations": value}).encode()])
+        with pytest.raises(ceph_native.Refusal, match="^transport$"):
+            refused.call(core_request["hosts"][0], "observe")
+        assert refused.applied == set()
+
+
+class AppliedTransport:
+    """Answers a read-only observation as the native phases of an execution that applied the given ids would."""
+
+    def __init__(self, core_request, applied, observed=None):
+        self.core_request, self.applied, self.observed = core_request, set(applied), observed
+
+    def call(self, host, phase, private=None, *, timeout=660):
+        if phase == "host_observe":
+            return copy.deepcopy(self.observed)
+        if phase == "observe":
+            return observation(self.core_request)
+        return {"name": host["name"], "owned": True, "exists": False}
+
+
+def host_block(core_request):
+    cluster = {key: value for key, value in copy.deepcopy(core_request).items() if key != "action"}
+    cluster["packages"] = {"version": "ceph-packages-v3", "licenseAccepted": True, "sources": [
+        {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "e" * 64, "mediaSize": 1024,
+         "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
+         "certificateRef": "serving-tls"} for host in cluster["hosts"]]}
+    request = {"version": "ceph-host-v5", "cluster": cluster, "host": "node-2"}
+    record = {"version": "ceph-host-evidence-v2", "host": "node-2", "owner": cluster["owner"], "fsid": cluster["fsid"], "image": cluster["image"],
+              "ready": False, "removed": False, "imageID": "", "uid": 0, "gid": 0, "label": "", "policySHA256": "", "cephadmSHA256": "",
+              "planDigest": "", "route": False, "devices": []}
+    return request, record
+
+
+def test_core_and_host_evidence_name_the_applied_specializations(core_request):
+    ids = ("ceph-mgr-without-license-contract", "ceph-call-home-opt-in")
+    named = ceph_core.execute(core_request, "observe", "d" * 64, AppliedTransport(core_request, ids), UNWRITTEN)["evidence"]
+    assert named["specializations"] == sorted(ids) and ceph_core.evidence(named, "d" * 64, core_request) is named
+    plain = ceph_core.execute(core_request, "observe", "d" * 64, AppliedTransport(core_request, ()), UNWRITTEN)["evidence"]
+    assert "specializations" not in plain and {key: value for key, value in named.items() if key != "specializations"} == plain
+    request, record = host_block(core_request)
+    named = ceph_core.execute_host(request, "observe", "d" * 64, AppliedTransport(core_request, ids, record))["evidence"]
+    assert named["specializations"] == sorted(ids) and ceph_core.evidence(named, "d" * 64, request) is named
+    plain = ceph_core.execute_host(request, "observe", "d" * 64, AppliedTransport(core_request, (), record))["evidence"]
+    assert "specializations" not in plain
+    released = ceph_core.execute_host(request, "destroy", "d" * 64, AppliedTransport(core_request, ids, record))["evidence"]
+    assert "specializations" not in released
+
+
+def test_evidence_without_specializations_still_reads(core_request):
+    core = dict(observation(core_request), request="d" * 64)
+    request, record = host_block(core_request)
+    host = dict(record, request="d" * 64)
+    assert ceph_core.evidence(core, "d" * 64, core_request) is core and ceph_core.evidence(host, "d" * 64, request) is host
+    for value in ([], None, ["ceph-mgr-without-license-contract", "ceph-call-home-opt-in"], ["ceph-call-home-opt-in", "ceph-call-home-opt-in"],
+                  ["ceph-unknown-specialization"], "ceph-call-home-opt-in"):
+        for record, bound in ((core, core_request), (host, request)):
+            with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+                ceph_core.evidence(dict(record, specializations=value), "d" * 64, bound)
+
+
 def test_observation_calls_only_read_phases_and_all_hosts(core_request):
     class Transport:
         def __init__(self):
@@ -2096,7 +2190,7 @@ def test_dispatch_routes_resource_actions_to_the_resource_worker(monkeypatch, co
     def recording(kind):
         class Recording:
             def __init__(self, request, host):
-                self.request, self.blocking = request, []
+                self.request, self.blocking, self.selection = request, [], native_specializations.Selection({})
 
             def clock(self):
                 return 0

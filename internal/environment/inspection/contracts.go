@@ -14,12 +14,13 @@ type Graph interface {
 }
 
 type CephProof struct {
-	Reason    string
-	FSID      string
-	Image     Image
-	Monitors  []Monitor
-	Dashboard Dashboard
-	Endpoints []Endpoint
+	Reason          string
+	FSID            string
+	Image           Image
+	Monitors        []Monitor
+	Dashboard       Dashboard
+	Endpoints       []Endpoint
+	Specializations []string
 }
 
 type Custodied struct {
