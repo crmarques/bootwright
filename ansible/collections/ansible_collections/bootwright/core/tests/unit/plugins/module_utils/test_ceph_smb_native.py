@@ -634,6 +634,17 @@ def test_share_daemons_must_run_on_eligible_hosts_with_the_frozen_image(monkeypa
     assert all(ceph_smb_native.PENDING.fullmatch(item) for item in ["smb@smb.files", "vip@smb.files"])
 
 
+def test_share_apply_reads_no_daemon_and_observation_refuses_a_stray_one():
+    value, monitor, markers = request("ceph.smb.share"), Monitor(), Markers()
+    monitor.resources["ceph.smb.cluster.files"] = cluster_resource()
+    monitor.daemons = [daemon("node-1"), daemon("node-3")]
+    assert worker(value, monitor, markers).smb_apply({}) == {"changed": True}
+    assert len(applies(monitor)) == 1 and all(command != ("orch", "ps") for command, unused in monitor.log)
+    with pytest.raises(ceph_native.NativeFailure, match="^foreign-service$") as caught:
+        worker(value, monitor, markers).smb_observe()
+    assert caught.value.native_error["cause"] == "daemon smb.files.0.0.node-3.abcdef"
+
+
 def test_share_readiness_ignores_daemons_of_another_declared_smb_cluster():
     value = request("ceph.smb.share")
     value["clusterIDs"] = ["files", "zeta"]

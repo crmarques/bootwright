@@ -761,8 +761,7 @@ bootstrap host. Before any effect it proves the cluster's ownership, that the
 `smb` manager module is enabled (`smb-module-disabled`), and for an SMB cluster
 or share that every SMB cluster `ceph smb cluster ls` lists and every `smb`
 service `ceph orch ls` lists is declared by a StorageSMBResource of the cluster
-and, for a share, that every daemon of its `smb.<cluster_id>` service runs on
-that service's frozen hosts (`foreign-service`) and that the settings block holds both samba image settings
+(`foreign-service`) and that the settings block holds both samba image settings
 at the frozen digests (`foreign-image`); it never writes them. It records its
 attempt, then runs `ceph smb apply -i - --password-filter=none
 --password-filter-out=hidden` with the one resource as JSON on stdin and the
@@ -789,7 +788,11 @@ share, so a share is ready only when, in addition, that service runs its
 daemons, as many as the placement count or else one per placement host, on the
 SMB cluster's hosts with the frozen samba image, and each `public_addrs`
 address of a clustered SMB cluster accepts TCP port 445 from the bootstrap
-host. A share not ready within 900 seconds refuses `smb-directory` for an
+host. The apply proof reads no daemon, since the daemons follow the effect;
+while it waits for a share's daemons, and when it observes a share, a daemon of
+its `smb.<cluster_id>` service on a host outside the frozen hosts, or a daemon
+of an undeclared `smb` service, refuses `foreign-service`. A share not ready
+within 900 seconds refuses `smb-directory` for an
 active-directory cluster, whose daemons join the directory before they start,
 and `smb-unavailable` otherwise. The core request lists each declared SMB
 cluster's `smb.<cluster_id>` service with its hosts among the services other
