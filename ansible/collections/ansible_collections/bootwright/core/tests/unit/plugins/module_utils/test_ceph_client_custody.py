@@ -47,12 +47,13 @@ class Markers:
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
+def client(tmp_path, monkeypatch, request):
+    data_pools = list(getattr(request, "param", []))
     hosts = [{"name": "node-" + str(i), "machine": "machine-" + str(i), "address": "192.0.2." + str(i),
               "user": "operator", "port": 22, "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}],
               "labels": [], "location": {}, "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    request = {"controller": "controller", "version": "ceph-core-v17", "action": "client", "cluster": "example", "owner": "apply-example",
+    request = {"controller": "controller", "version": "ceph-core-v18", "action": "client", "cluster": "example", "owner": "apply-example",
                "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
                "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
                "release": "9.1", "ansiblePackageVersion": "3.2.0",
@@ -63,7 +64,7 @@ def client(tmp_path, monkeypatch):
                "services": [{"service_type": "mon", "placement": {"hosts": names}},
                             {"service_type": "mgr", "placement": {"hosts": names, "count": 2}},
                             {"service_type": "osd", "service_id": "data", "placement": {"hosts": names}, "spec": {"data_devices": {"paths": ["/dev/vdb"]}}}],
-               "client": {"name": "consumer", "pool": "volumes", "access": "read-write"}}
+               "client": {"name": "consumer", "pool": "volumes", "access": "read-write", "dataPools": data_pools}}
     root = tmp_path / "root"
     root.mkdir(mode=0o755)
     directory = root
@@ -87,9 +88,14 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(ceph_native.os, "fstat", fstat)
     monkeypatch.setattr(ceph_native.os, "fchown", lambda fd, uid, gid: ceph_native.require(uid == gid == 0))
     markers = Markers(request)
+    native_pools = [{"pool_name": "volumes", "pool_id": 4, "application_metadata": {"rbd": {}}}]
+    for number, name in enumerate(data_pools, start=5):
+        markers.records["pool-" + name + ".json"] = {"name": name}
+        markers.records["pool-id-" + name + ".json"] = {"id": number}
+        native_pools.append({"pool_name": name, "pool_id": number, "application_metadata": {"rbd": {}}})
     key = base64.b64encode(b"synthetic-original-client-secret").decode("ascii")
     state = SimpleNamespace(auth=None, key=key, generated=0, added=0, calls=[], lose_add=False, fail_generation=False,
-                            pool_id=4, fsid=request["fsid"], generation_hook=lambda: None, add_hook=lambda: None)
+                            pool_id=4, data_pools=native_pools[1:], fsid=request["fsid"], generation_hook=lambda: None, add_hook=lambda: None)
     native = None
 
     def run(argv, data=b"", timeout=60):
@@ -109,7 +115,7 @@ def client(tmp_path, monkeypatch):
         if args == ["fsid"]:
             value = {"fsid": state.fsid}
         elif args == ["osd", "pool", "ls", "detail"]:
-            value = [{"pool_name": "volumes", "pool_id": state.pool_id, "application_metadata": {"rbd": {}}}]
+            value = [{"pool_name": "volumes", "pool_id": state.pool_id, "application_metadata": {"rbd": {}}}] + copy.deepcopy(state.data_pools)
         elif args == ["auth", "ls"]:
             value = {"auth_dump": [] if state.auth is None else copy.deepcopy(state.auth)}
         elif args == ["auth", "get", "client.consumer"]:
@@ -161,6 +167,7 @@ def test_client_original_material_is_retained_before_native_effect_and_no_secret
     assert client.state.generated == client.state.added == 1
 
 
+@pytest.mark.parametrize("client", [[], ["archive", "ec-data"]], indirect=True)
 def test_lost_auth_creation_reply_recovers_exact_original_identity(client):
     client.state.lose_add = True
     with pytest.raises(ceph_native.Refusal, match="native-command"):
@@ -172,6 +179,41 @@ def test_lost_auth_creation_reply_recovers_exact_original_identity(client):
     assert not client.native.client()["changed"]
     assert client.state.generated == client.state.added == 1
     assert client.material_path.read_bytes() == original
+
+
+@pytest.mark.parametrize("client", [["archive", "ec-data"]], indirect=True)
+def test_client_caps_include_data_pools_in_sorted_order(client):
+    osd = "profile rbd pool=volumes, profile rbd pool=archive, profile rbd pool=ec-data"
+    assert client.native.caps() == {"mon": "profile rbd", "mgr": "profile rbd pool=volumes", "osd": osd}
+    client.native.client()
+    added = [data for argv, data in client.state.calls if argv[-5:] == ["auth", "add", "client.consumer", "-i", "-"]]
+    assert len(added) == 1 and ('caps osd = "' + osd + '"').encode() in added[0]
+    hosts = client.native.request["hosts"]
+    ceph_native_resources.validate(copy.deepcopy(client.native.request), hosts)
+    for data_pools in (["ec-data", "archive"], ["archive", "archive"], ["volumes"], ["bad,name"], None, "missing"):
+        request = copy.deepcopy(client.native.request)
+        if data_pools == "missing":
+            del request["client"]["dataPools"]
+        else:
+            request["client"]["dataPools"] = data_pools
+        with pytest.raises(ceph_native.Refusal, match="request"):
+            ceph_native_resources.validate(request, hosts)
+
+
+@pytest.mark.parametrize("client", [["archive", "ec-data"]], indirect=True)
+@pytest.mark.parametrize("change", ["missing-marker", "different-id", "absent-natively"])
+def test_client_data_pools_are_proved_owned_before_key_generation(client, change):
+    if change == "missing-marker":
+        del client.markers.records["pool-id-ec-data.json"]
+    elif change == "different-id":
+        client.markers.records["pool-id-archive.json"] = {"id": 9}
+    else:
+        client.state.data_pools = client.state.data_pools[:1]
+    with pytest.raises(ceph_native.Refusal, match="pool-identity"):
+        client.native.client()
+    assert not [call for call in client.state.calls if call[0][0] == "/usr/bin/ceph-authtool" or "add" in call[0]]
+    assert client.state.generated == client.state.added == 0
+    assert "client-reserved-consumer.json" not in client.markers.records
 
 
 def test_generation_interruption_has_no_auth_effect_and_reuses_owned_reservation(client):

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"slices"
 	"testing"
 
@@ -67,25 +66,33 @@ func TestRBDImageExplicitEmptyFeaturesFreezeEmpty(t *testing.T) {
 	}
 }
 
-func TestClientOnPoolWithDataPoolImageRefuses(t *testing.T) {
+func TestClientOnPoolWithDataPoolImagePlans(t *testing.T) {
 	client := childOf(api.StorageClient, "consumer", "poolRef", "volumes", "access", "read-write")
-	message := "StorageClient consumer names pool volumes, whose StorageRBDImage disk keeps its data in pool %s; the client's caps cover only its declared pool"
-	remedy := "point spec.poolRef at a pool whose images declare no dataPoolRef, or remove spec.dataPoolRef from StorageRBDImage disk; B489 derives the data-pool caps"
+	plannedClient := func(catalog api.Catalog) []string {
+		t.Helper()
+		r, err := planned(t, catalog, api.StorageClient, "consumer")
+		if err != nil || r.Client == nil {
+			t.Fatalf("the client did not plan: %v", diagnostics.Of(err))
+		}
+		return r.Client.DataPools
+	}
 	for _, data := range []api.Object{ecData(), replicatedPool("archive")} {
 		catalog := planCatalog(6, 6, nil, replicatedPool("volumes"), data, client, imageOf("disk", "volumes", "dataPoolRef", data.Name()))
-		_, err := planned(t, catalog, api.StorageClient, "consumer")
-		refusedWith(t, err, "lifecycle.unsupported", fmt.Sprintf(message, data.Name()), remedy)
+		if got := plannedClient(catalog); !slices.Equal(got, []string{data.Name()}) {
+			t.Fatalf("a client beside an image on data pool %s froze %v", data.Name(), got)
+		}
 	}
 	for _, image := range []api.Object{imageOf("disk", "volumes"), imageOf("disk", "other", "dataPoolRef", "archive")} {
 		catalog := planCatalog(6, 6, nil, replicatedPool("volumes"), replicatedPool("other"), replicatedPool("archive"), client, image)
-		if r, err := planned(t, catalog, api.StorageClient, "consumer"); err != nil || r.Client == nil {
-			t.Fatalf("a client beside image %s did not plan: %v", image.Spec().Get("poolRef").Text(), diagnostics.Of(err))
+		if got := plannedClient(catalog); got == nil || len(got) != 0 {
+			t.Fatalf("a client beside image %s froze data pools %#v", image.Spec().Get("poolRef").Text(), got)
 		}
 	}
 	catalog := planCatalog(6, 6, nil, replicatedPool("volumes"), replicatedPool("archive"), ecData(), client,
 		imageOf("zeta", "volumes", "dataPoolRef", "ec-data"), imageOf("disk", "volumes", "dataPoolRef", "archive"))
-	_, err := planned(t, catalog, api.StorageClient, "consumer")
-	refusedWith(t, err, "lifecycle.unsupported", fmt.Sprintf(message, "archive"), remedy)
+	if got := plannedClient(catalog); !slices.Equal(got, []string{"archive", "ec-data"}) {
+		t.Fatalf("a client beside two data-pool images froze %v", got)
+	}
 }
 
 func TestRBDImageOnErasurePoolRefusesAtPlan(t *testing.T) {

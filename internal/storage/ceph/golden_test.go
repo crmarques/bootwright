@@ -96,7 +96,7 @@ func TestFrozenRequestGolden(t *testing.T) {
 			r.Pool = &Pool{Name: "volumes", Type: "replicated", Role: "rbd", Application: "rbd", Size: 2, MinSize: 2, PGNum: 32, CrushRule: "replicated_rule", Autoscale: PoolAutoscale{Mode: "on"}}
 		}
 		if action == "client" {
-			r.Client = &Client{Name: "consumer", Pool: "volumes", Access: "read-only"}
+			r.Client = &Client{Access: "read-only", DataPools: []string{"archive", "ec-data"}, Name: "consumer", Pool: "volumes"}
 		}
 		if action == "rbd" {
 			r.RBD = &RBDImage{Name: "disk", Pool: "volumes", SizeBytes: 10737418240, Features: []string{"layering", "exclusive-lock", "object-map", "fast-diff", "deep-flatten"}, DataPool: ""}

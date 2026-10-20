@@ -42,7 +42,9 @@ provider-command escape hatch.
 
 `StorageClient` is admitted with required `clusterRef`, `poolRef` and
 `access: read-only|read-write`. The pool must be a same-cluster RBD pool; no
-implicit administrator capability is granted. `StoragePlacementPolicy` and
+implicit administrator capability is granted. Its OSD caps also name the
+`dataPoolRef` pools of the StorageRBDImages on that pool
+([StorageClient](../storage-resources.md#storageclient)). `StoragePlacementPolicy` and
 `StoragePool` are admitted under
 [pool protection and erasure coding](#pool-protection-and-erasure-coding),
 `StorageRBDImage` under [RBD images](#rbd-images), `StorageFilesystem` under
@@ -165,7 +167,7 @@ provider sizing and measured resource acceptance remain separate.
 | --- | --- |
 | `StorageCluster` | One managed Ceph cluster or one externally managed Ceph identity. `spec.type` is exactly `ceph`; `spec.management` is `managed` (default) or `external`; `spec.ceph` is required for `managed` and forbidden for `external`. |
 | `StoragePlacementPolicy` | A reusable CRUSH placement policy and replicated defaults for one managed cluster. |
-| `StorageClient` | One pool-scoped RBD CephX principal with required same-cluster `poolRef` and explicit access. |
+| `StorageClient` | One pool-scoped RBD CephX principal with required same-cluster `poolRef` and explicit access; its OSD caps also name the data pools of the StorageRBDImages on that pool. |
 | `StoragePool` | One pool. `spec.type` is `replicated` (default) or `erasure` and selects protection; the referenced cluster selects the storage engine. |
 | `StorageRBDImage` | One RBD image: same-cluster replicated rbd `poolRef`, exact `sizeBytes`, optional rbd `dataPoolRef` and a closed feature set; image format 2. |
 | `StorageFilesystem` | One CephFS filesystem: a same-cluster `cephfs-metadata` pool, one or more ordered `cephfs-data` pools (the default replicated), its rank and standby policy, subvolume groups, and the native MDS service it binds through `mdsServiceRef`. |
@@ -272,9 +274,9 @@ times it fits the native 32-bit stripe width. `spec.erasure.parameters` and a no
 `crushRoot` refuse at plan. An erasure-coded `rbd` or `cephfs-data` pool
 derives irreversible overwrite enablement, as IBM's
 [erasure-coding overwrites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-coding-overwrites)
-require. A StorageClient on an erasure-coded pool refuses at plan; B489 owns
-caps on erasure-coded data pools. A StorageClient on a pool whose
-StorageRBDImage declares any `dataPoolRef` refuses at plan.
+require. A StorageClient on an erasure-coded pool refuses at plan; an
+erasure-coded pool reaches a client only as the `dataPoolRef` of a
+StorageRBDImage on the client's pool, whose caps then name it.
 
 The initial `pg_num` is `clamp(32, pgNumMin, pgNumMax)` over the positive
 bounds. `autoscale.mode` is `on` when omitted or `off`; `warn` refuses at plan
@@ -320,9 +322,8 @@ declares `features`, size rules. `sizeBytes` is an integer from 1 to
 `object-map`, `fast-diff`, `deep-flatten` and `journaling`, so librbd's
 internal features refuse as values. Plan refuses an erasure-coded `poolRef`
 again and propagates every plan refusal of the image pool and data pool. A
-StorageClient on a pool whose StorageRBDImage declares any `dataPoolRef`
-refuses at plan, naming the lexically first such image, until
-[B489](../milestones/m2.md#b489) derives the data-pool caps.
+StorageClient on the image's pool gains OSD caps on its `dataPoolRef`
+([StorageClient](../storage-resources.md#storageclient)).
 
 ## CephFS filesystems
 

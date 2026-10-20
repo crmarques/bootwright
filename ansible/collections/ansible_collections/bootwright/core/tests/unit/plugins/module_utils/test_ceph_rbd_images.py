@@ -37,7 +37,7 @@ def cluster(count=3):
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": GIB}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, count + 1)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v17", "action": "cluster", "cluster": "example", "owner": OWNER, "fsid": FSID,
+    return {"controller": "controller", "version": "ceph-core-v18", "action": "cluster", "cluster": "example", "owner": OWNER, "fsid": FSID,
             "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -64,7 +64,7 @@ def pool_value():
 
 
 def client_value():
-    return {"name": "canary", "pool": "volumes", "access": "read-write"}
+    return {"name": "canary", "pool": "volumes", "access": "read-write", "dataPools": []}
 
 
 def policy_value():

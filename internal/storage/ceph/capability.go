@@ -166,6 +166,9 @@ func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, 
 		}
 	case "client":
 		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: request.Client.Pool})
+		for _, pool := range request.Client.DataPools {
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: pool})
+		}
 	case "rbd":
 		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: request.RBD.Pool})
 		if request.RBD.DataPool != "" {

@@ -94,8 +94,11 @@ def validate(request, hosts):
         validate_policy(request.get("policy"), osd_hosts)
     elif request["action"] == "client":
         client = request.get("client")
-        require(isinstance(client, dict) and set(client) == {"name", "pool", "access"})
+        require(isinstance(client, dict) and set(client) == {"name", "pool", "access", "dataPools"})
         require(named(client["name"]) and named(client["pool"]))
+        data_pools = client["dataPools"]
+        require(isinstance(data_pools, list) and all(named(pool) for pool in data_pools))
+        require(data_pools == sorted(set(data_pools)) and client["pool"] not in data_pools)
         require(client["access"] in ("read-only", "read-write"))
         require("pool" not in request and "policy" not in request)
     elif request["action"] == "rbd":
@@ -267,7 +270,8 @@ class ResourceWorker(ceph_native.Worker):
     def caps(self):
         client = self.request["client"]
         profile = "rbd-read-only" if client["access"] == "read-only" else "rbd"
-        return {"mon": "profile rbd", "mgr": "profile " + profile + " pool=" + client["pool"], "osd": "profile " + profile + " pool=" + client["pool"]}
+        osd = ", ".join("profile " + profile + " pool=" + name for name in [client["pool"]] + client["dataPools"])
+        return {"mon": "profile rbd", "mgr": "profile " + profile + " pool=" + client["pool"], "osd": osd}
 
     def pools(self):
         result = self.ceph("osd", "pool", "ls", "detail")
@@ -637,6 +641,8 @@ class ResourceWorker(ceph_native.Worker):
         selected = [entry for entry in pools if isinstance(entry, dict) and entry.get("pool_name") == client["pool"]]
         require(len(selected) == 1 and self.pool_id(selected[0]) == identifier["id"], "pool-identity")
         require(isinstance(selected[0].get("application_metadata"), dict) and "rbd" in selected[0]["application_metadata"], "pool-identity")
+        for name in client["dataPools"]:
+            self.owned_pool(name, entries=pools)
         return {"owner": self.request["owner"], "fsid": self.request["fsid"], "host": self.host["name"], "client": dict(client), "poolID": identifier["id"]}
 
     def client_store(self):

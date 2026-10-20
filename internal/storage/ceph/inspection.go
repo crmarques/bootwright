@@ -282,7 +282,11 @@ func clientScopeText(r Request) string {
 	if r.Client == nil {
 		return ""
 	}
-	return "client." + r.Client.Name + " " + r.Client.Access + " on pool " + r.Client.Pool
+	scope := "client." + r.Client.Name + " " + r.Client.Access + " on pool " + r.Client.Pool
+	if len(r.Client.DataPools) != 0 {
+		scope += ", data pools " + strings.Join(r.Client.DataPools, " ")
+	}
+	return scope
 }
 
 func filesystemScopeText(r Request) string {

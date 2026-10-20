@@ -342,10 +342,32 @@ The native principal is `client.<metadata.name>`, with collision and ownership
 checks before `get-or-create`. Pool-scoped native RBD profiles are derived from
 the selected access, and exact monitor/manager/OSD capabilities are frozen and
 observed. The permission covers the declared pool, not only one image; the
-plan reports that scope. An EC data pool or other additional access dependency
-requires B489's explicit extension, rather than silently widening these caps.
-A client on a pool whose StorageRBDImage declares any `dataPoolRef` refuses at
-plan until B489 derives the data-pool caps.
+plan reports that scope.
+
+The client has no data-pool field: a StorageRBDImage's `spec.dataPoolRef` is
+the single owner of that fact. Plan derives the distinct `dataPoolRef` values
+of the same-cluster StorageRBDImages on the client's `poolRef`, sorts them,
+freezes them in the client request, requires those StoragePools and propagates
+their plan refusals. The frozen caps follow Ceph's
+[RBD user grammar](https://docs.ceph.com/en/tentacle/rbd/rados-rbd-cmds/), where
+grants inside one cap are separated by a comma and a space; `<profile>` is `rbd` for
+`read-write` and `rbd-read-only` for `read-only`:
+
+| Cap | Frozen value |
+| --- | --- |
+| `mon` | `profile rbd` |
+| `mgr` | `profile <profile> pool=<poolRef>` |
+| `osd` | `profile <profile> pool=<poolRef>`, then one more `profile <profile> pool=<data pool>` grant for each derived data pool in sorted order |
+
+With no derived data pool the caps name only `poolRef`. The `mgr` cap names
+only `poolRef`: least privilege keeps the data pools off it, and whether a
+consumer needs them there is unverified until the owner's live client row. The
+worker proves every data pool is owned under its recorded native pool ID
+before it generates a key. A client whose `poolRef` is erasure-coded still
+refuses at plan; an erasure-coded pool reaches a client only as an image's
+data pool. An image later added to or removed from the pool changes the
+client's frozen request, which follows the destroy/fresh-apply rule of
+[lifecycle and migration gates](#lifecycle-and-migration-gates).
 User-supplied arbitrary capabilities and imported keys are not part of the
 minimal shape.
 

@@ -46,7 +46,7 @@ func TestCoreConfigIsFrozenAcrossClusterChildrenAndChangedIntent(t *testing.T) {
 		if err != nil || bytes.Equal(original, next) {
 			t.Fatal("changed memory target did not change frozen request")
 		}
-		old := bytes.Replace(original, []byte(`"version":"ceph-core-v17"`), []byte(`"version":"ceph-core-v16"`), 1)
+		old := bytes.Replace(original, []byte(`"version":"ceph-core-v18"`), []byte(`"version":"ceph-core-v17"`), 1)
 		if _, err := DecodeRequest(old); err == nil {
 			t.Fatal("old frozen request silently migrated")
 		}

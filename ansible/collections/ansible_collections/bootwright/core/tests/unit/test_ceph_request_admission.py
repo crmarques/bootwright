@@ -36,7 +36,7 @@ CORE = {
     "nfsGaneshaPackageVersion": "synthetic-nfs",
     "packageRepository": "https://packages.example.test/selected",
     "cephadm": {"packageVersion": "20.2.1-405.el9cp", "path": "/usr/sbin/cephadm"},
-    "client": {"access": "rw", "name": "app", "pool": "data"},
+    "client": {"access": "rw", "dataPools": [], "name": "app", "pool": "data"},
     "cluster": "example",
     "clusterKeyRef": "cluster-key",
     "clusterNetworks": ["198.51.100.0/24"],
@@ -122,7 +122,7 @@ CORE = {
     "services": [{"placement": {"count": 2, "hosts": ["node-1"]}, "service_type": "mgr"}],
     "settings": {"modules": ["nfs"]},
     "subvolume": {"filesystem": "files", "gid": 0, "group": "", "mode": "755", "name": "docs", "pool": "files-data", "sizeBytes": 0, "uid": 0},
-    "version": "ceph-core-v17",
+    "version": "ceph-core-v18",
 }
 
 IMAGE = {

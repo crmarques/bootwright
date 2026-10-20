@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/canonicaljson"
@@ -60,19 +61,39 @@ func validateProduced(produced []lifecycle.Produced, r Request, present bool) er
 			return evidenceFailure()
 		}
 	}
-	profile := "rbd"
-	if r.Client.Access == "read-only" {
-		profile = "rbd-read-only"
-	} else if r.Client.Access != "read-write" {
+	caps, ok := clientCaps(*r.Client)
+	if !ok || !strictlyAscending(r.Client.DataPools) || slices.Contains(r.Client.DataPools, r.Client.Pool) {
 		return evidenceFailure()
 	}
-	caps := map[string]string{"mon": "profile rbd", "mgr": "profile " + profile + " pool=" + r.Client.Pool, "osd": "profile " + profile + " pool=" + r.Client.Pool}
 	key, err := base64.StdEncoding.DecodeString(entries[0].Key)
 	defer clear(key)
 	if err != nil || len(key) == 0 || entries[0].Entity != "client."+r.Client.Name || !maps.Equal(entries[0].Caps, caps) {
 		return evidenceFailure()
 	}
 	return nil
+}
+
+func clientCaps(c Client) (map[string]string, bool) {
+	profile := "rbd"
+	if c.Access == "read-only" {
+		profile = "rbd-read-only"
+	} else if c.Access != "read-write" {
+		return nil, false
+	}
+	grants := []string{"profile " + profile + " pool=" + c.Pool}
+	for _, pool := range c.DataPools {
+		grants = append(grants, "profile "+profile+" pool="+pool)
+	}
+	return map[string]string{"mon": "profile rbd", "mgr": "profile " + profile + " pool=" + c.Pool, "osd": strings.Join(grants, ", ")}, true
+}
+
+func strictlyAscending(values []string) bool {
+	for i := 1; i < len(values); i++ {
+		if values[i-1] >= values[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func validateDashboard(produced []lifecycle.Produced) error {

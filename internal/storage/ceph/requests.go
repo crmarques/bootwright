@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v17"
+const Version = "ceph-core-v18"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -105,9 +105,10 @@ type Pool struct {
 }
 
 type Client struct {
-	Access string `json:"access"`
-	Name   string `json:"name"`
-	Pool   string `json:"pool"`
+	Access    string   `json:"access"`
+	DataPools []string `json:"dataPools"`
+	Name      string   `json:"name"`
+	Pool      string   `json:"pool"`
 }
 
 type RBDImage struct {

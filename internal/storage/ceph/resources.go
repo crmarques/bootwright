@@ -294,28 +294,36 @@ func clientRequest(c api.Catalog, client api.Object, contextName string) (Reques
 		return Request{}, err
 	}
 	if r.Pool.Type == "erasure" {
-		return Request{}, failure("lifecycle.unsupported", "StorageClient "+client.Name()+" names erasure-coded pool "+pool.Name()+"; RBD image headers and the client's pool-scoped caps need a replicated RBD pool", "point spec.poolRef at a replicated rbd pool; B489 derives the caps on erasure-coded data pools")
+		return Request{}, failure("lifecycle.unsupported", "StorageClient "+client.Name()+" names erasure-coded pool "+pool.Name()+"; RBD image headers and the client's pool-scoped caps need a replicated RBD pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in the spec.dataPoolRef of the StorageRBDImages on it; the client's caps then include that data pool")
 	}
-	if image, data := dataPoolImage(c, client.Spec().Get("clusterRef").Text(), pool.Name()); image != "" {
-		return Request{}, failure("lifecycle.unsupported", "StorageClient "+client.Name()+" names pool "+pool.Name()+", whose StorageRBDImage "+image+" keeps its data in pool "+data+"; the client's caps cover only its declared pool", "point spec.poolRef at a pool whose images declare no dataPoolRef, or remove spec.dataPoolRef from StorageRBDImage "+image+"; B489 derives the data-pool caps")
+	dataPools, err := clientDataPools(c, client.Spec().Get("clusterRef").Text(), pool.Name(), contextName)
+	if err != nil {
+		return Request{}, err
 	}
 	r.Action = "client"
 	r.Pool = nil
-	r.Client = &Client{Name: client.Name(), Pool: pool.Name(), Access: client.Spec().Get("access").Text()}
+	r.Client = &Client{Access: client.Spec().Get("access").Text(), DataPools: dataPools, Name: client.Name(), Pool: pool.Name()}
 	return r, nil
 }
 
-func dataPoolImage(c api.Catalog, cluster, pool string) (image, data string) {
-	for _, candidate := range c.OfKind(api.StorageRBDImage) {
-		spec := candidate.Spec()
-		if spec.Get("clusterRef").Text() != cluster || spec.Get("poolRef").Text() != pool || spec.Get("dataPoolRef").Text() == "" {
+func clientDataPools(c api.Catalog, cluster, pool, contextName string) ([]string, error) {
+	pools := []string{}
+	for _, image := range c.OfKind(api.StorageRBDImage) {
+		spec := image.Spec()
+		data := spec.Get("dataPoolRef").Text()
+		if spec.Get("clusterRef").Text() != cluster || spec.Get("poolRef").Text() != pool || data == "" || slices.Contains(pools, data) {
 			continue
 		}
-		if image == "" || candidate.Name() < image {
-			image, data = candidate.Name(), spec.Get("dataPoolRef").Text()
+		pools = append(pools, data)
+	}
+	slices.Sort(pools)
+	for _, name := range pools {
+		data, _ := c.Find(api.StoragePool, name)
+		if _, err := poolRequest(c, data, contextName); err != nil {
+			return nil, err
 		}
 	}
-	return image, data
+	return pools, nil
 }
 
 func rbdImageRequest(c api.Catalog, image api.Object, contextName string) (Request, error) {
