@@ -7211,3 +7211,53 @@ B650 to B656, all closed and removed from their pages.
 
 **Constraints left behind:** none. No product behavior other than B651's
 refusal changed.
+
+### X59 — Registry trust bundle consumer
+
+**Owner:** Storage and Secrets. A product slice of [M2c](m2.md#m2c) whose other
+items are still open: this record covers B619, the one item of
+X59 that completed, and X59's [B483](m2.md#b483) and [B493](m2.md#b493) stay on
+the M2 page with what each has delivered in-tree. B619 was found while planning M2c: the
+`Entitlement.registry.trustBundleRef` was admitted and documented as for
+registry trust, but no storage code read it. **Items:** B619, delivered by the
+lanes x59-d1-supply-admission, x59-d2-image-origin and int-x59, merged to main
+with X59's other in-tree lanes under [D168](backlog.md#decisions).
+
+**Outcome:** a declared bundle is the only TLS anchor of every registry
+connection the Ceph supply makes. Image resolution, the guest pull broker and
+each frozen auxiliary registry reference verify against it; host preparation
+pulls the frozen Ceph image through that broker; and bootstrap skips cephadm's
+own pull, so no guest pull reaches the registry outside the broker. Without a
+bundle the host trust store stays the anchor, and a registry that verifies
+under neither refuses at resolution before any host effect, naming the registry
+and the anchor (the bundle Secret or the host trust store) and never a
+location, verify message or credential. The bundle travels as a protected
+request member and material, bounded in size and projected to its certificate
+blocks. [Storage](../storage.md#bootstrap-identity-and-continuation) and the
+[Secrets API](../api/secrets.md) own the behavior.
+
+**Guard tests:** the Go plan and request tests
+(`TestImageRequestBindsTheEntitlementTrustBundle`,
+`TestHostRequestCarriesTheRegistryTrustBundle`,
+`TestDeclaredRegistryTrustBundlePlansOnceConsumed` and the request goldens);
+the collection's broker, resolution and host-runtime tests (a bundle that
+verifies, one that does not and none: `test_broker_upstream_trusts_only_the_bound_bundle_when_declared`,
+`test_broker_bundle_that_does_not_verify_names_registry_and_secret`,
+`test_resolution_trusts_only_the_bound_bundle_when_declared`,
+`test_resolution_without_a_bundle_keeps_the_host_trust_store`,
+`test_bundle_that_does_not_verify_refuses`,
+`test_every_frozen_auxiliary_reference_resolves_through_the_bound_bundle`,
+`test_profile_passes_the_bound_bundle_to_every_broker`) and
+`test_bootstrap_argv_skips_the_pull`, each with a mutation check recorded in
+its commit body. The gates were `make quick`, `make focus`, `make docs-check`,
+the storage, API and `cmd/bootwright` packages, the collection unit and lint
+suites and the int-x59 checkpoint's full gates and adversarial review. They
+are offline, as B619's exit evidence required; no live registry row is part of
+it. The profile rows that exercise a private registry belong to
+[B484](m2.md#b484) and stay unrun.
+
+**Constraints left behind:** `ceph-image-v4`, `ceph-core-v22` and
+`ceph-host-v5` moved with this work and `ceph-packages-v3` with B493's package
+bundle; there is no older-version reader, so an incomplete operation or
+context planned by an earlier build is finished or destroyed with that build.
+No other behavior changed.

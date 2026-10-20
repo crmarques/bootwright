@@ -3198,7 +3198,7 @@ Requires cell as `owner decision: <question>`.
   are the disconnected naming, and no physical-name rule or second pair of
   package-mirror fields is added; OD16 (A) and OD17 (a) of D160 are superseded.
   [B493](m2.md#b493) adds the registry trust-bundle consumer
-  ([B619](m2.md#b619)), a CA-bundle binding for the package repository (one new
+  ([B619](delivered.md#x59--registry-trust-bundle-consumer)), a CA-bundle binding for the package repository (one new
   field), auxiliary-image closure and an egress-denied proof with a disconnected
   example. The lanes x59-d1 to x59-d4 are re-planned to that scope before their
   briefs; x59-d5 and X61-L7 keep their purpose. (4) OD31 (b) changes the
@@ -3289,3 +3289,9 @@ Requires cell as `owner decision: <question>`.
   [B481](m2.md#b481) stays in progress for the vendor support statement the
   owner left open (D161, OD27); and [B477](m2.md#b477), [B478](m2.md#b478) and
   [B479](m2.md#b479) plan their families once the images are authored.
+  It then merged X59's in-tree lanes after the int-x59 checkpoint, with the
+  docs commit of D166 that assigns [B664](#b664) to the lane
+  x59-d4-host-pull-route: [B619](delivered.md#x59--registry-trust-bundle-consumer)
+  is delivered; [B483](m2.md#b483) stays in progress for the replication lanes
+  (D160, OD18 (A) and OD19 (a)) and [B493](m2.md#b493) for the host pull route
+  and the disconnected profile.
