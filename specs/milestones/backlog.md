@@ -3325,3 +3325,19 @@ Requires cell as `owner decision: <question>`.
   The answers change no product spec by themselves and no delivery state:
   B620, B627 and B664 stay in their current state until their lanes land, and
   each lane updates the owning spec.
+
+- **D170** (2026-10-20, the owner): the owner accepted the definition of
+  [B688](m2.md#b688) (Ceph clusters of three to six hosts: the deadline formula,
+  concurrent per-host rounds and batched enrollment) that commits 16116f4b1 and
+  6d140d248 landed on `m2c`, and answered the session's question about its OSD
+  variants with "Accept, variants in B688 (Recommended)". DB/WAL, encrypted and
+  TPM2 OSDs on explicit devices stay in B688 with one added lane after the
+  enrollment lane, m2c-osd-variants, which moves the core request version one step
+  from its value at that lane's base; the alternative of leaving them with
+  [B475](m2.md#b475) (X53) is not taken. B688 becomes Specified with the lanes
+  m2c-cluster-budget-plan, m2c-cluster-budget-enrollment and m2c-osd-variants,
+  and the amendment of D159 clause (7) in it is accepted: the services and
+  enrollment calls count toward the cluster deadline. B659's continuation after
+  a partial enrollment and clusters above six hosts stay out of B688. The
+  decision changes no product spec by itself and no delivery state: B688 stays
+  not started until its first lane lands, and each lane updates the owning spec.
