@@ -143,6 +143,9 @@ func cephDeadline(r Request, operation string) (time.Duration, error) {
 	if r.Action == "gateway" {
 		return gatewayDeadline(operation), nil
 	}
+	if r.Action == "nfs-export" {
+		return nfsExportDeadline(operation), nil
+	}
 	nativeCalls, waits := len(r.Hosts)+2, 0
 	if operation == "observe" && r.Action == "cluster" {
 		nativeCalls++

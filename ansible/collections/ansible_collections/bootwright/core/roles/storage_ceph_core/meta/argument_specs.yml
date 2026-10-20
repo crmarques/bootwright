@@ -74,6 +74,8 @@ argument_specs:
           monIP:
             type: str
             required: true
+          nfsExport:
+            type: dict
           owner:
             type: str
           packages:
@@ -107,7 +109,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [ceph-core-v16]
+            choices: [ceph-core-v17]
       bootwright_ceph_digest:
         type: str
         required: true

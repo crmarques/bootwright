@@ -190,7 +190,7 @@ them:
   for a downstream consumer waits for all resources and material it describes.
 - Every child block of a cluster (its settings block, its service-unit blocks,
   object gateways and their zone pool blocks, placement policies, pools,
-  clients, RBD images, filesystems and subvolumes)
+  clients, RBD images, filesystems, subvolumes and NFS exports)
   depends on the cluster block by its block identity, never through the
   StorageCluster API identity that the cluster's image, host, settings and
   service-unit blocks share; a client still follows its pool through the
@@ -208,6 +208,13 @@ them:
   when an ingress fronts its rgw service, on the settings block, and on each
   declared placement StoragePool through that pool; its deadline
   is fixed (apply 3600 s, observe 720 s, destroy 1380 s) and does not grow with
+  the host count.
+- An NFS export block `ceph-nfs-export-<export>` (Kind StorageNFSExport,
+  exclusive `ceph/<cluster>`) realizes one StorageNFSExport on the bootstrap
+  host. It depends on the cluster and image blocks and on its NFS service-unit
+  block `ceph-service-<cluster>-nfs-<serviceID>` by ID, and on its backing
+  StorageFilesystem or StorageSubvolume through that object; its deadline is
+  fixed (apply 2280 s, observe 720 s, destroy 1380 s) and does not grow with
   the host count.
 
 Before an apply that selects managed Ceph claims an operation or binds secrets,

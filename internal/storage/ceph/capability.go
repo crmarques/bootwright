@@ -40,6 +40,8 @@ func (c Capability) request(catalog api.Catalog, object api.Object, contextName 
 		return filesystemRequest(catalog, object, contextName)
 	case api.StorageSubvolume:
 		return subvolumeRequest(catalog, object, contextName)
+	case api.StorageNFSExport:
+		return nfsExportRequest(catalog, object, contextName)
 	}
 	return Request{}, failure("lifecycle.unsupported", "the requested kind has no core Ceph adapter", "")
 }
@@ -175,6 +177,13 @@ func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, 
 		}
 	case "subvolume":
 		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageFilesystem), Object: request.Subvolume.Filesystem})
+	case "nfs-export":
+		dependencies = append(dependencies, ServiceUnitBlockID(request.Cluster, ServiceUnit{Type: "nfs", ID: request.NFSExport.Service}))
+		backing := reconciliation.ObjectRef{Kind: string(api.StorageFilesystem), Object: request.NFSExport.Filesystem}
+		if request.NFSExport.Subvolume != "" {
+			backing = reconciliation.ObjectRef{Kind: string(api.StorageSubvolume), Object: request.NFSExport.Subvolume}
+		}
+		requires = append(requires, backing)
 	case "gateway":
 		for _, suffix := range derivedZonePools(object) {
 			dependencies = append(dependencies, GatewayPoolBlockID(object.Name(), suffix))
@@ -237,6 +246,9 @@ func subjectOf(r Request, object string) string {
 	if r.Gateway != nil {
 		return "object gateway " + object
 	}
+	if r.NFSExport != nil {
+		return "NFS export " + object
+	}
 	if r.Pool != nil && r.Pool.Name != object {
 		return "zone pool " + r.Pool.Name + " of object gateway " + object
 	}
@@ -252,7 +264,7 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if err != nil {
 		return Request{}, err
 	}
-	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePlacementPolicy: "policy", api.StoragePool: "pool", api.StorageClient: "client", api.StorageRBDImage: "rbd", api.StorageFilesystem: "filesystem", api.StorageSubvolume: "subvolume", api.StorageObjectGateway: "pool"}[c.kind]
+	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePlacementPolicy: "policy", api.StoragePool: "pool", api.StorageClient: "client", api.StorageRBDImage: "rbd", api.StorageFilesystem: "filesystem", api.StorageSubvolume: "subvolume", api.StorageObjectGateway: "pool", api.StorageNFSExport: "nfs-export"}[c.kind]
 	object := r.Cluster
 	if r.Action == "policy" && r.Policy != nil {
 		object = r.Policy.Name
@@ -272,6 +284,9 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if r.Action == "subvolume" && r.Subvolume != nil {
 		object = r.Subvolume.Name
 	}
+	if r.Action == "nfs-export" && r.NFSExport != nil {
+		object = r.NFSExport.Name
+	}
 	if c.kind == api.StorageObjectGateway {
 		object = gatewayPoolObject(e.Block, r)
 		if r.Action == "gateway" && r.Gateway != nil && e.Block.ID == GatewayBlockID(r.Gateway.Name) {
@@ -281,7 +296,8 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if c.kind == api.StorageCluster && (r.Action == "settings" || r.Action == "service") {
 		action = r.Action
 	}
-	if action == "" || r.Action != action || (r.Action == "settings") != (r.Settings != nil) || (r.Action == "service") != (r.Service != nil) || (r.Action == "gateway") != (r.Gateway != nil) || e.Block.Kind != string(c.kind) || e.Block.Object != object {
+	if action == "" || r.Action != action || (r.Action == "settings") != (r.Settings != nil) || (r.Action == "service") != (r.Service != nil) || (r.Action == "gateway") != (r.Gateway != nil) ||
+		(r.Action == "nfs-export") != (r.NFSExport != nil) || r.NFSExport != nil && r.NFSExport.SubvolumePath != "" || e.Block.Kind != string(c.kind) || e.Block.Object != object {
 		return Request{}, failure("lifecycle.state", "Ceph request does not match its frozen resource identity", "")
 	}
 	if r.Owner != "" || r.FSID != "" || e.ApplyOperation == "" {
@@ -308,6 +324,16 @@ func (c Capability) prepare(ctx context.Context, e lifecycle.Execution) (Request
 	r.Image = image
 	if r.Auxiliary, err = ProvedAuxiliaryImages(proofs, r.Cluster, r.Auxiliary); err != nil {
 		return Request{}, err
+	}
+	if r.NFSExport != nil && r.NFSExport.Subvolume != "" {
+		path, filesystem, group, err := ProvedSubvolume(proofs, r.NFSExport.Subvolume)
+		if err != nil {
+			return Request{}, err
+		}
+		if filesystem != r.NFSExport.Filesystem || group != r.NFSExport.Group {
+			return Request{}, failure("lifecycle.state", "the creation proof of StorageSubvolume "+r.NFSExport.Subvolume+" names another filesystem or group than StorageNFSExport "+r.NFSExport.Name+" froze", "restore the original apply evidence")
+		}
+		r.NFSExport.SubvolumePath = path
 	}
 	return r, nil
 }

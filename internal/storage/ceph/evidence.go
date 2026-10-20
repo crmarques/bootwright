@@ -10,12 +10,13 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-const EvidenceVersion = "ceph-core-evidence-v6"
+const EvidenceVersion = "ceph-core-evidence-v7"
 
 const DashboardPort = "8443"
 
 var dashboardURL = regexp.MustCompile(`\Ahttps://(?:[A-Za-z0-9.-]{1,253}|\[[0-9A-Fa-f:.]{2,45}\]):8443/\z`)
 var certificateDigest = regexp.MustCompile(`\A[0-9a-f]{64}\z`)
+var exportID = regexp.MustCompile(`\A[1-9][0-9]{0,18}\z`)
 var resourceID = regexp.MustCompile(`\A(?:0|[1-9][0-9]{0,18})\z`)
 var rbdImageID = regexp.MustCompile(`\A[0-9a-f]{1,14}\z`)
 var unitDaemonName = regexp.MustCompile(`\A[a-z][a-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\z`)
@@ -332,6 +333,9 @@ func validateScope(e Evidence, r Request) bool {
 	if r.Action == "gateway" {
 		return e.Client == "" && r.Gateway != nil && (e.Resource == ResourceEvidence{} || zoneID.MatchString(e.Resource.ID) && e.Resource.Path == r.Gateway.Endpoint)
 	}
+	if r.Action == "nfs-export" {
+		return e.Client == "" && r.NFSExport != nil && (e.Resource == ResourceEvidence{} || exportID.MatchString(e.Resource.ID) && e.Resource.Path == r.NFSExport.Native.Pseudo)
+	}
 	if e.Resource.Path != "" {
 		return false
 	}
@@ -381,6 +385,8 @@ func validateReady(e Evidence, r Request) bool {
 		return r.Filesystem != nil && resourceID.MatchString(e.Resource.ID)
 	case "subvolume":
 		return subvolumeResource(e, r)
+	case "nfs-export":
+		return r.NFSExport != nil && exportID.MatchString(e.Resource.ID) && e.Resource.Path == r.NFSExport.Native.Pseudo
 	case "gateway":
 		return r.Gateway != nil && zoneID.MatchString(e.Resource.ID) && e.Resource.Path == r.Gateway.Endpoint && everyDocumentRuns(e, r) && e.Endpoint.Reachable
 	}

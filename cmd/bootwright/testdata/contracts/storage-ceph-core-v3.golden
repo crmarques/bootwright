@@ -1,5 +1,5 @@
 implementation: storage-ceph-core-v3
-content-digest: 4cb9261ca73ebc68544dd555db477f83a72b207369ac1888cc5b49980c344039
+content-digest: 49e6836cbfacbee6d49c60b20f2971cacfb6215da822be600d99dc271507d50a
 automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v1, ceph-dashboard-port-attempt-v1, ceph-dashboard-port-repair-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-user-v1, ceph-device-identities-v1, ceph-filesystem-attempt-v1, ceph-host-cache-v1, ceph-native-teardown-v1, ceph-osd-device-intent-v1, ceph-policy-attempt-v1, ceph-pool-attempt-v2, ceph-rbd-image-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v3, ceph-service-inputs-v1, ceph-subvolume-attempt-v1, ceph-subvolume-group-attempt-v1, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v2
 request-schema:
   action string
@@ -75,6 +75,30 @@ request-schema:
   hosts[].user string
   image string
   monIP string
+  nfsExport *struct ceph.NFSExport omitempty
+  nfsExport.filesystem string
+  nfsExport.group string
+  nfsExport.name string
+  nfsExport.native struct ceph.NFSExportNative
+  nfsExport.native.access_type string
+  nfsExport.native.clients []struct ceph.NFSExportClient
+  nfsExport.native.clients[].access_type string
+  nfsExport.native.clients[].addresses []string
+  nfsExport.native.clients[].squash string
+  nfsExport.native.fsal struct ceph.NFSExportFSAL
+  nfsExport.native.fsal.cmount_path string
+  nfsExport.native.fsal.fs_name string
+  nfsExport.native.fsal.name string
+  nfsExport.native.path string omitempty
+  nfsExport.native.protocols []int
+  nfsExport.native.pseudo string
+  nfsExport.native.sectype []string omitempty
+  nfsExport.native.security_label bool
+  nfsExport.native.squash string
+  nfsExport.native.transports []string
+  nfsExport.service string
+  nfsExport.subvolume string
+  nfsExport.subvolumePath string omitempty
   nfsGaneshaPackageVersion string omitempty
   owner string omitempty
   packageRepository string
