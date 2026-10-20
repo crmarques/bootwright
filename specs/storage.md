@@ -511,6 +511,100 @@ entries coded `lifecycle.unsupported` (`unsupported-release`,
 `ssh-policy-unavailable` and `tunnel-host-key-excluded`) leave it failed. A censored failure that names
 no refusal stays the generic adapter failure, which fails the attempt.
 
+### Cluster execution budget
+
+The StorageCluster's cluster block, the verified-tunnel apply that bootstraps,
+enrolls and deploys the cluster, supports three to six hosts per cluster in
+`spec.ceph.topology.nodes`. Fewer than three hosts keep their existing refusal.
+More than six refuse before operation registration and secret custody, as a row
+of the [refusal table](#refusal-table) for the StorageCluster and every
+StoragePlacementPolicy, StoragePool and StorageClient naming it, with reason
+`StorageCluster <cluster> declares <hosts> Ceph hosts, and Bootwright's cluster execution budget covers at most six hosts per cluster`
+and remedy
+`declare at most six entries in spec.ceph.topology.nodes of StorageCluster <cluster>; B79 tracks larger clusters`.
+
+The cluster block's deadline is at least the sum of the ceilings of the longest
+call sequence its run can make: every 660 s native call, the 1860 s bootstrap
+call and both 900 s readiness waits, plus 60 s. The run ceiling therefore never
+ends a run that every per-call bound admits, and in particular never after the
+first services call, the point from which an interrupted apply refuses
+`partial-cluster`. The worst case is computed from the frozen request alone:
+its hosts, its manager placement, its OSD services and their hosts, and its
+mon, mgr, osd and mds services. No request member is added for it.
+
+The per-host calls of one step run as one round: prerequisites, devices, tunnel
+preflight, claim, authorization, cache on the hosts other than the bootstrap
+host, devices after enrollment, host device identities, and OSD preparation.
+Every host's call of a round is in flight together, each with its own private
+scratch directory; the transport proves its SSH crypto policy and known-hosts
+preflight once, before the first round. A round ends when every call of it has
+returned. A refusal in any call ends the run after its round with the first
+refusal in host order, and no later round starts. The bootstrap host's cache
+call stays a round of its own before the other hosts' cache round. OSD
+preparation is one round over every host that carries an OSD service, because
+its intent record covers every device of the host. Each call keeps its own
+records exactly as the serial order does, so an interruption leaves the same
+per-host stages.
+
+Enrollment and an OSD service's per-host children are the two phases whose
+native work grows with the host count inside one call. An OSD service submits
+its per-host children to cephadm as one multi-document `ceph orch apply -i`
+after writing every child's attempt record, then reads them back once and
+writes the completion records; its call then issues one readback, one apply and
+one readback whatever the host count, as a single-host service does, and leaves
+daemon creation to the readiness wait. Enrollment cannot show the same bound:
+its fixed proofs include a manager wait that may run to its 480 s horizon,
+leaving 160 s of the 640 s worker budget, less than one 60 s command per host
+document at six hosts plus a readback. Each enrollment call therefore admits
+hosts in host order only while its remaining worker budget covers 60 s per
+admitted host document plus the batch's readback and, on the batch that
+completes the last host, the license step. It writes the admitted hosts'
+attempt records, submits their documents in one multi-document
+`ceph orch apply -i` whose ceiling is 60 s per document, reads them back once
+and writes their completion records. The controller calls enrollment again
+while hosts remain, at most once per host. A call that admits no host refuses
+before any effect with a named token coded `lifecycle.unknown`; the bootstrap
+host stays `enrolling` and every other host `prepared`, which the next apply
+continues. The services phase never stops between its first daemon-deploying
+apply and readiness except on a native failure.
+
+The cluster block's apply deadline is
+(10 rounds + 4 single calls + n enrollment calls + S services calls) × 660 s +
+1860 s + 2 × 900 s + 60 s, where n is the host count and S the number of mon,
+mgr, osd and mds services. The ten rounds are the nine above with the bootstrap
+host's cache round; the four single calls are the bootstrap state, tunnel
+configuration, tunnel mount and dashboard calls. Three hosts with mon, mgr and
+one osd service need 20 calls and 16920 s; six hosts with mon, mgr and two osd
+services need 24 calls and 19560 s. Within the 6h0m0s every adapter run is held
+to, six hosts admit at most seven such services (27 calls, 21540 s) and three
+hosts at most ten. A request whose deadline exceeds the ceiling refuses at
+planning, coded `lifecycle.unsupported`, with reason
+`StorageCluster <cluster> needs a cluster run deadline of <deadline>, past the 6h0m0s every adapter run is held to`
+and remedy
+`declare fewer hosts in spec.ceph.topology.nodes or fewer mon, mgr, osd and mds services in spec.ceph.services of StorageCluster <cluster>`.
+
+Both readiness waits stay 900 s. A readiness timeout after the services calls
+is recoverable: once cephadm has converged, the next apply observes a ready
+cluster, every host's stage is complete, and the apply passes. The six-host
+live runs of the [virtual provider matrix](milestones/m2.md#b484) record the
+measured OSD convergence time; a shortfall there is its own item.
+
+| An apply that stops | The next apply |
+| --- | --- |
+| before the bootstrap call | continues each host from its `unclaimed`, `claimed` or `prepared` stage |
+| inside bootstrap, tunnel configuration or tunnel mount | continues from the seed stages of the [verified transport](storage-native-api.md#verified-native-orchestration-transport) |
+| inside enrollment, devices, host device identities, OSD preparation or the services calls, before any non-bootstrap host carries a daemon | continues from `enrolling`, every other host `prepared` |
+| after a non-bootstrap host carries a daemon, the cluster not ready | refuses `partial-cluster` until [B659](milestones/backlog.md#b659) defines its recovery |
+| in a readiness wait | continues once cephadm has converged, as above |
+
+The budget changes no `partial-cluster` refusal. Observation, destruction,
+child blocks, host blocks and service units keep their deadlines; at six hosts
+the ones that grow with the hosts count 9 calls to observe the cluster, 8 to
+destroy it and 15 to apply a block other than the cluster.
+
+Not yet met: clusters of four to six hosts and the per-host rounds; tracked as
+[B688](milestones/m2.md#b688).
+
 ## Devices and destructive ownership
 
 An OSD declaration authorizes only a finite, proved device set on its bound
