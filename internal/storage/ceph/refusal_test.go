@@ -407,7 +407,7 @@ func TestSMBRefusalsNameOnlyNextStepsAFailedApplyCanTake(t *testing.T) {
 func TestAnSSHPolicyRefusalReachesTheOperatorWithItsRemedy(t *testing.T) {
 	const excluded = "a Ceph host's pinned SSH host key is of a type this controller's SSH crypto policy excludes, so Bootwright opened no session to it"
 	const unavailable = "this controller's SSH crypto policy could not be read or evaluated, so Bootwright opened no Ceph session"
-	const tunnel = "the SSH crypto policy inside the selected Ceph image admits none of the algorithms of a Ceph host's pinned host key, so cephadm's tunnel could not reach that host and nothing was changed on it"
+	const tunnel = "the SSH crypto policy inside the selected Ceph image admits none of the algorithms of a Ceph host's pinned host key, so cephadm's tunnel could not reach that host; the cluster block refused before this apply claimed or authorized any Ceph host"
 	for reason, message := range map[string]string{"ssh-policy-host-excluded": excluded, "ssh-policy-unavailable": unavailable, "tunnel-host-key-excluded": tunnel} {
 		t.Run(reason, func(t *testing.T) {
 			r := coreRequest()

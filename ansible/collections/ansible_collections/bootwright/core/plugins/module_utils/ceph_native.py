@@ -71,9 +71,9 @@ RBD_IMAGE_ID = re.compile(r"[0-9a-f]{1,14}\Z")
 SUBVOLUME_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 SUBVOLUME_PATH = re.compile(r"/volumes/(?:_nogroup|[A-Za-z0-9][A-Za-z0-9_.-]{0,127})/[a-z0-9](?:[-a-z0-9]{0,46}[a-z0-9])?/"
                             r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\Z")
-CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount", "cache", "enroll",
-                         "services", "dashboard", "dashboard_read", "observe", "bootstrap_state", "host_state", "destroy"))
-CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "observe", "bootstrap_state", "host_state", "dashboard_read"))
+CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "tunnel_preflight", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount",
+                         "cache", "enroll", "services", "dashboard", "dashboard_read", "observe", "bootstrap_state", "host_state", "destroy"))
+CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "tunnel_preflight", "observe", "bootstrap_state", "host_state", "dashboard_read"))
 EVIDENCE_VERSION = "ceph-core-evidence-v8"
 DASHBOARD_USER = "admin"
 DASHBOARD_PORT = 8443
@@ -2047,6 +2047,12 @@ class Worker:
                 "image": self.request["image"], "uid": uid, "label": label,
                 "nativeUser": self.request["clusterSSHUser"], "hosts": helper.targets(self.request)}
 
+    def tunnel_preflight(self, private):
+        """Read only: the coordinator asks each manager host before it claims or authorizes any host."""
+        require(self.request["clusterSSHTransport"] == "verified-tunnel" and set(private) == {"knownHosts"}, "material")
+        self.tunnel_host_key_preflight(private)
+        return {"changed": False}
+
     def tunnel_host_key_preflight(self, private):
         """Before any authorization effect, a manager host proves its tunnel client admits an algorithm of every pinned host key."""
         if self.request["clusterSSHTransport"] != "verified-tunnel":
@@ -3657,7 +3663,7 @@ def dispatch(envelope):
         worker.tls = ceph_native_object.material(worker.request, phase, envelope["private"])
     if unit:
         worker.bound = ceph_native_units.material(worker.request, phase, envelope["private"])
-    if phase in ("bootstrap", "authorize", "tunnel_configure"):
+    if phase in ("tunnel_preflight", "bootstrap", "authorize", "tunnel_configure"):
         return getattr(worker, phase)(envelope["private"])
     if phase == "services":
         return worker.services(devices, service)

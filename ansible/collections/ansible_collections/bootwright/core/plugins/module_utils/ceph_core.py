@@ -653,6 +653,10 @@ def apply_tunnel_cluster(request, bootstrap, transport, state, preparations):
         transport.call(host, "devices")
     changed = False
     private = transport.bootstrap_material()
+    managers = next(service["placement"]["hosts"] for service in request["services"] if service["service_type"] == "mgr")
+    for host in request["hosts"]:
+        if host["name"] in managers and stages[host["name"]] in ("unclaimed", "claimed"):
+            transport.call(host, "tunnel_preflight", {"knownHosts": private["knownHosts"]})
     for host in request["hosts"]:
         if stages[host["name"]] == "unclaimed":
             changed = transport.call(host, "claim")["changed"] or changed

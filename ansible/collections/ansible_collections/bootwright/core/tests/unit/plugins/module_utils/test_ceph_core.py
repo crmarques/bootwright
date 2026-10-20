@@ -432,6 +432,42 @@ def test_authorize_refuses_an_excluded_tunnel_pin_before_any_effect(core_request
     assert effects == [] and markers.writes == []
     assert ceph_core.refusal(ceph_native.RemoteRefusal("native-refusal:tunnel-host-key-excluded@ceph_native.authorize:1"),
                              ceph_core.CLUSTER_REASONS)[0] == "tunnel-host-key-excluded"
+    with pytest.raises(ceph_native.NativeFailure, match="^tunnel-host-key-excluded$"):
+        native.tunnel_preflight({"knownHosts": known})
+    assert effects == [] and markers.writes == []
+    with pytest.raises(ceph_native.Refusal, match="^material$"):
+        native.tunnel_preflight(private)
+
+
+def test_an_excluded_tunnel_pin_refuses_before_any_host_is_claimed_or_authorized(core_request, monkeypatch):
+    core_request["clusterSSHTransport"] = "verified-tunnel"
+    package_intent(core_request)
+    names = [host["name"] for host in core_request["hosts"]]
+    managers = names[1:]
+    for service in core_request["services"]:
+        if service["service_type"] == "mgr":
+            service["placement"]["hosts"] = managers
+    bootstrap = core_request["hosts"][1]
+    core_request["bootstrap"] = bootstrap["name"]
+
+    class Refusing(ReadinessTransport):
+        def call(self, host, phase, private=None, *, timeout=None, devices=None, service=None):
+            if phase == "tunnel_preflight":
+                self.calls.append((host["name"], phase, timeout))
+                assert set(private) == {"knownHosts"}
+                if host["name"] != names[-1]:
+                    return {"changed": False}
+                raise ceph_native.RemoteRefusal("native-refusal:tunnel-host-key-excluded@ceph_native._tunnel_host_keys:12")
+            return super().call(host, phase, private, timeout=timeout, devices=devices, service=service)
+
+    transport = Refusing(core_request, ReadinessClock())
+    monkeypatch.setattr(ceph_tunnel_staging, "prove_recovery_record", lambda *args, **kwargs: "unclaimed")
+    preparations = [{"name": name, "owned": False, "exists": False, "recovery": None} for name in names]
+    with pytest.raises(ceph_native.RemoteRefusal):
+        ceph_core.apply_tunnel_cluster(core_request, bootstrap, transport, None, preparations)
+    phases = [(host, phase) for host, phase, unused in transport.calls]
+    assert [host for host, phase in phases if phase == "tunnel_preflight"] == managers
+    assert not [phase for unused, phase in phases if phase in ("claim", "authorize", "bootstrap")]
 
 
 def test_private_input_is_opened_without_links_and_not_in_argv(core_request, tmp_path):
@@ -1604,8 +1640,8 @@ class ReadinessTransport:
             return {"name": host["name"], "owned": True, "exists": True}
         if phase == "dashboard":
             return {"changed": True, "private": PASSWORD}
-        assert phase in ("prerequisites", "devices", "claim", "authorize", "bootstrap", "cache", "enroll", "services", "osd_prepare")
-        return {"changed": phase not in ("prerequisites", "devices")}
+        assert phase in ("prerequisites", "devices", "tunnel_preflight", "claim", "authorize", "bootstrap", "cache", "enroll", "services", "osd_prepare")
+        return {"changed": phase not in ("prerequisites", "devices", "tunnel_preflight")}
 
 
 def package_intent(core_request):
@@ -1680,7 +1716,9 @@ def test_registry_material_only_reaches_each_hosts_authorization(core_request, m
             expected |= {"clusterPrivateKey", "knownHosts"}
         assert set(material) == expected
     for unused, phase, material in private_calls:
-        if phase != "authorize":
+        if phase == "tunnel_preflight":
+            assert set(material) == {"knownHosts"}
+        elif phase != "authorize":
             assert phase in ("bootstrap", "tunnel_configure")
             assert set(material) == {"clusterPrivateKey", "clusterPublicKey", "knownHosts"}
 

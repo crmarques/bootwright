@@ -427,10 +427,12 @@ inside the selected Ceph image and keeps that image's back end: its
 configuration pins, for each host, the pinned key's algorithms that the back
 end's first `HostKeyAlgorithms` value admits under the list and pattern rules
 of ssh_config(5) (no value, or a `+` or `^` form, keeps them all; a `-` form
-removes those it matches; any other value keeps those it matches). An empty
-intersection refuses `tunnel-host-key-excluded` before authorization changes
-anything. Strict host-key checking and the pinned known hosts are unchanged,
-and keeping a policy is not FIPS certification.
+removes those it matches; any other value keeps those it matches). Before
+the cluster block claims or authorizes any host, each manager host it will
+authorize renders that configuration in a read-only round trip, and an empty
+intersection refuses `tunnel-host-key-excluded` there. Strict host-key
+checking and the pinned known hosts are unchanged, and keeping a policy is not
+FIPS certification.
 
 The application request fixes exact targets and authorization before adapter
 execution. The adapter cannot widen targets, privileges, retries, or effects.

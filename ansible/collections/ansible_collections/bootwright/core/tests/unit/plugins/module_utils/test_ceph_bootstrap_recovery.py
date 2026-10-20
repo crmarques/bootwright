@@ -350,8 +350,9 @@ def test_coordinator_runs_only_missing_proved_transitions(core_request, monkeypa
     assert phases.count("services") == len(core_request["services"])
     assert phases.count("cache") == phases.count("host_devices") == 3 and "packages" not in phases
     assert max(index for index, phase in enumerate(phases) if phase == "cache") < phases.index("enroll")
+    assert phases.count("tunnel_preflight") == (3 if stage in ("unclaimed", "claimed") else 0)
     preconvergence = phases[:phases.index("services") + 1]
-    assert len(preconvergence) <= 27
+    assert len(preconvergence) <= 27 + phases.count("tunnel_preflight")
 
 
 def test_partial_enrollment_fence_resumes_without_erasing_ownership(native):
