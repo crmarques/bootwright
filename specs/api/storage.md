@@ -429,8 +429,8 @@ checks:
   candidate sets, with consistent site and label bindings;
 - OSD selectors are bounded and internally consistent and exclude the
   Machine's root device from explicit data, DB, and WAL paths;
-- policies, pools, filesystems, gateways, NFS exports, and storage exports
-  reference the same cluster under each kind's management-mode constraints and
+- policies, pools, filesystems, gateways, NFS exports, SMB resources, and
+  storage exports reference the same cluster under each kind's management-mode constraints and
   use compatible pool roles and protection modes;
 - addresses, CIDRs, DNS labels, paths, ports, service IDs, VRRP IDs, config
   ownership, and Secret types do not conflict across the aggregate graph;
@@ -488,7 +488,20 @@ checks:
   one declared nfs service, its pseudo path is unique among the exports of
   that service, and its native record is closed and serves NFSv4 over TCP
   with `sys` security only
-  ([field record](../storage-resources.md#storagenfsexport)); and
+  ([field record](../storage-resources.md#storagenfsexport));
+- SMB clusters of one storage cluster place on disjoint hosts, and each
+  holds the SMB port (445) and SMB metrics port (9922) on every eligible
+  host, and CTDB (4379) when clustered
+  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/smb/constants.py#L39-L41)),
+  binding all addresses, in the listener comparison above;
+- SMB public addresses are `address/prefix` inside a declared public CIDR
+  with its prefix length, neither its network nor its broadcast address, and
+  equal to no Machine address, no ingress virtual IP and no other SMB public
+  address;
+- an SMB share and an NFS export of one filesystem must bind distinct
+  StorageSubvolumes, two SMB clusters never share one subvolume, and SMB
+  native identities, share names and auth references resolve within the
+  cluster ([field record](../storage-resources.md#storagesmbresource)); and
 - an NFS service's mode follows its ingress, and the HAProxy mode that hides
   client addresses refuses
   ([NFS modes](../storage-native-api.md#rgw-ingress-and-nfs-records)).

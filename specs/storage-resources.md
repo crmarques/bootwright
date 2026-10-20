@@ -776,13 +776,61 @@ Value rules, each at its field:
 - A share with `restrict_access: true` needs at least one `login_control`
   entry.
 
-**Target:** [B482](milestones/m2.md#b482) adds the cross-object rules: a
-share's `cluster_id` agrees with its `smbClusterRef` and its CephFS
-volume/group/subvolume names agree with its backing reference, so a
-filesystem reference cannot smuggle an unbound subvolume name; native IDs and
-share names are unique per cluster; `cephfs.path` cannot escape the selected
-backing; and a filesystem/path share cannot bypass a forbidden NFS/SMB overlap
-by omitting a subvolume reference.
+Cross-object rules, each refusal naming the other object by its
+`metadata.name` and never echoing a native value:
+
+- Native identities are unique per StorageCluster: a cluster's `cluster_id`,
+  a share's (`cluster_id`, `share_id`), a join.auth's `auth_id` and a
+  usersgroups resource's `users_groups_id`. A second StorageSMBResource of
+  the same type and identity refuses at the identity's last field.
+- A share's effective name is `name`, else `share_id`, as the manager
+  derives it; two shares of one `cluster_id` with the same effective name
+  refuse, compared exactly. One share name on two SMB clusters is admitted.
+- A share's `smbClusterRef` names a same-cluster `ceph.smb.cluster`
+  StorageSMBResource, and the share's `cluster_id` equals that resource's
+  `cluster_id`.
+- The share's `cephfs` reference leaves agree with its backing. With
+  `filesystemRef`, `cephfs.subvolumegroup` and `cephfs.subvolume` refuse,
+  also in a fragment: a filesystem reference cannot smuggle an unbound
+  subvolume name. With `subvolumeRef`, `cephfs.subvolume` equals the bound
+  StorageSubvolume's name and `cephfs.subvolumegroup` its `group` (a
+  subvolume in the native default group takes none). With either backing,
+  `cephfs.volume` equals the bound filesystem's name. `cephfs.path: /` is the
+  root of the backing and is admitted; a clean absolute path stays inside the
+  backing.
+- NFS and SMB never expose one backing: a share refuses unless every NFS
+  export of its filesystem and the share bind distinct StorageSubvolumes; two
+  SMB clusters never share one subvolume. Admission cannot see resolved
+  subvolume paths, so a filesystem-wide export or share on either side
+  refuses with the other on the same filesystem. The refusal names the
+  StorageNFSExport, or the share of the other SMB cluster, whose subvolume
+  earmark `smb.cluster.<cluster_id>` the manager would refuse at apply.
+- A cluster's `resourceRefs` name same-cluster `ceph.smb.join.auth` and
+  `ceph.smb.usersgroups` resources only. Each `domain_settings.join_sources[]`
+  `ref` resolves to exactly one join.auth member by `auth_id`, and each
+  `user_group_settings[]` `ref` of `source_type: resource` or omitted to
+  exactly one usersgroups member by `users_groups_id`; a reference with no
+  match or several matches refuses, and so does a member no native reference
+  consumes. Several SMB clusters may name one auth resource.
+- SMB clusters of one StorageCluster place on disjoint hosts: each binds the
+  SMB port on every eligible host. Each cluster holds SMB (445) and SMB
+  metrics (9922), and CTDB (4379) when clustered, on every eligible host,
+  binding all addresses, in the
+  [listener comparison](api/storage.md#complete-graph-invariants); another
+  listener on one of those ports and hosts refuses, naming the port, the
+  host and the other listener.
+- `public_addrs[].address` is `address/prefix`, also in a fragment; a
+  non-empty `public_addrs` needs clustering, also in a fragment, because CTDB
+  assigns the addresses. Each address lies inside a declared public CIDR with
+  that CIDR's prefix length, is neither its network nor its broadcast
+  address, and equals no Machine address, no ingress virtual IP of any
+  StorageCluster, no earlier address of its own list and no public address
+  of another SMB cluster.
+
+The SMB manager generates the orchestrator service `smb.<cluster_id>` and its
+daemons, the pool `.smb` and the subvolume earmarks `smb.cluster.<cluster_id>`;
+none can be declared: an `smb` service and `smb` in `spec.ceph.mgrModules`
+refuse, and no StoragePool can be named `.smb`.
 
 Native auth references resolve by native resource type and ID within the
 objects named by `resourceRefs`; unused, ambiguous or foreign references

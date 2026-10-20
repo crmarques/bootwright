@@ -112,7 +112,11 @@ func TestSMBFieldsOutsideTheIntersectionRefuse(t *testing.T) {
 		{"smb-docs", "max_connections", 10, "max_connections", "Bootwright does not realize SMB share connection limits", "omit spec.native.max_connections"},
 		{"smb-docs", "custom_smb_share_options", m("veto files", "s3cr3t"), "custom_smb_share_options", "Bootwright does not realize custom Samba share options", "omit spec.native.custom_smb_share_options"},
 	} {
-		full, partial := smbBoth(t, catalog, row.name, smbNative(row.member, row.value))
+		changes := []any{row.member, row.value}
+		if row.member == "public_addrs" {
+			changes = append(changes, "clustering", "always")
+		}
+		full, partial := smbBoth(t, catalog, row.name, smbNative(changes...))
 		if len(full) != 1 || len(partial) != 1 {
 			t.Fatalf("%s produced %#v / %#v", row.field, full, partial)
 		}
@@ -164,18 +168,20 @@ func TestSMBAuthModeRequiresItsSettings(t *testing.T) {
 	catalog := smbCatalog(t)
 	join := []api.Value{m("source_type", "resource", "ref", "join")}
 	domain := m("realm", "EXAMPLE.COM", "join_sources", join)
+	both := smbSpec("resourceRefs", api.StringList("smb-users", "smb-join"))
+	none := smbSpec("resourceRefs", nil)
 	for _, row := range []struct {
 		change          func(api.Value) api.Value
 		field           string
 		partial         bool
 		message, remedy string
 	}{
-		{smbNative("domain_settings", domain), "domain_settings", true, "a user-mode SMB cluster takes no domain_settings", "remove domain_settings, or set auth_mode: active-directory"},
-		{smbNative("auth_mode", "active-directory", "domain_settings", domain), "user_group_settings", true, "an active-directory SMB cluster takes no user_group_settings", "remove user_group_settings, or set auth_mode: user"},
-		{smbNative("user_group_settings", nil), "user_group_settings", false, "a user-mode SMB cluster needs user_group_settings", "add a user_group_settings entry whose ref is the users_groups_id of a ceph.smb.usersgroups resource named in spec.resourceRefs"},
-		{smbNative("auth_mode", "active-directory", "user_group_settings", nil), "domain_settings", false, smbADSettings, smbADSettingsFix},
-		{smbNative("auth_mode", "active-directory", "user_group_settings", nil, "domain_settings", m("realm", "example.com", "join_sources", []api.Value{})), "domain_settings.join_sources", false, smbADSettings, smbADSettingsFix},
-		{smbNative("user_group_settings", []api.Value{m("source_type", "empty", "ref", "users")}), "user_group_settings[0].source_type", true, "Bootwright does not realize user-mode SMB clusters without a users-and-groups resource", "set source_type: resource and ref to the users_groups_id of a ceph.smb.usersgroups resource in spec.resourceRefs"},
+		{smbChain(both, smbNative("domain_settings", domain)), "domain_settings", true, "a user-mode SMB cluster takes no domain_settings", "remove domain_settings, or set auth_mode: active-directory"},
+		{smbChain(both, smbNative("auth_mode", "active-directory", "domain_settings", domain)), "user_group_settings", true, "an active-directory SMB cluster takes no user_group_settings", "remove user_group_settings, or set auth_mode: user"},
+		{smbChain(none, smbNative("user_group_settings", nil)), "user_group_settings", false, "a user-mode SMB cluster needs user_group_settings", "add a user_group_settings entry whose ref is the users_groups_id of a ceph.smb.usersgroups resource named in spec.resourceRefs"},
+		{smbChain(none, smbNative("auth_mode", "active-directory", "user_group_settings", nil)), "domain_settings", false, smbADSettings, smbADSettingsFix},
+		{smbChain(none, smbNative("auth_mode", "active-directory", "user_group_settings", nil, "domain_settings", m("realm", "example.com", "join_sources", []api.Value{}))), "domain_settings.join_sources", false, smbADSettings, smbADSettingsFix},
+		{smbChain(none, smbNative("user_group_settings", []api.Value{m("source_type", "empty", "ref", "users")})), "user_group_settings[0].source_type", true, "Bootwright does not realize user-mode SMB clusters without a users-and-groups resource", "set source_type: resource and ref to the users_groups_id of a ceph.smb.usersgroups resource in spec.resourceRefs"},
 	} {
 		full, partial := smbBoth(t, catalog, "smb-files", row.change)
 		if len(full) != 1 {
@@ -190,7 +196,7 @@ func TestSMBAuthModeRequiresItsSettings(t *testing.T) {
 	}
 	dns := api.StringList("192.0.2.53")
 	for _, change := range []func(api.Value) api.Value{
-		smbNative("auth_mode", "active-directory", "user_group_settings", nil, "domain_settings", domain, "custom_dns", dns),
+		smbChain(smbSpec("resourceRefs", api.StringList("smb-join")), smbNative("auth_mode", "active-directory", "user_group_settings", nil, "domain_settings", domain, "custom_dns", dns)),
 		smbNative("custom_dns", dns),
 	} {
 		admitted, changed := smbWith(t, catalog, "smb-files", change)

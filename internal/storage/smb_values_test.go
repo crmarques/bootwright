@@ -127,7 +127,13 @@ func TestSMBUsersAndGroupsAreNamedOnce(t *testing.T) {
 func TestSMBResourceIDsFollowTheManagerGrammar(t *testing.T) {
 	catalog := smbCatalog(t)
 	join := func(ref string) func(api.Value) api.Value {
-		return smbNative("auth_mode", "active-directory", "user_group_settings", nil, "domain_settings", m("realm", "example.com", "join_sources", []api.Value{m("source_type", "resource", "ref", ref)}))
+		return smbChain(smbSpec("resourceRefs", api.StringList("smb-join")), smbNative("auth_mode", "active-directory", "user_group_settings", nil, "domain_settings", m("realm", "example.com", "join_sources", []api.Value{m("source_type", "resource", "ref", ref)})))
+	}
+	peer := func(name, key string) func(api.Catalog, string) api.Catalog {
+		return func(catalog api.Catalog, id string) api.Catalog {
+			_, changed := smbWith(t, catalog, name, smbNative(key, id))
+			return changed
+		}
 	}
 	settings := func(ref string) func(api.Value) api.Value {
 		return smbNative("user_group_settings", []api.Value{m("source_type", "resource", "ref", ref)})
@@ -135,27 +141,36 @@ func TestSMBResourceIDsFollowTheManagerGrammar(t *testing.T) {
 	sites := []struct {
 		name, field string
 		change      func(string) func(api.Value) api.Value
+		prepare     func(api.Catalog, string) api.Catalog
 	}{
-		{"smb-files", "$.spec.native.cluster_id", func(id string) func(api.Value) api.Value { return smbNative("cluster_id", id) }},
-		{"smb-docs", "$.spec.native.cluster_id", func(id string) func(api.Value) api.Value { return smbNative("cluster_id", id) }},
-		{"smb-docs", "$.spec.native.share_id", func(id string) func(api.Value) api.Value { return smbNative("share_id", id) }},
-		{"smb-join", "$.spec.native.auth_id", func(id string) func(api.Value) api.Value { return smbNative("auth_id", id) }},
-		{"smb-users", "$.spec.native.users_groups_id", func(id string) func(api.Value) api.Value { return smbNative("users_groups_id", id) }},
-		{"smb-files", "$.spec.native.domain_settings.join_sources[0].ref", join},
-		{"smb-files", "$.spec.native.user_group_settings[0].ref", settings},
+		{"smb-files", "$.spec.native.cluster_id", func(id string) func(api.Value) api.Value { return smbNative("cluster_id", id) }, nil},
+		{"smb-docs", "$.spec.native.cluster_id", func(id string) func(api.Value) api.Value { return smbNative("cluster_id", id) }, peer("smb-files", "cluster_id")},
+		{"smb-docs", "$.spec.native.share_id", func(id string) func(api.Value) api.Value { return smbNative("share_id", id) }, nil},
+		{"smb-join", "$.spec.native.auth_id", func(id string) func(api.Value) api.Value { return smbNative("auth_id", id) }, nil},
+		{"smb-users", "$.spec.native.users_groups_id", func(id string) func(api.Value) api.Value { return smbNative("users_groups_id", id) }, nil},
+		{"smb-files", "$.spec.native.domain_settings.join_sources[0].ref", join, peer("smb-join", "auth_id")},
+		{"smb-files", "$.spec.native.user_group_settings[0].ref", settings, peer("smb-users", "users_groups_id")},
 	}
 	for _, site := range sites {
-		for _, id := range []string{"x_y", strings.Repeat("a", 19), "-ab", "ab-"} {
-			requireSMBRow(t, catalog, smbRow{site.name, site.change(id), "api.value", site.field, smbIDMessage, smbIDRemedy}, true)
+		prepared := func(id string) api.Catalog {
+			if site.prepare == nil {
+				return catalog
+			}
+			return site.prepare(catalog, id)
 		}
-		requireSMBAdmits(t, catalog, site.name, site.change("a"), site.change("a-b"), site.change(strings.Repeat("a", 18)))
+		for _, id := range []string{"x_y", strings.Repeat("a", 19), "-ab", "ab-"} {
+			requireSMBRow(t, prepared(id), smbRow{site.name, site.change(id), "api.value", site.field, smbIDMessage, smbIDRemedy}, true)
+		}
+		for _, id := range []string{"a", "a-b", strings.Repeat("a", 18)} {
+			requireSMBAdmits(t, prepared(id), site.name, site.change(id))
+		}
 	}
 }
 
 func TestSMBClusterRealmAndDNSAreLiteral(t *testing.T) {
 	catalog := smbCatalog(t)
 	ad := func(realm string, dns ...string) func(api.Value) api.Value {
-		return smbNative("auth_mode", "active-directory", "user_group_settings", nil, "custom_dns", api.StringList(dns...), "domain_settings", m("realm", realm, "join_sources", []api.Value{m("source_type", "resource", "ref", "join")}))
+		return smbChain(smbSpec("resourceRefs", api.StringList("smb-join")), smbNative("auth_mode", "active-directory", "user_group_settings", nil, "custom_dns", api.StringList(dns...), "domain_settings", m("realm", realm, "join_sources", []api.Value{m("source_type", "resource", "ref", "join")})))
 	}
 	dnsMessage, dnsRemedy := "a custom DNS server is a literal IP address", "write each custom_dns entry as an IP address"
 	rows := []smbRow{
