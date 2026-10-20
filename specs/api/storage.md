@@ -15,7 +15,8 @@ of the same cluster binds by name. StorageFilesystem is admitted under
 Prometheus, Alertmanager, Grafana, node-exporter, ceph-exporter, snmp-gateway,
 mgmt-gateway and oauth2-proxy documents are admitted under their
 [native records](../storage-native-api.md#observability-and-management-gateway-records);
-planning refuses each that needs an auxiliary image until it can be selected;
+each that needs an auxiliary image plans once that image is authored under
+`spec.ceph.images` and refuses at planning without it;
 ceph-exporter runs the Ceph image, and it and the other monitoring services
 realize through the
 [monitoring unit](../storage.md#resources-readiness-and-access); mgmt-gateway
@@ -27,7 +28,8 @@ outside the host request, so that core observation
 [tolerates its daemons](../storage-native-api.md#service-identity-and-references);
 planning realizes an rgw service a StorageObjectGateway binds, with its TLS
 bindings, through the gateway block and an nfs service through its unit; an
-ingress refuses until its auxiliary images can be selected
+ingress plans once its auxiliary images are authored under `spec.ceph.images`
+and refuses at planning without them
 ([refusal table](../storage.md#refusal-table)). A
 `spec.ceph.serviceBindings` entry is left to the gateway block only for an RGW
 service a StorageObjectGateway binds and for the ingress that fronts it, and
@@ -69,8 +71,9 @@ implicit administrator capability is granted. Its OSD caps also name the
 export block.
 `StorageSMBResource` is admitted under its
 [field record](../storage-resources.md#storagesmbresource); its SMB block
-plans it; until its samba images can be selected, planning refuses the
-StorageCluster it names (see the [refusal table](../storage.md#refusal-table)).
+plans it once the samba images of the StorageCluster it names are authored
+under `spec.ceph.images`; without them, planning refuses that StorageCluster
+(see the [refusal table](../storage.md#refusal-table)).
 Other P2 resource additions remain target contracts, not admitted kinds.
 Future storage export feature families are refused by current pure
 admission.
@@ -96,7 +99,8 @@ Ordinary apply realizes the core cluster, placement policies, replicated and
 erasure-coded pools, RBD images, CephFS filesystems with their subvolume
 groups, CephFS subvolumes, native `nfs` services, NFS exports of a CephFS
 filesystem or subvolume and the client over `verified-tunnel`; an ingress
-refuses until its auxiliary images can be selected.
+plans once its auxiliary images are authored under `spec.ceph.images` and
+refuses at planning without them.
 `ceph.release` is the operator's release label;
 `ceph.packageVersion` selects the Ceph/cephadm RPM roots and
 `ceph.cephadm.ansible.packageVersion` selects the actual cephadm-ansible RPM.
@@ -129,6 +133,22 @@ inspection freeze the selected immutable artifact for continuation.
 The [release qualification](../storage-coverage.md#release-qualification) owns
 those proofs. Validation proves no live qualification; [M2b](../milestones/m2.md#m2b)
 owns delivery and operator acceptance.
+
+`ceph.images.<name>` authors one auxiliary image. Its keys are cephadm's
+`mgr/cephadm/container_image_<name>` setting suffixes: `alertmanager`,
+`alloy`, `grafana`, `haproxy`, `keepalived`, `loki`, `nginx`,
+`node_exporter`, `nvmeof`, `oauth2_proxy`, `prometheus`, `promtail`, `samba`,
+`samba_metrics` and `snmp_gateway`; `base` is not a key, because `ceph.image`
+owns the Ceph image. Each holds `base` and `version` under the rules of
+`ceph.image`: an IBM distribution requires both, the base must be beneath the
+Entitlement registry namespace, and the version is a tag or a SHA-256 digest,
+nonempty, at most 1024 UTF-8 bytes and control-free, which native tools
+interpret. An image is required exactly when a declared service or a
+StorageSMBResource of the cluster needs it; planning refuses a missing one and
+one that nothing declared needs
+([refusal table](../storage.md#refusal-table)). Bootwright keeps no default and
+no table of values. Resolution freezes each image's linux/amd64 digest with
+the Ceph image ([frozen release and trust](../storage.md#frozen-release-and-trust)).
 
 `ceph.cephadm.clusterSSH.transport` accepts `native` or `verified-tunnel`
 (D135). Omission selects `native`; an empty, null or unknown value refuses.

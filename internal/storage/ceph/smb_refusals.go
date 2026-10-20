@@ -37,9 +37,14 @@ func clusterSMBResources(c api.Catalog, cluster string) []api.Object {
 
 func unselectedSMBImages(c api.Catalog, cluster api.Object) (string, string, bool) {
 	objects := clusterSMBResources(c, cluster.Name())
-	if len(objects) == 0 {
+	images := cluster.Spec().Get("ceph", "images")
+	if len(objects) == 0 || images.Has("samba") && images.Has("samba_metrics") {
 		return "", "", false
 	}
-	return "StorageSMBResource " + objects[0].Name() + " needs cephadm's container_image_samba and container_image_samba_metrics; no auxiliary image is selected for them, and Bootwright keeps no default",
-		"remove every StorageSMBResource whose spec.clusterRef is " + cluster.Name() + " from the selected Environment", true
+	name := "samba"
+	if images.Has(name) {
+		name = "samba_metrics"
+	}
+	return "StorageSMBResource " + objects[0].Name() + " needs cephadm's container_image_" + name + ", and spec.ceph.images." + name + " is not set; Bootwright keeps no default",
+		"set spec.ceph.images." + name + " of StorageCluster " + cluster.Name() + " to an image beneath its Entitlement registry, or remove every StorageSMBResource whose spec.clusterRef is " + cluster.Name() + " from the selected Environment", true
 }

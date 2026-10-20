@@ -198,6 +198,9 @@ func (c ImageCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 			tag = ""
 		}
 		request := ImageRequest{Version: ImageVersion, Cluster: r.Cluster, Controller: input.Controller, Release: r.Release, Base: base, Tag: tag, Image: r.Image, Registry: r.Registry, RegistryRef: r.RegistryRef}
+		if request.Auxiliary, err = authoredAuxiliary(catalog, object); err != nil {
+			return plan, err
+		}
 		canonical, err := request.Canonical()
 		if err != nil {
 			return plan, err
@@ -428,13 +431,32 @@ func auxiliarySetMismatch() error {
 
 func auxiliaryImage(name, base, version, registryURL string) (AuxiliaryImage, error) {
 	if base != registryURL && !strings.HasPrefix(base, registryURL+"/") {
-		return AuxiliaryImage{}, failure("lifecycle.unsupported", "the auxiliary image "+name+" is not beneath the Entitlement registry "+registryURL, "select an image for "+name+" beneath the Entitlement registry.url")
+		return AuxiliaryImage{}, failure("lifecycle.unsupported", "the auxiliary image "+name+" is not beneath the Entitlement registry "+registryURL, "set spec.ceph.images."+name+".base to a repository beneath the Entitlement registry.url")
 	}
 	if ValidImageDigest(version) {
 		return AuxiliaryImage{Name: name, Base: base, Image: base + "@" + version}, nil
 	}
 	if !storage.NativeVersion(version) {
-		return AuxiliaryImage{}, failure("lifecycle.unsupported", "the auxiliary image "+name+" names neither a tag nor a sha256 digest", "set its version to a tag or a sha256 digest")
+		return AuxiliaryImage{}, failure("lifecycle.unsupported", "the auxiliary image "+name+" names neither a tag nor a sha256 digest", "set spec.ceph.images."+name+".version to a tag or a sha256 digest")
 	}
 	return AuxiliaryImage{Name: name, Base: base, Image: base + ":" + version, Tag: version}, nil
+}
+
+func authoredAuxiliary(c api.Catalog, cluster api.Object) ([]AuxiliaryImage, error) {
+	spec := cluster.Spec().Get("ceph")
+	ent, _ := c.Find(api.Entitlement, spec.Get("entitlementRef").Text())
+	registryURL := ent.Spec().Get("registry", "url").Text()
+	var out []AuxiliaryImage
+	for _, name := range AuxiliaryNames {
+		image := spec.Get("images", name)
+		if !image.Present() {
+			continue
+		}
+		a, err := auxiliaryImage(name, image.Get("base").Text(), image.Get("version").Text(), registryURL)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, nil
 }

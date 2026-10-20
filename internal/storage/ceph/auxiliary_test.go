@@ -152,10 +152,10 @@ func TestAuxiliaryReferencesStayInsideTheEntitlementNamespace(t *testing.T) {
 	}
 	for _, base := range []string{"quay.io/ceph/haproxy", "cp.icr.io/cpx/haproxy"} {
 		_, err := auxiliaryImage("haproxy", base, "synthetic-2", registryURL)
-		refusedWith(t, err, "lifecycle.unsupported", "the auxiliary image haproxy is not beneath the Entitlement registry cp.icr.io/cp", "select an image for haproxy beneath the Entitlement registry.url")
+		refusedWith(t, err, "lifecycle.unsupported", "the auxiliary image haproxy is not beneath the Entitlement registry cp.icr.io/cp", "set spec.ceph.images.haproxy.base to a repository beneath the Entitlement registry.url")
 	}
 	_, err = auxiliaryImage("haproxy", "cp.icr.io/cp/ibm-ceph/haproxy-synthetic", "", registryURL)
-	refusedWith(t, err, "lifecycle.unsupported", "the auxiliary image haproxy names neither a tag nor a sha256 digest", "set its version to a tag or a sha256 digest")
+	refusedWith(t, err, "lifecycle.unsupported", "the auxiliary image haproxy names neither a tag nor a sha256 digest", "set spec.ceph.images.haproxy.version to a tag or a sha256 digest")
 
 	valid := auxiliaryImageRequest(PinnedRepository+":"+PinnedTag, syntheticAuxiliary())
 	data, err := valid.Canonical()
@@ -213,16 +213,62 @@ func auxiliaryGraph(t *testing.T, services []api.Value, children ...api.Object) 
 	return compilation.NewState(catalog, catalog, nil)
 }
 
-func unselectedRefusal(family, service, name string) []lifecycle.Refusal {
-	return []lifecycle.Refusal{{Kind: string(api.StorageCluster), Name: "example",
-		Reason:      "no auxiliary image is selected for the " + family + " service " + service + "; its daemons need cephadm's container_image_" + name + ", and Bootwright keeps no default",
-		Remediation: "remove " + service + " from spec.ceph.services, together with its spec.ceph.serviceBindings entries"}}
+func withImages(t *testing.T, state *compilation.State, images ...string) *compilation.State {
+	t.Helper()
+	catalog := state.Effective()
+	cluster, _ := catalog.Find(api.StorageCluster, "example")
+	spec := cluster.Spec()
+	for _, name := range images {
+		spec = spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/"+name, "version", "synthetic-1"), "ceph", "images", name)
+	}
+	objects := catalog.Objects()
+	for i := range objects {
+		if objects[i].Identity() == cluster.Identity() {
+			objects[i] = cluster.WithSpec(spec)
+		}
+	}
+	catalog = api.NewCatalog(objects)
+	return compilation.NewState(catalog, catalog, nil)
 }
 
-func TestFamilyNeedingAnAuxiliaryImageRefusesUntilOneIsSelected(t *testing.T) {
-	if got := New(api.StorageCluster, nil).Unsupported(auxiliaryGraph(t, nil)); len(got) != 0 {
-		t.Fatalf("the plain graph refuses %+v", got)
+func refusedEverywhere(t *testing.T, state *compilation.State, reason, remedy string) {
+	t.Helper()
+	for kind, name := range map[api.Kind]string{api.StorageCluster: "example", api.StoragePool: "volumes", api.StorageClient: "consumer"} {
+		want := []lifecycle.Refusal{{Kind: string(kind), Name: name, Reason: reason, Remediation: remedy}}
+		if got := New(kind, nil).Unsupported(state); !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s refuses %+v, want %+v", kind, got, want)
+		}
 	}
+}
+
+func unauthoredRefusal(t *testing.T, state *compilation.State, family, service, name string) {
+	t.Helper()
+	refusedEverywhere(t, state, "the "+family+" service "+service+" needs cephadm's container_image_"+name+", and spec.ceph.images."+name+" is not set; Bootwright keeps no default",
+		"set spec.ceph.images."+name+" of StorageCluster example to an image beneath its Entitlement registry, or remove "+service+" from its spec.ceph.services, together with its spec.ceph.serviceBindings entries")
+}
+
+func unneededRefusal(t *testing.T, state *compilation.State, name string) {
+	t.Helper()
+	refusedEverywhere(t, state, "spec.ceph.images."+name+" is set, but no declared service or StorageSMBResource of StorageCluster example needs cephadm's container_image_"+name,
+		"remove spec.ceph.images."+name+" from StorageCluster example")
+}
+
+func notRefused(t *testing.T, state *compilation.State, what string) {
+	t.Helper()
+	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool, api.StorageClient} {
+		if got := New(kind, nil).Unsupported(state); len(got) != 0 {
+			t.Fatalf("%s: %s refuses %+v", what, kind, got)
+		}
+	}
+}
+
+func objectsGateway(t *testing.T, ingress api.Value) *compilation.State {
+	t.Helper()
+	return auxiliaryGraph(t, []api.Value{rgwService("objects"), ingress}, childOf(api.StorageObjectGateway, "objects", "serviceRef", "rgw.objects"))
+}
+
+func TestDeclaredFamilyWithoutItsAuxiliaryImageRefusesNamingTheField(t *testing.T) {
+	notRefused(t, auxiliaryGraph(t, nil), "the plain graph")
 	for _, c := range []struct{ family, id, service, name string }{
 		{"alertmanager", "", "alertmanager", "alertmanager"}, {"alloy", "", "alloy", "alloy"}, {"grafana", "", "grafana", "grafana"},
 		{"loki", "", "loki", "loki"}, {"mgmt-gateway", "", "mgmt-gateway", "nginx"}, {"node-exporter", "", "node-exporter", "node_exporter"},
@@ -231,31 +277,114 @@ func TestFamilyNeedingAnAuxiliaryImageRefusesUntilOneIsSelected(t *testing.T) {
 		{"snmp-gateway", "", "snmp-gateway", "snmp_gateway"},
 	} {
 		t.Run(c.family, func(t *testing.T) {
-			state := auxiliaryGraph(t, []api.Value{auxiliaryService(c.family, c.id, api.Value{})})
-			if got, want := New(api.StorageCluster, nil).Unsupported(state), unselectedRefusal(c.family, c.service, c.name); !reflect.DeepEqual(got, want) {
-				t.Fatalf("refuses %+v, want %+v", got, want)
-			}
+			unauthoredRefusal(t, auxiliaryGraph(t, []api.Value{auxiliaryService(c.family, c.id, api.Value{})}), c.family, c.service, c.name)
 		})
 	}
-	state := auxiliaryGraph(t, []api.Value{auxiliaryService("prometheus", "", api.Value{}), auxiliaryService("alertmanager", "", api.Value{})})
-	if got, want := New(api.StorageCluster, nil).Unsupported(state), unselectedRefusal("alertmanager", "alertmanager", "alertmanager"); !reflect.DeepEqual(got, want) {
-		t.Fatalf("two families refuse %+v, want the first by name %+v", got, want)
-	}
-	gateway := auxiliaryGraph(t, []api.Value{rgwService("objects"), ingressService("rgw.objects")}, childOf(api.StorageObjectGateway, "objects", "serviceRef", "rgw.objects"))
-	if got, want := New(api.StorageCluster, nil).Unsupported(gateway), unselectedRefusal("ingress", "ingress.rgw.objects", "haproxy"); !reflect.DeepEqual(got, want) {
-		t.Fatalf("a gateway with its ingress refuses %+v, want only %+v", got, want)
-	}
-	for keepaliveOnly, name := range map[bool]string{false: "haproxy", true: "keepalived"} {
-		ingress := ingressService("rgw.objects")
-		if keepaliveOnly {
-			ingress = ingress.WithPath(api.BoolValue(true), "spec", "keepalive_only")
+	smb := auxiliaryGraph(t, []api.Value{auxiliaryService("smb", "shares", api.Value{})})
+	unauthoredRefusal(t, withImages(t, smb, "samba"), "smb", "smb.shares", "samba_metrics")
+	two := auxiliaryGraph(t, []api.Value{auxiliaryService("prometheus", "", api.Value{}), auxiliaryService("alertmanager", "", api.Value{})})
+	unauthoredRefusal(t, two, "alertmanager", "alertmanager", "alertmanager")
+	unauthoredRefusal(t, withImages(t, two, "alertmanager"), "prometheus", "prometheus", "prometheus")
+	gateway := objectsGateway(t, ingressService("rgw.objects"))
+	unauthoredRefusal(t, gateway, "ingress", "ingress.rgw.objects", "haproxy")
+	unauthoredRefusal(t, withImages(t, gateway, "haproxy"), "ingress", "ingress.rgw.objects", "keepalived")
+	unauthoredRefusal(t, withImages(t, gateway, "keepalived"), "ingress", "ingress.rgw.objects", "haproxy")
+	keepaliveOnly := objectsGateway(t, ingressService("rgw.objects").WithPath(api.BoolValue(true), "spec", "keepalive_only"))
+	unauthoredRefusal(t, keepaliveOnly, "ingress", "ingress.rgw.objects", "keepalived")
+	notRefused(t, withImages(t, keepaliveOnly, "keepalived"), "a keepalive-only ingress with its keepalived image")
+	notRefused(t, withImages(t, gateway, "haproxy", "keepalived"), "an ingress with both images")
+}
+
+func TestAuthoredImageOfAnUndeclaredFamilyRefuses(t *testing.T) {
+	plain := auxiliaryGraph(t, nil)
+	unneededRefusal(t, withImages(t, plain, "haproxy"), "haproxy")
+	unneededRefusal(t, withImages(t, plain, "snmp_gateway", "alertmanager"), "alertmanager")
+	keepaliveOnly := objectsGateway(t, ingressService("rgw.objects").WithPath(api.BoolValue(true), "spec", "keepalive_only"))
+	unneededRefusal(t, withImages(t, keepaliveOnly, "haproxy", "keepalived"), "haproxy")
+	unneededRefusal(t, withImages(t, plain, "samba", "samba_metrics"), "samba")
+	withSMB := api.NewCatalog(append(plain.Effective().Objects(), smbJoin()))
+	notRefused(t, withImages(t, compilation.NewState(withSMB, withSMB, nil), "samba", "samba_metrics"), "samba images a StorageSMBResource needs")
+	unneededRefusal(t, withImages(t, compilation.NewState(withSMB, withSMB, nil), "samba", "samba_metrics", "loki"), "loki")
+}
+
+func TestUndeclaredFamilyNeedsNoAuxiliaryImage(t *testing.T) {
+	state := auxiliaryGraph(t, nil)
+	notRefused(t, state, "the plain graph")
+	plan := plannedAuxiliary(t, state)
+	for _, id := range []string{ImageBlockID("example"), ClusterBlockID("example")} {
+		if bytes.Contains(plan[id].Request, []byte("auxiliary")) {
+			t.Fatalf("%s carries an auxiliary member: %s", id, plan[id].Request)
 		}
-		cluster := api.NewObject(api.StorageCluster, "example", api.Value{}, requestMap("ceph", requestMap("services", api.ListValue(ingress))))
-		reason, remedy, gap := unselectedAuxiliary(cluster)
-		got := []lifecycle.Refusal{{Kind: string(api.StorageCluster), Name: "example", Reason: reason, Remediation: remedy}}
-		if !gap || !reflect.DeepEqual(got, unselectedRefusal("ingress", "ingress.rgw.objects", name)) {
-			t.Fatalf("keepalive_only %v: refuses %q %q", keepaliveOnly, reason, remedy)
+	}
+	if _, planned := plan[SettingsBlockID("example")]; planned {
+		t.Fatal("a cluster without auxiliary images plans a settings block")
+	}
+}
+
+func plannedAuxiliary(t *testing.T, state *compilation.State) map[string]reconciliation.BlockDefinition {
+	t.Helper()
+	out := map[string]reconciliation.BlockDefinition{}
+	input := lifecycle.PlanInput{State: state, Verb: reconciliation.Apply, Controller: "controller", Context: lifecycle.ContextIdentity{Name: "synthetic"}}
+	image, err := NewImage(nil).Plan(context.Background(), input)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	core, err := New(api.StorageCluster, nil).Plan(context.Background(), input)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	host, err := NewHost(nil).Plan(context.Background(), input)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	for _, d := range slices.Concat(image.Definitions, core.Definitions, host.Definitions) {
+		out[d.ID] = d
+	}
+	return out
+}
+
+func TestAuthoredAuxiliaryImageReachesTheFrozenImageRequest(t *testing.T) {
+	haproxy, keepalived := PinnedRegistry+"/synthetic/haproxy", PinnedRegistry+"/synthetic/keepalived"
+	state := objectsGateway(t, ingressService("rgw.objects"))
+	cluster, _ := state.Effective().Find(api.StorageCluster, "example")
+	spec := cluster.Spec().WithPath(requestMap("base", keepalived, "version", keepalivedChild), "ceph", "images", "keepalived").
+		WithPath(requestMap("base", haproxy, "version", "synthetic-1"), "ceph", "images", "haproxy")
+	objects := state.Effective().Objects()
+	for i := range objects {
+		if objects[i].Identity() == cluster.Identity() {
+			objects[i] = cluster.WithSpec(spec)
 		}
+	}
+	catalog := api.NewCatalog(objects)
+	state = compilation.NewState(catalog, catalog, nil)
+	notRefused(t, state, "an ingress with its authored images")
+	want := []AuxiliaryImage{{Name: "haproxy", Base: haproxy, Image: haproxy + ":synthetic-1", Tag: "synthetic-1"}, {Name: "keepalived", Base: keepalived, Image: keepalived + "@" + keepalivedChild}}
+	plan := plannedAuxiliary(t, state)
+	image, err := DecodeImageRequest(plan[ImageBlockID("example")].Request)
+	if err != nil || !reflect.DeepEqual(image.Auxiliary, want) {
+		t.Fatalf("image request auxiliary %+v %v, want %+v", image.Auxiliary, diagnostics.Of(err), want)
+	}
+	core, err := DecodeRequest(plan[ClusterBlockID("example")].Request)
+	if err != nil || !reflect.DeepEqual(core.Auxiliary, authoredReferences(want)) {
+		t.Fatalf("core request auxiliary %+v %v", core.Auxiliary, err)
+	}
+	hosts := 0
+	for id, d := range plan {
+		if !strings.HasPrefix(id, "ceph-host-") {
+			continue
+		}
+		hosts++
+		host, err := DecodeHostRequest(d.Request)
+		if err != nil || !reflect.DeepEqual(host.Cluster.Auxiliary, core.Auxiliary) {
+			t.Fatalf("%s auxiliary %+v %v", id, host.Cluster.Auxiliary, err)
+		}
+	}
+	if _, planned := plan[SettingsBlockID("example")]; !planned || hosts == 0 {
+		t.Fatalf("settings planned %v, %d host blocks", planned, hosts)
+	}
+	authored, err := authoredAuxiliary(catalog, cluster.WithSpec(spec))
+	if err != nil || !reflect.DeepEqual(authored, want) {
+		t.Fatalf("authored %+v %v", authored, diagnostics.Of(err))
 	}
 }
 
@@ -372,5 +501,26 @@ func TestAuxiliaryResolutionMustProveEachChild(t *testing.T) {
 	data := auxiliaryEvidence(t, block, r, full)
 	if _, err := decodeImageEvidence(data, block.RequestDigest); err != nil {
 		t.Fatalf("a full auxiliary evidence of %d bytes is refused: %v", len(data), err)
+	}
+}
+
+func TestAuxiliaryImageKeysAreTheClosedNameTable(t *testing.T) {
+	ceph, _ := api.Schema(api.StorageCluster).Field("ceph")
+	images, found := ceph.Shape.Field("images")
+	if !found || images.Required || images.Shape.Type != api.Mapping || images.Shape.Open || images.Shape.Element != nil {
+		t.Fatalf("spec.ceph.images is not a closed optional record: %+v", images)
+	}
+	var names []string
+	for _, entry := range images.Shape.Fields {
+		names = append(names, entry.Name)
+		shape := entry.Shape
+		if entry.Required || shape.Type != api.Mapping || shape.Open || len(shape.Fields) != 2 ||
+			shape.Fields[0].Name != "base" || shape.Fields[0].Required || shape.Fields[0].Shape.Rule != "registry-base" ||
+			shape.Fields[1].Name != "version" || shape.Fields[1].Required || shape.Fields[1].Shape.Rule != "native-version" {
+			t.Fatalf("spec.ceph.images.%s is not a closed record of base and version", entry.Name)
+		}
+	}
+	if !slices.Equal(names, AuxiliaryNames) {
+		t.Fatalf("spec.ceph.images admits %v, the plan %v", names, AuxiliaryNames)
 	}
 }

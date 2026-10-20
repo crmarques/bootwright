@@ -269,6 +269,13 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 		ClusterSSHUser: spec.Get("cephadm", "clusterSSH", "user").Text(), ClusterKeyRef: spec.Get("cephadm", "clusterSSH", "keyRef").Text(),
 		RegistryRef: ent.Spec().Get("registry", "credentialsRef").Text(), Registry: registry, CallHome: spec.Get("ibm", "callHome").Text(),
 		PublicNetworks: spec.Get("networks", "publicCIDRs").Strings(), ClusterNetworks: spec.Get("networks", "clusterCIDRs").Strings(), Hosts: []Host{}, Services: []json.RawMessage{}}
+	authored, err := authoredAuxiliary(c, cluster)
+	if err != nil {
+		return Request{}, err
+	}
+	for _, a := range authored {
+		r.Auxiliary = append(r.Auxiliary, AuxiliaryReference{Name: a.Name, Image: a.Image})
+	}
 	r.PackageRepository = spec.Get("packageRepository").Text()
 	if r.PackageRepository == "" {
 		r.PackageRepository = DefaultPackageRepository

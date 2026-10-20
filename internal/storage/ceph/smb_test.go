@@ -494,7 +494,7 @@ func TestSMBRequestsCarryTheFrozenSambaDigests(t *testing.T) {
 	}
 }
 
-func TestSMBRefusesUntilSambaImagesAreSelected(t *testing.T) {
+func TestSMBWithoutItsSambaImagesRefusesNamingTheField(t *testing.T) {
 	plain := pinnedCatalog(t, nil)
 	refused := map[api.Kind]string{api.StorageCluster: "example", api.StoragePool: "volumes", api.StorageClient: "consumer"}
 	state := compilation.NewState(plain, plain, nil)
@@ -505,12 +505,36 @@ func TestSMBRefusesUntilSambaImagesAreSelected(t *testing.T) {
 	}
 	catalog := api.NewCatalog(append(plain.Objects(), smbJoin(), smbUsers()))
 	state = compilation.NewState(catalog, catalog, nil)
-	for kind, name := range refused {
-		want := []lifecycle.Refusal{{Kind: string(kind), Name: name,
-			Reason:      "StorageSMBResource smb-join needs cephadm's container_image_samba and container_image_samba_metrics; no auxiliary image is selected for them, and Bootwright keeps no default",
-			Remediation: "remove every StorageSMBResource whose spec.clusterRef is example from the selected Environment"}}
-		if got := New(kind, nil).Unsupported(state); !slices.Equal(got, want) {
-			t.Fatalf("%s refuses %+v, want %+v", kind, got, want)
+	cluster, _ := catalog.Find(api.StorageCluster, "example")
+	author := func(names ...string) *compilation.State {
+		spec := cluster.Spec()
+		for _, name := range names {
+			spec = spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/"+name, "version", "synthetic-1"), "ceph", "images", name)
+		}
+		objects := catalog.Objects()
+		for i := range objects {
+			if objects[i].Identity() == cluster.Identity() {
+				objects[i] = cluster.WithSpec(spec)
+			}
+		}
+		authored := api.NewCatalog(objects)
+		return compilation.NewState(authored, authored, nil)
+	}
+	for missing, authored := range map[string][]string{"samba": nil, "samba_metrics": {"samba"}, "": {"samba", "samba_metrics"}} {
+		for kind, name := range refused {
+			var want []lifecycle.Refusal
+			if missing != "" {
+				want = []lifecycle.Refusal{{Kind: string(kind), Name: name,
+					Reason:      "StorageSMBResource smb-join needs cephadm's container_image_" + missing + ", and spec.ceph.images." + missing + " is not set; Bootwright keeps no default",
+					Remediation: "set spec.ceph.images." + missing + " of StorageCluster example to an image beneath its Entitlement registry, or remove every StorageSMBResource whose spec.clusterRef is example from the selected Environment"}}
+			}
+			state := author(authored...)
+			if missing == "samba" {
+				state = author(append(authored, "samba_metrics")...)
+			}
+			if got := New(kind, nil).Unsupported(state); !slices.Equal(got, want) {
+				t.Fatalf("%s with %v refuses %+v, want %+v", kind, authored, got, want)
+			}
 		}
 	}
 }

@@ -61,10 +61,15 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 				services := append(spec.Get("ceph", "services").Items(), requestMap("service_type", "prometheus", "placement", requestMap("label", "mon", "count", 1)))
 				return spec.WithPath(api.ListValue(services...), "ceph", "services")
 			},
-		}, values: map[string]string{"<family>": "prometheus", "<service>": "prometheus", "<name>": "prometheus"}},
+		}, values: map[string]string{"<family>": "prometheus", "<service>": "prometheus", "<name>": "prometheus", "<cluster>": "example"}},
 		"StorageSMBResource objects whose samba images are not selected": {edits: map[string]func(api.Value) api.Value{
 			"a join auth and a users resource": nil,
-		}, values: map[string]string{"<smb>": "smb-join", "<cluster>": "example"}, extra: []api.Object{smbUsers(), smbJoin()}},
+		}, values: map[string]string{"<smb>": "smb-join", "<cluster>": "example", "<name>": "samba"}, extra: []api.Object{smbUsers(), smbJoin()}},
+		"An auxiliary image that no declared service needs": {edits: map[string]func(api.Value) api.Value{
+			"haproxy without an ingress": func(spec api.Value) api.Value {
+				return spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/haproxy", "version", "synthetic-1"), "ceph", "images", "haproxy")
+			},
+		}, values: map[string]string{"<name>": "haproxy", "<cluster>": "example"}},
 	}
 	refused := map[api.Kind]string{api.StorageCluster: "example", api.StoragePool: "volumes", api.StorageClient: "consumer"}
 	for _, row := range refusalTable(t) {

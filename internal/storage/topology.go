@@ -59,15 +59,13 @@ func (a *admission) distribution(ceph api.Value) {
 					a.required(ceph.Get("image"), key, "$.spec.ceph.image")
 				}
 			}
-		}
-		if base := textOf(ceph, "image", "base"); base != "" {
-			if entitlement, ok := a.catalog.Find(api.Entitlement, textOf(ceph, "entitlementRef")); ok {
-				registry := textOf(entitlement.Spec(), "registry", "url")
-				if registry != "" && !strings.HasPrefix(base, registry+"/") {
-					a.invalid("$.spec.ceph.image.base", "vendor image must be beneath its entitlement registry namespace")
+			for _, entry := range ceph.Get("images").Fields() {
+				for _, key := range []string{"base", "version"} {
+					a.required(entry.Value, key, "$.spec.ceph.images."+entry.Name)
 				}
 			}
 		}
+		a.vendorImages(ceph)
 	}
 	packages := ceph.Get("ibm", "packages")
 	if packages.Present() {
@@ -79,6 +77,22 @@ func (a *admission) distribution(ceph api.Value) {
 		}
 	}
 	a.entitlement(ceph.Get("osSubscriptionRef"), "$.spec.ceph.osSubscriptionRef", "redhat-rhel")
+}
+
+func (a *admission) vendorImages(ceph api.Value) {
+	entitlement, ok := a.catalog.Find(api.Entitlement, textOf(ceph, "entitlementRef"))
+	if !ok {
+		return
+	}
+	registry := textOf(entitlement.Spec(), "registry", "url")
+	if base := textOf(ceph, "image", "base"); base != "" && registry != "" && !strings.HasPrefix(base, registry+"/") {
+		a.invalid("$.spec.ceph.image.base", "vendor image must be beneath its entitlement registry namespace")
+	}
+	for _, entry := range ceph.Get("images").Fields() {
+		if base := textOf(entry.Value, "base"); base != "" && registry != "" && !strings.HasPrefix(base, registry+"/") {
+			a.invalid("$.spec.ceph.images."+entry.Name+".base", "vendor image must be beneath its entitlement registry namespace")
+		}
+	}
 }
 
 func (a *admission) clusterAccess(ceph api.Value) {

@@ -91,6 +91,10 @@ func (a *admission) lexicalValues() {
 			value := ceph.Get(path...)
 			a.lexical(value, "$.spec.ceph."+strings.Join(path, "."), NativeVersion(value.Text()))
 		}
+		for _, entry := range ceph.Get("images").Fields() {
+			value := entry.Value.Get("version")
+			a.lexical(value, "$.spec.ceph.images."+entry.Name+".version", NativeVersion(value.Text()))
+		}
 		a.size(ceph.Get("monitoring", "prometheus", "retentionTime"), "$.spec.ceph.monitoring.prometheus.retentionTime", retentionTime)
 		a.size(ceph.Get("monitoring", "prometheus", "retentionSize"), "$.spec.ceph.monitoring.prometheus.retentionSize", retentionSize)
 		for i, node := range ceph.Get("topology", "nodes").Items() {

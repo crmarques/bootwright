@@ -81,7 +81,7 @@ func TestIngressFixturesRefuseUntilAuxiliaryImagesAreSelected(t *testing.T) {
 				got = append(got, strings.Join([]string{refusal.Kind, refusal.Name, refusal.Reason, refusal.Remediation}, " | "))
 			}
 			for _, e := range fixture.Expect {
-				fill := strings.NewReplacer("<family>", "ingress", "<service>", e.Service, "<name>", e.Image)
+				fill := strings.NewReplacer("<family>", "ingress", "<service>", e.Service, "<name>", e.Image, "<cluster>", "ceph-lab")
 				r := lifecycle.Refusal{Kind: e.Kind, Name: e.Name, Reason: fill.Replace(reason), Remediation: fill.Replace(remedy)}
 				want = append(want, strings.Join([]string{r.Kind, r.Name, r.Reason, r.Remediation}, " | "))
 			}

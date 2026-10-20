@@ -97,8 +97,10 @@ digest resolution and the authored-digest rule.
 
 Auxiliary images. A native service whose daemons run an image other than the
 Ceph image needs an auxiliary image, named by cephadm's
-`mgr/cephadm/container_image_<name>` setting. The names form a closed set, and
-each service type needs these:
+`mgr/cephadm/container_image_<name>` setting. The operator authors each as
+`spec.ceph.images.<name>` of the StorageCluster, with `base` and `version`
+under the rules of `ceph.image` ([admission](api/storage.md)). The names form
+a closed set, and each service type needs these:
 
 | Service type | Auxiliary images |
 | --- | --- |
@@ -116,7 +118,7 @@ each service type needs these:
 | `smb` | `container_image_samba` and `container_image_samba_metrics` |
 | `snmp-gateway` | `container_image_snmp_gateway` |
 
-Each selected auxiliary image sits beneath the Entitlement registry namespace,
+Each authored auxiliary image sits beneath the Entitlement registry namespace,
 resolves in the image block to its own linux/amd64 manifest digest under the
 Ceph image's rules, the authored-digest rule included, and is frozen in the
 image request and evidence. The cluster and host blocks take frozen auxiliary
@@ -135,8 +137,10 @@ before any write for any other entry of that setting (another value, section,
 mask or location), never overwriting it. Every other block only reads these
 settings. The settings block follows the cluster block and, like every cluster
 child, retires with the cluster. Bootwright keeps no default
-auxiliary image; until one can be selected, a declared service that needs one
-refuses before operation registration (see the [refusal table](#refusal-table)).
+auxiliary image and no table of values. A declared service or
+StorageSMBResource whose image is not authored, and an authored image that
+nothing declared needs, refuse before operation registration (see the
+[refusal table](#refusal-table)).
 A native deploy that still pulls an image uses only the protected guest registry
 record of the same registry authority.
 
@@ -315,8 +319,9 @@ links each matrix combination that this table refuses.
 | Incomplete or unsafe Ceph coordinates or transport | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring an empty `ceph.release`, `ceph.packageVersion`, `ceph.cephadm.ansible.packageVersion` or `ceph.image.version`, an empty `ceph.image.base`, or a `ceph.cephadm.clusterSSH.transport` other than `verified-tunnel`, an omitted transport included | `the selected Ceph coordinates or cluster SSH transport are incomplete or unsafe` | `declare bounded version strings, an image repository and verified-tunnel transport; native transport is refused and host-key verification cannot be disabled` |
 | A replication network that a Ceph host has no address inside | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring `ceph.networks.clusterCIDRs` while the Machine of a `ceph.topology.nodes[]` entry declares no IP address inside any of them, a Machine whose addresses are assigned at runtime included; `<host>` is the first such node's native hostname in declaration order, `<machine>` its Machine and `<cidrs>` the declared networks joined by a comma and a space | `Ceph host <host> (Machine <machine>) has no address inside the replication networks <cidrs>` | `add an address inside one of <cidrs> to the network of <machine>, or remove spec.ceph.networks.clusterCIDRs` |
 | An ingress that resolves to no declared service | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` an `ingress` whose `spec.backend_service` resolves to no declared service; `<service>` is the first such ingress's qualified name in name order | `Bootwright does not deploy the native service <service> yet` | `remove <service> from spec.ceph.services, together with its spec.ceph.serviceBindings entries` |
-| A native service whose auxiliary image is not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that the previous row does not refuse; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type` and `<name>` the first image name it needs in name order, `keepalived` for an `ingress` with `spec.keepalive_only` | `no auxiliary image is selected for the <family> service <service>; its daemons need cephadm's container_image_<name>, and Bootwright keeps no default` | `remove <service> from spec.ceph.services, together with its spec.ceph.serviceBindings entries` |
-| StorageSMBResource objects whose samba images are not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, that a StorageSMBResource of any resource type names in its `clusterRef` and that neither of the two previous rows refuses; `<smb>` is the first such StorageSMBResource in name order and `<cluster>` the StorageCluster | `StorageSMBResource <smb> needs cephadm's container_image_samba and container_image_samba_metrics; no auxiliary image is selected for them, and Bootwright keeps no default` | `remove every StorageSMBResource whose spec.clusterRef is <cluster> from the selected Environment` |
+| A native service whose auxiliary image is not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that `ceph.images` does not set, and that the previous row does not refuse; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type`, `<name>` the first image it needs in name order that `ceph.images` does not set (only `keepalived` for an `ingress` with `spec.keepalive_only`) and `<cluster>` the StorageCluster | `the <family> service <service> needs cephadm's container_image_<name>, and spec.ceph.images.<name> is not set; Bootwright keeps no default` | `set spec.ceph.images.<name> of StorageCluster <cluster> to an image beneath its Entitlement registry, or remove <service> from its spec.ceph.services, together with its spec.ceph.serviceBindings entries` |
+| StorageSMBResource objects whose samba images are not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, that a StorageSMBResource of any resource type names in its `clusterRef` while `ceph.images` does not set both `samba` and `samba_metrics`, and that neither of the two previous rows refuses; `<smb>` is the first such StorageSMBResource in name order, `<name>` is `samba` unless `ceph.images` sets it, else `samba_metrics`, and `<cluster>` the StorageCluster | `StorageSMBResource <smb> needs cephadm's container_image_<name>, and spec.ceph.images.<name> is not set; Bootwright keeps no default` | `set spec.ceph.images.<name> of StorageCluster <cluster> to an image beneath its Entitlement registry, or remove every StorageSMBResource whose spec.clusterRef is <cluster> from the selected Environment` |
+| An auxiliary image that no declared service needs | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, setting `ceph.images.<name>` for an image that no service in `ceph.services` and no StorageSMBResource naming it needs (per the auxiliary image table, with `samba` and `samba_metrics` for a StorageSMBResource) and that none of the three previous rows refuses; `<name>` is the first such name in name order and `<cluster>` the StorageCluster | `spec.ceph.images.<name> is set, but no declared service or StorageSMBResource of StorageCluster <cluster> needs cephadm's container_image_<name>` | `remove spec.ceph.images.<name> from StorageCluster <cluster>` |
 
 ## Bootstrap identity and continuation
 

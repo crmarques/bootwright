@@ -327,8 +327,9 @@ whose members and spelling follow IBM's python3-ceph-common 20.2.1-405 ServiceSp
 core request lists each of them by name and hosts
 ([service identity](#service-identity-and-references)). Planning realizes an
 rgw service a StorageObjectGateway binds through the gateway block and an nfs
-service through its unit, and planning refuses an ingress until its auxiliary
-images can be selected ([refusal table](storage.md#refusal-table)).
+service through its unit; an ingress plans once its auxiliary images are
+authored under `spec.ceph.images` and refuses at planning without them
+([refusal table](storage.md#refusal-table)).
 
 | Type | Admitted `spec` members |
 | --- | --- |
@@ -459,8 +460,9 @@ Admission accepts `prometheus`, `alertmanager`, `grafana`, `node-exporter`,
 under closed records whose members and spelling follow IBM's
 python3-ceph-common 20.2.1-405 ServiceSpec schema (the source read for these
 records, not a pinned build). Each is a singleton whose `service_id` is
-forbidden ([service identity](#service-identity-and-references)). Planning
-refuses each that needs an auxiliary image until it can be selected
+forbidden ([service identity](#service-identity-and-references)). Each that
+needs an auxiliary image plans once it is authored under `spec.ceph.images`
+and refuses at planning without it
 ([refusal table](storage.md#refusal-table)); `ceph-exporter` runs the Ceph
 image, and it and the other monitoring services realize through the
 [monitoring unit](storage.md#resources-readiness-and-access).

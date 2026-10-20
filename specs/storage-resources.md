@@ -11,7 +11,8 @@ custody. [Provider coverage](storage-coverage.md) owns release qualification.
 `StorageNFSExport`, under its [field record](#storagenfsexport), are admitted
 and realized. `StorageSMBResource` is admitted under its
 [field record](#storagesmbresource) and realized by its SMB block once its
-samba images can be selected ([refusal table](storage.md#refusal-table)). Native effects
+samba images are authored under `spec.ceph.images` of its StorageCluster
+([refusal table](storage.md#refusal-table)). Native effects
 remain artifact-gated. **Not yet met:** later P2
 kinds and their qualified lifecycles. [Storage admission](api/storage.md)
 states current refusals.

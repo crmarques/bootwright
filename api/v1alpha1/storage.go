@@ -51,12 +51,23 @@ func storageMonitoringService(kind string) *Shape {
 	return s
 }
 
+var cephAuxiliaryImageNames = []string{"alertmanager", "alloy", "grafana", "haproxy", "keepalived", "loki", "nginx", "node_exporter", "nvmeof",
+	"oauth2_proxy", "prometheus", "promtail", "samba", "samba_metrics", "snmp_gateway"}
+
+func cephAuxiliaryImages() *Shape {
+	s := record()
+	for _, name := range cephAuxiliaryImageNames {
+		s.Fields = append(s.Fields, field(name, record(field("base", lexical("registry-base")), field("version", lexical("native-version")))))
+	}
+	return s
+}
+
 func storageClusterSchema() *Shape {
 	configValues := stringsMap()
 	configValues.Element = nonempty()
 	config := &Shape{Type: Mapping, Open: true, Element: configValues, Atomic: true}
 	cluster := record(
-		defaulted("distribution", enumeration("oss", "redhat", "ibm"), StringValue("oss")), required("release", lexical("native-version")), field("packageVersion", lexical("native-version")), field("packageRepository", lexical("package-repository")), field("nfsGanesha", record(required("packageVersion", lexical("native-version")))), field("image", record(field("base", lexical("registry-base")), field("version", lexical("native-version")))), field("community", record(field("mirror", lexical("https-url")), field("checksum", lexical("checksum")))),
+		defaulted("distribution", enumeration("oss", "redhat", "ibm"), StringValue("oss")), required("release", lexical("native-version")), field("packageVersion", lexical("native-version")), field("packageRepository", lexical("package-repository")), field("nfsGanesha", record(required("packageVersion", lexical("native-version")))), field("image", record(field("base", lexical("registry-base")), field("version", lexical("native-version")))), field("images", cephAuxiliaryImages()), field("community", record(field("mirror", lexical("https-url")), field("checksum", lexical("checksum")))),
 		field("ibm", record(required("callHome", enumeration("enabled", "disabled")), field("packages", record(required("source", enumeration("vendor", "subscription")), field("subscriptionRepos", set(nonempty())))))), field("entitlementRef", ref(Entitlement)), field("osSubscriptionRef", ref(Entitlement)),
 		required("cephadm", record(field("addressRef", nonempty()), field("ansible", record(field("packageVersion", lexical("native-version")))), field("clusterSSH", record(field("user", lexical("posix-user")), field("keyRef", secret("sshKeyPair")), field("transport", enumeration("native", "verified-tunnel")))), required("bootstrap", record(required("node", nonempty()), field("addressRef", nonempty()), field("singleHostDefaults", boolean()))))),
 		field("networks", record(field("publicCIDRs", set(cidr())), field("clusterCIDRs", set(cidr())))), field("security", record(field("fips", record(field("enabled", boolean()))), field("cephx", record(required("keyType", enumeration("aes", "aes256k")))))), field("config", config), field("mgrModules", set(nonempty())), required("services", nonemptyArray(array(storageNativeService()))), field("serviceBindings", storageServiceBindings()),

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -260,6 +261,67 @@ func TestStorageDistributionAndVendorNamespace(t *testing.T) {
 	requireIssue(t, Validate(wrong, replace(catalog, wrong)), "$.spec.ceph.image.base")
 	if issues := ValidateAuthored(ibm.WithSpec(ibm.Spec().WithPath(api.StringValue("v9"), "ceph", "release")), catalog); len(issues) != 0 {
 		t.Fatal("native release string was refused", issues)
+	}
+}
+
+func vendorCluster(t *testing.T) (api.Object, api.Catalog) {
+	t.Helper()
+	catalog := fixtureCatalog()
+	cluster := find(t, catalog, api.StorageCluster, "storage")
+	entitlement := object(api.Entitlement, "vendor", m("type", "ibm-storage-ceph", "registry", m("url", "registry.example.test/vendor", "credentialsRef", "creds"), "license", m("accept", true)))
+	ibm := cluster.WithSpec(cluster.Spec().WithPath(api.StringValue("ibm"), "ceph", "distribution").WithPath(api.StringValue("9.0.0.0"), "ceph", "release").WithPath(api.StringValue("vendor"), "ceph", "entitlementRef").WithPath(m("callHome", "disabled"), "ceph", "ibm").WithPath(api.StringValue("20.0.0-1.el9"), "ceph", "packageVersion").WithPath(api.StringValue("5.0.0-1"), "ceph", "cephadm", "ansible", "packageVersion").WithPath(m("base", "registry.example.test/vendor/ceph", "version", "v9"), "ceph", "image"))
+	return ibm, replace(replace(catalog, entitlement), ibm)
+}
+
+func TestAuxiliaryImageBaseMustSitInTheEntitlementNamespace(t *testing.T) {
+	ibm, catalog := vendorCluster(t)
+	with := func(image api.Value) api.Object {
+		return ibm.WithSpec(ibm.Spec().WithPath(image, "ceph", "images", "haproxy"))
+	}
+	inside := with(m("base", "registry.example.test/vendor/haproxy", "version", "synthetic-1"))
+	if issues := Validate(inside, replace(catalog, inside)); len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	for _, base := range []string{"registry.example.test/vendor-extra/haproxy", "registry.example.test/vendor"} {
+		outside := with(m("base", base, "version", "synthetic-1"))
+		issues := issuesAt(Validate(outside, replace(catalog, outside)), "$.spec.ceph.images.haproxy.base")
+		if len(issues) != 1 || issues[0].Code != "api.invariant" || issues[0].Message != "vendor image must be beneath its entitlement registry namespace" {
+			t.Fatalf("%s: %+v", base, issues)
+		}
+	}
+	missing := with(m("base", "registry.example.test/vendor/haproxy"))
+	issues := issuesAt(Validate(missing, replace(catalog, missing)), "$.spec.ceph.images.haproxy.version")
+	if len(issues) != 1 || issues[0].Code != "api.required" {
+		t.Fatalf("a missing version: %+v", issues)
+	}
+	if issues := ValidatePartial(missing, replace(catalog, missing)); len(issuesAt(issues, "$.spec.ceph.images.haproxy.version")) != 0 {
+		t.Fatalf("partial validation requires the version: %+v", issues)
+	}
+}
+
+func TestAuxiliaryImageVersionFollowsTheCephImageRules(t *testing.T) {
+	ibm, catalog := vendorCluster(t)
+	with := func(version string) api.Object {
+		return ibm.WithSpec(ibm.Spec().WithPath(api.StringValue(version), "ceph", "image", "version").
+			WithPath(m("base", "registry.example.test/vendor/haproxy", "version", version), "ceph", "images", "haproxy"))
+	}
+	for _, version := range []string{"", strings.Repeat("v", 1025), "19.2\u00851", "19.2 1", "19.2 1", "19.2\xff1"} {
+		object := with(version)
+		issues := Validate(object, replace(catalog, object))
+		for _, field := range []string{"$.spec.ceph.image.version", "$.spec.ceph.images.haproxy.version"} {
+			if len(issuesAt(issues, field)) == 0 {
+				t.Fatalf("%q admitted at %s", version, field)
+			}
+		}
+	}
+	for _, version := range []string{"synthetic-1", "sha256:" + strings.Repeat("0123456789abcdef", 4), strings.Repeat("v", 1024)} {
+		object := with(version)
+		issues := Validate(object, replace(catalog, object))
+		for _, field := range []string{"$.spec.ceph.image.version", "$.spec.ceph.images.haproxy.version"} {
+			if found := issuesAt(issues, field); len(found) != 0 {
+				t.Fatalf("%q refused at %s: %+v", version, field, found)
+			}
+		}
 	}
 }
 

@@ -47,6 +47,17 @@ func TestStorageWireShapesAreClosedAndVariantsAreExplicit(t *testing.T) {
 	}
 }
 
+func TestCephAuxiliaryImagesAreClosedWithoutTheCephImageKey(t *testing.T) {
+	ceph, _ := Schema(StorageCluster).Field("ceph")
+	images, found := ceph.Shape.Field("images")
+	if !found || images.Shape.Open || images.Shape.Element != nil || len(images.Shape.Fields) != 15 {
+		t.Fatal("ceph.images must be a closed record of the auxiliary image names")
+	}
+	if _, admitted := images.Shape.Field("base"); admitted {
+		t.Fatal("ceph.images must not admit base; ceph.image owns the Ceph image")
+	}
+}
+
 func TestNFSExportSchemaShape(t *testing.T) {
 	schema := Schema(StorageNFSExport)
 	names := []string{}

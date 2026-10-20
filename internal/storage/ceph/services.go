@@ -140,11 +140,35 @@ func unselectedAuxiliary(cluster api.Object) (string, string, bool) {
 	slices.SortStableFunc(services, func(a, b api.Value) int {
 		return strings.Compare(storage.NativeServiceName(a), storage.NativeServiceName(b))
 	})
+	images := cluster.Spec().Get("ceph", "images")
 	for _, svc := range services {
-		if needs := auxiliaryNeeds(svc); len(needs) != 0 {
+		for _, need := range auxiliaryNeeds(svc) {
+			if images.Has(need) {
+				continue
+			}
 			name := storage.NativeServiceName(svc)
-			return "no auxiliary image is selected for the " + svc.Get("service_type").Text() + " service " + name + "; its daemons need cephadm's container_image_" + needs[0] + ", and Bootwright keeps no default",
-				"remove " + name + " from spec.ceph.services, together with its spec.ceph.serviceBindings entries", true
+			return "the " + svc.Get("service_type").Text() + " service " + name + " needs cephadm's container_image_" + need + ", and spec.ceph.images." + need + " is not set; Bootwright keeps no default",
+				"set spec.ceph.images." + need + " of StorageCluster " + cluster.Name() + " to an image beneath its Entitlement registry, or remove " + name + " from its spec.ceph.services, together with its spec.ceph.serviceBindings entries", true
+		}
+	}
+	return "", "", false
+}
+
+func unneededAuxiliary(c api.Catalog, cluster api.Object) (string, string, bool) {
+	needed := map[string]bool{}
+	for _, svc := range cluster.Spec().Get("ceph", "services").Items() {
+		for _, need := range auxiliaryNeeds(svc) {
+			needed[need] = true
+		}
+	}
+	if len(clusterSMBResources(c, cluster.Name())) != 0 {
+		needed["samba"], needed["samba_metrics"] = true, true
+	}
+	images := cluster.Spec().Get("ceph", "images")
+	for _, name := range AuxiliaryNames {
+		if images.Has(name) && !needed[name] {
+			return "spec.ceph.images." + name + " is set, but no declared service or StorageSMBResource of StorageCluster " + cluster.Name() + " needs cephadm's container_image_" + name,
+				"remove spec.ceph.images." + name + " from StorageCluster " + cluster.Name(), true
 		}
 	}
 	return "", "", false

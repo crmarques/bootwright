@@ -206,16 +206,16 @@ func TestDelegatedServiceRefusesUntilItsBlockLands(t *testing.T) {
 		t.Fatalf("an ssl rgw service a gateway binds refuses %+v", got)
 	}
 	want := []lifecycle.Refusal{{Kind: string(api.StorageCluster), Name: "example",
-		Reason:      "no auxiliary image is selected for the ingress service ingress.rgw.objects; its daemons need cephadm's container_image_haproxy, and Bootwright keeps no default",
-		Remediation: "remove ingress.rgw.objects from spec.ceph.services, together with its spec.ceph.serviceBindings entries"}}
+		Reason:      "the ingress service ingress.rgw.objects needs cephadm's container_image_haproxy, and spec.ceph.images.haproxy is not set; Bootwright keeps no default",
+		Remediation: "set spec.ceph.images.haproxy of StorageCluster example to an image beneath its Entitlement registry, or remove ingress.rgw.objects from its spec.ceph.services, together with its spec.ceph.serviceBindings entries"}}
 	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{httpRGWService("objects"), ingressService("rgw.objects")}, gateway)); !reflect.DeepEqual(got, want) {
 		t.Fatalf("ingress.rgw.objects: refuses %+v, want %+v", got, want)
 	}
 	nfsIngress := requestMap("service_type", "ingress", "service_id", "nfs.files", "placement", requestMap("label", "mon", "count", 2),
 		"spec", requestMap("backend_service", "nfs.files", "virtual_ip", "192.0.2.50/24", "frontend_port", 2049, "monitor_port", 9049, "enable_haproxy_protocol", true))
 	want = []lifecycle.Refusal{{Kind: string(api.StorageCluster), Name: "example",
-		Reason:      "no auxiliary image is selected for the ingress service ingress.nfs.files; its daemons need cephadm's container_image_haproxy, and Bootwright keeps no default",
-		Remediation: "remove ingress.nfs.files from spec.ceph.services, together with its spec.ceph.serviceBindings entries"}}
+		Reason:      "the ingress service ingress.nfs.files needs cephadm's container_image_haproxy, and spec.ceph.images.haproxy is not set; Bootwright keeps no default",
+		Remediation: "set spec.ceph.images.haproxy of StorageCluster example to an image beneath its Entitlement registry, or remove ingress.nfs.files from its spec.ceph.services, together with its spec.ceph.serviceBindings entries"}}
 	if got := New(api.StorageCluster, nil).Unsupported(graph([]api.Value{nfsService("files"), nfsIngress})); !reflect.DeepEqual(got, want) {
 		t.Fatalf("ingress.nfs.files: refuses %+v, want %+v", got, want)
 	}

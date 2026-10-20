@@ -46,6 +46,9 @@ func TestPartialValidationIssuesAlsoRefuseTheCompleteObject(t *testing.T) {
 		{"policy replica bounds", edit(api.StoragePlacementPolicy, "policy", func(s api.Value) api.Value {
 			return s.With("replicated", m("size", 2, "minSize", 3))
 		})},
+		{"auxiliary image version lexical", edit(api.StorageCluster, "storage", func(s api.Value) api.Value {
+			return s.WithPath(m("base", "registry.example.test/haproxy", "version", "19.2\u00851"), "ceph", "images", "haproxy")
+		})},
 		{"oss vendor field", edit(api.StorageCluster, "storage", func(s api.Value) api.Value {
 			return s.WithPath(api.StringValue("ibm"), "ceph", "entitlementRef").WithPath(api.StringValue("oss"), "ceph", "distribution")
 		})},
