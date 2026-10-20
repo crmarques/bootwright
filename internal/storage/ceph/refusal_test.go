@@ -404,6 +404,18 @@ func TestSMBRefusalsNameOnlyNextStepsAFailedApplyCanTake(t *testing.T) {
 	}
 }
 
+func TestAnExcludedHostKeyRemedyNamesTheGuestKeyLeverAndDestroyFirst(t *testing.T) {
+	refusals := adapterRefusals()
+	for _, reason := range []string{"ssh-policy-host-excluded", "tunnel-host-key-excluded"} {
+		remedy := diagnostics.Of(refusals[reason])[0].Remediation
+		lever := strings.Index(remedy, "spec.customizations.security.fips on that host's MachineInstallProfile")
+		destroy := strings.Index(remedy, "bootwright destroy --context <context>")
+		if lever < 0 || destroy < 0 || destroy > lever || strings.Contains(remedy, "hostKeyRef") || strings.Contains(remedy, "reinstall") {
+			t.Errorf("the %s remedy does not name the guest host key lever after a destroy: %q", reason, remedy)
+		}
+	}
+}
+
 func TestAnSSHPolicyRefusalReachesTheOperatorWithItsRemedy(t *testing.T) {
 	const excluded = "a Ceph host's pinned SSH host key is of a type this controller's SSH crypto policy excludes, so Bootwright opened no session to it"
 	const unavailable = "this controller's SSH crypto policy could not be read or evaluated, so Bootwright opened no Ceph session"
