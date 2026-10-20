@@ -134,6 +134,9 @@ func (c Capability) ProveBinding(ctx context.Context, contextName string, block 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if c.kind == api.StorageCluster {
+		return proveGatewayUnit(contextName, block, material)
+	}
 	if c.kind != api.StorageObjectGateway {
 		return nil
 	}
@@ -158,6 +161,49 @@ func (c Capability) ProveBinding(ctx context.Context, contextName string, block 
 	if leaf.VerifyHostname(fqdn) != nil {
 		return secrets.Refusal("part", "the certificate of Secret "+secret+" does not name "+fqdn+", the endpoint of StorageObjectGateway "+name+" that clients and its readiness proof connect to", contextName, secret,
 			"store a certificate whose subject alternative names include "+fqdn+" (a DNS name or a matching wildcard) with "+set+", or set spec.endpoint.fqdn of StorageObjectGateway "+name+" to a name the certificate holds, then apply again")
+	}
+	return nil
+}
+
+func proveGatewayUnit(contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
+	if block.Implementation != Implementation {
+		return nil
+	}
+	r, err := DecodeRequest(block.Request)
+	if err != nil {
+		return err
+	}
+	if r.Action != "service" || r.Service == nil || r.Service.Type != "mgmt-gateway" || len(r.Service.Bindings) == 0 {
+		return nil
+	}
+	secret := r.Service.Bindings[0].SecretRef
+	value, found := material[secret]
+	if !found {
+		return failure("lifecycle.state", "the TLS Secret the management gateway of a StorageCluster binds is not bound to this apply", "")
+	}
+	set := secrets.Command(contextName, "set") + " --name " + secret + " --certificate-file <path> --private-key-file <path>"
+	leaf, ok := boundLeaf(value)
+	if !ok {
+		return secrets.Refusal("part", "the certificate of Secret "+secret+" that the management gateway of StorageCluster "+r.Cluster+" binds cannot be read", contextName, secret, "store a readable certificate and its private key with "+set+", then apply again")
+	}
+	for _, document := range unitDocuments(r) {
+		if document.ServiceType != "mgmt-gateway" {
+			continue
+		}
+		spec, _ := document.Spec.(map[string]any)
+		if vip, _ := spec["virtual_ip"].(string); vip != "" {
+			if leaf.VerifyHostname(vip) != nil {
+				return secrets.Refusal("part", "the certificate of Secret "+secret+" does not name "+vip+", the virtual IP of the management gateway of StorageCluster "+r.Cluster+" that clients and its readiness proof connect to", contextName, secret,
+					"store a certificate whose subject alternative names include the IP address "+vip+" with "+set+", or set the management gateway's spec.virtual_ip and its ingress's spec.virtual_ip to an address the certificate holds, then apply again")
+			}
+			continue
+		}
+		for _, host := range document.Placement.Hosts {
+			if leaf.VerifyHostname(host) != nil {
+				return secrets.Refusal("part", "the certificate of Secret "+secret+" does not name "+host+", a host of the management gateway of StorageCluster "+r.Cluster+" that clients and its readiness proof connect to", contextName, secret,
+					"store a certificate whose subject alternative names include "+host+" (a DNS name or a matching wildcard) with "+set+", or place the management gateway only on hosts the certificate names, then apply again")
+			}
+		}
 	}
 	return nil
 }

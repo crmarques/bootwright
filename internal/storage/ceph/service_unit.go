@@ -43,8 +43,9 @@ type unitType struct {
 }
 
 var unitTypes = map[string]unitType{
-	"monitoring": {units: monitoringUnits, dependencies: noUnitDependencies, impacts: monitoringImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
-	"nfs":        {units: nfsUnits, dependencies: noUnitDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 3, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
+	"mgmt-gateway": {units: gatewayUnits, dependencies: gatewayDependencies, impacts: gatewayImpacts, apply: unitBudget{calls: 3, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
+	"monitoring":   {units: monitoringUnits, dependencies: noUnitDependencies, impacts: monitoringImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
+	"nfs":          {units: nfsUnits, dependencies: noUnitDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 3, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 }
 
 func noUnitDependencies(api.Object, ServiceUnit) []string { return nil }
@@ -167,12 +168,14 @@ var unitSpecMembers = map[string][]string{
 		"health_check_interval", "keepalive_only", "monitor_port", "virtual_ip", "virtual_interface_networks"},
 	"ingress-rgw": {"backend_service", "certificate_source", "first_virtual_router_id", "frontend_port", "health_check_interval", "monitor_port", "ssl",
 		"virtual_interface_networks", "virtual_ip"},
-	"prometheus":    {"only_bind_port_on_networks", "port", "retention_size", "retention_time"},
-	"alertmanager":  {"only_bind_port_on_networks", "port", "user_data"},
-	"grafana":       {"anonymous_access", "only_bind_port_on_networks", "port", "protocol"},
-	"node-exporter": {"port"},
-	"ceph-exporter": {"port", "prio_limit", "stats_period"},
-	"snmp-gateway":  {"auth_protocol", "engine_id", "port", "privacy_protocol", "snmp_destination", "snmp_version"},
+	"prometheus":           {"only_bind_port_on_networks", "port", "retention_size", "retention_time"},
+	"alertmanager":         {"only_bind_port_on_networks", "port", "user_data"},
+	"grafana":              {"anonymous_access", "only_bind_port_on_networks", "port", "protocol"},
+	"node-exporter":        {"port"},
+	"ceph-exporter":        {"port", "prio_limit", "stats_period"},
+	"snmp-gateway":         {"auth_protocol", "engine_id", "port", "privacy_protocol", "snmp_destination", "snmp_version"},
+	"mgmt-gateway":         {"enable_auth", "enable_health_check_endpoint", "port", "ssl", "ssl_ciphers", "ssl_protocols", "virtual_ip"},
+	"ingress-mgmt-gateway": {"backend_service", "first_virtual_router_id", "health_check_interval", "keepalive_only", "virtual_interface_networks", "virtual_ip"},
 }
 
 func unitDocumentOf(cluster api.Object, svc api.Value, spec func(api.Value) any) (json.RawMessage, error) {
@@ -188,8 +191,8 @@ func unitDocumentOf(cluster api.Object, svc api.Value, spec func(api.Value) any)
 	}
 	t := svc.Get("service_type").Text()
 	members := unitSpecMembers[t]
-	if t == "ingress" && serviceFamily(cluster, svc) == "rgw" {
-		members = unitSpecMembers["ingress-rgw"]
+	if family := serviceFamily(cluster, svc); t == "ingress" && (family == "rgw" || family == "mgmt-gateway") {
+		members = unitSpecMembers["ingress-"+family]
 	}
 	for _, member := range svc.Get("spec").Fields() {
 		if !slices.Contains(members, member.Name) {
@@ -344,6 +347,7 @@ type monitoringLeaf struct {
 	Part     secrets.Part
 	Variable string
 	File     string
+	Observed bool
 }
 
 var monitoringLeaves = map[string]monitoringLeaf{
@@ -354,14 +358,27 @@ var monitoringLeaves = map[string]monitoringLeaf{
 	"snmp-gateway /spec/credentials/snmp_v3_priv_password": {Part: secrets.ValuePart, Variable: "snmpPrivPassword", File: "snmp-priv-password"},
 }
 
-func monitoringBinding(cluster api.Object, binding api.Value) bool {
+var gatewayLeaves = map[string]monitoringLeaf{
+	"mgmt-gateway /spec/ssl_cert": {Part: secrets.CertificatePart, Variable: "mgmtGatewayCertificate", File: "mgmt-gateway-certificate", Observed: true},
+	"mgmt-gateway /spec/ssl_key":  {Part: secrets.PrivateKeyPart, Variable: "mgmtGatewayKey", File: "mgmt-gateway-key"},
+}
+
+func unitLeaf(serviceType, path string) (monitoringLeaf, bool) {
+	if leaf, known := monitoringLeaves[serviceType+" "+path]; known {
+		return leaf, true
+	}
+	leaf, known := gatewayLeaves[serviceType+" "+path]
+	return leaf, known
+}
+
+func unitBinding(cluster api.Object, binding api.Value) bool {
 	svc, found := storage.NativeService(cluster, binding.Get("serviceRef").Text())
 	t := svc.Get("service_type").Text()
-	if !found || t != "grafana" && t != "snmp-gateway" || binding.Get("secrets").Len() == 0 {
+	if !found || !slices.Contains([]string{"grafana", "snmp-gateway", "mgmt-gateway"}, t) || binding.Get("secrets").Len() == 0 {
 		return false
 	}
 	for _, secret := range binding.Get("secrets").Items() {
-		if _, known := monitoringLeaves[t+" "+secret.Get("path").Text()]; !known {
+		if _, known := unitLeaf(t, secret.Get("path").Text()); !known {
 			return false
 		}
 	}
@@ -369,7 +386,7 @@ func monitoringBinding(cluster api.Object, binding api.Value) bool {
 }
 
 func unrealizedBinding(ref string) error {
-	return failure("lifecycle.unsupported", "Bootwright does not realize the service binding of "+ref+"; it realizes only the TLS bindings of an rgw service that a StorageObjectGateway binds and of the ingress that fronts it, and the credential bindings of the grafana and snmp-gateway services",
+	return failure("lifecycle.unsupported", "Bootwright does not realize the service binding of "+ref+"; it realizes only the TLS bindings of an rgw service that a StorageObjectGateway binds and of the ingress that fronts it, the TLS binding of the management gateway, and the credential bindings of the grafana and snmp-gateway services",
 		"remove the spec.ceph.serviceBindings entry for "+ref)
 }
 
@@ -426,4 +443,102 @@ func monitoringImpacts(cluster api.Object, unit ServiceUnit) []string {
 		impacts = append(impacts, "cephadm enables the prometheus manager module, whose exporter listens on port 9283 of every MGR host")
 	}
 	return impacts
+}
+
+var GatewayTypes = []string{"mgmt-gateway"}
+
+type mgmtGatewaySpec struct {
+	EnableAuth                bool     `json:"enable_auth,omitempty"`
+	EnableHealthCheckEndpoint bool     `json:"enable_health_check_endpoint,omitempty"`
+	Port                      *int64   `json:"port,omitempty"`
+	SSL                       bool     `json:"ssl,omitempty"`
+	SSLCiphers                []string `json:"ssl_ciphers,omitempty"`
+	SSLProtocols              []string `json:"ssl_protocols,omitempty"`
+	VirtualIP                 string   `json:"virtual_ip,omitempty"`
+}
+
+type gatewayIngressSpec struct {
+	BackendService           string   `json:"backend_service"`
+	FirstVirtualRouterID     *int64   `json:"first_virtual_router_id,omitempty"`
+	HealthCheckInterval      string   `json:"health_check_interval,omitempty"`
+	KeepaliveOnly            bool     `json:"keepalive_only"`
+	VirtualIP                string   `json:"virtual_ip"`
+	VirtualInterfaceNetworks []string `json:"virtual_interface_networks,omitempty"`
+}
+
+func canonicalVIP(text string) string {
+	if address, ok := storage.ParseVirtualIP(text, false); ok {
+		return address.Addr().String()
+	}
+	return text
+}
+
+func mgmtGatewaySpecOf(spec api.Value) any {
+	if spec.Len() == 0 {
+		return nil
+	}
+	s := mgmtGatewaySpec{EnableAuth: spec.Get("enable_auth").Bool(), EnableHealthCheckEndpoint: spec.Get("enable_health_check_endpoint").Bool(), Port: integerOf(spec.Get("port")),
+		SSL: spec.Get("ssl").Bool(), SSLCiphers: spec.Get("ssl_ciphers").Strings(), SSLProtocols: spec.Get("ssl_protocols").Strings()}
+	if vip := spec.Get("virtual_ip").Text(); vip != "" {
+		s.VirtualIP = canonicalVIP(vip)
+	}
+	return s
+}
+
+func gatewayIngressSpecOf(spec api.Value) any {
+	return gatewayIngressSpec{BackendService: spec.Get("backend_service").Text(), FirstVirtualRouterID: integerOf(spec.Get("first_virtual_router_id")),
+		HealthCheckInterval: spec.Get("health_check_interval").Text(), KeepaliveOnly: spec.Get("keepalive_only").Bool(), VirtualIP: canonicalVIP(spec.Get("virtual_ip").Text()),
+		VirtualInterfaceNetworks: spec.Get("virtual_interface_networks").Strings()}
+}
+
+func gatewayUnits(cluster api.Object) ([]ServiceUnit, error) {
+	services := slices.DeleteFunc(cluster.Spec().Get("ceph", "services").Items(), func(svc api.Value) bool {
+		return svc.Get("service_type").Text() != "mgmt-gateway" && (svc.Get("service_type").Text() != "ingress" || svc.Get("spec", "backend_service").Text() != "mgmt-gateway")
+	})
+	if !slices.ContainsFunc(services, func(svc api.Value) bool { return svc.Get("service_type").Text() == "mgmt-gateway" }) {
+		return []ServiceUnit{}, nil
+	}
+	unit := ServiceUnit{Documents: []json.RawMessage{}, Type: "mgmt-gateway"}
+	if !reconciliation.ValidSegment(ServiceUnitBlockID(cluster.Name(), unit)) {
+		return nil, failure("api.invariant", "StorageCluster "+cluster.Name()+" has a name too long to identify its management gateway service block, whose identity holds at most 63 characters",
+			"rename the StorageCluster to at most 37 characters")
+	}
+	slices.SortStableFunc(services, func(a, b api.Value) int {
+		return strings.Compare(storage.NativeServiceName(a), storage.NativeServiceName(b))
+	})
+	names := []string{}
+	for _, svc := range services {
+		spec := gatewayIngressSpecOf
+		if svc.Get("service_type").Text() == "mgmt-gateway" {
+			spec = mgmtGatewaySpecOf
+		}
+		document, err := unitDocumentOf(cluster, svc, spec)
+		if err != nil {
+			return nil, err
+		}
+		unit.Documents = append(unit.Documents, document)
+		names = append(names, storage.NativeServiceName(svc))
+	}
+	for _, binding := range gatewayBindings(cluster, names...) {
+		svc, _ := storage.NativeService(cluster, binding.ServiceRef)
+		if _, known := gatewayLeaves[svc.Get("service_type").Text()+" "+binding.Path]; !known {
+			return nil, unrealizedBinding(binding.ServiceRef)
+		}
+		unit.Bindings = append(unit.Bindings, ServiceBinding(binding))
+	}
+	return []ServiceUnit{unit}, nil
+}
+
+func gatewayDependencies(cluster api.Object, _ ServiceUnit) []string {
+	if units, err := monitoringUnits(cluster); err == nil && len(units) != 0 {
+		return []string{ServiceUnitBlockID(cluster.Name(), ServiceUnit{Type: "monitoring"})}
+	}
+	return nil
+}
+
+func gatewayImpacts(_ api.Object, unit ServiceUnit) []string {
+	if len(unit.Bindings) == 0 {
+		return []string{"cephadm signs the management gateway's TLS certificate; the readiness proof reports its SHA-256"}
+	}
+	return nil
 }

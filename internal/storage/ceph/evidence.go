@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-const EvidenceVersion = "ceph-core-evidence-v7"
+const EvidenceVersion = "ceph-core-evidence-v8"
 
 const DashboardPort = "8443"
 
@@ -195,6 +195,10 @@ func validDashboard(e Evidence, r Request) bool {
 }
 
 func validEndpoint(e Evidence, r Request) bool {
+	if r.Action == "service" && r.Service != nil && r.Service.Type == "mgmt-gateway" {
+		digest := e.Endpoint.CertificateSHA256
+		return (digest == "" || certificateDigest.MatchString(digest)) && (digest != "") == e.Endpoint.Reachable
+	}
 	if r.Action != "gateway" || r.Gateway == nil {
 		return e.Endpoint == EndpointEvidence{}
 	}
@@ -372,7 +376,7 @@ func validateReady(e Evidence, r Request) bool {
 	case "settings":
 		return r.Settings != nil
 	case "service":
-		return r.Service != nil && everyDocumentRuns(e, r)
+		return r.Service != nil && everyDocumentRuns(e, r) && (r.Service.Type != "mgmt-gateway" || e.Endpoint.Reachable)
 	case "policy":
 		return r.Policy != nil && resourceID.MatchString(e.Resource.ID)
 	case "pool":

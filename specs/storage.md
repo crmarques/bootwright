@@ -213,7 +213,33 @@ them:
   cephadm enables the prometheus manager module, whose exporter listens on
   port 9283 of every MGR host, for a declared prometheus service. A cluster
   name longer than 39 characters refuses, because the block identity holds at
-  most 63.
+  most 63. The management gateway and every keepalive-only ingress whose
+  `backend_service` is `mgmt-gateway` form one
+  `ceph-service-<cluster>-mgmt-gateway` block: the ingress document comes
+  first in native-name order, the singleton `mgmt-gateway` document carries no
+  `service_id`, and both write `virtual_ip` in its canonical address form. The
+  block also depends on `ceph-service-<cluster>-monitoring` when that block
+  exists, and its deadline is apply 2940 s, observe 720 s, destroy 1380 s. Its
+  TLS binding is a Secret reference (`service.bindings`) lent as protected
+  files, the certificate to every operation and the private key to apply only.
+  Without a binding the block lists the impact "cephadm signs the management
+  gateway's TLS certificate; the readiness proof reports its SHA-256". Its
+  evidence may carry an `endpoint` member whose lowercase SHA-256 is present
+  exactly when the endpoint answered, and readiness needs that answer; every
+  other unit's evidence carries no endpoint. A cluster name longer than 37
+  characters refuses. Before a fresh apply registers, the bound certificate
+  must name the gateway's `virtual_ip` (an IP address entry) or, without one,
+  every host of its placement (a DNS name or a matching wildcard), or the
+  apply refuses naming the Secret; no certificate byte enters the refusal.
+- A StorageCluster that declares an `oauth2-proxy` service, and each child
+  planned through it, refuses at planning with `lifecycle.unsupported`
+  "StorageCluster <cluster> declares an oauth2-proxy service, and Bootwright
+  does not realize single sign-on through oauth2-proxy yet", remedy "remove
+  the oauth2-proxy service and its spec.ceph.serviceBindings entries from
+  StorageCluster <cluster>, and omit spec.enable_auth on its mgmt-gateway
+  service or set it to false; B479 tracks single sign-on". The refusal comes
+  before the binding check, because admission requires the oauth2-proxy
+  secret bindings.
 - A gateway block `ceph-gateway-<gateway>` (Kind StorageObjectGateway,
   exclusive `ceph/<cluster>`) executes its gateway's realm, zone group, zone,
   zone placement and rgw service on the bootstrap host. It depends on the

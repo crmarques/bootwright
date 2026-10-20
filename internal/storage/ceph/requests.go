@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v19"
+const Version = "ceph-core-v20"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -295,8 +295,12 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	if spec.Get("mgrModules").Len() != 0 || spec.Get("cephadm", "bootstrap", "singleHostDefaults").Bool() {
 		return Request{}, failure("lifecycle.unsupported", "the core adapter does not yet realize additional cluster configuration", "use only the qualified core MON/MGR/OSD profile")
 	}
+	if slices.ContainsFunc(spec.Get("services").Items(), func(svc api.Value) bool { return svc.Get("service_type").Text() == "oauth2-proxy" }) {
+		return Request{}, failure("lifecycle.unsupported", "StorageCluster "+cluster.Name()+" declares an oauth2-proxy service, and Bootwright does not realize single sign-on through oauth2-proxy yet",
+			"remove the oauth2-proxy service and its spec.ceph.serviceBindings entries from StorageCluster "+cluster.Name()+", and omit spec.enable_auth on its mgmt-gateway service or set it to false; B479 tracks single sign-on")
+	}
 	for _, binding := range spec.Get("serviceBindings").Items() {
-		if ref := binding.Get("serviceRef").Text(); !gatewayExecuted(c, cluster, ref) && !monitoringBinding(cluster, binding) {
+		if ref := binding.Get("serviceRef").Text(); !gatewayExecuted(c, cluster, ref) && !unitBinding(cluster, binding) {
 			return Request{}, unrealizedBinding(ref)
 		}
 	}

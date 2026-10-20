@@ -527,7 +527,7 @@ def test_dispatch_routes_an_export_to_the_export_worker(monkeypatch):
 
 
 def observation(ready):
-    return {"version": "ceph-core-evidence-v7", "request": "", "action": "nfs-export", "owner": OWNER, "fsid": FSID, "owned": True, "exists": True,
+    return {"version": "ceph-core-evidence-v8", "request": "", "action": "nfs-export", "owner": OWNER, "fsid": FSID, "owned": True, "exists": True,
             "ready": ready, "removed": False, "partial": not ready, "health": "HEALTH_OK", "hosts": ["node-1", "node-2", "node-3"], "monitors": [],
             "monAddrs": [], "mgrActive": "", "mgrStandbys": [], "osds": [], "resource": {"id": "1", "path": "/docs"} if ready else {"id": "", "path": ""},
             "client": "", "dashboard": {"url": "", "certificateSHA256": "", "reachable": False}, "endpoint": {"certificateSHA256": "", "reachable": False},

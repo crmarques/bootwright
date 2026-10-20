@@ -84,7 +84,7 @@ func boundMaterial(e lifecycle.Execution, r Request, operation string, readers D
 }
 
 func unitMaterial(e lifecycle.Execution, r Request, operation string) ([]lifecycle.MaterialFile, error) {
-	if r.Action != "service" || r.Service == nil || len(r.Service.Bindings) == 0 || operation != "apply" {
+	if r.Action != "service" || r.Service == nil || len(r.Service.Bindings) == 0 {
 		return nil, nil
 	}
 	types := map[string]string{}
@@ -93,9 +93,12 @@ func unitMaterial(e lifecycle.Execution, r Request, operation string) ([]lifecyc
 	}
 	files := []lifecycle.MaterialFile{}
 	for _, b := range r.Service.Bindings {
-		leaf, known := monitoringLeaves[types[b.ServiceRef]+" "+b.Path]
+		leaf, known := unitLeaf(types[b.ServiceRef], b.Path)
 		if !known {
 			return nil, failure("lifecycle.state", "a Ceph service unit binds a credential leaf this build does not realize", "")
+		}
+		if operation != "apply" && !leaf.Observed {
+			continue
 		}
 		value, err := materialPart(e.Material, b.SecretRef, leaf.Part)
 		if err != nil {

@@ -332,12 +332,8 @@ func TestNoBoundMaterialInPlanRequestEvidence(t *testing.T) {
 }
 
 func TestUnrealizedMonitoringServicesKeepTheCoreRefusal(t *testing.T) {
-	for _, serviceType := range []string{"mgmt-gateway", "oauth2-proxy"} {
-		t.Run(serviceType, func(t *testing.T) {
-			_, err := planned(t, delegatedCatalog([]api.Value{auxiliaryService(serviceType, "", api.Value{})}, nil), api.StorageCluster, "example")
-			refusedWith(t, err, "lifecycle.unsupported", "a selected service has no core lifecycle", "use only MON, MGR, OSD and MDS services until its feature item is delivered")
-		})
-	}
+	_, err := planned(t, delegatedCatalog([]api.Value{auxiliaryService("oauth2-proxy", "", api.Value{})}, nil), api.StorageCluster, "example")
+	refusedWith(t, err, "lifecycle.unsupported", oauth2ProxyReason, oauth2ProxyRemedy)
 	r, err := planned(t, delegatedCatalog([]api.Value{auxiliaryService("prometheus", "", api.Value{})}, nil), api.StorageCluster, "example")
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))

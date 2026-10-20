@@ -529,7 +529,9 @@ after parsing, because "the `virtual_ip` parameter must be identical in both"
 the gateway's `virtual_ip` without such an ingress refuses at that field, and
 the ingress refuses at its own `virtual_ip` when the gateway declares none or
 a different address. That ingress runs keepalived only, so it refuses
-`frontend_port` and `monitor_port`.
+`frontend_port` and `monitor_port`. Planning refuses a declared oauth2-proxy
+until single sign-on is realized, so a planned management gateway carries no
+`enable_auth: true`.
 
 Some native types refuse by type at `service_type`. Log collection (`loki`,
 `alloy`, `promtail`) is not realized yet; only the gated log-collection lane

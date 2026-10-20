@@ -115,7 +115,7 @@ func TestClusterRequestRefusesOnlyUnexecutedBindings(t *testing.T) {
 			catalog := delegatedCatalog(append([]api.Value{rgwService("objects")}, c.services...), []api.Value{tlsBinding("rgw.objects", "gateway-tls"), c.binding},
 				childOf(api.StorageObjectGateway, "objects", "serviceRef", "rgw.objects"))
 			_, err := planned(t, catalog, api.StorageCluster, "example")
-			refusedWith(t, err, "lifecycle.unsupported", "Bootwright does not realize the service binding of "+c.ref+"; it realizes only the TLS bindings of an rgw service that a StorageObjectGateway binds and of the ingress that fronts it, and the credential bindings of the grafana and snmp-gateway services",
+			refusedWith(t, err, "lifecycle.unsupported", "Bootwright does not realize the service binding of "+c.ref+"; it realizes only the TLS bindings of an rgw service that a StorageObjectGateway binds and of the ingress that fronts it, the TLS binding of the management gateway, and the credential bindings of the grafana and snmp-gateway services",
 				"remove the spec.ceph.serviceBindings entry for "+c.ref)
 		})
 	}

@@ -18,7 +18,10 @@ mgmt-gateway and oauth2-proxy documents are admitted under their
 planning refuses each that needs an auxiliary image until it can be selected;
 ceph-exporter runs the Ceph image, and it and the other monitoring services
 realize through the
-[monitoring unit](../storage.md#resources-readiness-and-access). The
+[monitoring unit](../storage.md#resources-readiness-and-access); mgmt-gateway
+realizes through the
+[management gateway unit](../storage.md#resources-readiness-and-access), and
+oauth2-proxy refuses at planning until single sign-on is realized. The
 core request lists each of them only by its qualified name and eligible hosts,
 outside the host request, so that core observation
 [tolerates its daemons](../storage-native-api.md#service-identity-and-references);
@@ -29,7 +32,8 @@ ingress refuses until its auxiliary images can be selected
 `spec.ceph.serviceBindings` entry is left to the gateway block only for an RGW
 service a StorageObjectGateway binds and for the ingress that fronts it, and
 the credential bindings of a grafana or snmp-gateway service to the monitoring
-unit; any other entry refuses at planning. An RGW document must be bound by a StorageObjectGateway of the same
+unit, and the TLS binding of the management gateway to its unit; any other
+entry refuses at planning. An RGW document must be bound by a StorageObjectGateway of the same
 cluster whose `spec.serviceRef` names it; an unbound one refuses at its
 `service_id`, because cephadm would deploy it before its realm, zone group and
 zone exist. `spec.ceph.mgrModules` admits `cephadm` and

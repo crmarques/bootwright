@@ -155,5 +155,5 @@
       "nfs"
     ]
   },
-  "version": "ceph-core-v19"
+  "version": "ceph-core-v20"
 }
