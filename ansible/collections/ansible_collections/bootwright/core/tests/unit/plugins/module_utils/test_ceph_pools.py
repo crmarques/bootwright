@@ -171,7 +171,8 @@ class World:
         if kind == "erasure":
             profile = self.profiles[target]
             self.rules.setdefault(name, rule(len(self.rules) + 2, name, 3, profile["crush-device-class"]))
-            size, minimum, width = int(profile["k"]) + int(profile["m"]), int(profile["k"]) + min(1, int(profile["m"]) - 1), int(profile["k"]) * int(profile["stripe_unit"])
+            data, coding = int(profile["k"]), int(profile["m"])
+            size, minimum, width = data + coding, data + min(1, coding - 1), data * int(profile["stripe_unit"])
         else:
             size, minimum, width = 3, 2, 0
         crush_rule = self.rules[name if kind == "erasure" else target]["rule_id"]

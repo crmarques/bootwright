@@ -242,7 +242,8 @@ def validate_erasure(pool, osd_hosts):
     defaults = erasure["profileDefaults"]
     require(isinstance(defaults, dict) and set(defaults) <= PROFILE_DEFAULTS)
     require(all(isinstance(value, str) and PROFILE_VALUE.fullmatch(value) is not None for value in defaults.values()))
-    require(pool["size"] == row[0] + row[1] and pool["minSize"] == row[0] + min(1, row[1] - 1) and pool["overwrites"] == (pool["role"] in ("rbd", "cephfs-data")))
+    require(pool["size"] == row[0] + row[1] and pool["minSize"] == row[0] + min(1, row[1] - 1))
+    require(pool["overwrites"] == (pool["role"] in ("rbd", "cephfs-data")))
 
 
 def validate_autoscale(pool):
