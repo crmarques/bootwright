@@ -103,7 +103,8 @@ INVALID = {
                                       request["delegated"].insert(0, {"name": "nfs.b", "hosts": ["node-1", "node-2"]})),
     "unit id": lambda request: request["service"].update(id="a"),
     "binding": lambda request: request["service"].update(bindings=[{"path": "/spec/x", "secretRef": "s", "serviceRef": "rbd-mirror"}]),
-    "other type": lambda request: request["service"]["documents"][0].update(service_type="cephfs-mirror"),
+    "other type": lambda request: (request["service"]["documents"][0].update(service_type="nfs", service_id="b"),
+                                   request.update(delegated=[{"name": "nfs.b", "hosts": ["node-1", "node-2"]}])),
     "delegated hosts": lambda request: request["delegated"][0].update(hosts=["node-1", "node-3"]),
     "networks": lambda request: request["service"]["documents"][0].update(networks=["192.0.2.1/24"]),
 }
