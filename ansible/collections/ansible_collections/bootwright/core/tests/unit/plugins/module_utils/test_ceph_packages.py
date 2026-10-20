@@ -442,6 +442,33 @@ def test_signer_rule_unchanged_for_a_mirror(package_request, monkeypatch, tmp_pa
     with pytest.raises(ceph_native.Refusal, match="^packages$"):
         acquisition.payloads(str(tmp_path), plan)
     assert len(seen) == 1
+    seen.clear()
+    dvd = package_request["packages"]["sources"][0]["url"] + "/BaseOS/repodata/repomd.xml"
+    for url in (mirror + "/repodata/repomd.xml", sources.IBM_KEY, dvd):
+        acquisition.stream(url, io.BytesIO(), 7)
+    assert seen == [("repository", mirror + "/repodata/repomd.xml"), ("public", sources.IBM_KEY), ("local", dvd)]
+
+
+class Constructed(Exception):
+    pass
+
+
+@pytest.mark.parametrize("trust, trust_ref", [(None, None), ("bundle", "repository-ca")])
+def test_prepare_builds_the_acquisition_with_the_bound_repository_bundle(package_request, boundary, monkeypatch, trust, trust_ref):
+    received = []
+
+    def recording(*args, **kwargs):
+        received.append((args, kwargs))
+        raise Constructed()
+
+    monkeypatch.setattr(sources, "Acquisition", recording)
+    if trust_ref is not None:
+        package_request["packages"]["packageRepositoryTrustBundleRef"] = trust_ref
+    with pytest.raises(Constructed):
+        packages.prepare(package_request, "node-1", "public-certificate", trust=trust, journal=boundary.journal)
+    assert received == [((sources.source_for(package_request, "node-1"), "public-certificate"),
+                         {"repository": package_request["packageRepository"], "trust": trust, "trust_ref": trust_ref})]
+    assert boundary.journal.writes == []
 
 
 def test_package_scope_admits_only_a_named_repository_trust_bundle(package_request):
