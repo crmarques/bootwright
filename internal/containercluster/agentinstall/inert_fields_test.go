@@ -21,7 +21,8 @@ func TestAdmittedInertFieldsDoNotChangePlans(t *testing.T) {
 	}
 	for _, slot := range []string{"api", "api-int", "ingress"} {
 		for field, value := range map[string]api.Value{
-			"port": api.IntegerValue("8443"), "scheme": api.StringValue("http"),
+			"dnsName": api.StringValue(slot + ".custom.example.test"),
+			"port":    api.IntegerValue("8443"), "scheme": api.StringValue("http"),
 			"prefixLength": api.IntegerValue("24"), "interfaceNetworks": api.StringList("198.51.100.0/24"),
 		} {
 			changes[slot+" "+field] = cluster.Spec().WithPath(value, "install", "endpoints", slot, field)

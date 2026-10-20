@@ -25,8 +25,13 @@ func wireStoragePreflight(state inventory.EffectiveState, reconciler lifecycle.S
 	return preflight.Service{Graph: effectiveGraph{state: state}, Ownership: machineOwnership{reconciler: reconciler}, Project: libvirtAllocations, Capacity: capacity.Budget{Observer: preflightlocal.Observer{}}, Guests: preflight.GuestChecks{Commands: preflightCommands(state, reconciler, deps)}, Selection: currentSelection(deps.Selection)}
 }
 
-func libvirtCapacityAdmission(ctx context.Context, contextName string, catalog api.Catalog, owned map[string]lifecycle.ObjectOwnership, starting []reconciliation.Block) error {
-	return admitLibvirtCapacity(ctx, contextName, catalog, owned, starting, capacity.Budget{Observer: preflightlocal.Observer{}})
+func libvirtCapacityAdmission(checker capacity.CapacityChecker) lifecycle.ApplyAdmission {
+	if checker == nil {
+		checker = capacity.Budget{Observer: preflightlocal.Observer{}}
+	}
+	return func(ctx context.Context, contextName string, catalog api.Catalog, owned map[string]lifecycle.ObjectOwnership, starting []reconciliation.Block) error {
+		return admitLibvirtCapacity(ctx, contextName, catalog, owned, starting, checker)
+	}
 }
 
 func admitLibvirtCapacity(ctx context.Context, contextName string, catalog api.Catalog, owned map[string]lifecycle.ObjectOwnership, starting []reconciliation.Block, checker capacity.CapacityChecker) error {

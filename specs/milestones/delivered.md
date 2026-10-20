@@ -7396,111 +7396,266 @@ incomplete operation or context planned by an earlier build is finished or
 destroyed with that build. The collection change moves the Ceph automation
 digest, which alone needs a rebuild and an apply to continue.
 
-## X111 — M3b controller and release recovery
+### X111 — M3b controller and release recovery
 
-**Delivery:** in-tree work for [M3b](m3.md#m3b), requested on 2026-10-20.
-The delivering commit records verification commands and results. M3b's
-[B61](m3.md#b61) operator acceptance remains unrun.
-The selected `nmstatectl` host-package closure is implemented and source-verified;
-[B706](m3.md#b706) awaits the same operator run.
+**Owner:** Controller, with Container cluster. A defect slice of
+[M3b](m3.md#m3b), delivered in-tree on `m3` at the explicit request of
+2026-10-20 under [D172](backlog.md#decisions)'s M2 implementation waiver. The
+delivering commit records the verification commands and results; no host
+operation ran. [B706](m3.md#b706), the `nmstatectl` host-package closure of
+the controller stage, is implemented and source-verified but stays on the M3
+page, awaiting the owner-run lab-sno rehearsal with [B61](m3.md#b61), M3b's
+operator gate, and [B462](m3.md#b462). **Items:** B307, B680, B309, B237,
+B239, delivered in-tree.
 
-### B307
+**Outcome:** one exact publisher-release grammar governs ContainerCluster
+admission, tool selection and tool requests; installation resolves tools in a
+fixed order. A published but unsealed client area is incomplete, and every
+completing path seals it before the block completes, the settled replay and a
+replay that installs a missing host package alike. `latest` is selected from
+the context binding the recovery or the preflight proved. The controller stage
+installs `nmstate` for agent media whose cluster nodes reference a declared
+Machine, and `preflight controller --context` reports an `nmstate` check. The
+[controller spec](../controller.md) and the
+[container cluster spec](../container-clusters.md) own the behavior.
+
+**Guard tests:** `TestExactClusterReleaseGrammar`,
+`TestReleaseVersionRequiresAPatchAndAcceptsPublisherPrereleases`,
+`TestReleaseWithoutPatchIsRefusedByTheReleaseGrammar`,
+`TestTargetToolsUseTheClusterReleaseGrammar` and
+`TestOpenShiftToolRequestsRequireTheSharedExactReleaseGrammar` (B307 and
+B680, whose stable-only mutant failed the admission test);
+`TestMissingInstallationToolsAlwaysNameTheInstallerFirst` (B309);
+`TestAnInterruptedPublicationNeedsAReplayToSeal`,
+`TestAReplayThatInstallsAHostPackageSealsTheInterruptedPublication`,
+`TestASealFailureAfterAReplayedHostPackageInstallIsUnknown` and
+`TestInstalledToolLookupPreservesStoreFailures` (B237);
+`TestContextLatestIgnoresANewerReleaseRetainedByAnotherContext`,
+`TestContextPreflightSelectsLatestOnlyFromItsOwnBinding`,
+`TestInterruptedStageUsesItsPreparedSourcesBeforeAnyContextBinding` and
+`TestFreshStageKeepsTheReleaseInItsContextBinding` (B239); and for the
+`nmstate` closure `TestAgentMediaSelectsNMStateFromItsClusterNodes`,
+`TestARequestAndStageNativeOfAgree`, `TestTheFrozenRequestCarriesNMStateAndIPUtils`,
+`TestContextPreflightReportsTheNMStateAndIPUtilsClosures` and
+`TestAFrozenStageRequestOfAnyOtherVersionRefuses`. The audit fixes recorded a
+mutation check for each test they added.
+
+**Constraints left behind:** the frozen controller request moved from
+`controller-clients-v3` to `controller-clients-v4` with the `nmstate` closure,
+and its content digest moved with it
+(`TestEveryImplementationMovesItsContentDigestWithItsContract`); X117 moves it
+again. There is no older-version reader, so an incomplete operation or context
+whose controller block an earlier build planned is finished or destroyed with
+that build first, before this build touches it (D172, session clause 10). No
+other behavior changed.
+
+#### B307
 
 One exact publisher-release grammar now governs ContainerCluster admission, tool selection and tool requests. A missing patch refuses at validate and plan; publisher pre-releases remain accepted.
 
-### B680
+#### B680
 
 Admission of `4.22.0-rc.1` is regression-tested. Replacing the grammar with a stable-only screen made that test fail; the mutant was removed.
 
-### B309
+#### B309
 
 Installation resolves tools in a fixed order, installer before `oc`, so two missing tools always name the installer.
 
-### B237
+#### B237
 
-Recovery treats a published but unsealed client area as incomplete. Replay seals it before the block completes, and tool lookup preserves store failures.
+Recovery treats a published but unsealed client area as incomplete. Replay seals it before the block completes, on the settled path and after a host-package install alike, and tool lookup preserves store failures. A failure before the seal attempt on the settled path is failed; one from the seal attempt on, and any after a host install, is unknown.
 
-### B239
+#### B239
 
-Recovery and context preflight select `latest` from the context binding it proved. An interrupted first publication reuses its prepared sources rather than adopting another context's newer client.
+Recovery and context preflight select `latest` from the context binding they proved. An interrupted first publication reuses its prepared sources rather than adopting another context's newer client.
 
-## X112 — M3b admission diagnostics
+### X112 — M3b admission diagnostics
 
-**Delivery:** in-tree work for [M3b](m3.md#m3b), requested on 2026-10-20.
-The delivering commit records verification commands and results. M3b's
-[B61](m3.md#b61) operator acceptance remains unrun.
+**Owner:** Container cluster, with Desired state and Add-ons. A slice of
+[M3b](m3.md#m3b), delivered in-tree on `m3` at the explicit request of
+2026-10-20. The delivering commit records the verification commands and
+results; M3b's [B61](m3.md#b61) operator acceptance remains unrun.
+**Items:** B411, B312, B313, delivered in-tree.
 
-### B411
+**Outcome:** release-image and catalog-image digests are normalized, a cluster
+name beyond the longest lifecycle block prefix's budget refuses at admission,
+the inert endpoint and channel fields are declared as such, and every
+admission refusal names the field to correct and, where one exists, an exact
+remedy. The [container cluster spec](../container-clusters.md) and its
+[API](../api/container-clusters.md) own the behavior.
+
+**Guard tests:** `TestCatalogImageNormalizationChangesOnlyDigest`,
+`TestReleaseImageNormalizationChangesOnlyDigest`,
+`TestClusterNameFitsInstallationBlock`, `TestClusterNameAdmissionBoundFitsEveryBlock`
+and `TestClusterNameAdmissionDiagnosticNamesItsObject` (B411);
+`TestAdmittedInertFieldsDoNotChangePlans` (B312);
+`TestAdmissionRemediationNamesTheFieldToChange`,
+`TestEveryAdmissionRuleRemediationNamesWhatToChange` and
+`TestAdmissionRequiresTheEffectiveAPIEndpointAddress` (B313).
+
+**Constraints left behind:** none. No frozen request version moved.
+
+#### B411
 
 Normalization lowercases ContainerCluster release-image and ClusterAddon catalog-image digests. ContainerCluster admission refuses names beyond the 47-byte budget of the longest lifecycle block prefix at `metadata.name`.
 
-### B312
+#### B312
 
-Endpoint connection metadata and the derived release channel are declared inert or informational in the owning API contract. The inert-fields test proves media and installation plans unchanged.
+Endpoint connection metadata and the derived release channel are declared inert or informational in the owning API contract, and so is `spec.install.endpoints.*.dnsName`, read only by the named-certificate collision check of `api-int`. The inert-fields test proves media and installation plans unchanged.
 
-### B313
+#### B313
 
-ContainerCluster invariant diagnostics name the field to correct and provide an exact remedy when one exists. The generic remedy was removed.
+ContainerCluster invariant diagnostics name the field to correct and provide an exact remedy when one exists. The generic remedy was removed. A table test pins the remedy of every admission rule, and admission requires an effective API endpoint address.
 
-## X113 — M3b installer projection
+### X113 — M3b installer projection
 
-**Delivery:** in-tree work for [M3b](m3.md#m3b), requested on 2026-10-20.
-The delivering commit records verification commands and results. M3b's
-[B61](m3.md#b61) operator acceptance remains unrun.
+**Owner:** Container cluster, with Secrets. A slice of [M3b](m3.md#m3b),
+delivered in-tree on `m3` at the explicit request of 2026-10-20. The
+delivering commit records the verification commands and results; M3b's
+[B61](m3.md#b61) operator acceptance remains unrun. **Items:** B308, B306,
+B310, B311, B622, delivered in-tree.
 
-### B308
+**Outcome:** the installer projection names the cluster and the field to
+correct in every planning refusal; takes the administrator's authorized key
+from a Secret through the media consumer's injected port, refusing key options
+and unsafe comments; calls the owners of the cluster zone, endpoint names,
+label grammar and substrate arms; reads normalized network defaults; and
+refuses a composed node resolver list that conflicts with the selected name
+servers. The [container cluster spec](../container-clusters.md) and the
+[Secrets API](../api/secrets.md) own the behavior.
+
+**Guard tests:** `TestPlanningRefusalsNameClusterAndSelectedField` and
+`TestAnOffControllerServerRefusesBeforeRegistration` (B308);
+`TestPublicAdministrationKeyFormsReachInstaller`,
+`TestMalformedAdministrationKeyRefusesBeforeAdapter`,
+`TestAuthorizedKeyRefusesOptionsAndUnsafeComments` and
+`TestAuthorizedKeyAcceptsPublicPartAndOpaqueLine` (B306);
+`TestPublishedEndpointNamesAgreeWithInstallerProbes` (B310);
+`TestProjectionRefusesUnnormalizedNetworksWithClusterIdentity` (B311);
+`TestNodeResolverDeclarationConflict` and
+`TestAuthoredResolverListWithoutSelectionReachesInstaller` (B622).
+
+**Constraints left behind:** none. No frozen request version moved.
+
+#### B308
 
 Agent-install planning diagnostics name the ContainerCluster and the field to correct. The off-controller boot-image server refusal joins the capability's Unsupported table.
 
-### B306
+#### B306
 
-The Secrets material adapter returns one authorized-key line from an `sshKeyPair` public part or an opaque public key, through the media consumer's injected port. Malformed material names the Secret and discloses no bytes.
+The Secrets material adapter returns one authorized-key line from an `sshKeyPair` public part or an opaque public key, through the media consumer's injected port. Malformed material, a key with options or a comment with a backslash, a control character or a quote names the Secret and discloses no bytes.
 
-### B310
+#### B310
 
 Projection and admission call the owners of the cluster zone, controller Machine, endpoint names, label grammar and substrate arms. DNS publication and installation consume one endpoint-name owner, with a parity test.
 
-### B311
+#### B311
 
 Projection reads normalized network defaults. An empty machine-network list refuses as an internal invariant; projection fixtures are normalized before use.
 
-### B622
+#### B622
 
-Admission refuses composed node DNS server lists that conflict with selected DNS servers, naming both fields. Authored resolver lists without a selection reach the installer unchanged.
+Admission refuses composed node DNS server lists that conflict with selected DNS servers, naming both fields: an authored `dns-resolver.config.server` together with selected name servers is an `api.invariant` refusal at `nodes[i].machineRef`. Authored resolver lists without a selection reach the installer unchanged.
 
-## X114 — Shared libvirt capacity admission
+### X114 — Shared libvirt capacity admission
 
-**Delivery:** in-tree work for [M3b](m3.md#m3b), requested on 2026-10-20.
-The delivering commit records verification commands and results. M3b's
-[B61](m3.md#b61) operator acceptance remains unrun.
+**Owner:** Substrate, with Storage and Container cluster. A shared-foundation
+slice of [M1c](m1.md#m1c), delivered in-tree on `m3` with M3b at the explicit
+request of 2026-10-20. The delivering commit records the verification
+commands and results; M3b's [B61](m3.md#b61) operator acceptance remains
+unrun. **Items:** B700, delivered in-tree.
 
-### B700
+**Outcome:** every apply whose selection may start or resolve a libvirt
+Machine proves the aggregate host capacity before it registers, and the
+composed apply refuses with the checker's reason; storage and container-cluster
+preflight use the same budget. The [substrate spec](../substrates.md#capacity-admission)
+owns the behavior.
 
-Every apply whose selection may start or resolve a libvirt Machine proves aggregate host CPU, memory and backing-filesystem disk capacity for all declared guests on that host plus the authored reserve. The substrate owns the shared budget and reserve policy; storage and container-cluster preflight reuse it. A continuation with all Machine blocks done performs no capacity observation. Every libvirt example declares its reserve.
+**Guard tests:** `TestContainerOnlyApplyProvesAllDeclaredLibvirtGuestsBeforeAdmission`,
+`TestStorageCapacityAdmissionSkipsTransitionsThatAllocateNoGuest`,
+`TestComposedApplyRefusesAtTheLibvirtCapacityGateBeforeRegistration` (which
+fails when the production wiring drops the gate),
+`TestCapacityAggregatesSharedHostAndFilesystem` and
+`TestCapacityNeverPassesUnprovedFactsOrReserve`.
 
-## X115 — M3b preflight and handoff
+**Constraints left behind:** none. No frozen request version moved.
 
-**Delivery:** in-tree work for [M3b](m3.md#m3b), requested on 2026-10-20.
-The delivering commit records verification commands and results. M3b's
-[B61](m3.md#b61) operator acceptance remains unrun.
-Container-cluster preflight's in-tree implementation is included;
-[B705](m3.md#b705) awaits the same operator run.
+#### B700
 
-### B259
+Every apply whose selection may start or resolve a libvirt Machine proves aggregate host CPU, memory and backing-filesystem disk capacity for all declared guests on that host plus the authored reserve. The substrate owns the shared budget and reserve policy; storage and container-cluster preflight reuse it. A continuation with all Machine blocks done performs no capacity observation. Every libvirt example declares its reserve, and the lab-sno acceptance-profile row states the reserve the example authors (1 CPU, 2 GiB, 10 GiB) with the gate's totals.
+
+### X115 — M3b preflight and handoff
+
+**Owner:** Container cluster, with CLI and Lifecycle. A product slice of
+[M3b](m3.md#m3b), delivered in-tree on `m3` at the explicit request of
+2026-10-20. The delivering commit records the verification commands and
+results; M3b's [B61](m3.md#b61) operator acceptance remains unrun.
+[B705](m3.md#b705), the container-cluster preflight, is implemented in-tree
+and stays on the M3 page awaiting the same operator run. **Items:** B259, B71,
+delivered in-tree.
+
+**Outcome:** a kubeconfig the installer grew past 64 KiB is restored or left to
+the installer by its last 8 KiB, and `status` derives GitOps handoff readiness
+from durable records. `preflight container-cluster` resolves, through the
+controller's own resolver, exactly the names the installation's resolution
+before boot proves: `api`, `api-int`, the console name and the
+`bootwright-<cluster>` wildcard label under `apps.<cluster>.<zone>`, never the
+applications apex, which a `*.apps` wildcard does not answer. One owner in
+`internal/containercluster` names them for preflight, the projection and the
+install role, with a table shared with the role's Jinja rule. A settled apply
+restores a latched required-log fault only after re-proving its records and
+that the context's input is unchanged. The [container cluster spec](../container-clusters.md#preflight)
+and [state reconciliation](../state-reconciliation.md) own the behavior.
+
+**Guard tests:** `test_a_grown_installer_file_cut_in_each_section_is_restored`
+and `test_a_failed_wait_names_the_kubeconfig_it_restored` (B259);
+`TestStatusHandoffReadsRecordsWithoutWriting`,
+`TestSettledApplyRestoresALatchedLogFault`,
+`TestSettledLogRestorationReprovesItsRecords`,
+`TestSettledLogRestorationReprovesItsInputInItsTransaction`,
+`TestSettledLogRestorationRequiresADurableClear` and the handoff goldens of
+`TestCommandOutputMatchesItsGoldens` (B71); and for the preflight names
+`TestResolutionChecksTheNamesTheInstallationProvesAndNeverTheApex`,
+`TestContainerPreflightUsesCompletedDNSAndApplyCapacityRows`,
+`TestResolutionNamesAreTheNamesTheInstallationProves`,
+`TestWildcardLabelMatchesTheInstallRoleTable`,
+`test_the_role_renders_the_wildcard_label_of_the_shared_table` and
+`test_the_shared_table_cuts_trailing_hyphens`.
+
+**Constraints left behind:** none. No frozen request version moved; the
+agentinstall projection derives the console name from the same owner and every
+frozen request byte and golden is unchanged.
+
+#### B259
 
 Restore classifies a kubeconfig above 64 KiB from only its last 8 KiB: a complete final client-key-data line is left to the installer, and a cut rewrite is restored from the kept copy after identity validation. A failed wait names a restore it performed. Tests cover cuts in clusters and users, a whole grown file, and the failed wait.
 
-### B71
+#### B71
 
-Status derives GitOps handoff readiness from durable operation and block records, with fixed-order reasons and no write or host probe. A settled apply restores a latched required-log fault under a mutating transaction after re-proving its records. Human and JSON goldens cover readiness and every refusal reason.
+Status derives GitOps handoff readiness from durable operation and block records, with fixed-order reasons and no write or host probe. A settled apply restores a latched required-log fault under a mutating transaction after re-proving its records and its input. Human and JSON goldens cover readiness and every refusal reason.
 
-## X116 — M3c endpoint ownership
+### X116 — M3c endpoint ownership
 
-**Delivery:** in-tree work for [M3c](m3.md#m3c), requested on 2026-10-20.
-The delivering commit records verification commands and results; the compact
-operator gate [B66](m3.md#b66) remains unrun.
+**Owner:** Container cluster. A slice of [M3c](m3.md#m3c), delivered in-tree on
+`m3` at the explicit request of 2026-10-20. The delivering commit records the
+verification commands and results; the compact operator gate
+[B66](m3.md#b66) remains unrun. **Items:** B707, B708, delivered in-tree.
 
-### B707
+**Outcome:** the platform of a multi-node cluster follows who owns its
+endpoints, and an address a cluster declares for an endpoint belongs to no
+other holder Bootwright knows. The [container cluster spec](../container-clusters.md)
+owns the behavior.
+
+**Guard tests:** `TestInstallerEndpointPlatformOwnership`,
+`TestExternallyAnsweredEndpointsUsePlatformNone` and
+`TestAuthoredBaremetalRefusesExternalEndpoints` (B707);
+`TestEndpointOwnershipAcrossCatalog`, `TestEndpointOwnershipExceptions` and
+`TestASelectedLoadBalancerAddressBelongsToOneCluster` (B708). The frozen
+external-input goldens pin B707's rendering.
+
+**Constraints left behind:** none. No frozen request version moved.
+
+#### B707
 
 Multi-node platform derivation follows endpoint ownership: installer VIPs use
 `baremetal`; external and LoadBalancer endpoints use `none`. Mixed ownership,
@@ -7508,23 +7663,100 @@ an authored baremetal platform with external slots, differing API/internal API
 VIPs and an API VIP equal to ingress refuse. Installer inputs carry no
 load-balancer type. Admission and frozen external-input goldens pin this rule.
 
-### B708
+#### B708
 
 Endpoint collision admission names the other cluster, Machine, managed network
 host, managed service, emulated BMC or LoadBalancer holding an address. Tests
 cover every holder class, wildcard binds and the own-node/own-LoadBalancer
-exceptions. One domain projection owns locally probeable virtual IPs.
+exceptions.
 
-## X117 — M3c boot and media safety
+### X117 — M3c boot and media safety
 
-**Delivery:** in-tree work for [M3c](m3.md#m3c), requested on 2026-10-20.
-[B709](m3.md#b709) and [B710](m3.md#b710) await the compact operator run.
-Frozen install requests move to `cluster-install-agent-v5` for publication root,
-serving certificate, VIPs and rendezvous address. Controller requests move to
-`controller-clients-v5` for the selected `iputils` closure. Contract guards and
-request goldens cover both changes.
+**Owner:** Container cluster, with Substrate. A safety slice of
+[M3c](m3.md#m3c), delivered in-tree on `m3` at the explicit request of
+2026-10-20. The delivering commit records the verification commands and
+results. [B709](m3.md#b709) and [B710](m3.md#b710) are implemented and tested
+in-tree and stay on the M3 page awaiting the compact operator run with
+[B66](m3.md#b66). **Items:** B314, delivered in-tree.
 
-### B314
+**Outcome:** no node is handed the media block's own publication. Each
+fetching insert serves a fresh private hard link under its own token, and a
+sweep retires every insert link no controller presents: when an apply has read
+its nodes and before it boots any, when a release has ejected every node, and
+in the block's inverse after its ejects, which keeps only the media of a node
+whose eject failed. A failed insert retires its own link once its controller,
+read without being changed, does not present it. The sweep removes a link only
+when it is, by device and inode, the published image; any other insert entry
+is left and refuses the block after every provable link is removed, and it
+reports counts only. The token walk is anchored at the artifact server's
+content root: the reserved root is `<content root>/public/private/<consumer>/<object>`,
+every component from the content root down is opened without following a
+link, and above it a symbolic link is resolved by the module, every directory
+passed through owned by root and writable by neither group nor other, so a
+controller that keeps its services root on a larger disk through a link still
+applies, observes and destroys. One domain projection owns locally probeable
+virtual IPs. Their IPv4 addresses on a controller-hosted managed network are
+probed with ARP before a fresh boot, and only when no declared node is powered
+on; an IPv6 address or one off a managed network is named in the completion
+evidence as not probed. Boot TCP readiness shares the remaining boot budget and
+gives every node one connection attempt, even after the budget is spent, so a
+dead node never hides the nodes that answer; each unreachable node and its
+address is named, with a hint that gives the two causes (the node did not boot
+this cluster's image, or the image found no network configuration for the
+hardware address it booted with) and says a repeated apply leaves such a node
+as it is. Replays skip nodes already running this cluster's image and check
+rendezvous port 8090 only when this attempt booted it. The
+[container cluster spec](../container-clusters.md) and
+[infrastructure services](../infrastructure-services.md#private-consumer-publication)
+own the behavior.
+
+**Guard tests:** the token module tests (`test_each_insert_is_unique_and_eject_removes_only_its_link`,
+`test_another_inode_under_reserved_root_is_foreign`,
+`test_symlinked_token_is_never_owned`,
+`test_foreign_origin_and_traversal_are_never_owned`,
+`test_ejected_token_answers_404_while_other_insert_still_serves`,
+`test_a_symlink_from_the_content_root_down_refuses`,
+`test_a_symlinked_ancestor_inspects_publishes_and_removes`,
+`test_a_resolved_ancestor_others_can_write_refuses`,
+`test_a_writable_directory_holding_the_link_refuses`,
+`test_a_resolved_ancestor_root_does_not_own_refuses`,
+`test_a_root_outside_the_reserved_shape_refuses`,
+`test_sweep_keeps_presented_links_and_retires_every_other_insert`,
+`test_sweep_refuses_and_keeps_an_insert_entry_it_cannot_prove` and
+`test_the_sweep_task_fails_on_an_unprovable_entry_and_reports_only_counts`);
+the role wiring tests (`test_boot_publishes_then_proves_the_listener_then_inserts`,
+`test_the_insert_serves_the_per_insert_token_never_the_cluster_wide_publication`,
+`test_release_retires_the_token_only_after_an_eject_that_reported_no_failure`,
+`test_the_ownership_read_calls_an_insert_link_own_and_any_other_file_foreign`,
+`test_apply_sweeps_right_after_reading_its_nodes_and_before_any_boot`,
+`test_destroy_sweeps_after_its_ejects_keeping_only_unejected_media`,
+`test_a_failed_insert_reads_its_controller_and_retires_its_link_when_not_presented`
+and `test_observation_never_sweeps_or_removes_a_link`, with
+`TestEveryObservePlaybookRunsOnlyAllowedTasks`); and for the proofs
+`test_an_arp_reply_refuses_naming_address_slot_and_hardware`,
+`test_no_arp_reply_proceeds`, `test_a_probe_that_could_not_run_refuses_as_failed_not_free`,
+`test_any_powered_node_skips_every_probe`,
+`test_unprobeable_vips_are_never_probed_and_reach_completion_evidence`,
+`TestVirtualIPsOnlyProbeManagedIPv4NetworksOnController`,
+`test_a_node_that_never_answers_is_named_and_the_later_ones_that_answer_are_not`,
+`test_after_the_deadline_each_node_is_still_tried_once`,
+`test_a_rendezvous_service_that_never_answers_is_named_with_the_reach_causes`,
+`test_the_rendezvous_service_is_proved_only_when_its_node_was_booted_in_this_attempt`
+and `test_a_reach_failure_names_its_causes_and_never_promises_another_boot`. The
+contract guard is `TestEveryImplementationMovesItsContentDigestWithItsContract`
+with the request goldens `TestFrozenRequestsMatchTheirGoldens`. Each carries a
+mutation check recorded in its commit body.
+
+**Constraints left behind:** the frozen controller request moved from
+`controller-clients-v4` to `controller-clients-v5` for the selected `iputils`
+closure, and the frozen install request moved from `cluster-install-agent-v4`
+to `cluster-install-agent-v5` for the publication root, the serving
+certificate, the virtual IPs and the rendezvous address. There is no
+older-version reader, so an incomplete operation or context planned by an
+earlier build is finished or destroyed with that build first, before this
+build touches it. No other behavior changed.
+
+#### B314
 
 Every fetching insert publishes and verifies a fresh private hard link under
 its own cryptographic token. Observation proves ownership through the source
@@ -7532,45 +7764,94 @@ image's device and inode; eject retires that node's token and proves absence.
 Tests cover distinct tokens, post-eject HTTP 404, foreign inodes and paths,
 verified publication and safe cleanup. Capability URLs enter no records.
 
-**Other outcomes:** managed-controller IPv4 VIPs are ARP-probed before a fresh
-boot; unsupported probes are named in evidence. Boot TCP readiness shares the
-remaining boot budget, naming each unreachable node and address. Replays skip
-nodes already running this cluster's image and check rendezvous port 8090 only
-when this attempt booted it.
+### X118 — M3c completion and bootstrap diagnosis
 
-## X118 — M3c completion and bootstrap diagnosis
+**Owner:** Container cluster. A safety slice of [M3c](m3.md#m3c), delivered
+in-tree on `m3` at the explicit request of 2026-10-20. The delivering commit
+records the verification commands and results. [B260](m3.md#b260) is
+implemented at runtime and stays on the M3 page: it retains its
+captured-response provenance and stalled-node operator gates, and modeled
+responses are not live evidence. **Items:** B711, delivered in-tree.
 
-**Delivery:** runtime and in-tree tests for [M3c](m3.md#m3c), requested on
-2026-10-20. [B260](m3.md#b260) retains its captured-response provenance and
-stalled-node operator gates; modeled responses are not live evidence.
+**Outcome:** no media is released before a fresh authenticated read proves
+completion, the release and every declared node. The release gate names a
+stranded rendezvous host, and the destroy and fresh apply that follow, only
+from a read in which every request was answered by the cluster with this
+build's identity; otherwise it releases nothing and says the cluster could not
+be read, that no media was released, and to repeat the apply. A failed
+bootstrap stall, installer timeout or spent budget performs one bounded
+assisted-host read, whose diagnostics lead with the nodes that never
+registered, then the bad-state hosts with their messages and failing
+validation IDs. The unregistered-node hint claims the cluster reached ready
+only after a stall; after the installer's own timeout or a spent budget it
+says only that installing starts once every declared node reports known, and a
+read that names no node leaves the classification's own hint. The
+[container cluster spec](../container-clusters.md) owns the behavior; the
+[knowledge page](../../.agents/knowledge/openshift-agent-install-waits.md)
+distinguishes recorded installer assets from modeled host responses.
 
-### B711
+**Guard tests:** `test_media_release_is_gated_by_a_fresh_read_after_the_installation_wait`,
+`test_media_release_names_the_stranded_rendezvous_only_from_a_read_that_lacks_it`,
+`test_a_replay_of_a_stranded_rendezvous_fails_the_same_way`,
+`test_the_host_error_hint_names_a_destroy_and_a_fresh_apply_never_a_repeat`,
+`test_a_failed_read_after_the_wait_releases_nothing_and_offers_no_destroy` and
+`test_a_failed_node_read_cannot_prove_presence_from_partial_stdout` (B711);
+`test_bootstrap_timeout_or_budget_spent_reads_hosts_once`,
+`test_the_installers_own_timeout_reads_hosts_and_names_no_stall`,
+`test_install_wait_timeout_never_reads_assisted_hosts`,
+`test_bootstrap_diagnosis_leads_with_missing_then_bad_state_nodes` and
+`test_success_host_errors_and_unrelated_failures_do_not_read_registered_hosts`
+(the read and its hints); `test_registration_reports_bad_states_and_only_failing_validation_ids`
+and `test_bad_validation_shape_keeps_the_host_status` (the read's parsing).
+Each carries a mutation check recorded in its commit body.
+
+**Constraints left behind:** none. No frozen request version moved.
+
+#### B711
 
 A fresh authenticated cluster read proves completion, release and every
 declared node before any media release. Missing-node and replay tests prove
-no eject occurs; a missing rendezvous host names the stranded bootstrap
-control plane and destroy/fresh-apply recovery. The shared API-only prerelease
+no eject occurs; a missing rendezvous host, in a read every request of which
+was answered, names the stranded bootstrap control plane and destroy/fresh-apply
+recovery, and a read that failed names no node. The shared API-only prerelease
 read preserves the existing controller-call deadline margin.
 
-**Other outcome:** failed bootstrap stall, installer timeout and spent-budget
-paths perform one bounded assisted-host read. Diagnostics lead with missing
-nodes, then bad-state hosts, messages and failing validation IDs. The knowledge
-page distinguishes recorded installer assets from modeled host responses.
+### X119 — M3c serialization and compact journeys
 
-## X119 — M3c serialization and compact journeys
+**Owner:** Container cluster, with Lifecycle. An enabling slice of
+[M3c](m3.md#m3c), delivered in-tree on `m3` at the explicit request of
+2026-10-20. The delivering commit records the verification commands and
+results. [B66](m3.md#b66) stays on the M3 page: it requires B61's accepted row
+and a live compact rehearsal, and neither operator gate is claimed here.
+**Items:** B712, B713, delivered in-tree.
 
-**Delivery:** in-tree work for [M3c](m3.md#m3c), requested on 2026-10-20.
-[B66](m3.md#b66) requires B61's accepted row and a live compact rehearsal;
-neither operator gate is claimed here.
+**Outcome:** installations of one context run one at a time while media builds
+overlap, and the compact example's three-master journey is qualified in-tree.
+The [container cluster spec](../container-clusters.md) and the
+[lab-compact example](../../examples/container-clusters/lab-compact/README.md)
+own the behavior.
 
-### B712
+**Guard tests:** `TestTwoClusterPlanSerializesInstallationsOnlyGolden` and
+`TestClusterInstallationsSerializeWhileMediaBuildsOverlap` (B712; the journey
+holds the first installation at the gate and requires that no other block
+arrives until it is released, failing every run when the exclusive key is
+removed);
+`TestLabCompactExamplePlansThreeMastersAndInstallerVIPsGolden`,
+`TestCompactClusterContinuesAnInterruptedBootAfterResolvingMixedNodes`,
+`TestCompactClusterUnknownWithForeignMediaRemainsUnresolved`,
+`TestCompactRemovalNamesEveryMachineToStopBeforeRemovingAnyEffect` and
+`test_compact_retry_boots_only_the_stopped_or_unbooted_nodes` (B713).
+
+**Constraints left behind:** none. No frozen request version moved.
+
+#### B712
 
 Each cluster installation holds `container-cluster-install`; media builds
-remain independent. A two-cluster plan golden, digest test and scheduler
-journey prove exclusivity and overlapping builds, following Q5's recommended
-serialization policy.
+remain independent. A two-cluster plan golden and a scheduler journey prove
+exclusivity and overlapping builds, following Q5's recommended serialization
+policy.
 
-### B713
+#### B713
 
 The [lab-compact example](../../examples/container-clusters/lab-compact/README.md)
 declares three 6-vCPU, 16-GiB, 120-GiB masters, managed NAT networking,

@@ -71,18 +71,8 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 			nodes[node.Get("machineRef").Text()] = true
 		}
 		dns, pending := clusterDNS(catalog, cluster, blocks)
-		for _, endpoint := range containercluster.Endpoints(catalog, cluster) {
-			slot := "api"
-			if strings.HasPrefix(endpoint.Name, "api-int.") {
-				slot = "api-int"
-			}
-			if endpoint.Subtree {
-				slot = "ingress"
-			}
-			result.Checks = append(result.Checks, s.resolve(ctx, request, selected, endpoint.Name, endpoint.Address, slot, dns, pending))
-			if endpoint.Subtree {
-				result.Checks = append(result.Checks, s.resolve(ctx, request, selected, "console-openshift-console."+endpoint.Name, endpoint.Address, "ingress-wildcard", dns, pending))
-			}
+		for _, endpoint := range containercluster.ResolutionNames(catalog, cluster) {
+			result.Checks = append(result.Checks, s.resolve(ctx, request, selected, endpoint.Name, endpoint.Address, endpoint.Slot, dns, pending))
 		}
 	}
 	checks, err := s.capacityChecks(ctx, catalog, selected, nodes, request.DryRun)

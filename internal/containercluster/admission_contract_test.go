@@ -149,3 +149,115 @@ func TestAdmissionRemediationNamesTheFieldToChange(t *testing.T) {
 		}
 	}
 }
+
+func rewrite(c api.Catalog, kind api.Kind, name string, change func(api.Value) api.Value) api.Catalog {
+	objects := c.Objects()
+	for i, bound := range objects {
+		if bound.Kind() == kind && bound.Name() == name {
+			objects[i] = bound.WithSpec(change(bound.Spec()))
+		}
+	}
+	return api.NewCatalog(objects)
+}
+
+func TestAdmissionRequiresTheEffectiveAPIEndpointAddress(t *testing.T) {
+	o, c := fixture("kubevirt", 1, false)
+	o, _ = Normalize(o, c)
+	if o.Spec().Get("install", "endpoints", "api", "address").Text() == "" {
+		t.Fatal("fixture lost its resolved API address")
+	}
+	emptied := o.WithSpec(o.Spec().WithPath(m(), "install", "endpoints"))
+	var matched []api.Issue
+	for _, issue := range Validate(emptied, c) {
+		if issue.Field == "$.spec.install.endpoints.api.address" {
+			matched = append(matched, issue)
+		}
+	}
+	if len(matched) != 1 || matched[0].Code != "api.invariant" || !strings.Contains(matched[0].Message, "effective API endpoint address") || !strings.Contains(matched[0].Remediation, "spec.install.endpoints.api.address") {
+		t.Fatal(matched)
+	}
+}
+
+func TestEveryAdmissionRuleRemediationNamesWhatToChange(t *testing.T) {
+	type scenario struct {
+		name, field, message string
+		remedy               []string
+		build                func() (api.Object, api.Catalog)
+	}
+	machineSpec := func(change func(api.Value) api.Value) func() (api.Object, api.Catalog) {
+		return func() (api.Object, api.Catalog) {
+			o, c := fixture("libvirt", 1, false)
+			return o, rewrite(c, api.Machine, "node-0", change)
+		}
+	}
+	install := func(variant string, path string, value api.Value) func() (api.Object, api.Catalog) {
+		return func() (api.Object, api.Catalog) {
+			o, c := fixture(variant, 1, false)
+			o, _ = Normalize(o, c)
+			return o.WithSpec(o.Spec().WithPath(value, strings.Split(path, ".")...)), c
+		}
+	}
+	loadBalancer := func(ref string) func() (api.Object, api.Catalog) {
+		return func() (api.Object, api.Catalog) {
+			o, c := fixture("libvirt", 3, false)
+			objects := append(c.Objects(), obj(api.LoadBalancer, "lb", m("management", "external", "bindAddresses", list(m("name", "api", "address", "192.0.2.2"), m("name", "ingress", "address", "192.0.2.3")))))
+			source := m("type", "loadBalancer", "loadBalancerRef", "lb")
+			if ref != "" {
+				source = source.With("bindAddressRef", api.StringValue(ref))
+			}
+			o = o.WithSpec(o.Spec().WithPath(m("source", source), "install", "endpoints", "api"))
+			return o, api.NewCatalog(objects)
+		}
+	}
+	disconnected := func(change func(api.Object, api.Catalog) (api.Object, api.Catalog)) func() (api.Object, api.Catalog) {
+		return func() (api.Object, api.Catalog) {
+			o, c := fixture("libvirt", 1, false)
+			o = o.WithSpec(o.Spec().WithPath(api.StringValue("disconnected"), "install", "mode"))
+			return change(o, c)
+		}
+	}
+	cases := []scenario{
+		{"mixed provider platform", "$.spec.install.platform", "mixed provider types", []string{"spec.install.platform.type"}, func() (api.Object, api.Catalog) {
+			o, c := fixture("libvirt", 2, false)
+			c = rewrite(c, api.Machine, "node-1", func(s api.Value) api.Value { return s.WithPath(api.StringValue("other"), "substrate", "providerRef") })
+			return o, api.NewCatalog(append(c.Objects(), obj(api.InfraProvider, "other", m("kubevirt", m()))))
+		}},
+		{"openshift-node capability", "$.spec.nodes[0].machineRef", "openshift-node Machine capability", []string{"openshift-node", "spec.capabilities", "node-0"}, machineSpec(func(s api.Value) api.Value { return s.With("capabilities", api.StringList("other")) })},
+		{"os provided", "$.spec.nodes[0].machineRef", "OS is not provided", []string{"spec.os.provided", "node-0"}, machineSpec(func(s api.Value) api.Value { return s.WithPath(api.BoolValue(true), "os", "provided") })},
+		{"Machine networking", "$.spec.nodes[0].machineRef", "configured Machine networking", []string{"spec.network.configRef", "spec.network.inline", "node-0"}, machineSpec(func(s api.Value) api.Value { return s.Without("network") })},
+		{"redfish artifact endpoint", "$.spec.install.agent.redfishVirtualMedia.artifactServerEndpoint", "virtual-media artifact endpoint", []string{"spec.install.agent.redfishVirtualMedia.artifactServerEndpoint"}, func() (api.Object, api.Catalog) { return fixture("baremetal", 1, false) }},
+		{"boot artifacts endpoint", "$.spec.install.agent.bootArtifacts.artifactServerEndpoint", "boot-artifacts endpoint", []string{"spec.install.agent.bootArtifacts.artifactServerEndpoint"}, disconnected(func(o api.Object, c api.Catalog) (api.Object, api.Catalog) { return o, c })},
+		{"registry mirror", "$.spec.install.registries.mirror", "registry mirror selection", []string{"spec.install.registries.mirror"}, disconnected(func(o api.Object, c api.Catalog) (api.Object, api.Catalog) { return o, c })},
+		{"mirror trustBundleRef", "$.spec.install.registries.mirror.registryRef", "trustBundleRef", []string{"trustBundleRef", "spec.install.registries.mirror.registryRef"}, disconnected(func(o api.Object, c api.Catalog) (api.Object, api.Catalog) {
+			o = o.WithSpec(o.Spec().WithPath(m("registryRef", "mirror"), "install", "registries", "mirror"))
+			return o, api.NewCatalog(append(c.Objects(), obj(api.Registry, "mirror", m())))
+		})},
+		{"FIPS needs OpenShift", "$.spec.security.fips.enabled", "FIPS requires OpenShift", []string{"spec.security.fips.enabled", "spec.distribution.type"}, func() (api.Object, api.Catalog) {
+			o, c := fixture("libvirt", 1, false)
+			return o.WithSpec(o.Spec().With("distribution", m("type", "okd", "release", m("version", "4.21.15"))).With("security", m("fips", m("enabled", true)))), c
+		}},
+		{"prefixLength without address", "$.spec.install.endpoints.api.prefixLength", "prefix length requires an address", []string{"spec.install.endpoints.api.address", "spec.install.endpoints.api.prefixLength"}, install("kubevirt", "install.endpoints.api", m("source", m("type", "external"), "prefixLength", api.IntegerValue("24")))},
+		{"unknown bind address", "$.spec.install.endpoints.api.source.bindAddressRef", "bind address must resolve", []string{"spec.install.endpoints.api.source.bindAddressRef", "bindAddresses[].name"}, loadBalancer("missing")},
+		{"ambiguous bind address", "$.spec.install.endpoints.api.source.bindAddressRef", "explicit selection", []string{"spec.install.endpoints.api.source.bindAddressRef", "bindAddresses[].name"}, loadBalancer("")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			o, c := tc.build()
+			found := false
+			for _, issue := range Validate(o, c) {
+				if issue.Field != tc.field || !strings.Contains(issue.Message, tc.message) {
+					continue
+				}
+				found = true
+				for _, want := range tc.remedy {
+					if !strings.Contains(issue.Remediation, want) {
+						t.Fatalf("remedy %q does not name %q", issue.Remediation, want)
+					}
+				}
+			}
+			if !found {
+				t.Fatalf("rule %q did not fire at %s: %v", tc.message, tc.field, Validate(o, c))
+			}
+		})
+	}
+}

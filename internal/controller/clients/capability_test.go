@@ -1050,6 +1050,37 @@ func TestAnInterruptedPublicationNeedsAReplayToSeal(t *testing.T) {
 	}
 }
 
+func TestAReplayThatInstallsAHostPackageSealsTheInterruptedPublication(t *testing.T) {
+	selected := []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}
+	tools := &fakeTools{selected: selected, complete: true, present: true}
+	dnf := newDnf()
+	capability := stage(tools, dnf, &fakeSetup{}, &fakeInstaller{})
+	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Apply)
+	recorder := newRecorder(&fakeArea{})
+	digest := prerequisites.ToolsDigest(selected)
+	recorder.published[digest] = true
+	result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState()))
+	if err != nil || result.Outcome != reconciliation.OutcomeChanged || !slices.Contains(dnf.calls, "install libvirt-client (locked)") {
+		t.Fatalf("replay = %+v (%v), dnf calls %q", result, err, dnf.calls)
+	}
+	if !slices.Equal(recorder.sealed, []string{digest}) || !slices.Equal(recorder.current, []string{digest}) {
+		t.Fatalf("sealed %v, bound %v", recorder.sealed, recorder.current)
+	}
+}
+
+func TestASealFailureAfterAReplayedHostPackageInstallIsUnknown(t *testing.T) {
+	selected := []prerequisites.ToolDefinition{toolDefinition("helm", "v3.17.0")}
+	capability := stage(&fakeTools{selected: selected, complete: true, present: true}, newDnf(), &fakeSetup{}, &fakeInstaller{})
+	block := planBlock(t, capability, stateOf(environment(), machine("container-runtime", "libvirt"), cluster()), reconciliation.Apply)
+	recorder := newRecorder(&fakeArea{})
+	recorder.published[prerequisites.ToolsDigest(selected)] = true
+	recorder.sealErr = refuse("controller.state", "seal refused", "retry")
+	result, err := capability.Apply(context.Background(), recorder.execution(t, block, hostState()))
+	if err == nil || result.Outcome != reconciliation.OutcomeUnknown || len(recorder.current) != 0 {
+		t.Fatalf("seal failure = %+v (%v), bound %v", result, err, recorder.current)
+	}
+}
+
 func TestInterruptedStageUsesItsPreparedSourcesBeforeAnyContextBinding(t *testing.T) {
 	selected := []prerequisites.ToolDefinition{toolDefinition("helm", "v4.2.3")}
 	newer := toolDefinition("helm", "v4.2.4")

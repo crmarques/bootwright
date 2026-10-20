@@ -385,9 +385,52 @@ def test_the_rewrite_the_waits_leave_is_kept_before_the_final_read_and_the_custo
     assert "when" not in entries[keeps[1]]
 
 
-@pytest.mark.parametrize("missing,completed", [(["master-1"], True), (["master-0"], True), ([], False), ([], True)])
-def test_media_release_is_gated_by_fresh_complete_read_on_first_apply_and_replay(missing, completed):
-    entries = trusted(ROLE / "tasks" / "apply.yml")
+COMPACT = {
+    "identity": {"cluster": "compact", "context": "lab"}, "release": {"version": RELEASE},
+    "rendezvous": "192.0.2.10", "nodes": [
+        {"name": "master-0", "address": "192.0.2.10", "machine": "machine-00"},
+        {"name": "master-1", "address": "192.0.2.11", "machine": "machine-01"}],
+    "vips": [{"slot": "api", "address": "192.0.2.5", "bridge": "virbr-lab"},
+             {"slot": "ingress", "address": "192.0.2.7", "bridge": "virbr-lab"}]}
+COMPLETED = "True\nCompleted\n" + RELEASE
+
+
+def reads(nodes="master-0 master-1", nodes_rc=0, cluster_rc=0, completion=COMPLETED):
+    """What the four reads of cluster_state.yml register, as oc answers them."""
+    return {
+        "containercluster_install_agent_before": {"observation": {"identity": IDENTITY}},
+        "containercluster_install_agent_cluster": {
+            "rc": cluster_rc, "stdout": "clusterversion.config.openshift.io/version" if cluster_rc == 0 else "",
+            "stderr": "" if cluster_rc == 0 else TIMEOUT},
+        "containercluster_install_agent_release": {"rc": 0, "stdout": RELEASE, "stderr": ""},
+        "containercluster_install_agent_completion": {"rc": 0, "stdout": completion, "stderr": ""},
+        "containercluster_install_agent_nodes": {
+            "rc": nodes_rc, "stdout": nodes if nodes_rc == 0 else "", "stderr": "" if nodes_rc == 0 else TIMEOUT},
+    }
+
+
+def resolved_state(registered):
+    """The state cluster_state.yml resolves from those reads."""
+    task = state_task(lambda task: "ansible.builtin.set_fact" in task and "vars" in task)
+    scope = dict(task["vars"], bootwright_cluster_install_request=COMPACT, **registered)
+    templar = Templar(loader=LOADER, variables=scope)
+    return {key: templar.template(value)
+            for key, value in task["ansible.builtin.set_fact"]["containercluster_install_agent_state"].items()}
+
+
+def release_gate(registered, state):
+    """Whether the media release gate fires over that state, and its message."""
+    entries = apply_tasks()
+    task = entries[only(entries, lambda task: task.get("name") ==
+                        "Refuse media release until every declared node completed installation")]
+    scope = dict(task["vars"], bootwright_cluster_install_request=COMPACT,
+                 containercluster_install_agent_state=state, **registered)
+    templar = Templar(loader=LOADER, variables=scope)
+    return templar.evaluate_conditional(task["when"]), " ".join(templar.template(task["ansible.builtin.fail"]["msg"]).split())
+
+
+def test_media_release_is_gated_by_a_fresh_read_after_the_installation_wait():
+    entries = apply_tasks()
     gate = only(entries, lambda task: task.get("name") ==
                 "Refuse media release until every declared node completed installation")
     release = only(entries, lambda task: task.get("ansible.builtin.include_tasks") == "release.yml")
@@ -395,27 +438,69 @@ def test_media_release_is_gated_by_fresh_complete_read_on_first_apply_and_replay
                 and task.get("vars", {}).get("containercluster_install_agent_milestone") == "install-complete")
     assert wait < gate < release
     assert entries[gate - 1]["ansible.builtin.import_tasks"] == "cluster_state.yml"
-    task = entries[gate]
-    for replay in (False, True):
-        scope = dict(task["vars"], bootwright_cluster_install_request={
-            "identity": {"cluster": "compact"}, "release": {"version": RELEASE},
-            "rendezvous": "192.0.2.10", "nodes": [
-                {"name": "master-0", "address": "192.0.2.10"},
-                {"name": "master-1", "address": "192.0.2.11"}]},
-            containercluster_install_agent_before={"observation": {"identity": IDENTITY}},
-            containercluster_install_agent_settled=replay,
-            containercluster_install_agent_state={"cluster": IDENTITY, "release": RELEASE,
-                                                  "missing": missing, "completed": completed})
-        templar = Templar(loader=LOADER, variables=scope)
-        refuses = templar.evaluate_conditional(task["when"])
-        assert refuses is (bool(missing) or not completed)
-        if refuses:
-            message = templar.template(task["ansible.builtin.fail"]["msg"])
-            assert "No installation media was released" in message
-            for name in missing:
-                assert name in message
-            if "master-0" in missing:
-                assert "bootstrap control plane" in message and "Destroy" in message and "fresh apply" in message
+
+
+@pytest.mark.parametrize("registered,refuses,stranded", [
+    (reads(), False, False),
+    (reads(nodes="master-0"), True, False),
+    (reads(nodes="master-1"), True, True),
+    (reads(completion="True\nPartial\n" + RELEASE), True, False),
+])
+def test_media_release_names_the_stranded_rendezvous_only_from_a_read_that_lacks_it(registered, refuses, stranded):
+    fires, message = release_gate(registered, resolved_state(registered))
+    assert fires is refuses
+    if refuses:
+        assert "No installation media was released" in message
+        assert "could not be read" not in message
+        assert ("bootstrap control plane" in message and "Destroy this context and perform a fresh apply" in message) is stranded
+        if not stranded:
+            assert "Keep the installation media attached" in message
+
+
+# An apply after a host error found the rendezvous host missing goes back
+# through the boot path, which leaves every running node as it is, and fails at
+# the gate exactly as the first apply did.
+def test_a_replay_of_a_stranded_rendezvous_fails_the_same_way():
+    registered = reads(nodes="master-1")
+    first = release_gate(registered, resolved_state(registered))
+    machines = [node["machine"] for node in COMPACT["nodes"]]
+    state = dict(resolved_state(registered), powered=machines, ownMedia=machines, media=machines)
+    scope = dict(registered, bootwright_cluster_install_request=COMPACT, containercluster_install_agent_state=state)
+    entries = apply_tasks()
+    settled = entries[only(entries, lambda task: task.get("name") == "Decide whether this cluster is already installed")]
+    assert Templar(loader=LOADER, variables=scope).template(
+        settled["ansible.builtin.set_fact"]["containercluster_install_agent_settled"]) is False
+    boot = one("boot.yml", lambda task: task.get("name") == "Boot a node not already running from this cluster's image")
+    for node in COMPACT["nodes"]:
+        templar = Templar(loader=LOADER, variables=dict(scope, containercluster_install_agent_node=node))
+        assert templar.evaluate_conditional(boot["when"]) is False
+    probe = one("preboot_vips.yml", lambda task: task.get("register") == "containercluster_install_agent_vip_probes")
+    for vip in COMPACT["vips"]:
+        templar = Templar(loader=LOADER, variables=dict(scope, item=vip))
+        assert not all(templar.evaluate_conditional(condition) for condition in probe["when"])
+    assert release_gate(registered, state) == first
+    assert first[0] is True and "Destroy this context and perform a fresh apply" in first[1]
+
+
+def test_the_host_error_hint_names_a_destroy_and_a_fresh_apply_never_a_repeat():
+    defaults = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
+    hint = " ".join(Templar(loader=LOADER, variables=defaults).template(
+        defaults["containercluster_install_agent_host_error_hint"]).split())
+    assert "destroy this context and perform a fresh apply" in hint
+    assert "repeat the apply" not in hint.lower()
+
+
+# A read that fails after the installation wait counts every declared node
+# missing, the rendezvous host among them, yet proves nothing: the gate still
+# releases nothing, says the cluster could not be read and offers no destroy.
+@pytest.mark.parametrize("registered", [reads(nodes_rc=1), reads(cluster_rc=1)])
+def test_a_failed_read_after_the_wait_releases_nothing_and_offers_no_destroy(registered):
+    state = resolved_state(registered)
+    fires, message = release_gate(registered, state)
+    assert fires is True
+    assert "could not be read" in message and "Repeat the apply" in message
+    assert "No installation media was released" in message
+    assert "Destroy" not in message and "bootstrap control plane" not in message
 
 
 def test_a_failed_node_read_cannot_prove_presence_from_partial_stdout():

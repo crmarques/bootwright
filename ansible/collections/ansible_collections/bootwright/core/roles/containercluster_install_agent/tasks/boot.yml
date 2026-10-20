@@ -235,6 +235,58 @@
               {{ containercluster_install_agent_node.machine }} was being booted when it was spent.
           when: ansible_failed_result.timedout is defined
 
+        # A failed insert may still have left its link attached, so the
+        # controller is read, changing nothing, and the link this attempt just
+        # published is retired only when the controller answers presenting
+        # something else. A read that fails retires nothing and is named
+        # here; the next apply's sweep reads every controller again before it
+        # boots anything. A step the budget stopped ended the rescue above.
+        # A rescue inherits its block's timeout, which near the deadline is the
+        # one-second floor, and a task timeout raises past failed_when
+        # (executor/task_executor.py), so the read would end the rescue with a
+        # censored timeout. Its own timeout keyword is found before any parent
+        # is consulted (playbook/task.py _get_parent_attribute), so it reads
+        # under the media read's 2-minute bound plus 30 seconds, whatever the
+        # boot budget has left. The rescue ends in a fail, so the media read of
+        # the state read after boot, which the installation's deadline allows
+        # for each node, does not run in this attempt.
+        - name: Read what the controller presents after an insert it did not complete
+          bootwright.core.redfish_system_read:
+            endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+            user: '{{ lookup("ansible.builtin.file", containercluster_install_agent_user) }}'
+            password: '{{ lookup("ansible.builtin.file", containercluster_install_agent_password) }}'
+            verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+            ca_data: '{{ lookup("ansible.builtin.file", containercluster_install_agent_ca) if containercluster_install_agent_ca else omit }}'
+            media: true
+          register: containercluster_install_agent_after_insert
+          timeout: 150
+          when: containercluster_install_agent_insertion.msg is defined
+          failed_when: false
+          no_log: true
+
+        - name: Stop at a read after a failed insert the management controller did not answer
+          ansible.builtin.fail:
+            msg: >-
+              inserting this cluster's image into Machine {{ containercluster_install_agent_node.machine }}
+              failed:
+              {{ (containercluster_install_agent_insertion.msg | default('') | string | bootwright.core.printable)[:384] }};
+              reading what its management controller presents afterwards failed:
+              {{ (containercluster_install_agent_after_insert.msg | string | bootwright.core.printable)[:384] }};
+              the private link of that insert is left in place until the next apply retires it
+          when: containercluster_install_agent_after_insert.msg is defined
+
+        - name: Retire the link of a failed insert the controller does not present
+          bootwright.core.containercluster_media_token:
+            request: '{{ bootwright_cluster_install_request }}'
+            source: '{{ containercluster_install_agent_url }}'
+            image: '{{ containercluster_install_agent_token.url }}'
+            operation: remove
+          when:
+            - containercluster_install_agent_insertion.msg is defined
+            - containercluster_install_agent_after_insert.media is defined
+            - containercluster_install_agent_token.url.split('/')[-2] not in (containercluster_install_agent_after_insert.media | string)
+          no_log: true
+
         - name: Name the substrate's refusal of the node to the runner
           bootwright.core.containercluster_install_protocol:
             phase: refused

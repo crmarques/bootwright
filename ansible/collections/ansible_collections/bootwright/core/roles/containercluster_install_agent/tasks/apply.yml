@@ -84,6 +84,33 @@
 - name: Read the cluster and its nodes back
   ansible.builtin.import_tasks: state.yml
 
+# An insert that failed, one a timeout or an interruption stopped, and one a
+# later insert replaced each leave a link no controller presents, and a
+# controller may have journaled it. Every link no controller presents now is
+# retired here, before this attempt boots anything.
+- name: Retire every insert link no management controller presents
+  bootwright.core.containercluster_media_token:
+    request: '{{ bootwright_cluster_install_request }}'
+    source: '{{ containercluster_install_agent_before.observation.url }}'
+    presented: >-
+      {{ containercluster_install_agent_controllers.results | default([])
+         | map(attribute='media', default='') | list }}
+    operation: sweep
+  when: containercluster_install_agent_before.observation.url | default('') | length > 0
+  register: containercluster_install_agent_swept
+  failed_when: false
+  no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed,
+# so the sweep's own refusal, which carries counts and never a URL or
+# token, is reported here.
+- name: Stop at a refusal of the sweep before any boot
+  ansible.builtin.fail:
+    msg: >-
+      retiring the insert links no management controller presents failed:
+      {{ (containercluster_install_agent_swept.msg | string | bootwright.core.printable)[:512] }}
+  when: containercluster_install_agent_swept.msg is defined
+
 # Decided once, before any effect. Every later guard reads this fact rather
 # than the live state, which this attempt is about to change. A cluster that
 # answers with this build's identity, at the declared release and whole, may
@@ -211,9 +238,19 @@
 - name: Read completion before releasing any installation media
   ansible.builtin.import_tasks: cluster_state.yml
 
+# A read that failed proves nothing about which nodes the cluster holds: the
+# nodes read then counts every declared node missing. Only a read in which
+# every request was answered, the cluster with this build's identity, can show
+# the rendezvous host absent and so name it stranded.
 - name: Refuse media release until every declared node completed installation
   ansible.builtin.fail:
     msg: >-
+      {% if containercluster_install_agent_unread | bool -%}
+      cluster {{ bootwright_cluster_install_request.identity.cluster }} could not
+      be read with this build's identity after its installation wait, so nothing
+      proved which declared nodes completed installation. No installation media
+      was released. Repeat the apply to read the cluster again.
+      {%- else -%}
       cluster {{ bootwright_cluster_install_request.identity.cluster }} has not
       proved installation complete; missing declared nodes:
       {{ containercluster_install_agent_state.missing | sort | join(', ') or 'none' }}.
@@ -223,10 +260,16 @@
          if containercluster_install_agent_rendezvous in containercluster_install_agent_state.missing
          else 'Keep the installation media attached and inspect the cluster before repeating the apply.' }}
       No installation media was released.
+      {%- endif %}
   vars:
     containercluster_install_agent_rendezvous: >-
       {{ (bootwright_cluster_install_request.nodes | selectattr('address', 'equalto', bootwright_cluster_install_request.rendezvous)
           | map(attribute='name') | sort | first) | default('') }}
+    containercluster_install_agent_unread: >-
+      {{ [containercluster_install_agent_cluster, containercluster_install_agent_release,
+          containercluster_install_agent_completion, containercluster_install_agent_nodes]
+         | map(attribute='rc', default=1) | reject('equalto', 0) | list | length > 0
+         or containercluster_install_agent_state.cluster != containercluster_install_agent_before.observation.identity }}
   when: >-
     containercluster_install_agent_state.completed is not sameas true
     or containercluster_install_agent_state.missing | length > 0
@@ -279,6 +322,31 @@
 # certificate.
 - name: Read the installed cluster and its nodes back
   ansible.builtin.import_tasks: state.yml
+
+# Every node released its media above, so a link a replaced insert left is
+# retired with the release, keeping only what a controller still presents.
+- name: Retire every insert link no released node presents
+  bootwright.core.containercluster_media_token:
+    request: '{{ bootwright_cluster_install_request }}'
+    source: '{{ containercluster_install_agent_before.observation.url }}'
+    presented: >-
+      {{ containercluster_install_agent_controllers.results | default([])
+         | map(attribute='media', default='') | list }}
+    operation: sweep
+  when: containercluster_install_agent_before.observation.url | default('') | length > 0
+  register: containercluster_install_agent_swept
+  failed_when: false
+  no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed,
+# so the sweep's own refusal, which carries counts and never a URL or
+# token, is reported here.
+- name: Stop at a refusal of the sweep after the release
+  ansible.builtin.fail:
+    msg: >-
+      retiring the insert links no management controller presents failed:
+      {{ (containercluster_install_agent_swept.msg | string | bootwright.core.printable)[:512] }}
+  when: containercluster_install_agent_swept.msg is defined
 
 # The runner reads this copy back and removes it with the job; the engine keeps
 # it in the context's custody before it records this block done.

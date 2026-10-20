@@ -220,7 +220,7 @@ func TestCompleteContainerGraphCompilation(t *testing.T) {
 
 func TestContainerSchemaAndAuthoredFailures(t *testing.T) {
 	cases := map[string]string{
-		"release without patch":    strings.Replace(clusterYAML, "version: 4.21.15", "version: 4.21", 1),
+		"release without patch":    strings.Replace(clusterYAML, "version: 4.21.15", `version: "4.21"`, 1),
 		"retired pool":             strings.Replace(clusterYAML, "  nodes:\n", "  controlPlane: {}\n  nodes:\n", 1),
 		"nonmatching platform":     strings.Replace(clusterYAML, "  install:\n    endpoints:", "  install:\n    platform:\n      type: none\n      vsphere: {}\n    endpoints:", 1),
 		"derived address as input": strings.Replace(clusterYAML, "      api:\n        source:", "      api:\n        address: 192.0.2.10\n        source:", 1),
@@ -236,6 +236,15 @@ func TestContainerSchemaAndAuthoredFailures(t *testing.T) {
 				t.Fatal("invalid compilation succeeded")
 			}
 		})
+	}
+}
+
+func TestReleaseWithoutPatchIsRefusedByTheReleaseGrammar(t *testing.T) {
+	content := strings.Replace(clusterYAML, "version: 4.21.15", `version: "4.21"`, 1)
+	_, _, err := compiler().Compile(context.Background(), sources(content))
+	found := diagnostics.Of(err)
+	if len(found) != 1 || found[0].Code != "api.invariant" || found[0].Field != "$.spec.distribution.release.version" {
+		t.Fatalf("refusal = %#v", found)
 	}
 }
 

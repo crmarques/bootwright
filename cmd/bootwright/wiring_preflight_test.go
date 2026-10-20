@@ -38,12 +38,12 @@ func TestStorageCapacityAdmissionSkipsTransitionsThatAllocateNoGuest(t *testing.
 		"nothing left to start":            {},
 	}
 	for name, starting := range cases {
-		if err := libvirtCapacityAdmission(context.Background(), "lab", catalog, owned, starting); err != nil {
+		if err := libvirtCapacityAdmission(nil)(context.Background(), "lab", catalog, owned, starting); err != nil {
 			t.Fatalf("%s: admission = %v", name, diagnostics.Of(err))
 		}
 	}
 	starting := []reconciliation.Block{block(reconciliation.StageClusters, "StorageCluster", "lab-ceph"), block(reconciliation.StageMachines, libvirt.MachineKind, allocations[0].Machine)}
-	err = libvirtCapacityAdmission(context.Background(), "lab", catalog, owned, starting)
+	err = libvirtCapacityAdmission(nil)(context.Background(), "lab", catalog, owned, starting)
 	var failure *diagnostics.Failure
 	if !errors.As(err, &failure) || len(failure.Diagnostics) == 0 {
 		t.Fatalf("a transition starting a libvirt Machine with unknown capacity = %v", err)

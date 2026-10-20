@@ -7,7 +7,7 @@
     sleep: 1
     timeout: >-
       {{ [(containercluster_install_agent_boot_deadline | int)
-          - (((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)), 0] | max }}
+          - (((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)), 1] | max }}
   loop: '{{ bootwright_cluster_install_request.nodes }}'
   loop_control:
     label: '{{ item.machine }}'
@@ -21,7 +21,7 @@
       {% for result in containercluster_install_agent_ssh_ready.results | selectattr('msg', 'defined') %}
       Machine {{ result.item.machine }} ({{ result.item.address }}) never answered TCP 22.
       {% endfor %}
-      {{ containercluster_install_agent_boot_spent_hint }}
+      {{ containercluster_install_agent_reach_hint }}
   when: containercluster_install_agent_ssh_ready.results | selectattr('msg', 'defined') | list | length > 0
 
 - name: Prove the rendezvous service when its host was booted in this attempt
@@ -32,7 +32,7 @@
     sleep: 1
     timeout: >-
       {{ [(containercluster_install_agent_boot_deadline | int)
-          - (((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)), 0] | max }}
+          - (((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)), 1] | max }}
   loop: '{{ bootwright_cluster_install_request.nodes }}'
   loop_control:
     label: '{{ item.machine }}'
@@ -49,5 +49,5 @@
       {% for result in containercluster_install_agent_rendezvous_ready.results | selectattr('msg', 'defined') %}
       Machine {{ result.item.machine }} ({{ result.item.address }}) never answered TCP 8090.
       {% endfor %}
-      {{ containercluster_install_agent_boot_spent_hint }}
+      {{ containercluster_install_agent_reach_hint }}
   when: containercluster_install_agent_rendezvous_ready.results | selectattr('msg', 'defined') | list | length > 0

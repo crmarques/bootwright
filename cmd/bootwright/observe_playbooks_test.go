@@ -380,6 +380,16 @@ func TestEveryObservePlaybookRunsOnlyAllowedTasks(t *testing.T) {
 		}
 	})
 
+	t.Run("a token sweep is reported", func(t *testing.T) {
+		planted := "\n- name: Sweep the tokens\n  bootwright.core.containercluster_media_token:\n    presented: []\n    operation: sweep\n"
+		problems := walkObservePlaybooks(observeAssetsWith(observeRoleRoot+"containercluster_install_agent/tasks/state.yml", planted))
+		if !slices.ContainsFunc(problems, func(problem string) bool {
+			return strings.Contains(problem, `containercluster_media_token ("Sweep the tokens") outside its constraint`)
+		}) {
+			t.Fatalf("the token sweep was not reported: %v", problems)
+		}
+	})
+
 	t.Run("a custody copy no output gates is reported", func(t *testing.T) {
 		planted := "\n- name: Copy anyway\n  ansible.builtin.copy:\n    src: /etc/passwd\n    dest: /root/passwd\n"
 		problems := walkObservePlaybooks(observeAssetsWith(observeRoleRoot+"containercluster_media_agent/tasks/observe.yml", planted))

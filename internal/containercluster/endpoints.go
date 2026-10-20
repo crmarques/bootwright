@@ -11,7 +11,32 @@ import (
 type Endpoint struct {
 	Name    string
 	Address string
+	Slot    string
 	Subtree bool
+}
+
+const ConsolePrefix = "console-openshift-console."
+
+func WildcardLabel(cluster string) string {
+	label := "bootwright-" + cluster
+	if len(label) > 63 {
+		label = label[:63]
+	}
+	return strings.TrimRight(label, "-")
+}
+
+func ResolutionNames(catalog api.Catalog, cluster api.Object) []Endpoint {
+	var names []Endpoint
+	for _, endpoint := range Endpoints(catalog, cluster) {
+		if !endpoint.Subtree {
+			names = append(names, endpoint)
+			continue
+		}
+		names = append(names,
+			Endpoint{Name: ConsolePrefix + endpoint.Name, Address: endpoint.Address, Slot: "ingress"},
+			Endpoint{Name: WildcardLabel(cluster.Name()) + "." + endpoint.Name, Address: endpoint.Address, Slot: "ingress-wildcard"})
+	}
+	return names
 }
 
 func Endpoints(catalog api.Catalog, cluster api.Object) []Endpoint {
@@ -30,7 +55,7 @@ func Endpoints(catalog api.Catalog, cluster api.Object) []Endpoint {
 		if slot == "ingress" {
 			name = "apps"
 		}
-		endpoints = append(endpoints, Endpoint{Name: name + suffix, Address: address, Subtree: slot == "ingress"})
+		endpoints = append(endpoints, Endpoint{Name: name + suffix, Address: address, Slot: slot, Subtree: slot == "ingress"})
 	}
 	slices.SortFunc(endpoints, func(a, b Endpoint) int { return strings.Compare(a.Name, b.Name) })
 	return endpoints

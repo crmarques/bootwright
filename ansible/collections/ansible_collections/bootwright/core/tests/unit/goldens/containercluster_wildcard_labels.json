@@ -1,0 +1,32 @@
+[
+  {
+    "case": "short",
+    "cluster": "sno",
+    "label": "bootwright-sno"
+  },
+  {
+    "case": "inner hyphen",
+    "cluster": "lab-sno",
+    "label": "bootwright-lab-sno"
+  },
+  {
+    "case": "exactly one label",
+    "cluster": "cccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "label": "bootwright-cccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  {
+    "case": "longest",
+    "cluster": "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "label": "bootwright-cccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  {
+    "case": "cut after a hyphen",
+    "cluster": "ccccccccccccccccccccccccccccccccccccccccccccccccccc-deeeeeeeeee",
+    "label": "bootwright-ccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  {
+    "case": "cut after two hyphens",
+    "cluster": "cccccccccccccccccccccccccccccccccccccccccccccccccc--deeeeeeeeee",
+    "label": "bootwright-cccccccccccccccccccccccccccccccccccccccccccccccccc"
+  }
+]

@@ -341,12 +341,10 @@ func nativeValue(value api.Value) any {
 
 func endpointNames(catalog api.Catalog, object api.Object) []Endpoint {
 	var names []Endpoint
-	for _, endpoint := range containercluster.Endpoints(catalog, object) {
-		name := endpoint.Name
-		if endpoint.Subtree {
-			name = "console-openshift-console." + name
+	for _, endpoint := range containercluster.ResolutionNames(catalog, object) {
+		if endpoint.Slot != "ingress-wildcard" {
+			names = append(names, Endpoint{Name: endpoint.Name, Address: endpoint.Address})
 		}
-		names = append(names, Endpoint{Name: name, Address: endpoint.Address})
 	}
 	slices.SortFunc(names, func(x, y Endpoint) int { return strings.Compare(x.Name, y.Name) })
 	return names

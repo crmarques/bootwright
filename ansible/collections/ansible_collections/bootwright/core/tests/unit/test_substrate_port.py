@@ -63,7 +63,10 @@ COMPOSED = {
 }
 
 # Only these read the media a machine presents; every other read is a power read.
-MEDIA_READS = {"containercluster_install_agent/tasks/state.yml", "managedos_install_anaconda/tasks/observe.yml"}
+# A cluster's boot reads it only after an insert failed, to retire the link
+# the controller does not present.
+MEDIA_READS = {"containercluster_install_agent/tasks/boot.yml", "containercluster_install_agent/tasks/state.yml",
+               "managedos_install_anaconda/tasks/observe.yml"}
 READS = MEDIA_READS | {
     "machine_power_read_redfish/tasks/read.yml",
     "machine_power_redfish/tasks/power.yml",

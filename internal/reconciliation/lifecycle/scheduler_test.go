@@ -899,6 +899,10 @@ func TestAFailedResolutionIsRetriedButAFailedAttemptIsNot(t *testing.T) {
 	}
 }
 
+// heldInstallationWindow is how long a held installation must stand alone, far
+// beyond the moment an unserialized scheduler admits its peer.
+const heldInstallationWindow = time.Second
+
 func TestClusterInstallationsSerializeWhileMediaBuildsOverlap(t *testing.T) {
 	first := dependent("cluster-install-alpha", "cluster-media-alpha")
 	second := dependent("cluster-install-bravo", "cluster-media-bravo")
@@ -916,7 +920,17 @@ func TestClusterInstallationsSerializeWhileMediaBuildsOverlap(t *testing.T) {
 		t.Fatal("media builds did not start together", first)
 	}
 	watch.admit()
-	watch.gather(t, 1)
+	installing := watch.gather(t, 1)
+	select {
+	case early := <-watch.arrived:
+		t.Fatalf("%s started while %v was still held installing", early, installing)
+	case <-time.After(heldInstallationWindow):
+	}
+	watch.admit()
+	following := watch.gather(t, 1)
+	if want := []string{"cluster-install-alpha", "cluster-install-bravo"}; !slices.Equal(slices.Sorted(slices.Values(append(installing, following...))), want) {
+		t.Fatalf("installations started as %v then %v, want each of %v once", installing, following, want)
+	}
 	watch.open()
 	if err := returnedWithin(t, finished); err != nil {
 		t.Fatal(err)

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import pathlib
 import tempfile
+from unittest import mock
 
 from ansible_collections.bootwright.core.plugins.modules import containercluster_media_token
 from types import SimpleNamespace
@@ -312,13 +313,14 @@ def resolved_media(results, published=PUBLISHED):
     scope["containercluster_install_agent_before"] = {"observation": {"identity": IDENTITY, "url": published}}
     scope["containercluster_install_agent_state"] = {}
     identities = []
-    with tempfile.TemporaryDirectory() as directory:
+    with tempfile.TemporaryDirectory() as directory, mock.patch.object(containercluster_media_token, "trusted", lambda fd: None):
         if published:
-            source = pathlib.Path(directory) / TOKEN
-            source.mkdir()
+            root = pathlib.Path(directory, "server", "public", "private", "clusters", "sno")
+            source = root / TOKEN
+            source.mkdir(parents=True)
             (source / "agent.iso").write_bytes(b"image")
             base = published.rsplit("/", 2)[0]
-            request = {"publicationRoot": {"path": directory, "url": base}}
+            request = {"publicationRoot": {"path": str(root), "url": base}}
             identities = [{"item": result, **containercluster_media_token.operate(
                 request, published, result.get("media", ""), "inspect")} for result in results]
     scope["containercluster_install_agent_media_identity"] = {"results": identities}

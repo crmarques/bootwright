@@ -792,7 +792,7 @@ def skip():
 
 
 def bounded():
-    return found(INSTALL, "boot.yml", lambda task: "timeout" in task)
+    return found(INSTALL, "boot.yml", lambda task: "timeout" in task and "block" in task)
 
 
 def test_the_boot_phase_deadline_is_set_once_before_the_first_node():
@@ -826,7 +826,8 @@ def test_every_boot_step_runs_under_what_the_boot_phase_has_left():
         assert max(1, want - 2) <= int(rendering.template(bounded()["timeout"])) <= want
     # A refusal of the node's pre-boot proof is named between the two
     # (test_containercluster_pre_boot.py), after the budget, which it never is.
-    stopped, named, other = bounded()["rescue"]
+    rescue = bounded()["rescue"]
+    stopped, named, other = rescue[0], rescue[-2], rescue[-1]
     assert named["bootwright.core.containercluster_install_protocol"]["phase"] == "refused"
     rendering = scope(INSTALL, containercluster_install_agent_node={"machine": "sno-01"},
                       ansible_failed_result={"failed": True, "timedout": {"period": 12}})
@@ -880,6 +881,15 @@ def test_every_budget_clock_counts_true_seconds_across_a_daylight_saving_change(
     taking = found(INSTALL, "wait_attempt.yml",
                    lambda task: "containercluster_install_agent_remaining" in (task.get("ansible.builtin.set_fact") or {}))
     stepping = found(INSTALL, "boot.yml", lambda task: "timeout" in task and "block" in task)
+    proving = [task["ansible.builtin.wait_for"] for task in walk(trusted(INSTALL / "tasks" / "readiness.yml"))
+               if "ansible.builtin.wait_for" in task]
+    assert [proof["port"] for proof in proving] == [22, 8090]
+    for elapsed in (1799, 1800, 1801, 3600, 7199, 7200, 9000):
+        clock.seconds = start + elapsed
+        for proof in proving:
+            left = int(scope(INSTALL, now=clock, containercluster_install_agent_boot_deadline=start + 7200).template(
+                proof["timeout"]))
+            assert left == max(7200 - elapsed, 1)
     for elapsed in (1799, 1800, 1801, 3600):
         clock.seconds = start + elapsed
         remaining = int(scope(INSTALL, now=clock, containercluster_install_agent_deadline=deadline).template(
@@ -907,7 +917,26 @@ def test_bootstrap_timeout_or_budget_spent_reads_hosts_once(tmp_path, service, s
     wait = Wait(script, work=asset_state(tmp_path / "work"), nodes=NODES)
     message = wait.run()
     assert message.startswith("nodes master-1, master-2 never registered")
+    assert "reached ready" not in message and "never started installing" not in message
     assert service.seen == [READ]
+    assert TOKEN not in message
+
+
+# The installer gives up on its own compiled deadline just short of the
+# budget, and no attempt follows: only its timeout makes the wait read, and a
+# cluster held short of every declared node never reached ready.
+def test_the_installers_own_timeout_reads_hosts_and_names_no_stall(tmp_path, service):
+    wait = Wait([(1, TIMED_OUT, 4690)], work=asset_state(tmp_path / "work"), nodes=NODES)
+    message = wait.run()
+    assert wait.runs == [(0, 4703)] and wait.pauses == [13]
+    assert wait.facts["containercluster_install_agent_wait"]["rc"] == 1
+    assert wait.facts["containercluster_install_agent_stalled"] is False
+    assert len(wait.reads) == 1 and service.seen == [READ]
+    assert message.startswith("nodes master-1, master-2 never registered with the assisted service on the "
+                              "rendezvous host. The rendezvous node starts installing only once every declared "
+                              "node reports known.")
+    assert "reached ready" not in message and "never started installing" not in message
+    assert "the installer stopped watching on its own compiled deadline" in message
     assert TOKEN not in message
 
 

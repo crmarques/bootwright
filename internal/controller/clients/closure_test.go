@@ -40,6 +40,42 @@ func guestOnLibvirt() []api.Object {
 	}
 }
 
+func openshiftDistribution() api.Value {
+	return api.MapValue(text("type", "openshift"), field("release", api.MapValue(text("version", "4.19.3"))))
+}
+
+// agentNodes is an agent-installed cluster whose node has a declared Machine,
+// which makes the controller generate that node's network configuration.
+func agentNodes() []api.Object {
+	return []api.Object{
+		api.NewObject(api.Machine, "node", api.Value{}, api.MapValue()),
+		api.NewObject(api.ContainerCluster, "hub", api.Value{}, api.MapValue(
+			field("distribution", openshiftDistribution()),
+			field("install", api.MapValue(text("method", "agent"))),
+			field("nodes", api.ListValue(api.MapValue(text("machineRef", "node")))),
+		)),
+	}
+}
+
+// probedVirtualIP is a multi-node bare-metal agent cluster whose IPv4 virtual
+// IPs sit on a managed network of a provider hosted on the controller.
+func probedVirtualIP() []api.Object {
+	attachment := api.MapValue(field("libvirt", api.MapValue(text("management", "managed"), text("address", "198.51.100.1/24"), text("bridge", "virbr-lab"))))
+	provider := api.NewObject(api.InfraProvider, "hosted", api.Value{}, api.MapValue(
+		field("libvirt", api.MapValue(text("machineRef", "controller"))),
+		field("networkAttachments", api.ListValue(attachment)),
+	))
+	endpoints := api.MapValue()
+	for _, slot := range []string{"api", "api-int", "ingress"} {
+		endpoints = endpoints.With(slot, api.MapValue(text("address", "198.51.100.10"), field("source", api.MapValue(text("type", "openshift")))))
+	}
+	return []api.Object{provider, api.NewObject(api.ContainerCluster, "hub", api.Value{}, api.MapValue(
+		field("distribution", openshiftDistribution()),
+		field("install", api.MapValue(text("method", "agent"), field("platform", api.MapValue(text("type", "baremetal"))), field("endpoints", endpoints))),
+		field("nodes", api.ListValue(api.MapValue(), api.MapValue(), api.MapValue())),
+	))}
+}
+
 func evidenceOf(t *testing.T, data json.RawMessage) Evidence {
 	t.Helper()
 	var evidence Evidence
@@ -65,6 +101,8 @@ func selections() map[string][]api.Object {
 		"a provider hosted here":           {environment(), machine("container-runtime"), hostedProvider()},
 		"a Machine on a libvirt provider":  append([]api.Object{environment(), machine("container-runtime")}, guestOnLibvirt()...),
 		"an installer-media tooling alone": append([]api.Object{environment(), machine("container-runtime")}, installerMedia()...),
+		"agent node network configuration": append([]api.Object{environment(), machine("container-runtime")}, agentNodes()...),
+		"a probed virtual IP":              append([]api.Object{environment(), machine("container-runtime")}, probedVirtualIP()...),
 	}
 }
 
@@ -88,6 +126,36 @@ func TestARequestAndStageNativeOfAgree(t *testing.T) {
 			request, want := NewRequest(selection, tools), prerequisites.StageNativeOf(selection)
 			if request.native() != want || !slices.Equal(request.Packages, prerequisites.StageRequirements(want)) {
 				t.Fatalf("the request reads %+v with %v, the selection %+v with %v", request.native(), request.Packages, want, prerequisites.StageRequirements(want))
+			}
+		})
+	}
+}
+
+// The frozen request names the nmstate and iputils host packages exactly when
+// the graph selects them, and the plan presents them as host-package impacts.
+func TestTheFrozenRequestCarriesNMStateAndIPUtils(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		objects []api.Object
+		nmstate bool
+		iputils bool
+		want    string
+	}{
+		{"agent node network configuration", agentNodes(), true, false, "nmstate"},
+		{"a probed virtual IP", probedVirtualIP(), false, true, "iputils"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			state := stateOf(append([]api.Object{environment(), machine("container-runtime")}, test.objects...)...)
+			block := planBlock(t, unwired(), state, reconciliation.Apply)
+			request := stageRequest(t, block)
+			if request.NMState != test.nmstate || request.IPUtils != test.iputils || request.native().NMState != test.nmstate || request.native().IPUtils != test.iputils {
+				t.Fatalf("the request reads %+v", request)
+			}
+			if !slices.Contains(request.Packages, test.want) || !slices.Contains(block.Impacts, "install-host-package "+test.want) {
+				t.Fatalf("packages %v, impacts %v", request.Packages, block.Impacts)
+			}
+			if test.nmstate && !slices.Equal(request.Packages, []string{"nmstate"}) {
+				t.Fatalf("agent media installs %v", request.Packages)
 			}
 		})
 	}

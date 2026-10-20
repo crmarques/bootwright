@@ -92,6 +92,37 @@
         - containercluster_install_agent_ejected.results[containercluster_install_agent_cleanup_index].msg is not defined
       no_log: true
 
+    # A link a failed or replaced insert left is presented by no controller,
+    # so only the media of a node whose eject was not proved is kept.
+    - name: Retire every insert link no node whose eject failed presents
+      bootwright.core.containercluster_media_token:
+        request: '{{ bootwright_cluster_install_request }}'
+        source: '{{ containercluster_install_agent_before.observation.url }}'
+        presented: >-
+          {{ containercluster_install_agent_controllers.results | default([])
+             | rejectattr('item.machine', 'in', containercluster_install_agent_released_machines)
+             | map(attribute='media', default='') | list }}
+        operation: sweep
+      vars:
+        containercluster_install_agent_released_machines: >-
+          {{ containercluster_install_agent_ejected.results | default([])
+             | rejectattr('msg', 'defined')
+             | map(attribute='containercluster_install_agent_node.machine') | list }}
+      when: containercluster_install_agent_before.observation.url | default('') | length > 0
+      register: containercluster_install_agent_swept
+      failed_when: false
+      no_log: true
+
+    # ansible-core keeps nothing of a failure under no_log but that it failed,
+    # so the sweep's own refusal, which carries counts and never a URL or
+    # token, is reported here.
+    - name: Stop at a refusal of the sweep after the ejects
+      ansible.builtin.fail:
+        msg: >-
+          retiring the insert links no management controller presents failed:
+          {{ (containercluster_install_agent_swept.msg | string | bootwright.core.printable)[:512] }}
+      when: containercluster_install_agent_swept.msg is defined
+
 - name: Report media release completion
   bootwright.core.containercluster_install_protocol:
     phase: group

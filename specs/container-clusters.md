@@ -57,6 +57,7 @@ an agent-install plan:
 | Field | Meaning for the agent installer |
 | --- | --- |
 | `spec.distribution.release.channel` | Informational, including a channel derived from the version; release selection uses the exact version or image. |
+| `spec.install.endpoints.*.dnsName` | Inert; the installer derives every endpoint name from the cluster name and zone. Only `api-int`'s `dnsName` is read: admission refuses an API named certificate that carries it. |
 | `spec.install.endpoints.*.port` | Inert; the installer uses its native endpoint ports. |
 | `spec.install.endpoints.*.scheme` | Inert; the installer uses its native endpoint protocols. |
 | `spec.install.endpoints.*.prefixLength` | Inert; no installer input consumes it. |
@@ -281,6 +282,16 @@ names are its kernel names once it is installed.
 Not yet met: bond members are not identified by permanent address and none of
 these refusals exists; tracked as [B718](milestones/m3.md#b718).
 
+The name servers a node selects through its network's `dns` field become
+`dns-resolver.config.server` in that node's host record. Admission refuses a
+node whose composed network configuration authors `dns-resolver.config.server`
+and also selects name servers, with an `api.invariant` diagnostic at
+`nodes[i].machineRef` that directs the operator to keep one of the two on the
+Machine. A node that authors `dns-resolver.config.server` and selects no name
+servers reaches the installer with its authored list unchanged. A
+[managed-OS installation](managed-os.md#refusal-table) refuses the same
+combination under its own wording.
+
 ### Install-time manifests
 
 The media block writes into `<work>/openshift/`, before it builds the image, the
@@ -394,6 +405,15 @@ owns `private/clusters/<cluster>/` as its reserved path. Its request names the
 selected server's serving certificate Secret among its bindings, and its apply
 hands the adapter that Secret's certificate part alone, as the authority the
 fetch proving the publication verifies the listener against.
+
+The installation block reaches that reserved path by file descriptor and
+follows no symbolic link from the artifact server's content root down, so a
+link anywhere there refuses every proof, insert and retirement of its links.
+The directories above the content root may be symbolic links, so a controller
+can move its services root onto a larger disk, but every directory the walk to
+the content root passes through, each link resolved, must be owned by root and
+writable by neither group nor other; any other layout refuses as a publication
+that could not be proved, in apply, observation and removal alike.
 
 That contract requires the fetching controller to verify the serving
 certificate. A physical management controller does so under the trust its
@@ -534,8 +554,8 @@ Not yet met: the image is inserted through the Redfish modules directly rather
 than through each node's `media_insert`; tracked as
 [B704](milestones/m1.md#b704).
 
-**Virtual IPs are free before boot.** When the boot will boot every node, so no
-node runs this cluster's image yet, the block first proves that no host answers
+**Virtual IPs are free before boot.** When the boot is a fresh one, so no
+declared node is powered on, the block first proves that no host answers
 a virtual IP of a multi-node `baremetal` cluster, for each such address inside a
 managed libvirt network whose provider host is the controller: it sends
 duplicate-address ARP probes from that network's bridge, three within three
@@ -545,7 +565,11 @@ anything is inserted. The assisted service refuses a virtual IP another host
 answers only after every node has registered, and the installer reports that
 as a timeout naming no address. Bootwright never assigns a virtual IP to a host
 interface. An IPv6 virtual IP and one on any other network is not probed, and
-the evidence names the addresses that were not probed.
+the evidence names the addresses that were not probed. Once any declared node is
+powered on, whether it runs this cluster's image or belongs to an installed
+cluster whose media was released, nothing is probed: the cluster's own nodes
+may answer its virtual IPs, and a running node without this cluster's image
+refuses at its pre-boot proof.
 
 
 **Each insert has its own token.** A management controller holds the URL it is
@@ -558,6 +582,24 @@ the image the media block published, proves that link by the
 [publication fetch](infrastructure-services.md#private-consumer-publication),
 and inserts its URL. After the eject that releases the node, in release or in
 this block's inverse, it removes that token's directory and proves it absent.
+A link no controller presents is retired too, because a controller may have
+journaled it: an insert that fails has its link retired in the same attempt
+once its controller, read without being changed, answers presenting something
+else, and every insert link no controller presents is swept when an apply has
+read its nodes and before it boots any, when a release has ejected every node,
+and in this block's inverse after its ejects, which keeps only the media of a
+node whose eject failed. A link is presented when its token is a component of
+the path of an image some controller reports, whatever host and port that image
+names, because a physical controller may echo the image without its
+non-default port; a token is too random for a foreign image to name it. The
+sweep removes an unpresented link only when it is
+a directory holding nothing but a file that is, by device and inode, the media
+block's published image, or an empty directory an interrupted publication
+left; any other entry named as an insert link is left in place and refuses the
+block, once every provable link is removed, so that tampering with the
+reserved path is never hidden. The sweep reports only how many links it
+removed, kept and refused, and a refusal names those counts to the operator.
+Observation never retires a link.
 The token appears in no request, evidence, progress output or log. A node
 presents this cluster's own image when the scheme and host of the image its
 controller reports are the media block's publication's, and its path names a
@@ -576,7 +618,9 @@ where that image's assisted service listens, when the rendezvous node was
 booted by this attempt. A node that has not answered by the boot deadline fails
 the block as the boot budget spent, leading with each such node and its
 address: it did not boot this cluster's image, or the image found no network
-configuration for the hardware address it booted with. Without this proof the
+configuration for the hardware address it booted with. A repeated apply leaves
+such a node as it is rather than booting it again, so the failure names those
+causes instead of offering another boot. Without this proof the
 installer's own wait watches for an hour a cluster that cannot form.
 
 
@@ -627,7 +671,12 @@ redirect, reads no proxy setting, ends within 10 seconds of its start and
 drops an answer past 16 MiB; it runs under `no_log`, and the token never
 leaves the inspection that reads and sends it. The block then fails leading
 with each declared node that no registered host carries the name of, as its
-requested hostname or as the hostname its inventory reports, then each declared
+requested hostname or as the hostname its inventory reports, and says that the
+cluster reached ready without the rendezvous node starting to install only when
+the wait was diagnosed as a stall: after the installer's own timeout or a spent
+budget the cluster held short of a declared node need never have reached ready,
+so the block says only that installing starts once every declared node reports
+known. It then names each declared
 node whose host the service holds `insufficient`, `disconnected`,
 `pending-for-input`, `preparing-failed`, `installing-pending-user-action` or
 `error`, with that status, its status message and the identifiers of its
@@ -635,7 +684,8 @@ failing validations; the image sets a node's hostname to its declared name when
 the node carries the MAC address of its first declared interface. A read that
 fails, an answer that is not exactly one cluster whose hosts each carry a name,
 or one with no missing or bad-state declared node names no node, and the block
-fails with the stall's own message. The read comes after the wait, so it is no
+fails with that classification's own hint: the stall's own message after a
+stall, the spent budget's or the installer timeout's otherwise. The read comes after the wait, so it is no
 part of the wait's budget, and the installation's deadline covers it.
 
 
@@ -656,7 +706,16 @@ step, the substrate's own included, runs under ansible-core's task timeout with
 only what is left of it, so a node already running from this cluster's image,
 which the boot leaves alone, takes none of it. A step still running at the deadline is stopped there, and a node reached
 after it is not booted; either fails the block as the boot budget spent, and a
-repeated apply boots only the nodes not already running from the image. The
+repeated apply boots only the nodes not already running from the image. Each
+proof that a node answers waits for what is left of the same deadline, but for
+no less than one second, so a node checked after an earlier one spent the
+deadline still gets one connection attempt and is named only when it does not
+answer. The read of a node's controller after an insert it did not complete
+runs under the media read's own bound plus 30 seconds rather than what is left
+of the boot budget, so an insert that failed near the deadline still has its
+link retired or the read's own failure named, rather than a censored timeout;
+the block then fails, so the node's media read after boot does not run in that
+attempt. The
 task timeout ends the step but not the management-controller request the step
 made, which ends within the adapter's own fixed bounds. Every read of the
 cluster through its API passes oc's `--request-timeout` of 30 seconds, so each
@@ -748,7 +807,14 @@ nothing and fails the block naming each missing node. When that node is the
 rendezvous host, the failure says that it still runs the bootstrap control
 plane from the live image, because the assisted service stopped installing
 after another host's error and its recovery never pivots that host, and that
-recovery is a destroy and a fresh apply.
+recovery is a destroy and a fresh apply. Only a read in which every request
+was answered, the cluster with this build's identity, names a node missing or
+the rendezvous host stranded. When a request of that read fails, or the
+cluster does not answer with this build's identity, the block also releases
+nothing, and the failure says the cluster could not be read, that no media was
+released, and that the remedy is to repeat the apply; it offers no destroy.
+Any other missing node or incomplete installation keeps the media attached
+and asks for the cluster to be inspected before the apply is repeated.
 
 
 **Completion.** Completion requires the cluster answering with this build's
@@ -870,9 +936,16 @@ readiness.
 
 - `resolution.api`, `resolution.api-int`, `resolution.ingress` and
   `resolution.ingress-wildcard`: one check for each name
-  [resolution before boot](#installation) proves, targeting that name. It
-  resolves the name through the controller's own resolver exactly as the
-  installation does, by running `getent ahosts` with exact arguments, because
+  [resolution before boot](#installation) proves, targeting that name:
+  `api.<cluster>.<zone>`, `api-int.<cluster>.<zone>`,
+  `console-openshift-console.apps.<cluster>.<zone>` and
+  `<label>.apps.<cluster>.<zone>`, where `<label>` is `bootwright-` followed
+  by the cluster name, cut to 63 characters and to no trailing hyphen. The
+  applications name `apps.<cluster>.<zone>` itself is never resolved: a
+  `*.apps` wildcard record does not answer it, and resolution before boot does
+  not prove it. Each check resolves its name through the controller's own
+  resolver exactly as the installation does, by running `getent ahosts` with
+  exact arguments, because
   only the system's name-service configuration answers what the installer
   will poll. It passes when every answer is the slot's effective address, and
   fails naming each answer otherwise. Its `next` names the record and the

@@ -523,6 +523,8 @@ func (c Capability) verify(ctx context.Context, execution lifecycle.Execution, r
 		if err := execution.Stage.SealClientArea(ctx, area); err != nil {
 			return unknown, err
 		}
+	} else if _, err := sealPublished(ctx, execution, tools); err != nil {
+		return unknown, err
 	}
 	if err := execution.Stage.RetireToolAreas(ctx, current(tools, area)); err != nil {
 		return unknown, err
@@ -540,24 +542,12 @@ func (c Capability) verify(ctx context.Context, execution lifecycle.Execution, r
 // binding names the area it proved and the unnamed areas are retired.
 func (c Capability) settled(ctx context.Context, execution lifecycle.Execution, request Request, tools []prerequisites.ToolDefinition, installed []prerequisites.HostPackageEvidence) (lifecycle.Result, error) {
 	failureOutcome := reconciliation.OutcomeFailed
-	if len(tools) != 0 {
-		area, err := execution.Stage.Setup.OpenBundle(ctx, prerequisites.ToolsDigest(tools))
-		if err != nil {
-			return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
-		}
-		location, err := area.Location(ctx)
-		if err != nil {
-			return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
-		}
-		if !location.Sealed {
-			failureOutcome = reconciliation.OutcomeUnknown
-			if _, err := execution.Stage.ClientArea(ctx, prerequisites.ToolsDigest(tools)); err != nil {
-				return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
-			}
-			if err := execution.Stage.SealClientArea(ctx, prerequisites.ToolsDigest(tools)); err != nil {
-				return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, err
-			}
-		}
+	attempted, err := sealPublished(ctx, execution, tools)
+	if attempted {
+		failureOutcome = reconciliation.OutcomeUnknown
+	}
+	if err != nil {
+		return lifecycle.Result{Outcome: failureOutcome}, err
 	}
 	if err := execution.Stage.RetireToolAreas(ctx, current(tools, prerequisites.ToolsDigest(tools))); err != nil {
 		return lifecycle.Result{Outcome: failureOutcome}, err
@@ -568,6 +558,25 @@ func (c Capability) settled(ctx context.Context, execution lifecycle.Execution, 
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
 	return lifecycle.Result{Outcome: reconciliation.OutcomeUnchanged, Evidence: evidence}, nil
+}
+
+func sealPublished(ctx context.Context, execution lifecycle.Execution, tools []prerequisites.ToolDefinition) (bool, error) {
+	if len(tools) == 0 {
+		return false, nil
+	}
+	digest := prerequisites.ToolsDigest(tools)
+	area, err := execution.Stage.Setup.OpenBundle(ctx, digest)
+	if err != nil || area == nil {
+		return false, err
+	}
+	location, err := area.Location(ctx)
+	if err != nil || location.Sealed {
+		return false, err
+	}
+	if _, err := execution.Stage.ClientArea(ctx, digest); err != nil {
+		return true, err
+	}
+	return true, execution.Stage.SealClientArea(ctx, digest)
 }
 
 // current is the area a stage's binding names: none when it selects no tool.

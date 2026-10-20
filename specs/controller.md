@@ -16,7 +16,7 @@ and neither command performs the other's work.
 | Scope | Prerequisites | Owner |
 | --- | --- | --- |
 | Host | A [supported](#supported-hosts) OS family and architecture and verified installed-host identity; the fixed root and its [setup subtree](contexts/controller-record.md#the-setup-subtree); the [controller runtime](#the-controller-runtime), a virtual environment on the host's own CPython holding the [locked](#the-runtime-lock) `ansible-core` closure; the baseline [host packages](#host-packages) `openssh-clients` and `podman`. | `setup` |
-| Context | The target client closure the selected graph needs; the libvirt client closure a declared `libvirt` capability, or any Machine a libvirt provider hosts, selects; the hypervisor closure and the libvirt client a libvirt provider hosted on this Machine selects; the installer-media tooling an Anaconda installation published through an artifact server on this Machine selects; the binding between this context and this host. | [`apply --stage controller`](#the-controller-stage) |
+| Context | The target client closure the selected graph needs; the libvirt client closure a declared `libvirt` capability, or any Machine a libvirt provider hosts, selects; the hypervisor closure and the libvirt client a libvirt provider hosted on this Machine selects; the installer-media tooling an Anaconda installation published through an artifact server on this Machine selects; the `nmstate` package an agent-installed ContainerCluster node that references a declared Machine selects; the `iputils` package an agent-installed multi-node baremetal ContainerCluster selects when one of its OpenShift-sourced IPv4 virtual IPs lies in a managed libvirt network of a provider hosted on this Machine; the binding between this context and this host. | [`apply --stage controller`](#the-controller-stage) |
 
 A host prepared once therefore serves every context later created on it, and a
 context that selects nothing beyond the baseline needs no controller stage.
@@ -223,6 +223,8 @@ One Go table names the host packages by name or RPM capability:
 | Stage | libvirt client | `libvirt-client` |
 | Stage | hypervisor | `libvirt-daemon`, `libvirt-daemon-driver-network`, `libvirt-daemon-driver-qemu`, `libvirt-daemon-driver-storage-core`, `qemu-img`, `qemu-kvm`, `swtpm`, `swtpm-tools` |
 | Stage | installer media | `lorax`, `xorriso` |
+| Stage | agent-installed ContainerCluster with a node that references a declared Machine | `nmstate` |
+| Stage | agent-installed multi-node baremetal ContainerCluster with an OpenShift-sourced IPv4 virtual IP in a managed libvirt network of a provider hosted on the controller Machine | `iputils` |
 
 `podman` is baseline because the container-runtime capability is mandatory.
 An entry names no version; the grammar admits `name = EVR` and no entry uses
@@ -287,7 +289,7 @@ import command. Every check carries the scope that owns it, so a negative
 report names the one command that settles it: `setup` for a host prerequisite,
 and that context's own `apply --stage controller --context <name>` for anything
 its graph selects. A context whose graph selects no target client, libvirt
-client, hypervisor or installer-media tooling has no controller stage, so its
+client, hypervisor, installer-media tooling, `nmstate` or `iputils` has no controller stage, so its
 only context check, the binding, names `apply --context <name>`, whose first
 apply publishes it. The report's next command and the diagnostic's remedy are
 that one decision. An unmet host prerequisite always wins, because the
@@ -300,7 +302,7 @@ SSH flags remain unconsumed.
 | `bootwright setup --download-only --dest-dir <dir>` | Write the lock's files into `<dir>` as [Offline and mirrored wheels](#offline-and-mirrored-wheels) defines. It never elevates and admits no host: it reads no setup record, runs no `rpm` or `dnf` and changes nothing outside `<dir>`, so any connected host can run it. |
 | `bootwright setup` | Elevate, then inspect read-only: admission, the installed host, FIPS mode, the untested release and loader preload (informational), the setup state, the interpreter and its runtime and the baseline package presence. A ready host prints the receipt table and `Nothing to do.`, with no network request, confirmation or write. Otherwise run the preview and present the plan, confirm, take `setup/lock`, inspect again and refuse a host that moved, record the pending intent, install with dnf, fetch, build, verify and publish the runtime, and write the receipt, which clears the pending intent. Publish no binding and touch no controller record. |
 | `bootwright preflight controller` | Read and verify the same host checks as setup with bounded local probes and no dnf preview, and report the host's FIPS mode and the missing package names. May use the verified privilege boundary for private metadata. |
-| `bootwright preflight controller --context <name>` | Additionally report that context's own target tools, its libvirt client, hypervisor and installer-media requirements by `rpm` presence, and its host binding, as context-scoped checks. Contact no publisher and read no repository metadata for them. |
+| `bootwright preflight controller --context <name>` | Additionally report that context's own target tools, its libvirt client, hypervisor, installer-media, `nmstate` and `iputils` requirements by `rpm` presence, and its host binding, as context-scoped checks. Contact no publisher and read no repository metadata for them. |
 
 Neither command contacts a managed endpoint, creates or repairs shared state
 on behalf of the other's scope, or publishes a binding. Preflight publishes
@@ -350,9 +352,14 @@ intent, and the controller Machine's normalized proxy choice. The libvirt
 client closure is selected by a declared `libvirt` capability, a libvirt
 provider hosted on the controller Machine, or any Machine a libvirt provider
 hosts, and by nothing else; the [hypervisor closure](substrates.md#provider-host-realization)
-by a libvirt provider hosted on the controller Machine; and the
+by a libvirt provider hosted on the controller Machine; the
 [installer-media tooling](managed-os.md#installation) by an Anaconda
-installation published through an artifact server on the controller Machine.
+installation published through an artifact server on the controller Machine;
+the `nmstate` package by an agent-installed ContainerCluster with a node whose
+`machineRef` names a declared Machine; and the `iputils` package by an
+agent-installed ContainerCluster with at least two nodes on the `baremetal`
+platform that has an OpenShift-sourced IPv4 endpoint address inside a managed
+libvirt network attachment of a provider hosted on the controller Machine.
 No closure forces another into the request. The plan presents each selected
 requirement by name, `install-host-package <requirement>`; planning reads no
 host, so it names what the closures require, and a requirement the host
@@ -372,8 +379,10 @@ compatibility inference is required. A tool's `latest` intent is resolved by
 the attempt that installs it and retained from then on; moving a retained
 `latest` client to a newer release requires declaring that release in
 `dependencyVersions`. A host package is whatever the host's repositories
-provide. Agent media with node network configurations selects the host's
-`nmstate` package for the installer's `nmstatectl gc` invocation.
+provide. An agent-installed ContainerCluster node that references a declared Machine
+selects the host's `nmstate` package for the installer's `nmstatectl gc`
+invocation; the `iputils` package serves the virtual-IP duplicate-address
+probe.
 
 A context that selects nothing beyond the host
 baseline contributes no block at all.
@@ -418,7 +427,14 @@ on a stage that changed nothing leaves it failed
 (`TestEverySuccessfulStageNamesItsAreaAndRetiresTheRest`,
 `TestARetirementFailureKeepsTheStageOutcomeHonest`). The block completes only
 after every selected requirement is provided again and every tool it published
-is proved present by presence alone and its area sealed. Its evidence names
+is proved present by presence alone and its area sealed. An area an earlier
+attempt published but never sealed is sealed by every path that completes the
+stage, one that installs a missing host package included; a failure before
+the seal attempt of a stage that changed nothing leaves the attempt failed,
+and one from the seal attempt on leaves it unknown
+(`TestAnInterruptedPublicationNeedsAReplayToSeal`,
+`TestAReplayThatInstallsAHostPackageSealsTheInterruptedPublication`,
+`TestASealFailureAfterAReplayedHostPackageInstallIsUnknown`). Its evidence names
 each requirement's installed providers by NEVRA, and each published tool by
 kind, release and source digest. Presence is read through `rpm` alone, so a
 host that already holds every package runs no dnf; only the reading after an
@@ -520,8 +536,8 @@ area no remaining binding names is then retired. Recovery is idempotent rather t
 dnf installs only what is missing and publication verifies existing bytes
 instead of overwriting them, so an interrupted stage is completed by repeating
 it. `preflight controller --context <name>` reports the same closures by
-presence, one check each for the libvirt client, the hypervisor and the
-installer-media tooling the context selects, read through the same
+presence, one check each for the libvirt client, the hypervisor, the
+installer-media tooling, `nmstate` and `iputils` the context selects, read through the same
 requirements, and requires every one of them; it names this command when one
 is not yet installed. Setup remains the owner of the host baseline, and this
 stage never installs it, publishes a binding, or claims another context's
@@ -912,7 +928,7 @@ scope, then one `Checks` row per host check as it is verified, and, after
 confirmation, one `Progress` step per action. The host checks are `host`,
 `installed-host`, `fips-mode`, `state-root`, `setup-state`, `python-runtime`
 and `host-packages`; the context checks are `target-tools`, `libvirt-client`,
-`hypervisor`, `installer-media` and `controller-binding`.
+`hypervisor`, `installer-media`, `nmstate`, `iputils` and `controller-binding`.
 
 Setup's ready path and `preflight controller` render the same short receipt
 table, for example:

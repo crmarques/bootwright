@@ -44,12 +44,12 @@ PORT_BUNDLE = {"pre_boot": "substrate_baremetal_machine_target_ca", "boot_media"
 # module tasks each holds. Finding another number means the walk or a role
 # changed, and either must be looked at.
 BUNDLED = {"managedos_install_anaconda": 6, "substrate_baremetal_machine": 7, "machine_power_redfish": 5,
-           "machine_power_read_redfish": 1, "substrate_libvirt_machine": 8, "containercluster_install_agent": 4}
+           "machine_power_read_redfish": 1, "substrate_libvirt_machine": 8, "containercluster_install_agent": 5}
 # The roles that make Redfish calls without a bundle, and why.
 UNBUNDLED = {
     "containercluster_media_agent": "it makes no Redfish call",
 }
-CLUSTER_CALLS = 4
+CLUSTER_CALLS = 5
 
 
 def loaded(path):
@@ -211,7 +211,7 @@ def test_the_managed_os_installation_sets_and_settles_the_frozen_trust(lookups, 
             assert rendering.template(arguments["certificate"]) == certificate, name
 
 
-# A cluster installation sets no virtual-media trust: its four direct calls
+# A cluster installation sets no virtual-media trust: its five direct calls
 # pass none, so the controller is left exactly as it was.
 def test_no_cluster_task_sets_a_virtual_media_trust():
     found = calls("containercluster_install_agent")

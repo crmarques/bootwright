@@ -19,7 +19,7 @@
   failed_when: false
   when:
     - item.bridge | length > 0
-    - containercluster_install_agent_state.powered | intersect(containercluster_install_agent_state.ownMedia) | length == 0
+    - containercluster_install_agent_state.powered | length == 0
 
 - name: Refuse a virtual IP whose freedom was not proved
   ansible.builtin.fail:

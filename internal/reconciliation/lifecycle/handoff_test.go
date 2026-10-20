@@ -52,6 +52,27 @@ func TestSettledLogRestorationReprovesItsRecords(t *testing.T) {
 	before.require(t, h)
 }
 
+func TestSettledLogRestorationReprovesItsInputInItsTransaction(t *testing.T) {
+	for name, change := range map[string]func(f diffFixture){
+		"a new revision of the same bytes": func(f diffFixture) { f.update("rev-2", f.workspace.inputs) },
+		"edited bytes": func(f diffFixture) {
+			f.publish("rev-2", "kind: Environment\n# edited\n", diffState(servers("v1", "alpha", "bravo")...))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newDiffHarness(t, "alpha")
+			id := f.apply(t)
+			changeOperation(t, f.harness, id, func(record *operationstore.Operation) { record.LogFault = true })
+			before := beforeItsTransaction(f.harness, func() { change(f) })
+			applyRefusedWith(t, f, changedMessage, changedRemedy)
+			before.require(t, f.harness)
+			if record, _ := durableOperation(t, f.harness); !record.LogFault || record.ID != id {
+				t.Fatalf("the refused restoration cleared the log fault: %+v", record)
+			}
+		})
+	}
+}
+
 func TestSettledLogRestorationRequiresADurableClear(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	id := completeApply(t, h)

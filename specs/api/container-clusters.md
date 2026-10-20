@@ -189,11 +189,11 @@ Every endpoint has this exact shape:
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `address` | string | for `openshift` and `external` | — | IP literal owned by `openshift` or `external`; absent for load-balancer and node sources, which resolve it. Never in `::/96`; an IPv4-mapped address is admitted. |
-| `dnsName` | string | no | — | DNS subdomain naming the endpoint. |
-| `port` | integer | no | consumer default | `1..65535` when set. |
-| `scheme` | string | no | consumer default | `http` or `https`. |
-| `prefixLength` | integer | no | — | Valid only with `address`; `1..32` for IPv4 or `1..128` for IPv6. |
-| `interfaceNetworks` | array of strings | no | `[]` | Valid CIDRs narrowing the interface that carries an owned address; effective state masks host bits. |
+| `dnsName` | string | no | — | DNS subdomain naming the endpoint; inert for the agent installer apart from `api-int`'s named-certificate collision check, see [the inert fields](../container-clusters.md#selection-and-refusal). |
+| `port` | integer | no | consumer default | `1..65535` when set; inert for the agent installer, see [the inert fields](../container-clusters.md#selection-and-refusal). |
+| `scheme` | string | no | consumer default | `http` or `https`; inert for the agent installer, see [the inert fields](../container-clusters.md#selection-and-refusal). |
+| `prefixLength` | integer | no | — | Valid only with `address`; `1..32` for IPv4 or `1..128` for IPv6; inert for the agent installer. |
+| `interfaceNetworks` | array of strings | no | `[]` | Valid CIDRs narrowing the interface that carries an owned address; effective state masks host bits; inert for the agent installer. |
 | `source.type` | string | no | `openshift` | `openshift`, `external`, `loadBalancer`, or `node`. |
 | `source.loadBalancerRef` | string | conditional | — | Global LoadBalancer; valid only for `loadBalancer`. |
 | `source.bindAddressRef` | string | conditional | sole bind address | LoadBalancer-local `bindAddresses[].name`; valid only for `loadBalancer`. |

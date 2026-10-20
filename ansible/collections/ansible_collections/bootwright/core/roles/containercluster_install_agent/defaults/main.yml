@@ -64,14 +64,17 @@ containercluster_install_agent_stalled_hint: >-
   with, or whose install disk was rejected holds the cluster there.
 # Failed bootstrap waits read once which declared nodes are missing or held
 # in bad states. A failed read leaves the wait's original diagnosis.
+# Only a stall proves the cluster reached ready: after the installer's own
+# timeout or a spent budget the hint names the nodes and nothing more.
 containercluster_install_agent_unregistered_hint: >-
   {{ 'node' if containercluster_install_agent_unregistered | length == 1 else 'nodes' }}
   {{ containercluster_install_agent_unregistered | join(', ') }} never registered
-  with the assisted service on the rendezvous host, so the cluster reached ready
-  but the rendezvous node never started installing: it starts only once every
-  declared node reports known. A node that never booted the image, or whose
-  declared hardware address is not the one it registers with, holds the cluster
-  there.
+  with the assisted service on the rendezvous host{{
+  ', so the cluster reached ready but the rendezvous node never started installing: it'
+  if containercluster_install_agent_stall_seen | default(false) | bool
+  else '. The rendezvous node' }} starts installing only once every declared node
+  reports known. A node that never booted the image, or whose declared hardware
+  address is not the one it registers with, keeps the cluster from installing.
 containercluster_install_agent_stopped_after_stall_note: >-
   The installer was re-invoked after that give-up, and this wait's budget of
   {{ containercluster_install_agent_budget }} seconds stopped that attempt.
@@ -94,6 +97,14 @@ containercluster_install_agent_boot_spent_hint: >-
   booted keeps running from this cluster's image, and a repeated apply leaves it
   as it is and boots the others; a budget spent again points at a management
   controller slow to insert the image or to power its machine on.
+containercluster_install_agent_reach_hint: >-
+  the boot phase's budget of
+  {{ bootwright_cluster_install_request.budgets.bootSeconds }} seconds was spent
+  after every node was booted, before each machine named here answered: it did
+  not boot this cluster's image, or the image found no network configuration
+  for the hardware address it booted with. A repeated apply leaves a node that
+  is powered on with this cluster's image inserted as it is rather than booting
+  it again, so it fails here the same way until that cause is corrected.
 containercluster_install_agent_unclassified_hint: >-
   this give-up is not one the installer can be resumed after, so the wait ran
   once and stopped. Read the installer output before repeating the apply.

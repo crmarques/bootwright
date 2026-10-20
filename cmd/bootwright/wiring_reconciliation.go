@@ -27,6 +27,7 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets/material"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
+	"github.com/crmarques/bootwright/internal/substrate/capacity"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 	"github.com/crmarques/bootwright/internal/trust"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -49,7 +50,8 @@ type lifecycleDependencies struct {
 	// Production leaves it empty and uses this build's own capabilities.
 	Capabilities lifecycle.CapabilityResolver
 	// Media is the host media store a plan freezes installation media from.
-	Media media.Store
+	Media    media.Store
+	Capacity capacity.CapacityChecker
 }
 
 // storeMediaRecords reads the host media store's records for the installation
@@ -244,7 +246,7 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 		capabilities = deps.Capabilities
 	}
 	options := lifecycleOptions(deps, clock, runner)
-	options.ApplyAdmission = libvirtCapacityAdmission
+	options.ApplyAdmission = libvirtCapacityAdmission(deps.Capacity)
 	if controller.Lock != nil {
 		options.Lock = lifecycle.RuntimeLock{Digest: controller.Lock.Digest, AnsibleCore: controller.Lock.AnsibleCore}
 		if controller.Setup != nil && controller.Python != nil {

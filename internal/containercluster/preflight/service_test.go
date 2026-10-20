@@ -87,6 +87,54 @@ func TestResolutionUsesExactNSSCommandAndChecksEveryAnswer(t *testing.T) {
 		})
 	}
 }
+func TestResolutionChecksTheNamesTheInstallationProvesAndNeverTheApex(t *testing.T) {
+	long := strings.Repeat("c", 51) + "-d" + strings.Repeat("e", 10)
+	for _, row := range []struct {
+		cluster string
+		want    map[string]string
+	}{
+		{"sno", map[string]string{
+			"resolution.api":              "api.sno.example.test",
+			"resolution.api-int":          "api-int.sno.example.test",
+			"resolution.ingress":          "console-openshift-console.apps.sno.example.test",
+			"resolution.ingress-wildcard": "bootwright-sno.apps.sno.example.test",
+		}},
+		{long, map[string]string{
+			"resolution.api":              "api." + long + ".example.test",
+			"resolution.api-int":          "api-int." + long + ".example.test",
+			"resolution.ingress":          "console-openshift-console.apps." + long + ".example.test",
+			"resolution.ingress-wildcard": "bootwright-" + strings.Repeat("c", 51) + ".apps." + long + ".example.test",
+		}},
+	} {
+		t.Run(row.cluster[:3], func(t *testing.T) {
+			s := fixture(t, true)
+			endpoints := m("api", m("address", "192.0.2.10"), "api-int", m("address", "192.0.2.10"), "ingress", m("address", "192.0.2.10"))
+			s.Graph = graph{api.NewCatalog([]api.Object{object(api.Environment, "env", m("domains", m("containerClusters", "example.test"))),
+				object(api.ContainerCluster, row.cluster, m("install", m("endpoints", endpoints)))})}
+			resolved := []string{}
+			s.Resolver = ResolverFunc(func(_ context.Context, argv []string) ([]byte, error) {
+				resolved = append(resolved, argv[2])
+				return []byte("192.0.2.10 STREAM\n"), nil
+			})
+			report, err := s.Check(context.Background(), PreflightRequest{ContextName: "lab"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := map[string]string{}
+			for _, check := range report.Checks {
+				got[check.ID] = check.Target
+			}
+			if !reflect.DeepEqual(got, row.want) || len(resolved) != len(row.want) {
+				t.Fatalf("checks %v, resolved %v, want %v", got, resolved, row.want)
+			}
+			for _, name := range resolved {
+				if strings.HasPrefix(name, "apps.") {
+					t.Fatalf("resolved the applications apex %s, which a wildcard does not answer", name)
+				}
+			}
+		})
+	}
+}
 func TestManagedDNSIsPendingBeforeItsBlockCompletes(t *testing.T) {
 	s := fixture(t, true)
 	s.Blocks = func(context.Context, string) (map[string]string, error) { return nil, nil }

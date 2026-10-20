@@ -243,6 +243,7 @@ Alias cell.
 | [B746](#b746) | new, 2026-10-20 (D172) | enabling | Substrate | One staged image per cluster on push arms | Per-node pushes keep ownership per Machine; it needs evidence from M3e or M3f runs that per-node pushes are the bottleneck |
 | [B747](#b747) | new, 2026-10-20 (D172) | product | Container cluster and Substrate | A cluster whose nodes span KubeVirt or vSphere and another arm | No run qualifies it, and the media block would both publish and push; it needs B88 or B733 and a qualifying run |
 | [B748](#b748) | new, 2026-10-20 (D172) | product | Container cluster | OKD clusters through the agent installer | M3's coverage is OpenShift; OKD's release, client and image sources need their own definition, and its refusal row stays |
+| [B796](#b796) | new, 2026-10-20 (X117; audit fixes of B314) | safety | Container cluster | The media block refuses, before it publishes, a reserved-subtree layout the install block's token walk refuses, and the token module's refusal names the directory to fix | The install block already refuses the layout safely; moving the refusal to the media block needs the walk's rule stated once for both roles, and no run has met the layout |
 
 ### B82
 
@@ -2604,6 +2605,23 @@ covers. Parked on 2026-10-20 (D172) when M3's coverage was defined for
 OpenShift only. **Revival needs:** OKD's release, installer, client and
 base-image sources and their trust, a distribution arm of the installer inputs,
 and an acceptance run; the refusal-table row lifts with that code.
+
+### B796
+
+The install block's token walk opens every component from the artifact server's
+content root down with `O_NOFOLLOW` and requires each resolved ancestor above
+it to be owned by root and writable by neither group nor other, while the media
+block publishes through tasks that follow links. A reserved private subtree
+holding a symbolic link, or an ancestor others can write, therefore builds and
+publishes, and every state read of the install block then refuses with a
+message that names no directory. Found on 2026-10-20 by the audit fixes of
+[B314](delivered.md#b314) (X117). **Outcome:** the media block proves the same
+layout before it publishes and refuses a symbolic link inside the reserved
+private subtree or an untrusted ancestor, and the token module's refusal names
+the directory to fix. **Requires:** none. **Definition:** Candidate; the media
+role's publication tasks and the module's refusal text need the shared rule
+stated once. **Exit evidence:** media-role tests that refuse each layout before
+any publication and module tests that name the directory.
 
 ## Retired
 

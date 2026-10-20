@@ -46,13 +46,21 @@ func TestContainerPreflightUsesCompletedDNSAndApplyCapacityRows(t *testing.T) {
 	}
 	allocation := allocations[0]
 	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Kind: libvirt.MachineKind, Object: allocation.Machine}}
-	answers := map[string]string{}
+	slots := map[string]string{}
 	for _, cluster := range catalog.OfKind(api.ContainerCluster) {
 		for _, endpoint := range containercluster.Endpoints(catalog, cluster) {
-			answers[endpoint.Name] = endpoint.Address
-			if endpoint.Subtree {
-				answers["console-openshift-console."+endpoint.Name] = endpoint.Address
-			}
+			slots[endpoint.Slot] = endpoint.Address
+		}
+	}
+	answers := map[string]string{
+		"api.sno.lab.example.test":                            slots["api"],
+		"api-int.sno.lab.example.test":                        slots["api-int"],
+		"console-openshift-console.apps.sno.lab.example.test": slots["ingress"],
+		"bootwright-sno.apps.sno.lab.example.test":            slots["ingress"],
+	}
+	for name, address := range answers {
+		if address == "" {
+			t.Fatalf("lab-sno froze no address for %s", name)
 		}
 	}
 	for _, owned := range []lifecycle.ObjectOwnership{{Verb: "apply", State: "done"}, {Verb: "destroy", State: "done"}} {
