@@ -358,6 +358,7 @@ class Transport:
         allowed = {"sshKey", "knownHosts", "clusterPrivateKey", "clusterPublicKey", "registryJSON", "gatewayCertificate", "gatewayKey"}
         allowed |= ceph_native_units.MATERIAL_VARIABLES
         allowed |= {"smbSecret" + str(index) for index in range(self.smb_secrets)}
+        allowed |= {"registryCA"} if "registryTrustBundleRef" in self.request else set()
         ceph_native.require(set(self.material) <= allowed | package_material, "material")
         ceph_native.require(set(self.material) >= {"sshKey", "knownHosts"}, "material")
         with tempfile.TemporaryDirectory(prefix="bootwright-ceph-") as scratch:
@@ -467,12 +468,14 @@ class Transport:
 
     def host_profile(self, host):
         """The one long call: pull the frozen digest, then prove its contained runtime."""
-        ceph_native.require("registryJSON" in self.material, "material")
+        names = ("registryJSON", "registryCA") if "registryTrustBundleRef" in self.request else ("registryJSON",)
+        ceph_native.require(all(name in self.material for name in names), "material")
         try:
-            registry = ceph_native.read_regular(self.material["registryJSON"], private=True).decode("utf-8")
+            private = {name: ceph_native.read_regular(self.material[name], private=True).decode("utf-8") for name in names}
         except UnicodeError:
             raise ceph_native.Refusal("material") from None
-        payload = {"request": self.request, "host": host["name"], "phase": "profile", "private": {"registryJSON": registry}}
+        ceph_native.require(0 < len(private.get("registryCA", "-")) <= ceph_pull_broker.MAX_TRUST, "material")
+        payload = {"request": self.request, "host": host["name"], "phase": "profile", "private": private}
         source = ceph_host_worker.launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker))
         budget = ceph_host_worker.REMOTE_LIMIT
         return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": budget}, budget + 60,

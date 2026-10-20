@@ -2048,3 +2048,30 @@ def test_dispatch_routes_resource_actions_to_the_resource_worker(monkeypatch, co
         with pytest.raises(ceph_native.Refusal, match="^request$"):
             send("cluster", phase)
     assert len(reached) == 8
+
+
+def test_host_profile_relays_the_bound_bundle(core_request, tmp_path):
+    scope = {key: value for key, value in core_request.items() if key != "action"}
+    bound = dict(scope, registryTrustBundleRef="registry-ca")
+    bundle_text = "-----BEGIN CERTIFICATE-----\nREGISTRY-BUNDLE-SENTINEL\n-----END CERTIFICATE-----\n"
+    paths = {"sshKey": "PRIVATE-KEY-SENTINEL", "knownHosts": "node-1 ssh-ed25519 PUBLIC",
+             "registryJSON": json.dumps({"url": scope["registry"], "username": "registry-user", "password": PASSWORD}), "registryCA": bundle_text}
+    for name, text in paths.items():
+        (tmp_path / name).write_text(text)
+        (tmp_path / name).chmod(0o600)
+    material = {name: str(tmp_path / name) for name in paths}
+    calls = []
+
+    def run(argv, data, timeout):
+        calls.append((argv, data, timeout))
+        return 0, b'{"ok":true,"result":{"changed":true}}'
+
+    assert ceph_core.Transport(bound, material, run=run, scope=True).host_profile(bound["hosts"][0]) == {"changed": True}
+    argv, data, unused_timeout = calls[0]
+    assert json.loads(data)["payload"]["private"] == {"registryJSON": paths["registryJSON"], "registryCA": bundle_text}
+    assert "REGISTRY-BUNDLE-SENTINEL" not in " ".join(argv) and PASSWORD not in " ".join(argv)
+    unbound = {name: path for name, path in material.items() if name != "registryCA"}
+    for request_value, private in ((scope, material), (bound, unbound)):
+        with pytest.raises(ceph_native.Refusal, match="^material$"):
+            ceph_core.Transport(request_value, private, run=run, scope=True).host_profile(request_value["hosts"][0])
+    assert len(calls) == 1

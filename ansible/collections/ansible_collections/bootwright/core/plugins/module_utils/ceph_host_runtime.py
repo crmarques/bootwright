@@ -444,7 +444,7 @@ class HostRuntime:
     def scope(self):
         return scope(self.request, self.host["name"])
 
-    def pull(self, durable, private, deadline):
+    def pull(self, durable, private, deadline, *, trust=None):
         """Fill the content-addressed image cache with only the frozen digest."""
         image = self.request["image"]
         discard_residue(durable.path, "pull-")
@@ -473,7 +473,7 @@ class HostRuntime:
         broker = None
         try:
             with owned_scratch(durable.path, "pull-") as scratch, authfile(scratch) as auth, \
-                    ceph_pull_broker.Broker(scratch, self.request, private, deadline, self.command) as broker:
+                    ceph_pull_broker.Broker(scratch, self.request, private, deadline, self.command, trust=trust) as broker:
                 policy = os.path.join(scratch, "policy.json")
                 ceph_native.private_write(policy, signature_policy(image))
                 argv = ["/usr/bin/podman", "pull", "--signature-policy", policy, "--tls-verify=true", "--authfile", auth,
@@ -500,15 +500,15 @@ class HostRuntime:
         durable.write("pulled.json", {"scope": self.scope(), "imageID": current["id"]})
         return True
 
-    def pull_auxiliary(self, durable, private, deadline):
+    def pull_auxiliary(self, durable, private, deadline, *, trust=None):
         """Pre-pull each frozen auxiliary digest, so no native deploy pulls one."""
         discard_residue(durable.path, "auxiliary-scratch-")
         changed = False
         for entry in self.request.get("auxiliary", []):
-            changed = self.pull_reference(durable, private, deadline, entry["name"], entry["image"]) or changed
+            changed = self.pull_reference(durable, private, deadline, entry["name"], entry["image"], trust=trust) or changed
         return changed
 
-    def pull_reference(self, durable, private, deadline, name, reference):
+    def pull_reference(self, durable, private, deadline, name, reference, *, trust=None):
         """The frozen-image pull of one auxiliary reference, journaled under its own name with its own broker."""
         attempt_name, pulled_name = "auxiliary-" + name + "-attempt-%d.json", "auxiliary-" + name + "-pulled.json"
         inspect = functools.partial(self.command, coordinate=reference)
@@ -538,7 +538,8 @@ class HostRuntime:
         broker = None
         try:
             with owned_scratch(durable.path, "auxiliary-scratch-") as scratch, authfile(scratch) as auth, \
-                    ceph_pull_broker.Broker(scratch, self.request, private, deadline, self.command, image=reference) as broker:
+                    ceph_pull_broker.Broker(scratch, self.request, private, deadline, self.command, image=reference,
+                                            trust=trust) as broker:
                 policy = os.path.join(scratch, "policy.json")
                 ceph_native.private_write(policy, signature_policy(reference))
                 argv = ["/usr/bin/podman", "pull", "--signature-policy", policy, "--tls-verify=true", "--authfile", auth,
@@ -694,10 +695,12 @@ class HostRuntime:
     def profile(self, private):
         """Pull the frozen digest, then prove its runtime facts in contained probes."""
         deadline = self.clock() + PROFILE_CALL_SECONDS
-        require(isinstance(private, dict) and set(private) == {"registryJSON"}, "material")
+        expected = {"registryJSON"} | ({"registryCA"} if "registryTrustBundleRef" in self.request else set())
+        require(isinstance(private, dict) and set(private) == expected, "material")
+        trust = private.get("registryCA")
         with self.journal(create=True) as durable:
-            changed = self.pull(durable, private["registryJSON"], deadline)
-            changed = self.pull_auxiliary(durable, private["registryJSON"], deadline) or changed
+            changed = self.pull(durable, private["registryJSON"], deadline, trust=trust)
+            changed = self.pull_auxiliary(durable, private["registryJSON"], deadline, trust=trust) or changed
             original = inspect_image(self.request["image"], self.command)
             require(canonical(durable.read("pulled.json")) == canonical({"scope": self.scope(), "imageID": original["id"]}), "image-platform")
             existing = durable.read(PROFILE)

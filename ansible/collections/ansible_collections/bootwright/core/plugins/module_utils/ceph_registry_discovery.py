@@ -104,10 +104,11 @@ def name(value):
 
 
 def validate_request(value):
-    require(isinstance(value, dict) and set(value) in (set(REQUEST), set(REQUEST) | {"auxiliary"}))
+    require(isinstance(value, dict) and set(REQUEST) <= set(value) <= set(REQUEST) | {"auxiliary", "registryTrustBundleRef"})
     require(value["version"] == VERSION and isinstance(value["release"], str) and bool(value["release"]))
     validate_selection(value)
     require(name(value["cluster"]) and name(value["controller"]) and name(value["registryRef"]))
+    require("registryTrustBundleRef" not in value or name(value["registryTrustBundleRef"]))
     if "auxiliary" in value:
         entries = value["auxiliary"]
         require(isinstance(entries, list) and 1 <= len(entries) <= len(AUXILIARY_NAMES))
@@ -134,6 +135,8 @@ def validate_selection(value):
 def auxiliary_request(request, entry):
     """The Ceph request's members with one auxiliary image's coordinates in place of the Ceph image's."""
     value = {key: request[key] for key in REQUEST}
+    if "registryTrustBundleRef" in request:
+        value["registryTrustBundleRef"] = request["registryTrustBundleRef"]
     value.update(base=entry["base"], tag=entry["tag"], image=entry["image"])
     return value
 
@@ -294,6 +297,29 @@ def tls_proof():
 
 
 @contextlib.contextmanager
+def bundle_proof(path):
+    """Only the bound registry trust bundle anchors verification; the host trust path is never opened."""
+    try:
+        with protected_file(path, ceph_pull_broker.MAX_TRUST, private=True) as (handle, prove):
+            data = handle.read(ceph_pull_broker.MAX_TRUST + 1)
+            require(len(data) == os.fstat(handle.fileno()).st_size, "material")
+            prove()
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            for block in certificates(data):
+                context.load_verify_locations(cadata=block)
+            require(context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname and context.cert_store_stats()["x509_ca"] > 0, "material")
+            yield context, prove
+            prove()
+    except DiscoveryRefusal as error:
+        if str(error) == "artifact":
+            raise DiscoveryRefusal("material") from None
+        raise
+    except (OSError, ValueError, UnicodeError):
+        raise DiscoveryRefusal("material") from None
+
+
+@contextlib.contextmanager
 def bounded_lifetime(seconds=TOTAL_SECONDS):
     """The dedicated module owns a finite budget including DNS and TLS work."""
     require(type(seconds) in (int, float) and 0 < seconds <= TOTAL_SECONDS, "timeout")
@@ -365,6 +391,11 @@ class Registry:
         self.context, self.now = context, now
         self.deadline = now() + TOTAL_SECONDS
         self.resolver, self.delivery = delivery_answers, ceph_pull_broker.RegistryConnection
+        self.anchor = ceph_pull_broker.anchor(request)
+
+    def untrusted(self, error, cause):
+        if getattr(error, "untrusted", False):
+            error.native_error = native_diagnostics.error_detail(self.request["image"], cause + " failed against " + self.anchor)
 
     def get(self, path, authorization=None, maximum=MAX_BODY):
         # Exact byte budgets exclude bool and float.
@@ -395,7 +426,11 @@ class Registry:
         }
         if authorization is not None:
             headers["Authorization"] = authorization
-        return self.exchange(connection, path, headers, maximum)
+        try:
+            return self.exchange(connection, path, headers, maximum)
+        except DiscoveryRefusal as error:
+            self.untrusted(error, "TLS verification of the registry " + self.registry)
+            raise
 
     def deliver(self, values):
         """Follow one validated Location to public addresses only; its value never enters a refusal."""
@@ -409,7 +444,11 @@ class Registry:
         connection = self.delivery(host, addresses=addresses, deadline=time.monotonic() + remaining, port=443,
                                    context=self.context, timeout=min(remaining, 30))
         headers = {"Accept-Encoding": "identity", "User-Agent": "bootwright-ceph-metadata-v1"}
-        status, unused_values, raw = self.exchange(connection, path, headers, MAX_BODY)
+        try:
+            status, unused_values, raw = self.exchange(connection, path, headers, MAX_BODY)
+        except DiscoveryRefusal as error:
+            self.untrusted(error, "TLS verification of the registry's configuration blob delivery endpoint")
+            raise
         return status, raw
 
     def exchange(self, connection, path, headers, maximum):
@@ -430,6 +469,10 @@ class Registry:
             require(len(raw) <= maximum and (length is None or len(raw) == int(length)), "discovery")
             require(self.now() < self.deadline, "timeout")
             return response.status, values, raw
+        except ssl.SSLCertVerificationError:
+            error = DiscoveryRefusal("discovery")
+            error.untrusted = True
+            raise error from None
         except (OSError, http.client.HTTPException):
             raise DiscoveryRefusal("discovery") from None
         finally:
@@ -631,10 +674,12 @@ def execute(operation, request, digest_value, material):
     require(operation in OPERATIONS)
     original = validate_request(request)
     require(isinstance(digest_value, str) and digest(digest_value))
-    require(isinstance(material, dict) and (set(material) == {"registryJSON"} if operation == "apply" else not material), "material")
+    expected = {"registryJSON"} | ({"registryCA"} if "registryTrustBundleRef" in request else set())
+    require(isinstance(material, dict) and (set(material) == expected if operation == "apply" else not material), "material")
     if operation != "apply":
         return {"changed": False, "evidence": evidence({"request": digest_value, "postcondition": True, "absent": True}, digest_value)}
-    with bounded_lifetime(), tls_proof() as (context, prove_tls):
+    trust = bundle_proof(material["registryCA"]) if "registryCA" in material else tls_proof()
+    with bounded_lifetime(), trust as (context, prove_tls):
         with protected_file(material["registryJSON"], MAX_REGISTRY, private=True) as (loan, prove):
             basic = basic_material(loan.read(MAX_REGISTRY + 1), request["registry"])
             prove()

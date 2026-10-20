@@ -2,7 +2,8 @@
 
 Only this broker holds the entitlement and registry bearer token. The native
 client receives an empty authfile and an ephemeral CA, so a proxy bypass never
-carries credentials. Every upstream connection uses the host TLS trust.
+carries credentials. Every upstream connection uses the declared registry trust
+bundle alone when one is bound, and the host TLS trust otherwise.
 Authentication stays at the selected registry authority; only blob reads may
 use one public HTTPS delivery endpoint without registry credentials. Foreign
 token realms refuse. One broker serves one frozen reference: the Ceph image or
@@ -35,6 +36,7 @@ MAX_BLOB = 16 << 30
 MAX_TOTAL = 32 << 30
 MAX_CONNECTIONS = 512
 MAX_WORKERS = 8
+MAX_TRUST = 1 << 20
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 # The native client (Go net/http) follows each of these; a delegated blob GET or HEAD keeps its method.
 DELIVERY_REDIRECTS = frozenset({301, 302, 303, 307, 308})
@@ -138,6 +140,26 @@ class TokenRefused(BrokerError):
 def require(value):
     if not value:
         raise BrokerError("registry credential boundary")
+
+
+def bundle_context(bundle):
+    """Only the declared bundle anchors verification; no default store or path is loaded."""
+    require(isinstance(bundle, str) and 0 < len(bundle) <= MAX_TRUST)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    try:
+        context.load_verify_locations(cadata=bundle)
+    except (ssl.SSLError, ValueError):
+        raise BrokerError("registry trust bundle") from None
+    require(context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname)
+    require(context.cert_store_stats()["x509_ca"] > 0)
+    return context
+
+
+def anchor(request):
+    if "registryTrustBundleRef" in request:
+        return "trust bundle Secret " + request["registryTrustBundleRef"]
+    return "the host trust store"
 
 
 def authority(value):
@@ -395,8 +417,10 @@ class Upstream:
 class Broker:
     """Bounded concurrent CONNECT listeners, all joined before private cleanup."""
 
-    def __init__(self, directory, request, private, deadline, command, *, upstream=None, tls=None, image=None):
+    def __init__(self, directory, request, private, deadline, command, *, upstream=None, tls=None, image=None, trust=None):
         self.directory, self.request, self.deadline = directory, request, deadline
+        require((trust is None) == ("registryTrustBundleRef" not in request))
+        self.anchor, self.untrusted = anchor(request), False
         info = os.stat(directory, follow_symlinks=False)
         require(stat.S_ISDIR(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o700 and info.st_uid == os.geteuid())
         self.authority = request["registry"]
@@ -406,7 +430,8 @@ class Broker:
         self.repository, separator, self.digest = reference.rpartition("@sha256:")
         require(separator and HEX.fullmatch(self.digest) is not None and self.repository.startswith(self.authority + "/"))
         self.namespace = self.repository.split("/", 1)[1]
-        self.upstream = upstream or Upstream(self.authority, self.repository, json.loads(private), deadline)
+        self.upstream = upstream or Upstream(self.authority, self.repository, json.loads(private), deadline,
+                                             context=None if trust is None else bundle_context(trust))
         self.cert_directory = os.path.join(directory, "native-certs")
         self.tls = tls or certificate(directory, self.cert_directory, self.authority, command)
         self.home = os.path.join(directory, "home")
@@ -441,7 +466,10 @@ class Broker:
     def failure_cause(self):
         """Latest refusal observed in this invocation, including its native retries."""
         with self.lock:
-            failure = self.failure
+            failure, untrusted = self.failure, self.untrusted
+        if untrusted:
+            return ("broker could not verify the TLS certificate of " + self.authority
+                    + " or its blob delivery endpoint against " + self.anchor)
         if failure is None:
             return ""
         request_class, status = failure
@@ -501,7 +529,12 @@ class Broker:
                 require(headers.get("host") in (self.authority, self.host + ":" + str(self.port)))
                 maximum = self.path(method, path)
                 request_class = "registry" if path == "/v2/" else "blob" if maximum == MAX_BLOB else "manifest"
-                self.upstream.fetch(method, path, lambda response: self.response(stream, response, method, maximum, request_class))
+                try:
+                    self.upstream.fetch(method, path, lambda response: self.response(stream, response, method, maximum, request_class))
+                except ssl.SSLCertVerificationError:
+                    with self.lock:
+                        self.untrusted = True
+                    raise
         except TokenRefused as error:
             with self.lock:
                 self.failure = ("token", error.status)

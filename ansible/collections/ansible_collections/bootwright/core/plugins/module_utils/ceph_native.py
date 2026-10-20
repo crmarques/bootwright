@@ -58,7 +58,7 @@ HOST_PHASES = frozenset(("profile", "route", "device_identity", "host_devices", 
 SCOPE_MEMBERS = frozenset(("controller", "version", "cluster", "owner", "fsid", "image", "cephadm", "bootstrap", "hosts", "services", "clusterSSHUser",
                            "clusterSSHTransport", "monIP", "publicNetworks", "clusterNetworks", "callHome", "release", "ansiblePackageVersion",
                            "packageRepository", "clusterKeyRef", "registryRef", "registry"))
-SCOPE_OPTIONAL = frozenset(("auxiliary", "config", "packages", "nfsGaneshaPackageVersion"))
+SCOPE_OPTIONAL = frozenset(("auxiliary", "config", "packages", "nfsGaneshaPackageVersion", "registryTrustBundleRef"))
 # cephadm's container_image_<name> settings an auxiliary image may fill, in name order.
 AUXILIARY_NAMES = (
     "alertmanager", "alloy", "grafana", "haproxy", "keepalived", "loki", "nginx", "node_exporter",
@@ -556,6 +556,7 @@ def scope_checks(request):
     require(named(request["clusterSSHUser"]))
     require(request["clusterSSHTransport"] in ("native", "verified-tunnel"))
     require(named(request["clusterKeyRef"]) and named(request["registryRef"]))
+    require("registryTrustBundleRef" not in request or named(request["registryTrustBundleRef"]))
     require(isinstance(request["registry"], str) and re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]{1,255}", request["registry"]) is not None)
     registry_authority(request)
     validate_auxiliary(request)

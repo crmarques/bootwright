@@ -10,6 +10,7 @@ version_added: "0.1.0"
 description:
   - Resolves the authored tag or digest with a bounded origin-confined OCI client.
   - The request may carry the auxiliary image set; each member resolves to its own linux/amd64 manifest digest at the same registry authority.
+  - TLS verifies against the bound registry trust bundle alone when the request names one, and against the host trust store otherwise.
   - Downloads no image layers, starts no container and retains nothing.
   - Observation and removal read nothing remote and report the resolution absent.
 options:
@@ -27,7 +28,9 @@ options:
     type: str
     required: true
   material:
-    description: Protected registry JSON file loan, for apply only.
+    description:
+      - Protected registry JSON file loan, for apply only.
+      - Also carries the registry trust bundle file loan when the request names one.
     type: dict
     default: {}
 author:

@@ -44,9 +44,10 @@ def injected_broker(monkeypatch):
         environment = {}
         failure_cause = ""
 
-        def __init__(self, directory, request, private, deadline, command):
+        def __init__(self, directory, request, private, deadline, command, *, trust=None):
             assert json.loads(private)["password"] == PASSWORD
             assert request["image"] == IMAGE
+            assert trust is None or "registryTrustBundleRef" in request
             self.cert_directory = os.path.join(directory, "native-certs")
 
         def __enter__(self):
@@ -152,6 +153,9 @@ def host_runtime(request, tmp_path, podman, clock=None, **options):
     return runtime.HostRuntime(request, "node-1", podman, clock=clock.now, pause=clock.pause, markers=markers, **options), markers, clock
 
 
+BUNDLE = "-----BEGIN CERTIFICATE-----\nREGISTRY-BUNDLE-SENTINEL\n-----END CERTIFICATE-----\n"
+
+
 def registry(request):
     return json.dumps({"url": request["registry"], "username": "registry-user", "password": PASSWORD})
 
@@ -182,8 +186,8 @@ def test_pull_cert_directory_loads_native_client_identity(request_value, tmp_pat
     monkeypatch.setattr(runtime.ceph_pull_broker, "Broker", injected_broker)
 
     class Upstream:
-        def __init__(self, *unused):
-            pass
+        def __init__(self, *unused, context=None):
+            assert context is None
 
         def close(self):
             pass
@@ -719,8 +723,11 @@ def test_profile_authenticates_image_bytes_independently_of_installed_package(re
     assert host_cephadm_sealed == []
 
 
-@pytest.mark.parametrize("private", [{}, {"registryJSON": "x", "extra": "y"}])
-def test_profile_accepts_only_the_registry_material(request_value, tmp_path, monkeypatch, private):
+@pytest.mark.parametrize("private,bound", [({}, False), ({"registryJSON": "x", "extra": "y"}, False), ({"registryJSON": "x", "registryCA": BUNDLE}, False),
+                                           ({"registryJSON": "x"}, True), ({"registryJSON": "x", "registryCA": BUNDLE, "extra": "y"}, True)])
+def test_profile_accepts_only_the_registry_material(request_value, tmp_path, monkeypatch, private, bound):
+    if bound:
+        request_value["registryTrustBundleRef"] = "registry-ca"
     worker, markers, podman, unused = profiled_runtime(request_value, tmp_path, monkeypatch, [])
     with pytest.raises(ceph_native.Refusal, match="^material$"):
         worker.profile(private)
@@ -1126,10 +1133,11 @@ def test_pull_http_cause_survives_redaction_and_truncation_without_cross_invocat
     class Broker(injected_broker):
         environment = {}
 
-        def __init__(self, directory, *unused):
+        def __init__(self, directory, *unused, trust=None):
+            assert trust is None
             self.cert_directory = os.path.join(directory, "native-certs")
             self.lock = threading.Lock()
-            self.failure = None
+            self.failure, self.untrusted = None, False
             self.upstream = SimpleNamespace(private=[PASSWORD])
             self.exited = False
             instances.append(self)
@@ -1266,10 +1274,11 @@ def auxiliary_brokers(monkeypatch):
     class Broker:
         failure_cause = ""
 
-        def __init__(self, directory, request, private, deadline, command, *, image=None):
-            del request, deadline, command
+        def __init__(self, directory, request, private, deadline, command, *, image=None, trust=None):
+            del deadline, command
             assert json.loads(private)["password"] == PASSWORD
-            self.image = image
+            assert trust is None or "registryTrustBundleRef" in request
+            self.image, self.trust = image, trust
             self.cert_directory = os.path.join(directory, "native-certs")
             self.environment = {"HTTPS_PROXY": "http://127.0.0.1:" + str(40000 + len(instances))}
             instances.append(self)
@@ -1387,3 +1396,14 @@ def test_an_exhausted_auxiliary_journal_lets_the_next_invocation_pull(request_va
     assert pulls == [HAPROXY] * min(len(outcomes), runtime.PULL_ATTEMPTS)
     assert ("auxiliary-haproxy-pulled.json" in markers.records) is pulled
     assert ("auxiliary-keepalived-pulled.json" in markers.records) is pulled
+
+
+def test_profile_passes_the_bound_bundle_to_every_broker(request_value, tmp_path, monkeypatch, authenticated, auxiliary_brokers):
+    del authenticated
+    request_value["registryTrustBundleRef"] = "registry-ca"
+    worker, unused_markers, images = auxiliary_runtime(request_value, tmp_path, monkeypatch, {IMAGE: ["ok"], HAPROXY: ["ok"], KEEPALIVED: ["ok"]},
+                                                       [probe_output(), probe_output()])
+    assert worker.profile({"registryJSON": registry(request_value), "registryCA": BUNDLE}) == {"changed": True}
+    assert [argv[-1] for argv in images.calls if argv[:2] == ["/usr/bin/podman", "pull"]] == [IMAGE, HAPROXY, KEEPALIVED]
+    assert [(broker.image, broker.trust) for broker in auxiliary_brokers] == [(None, BUNDLE), (HAPROXY, BUNDLE), (KEEPALIVED, BUNDLE)]
+    assert all(BUNDLE not in str(argv) for argv in images.calls) and all(BUNDLE not in str(value) for value in images.environments)

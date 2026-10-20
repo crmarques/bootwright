@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_pull_broker, native_diagnostics
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_registry_discovery as discovery
 from ansible_collections.bootwright.core.plugins.modules import ceph_image_resolve as module
 
@@ -955,3 +956,165 @@ def test_published_auxiliary_evidence_is_closed(change):
     value.update(change)
     with pytest.raises(discovery.DiscoveryRefusal, match="^discovery$"):
         discovery.evidence(value, GOLDEN["digest"])
+
+
+SYNTHETIC_CA = (COLLECTION / "tests" / "fixtures" / "ceph-discovery-synthetic-ca.golden").read_bytes()
+SYNTHETIC_BLOCK = discovery.certificates(SYNTHETIC_CA)[0]
+BOUND_REQUEST = dict(GOLDEN["request"], registryTrustBundleRef="registry-ca")
+REGISTRY_PASSWORD = "private-registry-password"
+
+
+def synthetic_ca_certs():
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.load_verify_locations(cadata=SYNTHETIC_BLOCK)
+    return context.get_ca_certs()
+
+
+def private_loans(tmp_path):
+    tmp_path.chmod(0o700)
+    registry, bundle = tmp_path / "registry", tmp_path / "registry-ca"
+    registry.write_bytes(raw({"url": REGISTRY, "username": "cp", "password": REGISTRY_PASSWORD}))
+    bundle.write_bytes(SYNTHETIC_CA)
+    for path in (registry, bundle):
+        path.chmod(0o600)
+    return str(registry), str(bundle)
+
+
+def test_resolution_trusts_only_the_bound_bundle_when_declared(tmp_path, monkeypatch):
+    registry, bundle = private_loans(tmp_path)
+    monkeypatch.setattr(discovery.ssl, "create_default_context", lambda *args, **kwargs: pytest.fail("default trust"))
+    with discovery.bundle_proof(bundle) as (context, prove):
+        prove()
+        assert context.get_ca_certs() == synthetic_ca_certs() and context.cert_store_stats()["x509_ca"] == 1
+        assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname and context.minimum_version == ssl.TLSVersion.TLSv1_2
+    calls = []
+
+    class Context:
+        verify_mode = ssl.CERT_REQUIRED
+        check_hostname = True
+
+        def __init__(self, protocol):
+            calls.append(protocol)
+
+        def load_verify_locations(self, **options):
+            calls.append(options)
+
+        def cert_store_stats(self):
+            return {"x509_ca": 1}
+
+    with monkeypatch.context() as patch:
+        patch.setattr(discovery.ssl, "SSLContext", Context)
+        with discovery.bundle_proof(bundle):
+            pass
+    assert calls == [ssl.PROTOCOL_TLS_CLIENT, {"cadata": SYNTHETIC_BLOCK}]
+    monkeypatch.setattr(discovery, "tls_proof", lambda *args: pytest.fail("host trust store with a bound bundle"))
+    contexts, client = [], Client()
+    monkeypatch.setattr(discovery, "Registry", lambda context, request: contexts.append(context) or client)
+    result = discovery.execute("apply", BOUND_REQUEST, GOLDEN["digest"], {"registryJSON": registry, "registryCA": bundle})
+    assert result["evidence"]["digest"] == sha(raw(client.manifest)) and client.rows == []
+    assert len(contexts) == 1 and isinstance(contexts[0], ssl.SSLContext) and contexts[0].get_ca_certs() == synthetic_ca_certs()
+
+
+def test_resolution_without_a_bundle_keeps_the_host_trust_store(tmp_path, monkeypatch):
+    registry, bundle = private_loans(tmp_path)
+    checks = []
+    fake_tls(monkeypatch, checks)
+    monkeypatch.setattr(discovery, "bundle_proof", lambda *args: pytest.fail("bundle without a binding"))
+    client = Client()
+    monkeypatch.setattr(discovery, "Registry", lambda *args: client)
+    result = discovery.execute("apply", GOLDEN["request"], GOLDEN["digest"], {"registryJSON": registry})
+    assert result["evidence"]["digest"] == sha(raw(client.manifest)) and checks == ["tls"] * 3
+    monkeypatch.setattr(discovery, "tls_proof", lambda: pytest.fail("TLS before material"))
+    monkeypatch.setattr(discovery, "protected_file", lambda *args, **kwargs: pytest.fail("loan before material"))
+    for request, material in ((GOLDEN["request"], {"registryJSON": registry, "registryCA": bundle}), (BOUND_REQUEST, {"registryJSON": registry})):
+        with pytest.raises(discovery.DiscoveryRefusal, match="^material$"):
+            discovery.execute("apply", request, GOLDEN["digest"], material)
+
+
+class Unverified:
+    """A TLS peer the bound anchor does not verify; the message stands in for OpenSSL's verify text."""
+
+    def __init__(self, host, **options):
+        self.host, self.options = host, options
+
+    def request(self, *unused_args, **unused_options):
+        raise ssl.SSLCertVerificationError(1, "certificate verify failed: unable to get local issuer certificate")
+
+    def getresponse(self):
+        pytest.fail("response without a handshake")
+
+    def close(self):
+        pass
+
+
+@pytest.mark.parametrize("request_value,anchor", [(BOUND_REQUEST, "trust bundle Secret registry-ca"), (GOLDEN["request"], "the host trust store")])
+def test_bundle_that_does_not_verify_refuses(monkeypatch, request_value, anchor):
+    monkeypatch.setattr(discovery.http.client, "HTTPSConnection", Unverified)
+    registry = discovery.Registry(object(), request_value)
+    with pytest.raises(discovery.DiscoveryRefusal, match="^discovery$") as caught:
+        registry.get("/v2/" + NAMESPACE + "/manifests/" + TAG_NAME)
+    assert discovery.refusal(caught.value) == ("discovery", None)
+    assert native_diagnostics.valid(caught.value.native_error)
+    assert caught.value.native_error == {"coordinate": request_value["image"], "cause": "TLS verification of the registry cp.icr.io failed against " + anchor}
+    registry.resolver, registry.delivery = (lambda host: json.dumps([dns_row()]).encode()), Unverified
+    with pytest.raises(discovery.DiscoveryRefusal, match="^discovery$") as caught:
+        registry.deliver({"location": SIGNED})
+    assert caught.value.native_error == {
+        "coordinate": request_value["image"],
+        "cause": "TLS verification of the registry's configuration blob delivery endpoint failed against " + anchor,
+    }
+    assert DELIVERY not in str(caught.value.native_error) and "verify failed" not in str(caught.value.native_error)
+
+
+def test_refusal_detail_never_contains_credentials_or_token(tmp_path, monkeypatch):
+    bearer = "private-bearer-token"
+    rows = [SimpleNamespace(status=401, getheaders=lambda: [("WWW-Authenticate", AUTH)], read=lambda limit: b""),
+            SimpleNamespace(status=200, getheaders=lambda: [], read=lambda limit: raw({"token": bearer})),
+            ssl.SSLCertVerificationError(1, "certificate verify failed: self-signed certificate in certificate chain")]
+    sent = []
+
+    class Scripted(Unverified):
+        def request(self, method, path, headers):
+            sent.append(dict(headers))
+
+        def getresponse(self):
+            row = rows.pop(0)
+            if isinstance(row, Exception):
+                raise row
+            return row
+
+    monkeypatch.setattr(discovery.http.client, "HTTPSConnection", Scripted)
+    basic = discovery.basic_material(raw({"url": REGISTRY, "username": "cp", "password": REGISTRY_PASSWORD}), REGISTRY)
+    with pytest.raises(discovery.DiscoveryRefusal) as caught:
+        discovery.resolve(basic, discovery.Registry(object(), BOUND_REQUEST), BOUND_REQUEST)
+    assert rows == [] and sent[1]["Authorization"] == basic and sent[2]["Authorization"] == "Bearer " + bearer
+    service = object.__new__(ceph_pull_broker.Broker)
+    service.lock, service.failure, service.untrusted = threading.Lock(), None, True
+    service.authority, service.anchor = REGISTRY, ceph_pull_broker.anchor(BOUND_REQUEST)
+    texts = [str(caught.value), json.dumps(caught.value.native_error), str(discovery.refusal(caught.value)), service.failure_cause]
+    assert caught.value.native_error["cause"].endswith("against trust bundle Secret registry-ca")
+    body = SYNTHETIC_BLOCK.splitlines()[1]
+    for private in (REGISTRY_PASSWORD, basic, basic[6:], bearer, "Bearer " + bearer, body, "verify failed", "self-signed"):
+        assert all(private not in text for text in texts)
+
+
+def test_every_frozen_auxiliary_reference_resolves_through_the_bound_bundle(tmp_path, monkeypatch):
+    registry_path, bundle = private_loans(tmp_path)
+    monkeypatch.setattr(discovery, "tls_proof", lambda *args: pytest.fail("host trust store with a bound bundle"))
+    digested_client = DigestAuxiliaryClient()
+    clients = {REPOSITORY: Client(), AUX_BASE: AuxiliaryClient(), DIGEST_BASE: digested_client}
+    original, seen = discovery.Registry, []
+
+    def registry(context, request):
+        seen.append((context, original(context, request).anchor, request["base"]))
+        return clients[request["base"]]
+
+    monkeypatch.setattr(discovery, "Registry", registry)
+    keepalived = {"name": "keepalived", "base": DIGEST_BASE, "tag": "", "image": DIGEST_BASE + "@" + digested_client.digest}
+    request = dict(BOUND_REQUEST, auxiliary=[AUX_ENTRY, keepalived])
+    result = discovery.execute("apply", request, GOLDEN["digest"], {"registryJSON": registry_path, "registryCA": bundle})
+    assert [entry["digest"] for entry in result["evidence"]["auxiliary"]] == [sha(raw(clients[AUX_BASE].manifest)), digested_client.digest]
+    assert [base for unused_context, unused_anchor, base in seen] == [REPOSITORY, AUX_BASE, DIGEST_BASE]
+    assert [anchor for unused_context, anchor, unused_base in seen] == ["trust bundle Secret registry-ca"] * 3
+    assert len({id(context) for context, unused_anchor, unused_base in seen}) == 1
+    assert isinstance(seen[0][0], ssl.SSLContext) and seen[0][0].get_ca_certs() == synthetic_ca_certs()

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import io
 import json
 import os
+import pathlib
 import socket
 import ssl
 import stat
@@ -77,6 +79,7 @@ def boundary(up):
     value.namespace, value.digest, value.upstream = "vendor/ceph", DIGEST, up
     value.total = 0
     value.failure = None
+    value.untrusted, value.anchor = False, "the host trust store"
     import threading
     value.lock = threading.Lock()
     value.stopping = threading.Event()
@@ -902,3 +905,117 @@ def test_broker_refuses_a_repository_outside_the_frozen_set(tmp_path, monkeypatc
         broker.Broker(str(tmp_path), FROZEN_SET, json.dumps(MATERIAL), time.monotonic() + 60,
                       lambda *args: pytest.fail("command before admission"), image=reference)
     assert list(tmp_path.iterdir()) == []
+
+
+SYNTHETIC_CA = "".join(line for line in (pathlib.Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "ceph-discovery-synthetic-ca.golden")
+                       .read_text(encoding="utf-8").splitlines(True) if not line.startswith("#"))
+BOUND = {"registry": REGISTRY, "image": REPOSITORY + "@sha256:" + DIGEST, "registryTrustBundleRef": "registry-ca"}
+
+
+def openssl(argv, timeout, limit):
+    assert argv[:2] == ["/usr/bin/openssl", "req"]
+    result = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            timeout=timeout, check=True, env={"PATH": "/usr/bin:/bin", "LANG": "C"})
+    assert len(result.stdout) + len(result.stderr) <= limit
+    return result.stdout
+
+
+def handshake(server, trust):
+    """One real loopback TLS handshake of a RegistryConnection pinned to 127.0.0.1 under the registry's TLS name."""
+    listener = socket.create_server(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+
+    def accept():
+        connection, unused = listener.accept()
+        with contextlib.suppress(OSError):
+            with server.wrap_socket(connection, server_side=True):
+                pass
+        connection.close()
+
+    worker = threading.Thread(target=accept)
+    worker.start()
+    connection = broker.RegistryConnection(REGISTRY, addresses=[(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("127.0.0.1", port))],
+                                           deadline=time.monotonic() + 10, port=port, context=broker.bundle_context(trust), timeout=5)
+    try:
+        connection.connect()
+    finally:
+        connection.close()
+        worker.join(timeout=5)
+        listener.close()
+
+
+def test_broker_upstream_trusts_only_the_bound_bundle_when_declared(tmp_path, monkeypatch):
+    identity = tmp_path / "identity"
+    identity.mkdir(mode=0o700)
+    server = broker.certificate(str(identity), str(identity / "native-certs"), REGISTRY, openssl)
+    server.verify_mode = ssl.CERT_NONE
+    ca = (identity / "ca.crt").read_text(encoding="ascii")
+    context = broker.bundle_context(ca)
+    expected = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    expected.load_verify_locations(cadata=ca)
+    assert context.get_ca_certs() == expected.get_ca_certs() and context.cert_store_stats()["x509_ca"] == 1
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname and context.minimum_version == ssl.TLSVersion.TLSv1_2
+    handshake(server, ca)
+    with pytest.raises(ssl.SSLCertVerificationError):
+        handshake(server, SYNTHETIC_CA)
+    captured = []
+    monkeypatch.setattr(broker, "Upstream", lambda *args, **kwargs: captured.append(kwargs["context"]) or object())
+    for index, (request, trust) in enumerate(((BOUND, ca), ({"registry": REGISTRY, "image": BOUND["image"]}, None))):
+        directory = tmp_path / str(index)
+        directory.mkdir(mode=0o700)
+        broker.Broker(str(directory), request, json.dumps(MATERIAL), time.monotonic() + 60,
+                      lambda *args: pytest.fail("certificate effect"), tls=object(), trust=trust)
+    assert isinstance(captured[0], ssl.SSLContext) and captured[0].get_ca_certs() == expected.get_ca_certs()
+    assert captured[1] is None
+
+
+@pytest.mark.parametrize("request_value,trust", [(BOUND, None), ({"registry": REGISTRY, "image": BOUND["image"]}, "bundle")])
+def test_broker_trust_must_match_the_request(tmp_path, monkeypatch, request_value, trust):
+    monkeypatch.setattr(broker, "Upstream", lambda *args, **kwargs: pytest.fail("upstream before admission"))
+    monkeypatch.setattr(broker, "certificate", lambda *args, **kwargs: pytest.fail("certificate before admission"))
+    monkeypatch.setattr(broker, "bundle_context", lambda *args: pytest.fail("trust before admission"))
+    tmp_path.chmod(0o700)
+    with pytest.raises(broker.BrokerError):
+        broker.Broker(str(tmp_path), request_value, json.dumps(MATERIAL), time.monotonic() + 60,
+                      lambda *args: pytest.fail("command before admission"), trust=trust)
+    assert list(tmp_path.iterdir()) == []
+
+
+class UntrustedUpstream:
+    private = [PASSWORD]
+
+    def __init__(self):
+        self.calls = 0
+
+    def fetch(self, method, path, consume):
+        self.calls += 1
+        raise ssl.SSLCertVerificationError(1, "certificate verify failed: synthetic " + DELIVERY + " " + TOKEN)
+
+    def close(self):
+        pass
+
+
+@pytest.mark.parametrize("client_identity", [True, False])
+def test_broker_bundle_that_does_not_verify_names_registry_and_secret(tmp_path, client_identity):
+    up = UntrustedUpstream()
+    with broker.Broker(str(tmp_path), BOUND, json.dumps(MATERIAL), time.monotonic() + 60, openssl, upstream=up, trust="bundle") as service:
+        port = int(service.environment["HTTPS_PROXY"].rsplit(":", 1)[1])
+        connection = socket.create_connection(("127.0.0.1", port), timeout=5)
+        connection.sendall(("CONNECT " + REGISTRY + ":443 HTTP/1.1\r\n\r\n").encode())
+        assert connection.recv(4096) == b"HTTP/1.1 200 Connection Established\r\n\r\n"
+        context = ssl.create_default_context(cafile=service.cert_directory + "/ca.crt")
+        if client_identity:
+            context.load_cert_chain(service.cert_directory + "/client.cert", service.cert_directory + "/client.key")
+        with contextlib.suppress(ssl.SSLError, ConnectionResetError):
+            with context.wrap_socket(connection, server_hostname=REGISTRY) as secured:
+                secured.sendall(("GET /v2/vendor/ceph/manifests/sha256:" + DIGEST + " HTTP/1.1\r\nHost: " + REGISTRY + "\r\n\r\n").encode())
+                with secured.makefile("rb") as stream:
+                    assert stream.read() == b""
+    cause = service.failure_cause
+    if client_identity:
+        assert up.calls == 1
+        assert cause == ("broker could not verify the TLS certificate of registry.example.test or its blob delivery endpoint"
+                         " against trust bundle Secret registry-ca")
+        assert all(value not in cause for value in (PASSWORD, TOKEN, DELIVERY, "certificate verify failed"))
+    else:
+        assert up.calls == 0 and cause == ""
