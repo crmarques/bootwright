@@ -44,19 +44,22 @@ Print the admin node and its Ceph command as the three-node example's [validatio
 
 Require `HEALTH_OK`, or only the tolerated `CHA_ERROR_SENDING_REPORT` warning, one running `nfs.shares` daemon, and an export at `/docs` whose `path` lies under `/volumes/apps/docs/`, with `access_type` `NONE`, `protocols` `[4]`, `transports` `["TCP"]` and the two client entries in their declared order. Bootwright's readiness proves the same stored export; client access is the operator's acceptance, not Bootwright's.
 
-Write the NFS daemon's host from the `orch ps` output as `<nfsHost>`. From the allowed client `rhel-02`, mount the export with NFSv4, write 1 MiB, read it back and unmount:
+Write the NFS daemon's host from the `orch ps` output as `<nfsHost>`. From the allowed client `rhel-02`, mount the export with NFSv4, write 1 MiB, read it back and unmount. Every client entry squashes root, so the client's root reaches the export as the anonymous user, which the subvolume's mode `750` denies; the check therefore writes, reads and removes as the subvolume's owner, uid and gid `2000` from `storage/subvolume.yaml`:
 
 ```sh
 ./bin/bootwright cluster exec --name ceph-lab --node rhel-02 -- sudo -n bash -s -- '<nfsHost>' <<'CHECK'
 set -euo pipefail
 check_dir=$(mktemp -d)
 trap 'umount "$check_dir/mnt" 2>/dev/null || true; rm -f -- "$check_dir/input"; rmdir -- "$check_dir/mnt" "$check_dir"' EXIT
+chmod 0711 "$check_dir"
 mkdir "$check_dir/mnt"
 mount -t nfs4 -o proto=tcp "$1:/docs" "$check_dir/mnt"
 head -c 1048576 /dev/urandom > "$check_dir/input"
-cp "$check_dir/input" "$check_dir/mnt/nfs-check"
-cmp "$check_dir/input" "$check_dir/mnt/nfs-check"
-rm -- "$check_dir/mnt/nfs-check"
+chmod 0644 "$check_dir/input"
+owner() { setpriv --reuid=2000 --regid=2000 --clear-groups -- "$@"; }
+owner cp "$check_dir/input" "$check_dir/mnt/nfs-check"
+owner cmp "$check_dir/input" "$check_dir/mnt/nfs-check"
+owner rm -- "$check_dir/mnt/nfs-check"
 CHECK
 ```
 

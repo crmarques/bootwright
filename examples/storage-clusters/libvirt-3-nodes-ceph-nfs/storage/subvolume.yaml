@@ -8,4 +8,6 @@ spec:
   filesystemRef: files
   group: apps
   sizeBytes: 1073741824
+  uid: 2000
+  gid: 2000
   mode: '750'

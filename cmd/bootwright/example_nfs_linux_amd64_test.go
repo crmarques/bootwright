@@ -3,7 +3,11 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -34,5 +38,35 @@ func TestExampleNFSPlansTheExportBlock(t *testing.T) {
 		if !slices.Contains(plan.Blocks[index].Dependencies, dependency) {
 			t.Errorf("the export block depends on %q, want it to include %q", plan.Blocks[index].Dependencies, dependency)
 		}
+	}
+}
+
+// TestExampleNFSAcceptanceWritesAsTheSubvolumeOwner keeps the README's
+// allowed-client check runnable: every client entry squashes root, so the
+// check writes through the export as the frozen subvolume's owner, which must
+// not be root.
+func TestExampleNFSAcceptanceWritesAsTheSubvolumeOwner(t *testing.T) {
+	state, _ := compileAcceptance(t, exampleDirectory(t, nfsExample))
+	definitions := productionDefinitions(t, state, nfsExample)
+	index := slices.IndexFunc(definitions, func(block reconciliation.BlockDefinition) bool { return block.ID == "ceph-subvolume-docs" })
+	if index < 0 {
+		t.Fatal("the example plans no ceph-subvolume-docs block")
+	}
+	request, err := ceph.DecodeRequest(definitions[index].Request)
+	if err != nil || request.Subvolume == nil {
+		t.Fatalf("the subvolume block froze %s (%v)", definitions[index].Request, err)
+	}
+	readme, err := os.ReadFile(filepath.Join(examplePath(t, nfsExample), "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	identities := regexp.MustCompile(`setpriv --reuid=(\d+) --regid=(\d+) `).FindAllStringSubmatch(string(readme), -1)
+	if len(identities) != 1 {
+		t.Fatalf("the README switches identity %d times, want once", len(identities))
+	}
+	uid, _ := strconv.Atoi(identities[0][1])
+	gid, _ := strconv.Atoi(identities[0][2])
+	if request.Subvolume.UID == 0 || uid != request.Subvolume.UID || gid != request.Subvolume.GID {
+		t.Fatalf("the README writes as %d:%d through a root-squashing export, but the subvolume is owned by %d:%d", uid, gid, request.Subvolume.UID, request.Subvolume.GID)
 	}
 }
