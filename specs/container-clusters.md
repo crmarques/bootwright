@@ -997,14 +997,16 @@ network's name, and waits for `NetworkCreated`; OVN-Kubernetes renders a
 `NetworkAttachmentDefinition` of the same name into every namespace the
 network's selector matches, so pods and VMs attach by that name.
 
-Every object is created under the add-on lifecycle's ownership receipts, a
-foreign object of the same name refuses, a continuation reports equal objects
-unchanged and fails naming a difference, a settled apply reaches no cluster and
-`bootwright diff --observe` reports drift (D153), and the block's removal retires it
-with its cluster without contacting it: the cluster leaves with its disks, or
-keeps running on physical nodes. A condition reporting `Degraded`, a policy
-matching no node and a foreign attachment definition each fail the block naming
-the object.
+Every object is created through the
+[cluster object program](add-ons.md#the-cluster-object-program) under its
+[ownership receipts](add-ons.md#ownership-receipts), a foreign object of the
+same name refuses, a continuation reports equal objects unchanged and fails
+naming a difference, a settled apply reaches no cluster and
+`bootwright diff --observe` reports drift (D153), and the block's removal
+retires it with its cluster without contacting it: the cluster leaves with its
+disks, or keeps running on physical nodes. A condition reporting `Degraded`, a
+policy matching no node and a foreign attachment definition each fail the block
+naming the object.
 
 Not yet met: no capability plans this block; tracked as
 [B726](milestones/m3.md#b726).

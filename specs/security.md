@@ -617,13 +617,28 @@ memory dump, request body, or provider response.
 
 ## Custom code
 
-[Add-on packages](add-ons.md) are declarative data consumed by qualified
-Bootwright-owned drivers. Built-in and custom origins have the same integrity,
-isolation, lifecycle, and negative-proof requirements. Neither grants process,
-adapter, target, effect, inventory, endpoint, dependency, credential, or
-privilege authority. Package-carried executable content is never loaded or run;
+Authored [add-on packages](add-ons.md) are declarative data consumed by
+qualified Bootwright-owned drivers; built-in packages are reviewed Go code
+whose program the same adapter runs. Built-in and custom origins have the
+same integrity, isolation, and negative-proof requirements, and custom
+packages gain the built-in lifecycle only with
+[B90](milestones/m4.md#b90). Neither grants process, adapter, target, effect,
+inventory, endpoint, dependency, credential, or privilege authority.
+Package-carried executable content is never loaded or run;
 a driver may enter only its pinned embedded adapter and locked dependency
 closure under [architecture](architecture.md#go-and-ansible-responsibility-boundary).
+
+A built-in add-on package is Go code reviewed with the executable: its
+admission and rendering are pure, it never patches, adopts or deletes a
+cluster object it did not create, and its only remote effects are those of the
+[cluster object adapter](add-ons.md#the-cluster-object-adapter), which starts
+only the located `oc`. A built-in package grants privileges to identities it
+does not own only as its configuration selects: the operator chosen by
+catalog, channel and `startingCSV` receives the permissions its CSV declares
+when Bootwright approves its plan, an operator-managed package's operator
+receives what the plans it approves declare, and a role its configuration
+names is bound as the GitOps bootstrap's access is. The operator's declaration
+is the trust decision, and the grant outlives a physical cluster's context.
 
 [`CustomPlaybook`](api/custom-playbooks.md) is a reserved, non-executable
 shape whose admission and refusal that page owns. An exit status, source
@@ -675,3 +690,5 @@ require qualified real-system tests, recorded in the
 | Read-only commands perform no writes, payload reads, processes, network access, secret lookup or generation. | `TestImmutableInputAndReadOnlyLifecycleBoundary`, `TestALifecycleInspectionRunsNothing`, `TestPlanPreviewsWithoutWritingAnything`, `TestStubServicesRemainStubs`, `TestReadsNeverCollectAStage` | none |
 | Rejected operations perform no effect. | `TestCancellationBeforeAnyEffectRegistersNothing`, `TestDeclinedConfirmationRegistersNothing`, `TestUnsupportedObjectsRefuseBeforeRegistration`, `TestInvalidAdmissionAndUnavailableRoutesDoNotWrite`, `TestADestroyOverAnIncompleteApplyWithAContradictedBlockRefuses`, `TestARepeatedApplyOverACompletedApplyWithABlockNotDoneRefuses`, `TestATransitionRefusesWhenItsFrozenPlanChangedBeforeMutation`, `TestATransitionRefusesWhenTheOperationRecordChangedBeforeMutation`, `TestAContinuationRefusesWhenABlockWasRetriedBeforeMutation`, `TestAFrozenPlanThatIsNotItsOperationsRefuses`, `TestARepeatedMaterialRefusesBeforeAnyJobExists`, `TestAnUnsafeMaterialNameOrValueRefusesBeforeAnyJobExists`, `TestAFrozenPlacementOffTheControllerRefusesEveryVerb` | none |
 | A failed security check cannot be bypassed by confirmation, retry or adapter behavior. | `TestMissingSafeguardsCannotBeReplacedByConfirmationFlags`, `TestOrphanAcknowledgementClaimsNothingAndReplacesNoOtherSafeguard`, `TestDestroyOverAnInterruptedApplyIsStillGated` | none |
+| Package content cannot select code, and configuration selects code only through the declared catalog, channel and CSV; neither can carry Secret bytes into a request, adopt a foreign object or force a field conflict, and a placed Secret's value reaches no record or output. | none yet | [B751](milestones/m4.md#b751), [B753](milestones/m4.md#b753) |
+| A storage export's keys and external-cluster details reach only custody and the consuming cluster's owned Secret, never a request, record, evidence, log, diagnostic, argument or output; no gateway private key leaves the Ceph side; an export never adopts or alters an entity it did not mint. | none yet | [B86](milestones/m4.md#b86), [B760](milestones/m4.md#b760) |

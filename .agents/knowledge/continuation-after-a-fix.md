@@ -68,6 +68,18 @@ lock continues with no `setup`.
   or evidence schema or a persisted automation format changes with the digest
   unmoved; it cannot see a change of meaning under an unmoved version, so a fix
   that changes what an effect is must move the implementation's version.
+- An add-on package's rendering change, such as another object, field or
+  approval rule in what a package's program renders, changes that instance's
+  request, so another build does not continue the operation: the continuation
+  refuses naming the first block that differs, and the way out is a destroy. A
+  fix confined to the cluster objects role or its modules (planned by
+  [B751](../../specs/milestones/m4.md#b751)) moves no content digest and no
+  request byte, so it continues a live operation like any other automation fix
+  here: rebuild, then `apply`. The approval-rule tags of
+  [B750](../../specs/milestones/m4.md#b750) are in the content digest from its
+  first delivery, so [B759](../../specs/milestones/m4.md#b759) lifts a planning
+  refusal and adds adapter behavior only, which moves the automation digest and
+  nothing else.
 - After continuing an operation with a build that writes `build`, do not go
   back to an earlier build for it: a build from before X74 decodes records
   closed and refuses one that carries `build` as "lifecycle record is malformed

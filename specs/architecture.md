@@ -205,7 +205,7 @@ owned behavior or asset is added.
 | `cmd/bootwright/` | Executable composition root and process boundary. |
 | `internal/<context>/` | Private Go domain, application, and adapter packages grouped by bounded context. |
 | `ansible/` | Controlled Ansible configuration, dependency locks, and embedded adapter collection. |
-| `add-ons/` | Built-in packages conforming to [the add-on contract](add-ons.md), owned by the Add-ons context and embedded through a narrow package. |
+| `add-ons/` | Reserved; no M4 item creates it: built-in package definitions are Go code under `internal/addons`, and authored payloads are [B90](milestones/m4.md#b90)'s. |
 | `scripts/` | Build, generation, packaging, and verification tooling; never product policy. |
 | `test/` | Cross-component and end-to-end fixtures and harnesses; package tests remain beside their Go packages. |
 
@@ -960,10 +960,14 @@ silently selecting one, and runs another build's automation only where that
 build freezes the same blocks. Recovery follows
 [state reconciliation](state-reconciliation.md#dependency-safety-during-recovery).
 
-For an add-on, implementation selection also binds the exact package, catalog
-snapshot, driver, and payload manifest defined by
-[the add-ons design](deferred/add-ons-design.md#package-standard). Package discovery never replaces
-the allowlisted registry or introduces executable authority at runtime.
+For an add-on, one implementation serves every built-in package, and the
+frozen request carries the whole program its package rendered
+([instances and blocks](add-ons.md#instances-and-blocks)), so a changed
+package changes the request another build compares. A custom package would
+also bind the exact package, catalog snapshot and payload manifest the
+[add-ons design](deferred/add-ons-design.md#package-standard) defines.
+Package discovery never replaces the allowlisted registry or introduces
+executable authority at runtime.
 
 ## Data, state, and effects
 

@@ -1,33 +1,13 @@
 # Add-ons design
 
-[B83](../milestones/m4.md#b83) revives this design with the first built-in
-package and binding lifecycle, [B89](../milestones/m6.md#b89) with
-custom-catalog acquisition and [B90](../milestones/m6.md#b90) with a
-declarative custom-package lifecycle.
-Until then the [add-on boundary](../add-ons.md) and the
-[add-on API](../api/addons.md) own what admission and the current code
-enforce, and nothing here is implemented except the step shape recorded
-under [Steps](#steps), which admission enforces.
+[B90](../milestones/m4.md#b90) revives this design with a declarative
+custom-package lifecycle. The [add-on lifecycle](../add-ons.md) owns the
+built-in packages M4 implements, their instances and blocks, the cluster
+object program, readiness and retirement, and the
+[add-on API](../api/addons.md) owns admission. Nothing here is implemented
+except the step shape recorded under [Steps](#steps), which admission enforces.
 
-## Responsibility boundary
-
-Add-ons resolves packages and drivers, expands bindings, and contributes typed
-local actions, readiness, ownership and inverse requirements.
-
-[Architecture](../architecture.md) owns component placement. Workspace owns
-verified catalog roots, atomic snapshot publication, crash recovery, retention
-and cleanup. [State reconciliation](../state-reconciliation.md) owns the global
-plan, block IDs, cross-context edges and durable transitions, and retains frozen
-package content through completed destroy. Add-ons owns semantic validation,
-not a shared writable store.
-
-## Declarative user journey
-
-Authors select add-ons directly or through profiles, bind them to a cluster,
-and supply declared resource or Secret inputs. Bootwright resolves and freezes
-packages, drivers, dependencies and target constraints for the complete
-selected environment. There is no standalone add-on execution, force,
-adoption or reclaim journey.
+A custom package adds the sections below to the built-in lifecycle.
 
 ## Package standard
 
@@ -80,9 +60,9 @@ The API rejects add-on `source.git`.
 
 ## Catalogs and dynamic discovery
 
-Built-in catalogs are embedded, locked and released with Bootwright. Custom
-catalogs require an explicitly specified acquisition, immutable publication
-and selection journey, including Workspace persistence. Both use the same
+The built-in catalog is the executable's own registry; a custom catalog
+requires an explicitly specified acquisition, immutable publication and
+selection journey, including Workspace persistence. Both use the same
 package and host contracts; origin grants no exemption or extra authority.
 
 Search only explicitly selected snapshots, offline. Acquisition must
@@ -178,41 +158,6 @@ Unsupported declarations, including global pull-secret merges or resources
 without a proven ownership-aware inverse, fail before planning; no selected
 step is silently dropped or reported as partially supported.
 
-## Lifecycle and ordering
-
-Preserve the API's resolved profile/binding order as the stable tie-break;
-dependency edges take precedence. Missing requirements, cycles, unsupported
-target versions, conflicting effects or ambiguous ownership fail before
-operation registration.
-
-Each instance requires positive target-cluster readiness and every consumed
-domain capability. Storage integration additionally requires positive storage
-readiness and the exact export identity. These are global plan prerequisites;
-an add-on cannot probe ahead or hide them in automation.
-
-Execute one state-authorized frozen action at a time. Completion requires all
-effects, readiness and ownership evidence to be positive and durable. Failure,
-cancellation, lost response and malformed or contradictory evidence follow
-[state reconciliation](../state-reconciliation.md#plan-and-execution). Replay and
-continuation retain the exact request, targets, content, dependencies and
-confidential binding.
-
-Destroy uses the completed apply snapshot, processes dependents before
-providers and removes only positively identified Bootwright-owned resources.
-Every effect requires an idempotence/replay boundary, observation, safe inverse
-or compensation, and positive absence proof. Without a safe complete inverse,
-a package is ineligible for managed lifecycle.
-
-## GitOps handoff
-
-Instances contribute safe completion, readiness, access and ownership evidence;
-[state reconciliation](../state-reconciliation.md#bootstrap-completion-and-gitops-readiness)
-owns the complete-environment handoff gate. Evidence names proven capabilities,
-never Secrets or vendor payloads. Handoff transfers no ownership: GitOps may
-control downstream resources, but cannot mutate Bootwright-owned resources.
-Ownership transfer needs a separate acceptance, continuation and destroy
-contract; add-ons confer no adoption, drift-repair or GitOps publication role.
-
 ## Security and isolation
 
 Apply [security.md](../security.md) to every descriptor, catalog, package, native
@@ -259,15 +204,10 @@ Every built-in and custom package passes the same qualification suite:
 
 Only passing packages enter the supported matrix. Unqualified packages may
 remain valid API declarations, but lifecycle operations refuse them before
-payload execution or platform mutation.
-
-## Frozen add-on blocks
-
-Add-on blocks also freeze the package, catalog snapshot, payload manifest,
-driver, and compatibility decision under the package standard above. They obey
-the same state machine and never re-resolve on continuation or destroy.
-Retain the selected non-secret package bytes in the operation snapshot through
-completed destroy, independent of source catalog availability.
+payload execution or platform mutation. B90's definition restates support
+under D157 and D163: no support statement names a release. The built-in
+qualification suite is [package qualification](../add-ons.md#package-qualification)
+and the [coverage page's qualification rules](../add-on-coverage.md#qualification-rules).
 
 ## Steps
 
@@ -339,10 +279,3 @@ only authored declaration relationships, without inspecting template tokens.
 The step timeout, target limit, and output format have effective defaults
 `10m`, `firstReachable`, and `text` for their effectful consumers. They remain
 absent in effective state when unauthored.
-
-## Reserved diagnostic code
-
-`addon.catalog`, for an invalid add-on name, version, registration or catalog
-identity, joins the
-[diagnostic taxonomy](../cli/output.md#diagnostic-taxonomy-and-order) with its
-first emission.

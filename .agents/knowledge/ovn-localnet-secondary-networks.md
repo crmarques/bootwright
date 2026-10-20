@@ -52,6 +52,11 @@ The v1 lesson ids name review notes of the main-v1 branch, likewise untracked.
   `spec.probeConfiguration.dns.host` names a host the cluster resolves, or the
   DNS server answers an NS query for `root-servers.net`; otherwise NNCP
   enactments can fail the probe and roll back (R3:C28).
+- The shipped NMState CSV supports own, single and all namespaces and declares
+  disconnected support (`M4 RV-R1`, the M4 definition's untracked review of OLM
+  and catalogs, corrections 1 and 2). An earlier reading took the upstream
+  `bundle/` template for the shipped CSV and found an install-mode
+  contradiction that does not exist.
 
 ## Bridge mappings and the primary interface
 

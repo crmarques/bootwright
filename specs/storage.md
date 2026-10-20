@@ -824,6 +824,14 @@ Observation never writes, and no credential or stored specification reaches
 evidence, which lists only each daemon's host, name and service. The block's
 deadline is fixed for its type (apply 2280 s, observe 720 s, destroy 1380 s).
 
+A managed [StorageExport](storage-resources.md#storageexport) is realized by
+its export block, which mints the consumer's own principals and produces its
+external-cluster details in custody; it installs nothing on the consuming
+cluster.
+
+Not yet met: no export block exists; tracked as
+[B86](milestones/m4.md#b86).
+
 The management gateway unit `ceph-service-<cluster>-mgmt-gateway` runs its
 apply phase only on the bootstrap host, after the firewall check below on each
 host of its keepalive-only ingress when it declares a `virtual_ip`. Before any

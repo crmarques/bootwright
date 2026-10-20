@@ -155,8 +155,9 @@ discovered under [the API input rules](input.md#discovery):
 - omission selects every discovered YAML file, while an authored empty list is
   invalid.
 
-A native add-on descriptor published by the add-on registration journey
-([B89](../milestones/m6.md#b89) owns its storage and publication) is the sole selection exception.
+A native add-on descriptor under the `_store` directory of `add-ons/` is the
+sole selection exception; no registration journey publishes one, and its
+removal is parked as [B771](../milestones/backlog.md#b771).
 `add-ons/_store/<name>/add-on.yaml` is selected when it contains exactly one
 `ClusterAddon/<name>` and the same directory contains the exact sibling basename
 `.bootwright-addon`. `<name>` is a DNS label of at most 63 ASCII bytes, and the
@@ -175,7 +176,7 @@ selection only, never package authenticity or execution authority; see
 
 Not yet met: a hard-linked marker refuses the whole input read as
 `input.symlink` rather than only withholding the selection exception; tracked
-as [B365](../milestones/backlog.md#b365).
+as [B771](../milestones/backlog.md#b771).
 
 An excluded-file warning identifies its relative path, Bootwright object
 identities and safe recovery guidance under the
@@ -199,8 +200,8 @@ The cluster-selection closure is authoritative and independent of file layout:
 | Starting selection | Retained objects |
 | --- | --- |
 | Every selection | The selected `Environment`, its required controller Machine and that Machine's provider/provider-host closure, plus resource-selected `Entitlement`, `MachineImage`, `MachineInstallProfile`, `NetworkConfig`, `Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer`, `CustomPlaybook`, and `Secret` objects; every retained managed service also retains its placement Machine and that Machine's `InfraProvider` and provider-host Machine closure. |
-| One `ContainerCluster` | That root; its node Machines; the Machines' `InfraProvider` objects and any libvirt provider-host Machines; Machines hosting managed infrastructure services consumed by the root; bindings for the root plus their recursively expanded profiles and add-ons; and each `StorageExport` attached through a selected add-on's `storageExportAttachment` effect, its referenced storage cluster, policy/pool/filesystem/gateway chain, and every `StorageNFSExport` on that retained storage cluster. |
-| One `StorageCluster` | That root and every `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage`, `StorageFilesystem`, `StorageSubvolume`, `StorageObjectGateway`, `StorageNFSExport`, `StorageSMBResource`, and `StorageExport` naming it; its node, provider, provider-host, and consumed-service Machines; and each `ContainerCluster` attached to one of those exports through a `storageExportAttachment` effect, together with that container root's bindings, recursively expanded profiles, and add-ons. |
+| One `ContainerCluster` | That root; its node Machines; the Machines' `InfraProvider` objects and any libvirt provider-host Machines; Machines hosting managed infrastructure services consumed by the root; bindings for the root plus their recursively expanded profiles and add-ons; and each `StorageExport` attached through a selected add-on's `storageExportAttachment` effect or named by a selected package's configuration, its referenced storage cluster, policy/pool/filesystem/gateway chain, and every `StorageNFSExport` on that retained storage cluster. |
+| One `StorageCluster` | That root and every `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage`, `StorageFilesystem`, `StorageSubvolume`, `StorageObjectGateway`, `StorageNFSExport`, `StorageSMBResource`, and `StorageExport` naming it; its node, provider, provider-host, and consumed-service Machines; and each `ContainerCluster` attached to one of those exports through a `storageExportAttachment` effect or a package's configuration, together with that container root's bindings, recursively expanded profiles, and add-ons. |
 
 Closures for all listed roots are unioned and then emitted in canonical API
 order. The rules apply until nothing more is retained. A `ContainerCluster`
@@ -215,6 +216,9 @@ excluded. A reference from an always-retained object to an excluded object is
 not an implicit retention edge; it is an unresolved-reference error that tells
 the author to make the selections consistent. Omission of both cluster lists
 skips this filtering and retains every resource-selected object.
+
+Not yet met: a package's configuration retains no export; tracked as
+[B760](../milestones/m4.md#b760).
 
 ## Remote-machine access and install defaults
 

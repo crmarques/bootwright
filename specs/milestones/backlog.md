@@ -23,7 +23,7 @@ Alias cell.
 | [B98](#b98) | C30; B336 split from it on 2026-10-05 (D101) | enabling | Architecture | Production comments reduced to what the clarity contract keeps | D101: M1 amends the rule, and a ratchet holds the count |
 | [B100](#b100) | C2 (LoadBalancer) | product | Infrastructure services | One managed `LoadBalancer` lifecycle | No consumer; M4's MetalLB is an in-cluster add-on |
 | [B101](#b101) | C6 (rest) | product | CLI | One more view of evidence or access, or a dashboard | No milestone names a view or dashboard |
-| [B102](#b102) | C8 | product | Custom automation | One typed, invertible executable playbook journey | M6's packages are add-ons, not playbooks |
+| [B102](#b102) | C8 | product | Custom automation | One typed, invertible executable playbook journey | M4's packages are add-ons, not playbooks |
 | [B103](#b103) | C14 | safety | Workspace and Secrets | Explicit complete-store restore | No milestone needs backup and restore |
 | [B104](#b104) | C15; B337 split from it on 2026-10-05 (D85) | safety | Secrets | Bounded lifetime allocation for secret reservations | D85: after B337 only applies and new versions consume the budget; waits on B103 |
 | [B105](#b105) | C19 | product | Secrets | One more secret-store implementation | `local-keyring` meets the current scope |
@@ -83,7 +83,6 @@ Alias cell.
 | [B362](#b362) | new, 2026-10-06 (X40) | enabling | Secrets | A Secret version stored before X40 stays current across a re-import from another directory | Found in X40; parked under D48 (D116); D71 accepted the residual |
 | [B363](#b363) | new, 2026-10-06 (X40) | enabling | State reconciliation | Status diagnoses a removal whose source apply's records are unreadable | Found in X40; parked under D48 (D116); the specs require today's refusal |
 | [B364](#b364) | new, 2026-10-06 (X40) | enabling | State reconciliation | A plan preview over a keyring listing that fails as corrupt names the lost binding | Found in X40; parked under D48 (D116) |
-| [B365](#b365) | new, 2026-10-06 (X40) | defect | Desired state, with Add-ons | The add-on marker rule and the input reader agree | Found in X40; parked under D48 (D116); add-on input is in no M1 journey |
 | [B366](#b366) | new, 2026-10-06 (X40) | enabling | Machine, with Desired state | Repeated reads X40 left | Found in X40; parked under D48 (D116) |
 | [B367](#b367) | new, 2026-10-06 (X40) | enabling | Desired state | Validate refusals X40 left | Found in X40; parked under D48 (D116) |
 | [B368](#b368) | new, 2026-10-06 (X40) | enabling | Each test's owner | Tests and gates X40 left | Found in X40; parked under D48 (D116) |
@@ -238,11 +237,38 @@ Alias cell.
 | [B741](#b741) | new, 2026-10-20 (D172) | product | Container cluster | Linux-bridge NADs and overlay UDNs as secondary networks | M3d's external networks are localnet; neither is needed by its profiles, pending the owner's [Q24](m3.md#m3a-open-decisions) |
 | [B742](#b742) | new, 2026-10-20 (D172) | product | Container cluster | Tang disk encryption | The API admits TPM2 only; Tang needs reachable servers and thumbprints |
 | [B743](#b743) | new, 2026-10-20 (D172) | product | Container cluster and Substrate | One virtual cluster across several libvirt hosts | An emulated controller fetches the private image without verifying its server |
-| [B744](#b744) | new, 2026-10-20 (D172) | product | Container cluster, with Add-ons | MetalLB BGP advertisements | M3d's pools are L2; BGP needs a router and one ASN per cluster |
+| [B744](#b744) | new, 2026-10-20 (D172) | product | Add-ons | MetalLB BGP advertisements | M3d's pools are L2; BGP needs a router and one ASN per cluster |
 | [B745](#b745) | new, 2026-10-20 (D172) | product | Substrate | A Redfish facade realizes KubeVirt Machines | The 2026-06-28 owner decision keeps `virtctl image-upload`; vSphere needs the port anyway; the facade needs host-wide feature gates |
 | [B746](#b746) | new, 2026-10-20 (D172) | enabling | Substrate | One staged image per cluster on push arms | Per-node pushes keep ownership per Machine; it needs evidence from M3e or M3f runs that per-node pushes are the bottleneck |
 | [B747](#b747) | new, 2026-10-20 (D172) | product | Container cluster and Substrate | A cluster whose nodes span KubeVirt or vSphere and another arm | No run qualifies it, and the media block would both publish and push; it needs B88 or B733 and a qualifying run |
 | [B748](#b748) | new, 2026-10-20 (D172) | product | Container cluster | OKD clusters through the agent installer | M3's coverage is OpenShift; OKD's release, client and image sources need their own definition, and its refusal row stays |
+| [B769](#b769) | new, 2026-10-20 (D173) | product | Add-ons | One add-on instance removed online from a cluster that stays | M4 retires instances with their cluster; [D153](#decisions) refuses changing a completed apply's selection |
+| [B770](#b770) | new, 2026-10-20 (D173) | product | Add-ons | `preflight add-ons` reports add-on prerequisites before an apply | No check is provable before the cluster exists; apply-time gates name their failures |
+| [B771](#b771) | new, 2026-10-20 (D173); folds B365 | defect | Add-ons, with Workspace | The `add-ons/_store` selection exception, its marker and its reader rules leave the input reader | Dead surface now that B89 is retired; removing input-reader rules is not needed by any M4 package |
+| [B772](#b772) | new, 2026-10-20 (D173) | product | Add-ons | A package installed through OLM v1 (`ClusterExtension`) | ODF/FDF, ACM, MCE and GitLab do not qualify; own-namespace installs are Technology Preview |
+| [B773](#b773) | new, 2026-10-20 (D173) | product | Add-ons | A registry credential merged into a cluster's global pull secret with an exact-entry receipt | Its inverse never runs under retirement; the install pull secret carries entitlements from first boot |
+| [B774](#b774) | new, 2026-10-20 (D173) | safety | Container cluster, with Add-ons | Add-on work uses a scoped cluster identity instead of the 10-year administrator certificate | Needs an identity minted and revoked per operation; [B64](m3.md#b64) lends the installer's kubeconfig today |
+| [B775](#b775) | new, 2026-10-20 (D173) | product | Add-ons | NMState's probe host on a disconnected cluster, as package configuration | M3 refuses disconnected clusters |
+| [B776](#b776) | new, 2026-10-20 (D173) | product | Add-ons | A MetalLB pool on a secondary interface forwarded by a per-interface NNCP instead of the cluster's `ipForwarding: Global` | The cluster-wide setting serves every documented release; per-interface NNCP forwarding is documented only from 4.22 and needs the `nmstate` package |
+| [B777](#b777) | new, 2026-10-20 (D173) | safety | Add-ons | MetalLB pools of two clusters on one layer 2 network refused when they overlap | Needs admission across add-on instances, which the package interface does not offer; no profile shares a network between two clusters' pools |
+| [B778](#b778) | new, 2026-10-20 (D173) | product | Add-ons, with Container cluster | Data Foundation on a disconnected cluster, its mirror set derived from the selected bundles' related images | M3 refuses disconnected clusters |
+| [B779](#b779) | new, 2026-10-20 (D173) | product | Add-ons and Storage | In-transit encryption between a Data Foundation cluster and its Ceph cluster | The Ceph-side secure messenger modes and daemon restarts are unverified and no M4 profile needs them |
+| [B780](#b780) | new, 2026-10-20 (D173) | product | Add-ons, with Container cluster | The Data Foundation console plugin enabled on the cluster console | Enabling it patches the cluster-owned console operator configuration, which no package may touch; readiness does not need it |
+| [B781](#b781) | new, 2026-10-20 (D173) | product | Add-ons, with Container cluster | An `acm` hub imports other Bootwright-managed clusters of the context as managed clusters | Import places one cluster's administrator credential in another cluster, which the Secrets contract refuses; managed clusters block the hub's deletion; fleet management is day-2 |
+| [B782](#b782) | new, 2026-10-20 (D173) | product | Add-ons | Managed clusters registered with the hub's Argo CD through `GitOpsCluster`, `Placement` and a cluster set binding | Needs [B781](#b781)'s managed clusters; it is fleet GitOps wiring, outside bootstrap |
+| [B783](#b783) | new, 2026-10-20 (D173) | product | Add-ons | GitOps installed without its default instance, or with a Bootwright-owned Argo CD instance whose source namespaces, trust and placement Bootwright declares | No M4 journey needs it; disabling the default later deletes it, so the choice is creation-time only |
+| [B784](#b784) | new, 2026-10-20 (D173) | product | Add-ons | A bootstrap repository reached over SSH or behind a private certificate authority, and an `ApplicationSet` root | Known hosts and repository CAs live in operator-managed ConfigMaps Bootwright never patches; needs [B783](#b783)'s owned instance or an operator-supported creation-time field |
+| [B785](#b785) | new, 2026-10-20 (D173) | product | Add-ons | ACM component toggles (`spec.overrides.components`) as `acm` configuration | The hub operator may rewrite the list it is given, which create-only comparison would read as a difference on every continuation; needs a keyed list comparison or proof it does not |
+| [B786](#b786) | new, 2026-10-20 (D173) | product | Add-ons | GitLab installed from the operator's OpenShift release manifest supplied by the operator | Needs [B90](m4.md#b90)'s frozen manifest-set payloads; embedding a manifest in the executable would register an operator version (D163) |
+| [B787](#b787) | new, 2026-10-20 (D173) | product | Storage, with Add-ons and Secrets | GitLab's object-storage documents composed by Bootwright from a StorageObjectUser's produced keys | Needs a closed document format in the Secret placement beside [B760](m4.md#b760)'s produced placement; the operator-supplied documents serve M4f |
+| [B788](#b788) | new, 2026-10-20 (D173) | product | Add-ons | Git over SSH to GitLab through a Gateway API TCPRoute with an explicit controller and a LoadBalancer address | Routes cannot carry SSH; needs a Gateway controller package and MetalLB on the cluster |
+| [B789](#b789) | new, 2026-10-20 (D173) | product | Add-ons | PostgreSQL and Redis or Valkey for GitLab from in-cluster operator packages | GitLab calls in-cluster stateful services non-production; no verified package research |
+| [B790](#b790) | new, 2026-10-20 (D173) | product | Add-ons | GitLab Community Edition through the operator | CE through the operator is undocumented and unverified |
+| [B791](#b791) | new, 2026-10-20 (D173) | product | Add-ons | GitLab on a disconnected cluster | M3 refuses disconnected clusters; the bundle declares itself not disconnected-capable |
+| [B792](#b792) | new, 2026-10-20 (D173) | product | Add-ons | GitLab Runner through the GitLab Runner Operator as its own package | The GitLab Operator installs no Runner; no M4 journey needs CI execution |
+| [B793](#b793) | new, 2026-10-20 (D173) | product | Add-ons, with Secrets | GitLab backups to object storage and a declared Rails secret, so external data survives a cluster rebuild | Chart keys unverified; backup content is day-2 data custody |
+| [B794](#b794) | new, 2026-10-20 (D173) | product | Add-ons | A program check arm that probes an HTTP endpoint, such as GitLab's readiness path through its Route | A new check arm moves the program version; no M4 package needs it to exit |
+| [B795](#b795) | new, 2026-10-20 (D173) | product | Add-ons, with Secrets | GitLab trusts a declared CA bundle toward its object storage, PostgreSQL and Redis | The chart's custom-CA and TLS keys are unverified; the profile reaches its services without a private CA |
 
 ### B82
 
@@ -612,10 +638,6 @@ Since X40 `status` reads the operation, plan and block records of the apply each
 ### B364
 
 Since X40 `status` reads a keyring listing that fails as corrupt or undecryptable as the reopen will and names the binding lost, but `plan`, whose preview never reopens a binding, still presents the continuation that `apply` then refuses (found in X40, older than it). **Exit evidence:** the lost-binding golden's failing-listing variant previewing the refusal and the exits `status` names.
-
-### B365
-
-The environment spec says a linked add-on marker grants no exception, but the input reader refuses the whole read when a marker is hard-linked, since X40 as `input.symlink` (found in X40, older than it). **Exit evidence:** the spec and the reader agreeing, with a reader test for a hard-linked marker.
 
 ### B366
 
@@ -2563,7 +2585,12 @@ node off the artifact server's host"). Parked on 2026-10-20 (D172).
 
 MetalLB BGP: `BGPPeer` (`metallb.io/v1beta2`) and `BGPAdvertisement`, one ASN
 and router ID per cluster. Parked on 2026-10-20 (D172): the pools of
-[B727](m4.md#b727) are L2.
+[B727](m4.md#b727) are L2. Revived as configuration of the MetalLB package
+([B84](m4.md#b84)): a pool's `bgp` advertisement beside `l2`, peers in
+`metallb.io/v1beta2 BGPPeer` with one `myASN` and router ID per cluster, and a
+profile with a BGP router reachable on TCP 179. The `bgpBackend` choice (`frr`
+or `frr-k8s`) is the operator's configuration and never a Bootwright default
+(D173).
 
 ### B745
 
@@ -2604,6 +2631,288 @@ covers. Parked on 2026-10-20 (D172) when M3's coverage was defined for
 OpenShift only. **Revival needs:** OKD's release, installer, client and
 base-image sources and their trust, a distribution arm of the installer inputs,
 and an acceptance run; the refusal-table row lifts with that code.
+
+### B769
+
+One add-on instance removed online from a cluster that stays: operands before
+their operator as each product requires, deletes by a raw DELETE whose
+`DeleteOptions` pin the recorded `uid` (`oc delete` has no precondition flag),
+positive absence of Subscription, CSV and namespace, a terminating namespace
+reported from its conditions, and a report of the OLM footprint it cannot
+invert (CSVs, InstallPlans, CRDs, dependency Subscriptions). Parked on
+2026-10-20 (D173): M4 retires instances with their cluster, and
+[D153](#decisions) refuses changing a completed apply's selection. **Revive
+when** the owner asks for day-2 removal; it needs a desired-state journey D153
+does not admit today.
+
+Package facts for that removal. ACM: remove `MultiClusterObservability`,
+`DiscoveryConfig`, `AgentServiceConfig` and non-local `ManagedCluster` objects
+first, because the hub's validating webhook refuses deletion while they exist;
+deletion takes up to 20 minutes and its finalizer removes the multicluster
+engine it created; CRDs, cluster roles and webhook configurations remain until
+the documented cleanup script runs, and a later install of an earlier minor
+over them can fail. GitOps: delete the bootstrap object first (it carries no
+cascade finalizer), then `GitopsService/cluster` (which the documentation says deletes the
+instances; garbage collection of the default instance is unverified), then the Subscription and CSV; the operator's instances are not
+removed by removing the operator.
+
+### B770
+
+`bootwright preflight add-ons` reporting, with no effect, the cluster API
+answering through the lent kubeconfig, a named CatalogSource `READY` and the
+declared `startingCSV` in its channel. Parked on 2026-10-20 (D173): no check
+is provable before the cluster exists, and apply-time gates name their
+failures. **Revive when** an operator asks for the first pre-apply check.
+
+### B771
+
+Remove the `add-ons/_store/<name>/add-on.yaml` selection exception, its
+marker, its reader bounds and its context-manifest rule now that no
+registration journey exists; folds B365, whose hard-linked-marker defect
+disappears with it. Touches the input reader and context records
+(`specs/api/environment.md`, `specs/api/input.md`). Parked on 2026-10-20
+(D173): the exception is dead surface now that B89 is retired, and no M4
+package needs the input-reader rules removed. **Revive when** an input-reader
+change is already open, or the exception causes a defect.
+
+### B772
+
+OLM v1 `ClusterExtension` as a second install shape for packages that meet its
+criteria (MetalLB, GitOps and NMState on paper). No Manual-approval equivalent
+was found (uncertain). Parked on 2026-10-20 (D173): ODF/FDF, ACM, MCE and
+GitLab do not qualify, and own-namespace installs are Technology Preview.
+**Revive when** OLM v1 installs a package this milestone covers, with a
+documented approval step.
+
+### B773
+
+`globalPullSecretMerge` realized: read and rewrite `openshift-config/pull-secret`
+under `no_log` with a `resourceVersion` precondition, refuse a different
+existing entry for the registry, record registry, username and disposition,
+remove only the exact recorded entry. Parked on 2026-10-20 (D173): its inverse
+runs only with [B769](#b769), and the install pull secret carries entitlements
+from first boot. **Revive when** an entitlement must be added after
+installation.
+
+### B774
+
+A least-privilege identity for add-on work (for example a ServiceAccount token
+minted per operation and revoked after it), keeping the installer's 10-year
+`system:admin` certificate (no rotation entry was found; Kubernetes has no
+client-certificate revocation) for installation only.
+Parked on 2026-10-20 (D173): it needs an identity minted and revoked per
+operation, and [B64](m3.md#b64) lends the installer's kubeconfig today.
+**Revive when** the owner asks for a scoped identity or a package needs
+permissions the lent kubeconfig must not carry.
+
+### B775
+
+On a disconnected cluster the NMState package sets
+`spec.probeConfiguration.dns.host` from a `probeDNSHost` configuration field
+naming a host the managed resolver answers (the former B735 open question).
+Parked on 2026-10-20 (D173): M3 refuses disconnected clusters. **Revive when**
+M3 admits `spec.install.mode: disconnected`; it is one of three parked
+disconnected-cluster items with [B778](#b778) and [B791](#b791).
+
+### B776
+
+The MetalLB package could forward for a pool on a secondary interface through
+one `nmstate.io/v1 NodeNetworkConfigurationPolicy` per node setting
+`ipv4.forwarding: true` on the named interface:
+- the 4.22 documentation does it this way and its release notes list
+  per-interface forwarding as new;
+- the package would then require `nmstate`;
+- a run must prove that the policy's partial interface edit keeps the
+  interface's static address;
+- it limits forwarding to one interface instead of every interface.
+
+Parked on 2026-10-20 (D173): the cluster-wide `ipForwarding: Global` setting
+serves every documented release. **Revive when** an operator refuses
+cluster-wide forwarding, with a run on each release minor that operator uses.
+
+### B777
+
+Two clusters of one context whose MetalLB pools overlap on a shared layer 2
+network would both answer ARP for one address. Refusing this needs a rule over
+every `metallb` instance of the effective catalog. The package interface sees
+one instance and its cluster's facts, so the rule would be an add-on admission
+rule of [B752](m4.md#b752)'s instance function. Parked on 2026-10-20 (D173):
+no profile shares a network between two clusters' pools. **Revive when** a
+profile shares one network between two clusters' pools.
+
+### B778
+
+Data Foundation on a disconnected cluster: the mirror set and pull-secret
+checks derive from the selected bundles' `relatedImages`, never from a fixed
+per-product list, because the bundles pull from IBM and several Red Hat
+registry paths that differ per bundle; the operator mirrors the catalog and
+names it through an owned `catalogSource`. Parked on 2026-10-20 (D173): M3
+refuses disconnected clusters. **Revive when** M3 admits
+`spec.install.mode: disconnected`.
+
+### B779
+
+`spec.network.connections.encryption.enabled` on the StorageCluster with the
+Ceph-side `ms_client_mode`, `ms_cluster_mode`, `ms_service_mode secure` and
+`rbd_default_map_options ms_mode=secure` and their daemon restarts (uncertain).
+Parked on 2026-10-20 (D173): the Ceph-side secure messenger modes and daemon
+restarts are unverified, and no M4 profile needs them. **Revive when** the
+owner asks for it and a Ceph-side procedure is verified.
+
+### B780
+
+The `odf-console` plugin named by the CSV enabled in
+`consoles.operator.openshift.io/cluster` `spec.plugins`. Parked on 2026-10-20
+(D173): enabling it patches the cluster-owned console operator configuration,
+which no package may touch, and readiness does not need it. **Revive when** a
+cluster-owned object patch with an exact-entry receipt exists, as
+[B773](#b773) would need.
+
+### B781
+
+An `acm` configuration listing other `ContainerCluster`s of the context that
+the hub imports: per cluster, a namespace, a `ManagedCluster`
+(`cluster.open-cluster-management.io/v1`) with `spec.hubAcceptsClient: true`, a
+`KlusterletAddonConfig` and an import credential (uncertain: not re-verified).
+The documented auto-import route places a kubeconfig or token of the imported
+cluster in the hub (Secret `auto-import-secret`), which "A cluster's
+administrator kubeconfig is never placed in a cluster"
+([secrets](../secrets.md), [B753](m4.md#b753)) refuses; a least-privilege
+import identity (beside [B774](#b774)) or the manual import-manifest route
+would be needed. Cross-cluster edges (the imported cluster's install block), a
+hub that "cannot manage a different hub" and the deletion webhook all follow.
+Parked on 2026-10-20 (D173). **Revive when** the owner asks for fleet
+registration at bootstrap.
+
+### B782
+
+`ManagedClusterSet`, a `ManagedClusterSetBinding` in `openshift-gitops` whose
+name equals the set, a `Placement` and a `GitOpsCluster`
+(`apps.open-cluster-management.io/v1beta1`, `spec.argoServer.cluster`,
+`spec.argoServer.argoNamespace: openshift-gitops`, `spec.placementRef`) on a
+cluster bound to both `acm` and `gitops`. The controller writes cluster
+Secrets into `openshift-gitops` beside Bootwright's repository Secret. Parked
+on 2026-10-20 (D173): it is fleet GitOps wiring, outside bootstrap. **Revive
+when** [B781](#b781) is revived.
+
+### B783
+
+Either `DISABLE_DEFAULT_ARGOCD_INSTANCE: "true"` in the Subscription
+`config.env` at creation (the operator then deletes any default instance), or a
+Bootwright-created `ArgoCD` in an owned namespace with declared
+`sourceNamespaces`, `spec.tls.initialCerts`, `initialSSHKnownHosts`, placement
+and RBAC. The second is the route to [B784](#b784) and to a self-signed GitLab
+(M4f). Parked on 2026-10-20 (D173): no M4 journey needs it, and disabling the
+default later deletes it, so the choice is creation-time only. **Revive when**
+an operator needs a GitOps instance other than the default.
+
+### B784
+
+SSH repository URLs (known hosts beyond the operator's defaults), HTTPS behind
+a private certificate authority (entries in `argocd-tls-certs-cm`, an
+operator-managed ConfigMap), and an `ApplicationSet` root (generators are
+content; the ApplicationSet controller is outside the instance's `Available`
+computation). Parked on 2026-10-20 (D173): Bootwright never patches
+operator-managed ConfigMaps. **Revive when** [B783](#b783) lands an owned
+instance, or the operator supports a creation-time field for them.
+
+### B785
+
+`spec.overrides.components` as a map of component name to enabled; names are
+not validated by Bootwright because the hub webhook does and the set changes
+per release. Parked on 2026-10-20 (D173): the operator is reported to complete
+the list it is given (inference, unverified), which create-only comparison
+would read as a difference on every continuation. **Revive when** a keyed list
+comparison exists in the cluster object program or a run proves the hub
+operator leaves the list as given.
+
+### B786
+
+GitLab through the operator's OpenShift release manifest (a 31-document file:
+the CRD, service accounts, cluster roles, the webhook with cert-manager CA
+injection, the Issuer and Certificate, an SCC, an IngressClass, and everything
+in `gitlab-system`), which GitLab recommends over OLM and which places no
+`olm.maxOpenShiftVersion` gate on cluster updates. The operator supplies the
+file, frozen with the context as a [B90](m4.md#b90) manifest-set payload;
+Bootwright embeds no version (D163). Parked on 2026-10-20 (D173): it needs
+B90's payloads. **Revive when** B90 is revived.
+
+### B787
+
+Bootwright composes the chart's consolidated `connection` document (provider
+`AWS`, region, the RGW endpoint, the keys, `path_style: true`) and the registry
+storage document from a StorageObjectUser's produced keys and a
+StorageObjectGateway's endpoint, placed through the produced-input source
+[B760](m4.md#b760) delivers and a closed document format added to the Secret
+placement; one key copy instead of the operator's two. Parked on 2026-10-20
+(D173): the operator-supplied documents serve M4f. **Revive when** an operator
+asks for RGW object storage without handling keys.
+
+### B788
+
+Git over SSH: Gateway API with an explicit controller (the operator pins Envoy
+Gateway's controller name unless overridden), a `TCPRoute` for `gitlab-shell`
+on port 22, and a LoadBalancer address (MetalLB, M4c). The bundled NGINX route
+is deprecated and leaves Routes; it stays refused. Parked on 2026-10-20
+(D173): Routes cannot carry SSH, and the path needs a Gateway controller
+package and MetalLB on the cluster. **Revive when** an operator needs SSH to
+GitLab.
+
+### B789
+
+CloudNativePG (which GitLab's end-to-end suite uses) and a Valkey operator as
+built-in packages providing tokens `gitlab` would require. Parked on
+2026-10-20 (D173): GitLab positions in-cluster stateful services as
+non-production, retirement with a virtual cluster would destroy the data, and
+no package research is verified. **Revive when** an operator asks for
+in-cluster services and a package research pass qualifies them.
+
+### B790
+
+`global.edition: ce`: the chart supports it, the operator documents no edition
+and the certified image list holds only `-ee` images. Parked on 2026-10-20
+(D173): the combination is undocumented and unverified. **Revive when** a live
+check shows the operator installs the Community Edition.
+
+### B791
+
+The bundle's `relatedImages` lists only the operator image and declares
+disconnected `"false"`; operand images need per-subchart repository overrides
+or cluster-level tag mirroring. Parked on 2026-10-20 (D173): M3 refuses
+disconnected clusters. **Revive when** M3 admits disconnected clusters.
+
+### B792
+
+`gitlab-runner-operator` from the certified and community catalogs as its own
+package, with registration tokens as placed Secrets. Parked on 2026-10-20
+(D173): the GitLab Operator installs no Runner, and no M4 journey needs CI
+execution. **Revive when** an operator asks for CI execution on the cluster.
+
+### B793
+
+Toolbox backups to object storage (an s3cmd configuration Secret) and the
+Rails secret, which is not in a backup (uncertain), declared in custody so
+that a new cluster can reuse a database and buckets that outlive a retired
+one. Parked on 2026-10-20 (D173): the chart keys are unverified, and backup
+content is day-2 data custody. **Revive when** an operator asks for data to
+survive a cluster rebuild.
+
+### B794
+
+A `httpEndpoint` check arm probing a URL through the cluster's ingress (for
+GitLab, the webservice readiness path) under the attempt's deadline, read from
+the controller. Parked on 2026-10-20 (D173): a new check arm moves the program
+version, and no M4 package needs it to exit. **Revive when** a package's
+readiness cannot be proved from cluster objects.
+
+### B795
+
+A `caBundle` Secret placed and named in the chart's custom certificate
+authorities, and TLS settings toward PostgreSQL (`global.psql.ssl`) and Redis
+(`rediss`), for services behind a private CA (the custom-CA key is
+unverified). Parked on 2026-10-20 (D173): the profile reaches its services
+without a private CA. **Revive when** an operator's PostgreSQL, Redis or
+object storage sits behind a private CA.
 
 ## Retired
 
@@ -2657,6 +2966,8 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | B63 | 2026-10-20 | Alias L4. Folded under [D172](#decisions) into [B713](delivered.md#b713); each later shape carries its own lifecycle journeys. |
 | B65 | 2026-10-20 | Alias L6. Retired under [D172](#decisions): every M3 item carries the contract, crash, replay, cancellation and real-system evidence of its own binding. |
 | B397 | 2026-10-20 | Folded under [D172](#decisions) into [B308](delivered.md#b308), whose refusal-table rows include the off-controller boot-image server. |
+| B89 | 2026-10-20 | Alias C10. Moved from M6 and folded under [D173](#decisions) into [B752](m4.md#b752) (built-in packages need no acquisition; authored packages are input-tree data frozen with the context) and [B754](m4.md#b754) (the registration commands are removed); its `add-ons/_store` exception is parked as [B771](#b771). |
+| B365 | 2026-10-20 | Folded under [D173](#decisions) into [B771](#b771), which removes the `add-ons/_store` exception and its marker, so the hard-linked-marker disagreement leaves with them. |
 
 ## Decisions
 
@@ -3557,3 +3868,113 @@ Requires cell as `owner decision: <question>`.
   version rebases it, no reader of an older version is added, and a context an
   earlier build applied is destroyed with that build first. No implementation
   slice is activated and no host operation is authorized.
+
+- **D173** (2026-10-20, the owner's request; the clauses after the owner's
+  words are taken by the session, pending the owner's review): the owner asked
+  "let's start planning m4 - addons / think of basic requisites and structure
+  the high-level design / we will divide m4 in submilestones: / m4a: requisite
+  details and spec update, so implementation will be straigthforward / m4b:
+  code skelleton to handle add-ons fully / m4c: network addons / m4d: ibm data
+  foundation add-ons / m4e: acm/gitops addon / m4f: Gitlab addon / detail the
+  high-level spec and implement m4a, so i could use other AIs to implement the
+  following m4 submilestones / create a new branch call m4 to save the work
+  from this session, and later we will incorporate to main / reference branch
+  already implemented some of those features in the past and have a lot of
+  learned lessions / i don't want you to blindly copy things from there, but
+  you could be inspired and take some notes of the problems that have been
+  overcome / optimize token usage but dividing work in tasks that will be
+  performed by the best fitting model/effort". The
+  [M4 page](m4.md#submilestones) owns the submilestones' mapping and gates,
+  the [add-on lifecycle](../add-ons.md) the shared contract, and the
+  [coverage page](../add-on-coverage.md) the package matrix. This expressly
+  permits the suffixed submilestone IDs M4a to M4f while retaining M4's single
+  status and all B/X/D identifiers, as D131 did for M2 and D172 for M3; M4's
+  title becomes "Cluster add-ons". Taken by the session, pending the owner's
+  review: (1) M4a is definition only, delivered as enabling slice X135 whose
+  one item, [B749](m4.md#b749), is M4's coverage and contract definition and
+  completes when the owner accepts the baseline, as D134 accepted M2a; it
+  grants no implementation authority. (2) "code skelleton to handle add-ons
+  fully" is read as the one built-in lifecycle every M4c to M4f package uses:
+  packages compiled into the executable and selected under a binding's
+  `spec.packages` with typed configuration ([Q26](m4.md#m4a-open-decisions)),
+  one cluster object program and adapter over `oc`, create-only with
+  operation-specific ownership ([Q27](m4.md#m4a-open-decisions)), Manual OLM
+  approval of a declared `startingCSV` ([Q28](m4.md#m4a-open-decisions)), one
+  instance block per package and cluster retired with its cluster
+  ([Q32](m4.md#m4a-open-decisions)), owned cluster Secrets and the package
+  listing; a built-in package is therefore reviewed Go code rather than
+  declarative data, and the [project's extension model](../project.md#implementation-and-extension-model)
+  and the [custom-code rule](../security.md#custom-code) are amended to say so,
+  authored packages staying declarative data refused until B90
+  ([Q26](m4.md#m4a-open-decisions)); the program carries from its first delivery every approval policy
+  and Secret placement source M4c to M4f use, so those submilestones move no
+  existing contract version (M4d's B86 adds the new `ceph-export` identities).
+  The Kubernetes NMState Operator, [B735](m4.md#b735),
+  moves from M4c into M4b as its reference package
+  ([Q29](m4.md#m4a-open-decisions)). Authored (custom) packages stay
+  [B90](m4.md#b90), scheduled after M4f ([Q31](m4.md#m4a-open-decisions));
+  online removal, add-on preflight, OLM v1, the global pull-secret merge and a
+  least-privilege cluster identity are parked. (3) M6 folds into M4 because
+  the owner placed ACM and GitOps in M4e and GitLab in M4f: [B91](m4.md#b91)
+  and [B92](m4.md#b92), "acm/gitops" read as Red Hat Advanced Cluster
+  Management and Red Hat OpenShift GitOps, move to M4e, [B93](m4.md#b93) to
+  M4f and B90 to M4, each with a dated alias; B89 retires, folded into
+  [B752](m4.md#b752) and [B754](m4.md#b754), with `add-ons add` and
+  `add-ons delete` removed ([Q30](m4.md#m4a-open-decisions)); M6 is retired as
+  M5 was, its page a stub holding no item, its Status row kept
+  `not started`, and its number never reused; M7 requires M4 instead of M6.
+  (4) "network addons" is read as MetalLB with its layer 2 pools
+  ([Q36](m4.md#m4a-open-decisions)); X134 keeps its ID as M4c's
+  network-package slice, which B83 and B735 leave for X138, and M3d's
+  cluster-network block narrows its dependency on B83 to the program and
+  adapter it consumes ([B750](m4.md#b750), [B751](m4.md#b751)). (5) "ibm data
+  foundation add-ons" is read as one package, `fdf`, installing the operator
+  package `odf-operator` from IBM's catalog or, expected but unverified until
+  [B761](m4.md#b761), the same package from Red Hat's, as the binding names
+  ([Q38](m4.md#m4a-open-decisions)), attached in external mode to the Ceph
+  cluster M2 manages; the Ceph side stays Storage's
+  ([B86](m4.md#b86), [B762](m4.md#b762), [B763](m4.md#b763)), and the IBM
+  entitlement travels in the cluster's install pull secret
+  ([Q33](m4.md#m4a-open-decisions)). (6) The words "so i could use other AIs
+  to implement the following m4 submilestones" are read, as D172 (5) read
+  them, as waiving M2 and M3c for the implementation of M4b to M4f's slices
+  only, each slice keeping the M2 and M3 slices its row names, excepting those
+  slices from the two-active-slice WIP limit beside M2c's and M3's, and
+  letting M4c to M4f's in-tree slices start once the M4b in-tree slices they
+  name have landed; promotion, every operator gate and M4 completion keep
+  their Requires ([Q59](m4.md#m4a-open-decisions)), and
+  [Q25](m3.md#m3a-open-decisions) keeps M3d's scope. The waiver takes effect
+  only for a slice the owner authorizes. (7) Each submilestone exits on an
+  emulated rehearsal recorded as an owner-accepted ledger row; D17's "M4"
+  names the milestone that D128 renumbered to M2, so no M4 row on real
+  hardware is required, and no package needs one
+  ([Q61](m4.md#m4a-open-decisions)). (8) Native facts are
+  evidence, never rules: the operator declares every channel, CSV and catalog
+  image; a bundle's `olm.maxOpenShiftVersion` is recorded, never enforced; a
+  difference between release minors becomes a registered version
+  specialization only when a run shows the general mechanism failing (D157,
+  D162, D163). The reference branch is read for lessons only, as D172 (7)
+  states, and none of its architecture becomes a requirement. (9) The token
+  instruction governs how the session divides and routes its work; it changes
+  no product spec. (10) New items B749 to B795: B749 is M4a's; B750 to B768 sit
+  on M4's page, B762 to B764 with Owner Storage; B769 to B795 are parked. New
+  slices X135 to X155, and X134 is re-planned. Owner questions continue M3's
+  series as Q26 to Q61. The parked B365 retires, folded into
+  [B771](#b771). B688 to B699 and X105 to X109 stay unused (D172 (4)); the
+  numbers carry no meaning, and integration re-checks main, `m2c` and `m3` for
+  B749 or later, X135 or later and D173 or later and renumbers the unlanded
+  items on a collision, and re-checks `m2c` for conflicts with m2.md's B491
+  addition (revoking one export's principals, [Q39](m4.md#m4a-open-decisions))
+  and OD25 text and with Q43's change to M2c's default of no published storage
+  FQDN. (11) The definition lands as one squashed docs commit
+  on the local branch `m4`, created from branch `m3` at `310284528` (the
+  unmerged M3 definition) and never pushed; incorporating `m4` into main waits
+  for the owner and follows `m3`'s, and D168's merge on checkpoint applies to
+  M4's slices only once `m4` is on main. (12) Each slice that changes a frozen
+  request moves its version as D172 (10) states. (13) The GitOps bootstrap
+  object hands its cluster to GitOps once every other block that reaches that
+  cluster is complete, before the environment-wide handoff predicate holds,
+  and the [project's handoff paragraph](../project.md#lifecycle-and-handoff)
+  is amended to allow that per-cluster early handoff; this clause stays
+  pending until the owner answers [Q60](m4.md#m4a-open-decisions). No
+  implementation slice is activated and no host operation is authorized.

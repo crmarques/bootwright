@@ -298,22 +298,8 @@ same-cluster storage graph.
 
 ## StorageExport
 
-`StorageExport` is a discriminated union for a downstream storage surface.
-
-| Field | Type | Required | Default | Rule |
-| --- | --- | --- | --- | --- |
-| `spec.type` | string | conditional | `dataFoundation` when that arm is present | Currently `dataFoundation`. External exports author it. |
-| `spec.clusterRef` | string | yes | — | Managed or external `StorageCluster`. |
-| `spec.dataFoundation` | object | conditional | — | Managed-cluster arm. |
-| `spec.externalDetails` | object | conditional | — | External-cluster arm. |
-
-For a managed cluster, `dataFoundation` is required and `externalDetails` is
-forbidden. It contains required same-cluster `rbdPoolRef` and
-`filesystemRef`, plus optional same-cluster `objectGatewayRef`. The pool has
-role `rbd`.
-
-For an external cluster, `externalDetails` is required and `dataFoundation`
-is forbidden. Its `fromSecretRef` is a scalar `opaque` `Secret` reference.
+Promoted to the [StorageExport field record](../storage-resources.md#storageexport)
+(D173).
 
 ## Normalization
 

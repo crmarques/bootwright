@@ -333,6 +333,11 @@ implicit trust inherited from another consumer.
 | `ovnKubernetesConfig` | object | no | absent; `mtu`, `gatewayConfig.routingViaHost`, `gatewayConfig.ipForwarding` (`Restricted` or `Global`), each written into the install-time `Network` only when set. |
 | `secondaryNetworks` | array | no | `[]`; localnet secondary networks below. |
 
+A cluster whose [MetalLB pool](addons.md#package-metallb) names an interface
+declares `gatewayConfig.routingViaHost: true` and `gatewayConfig.ipForwarding:
+Global`: forwarding on that interface is the cluster's install-time
+declaration, never an add-on's change.
+
 The two lists default independently. An authored non-empty list retains its
 membership and order while effective output canonicalizes CIDR text:
 
@@ -366,8 +371,8 @@ physical network and of the attachment definition workloads select.
 | `ipam.lifecycle` | string | no | `Persistent`, with `Enabled` only. |
 | `namespaceSelector.matchLabels` | map | yes | Non-empty Kubernetes labels selecting the namespaces that receive the attachment definition. |
 
-A cluster that declares a secondary network needs a binding of an add-on
-providing `nmstate`.
+A cluster that declares a secondary network needs a binding that
+selects a package or add-on providing `nmstate`.
 
 Not yet met: `ovnKubernetesConfig` and `secondaryNetworks` are not admitted;
 tracked as [B719](../milestones/m3.md#b719) and

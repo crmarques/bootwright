@@ -24,7 +24,8 @@ is not necessarily implemented or authorized.
 | OpenShift provider coverage and acceptance profiles | [cluster coverage](container-cluster-coverage.md) |
 | Ceph lifecycle, native input, resources and release qualification | [storage](storage.md), [native input](storage-native-api.md), [resources](storage-resources.md), [coverage](storage-coverage.md) |
 | Trust, sensitive material, processes, network, supply chain | [security](security.md) |
-| The add-on boundary | [add-ons](add-ons.md) |
+| The add-on boundary and lifecycle | [add-ons](add-ons.md) |
+| Built-in add-on packages and acceptance profiles | [add-on coverage](add-on-coverage.md) |
 | Delivery state, open items, delivered history, parked work, decisions | [milestones](milestones.md) and its pages, [delivered](milestones/delivered.md), [backlog](milestones/backlog.md) |
 | Design for an unpromoted feature, only when reviving it | [deferred](deferred/) |
 

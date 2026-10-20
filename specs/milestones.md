@@ -15,10 +15,10 @@ listed commands return the [unavailable result](cli.md#recognized-but-unavailabl
 | [M1](milestones/m1.md) | Foundations: substrates, infrastructure components and Machines | none | in progress | X55/X60 for M2c (D159) |
 | [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | D156; applicable M1c/M1d/M1e; B509 | in progress | M2c paused; X56-59, X61 part on main |
 | [M3](milestones/m3.md) | Full OpenShift on libvirt+sushy, BMCs, KubeVirt, vSphere | M2; applicable M1c to M1g; B18/B23/B265 | in progress | M3b operator gate |
-| [M4](milestones/m4.md) | MetalLB and IBM Fusion Data Foundation | M2, M3c | not started | nothing until M2 and M3c |
+| [M4](milestones/m4.md) | Cluster add-ons | M2, M3c | in progress | X135 |
 | [M5](milestones/m5.md) | Retired: moved to M3e (D172) | none | not started | nothing |
-| [M6](milestones/m6.md) | Add-ons ACM, Argo CD and GitLab | M4 | not started | nothing until M4 |
-| [M7](milestones/m7.md) | Standalone native files and commands | M6 | not started | after M6: B51 |
+| [M6](milestones/m6.md) | Retired: moved to M4 (D173) | none | not started | nothing |
+| [M7](milestones/m7.md) | Standalone native files and commands | M4 | not started | after M4: B51 |
 
 [D158](milestones/backlog.md#decisions) reopens M1 as Foundations with
 [M1a to M1g](milestones/m1.md#submilestones). The accepted hardening baseline
@@ -28,7 +28,7 @@ remain delivered.
 
 - **Next for agents:** [M2c](milestones/m2.md#m2c)'s remaining lanes resume on
   `m2c` later, each merged at its checkpoint (D168).
-- **Next for operator:** review D159 to D172. Other provider and cluster
+- **Next for operator:** review D159 to D173. Other provider and cluster
   gates keep their acceptance.
 
 ## Scope rules
@@ -98,8 +98,9 @@ remain delivered.
 ## Identifiers
 
 - **M\<n\>, milestone.** Sequence position; new milestones append. Exceptions:
-  D128's unfinished-scope renumbering, D131's M2 and D172's
-  [M3 submilestones](milestones/m3.md#submilestones), and D158's
+  D128's unfinished-scope renumbering, D131's M2, D172's
+  [M3](milestones/m3.md#submilestones) and D173's
+  [M4 submilestones](milestones/m4.md#submilestones), and D158's
   [Foundations redefinition](milestones/m1.md#submilestones).
   Other IDs and dated history stay fixed.
 - **B\<n\>, item.** One bounded outcome on exactly one milestone page, or

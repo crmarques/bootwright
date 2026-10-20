@@ -47,7 +47,10 @@ The [GitOps handoff gate](state-reconciliation.md#bootstrap-completion-and-gitop
 requires durable completion, readiness, access and ownership evidence for the
 entire selected bootstrap scope. GitOps may then control downstream day-2
 resources, without co-managing Bootwright-owned resources. Handoff does not
-transfer, adopt or reclaim ownership.
+transfer, adopt or reclaim ownership. An optional
+[GitOps bootstrap object](add-ons.md#the-gitops-bootstrap-object) hands one
+cluster to GitOps earlier, once every Bootwright block that reaches that
+cluster is complete, under the same ownership rule.
 
 ## Implementation and extension model
 
@@ -58,10 +61,13 @@ Official installers, APIs, modules and tools own their native mechanisms;
 Bootwright coordinates and verifies them under the
 [architecture contract](architecture.md).
 
-[Add-ons](add-ons.md) are immutable declarative data packages executed by
-qualified Bootwright-owned drivers. Built-in and custom packages share the
-same trust and lifecycle contract. They configure cluster-bound capabilities;
-underlying cluster, storage and substrate invariants retain their domain owners.
+Built-in [add-on](add-ons.md) packages are reviewed Go code in the executable
+that renders a closed cluster object program, run by one qualified
+Bootwright-owned adapter; authored (custom) packages are declarative data
+refused until [B90](milestones/m4.md#b90), which will compile them into the
+same program under the same trust contract. They configure cluster-bound
+capabilities; underlying cluster, storage and substrate invariants retain
+their domain owners.
 There is no ambient plugin path or dynamic native-code loading.
 
 `CustomPlaybook` is a reserved authoring shape, with no execution authority.

@@ -335,6 +335,32 @@ one StorageClient's entry in its native keyring form under the
 rotation re-encrypts it with every other version, and it is removed with the
 keyring.
 
+## Material placed in a cluster
+
+A declared Secret reaches a cluster only as an
+[owned Secret](add-ons.md#owned-secrets) of a block that binds it: the request
+names the target and the mapping of parts to keys, the attempt is lent exactly
+the mapped parts, and no value or value-derived digest reaches a request,
+record, evidence, log, diagnostic or adapter output. A storage export's
+external-cluster details reach their consuming cluster the same way, as an
+owned Secret placed from the export block's produced material, which no
+command reveals. The placed copy is outside custody once created: it leaves
+with a virtual cluster's disks and stays on a physical cluster that keeps
+running after its context is destroyed. Rotating the declaration never
+changes a placed copy; a fresh apply after a destroy places the version it
+binds. A cluster's administrator kubeconfig is never placed in a cluster:
+planning [refuses every produced placement source](add-ons.md#owned-secrets)
+outside its closed set. The external-cluster details give the consuming
+cluster's administrators the [trust extent](storage-resources.md#storageexport)
+of the export's principals, which is not isolated from other exports of the
+same Ceph cluster. A placed copy is readable by every principal its namespace grants; a GitOps
+repository credential, for example, is readable by Argo CD's components in
+their namespace, so a credential placed there should be one scoped to reading
+that repository.
+
+Not yet met: no block places a Secret in a cluster; tracked as
+[B753](milestones/m4.md#b753) and [B760](milestones/m4.md#b760).
+
 ## Local keyring v4
 
 The `secrets/` subtree is initialized during context creation, independently

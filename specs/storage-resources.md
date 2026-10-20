@@ -975,6 +975,138 @@ StorageSMBResource is admitted and realized by its SMB block once the samba
 images of its StorageCluster are authored under `spec.ceph.images`; until then
 planning refuses it as the [refusal table](storage.md#refusal-table) states.
 
+## StorageExport
+
+A `StorageExport` is the Ceph side of one Data Foundation consumer. Its
+managed arm names what the consumer attaches; the export block realizes the
+principals and the external-cluster details that a consuming package places
+in its cluster ([add-on lifecycle](add-ons.md#built-in-packages-and-selection)).
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: StorageExport
+metadata:
+  name: odf-compact
+
+spec:
+  clusterRef: ceph-example
+  dataFoundation:
+    rbdPoolRef: odf-compact-rbd
+    filesystemRef: shared
+    objectGatewayRef: objects
+```
+
+| Field | Contract |
+| --- | --- |
+| `type` | `dataFoundation`, normalized when that arm is present. |
+| `clusterRef` | Required `StorageCluster`. |
+| `dataFoundation.rbdPoolRef` | Required replicated StoragePool of role `rbd` of the same cluster. |
+| `dataFoundation.filesystemRef` | Required StorageFilesystem of the same cluster declaring the subvolume group `csi`. |
+| `dataFoundation.objectGatewayRef` | Optional StorageObjectGateway of the same cluster with an endpoint. |
+| `dataFoundation.cephxKeyType` | `aes` (default) or `aes256k`: the type of every key the export mints. |
+| `externalDetails.fromSecretRef` | An `opaque` Secret for an external cluster; refused, parked as [B107](milestones/backlog.md#b107). |
+
+Admission also requires a declared prometheus service on the cluster, because
+ocs-operator refuses details without a monitoring endpoint, and an export
+name of at most 51 bytes, so the block identity `ceph-export-<export>` stays
+within 63. A consuming package names each export at most once across the
+input. `aes` is the default because kernel CephFS and RBD clients need
+Linux 7.0 or later for `aes256k` keys; the operator chooses `aes256k` for
+nodes that run it.
+
+The export block depends on the cluster, the pool, the filesystem, the
+gateway and the monitoring unit, is exclusive on its cluster, and runs on the
+bootstrap host. Before any effect it proves the cluster's ownership record and
+FSID, the pool's `rbd` application under its recorded ID, the `csi` group, a
+non-empty `prometheus` endpoint in `ceph mgr services`, the gateway's realm,
+zone group and zone, and that the monitors allow the declared key type; any
+failure refuses, naming the missing prerequisite or the allowed key types.
+It then mints, for this export and this apply operation, five CephX
+principals and, with a gateway, one RGW user, each named from a digest of the
+apply operation's identity and the export's name:
+
+| Principal | `mon` | `mgr` | `osd` | `mds` |
+| --- | --- | --- | --- | --- |
+| health | `allow r, allow command quorum_status, allow command version` | `allow command config` | `profile rbd-read-only`, plus with a gateway `allow rwx pool=<zone>.rgw.meta, allow r pool=.rgw.root, allow rw pool=<zone>.rgw.control, allow rx pool=<zone>.rgw.log, allow x pool=<index pool>` | `allow *` |
+| RBD node | `profile rbd, allow command 'osd blocklist'` | none | `profile rbd pool=<pool>` | none |
+| RBD provisioner | `profile rbd, allow command 'osd blocklist'` | `allow rw` | `profile rbd pool=<pool>` | none |
+| CephFS node | `allow r, allow command 'osd blocklist'` | `allow rw` | `allow rw tag cephfs *=<filesystem>` | `allow rw` |
+| CephFS provisioner | `allow r, allow command 'osd blocklist'` | `allow rw` | `allow rw tag cephfs metadata=<filesystem>` | `allow *` |
+
+These are the exporter's restricted-authorization capabilities, whose
+privileged grants serve ocs-operator's health checks and CSI provisioning.
+The RGW user carries `buckets=*;users=*;usage=read;metadata=read;zone=read`
+and `info=read`, created in the gateway's realm, zone group and zone; its caps
+apply to every user and bucket of the realm. It serves the operator's object
+bucket provisioning.
+
+Trust extent: an export trusts its consuming cluster's administrators with
+every RGW user and bucket of the gateway's realm, read and write of the
+zone's RGW metadata pool, which holds every RGW user's keys, and every path of
+the named filesystem. Exports that share a cluster, filesystem or gateway are
+not isolated from each other: per-export principals give per-export removal,
+not isolation.
+
+Each CephX key is generated at the declared type and retained under client
+custody before its native add; a lost reply recaptures it and never
+regenerates. The RGW user is created by `radosgw-admin user create
+--uid=<minted> ... --gen-access-key --gen-secret`, never with
+`--access-key` or `--secret-key` on any argument list; its JSON reply is read
+privately and the key pair retained under client custody before the block
+records progress. A lost reply recaptures the pair from `radosgw-admin user
+info --uid=<minted>`, read privately, and refuses unless the user has exactly
+one S3 key pair and the minted caps. An entity or RGW user of a minted name
+that this block has no attempt record for refuses as foreign; a key of
+another type refuses. The export never adopts, rotates, re-caps or removes an
+entity it did not mint and never changes the monitors' cipher policy.
+
+The block then assembles the details in the exporter's entry vocabulary and
+offers them as its produced output `external-details` only from a proved
+completion:
+
+| Entry | Kind | Data |
+| --- | --- | --- |
+| `external-cluster-user-command` | ConfigMap | `args`: a fixed Bootwright marker |
+| `rook-ceph-mon-endpoints` | ConfigMap | `data`: the quorum leader recorded at the first assembly as `<name>=<address>:3300`; `maxMonId` `0`; `mapping` `{}` |
+| `rook-ceph-mon` | Secret | `fsid`; `admin-secret` and `mon-secret` as fixed placeholders |
+| `rook-ceph-operator-creds` | Secret | the health principal |
+| `monitoring-endpoint` | CephCluster | `MonitoringEndpoint`: the public addresses of the MGR hosts; `MonitoringPort`: the `prometheus` port |
+| `rook-<principal>` for the four CSI principals | Secret | `userID`, `userKey` |
+| `ceph-rbd` | StorageClass | `pool` and the RBD secret names |
+| `cephfs` | StorageClass | `fsName`, the default data pool as `pool`, and the CephFS secret names |
+| `ceph-rgw`, with a gateway | StorageClass | `endpoint`: `<fqdn>:<port>`; `poolPrefix`: the zone |
+| `rgw-admin-ops-user`, with a gateway | Secret | `accessKey`, `secretKey` |
+| `ceph-rgw-tls-cert`, with a TLS gateway | Secret | `cert`: the gateway certificate chain, never its key |
+
+The details are a pure function of the retained keys and the non-secret facts
+the block recorded at its first assembly, so a continuation reproduces the
+same bytes. Before offering them the block checks them: every key is a
+non-empty string of the declared type, the recorded leader is a monitor the
+cluster's request declares, by name, and its address is that monitor's
+declared public address, the monitoring endpoint names at least one address
+and a port, `ceph-rgw` names exactly the gateway's endpoint, the
+RGW keys are non-empty, and `ceph-rgw-tls-cert` is present exactly when the
+gateway terminates TLS. Its evidence names the principals, their capabilities
+and key type, the RGW user, the recorded leader and the entries by name and
+kind; no key, key digest, certificate private key or detail reaches a
+request, record, evidence, log, diagnostic or output. Observation compares
+each principal's key and capabilities privately and never writes.
+
+The export block retires with its cluster when every host is a
+Bootwright-owned virtual Machine the same destroy removes; otherwise its
+removal refuses with the cluster's other resources, and revoking one export
+while the cluster stays is [B491](milestones/m2.md#b491)'s.
+
+Not yet met: every StorageExport refuses as a later resource family; tracked
+as [B762](milestones/m4.md#b762). No export block mints a principal
+or produces details; tracked as [B86](milestones/m4.md#b86). The gateway's
+endpoint name is not resolvable from a consuming cluster; tracked as
+[B763](milestones/m4.md#b763). Whether ocs-operator and Rook accept a
+`ceph-rgw-tls-cert` holding the certificate chain without the private key is
+unverified, because Red Hat's document says the file includes private keys;
+tracked as [B761](milestones/m4.md#b761). "Never its key" is Bootwright's
+security decision, not a native requirement.
+
 ## Remaining resource families and consuming gates
 
 These families use the shared resource envelope and explicit dependency model.

@@ -926,6 +926,16 @@ reasons is two diagnostics. A frozen plan requires a resolved
 implementation for every block; a removal planned from a frozen plan is never
 refused this way.
 
+Which add-on kinds select an effect is owned by
+[add-ons](add-ons.md#built-in-packages-and-selection). The engine consequence
+is that only a `ClusterAddonBinding` is an effect-bearing kind that the add-on
+capability claims, and what it cannot realize it reports as
+[add-on refusals](add-ons.md#refusal-table).
+
+Not yet met: the engine treats `ClusterAddon` and `ClusterAddonProfile` as
+effect-bearing kinds and refuses all three add-on kinds as unclaimed; tracked
+as [B83](milestones/m4.md#b83).
+
 The engine's own refusals, of objects no capability of this executable claims,
 are the rows below, and `TestUnclaimedObjectTableMatchesTheEngine` holds
 `Unrealizable` to them. An external managed service and a Machine whose
@@ -1786,6 +1796,17 @@ not perform another platform effect, transfer ownership, or authorize GitOps
 to mutate Bootwright-owned resources. Add-on drivers and other capabilities
 contribute typed readiness evidence, but cannot declare the complete
 environment ready themselves.
+
+A [GitOps bootstrap object](add-ons.md#the-gitops-bootstrap-object) is an
+owned object of the apply, created after every other block that reaches its
+cluster. It hands that cluster to GitOps without waiting for the predicate
+over the whole environment, as the
+[project's handoff paragraph](project.md#lifecycle-and-handoff) allows
+(pending the owner's Q60 under [D173](milestones/backlog.md#decisions)), and
+transfers no ownership.
+
+Not yet met: no apply creates a bootstrap object; tracked as
+[B765](milestones/m4.md#b765).
 
 `status` reports the predicate as its handoff section: ready, or each reason it
 is not, in this order: no apply recorded or a destroy as the latest operation,
