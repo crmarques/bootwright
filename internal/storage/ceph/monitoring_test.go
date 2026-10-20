@@ -329,3 +329,19 @@ func TestNoBoundMaterialInPlanRequestEvidence(t *testing.T) {
 	_, err = New(api.StorageCluster, &recordingRunner{}).WithProofs(dependencyProofs{}).run(context.Background(), monitoringExecution(t, foreign), "apply", foreign)
 	refusedWith(t, err, "lifecycle.state", "a Ceph service unit binds a credential leaf this build does not realize", "")
 }
+
+func TestUnrealizedMonitoringServicesKeepTheCoreRefusal(t *testing.T) {
+	for _, serviceType := range []string{"ceph-exporter", "mgmt-gateway", "oauth2-proxy"} {
+		t.Run(serviceType, func(t *testing.T) {
+			_, err := planned(t, delegatedCatalog([]api.Value{auxiliaryService(serviceType, "", api.Value{})}, nil), api.StorageCluster, "example")
+			refusedWith(t, err, "lifecycle.unsupported", "a selected service has no core lifecycle", "use only MON, MGR, OSD and MDS services until its feature item is delivered")
+		})
+	}
+	r, err := planned(t, delegatedCatalog([]api.Value{auxiliaryService("prometheus", "", api.Value{})}, nil), api.StorageCluster, "example")
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	if len(r.Delegated) != 1 || r.Delegated[0].Name != "prometheus" {
+		t.Fatalf("delegated %+v, want only prometheus", r.Delegated)
+	}
+}
