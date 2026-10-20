@@ -365,7 +365,7 @@ hexadecimal digests normalize to lowercase. Set-valued lists sort only where
 their owning schema says so; ordered lists retain authored order.
 Not yet met: ContainerCluster `spec.distribution.release.image` and ClusterAddon
 `spec.olm.catalogSource.image` digests are not yet lowercased; tracked as
-[B411](milestones/backlog.md#b411).
+[B411](milestones/m3.md#b411).
 
 Composed machine and cluster hostnames, Environment defaults, provider and
 component defaults, cluster networking defaults, and other normalized values

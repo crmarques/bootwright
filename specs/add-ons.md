@@ -38,3 +38,13 @@ vocabulary, ordering, GitOps handoff, qualification suite and step semantics
 are recorded in the [add-ons design](deferred/add-ons-design.md), which
 [B83](milestones/m4.md#b83), [B89](milestones/m6.md#b89) and
 [B90](milestones/m6.md#b90) revive.
+
+M3d's first consumers are built-in OLM operator packages providing `nmstate`
+and `metallb` ([B735](milestones/m4.md#b735) and
+[B84](milestones/m4.md#b84)). The
+[cluster network block](container-clusters.md#post-installation-network-configuration)
+requires the `nmstate` provider, and the MetalLB package carries its own
+address pools and advertisements as typed configuration of its binding
+([B727](milestones/m4.md#b727)), never the cluster's. Authored packages,
+including manifest sets, need the custom-package lifecycle of
+[B90](milestones/m6.md#b90).

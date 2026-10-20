@@ -458,7 +458,9 @@ where it is fetched, both withdrawn when its installation completes. A
 [container cluster](container-clusters.md#boot-media) publishes its agent boot
 image, which embeds the operator's own pull secret in its ignition and is
 retained while the cluster's media block is, because a node may be booted from
-it again. Any further use is specified before it is built.
+it again. A cluster's per-insert tokens are specified in
+[installation](container-clusters.md#installation). Any further use is
+specified before it is built.
 
 ## Managed network services
 
@@ -494,7 +496,11 @@ recursively, and retains `/var/lib/bootwright-services` itself. Each service's
 apply and destroy refuse a content root not in normal form before any effect,
 as the artifact server's do. Nothing else on the host is created, modified or
 removed, and no managed service writes to the
-host's own resolver, proxy or time configuration.
+host's own resolver, proxy or time configuration. A controller that must
+resolve names a managed DNSServer serves, as a container-cluster installation
+polling its cluster does, is routed to that server by the operator;
+[container-cluster preflight](container-clusters.md#preflight) names each
+record and the route.
 
 **Derived configuration.** A managed service is configured from the selected
 graph, never from authored daemon syntax:

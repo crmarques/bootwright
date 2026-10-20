@@ -37,10 +37,13 @@ unknown arms are invalid; the selected arm must satisfy its required fields.
 
 Capability tokens match `^[A-Za-z0-9][A-Za-z0-9._-]*$` and are unique in each
 list. `provides` and `requires` are not closed enums. The names `kubevirt`,
-`dataFoundation`, and `nmstate` have defined downstream meanings, but all
-valid tokens participate in dependency ordering. An add-on with any
+`dataFoundation`, `metallb` and `nmstate` have defined downstream meanings, but
+all valid tokens participate in dependency ordering. An add-on with any
 `provides` value requires at least one effective readiness check after the
 readiness defaults below apply.
+
+Not yet met: nothing reads `nmstate` or `metallb`; tracked as
+[B726](../milestones/m3.md#b726) and [B727](../milestones/m4.md#b727).
 
 ### Accepted inputs and effects
 

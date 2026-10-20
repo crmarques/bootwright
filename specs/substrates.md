@@ -37,6 +37,22 @@ an arm a consumer has no entry point for fails closed before anything is
 published, inserted or booted, so a substrate added later supplies those entry
 points to every consumer that dispatches on it.
 
+The KubeVirt and vSphere arms realize installer-provisioned Machines, those
+with `os.provided: false` and no install profile, as
+[KubeVirt machine realization](#kubevirt-machine-realization) and
+[vSphere machine realization](#vsphere-machine-realization) state. Their
+realized target names no management controller: it names the arm's own
+management API and access, an identity channel of none, the interfaces the
+realization derived, the delivery kind `push`, and the controller Machine as
+placement. A Bootwright-installed Machine on either arm keeps refusing until
+its arm defines an identity channel.
+
+Not yet met: a KubeVirt provider and its Machines refuse before registration;
+tracked as [B87](milestones/m1.md#b87).
+
+Not yet met: a vSphere provider and its Machines refuse before registration;
+tracked as [B99](milestones/m1.md#b99).
+
 The libvirt provider host is the Machine `spec.libvirt.machineRef` names. It
 must be OS-ready and reachable through one of the
 [placement arms](infrastructure-services.md#placement-arms-and-credentials)
@@ -136,6 +152,20 @@ network whose definition differs from the frozen request is redefined, and
 restarted while it runs another one. Each managed network is started before it
 is set to autostart, so a start that fails leaves no definition that starts
 with the host.
+
+A managed network carries the MTU its attachment declares and one IPv4 or IPv6
+prefix; a Machine's NICs attach, each in declared order, to the attachment its
+interface map names
+([machines](api/machines.md#machine-profiles-and-network-attachments)).
+
+Not yet met: a Machine's NICs all attach to one network; tracked as
+[B701](milestones/m1.md#b701).
+
+Not yet met: attachments declare no MTU; tracked as
+[B702](milestones/m1.md#b702).
+
+Not yet met: a managed network's prefix is written without a family; tracked
+as [B703](milestones/m1.md#b703).
 
 **Firewall readiness.** A provider with a managed network requires firewalld
 already enabled and running; it never enables or reconfigures the host firewall.
@@ -486,6 +516,24 @@ and a Machine neither can account for is treated as in use. The refusal names
 that is not shut off rather than forcing it, under the
 [removal gate](state-reconciliation.md#quiescence-before-removal).
 
+### Capacity admission
+
+Before an apply claims an operation or binds secrets, when its selection holds
+a libvirt Machine block that may still start or resolve, it observes each
+provider host's aggregate libvirt CPU, memory and backing-filesystem disk
+capacity against every declared libvirt guest placed there, including guests
+outside the selection, and the reserve the provider authors in
+`libvirt.capacityReserve`. It refuses before registration when the guests and
+the reserve do not fit or a fact is unknown, under the checks, credits and
+reserve rules [managed Ceph's gate](storage.md#plan-and-prerequisites) states.
+Pure planning probes nothing, a continuation whose Machine blocks are all done
+is not gated, and [container-cluster preflight](container-clusters.md#preflight)
+and storage preflight report the same checks.
+
+Not yet met: only an apply that selects a managed StorageCluster is gated, so a
+libvirt apply without one starts guests its host may not hold; tracked as
+[B700](milestones/m1.md#b700).
+
 ## Physical machine realization
 
 The block `machine-<machine>` on a bare-metal provider realizes nothing. A
@@ -597,17 +645,121 @@ the machine untouched interrupts nothing, and the installation that would
 change it has its own gate below. No effect of this block can be left half
 performed by cancellation, because it performs none.
 
+## KubeVirt machine realization
+
+A KubeVirt provider names an existing host cluster with OpenShift
+Virtualization through `spec.kubevirt.kubeconfigRef`, an `opaque` Secret
+holding one kubeconfig, and a namespace on it that the operator owns. Every
+effect speaks the host's Kubernetes API to exactly the server that kubeconfig
+names, with no redirect and bounded requests, under the
+[verification and refusal rules](security.md#network-remote-systems-and-privilege)
+of a host cluster's kubeconfig; `virtctl image-upload` is the one command the
+arm runs. The kubeconfig is lent to a run as an operation-scoped file and
+removed on every return.
+
+The machine block of each Machine creates, once, a VirtualMachine with
+`runStrategy: Manual`, so no later write changes its power, and a root
+DataVolume template requested through `spec.storage` with the provider's
+`storageClassRef` or the host's default virtualization class, naming neither
+access mode nor volume mode so the class's StorageProfile decides them, and
+annotated `cdi.kubevirt.io/storage.bind.immediate.requested: "true"` so a
+stopped machine's claim binds on a WaitForFirstConsumer class. The root disk
+is the first `virtio` disk, presented as `/dev/vda`, with `bootOrder: 1`. Each
+NMState `ethernet` interface becomes one interface with the `bridge` binding
+and a pinned `macAddress`, on the network its attachment's `networkRef`
+names: for a `Localnet` ClusterUserDefinedNetwork the derived
+NetworkAttachmentDefinition of the same name in the provider's namespace, and
+for a NetworkAttachmentDefinition of type `bridge` that object in the
+provider's namespace. Every object carries the context's and Machine's
+ownership labels, and the block records each API-returned UID; a same-named
+object without them, or with another UID, is foreign and refuses. Objects are
+created, never applied over.
+
+Pushed media: `media_insert` creates an upload DataVolume of its own name,
+labelled with the media identity, waits until it is ready for upload, runs
+`virtctl image-upload --no-create` with the image file under what the boot
+budget has left, verifying the upload proxy against the ingress certificate
+authority the host publishes in ConfigMap
+`openshift-config-managed/default-ingress-cert` read through the verified API
+(a v1 observation; re-verified by M3e's first run), and then adds the volume to
+the stopped VirtualMachine as a SATA `cdrom` with `bootOrder: 2`. The
+persistent boot order sends a blank disk to the image and an installed disk to
+itself, so no boot selection is ever made (an inference; re-verified by M3e's
+first run). The machine
+must be off, by a positive `NotFound` of its VirtualMachineInstance, before
+any media write. `boot_media` starts the VirtualMachine and polls until its
+VirtualMachineInstance exists and runs. `media_eject` removes the volume from
+the VirtualMachine and deletes the upload DataVolume; the claim stays bound
+under `kubernetes.io/pvc-protection` until the instance next stops, and the
+state read reports the media the VirtualMachine will present. `boot_disk`
+makes no request unless asked to power on.
+
+Removal requires the VirtualMachineInstance absent, which is its quiescence
+under the [removal gate](state-reconciliation.md#quiescence-before-removal);
+deletes the VirtualMachine with `preconditions.uid`; and proves the
+VirtualMachine, every DataVolume and every claim it owned, its persistent TPM
+state claim included, absent by a positive `NotFound`. It consumes
+`data-loss`, because it deletes the disks. The namespace and every network
+object are the operator's and are never written. A host that cannot be read,
+refuses the request or answers what is not the expected object is unknown,
+never absent.
+
+Not yet met: nothing realizes a KubeVirt Machine; tracked as
+[B87](milestones/m1.md#b87).
+
+## vSphere machine realization
+
+A vSphere provider's Machines are created through the vCenter its failure
+domain names, with the provider's provisioning credential, which never
+becomes a cluster's own. The machine block creates each Machine powered off,
+in the failure domain's folder, compute cluster, resource pool and datastore,
+with EFI firmware and Secure Boot off, its profile's CPU, memory and one root
+disk, presented as `/dev/sda`, and one adapter per NMState `ethernet`
+interface on its attachment's portgroup with a MAC in the manual range
+`00:50:56:00:00:00` through `00:50:56:3f:ff:ff`, derived from the context,
+Machine and interface names when not authored. Before its first power-on it
+sets extraConfig `disk.EnableUUID` to `TRUE`, whatever platform a cluster
+installs on it, because the assisted service keeps a VMware host whose disks
+report no UUID from becoming known; it sets the boot order disk then CD-ROM,
+so the node boots its installed disk whether or not the installer's EFI boot
+entry took effect (the installer writes it only on EFI firmware; an inference,
+in [knowledge](../.agents/knowledge/vsphere-agent-node-boot.md)); and it adds no TPM.
+The block records the managed-object reference and an ownership marker, and
+every later call addresses that reference, never a name.
+
+Pushed media: `media_insert` uploads the image to
+`[<staging datastore>] <staging folder>/<context>/<cluster>/<machine>-<media identity>.iso`
+and attaches it to the Machine's CD-ROM, connected, while the Machine is off.
+`boot_media` powers the Machine off by force if it is on, then on, because a
+power-on request to a running machine changes nothing. `media_eject`
+disconnects the CD-ROM and deletes the staged file, and a refused delete
+fails rather than leaking the image. `boot_disk` makes no request unless
+asked to power on. Removal requires the Machine off, destroys it with its
+disks by managed-object reference, proves it and its staged files absent, and
+consumes `data-loss`. Volumes a cluster's storage driver created are not the
+Machine's and are retained.
+
+Not yet met: nothing realizes a vSphere Machine; tracked as
+[B99](milestones/m1.md#b99).
+
 ## Identity and power operations
 
 Substrate publishes the operations other domains use to act on a realized
 Machine. An installation composes them through the argument-spec entry points
 of each machine role, which the [adapter boundary](#adapter-boundary) names:
 consumer roles include them by exactly those names, and ansible-core validates
-their inputs before their first task. Power operations go through the
-Machine's management controller over Redfish, never through the hypervisor
-directly, so a consumer takes the same path to a virtual and a physical server:
-read the power state and the inserted media, insert and eject virtual media,
-set a one-time boot device, power on, power off. A power read reads the system
+their inputs before their first task. On the libvirt and bare-metal arms, power
+and media operations go through the Machine's management controller over
+Redfish, never through the hypervisor directly, so a consumer takes the same
+path to a virtual and a physical server: read the power state and the inserted
+media, insert and eject virtual media, set a one-time boot device, power on,
+power off. On the KubeVirt and vSphere arms the same operations go through the
+arm's own management API, behind the same entry points, and media is pushed
+rather than fetched: the run that holds the image transfers it to where the
+machine reads it, so no controller fetches anything and no artifact server
+publishes it. Each arm publishes the worst-case bound of every entry point and
+the share of a boot budget one node's boot takes, as constants its consumers
+sum. A power read reads the system
 alone and never looks for media; a media read discovers the device first. Both
 run through a module that cannot drive the machine. A poll treats a failed read
 as not yet at the state it waits for, so one failure spends one attempt rather
@@ -619,6 +771,9 @@ is not a Redfish resource, fails rather than answering empty, and the target
 proof reports what it could not read as unobserved, which proves nothing; a
 controller that offers no virtual media reports none, and inserting into it
 refuses.
+
+Not yet met: consumers call the Redfish modules directly and sum the Redfish
+bounds alone; tracked as [B704](milestones/m1.md#b704).
 
 Each call's worst case follows from the Redfish client's fixed bounds, and a
 consumer's run [deadline](architecture.md#the-adapter-result-protocol) allows
@@ -784,20 +939,28 @@ and the [process](security.md#process-boundary) and
 speaks Redfish to exactly the endpoint the frozen request names. Both placement
 arms use the same roles, requests and evidence.
 
-Each substrate's machine role also publishes four entry points that consumers
-compose by qualified role name and entry-point key, each validated by the
-role's argument specification before its first task: `pre_boot` proves the
-exact target immediately before destructive media is inserted, `boot_media`
-boots from inserted media, `boot_disk` boots the installed disk, and
-`identity_read` performs the identity read above. A consumer selects among them
-by the frozen arm, as [selection](#selection-and-refusal) states, and a
-substrate supplies them or its installation path is not promoted. Because they
-are named entry points of a role rather than free variables, the binding is
-allowlisted and frozen: authored data can never select which of them runs. An
-input is a value or the path of a material file, never secret bytes, because
-the validation is not hidden from output and echoes a value it refuses. The
-bare-metal entry points that reach the controller also take the path of its
-trust-bundle material, empty when it declares none.
+Each substrate's machine role also publishes eight entry points that
+consumers compose by qualified role name and entry-point key, each validated
+by the role's argument specification before its first task: `pre_boot`
+proves the exact target immediately before destructive media is inserted,
+`boot_media` boots from inserted media, `boot_disk` boots the installed disk,
+`identity_read` performs the identity read above, `state_read` reads the
+power state and whether the media presented is the consumer's own, another
+or none, `media_insert` presents an image, from the published address on a
+fetching arm or the image file on a pushing one, `media_eject` takes it back
+and settles what the insert needed, and `power` powers on, off or restarts.
+A consumer selects among them by the frozen arm through one dispatch table
+per entry point, as [selection](#selection-and-refusal) states, and a
+substrate supplies them or its installation path is not promoted. Because
+they are named entry points of a role rather than free variables, the
+binding is allowlisted and frozen: authored data can never select which of
+them runs. An input is a value or the path of a material file, never secret
+bytes, because the validation is not hidden from output and echoes a value it
+refuses. The bare-metal entry points that reach the controller also take the
+path of its trust-bundle material, empty when it declares none.
+
+Not yet met: machine roles publish only `pre_boot`, `boot_media`,
+`boot_disk` and `identity_read`; tracked as [B704](milestones/m1.md#b704).
 
 The result channel belongs to the consumer, so `pre_boot` leaves the refusal
 its failed check makes in a fact of its own role, cleared before the proof and

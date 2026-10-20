@@ -118,8 +118,9 @@ before registration by [substrate selection](../substrates.md#selection-and-refu
 and [managed-OS installation](../managed-os.md#installation). Their field
 detail is recorded in [refused machine arms](../deferred/machine-arms.md),
 which [B87](../milestones/m1.md#b87) and [B99](../milestones/m1.md#b99) revive.
-A Machine's [`network.interfaceAttachments`](#network-configuration), which
-only the KubeVirt arm reads, refuses at admission on every realized substrate.
+A Machine's [`network.interfaceAttachments`](#network-configuration) is read by
+libvirt and KubeVirt Machines; until libvirt reads it, it refuses at admission
+on every realized substrate.
 
 ### Machine profiles and network attachments
 
@@ -155,6 +156,16 @@ changing media requires a new realization rather than modifying an owned disk.
 | --- | --- | --- |
 | `baremetal` | none | Names a physical network a Machine may select; it configures nothing. VLAN and bond interfaces are declared in the Machine's NMState network; the attachment configures nothing for them. |
 | `libvirt` | required string `bridge`; optional string `management`; conditional string `address`; conditional string `forward` | `bridge` is 1 to 15 bytes of letters, digits, `_`, `.` or `-`, and neither `.` nor `..`; a `+` is refused because firewalld reads it as an interface wildcard and a managed network puts its bridge in zone `trusted` (`TestABridgeNameRefusesFirewalldsWildcard`). `management` is `managed` or `external` and defaults to `external`. `external` names an existing bridge and forbids `address` and `forward`. `managed` requires `address`, the host's IP with its prefix on a bridge Bootwright defines, and permits `forward`, `nat` or `none`, defaulting to `nat`; [substrates](../substrates.md#provider-host-realization) owns the network it defines. On one host, no two providers declare a managed attachment of one name, a bridge a managed attachment defines is named by no other attachment, of the same provider or another, and no two managed attachments, of one provider or two, declare overlapping prefixes, IPv4 or IPv6; each refuses at admission, naming both providers. A libvirt provider declares at most 20 managed attachments (its host reservation's key bound). |
+
+A libvirt attachment may declare `mtu`, the largest frame its network carries:
+a managed network is defined with it, and an external bridge is proved to carry
+it. A guest interface whose declared `mtu` exceeds its attachment's, or 1,500
+when the attachment declares none, refuses. A managed network's one prefix may
+be IPv4 or IPv6.
+
+Not yet met: attachments declare no MTU and a managed network's prefix is
+written without a family; tracked as [B702](../milestones/m1.md#b702) and
+[B703](../milestones/m1.md#b703).
 
 ## Machine
 
@@ -318,11 +329,14 @@ and which it refuses, is the rule of the consumer that installs the Machine:
 | `configRef` | string | union | — | Global `NetworkConfig`. |
 | `inline` | `NetworkConfig.spec` object | union | — | Inline one-off alternative with the same NMState, CIDR, and DNS selection constraints. |
 | `attachmentRef` | string | conditional | `configRef` name | Provider-local `networkAttachments[].name`; applies one attachment to every effective physical interface. Required with a configured network on a libvirt Machine unless the default applies; optional on bare metal, where it selects nothing. |
-| `interfaceAttachments` | array | no | — | Set of `{interface, attachmentRef}` keyed by `interface`; mutually exclusive with `attachmentRef`. `interface` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. Only the [refused](#refused-arms) KubeVirt arm reads it, so it refuses at admission on every realized substrate. |
+| `interfaceAttachments` | array | no | — | Set of `{interface, attachmentRef}` keyed by `interface`; mutually exclusive with `attachmentRef`. `interface` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. It maps every available ethernet interface exactly once to one of its provider's attachments, on libvirt as on KubeVirt; without it every interface uses `attachmentRef`. |
 | `installAddressRef` | string | when a consumer requires a static install IP | unique eligible address below | Machine-local `addresses[].name`; selects an interface-assigned IP inside a consumed machine network. |
 | `addresses` | array | no | `[]`, plus derived `fqdn` contact | Set keyed by `name`; exact entry shape below. |
 | `interfaceBinding` | array | conditional | exact NIC-name matches for bare-metal install | Set of `{nicRef, interfaceName}`; the field name is singular `interfaceBinding`. `interfaceName` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
 | `overrides` | arbitrary map | no | `{}` | Valid only with `configRef`; merged into the selected native NMState template. |
+
+Not yet met: a libvirt Machine refuses `interfaceAttachments`; tracked as
+[B701](../milestones/m1.md#b701).
 
 A configured network selects exactly one of `configRef` and `inline`.
 `inline` has precisely the [NetworkConfig spec](#networkconfig) shape;

@@ -8,6 +8,10 @@ and `api/v1alpha1/machines_install.go`, whose admission enforces the rules
 below as written, and refused before registration under the
 [refused-arm note](../api/machines.md#refused-arms).
 
+[M3e](../milestones/m3.md#m3e) and [M3f](../milestones/m3.md#m3f) consume these
+arms for OpenShift nodes; the realization contracts they need are stated in
+[substrates](../substrates.md#kubevirt-machine-realization).
+
 ## InfraProvider arms
 
 ### vSphere arm

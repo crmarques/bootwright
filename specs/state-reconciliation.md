@@ -652,6 +652,22 @@ clears the mark, and the entry is withdrawn as every entry is. No record, log,
 evidence or adapter output carries
 the material.
 
+A block may name, as a *produced input*, an output another block of its plan
+produces, by that block's kind and object and the output's name: today a
+cluster's `kubeconfig`. Planning resolves it to the producing block, depends on
+that block, and freezes the reference, never the bytes. Each apply attempt and
+observation of the consumer receives the custody entry as an operation-scoped
+material file under the bounds, clearing and logging rules of a declared
+Secret's, read from custody at that attempt; an entry marked unproved is lent
+only to a removal, and a missing one refuses with `lifecycle.state` naming the
+producer. A removal lends the entry while custody holds it, which is until the
+removal completes. A consumer reaches the cluster only at the server the entry
+names, verifies it against the entry's authority, and reads a foreign or
+silent answer as `unknown`.
+
+Not yet met: no block can name a produced input; tracked as
+[B64](milestones/m3.md#b64).
+
 ### Block transitions
 
 | Block state | Step | Leads to |
@@ -742,6 +758,19 @@ barrier: a block starts as soon as its own dependencies are done, so a later
 wave overlaps an earlier one. Equal definitions in any input order still
 produce an identical plan and an identical digest.
 
+A plan holds at most 256 blocks, a block at most 32 groups of at most 512
+Machines each, 128 impacts and 8 resources it will not share, every identifier
+at most 63 characters, each canonical request at most 256 KiB, and all of a
+plan's requests together at most 4 MiB, so a fresh apply's plan and its
+removal's fit the bytes it keeps free; the
+[operator-visible bounds](contexts.md#storage-locking-and-publication) list
+them. A plan past any bound refuses before registration, naming the bound.
+
+Not yet met: impacts are bounded at 64 and requests at 64 KiB, with no plan
+total and no specified bound, and the operator-visible bounds table of
+`contexts.md` lists none of these bounds; tracked as
+[B715](milestones/m3.md#b715).
+
 A definition may name host resources its block *will not share* while it runs.
 Two blocks that name one resource never run at the same time, however
 independent the graph says they are, because the graph orders what one block
@@ -794,7 +823,7 @@ digest. A stage names the kind of platform work its block performs:
 | `substrates` | [Provider host realization](substrates.md#provider-host-realization) for a declared `InfraProvider`: its virtualization runtime, managed networks and virtual-media pool. |
 | `machines` | [Machine realization](substrates.md#machine-realization) with its management controller, the [claim and proof](substrates.md#physical-machine-realization) of a physical machine, [shared package-tree publication](managed-os.md#shared-package-tree-publication), and [managed operating-system installation](managed-os.md#installation). |
 | `clusters` | Container and storage cluster installation. |
-| `add-ons` | Add-on instances bound to a cluster. |
+| `add-ons` | Add-on instances bound to a cluster, and the cluster configuration they enable. |
 
 The capability that plans a block owns its stage. Stages are not strata: a
 block depends on other blocks, never on a stage, so a `substrates` block may
@@ -1757,6 +1786,19 @@ not perform another platform effect, transfer ownership, or authorize GitOps
 to mutate Bootwright-owned resources. Add-on drivers and other capabilities
 contribute typed readiness evidence, but cannot declare the complete
 environment ready themselves.
+
+`status` reports the predicate as its handoff section: ready, or each reason it
+is not, in this order: no apply recorded or a destroy as the latest operation,
+the apply not `done`, each block not `done` in plan order, each `unknown` block,
+and a latched log fault. A block recorded `done` discharges the completion,
+readiness, access and ownership requirements frozen for it, because the engine
+records `done` only after its capability validated positive evidence and
+captured the material the block produces. A settled `apply` over unchanged
+input restores a latched log fault, as any later invocation does, before it
+reports; `status` never clears it.
+
+Not yet met: `status` reports no handoff section, and a settled apply does not
+restore a latched log fault; tracked as [B71](milestones/m3.md#b71).
 
 ## Mutation safety
 

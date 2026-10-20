@@ -103,8 +103,6 @@ Alias cell.
 | [B394](#b394) | new, 2026-10-06 (X41) | enabling | Each test's owner | Tests X41 left narrower than they read | Found in X41; parked under D48 (D116) |
 | [B395](#b395) | new, 2026-10-06 (X41) | enabling | Each spec's owner | Wording X41 left | Found in X41; parked under D48 (D116) |
 | [B396](#b396) | new, 2026-10-06 (X41) | enabling | Architecture | Knowledge lessons X41 left | Found in X41; parked under D48 (D116) |
-| [B397](#b397) | new, 2026-10-06 (X41) | defect | Container cluster | An off-controller boot-image server refuses through the cluster's refusal table | Found in X41; parked under D48 (D116); container-cluster installs are in no M1 journey |
-| [B411](#b411) | new, 2026-10-06 (X42) | defect | Container cluster and Add-ons | Cluster and add-on image digests are lowercased, and cluster names fit their block identity | Found in X42; parked under D48 (D116); container-cluster and add-on input is in no M1 journey |
 | [B412](#b412) | new, 2026-10-06 (X42) | defect | Infrastructure services | A wildcard bind serves its IP endpoints' family | Found in X42; parked under D48 (D116); IPv6 service endpoints are in no M1 journey |
 | [B413](#b413) | new, 2026-10-06 (X42) | enabling | Managed OS, with CLI | A media transfer shows its bytes and bounds its response headers | Found in X42; parked under D48 (D116); byte progress needs the owner to amend the output spec's rule 3 |
 | [B414](#b414) | new, 2026-10-06 (X42) | enabling | Controller setup | An unreadable FIPS flag is reported, not a stop | Found in X42; parked under D48 (D116) |
@@ -132,7 +130,6 @@ Alias cell.
 | [B452](#b452) | new, 2026-10-08 (X45) | enabling | Each spec's and test's owner | Wording and tests X45 left narrower than they read | Found in X45; parked under D48 (D116) |
 | [B460](#b460) | new, 2026-10-08 (X46) | enabling | State reconciliation | A resolution record says which check proved its evidence | Found in X46; parked under D48 (D116); it adds an optional field to the attempt record |
 | [B461](#b461) | new, 2026-10-08 (X46) | enabling | Infrastructure services | The managed-service and artifact-server roles share their helpers, and Go checks the content root it decodes | Found in X46; parked under D48 (D116); defense in depth, since no input reaches either, and the role half moves the automation digest |
-| [B462](#b462) | new, 2026-10-08 (X46) | enabling | Container cluster | The media role's keep task is qualified in an agent-install rehearsal | Found in X46; parked under D48 (D116); needs an agent-install run on a host, which B61's operator gate provides |
 | [B463](#b463) | new, 2026-10-08 (X46) | enabling | Controller (privilege), Desired state and Infrastructure services | Host observations of what X46 proved only in-tree | Found in X46; parked under D48 (D116); each needs root on a host, which D59's closing run provides |
 | [B464](#b464) | new, 2026-10-08 (X46) | enabling | Each spec's and test's owner | Wording, tests and dead code X46 left | Found in X46; parked under D48 (D116) |
 | [B495](#b495) | new, 2026-10-12 (X48 review) | enabling | State reconciliation, with Managed OS, Substrate and Infrastructure services | The three-node lifecycle composition runs end to end with the real runner and controlled adapters | Found in X48's review; parked under D48 (D116): D125's operator gate already proves overlap on a host, and X48's tests qualify each part |
@@ -198,7 +195,6 @@ Alias cell.
 | [B612](#b612) | new, 2026-10-15 (X93) | defect | Controller setup | The core-package note says install, not update, for a package the host lacks | Found in the owner run; wording only |
 | [B616](#b616) | new, 2026-10-16 | defect | Architecture and developer tooling | Source checks exclude unreadable ignored non-source directories | Found during integration verification; test tooling, no milestone gate |
 | [B617](#b617) | new, 2026-10-17 | defect | Storage | Registry socket publication serialized with close | Pre-existing connector race; separate cancellation follow-up, no new milestone gate |
-| [B622](#b622) | new, 2026-10-18 (D159; found while planning M2c) | defect | Container clusters | The agent-install projection keeps an authored `dns-resolver.config.server` | M3's agent-install journey is its first consumer and no milestone exit names it yet |
 | [B624](#b624) | new, 2026-10-18 (D159; found by the X55 checkpoint) | enabling | CLI and Managed OS | `diff --observe` shows a Machine's bounded network differences | Display only; the runbook reads the drifted value from the guest, and a projector is promoted with B576 |
 | [B630](#b630) | new, 2026-10-19 (X101) | safety | Storage | A proved-absent native rejection leaves a bootstrap or `set-user` attempt recoverable instead of `partial-cluster` | Found in X101; narrowing a safety refusal needs its own named slice and decision; X101's argv check before the attempt record already covers the bootstrap options |
 | [B631](#b631) | new, 2026-10-19 (X101) | enabling | Storage | A wrong `ceph.ibm.callHome` for the selected build is refused before any host block runs | Found in X101; Go has no planning-visible Call Home model fact, and D157 forbids gating on the release |
@@ -229,12 +225,24 @@ Alias cell.
 | [B677](#b677) | new, 2026-10-19 (X102) | enabling | Storage | The misnamed `unsupported-release` Ceph refusal token is renamed `unsupported-coordinates` | Cosmetic, and it collides with the closed reason lists the m2c lanes edit |
 | [B678](#b678) | new, 2026-10-19 (X102) | defect | Storage package resolution | A non-rhel host refuses `package-platform` naming the os-release ID, not a generic `package-resolution` | Fails closed before any effect; low value |
 | [B679](#b679) | new, 2026-10-19 (X102) | enabling | Storage and State reconciliation | The edges X102's lanes and reviews left untested, unmeasured or unreconciled are tested or recorded | Found in X102; each is hardening of a path no known input reaches |
-| [B680](#b680) | new, 2026-10-19 (X103) | defect | Container clusters | OpenShift admission of `distribution.release.version` accepts an exact publisher release such as a release candidate, and any stable-only screen found is removed | Found by X103; unverified, because X103 changed only the CLI tool pins and the installer download |
 | [B681](#b681) | new, 2026-10-19 (X103) | enabling | CLI, Substrate and Docs | The edges X103's lanes and reviews left untested, unmeasured or unreconciled are tested or recorded | Found in X103; each is hardening of output or removal paths no known input breaks |
 | [B682](#b682) | new, 2026-10-20 (X57; parked by D160, OD7, kept by D161) | product | Storage and Secrets | A StorageCluster binds the direct MGR dashboard's certificate | The management gateway fronts the dashboard with a bound certificate; X70's self-signed dashboard certificate stays |
 | [B683](#b683) | new, 2026-10-20 (X57; parked by D160, OD7, kept by D161) | product | Storage and Secrets | Declared dashboard roles and local users with protected passwords | No approved API; SSO grants only system roles, and X70's administrator stays |
 | [B684](#b684) | new, 2026-10-20 (X57) | product | Storage | The manager prometheus exporter serves external scrapers without a Prometheus service | No consumer; without a declared service the module would have no owner, so `spec.ceph.mgrModules` refuses it |
 | [B685](#b685) | new, 2026-10-20 (X57; parked by D160, OD26) | product | Storage | Monitoring and gateway certificates that cephadm signs or that a certificate source selects, with the cephadm root CA reported | Bound certificates cover the gateway; cephadm-signed sources and root-CA retrieval have no documented native contract |
+| [B736](#b736) | new, 2026-10-20 (D172) | product | Infrastructure services and Controller | Bootwright routes the controller's resolver to the managed zones it serves | [Q3](m3.md#m3a-open-decisions) keeps the route an operator prerequisite proved by preflight; a host-wide resolver mutation needs an ownership, lease and cross-context design no M3 profile requires |
+| [B737](#b737) | new, 2026-10-20 (D172) | product | Container cluster | Two-node clusters with fencing | The 4.20 and 4.21 agent installers refused it and 4.22 accepts it; fencing credentials enter the image; no consumer |
+| [B738](#b738) | new, 2026-10-20 (D172) | product | Container cluster, with Substrate | Dual-stack clusters | One address family per cluster is the contract; per-family VIP lists, endpoints and managed networks are unspecified |
+| [B739](#b739) | new, 2026-10-20 (D172) | product | Container cluster | Workers added to an installed cluster by `oc adm node-image` | A day-2 change over a completed apply (D153); the any-size block covers sizes the ceiling admits |
+| [B740](#b740) | new, 2026-10-20 (D172) | product | Container cluster | Install-time OVS or Linux bridges and a customized `br-ex` on cluster nodes | Unproven in agent `networkConfig`; needs a live test |
+| [B741](#b741) | new, 2026-10-20 (D172) | product | Container cluster | Linux-bridge NADs and overlay UDNs as secondary networks | M3d's external networks are localnet; neither is needed by its profiles, pending the owner's [Q24](m3.md#m3a-open-decisions) |
+| [B742](#b742) | new, 2026-10-20 (D172) | product | Container cluster | Tang disk encryption | The API admits TPM2 only; Tang needs reachable servers and thumbprints |
+| [B743](#b743) | new, 2026-10-20 (D172) | product | Container cluster and Substrate | One virtual cluster across several libvirt hosts | An emulated controller fetches the private image without verifying its server |
+| [B744](#b744) | new, 2026-10-20 (D172) | product | Container cluster, with Add-ons | MetalLB BGP advertisements | M3d's pools are L2; BGP needs a router and one ASN per cluster |
+| [B745](#b745) | new, 2026-10-20 (D172) | product | Substrate | A Redfish facade realizes KubeVirt Machines | The 2026-06-28 owner decision keeps `virtctl image-upload`; vSphere needs the port anyway; the facade needs host-wide feature gates |
+| [B746](#b746) | new, 2026-10-20 (D172) | enabling | Substrate | One staged image per cluster on push arms | Per-node pushes keep ownership per Machine; it needs evidence from M3e or M3f runs that per-node pushes are the bottleneck |
+| [B747](#b747) | new, 2026-10-20 (D172) | product | Container cluster and Substrate | A cluster whose nodes span KubeVirt or vSphere and another arm | No run qualifies it, and the media block would both publish and push; it needs B88 or B733 and a qualifying run |
+| [B748](#b748) | new, 2026-10-20 (D172) | product | Container cluster | OKD clusters through the agent installer | M3's coverage is OpenShift; OKD's release, client and image sources need their own definition, and its refusal row stays |
 
 ### B82
 
@@ -324,8 +332,8 @@ the remaining matrix.
 
 One typed, invertible executable custom-playbook journey. The reserved schema
 cannot prove effects, ownership or non-exfiltration; it needs [the legacy lifecycle baseline](delivered.md#m1e--lifecycle-engine-and-managed-artifact-serving), the plan and
-execution extensions of [B62](m3.md#b62) to [B64](m3.md#b64) and a named
-journey. **Exit evidence:** a same-change API replacement of the
+execution journeys of [B713](m3.md#b713) and the produced input of
+[B64](m3.md#b64) and a named journey. **Exit evidence:** a same-change API replacement of the
 [reserved shape](../deferred/custom-playbooks.md), immutable source and
 dependencies, exact targets, bounded secrets, authorization, continuation,
 failure injection and isolated-runner qualification.
@@ -685,14 +693,6 @@ Wording X41 left: the state-reconciliation spec's status contradictions still li
 
 Knowledge lessons X41 left: the concurrent-block-execution page quotes the old "up to 1 step at once" wording without marking it as history; the operation-store entry page says every write measures the whole subtree; no build page says that `make build` disables cgo while `scripts/go` keeps it, because `make race` needs it; and no page explains why a binding once refused during a bounded run (found in X41). **Exit evidence:** each page updated or written.
 
-### B397
-
-The agent installer refuses a boot-image server placed off the controller at plan, as an object-less `lifecycle.state` outside the container-cluster refusal table, which its projection test pins empty: the cluster counterpart of D82 (found in X41). **Exit evidence:** a refusal-table row held by a table test, the refusal naming its object and field before registration.
-
-### B411
-
-ContainerCluster `spec.distribution.release.image` and ClusterAddon `spec.olm.catalogSource.image` digests are not lowercased, against the [API's normalization rule](../api.md), whose Not-yet-met line names this item, while X42 lowercases service image digests; and the cluster's install and media block prefixes leave a ContainerCluster name 47 and 49 bytes of the 63-byte block identity, so a longer name the API admits fails at plan as an object-less `lifecycle.state` (found in X42). **Exit evidence:** both digests lowercased by normalization with the Not-yet-met line removed, and the cluster name limit refused at `metadata.name` naming it.
-
 ### B412
 
 A wildcard bind of one family, such as `0.0.0.0` with an IPv6 endpoint, passes X42's endpoint rule but never answers on that endpoint (found in X42). **Exit evidence:** admission refusing an IP endpoint whose family the wildcard bind does not serve, naming the bind.
@@ -983,18 +983,6 @@ refuse a corrupt frozen block before any adapter run; no input reaches it today
 the collection's units and lint suites passing, and the decoders refusing a root
 with a `.` or `..` component or a repeated slash, in a test per kind; and
 `make quick`, `make docs-check`, `make check` and `make race`.
-
-### B462
-
-X46's D124 keep task, the media role's observation that copies the installer's
-kept administrator kubeconfig into the output the engine publishes to custody
-before the work area goes, is proved in-tree only: the Go journeys, the role's
-unit tests and their mutants (found in X46). **Exit evidence:** an agent-install
-rehearsal in which a completed installation whose custody publication failed is
-destroyed, the kubeconfig held in custody marked unproved when the work area is
-removed and exported by `cluster kubeconfig` with its `access.unproved` warning,
-recorded in the [acceptance ledger](../../docs/acceptance.md) with the build
-commit, or withdrawn by the owner.
 
 ### B463
 
@@ -1987,17 +1975,6 @@ injected cancellation at allocation, connect and TLS boundaries proves no late
 publication, lost socket or unhandled setup exception. Parked for separate
 cancellation work; it adds no M2b acceptance gate.
 
-### B622
-
-The agent-install projection overwrites an authored
-`dns-resolver.config.server` when DNS servers are selected
-(`internal/containercluster/agentinstall/projection.go:308-323`), so an
-authored resolver list is dropped without a refusal. Found while planning M2c;
-parked because no M2 slice reads it. **Outcome:** an authored resolver list is
-kept, or the conflicting declaration refuses naming both sources and the next
-step. **Exit evidence:** a projection test over an authored `server` list with
-and without selected DNS servers.
-
 ### B624
 
 Network convergence ([B326](m1.md#b326)) stores a drifted installed Machine's
@@ -2422,20 +2399,6 @@ or a recorded reason it needs none. **Requires:** none. **Definition:**
 `Specified`. **Exit evidence:** the named tests, mutation-checked, and the
 recorded measurements.
 
-### B680
-
-[D163](#decisions) removed the stable-only screen on exact CLI tool pins, so the
-OpenShift installer and clients of a release candidate download
-(`internal/controller/tools.go`). Whether the OpenShift container-cluster
-admission of `distribution.release.version` accepts such an exact publisher
-release is unchecked: X103 reached only the tool pins and the download. Found
-by X103 (D163 follow-up). **Outcome:** admission accepts an exact publisher
-release such as a release candidate, and any stable-only screen found in
-`internal/controller/tools.go` or the container-cluster admission is removed.
-**Why parked:** an unconfirmed edge outside the five X103 items. **Requires:**
-none. **Definition:** `Specified`. **Exit evidence:** an admission test with a
-`4.22.0-rc.1` release, mutation-checked, and `make docs-check`.
-
 ### B681
 
 X103's lanes and reviews left these edges, none reached by a known input:
@@ -2526,6 +2489,116 @@ documented native contract. **Requires:** none. **Definition:** `Needs
 definition`. **Exit evidence:** admission tests per field and a live CA-chain
 check under B484.
 
+### B736
+
+Bootwright installs and removes a controller resolver route for each managed
+zone a context's DNSServer serves. Parked on 2026-10-20 (D172) because
+[Q3](m3.md#m3a-open-decisions) keeps the route an operator prerequisite that
+preflight proves. **Requires:** an owner decision. **Definition:** `Candidate`.
+**Exit evidence:** a contract for host resolver ownership (a systemd-resolved
+drop-in or none), a cross-context reservation class for a route, a
+controller-global mutation lease, removal order after every dependent, and
+tests. The v1 implementation's design is a lesson, not the target.
+
+### B737
+
+Two-node clusters with fencing: `controlPlane.fencing.credentials[]` with
+`hostName`, `username`, `password`, `address` (containing `redfish`) and
+`certificateVerification`. The 4.20 and 4.21 agent installers refused it; 4.22
+accepts it with `DualReplica` in the Default feature set (the installer judges
+the release), and the credentials are embedded in the image. Parked on 2026-10-20 (D172): no profile needs it.
+
+### B738
+
+Dual-stack clusters: two VIPs per slot of different families, the primary
+family first in every network list, two service networks, and dual-family
+managed libvirt networks. Parked on 2026-10-20 (D172): the one-family contract
+of `specs/api/container-clusters.md` stands.
+
+### B739
+
+Workers added to an installed cluster by `oc adm node-image create` and
+`monitor`: worker-only, on `baremetal`, `vsphere`, `nutanix` and `none`. The
+installer's 48-hour image token is refreshed within its last 24 hours, which
+invalidates earlier images, and CSRs need approval outside the initial
+install. Parked on 2026-10-20 (D172): a day-2 change over a completed apply
+(D153).
+
+### B740
+
+Install-time `ovs-bridge`, `ovs-interface` and `linux-bridge` interfaces in a
+node's `networkConfig`, and a customized `br-ex` through the documented
+MachineConfig writing `/etc/nmstate/openshift/<host>.yml`. Parked on
+2026-10-20 (D172). **Definition needs:** a live test of `nmstatectl gc` and the
+live image with each.
+
+### B741
+
+Linux-bridge NADs (`type: bridge` on an NNCP `linux-bridge`, trunk access) and
+overlay UDNs (`Layer2` or `Layer3`, primary or secondary). Parked on 2026-10-20
+(D172): M3d's external networks are localnet ClusterUserDefinedNetworks,
+pending the owner's [Q24](m3.md#m3a-open-decisions).
+
+### B742
+
+Tang disk encryption: `mode: tang` with `tangServers` as a JSON string of
+`{url, thumbprint}`, every server reachable from the nodes before the install.
+Parked on 2026-10-20 (D172): the API admits TPM2 alone.
+
+### B743
+
+One virtual cluster whose nodes sit on several libvirt hosts. The emulated
+controller fetches the private image without verifying its server, so every
+provider host must be the artifact server's (the container-cluster refusal "A
+node off the artifact server's host"). Parked on 2026-10-20 (D172).
+**Definition needs:** a verified emulator fetch or a per-host publication.
+
+### B744
+
+MetalLB BGP: `BGPPeer` (`metallb.io/v1beta2`) and `BGPAdvertisement`, one ASN
+and router ID per cluster. Parked on 2026-10-20 (D172): the pools of
+[B727](m4.md#b727) are L2.
+
+### B745
+
+KubeVirt Machines reached through a Redfish endpoint (OpenShift 4.22's
+KubeVirt Redfish, Technology Preview, control-plane VMs only; or KubeVirtBMC),
+so the libvirt-style fetch path applies. Parked on 2026-10-20 (D172) because
+the 2026-06-28 owner decision keeps `virtctl image-upload` (a DataVolume pull
+needs host-to-controller egress, the token URL in the DataVolume spec and a CA
+ConfigMap), because vSphere needs the port anyway, and because the facade
+needs host-wide HyperConverged feature gates. **Exit evidence if revived:** a
+facade arm behind the same port, its trust contract for the importer's fetch,
+and a run.
+
+### B746
+
+Upload the agent image once per cluster and share it (a vSphere datastore file
+attached read-only by every node; a KubeVirt source DataVolume cloned per
+node). Parked on 2026-10-20 (D172) because per-node pushes keep ownership per
+Machine, and the v1 implementation's shared source brought a stale-generation
+race and an unbounded clone wait. **Revival needs:** evidence from the
+[B731](m3.md#b731) or [B734](m3.md#b734) runs that per-node pushes are the
+bottleneck. **Exit evidence:** measured push durations, a cluster-scoped owner
+block, a bounded clone escape.
+
+### B747
+
+A cluster mixing push-arm nodes with fetch-arm nodes, such as the vendor's
+control plane on KubeVirt with physical workers. The port dispatches per node
+already. Parked on 2026-10-20 (D172) because no run qualifies it and the media
+block would both publish and push. **Revival needs:** [B88](m3.md#b88) or
+[B733](m3.md#b733) and a qualifying run. **Exit evidence:** projection and
+capability tests of the mixed shape and a run.
+
+### B748
+
+An OKD cluster installed by the agent installer on the provider paths M3
+covers. Parked on 2026-10-20 (D172) when M3's coverage was defined for
+OpenShift only. **Revival needs:** OKD's release, installer, client and
+base-image sources and their trust, a distribution arm of the installer inputs,
+and an acceptance run; the refusal-table row lifts with that code.
+
 ## Retired
 
 Historical IDs no longer issued in their original meanings. D131 reuses
@@ -2574,6 +2647,10 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | B542 | 2026-10-14 | Moot under [D152](#decisions): X89 deleted the Fedora native plan and its libdnf5 solver; the host's dnf installs controller packages. |
 | B574 | 2026-10-16 | [D155](#decisions) retains records-only settlement; comparing the current build's plan is declined for now. No implementation remains. |
 | B500 | 2026-10-16 | Superseded by [D157](#decisions) and [B615](delivered.md#b615): remove reviewed release pins instead of consolidating them into per-language release profiles. |
+| B62 | 2026-10-20 | Alias L2. Folded under [D172](#decisions) into [B713](m3.md#b713) and each M3 item's own planning goldens; it named no bounded shape. |
+| B63 | 2026-10-20 | Alias L4. Folded under [D172](#decisions) into [B713](m3.md#b713); each later shape carries its own lifecycle journeys. |
+| B65 | 2026-10-20 | Alias L6. Retired under [D172](#decisions): every M3 item carries the contract, crash, replay, cancellation and real-system evidence of its own binding. |
+| B397 | 2026-10-20 | Folded under [D172](#decisions) into [B308](m3.md#b308), whose refusal-table rows include the off-controller boot-image server. |
 
 ## Decisions
 
@@ -3398,3 +3475,79 @@ Requires cell as `owner decision: <question>`.
   entitlement registry, so the examples use alloy. The decision changes no
   product spec and no delivery state; a lane that authors an auxiliary image in
   an example uses this table.
+
+- **D172** (2026-10-20, the owner's requests; the clauses after the owner's
+  words are taken by the session, pending the owner's review): the owner asked
+  "let's start planning m3 / think of basic requisite and structure the
+  high-level design / we will divide m3 in submilestones: / m3a: requisite
+  details and spec update, so implementation will be straigthforward / m3b:
+  support to provision a sno over libvirt+sushy / m3c: support to provision a
+  3-node ocp over libvirt+sushy / m3d: support to any size ocp cluster over
+  libvirt+sushy and real bmc+bare metal, with advanced networking as NAD and
+  CUDN/UDN for providing external network for internal containers/vms, and
+  usage of metallb (to be installed and configured as add-on, after initial
+  implementation of M4 / m3e: support to any size ocp cluster over openshift
+  virtualization / m3f: support to any size ocp cluster over openshift
+  virtualization / detail the high-level spec and implement m3a, so i could use
+  other AIs to implement the following m3 submilestones", then "create a new
+  branch call m3 to save the work from this session, and later we will
+  incorporate to main", then "reference branch already implemented those
+  features in the past and have a lot of lession / i don't want you to blindly
+  copy things from there, but you could be inspired and take some notes of the
+  problems that have been overcome", and then "optimize token consumption by
+  dividing tasks and using best fitting model/effort for any of them". The
+  [M3 page](m3.md#submilestones) owns the submilestones' mapping and gates and
+  the [coverage page](../container-cluster-coverage.md) the provider matrix.
+  This expressly permits the suffixed submilestone IDs M3a to M3f while
+  retaining M3's single status and all B/X/D identifiers, as D131 did for M2.
+  Taken by the session, pending the owner's review: (1) m3f repeats m3e's
+  words; the session reads M3f as OpenShift over VMware vSphere, which mirrors
+  M1f and is the one product-scope substrate no other submilestone covers
+  ([Q1](m3.md#m3a-open-decisions)). (2) M3a is definition only, delivered as
+  enabling slice X110 whose one item, [B473](m3.md#b473), is redefined as M3's
+  coverage and contract definition and completes when the owner accepts the
+  baseline, as D134 accepted M2a; it grants no implementation authority. B473's
+  "exact supported releases" gives way to recorded evidence under D157, D162
+  and D163. (3) [B88](m3.md#b88) moves from M5 to M3e; M5 is retired, its page a
+  stub holding no item, its Status row kept `not started`, and its number never
+  reused. M4 requires M2 and M3c instead of M3, so M3d consumes M4's B83 and B84
+  after their first delivery, and B83 requires [B64](m3.md#b64). (4) B62, B63,
+  B65 and the parked B397 retire into named items; the parked B411, B462, B622
+  and B680 move into M3b; B64, B66, B67, B69, B71, B195, B250, B251, B259, B260
+  and B314 are redefined, B71 requiring only B61; B87 and B99 gain the
+  cluster-facing requirements of M3e and M3f. B688 to B699 and X105 to X109 are
+  left unused so this session cannot collide with M2c's concurrent allocations;
+  the numbers carry no meaning, and integration re-checks main for B688 or
+  later and X105 or later and renumbers the unlanded items on a collision. New
+  items B700 to B748: shared
+  foundation items B700 to B704 sit on M1's page under M1c and M1g, scheduled
+  with their first M3 consumer (D158); B727 and B735 sit on M4's page; B736 to
+  B748 are parked. (5) The words "so i could use other AIs to implement the
+  following m3 submilestones" are read as waiving M2 for the implementation of
+  M3b to M3d's slices (X111 to X127) only, excepting those slices from the
+  two-active-slice WIP limit beside M2c's (D159 clause 2), and letting M3c's
+  and M3d's in-tree slices start on the preceding submilestone's in-tree
+  slices; promotion, every operator gate and M3 completion keep their Requires
+  ([Q2](m3.md#m3a-open-decisions)). The waiver takes effect only for a slice
+  the owner authorizes. (6) Native facts are evidence, never rules: the agent
+  installer's 48-hour authentication token belongs to the day-2
+  `oc adm node-image` flow and an install image's tokens do not expire, so no
+  image-age rule is added ([Q6](m3.md#m3a-open-decisions)); the agent installer
+  in the 4.20 to 4.22 branches does not forward
+  `platform.baremetal.loadBalancer` (its development branch does), so today's
+  user-managed rendering is a pre-existing defect recorded as
+  [B707](m3.md#b707), and modelling an external load balancer only as `none` is
+  Bootwright's choice. (7) The
+  reference branch is read for lessons only: a native fact it observed enters
+  knowledge marked "observed by the v1 implementation (main-v1); re-verify on
+  this tree" unless research confirmed it, and none of its architecture becomes
+  a requirement. (8) The token instruction governs how the session divides and
+  routes its work; it changes no product spec. (9) The definition lands as one
+  squashed docs commit on the local branch `m3`, created from main `9d2d8cf5c`
+  and never pushed; incorporating `m3` into main waits for the owner, and D168's
+  merge on checkpoint applies to M3's slices only once `m3` is on main. (10)
+  Each slice that changes a frozen request moves its version exactly one step
+  from its value on the branch tip, the second of two slices holding one
+  version rebases it, no reader of an older version is added, and a context an
+  earlier build applied is destroyed with that build first. No implementation
+  slice is activated and no host operation is authorized.

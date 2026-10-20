@@ -892,6 +892,14 @@ each capability's plugin; progress groups stay in its role. Go decides what an
 outcome and its evidence mean; a plugin neither schedules work nor authorizes
 it.
 
+An installation adapter's inventory may hold, beside the controller, one host
+per node it boots, each the controller itself over a local connection, so that
+per-node phases run at the frozen fan-out; such a host carries no identity of
+its own.
+
+Not yet met: one controller host per run; tracked as
+[B714](milestones/m3.md#b714).
+
 ## Implementations and version variation
 
 [Secrets](secrets.md#implementation-selection) owns its immutable implementation

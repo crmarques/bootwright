@@ -137,15 +137,18 @@ The matching configuration arm is optional for `baremetal`, `vsphere`, and
 | Platform | Exact arm |
 | --- | --- |
 | `baremetal` | Optional arm containing optional `baremetal.provisioningNetwork`: `disabled`, `managed`, or `unmanaged`; omission leaves the release/native default. |
-| `vsphere` | Optional arm containing optional `vsphere.nodeNetworking.external.networkSubnetCidr[]` and `vsphere.nodeNetworking.internal.networkSubnetCidr[]`. The YAML spelling ends in `Cidr`. |
+| `vsphere` | Optional arm containing optional `vsphere.nodeNetworking.external.networkSubnetCidr[]` and `vsphere.nodeNetworking.internal.networkSubnetCidr[]`, and optional `vsphere.vcenterCredentials[]` of `{server, credentialsRef}`. The YAML spelling ends in `Cidr`. |
 | `none` | No platform arm. |
 | `external` | Optional `external` arbitrary map, preserved without interpretation by the read-only compiler. |
 
 When the complete platform object is omitted, normalization derives it:
 
 - every single-node cluster becomes `type: none`;
-- multi-node libvirt or bare-metal machines become `type: baremetal` with
-  `provisioningNetwork: disabled`;
+- multi-node libvirt or bare-metal machines whose three endpoint slots all take
+  the `openshift` source become `type: baremetal` with `provisioningNetwork:
+  disabled`, and those whose slots take no `openshift` source become
+  `type: none`; a mix is refused at `spec.install.endpoints`, because the
+  installer owns either all three addresses or none of them;
 - multi-node vSphere machines become `type: vsphere`; and
 - multi-node KubeVirt machines become `type: none`.
 
@@ -153,6 +156,27 @@ Derivation follows `nodes[].machineRef` to each `Machine` and then its
 `substrate.providerRef`. Mixed provider types require an explicit platform. An
 unresolved machine reference is reported at that reference and suppresses the
 secondary cannot-derive error. An authored platform always wins.
+
+`vsphere.vcenterCredentials` is the cluster's own vCenter credential, set keyed
+by `server`: each `server` names a `vcenters[].server` of the nodes' provider,
+each `credentialsRef` a `usernamePassword` Secret, and when present it names
+every vCenter the nodes' failure domains use. It is never inferred from the
+provider's provisioning `credentialsRef`; naming that same Secret is an
+explicit choice. A cluster that declares it requires `topology.folder` on every
+failure domain its nodes use and each such domain's `datacenter` among its
+vCenter's `datacenters`. `nodeNetworking` is accepted and reaches no
+agent-installer input.
+
+A multi-node KubeVirt cluster may author `baremetal`; every slot's source is
+then `openshift`, and every node's attachments are `Localnet`
+ClusterUserDefinedNetworks or `bridge` NetworkAttachmentDefinitions.
+
+Not yet met: the vSphere arm admits no `vcenterCredentials`, a KubeVirt
+`baremetal` cluster's attachment rule is not enforced, and every multi-node
+libvirt or bare-metal cluster derives `baremetal` whatever its slots' sources
+are, with a mixed slot set admitted; tracked as
+[B733](../milestones/m3.md#b733), [B88](../milestones/m3.md#b88) and
+[B707](../milestones/m3.md#b707).
 
 ## Endpoints
 
@@ -196,14 +220,44 @@ A multi-node cluster whose effective platform is `none`, authored or derived
 for KubeVirt machines, also rejects the `openshift` source for every slot, at
 its `source.type`: the installer receives no VIPs on that platform, so nothing
 in the cluster would answer the endpoint. An `external` or `loadBalancer`
-source is valid there. Multi-node libvirt and bare-metal machines derive
-`baremetal`, which carries the VIPs.
+source is valid there.
 
-On a multi-node `baremetal` or `vsphere` platform, all three endpoint slots are
-VIP-bearing. Each therefore resolves an address directly or through an
-`loadBalancer`. API, internal API, ingress,
-and node IPs obey the selected machine-network CIDRs. VIPs do not collide with
-node install IPs, and endpoint/network address families are consistent.
+On a multi-node `baremetal` or `vsphere` platform the installer owns all three
+endpoint slots as virtual IPs its own VIP holders answer. Each takes the
+`openshift` source with an authored `address`; an `external` or `loadBalancer`
+source is refused at its `source.type`, because the 4.20 to 4.22 agent
+installers pass no load-balancer type to the service that installs the cluster,
+which deploys its VIP holders whatever the input says (the installer's
+development branch does pass one), and on `vsphere` the agent installer ignores
+`platform.vsphere.loadBalancer`; an external load balancer is declared with
+platform `none`, Bootwright's modelling choice rather than a claim about every
+release. `api-int` resolves the `api` address, and the `api` and
+`ingress` addresses differ. API, internal API, ingress, and node IPs obey the
+selected machine-network CIDRs. VIPs do not collide with node install IPs, and
+endpoint/network address families are consistent.
+
+Not yet met: such a platform admits `external` and `loadBalancer` endpoints, an
+`api-int` address other than `api`'s and an `ingress` address equal to `api`'s;
+tracked as [B707](../milestones/m3.md#b707).
+
+**Endpoint addresses are the cluster's own.** An effective endpoint address
+equals no effective endpoint address of another selected ContainerCluster, no
+IP address a Machine declares other than the node a single-node cluster's
+`node` source names, no host address of a managed libvirt network attachment,
+no bind or endpoint address of a managed DNSServer, NTPServer, Proxy,
+ArtifactServer or Registry, no emulated controller's bind address, and no
+LoadBalancer bind address other than the one its own `loadBalancer` source
+selects; two clusters never select one LoadBalancer bind address. A wildcard
+bind claims no address here. Within one cluster `api-int` may equal `api`, and
+on platform `none` slots may share one external or load-balancer address. Each
+refusal is an `api.invariant` at the slot's address, or at its source when the
+address is resolved, naming the other holder. A managed libvirt network's
+prefix belongs to one context through its exclusive reservation, so no address
+in it is shared across contexts; on any other network Bootwright coordinates no
+address, as for node addresses.
+
+Not yet met: only a collision with the cluster's own node install addresses is
+refused; tracked as [B708](../milestones/m3.md#b708).
 
 ## Credentials and certificates
 
@@ -281,6 +335,8 @@ implicit trust inherited from another consumer.
 | `networkType` | string | no | Installer default when absent. |
 | `clusterNetwork` | array of `{cidr, hostPrefix}` | normalized | Family-dependent default below. |
 | `serviceNetwork` | array of CIDR strings | normalized | Family-dependent default below. |
+| `ovnKubernetesConfig` | object | no | absent; `mtu`, `gatewayConfig.routingViaHost`, `gatewayConfig.ipForwarding` (`Restricted` or `Global`), each written into the install-time `Network` only when set. |
+| `secondaryNetworks` | array | no | `[]`; localnet secondary networks below. |
 
 The two lists default independently. An authored non-empty list retains its
 membership and order while effective output canonicalizes CIDR text:
@@ -295,6 +351,32 @@ than the CIDR prefix and no larger than `32` or `128`. Service CIDRs are valid.
 The consumed `NetworkConfig.spec.machineNetwork` values, cluster networks, service
 networks, node install addresses, and endpoint addresses form one supported
 address family; dual-stack or mixed-family input is rejected by this contract.
+
+### Secondary networks
+
+Each `secondaryNetworks[]` entry is keyed by `name`, a DNS label that is
+neither `physnet` nor `exgwphysnet`, and becomes the name of the network, of its
+physical network and of the attachment definition workloads select.
+
+| Field | Type | Required | Rule |
+| --- | --- | --- | --- |
+| `topology` | string | yes | `Localnet`. |
+| `uplink.bridge` | string | yes | `br-ex`, sharing the default bridge, or a new OVS bridge name of at most 15 characters. |
+| `uplink.interface` | string | with a new bridge | An addressless `ethernet`, `bond` or `vlan` every node declares, other than its install interface. |
+| `vlan` | integer | no | Access VLAN `1..4094`; distinct among networks sharing an uplink. |
+| `mtu` | integer | no | `576..65536`, at least `1280` with an IPv6 subnet, at most the uplink interface's declared MTU. |
+| `ipam.mode` | string | no | `Disabled` (default) or `Enabled`. |
+| `ipam.subnets` | array of CIDRs | with `Enabled` | One or two, of different families. |
+| `ipam.excludeSubnets` | array of CIDRs | no | At most 25, inside `subnets`. |
+| `ipam.lifecycle` | string | no | `Persistent`, with `Enabled` only. |
+| `namespaceSelector.matchLabels` | map | yes | Non-empty Kubernetes labels selecting the namespaces that receive the attachment definition. |
+
+A cluster that declares a secondary network needs a binding of an add-on
+providing `nmstate`.
+
+Not yet met: `ovnKubernetesConfig` and `secondaryNetworks` are not admitted;
+tracked as [B719](../milestones/m3.md#b719) and
+[B726](../milestones/m3.md#b726).
 
 ## Security
 
@@ -317,6 +399,11 @@ effect-time checks; the desired-state declaration never triggers a hardware
 read or disk operation. General destructive and secret boundaries are defined
 in [security.md](../security.md) and
 [state-reconciliation.md](../state-reconciliation.md).
+
+On the agent path the roles resolve to the installer's `enableOn` value: every
+represented role is `all`, `master` alone is `masters`, and `worker`, `infra` or
+both is `workers`; the installer accepts no other selector, whatever its custom
+resource's enumeration lists.
 
 ## Nodes
 

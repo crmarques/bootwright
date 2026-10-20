@@ -21,6 +21,7 @@ is not necessarily implemented or authorized.
 | Provider hosts, machines, emulated BMCs, identity and power | [substrates](substrates.md) |
 | Media store and operating-system installation | [managed OS](managed-os.md) |
 | Container cluster installation | [container clusters](container-clusters.md) |
+| OpenShift provider coverage and acceptance profiles | [cluster coverage](container-cluster-coverage.md) |
 | Ceph lifecycle, native input, resources and release qualification | [storage](storage.md), [native input](storage-native-api.md), [resources](storage-resources.md), [coverage](storage-coverage.md) |
 | Trust, sensitive material, processes, network, supply chain | [security](security.md) |
 | The add-on boundary | [add-ons](add-ons.md) |

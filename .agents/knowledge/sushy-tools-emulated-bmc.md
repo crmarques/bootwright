@@ -142,6 +142,17 @@ refused by SELinux, so the unit sets `SecurityLabelDisable=true`.
   drive, beside the manager-scoped and dual-view shapes
   [physical controllers](redfish-physical-bmc.md) show.
 
+## Several nodes
+
+Each Machine's emulator downloads the whole image during its insert and stores
+one volume per node in the provider's pool. N nodes therefore make N downloads
+and N volumes, beside the work area's and the publication's copies of the same
+image. The emulator first writes the download to its container's temporary
+directory, so container storage needs the image size too. Observed by the v1
+implementation (main-v1) at about 1.3 GiB per agent image; re-verify on this
+tree. [B700](../../specs/milestones/m1.md#b700) owns the capacity admission this
+informs.
+
 ## Host firewall
 
 libvirt places every bridge it creates in firewalld's `libvirt` zone, and that

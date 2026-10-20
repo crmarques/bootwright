@@ -3631,7 +3631,7 @@ error ([B456](#x46--the-safety-and-defect-sweep-of-m1)), the Machine and Environ
 ([B459](#x46--the-safety-and-defect-sweep-of-m1)) and the sibling template's removed fields
 ([B465](#x46--the-safety-and-defect-sweep-of-m1)). Under D48 five were parked: the resolution record's check
 ([B460](backlog.md#b460)), the infrastructure roles' shared helpers
-([B461](backlog.md#b461)), the keep task's rehearsal ([B462](backlog.md#b462)), the
+([B461](backlog.md#b461)), the keep task's rehearsal ([B462](m3.md#b462)), the
 host observations ([B463](backlog.md#b463)) and the wording, tests and dead code
 ([B464](backlog.md#b464)). Already tracked: the enrollment test double and the
 status of a setup receipt with no execution definition are
@@ -7111,7 +7111,7 @@ owner question or parked.
 - A pin such as `virtctl v1.9.0-rc.0` or a `4.22.0-rc.1` cluster's installer is
   admitted, frozen and installed by `setup` and `apply --stage controller`.
   `distribution.release.version` of an OpenShift cluster is not part of this
-  change ([B680](backlog.md#b680)).
+  change ([B680](m3.md#b680)).
 - The stable-only pin screen, the managed-OS RHEL floor and the rescue RHEL 9
   pin are gone; a version the operator chooses fails natively on an older
   target.
@@ -7157,7 +7157,7 @@ owner's.
 rescue declaration is still refused. Follow-ups: owner questions
 B651, B655 and B656, closed in [X104](#x104--owner-answers-of-2026-10-19); parked
 [B665](backlog.md#b665) to [B673](backlog.md#b673), [B676](backlog.md#b676),
-[B680](backlog.md#b680) and [B681](backlog.md#b681), which holds the edges the
+[B680](m3.md#b680) and [B681](backlog.md#b681), which holds the edges the
 lanes left.
 
 ### X104 — Owner answers of 2026-10-19

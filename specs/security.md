@@ -317,6 +317,14 @@ deterministic, inspectable artifacts with fixed command structure and safe
 argument encoding; they do not use `eval`, inline secrets, or execute as part
 of generation.
 
+One child receives a proxy route: the installer process of a cluster's image
+build, which reaches the release payload through the controller Machine's proxy
+choice, given as `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` from its frozen
+request, never from the environment.
+
+Not yet met: the image build runs direct; tracked as
+[B721](milestones/m3.md#b721).
+
 ## Local context privilege
 
 The [context store](contexts.md#storage-locking-and-publication) owns
@@ -397,6 +405,25 @@ This is no credential discovery: the token is the installer's own, read from
 the member of the installer's asset state that the installer reads it from, in
 the installation's root-owned work area. It is never an argument, a result,
 evidence, output or a log entry.
+
+A KubeVirt host cluster is reached only at the server its provider's
+kubeconfig names, verified against the certificate authority that kubeconfig
+embeds and authenticated by its client certificate or token, and a kubeconfig
+that disables verification, carries no certificate authority, names a proxy,
+refers to files or runs a plugin (an `exec` or `auth-provider` entry) refuses
+before registration, because each would let the host connection run or trust
+something the declaration does not name. Its CDI upload proxy is verified against the
+ingress certificate authority read through that verified connection, never with
+`--insecure`. A vCenter is reached at its declared server and port over TLS
+verified against the system trust store; its `disableCertificateVerification`
+exception is endpoint-scoped and refuses wherever the transfer carries a
+cluster's private material. A pushed image leaves the controller only to those
+verified endpoints, and its destination's access control is recorded as inside
+the trust boundary of what it embeds
+([container clusters](container-clusters.md#boot-media)).
+
+Not yet met: no KubeVirt or vSphere connection exists; tracked as
+[B87](milestones/m1.md#b87) and [B99](milestones/m1.md#b99).
 
 Managed probes and effects use the
 [Ansible boundary and locked runtime closure](architecture.md#go-and-ansible-responsibility-boundary),
