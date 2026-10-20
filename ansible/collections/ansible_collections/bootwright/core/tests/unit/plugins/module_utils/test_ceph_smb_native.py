@@ -138,7 +138,7 @@ class Monitor:
         self.enabled, self.always_on = list(enabled), list(always_on)
         self.config = [entry(SAMBA_KEY, SAMBA), entry(METRICS_KEY, METRICS)] if config is None else list(config)
         self.resources, self.cluster_ids, self.services, self.daemons = {}, ["files"], [], []
-        self.log, self.mutations, self.answer = [], [], None
+        self.log, self.mutations, self.answer, self.stores_answered = [], [], None, False
 
     def run(self, argv, data=b"", timeout=60):
         del timeout
@@ -166,17 +166,21 @@ class Monitor:
 
     def apply(self, data):
         if self.answer is not None:
+            if self.stores_answered:
+                self.store(data)
             code, stdout, stderr = self.answer
             return code, ceph_native.NativeOutput(stdout, stderr)
-        loaded = json.loads(data)["resources"]
-        results = []
-        for resource in loaded:
-            stored = simplified(resource)
+        results = [{"resource": masked(stored), "success": True} for stored in self.store(data)]
+        return 0, json.dumps({"results": results, "success": True}).encode()
+
+    def store(self, data):
+        stored = []
+        for resource in json.loads(data)["resources"]:
             kind = resource["resource_type"]
             prefix = resource["cluster_id"] + "." if kind == "ceph.smb.share" else ""
-            self.resources[kind + "." + prefix + resource[ceph_smb_native.TYPES[kind]]] = stored
-            results.append({"resource": masked(stored), "success": True})
-        return 0, json.dumps({"results": results, "success": True}).encode()
+            self.resources[kind + "." + prefix + resource[ceph_smb_native.TYPES[kind]]] = simplified(resource)
+            stored.append(simplified(resource))
+        return stored
 
 
 class Markers:
@@ -344,10 +348,11 @@ def unsuccessful_answers(value):
             (11, json.dumps({"results": [good], "success": True}).encode(), NATIVE_SENTINEL.encode())]
 
 
+@pytest.mark.parametrize("stored", [False, True])
 @pytest.mark.parametrize("index", range(6))
-def test_unsuccessful_apply_result_refuses_without_native_message(index):
+def test_unsuccessful_apply_result_refuses_without_native_message(index, stored):
     value, monitor, markers = request("ceph.smb.join.auth"), Monitor(), Markers()
-    monitor.answer = unsuccessful_answers(value)[index]
+    monitor.answer, monitor.stores_answered = unsuccessful_answers(value)[index], stored
     with pytest.raises(ceph_native.Refusal, match="^smb-result$") as caught:
         worker(value, monitor, markers).smb_apply(private_of(value))
     assert caught.type is ceph_native.Refusal and not hasattr(caught.value, "native_error")
@@ -530,6 +535,24 @@ def test_share_daemons_must_run_on_eligible_hosts_with_the_frozen_image(monkeypa
     result = observed_share([daemon("node-1"), daemon("node-2")], cluster=vip, reach=True, monkeypatch=monkeypatch, served=clustered)
     assert result["ready"] is True and result["blocking"] == []
     assert all(ceph_smb_native.PENDING.fullmatch(item) for item in ["smb@smb.files", "vip@smb.files"])
+
+
+def test_share_readiness_ignores_daemons_of_another_declared_smb_cluster():
+    value = request("ceph.smb.share")
+    value["clusterIDs"] = ["files", "zeta"]
+    monitor = Monitor()
+    monitor.cluster_ids = ["files", "zeta"]
+    monitor.services = [{"service_type": "smb", "service_name": "smb.files"}, {"service_type": "smb", "service_name": "smb.zeta"}]
+    present(monitor, value)
+    monitor.resources["ceph.smb.cluster.files"] = cluster_resource()
+    zeta = daemon("node-3", identifier="zeta.0.0.node-3.abcdef", status=0, digests=(), service_name="smb.zeta")
+    monitor.daemons = [daemon("node-1"), daemon("node-2"), zeta]
+    result = worker(value, monitor, Markers(records(value, applied=True))).smb_observe()
+    assert result["ready"] is True and result["blocking"] == []
+    assert [item["name"] for item in result["daemons"]] == ["smb.files.0.0.node-1.abcdef", "smb.files.0.0.node-2.abcdef"]
+    monitor.daemons = [daemon("node-1"), daemon("node-2"), dict(zeta, service_name="smb.other")]
+    with pytest.raises(ceph_native.NativeFailure, match="^foreign-service$"):
+        worker(value, monitor, Markers(records(value, applied=True))).smb_observe()
 
 
 def test_a_share_of_an_active_directory_cluster_reports_its_directory():

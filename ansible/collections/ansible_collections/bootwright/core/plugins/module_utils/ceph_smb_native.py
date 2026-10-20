@@ -485,8 +485,10 @@ class SMBWorker(ceph_native_resources.ResourceWorker):
                 "daemons": daemons, "blocking": blocking, "directory": directory}
 
     def daemon_rows(self):
-        """The generated service's daemons: each of that service, on its hosts, on the frozen samba image or none yet."""
+        """The generated service's daemons: each of that service, on its hosts, on the frozen samba image or none yet; another declared
+        SMB cluster's daemons are that cluster's own."""
         service, frozen = self.smb["service"], self.smb["images"][0]["image"]
+        others = {"smb." + identity for identity in self.smb["clusterIDs"]} - {service["name"]}
         rows = self.manager_retry(self.ceph, "orch", "ps")
         require(isinstance(rows, list) and len(rows) <= MAX_LISTED and all(isinstance(row, dict) for row in rows), "native-output")
         daemons, running = [], 0
@@ -496,6 +498,8 @@ class SMBWorker(ceph_native_resources.ResourceWorker):
             identifier, host, name = row.get("daemon_id"), row.get("hostname"), row.get("service_name")
             require(isinstance(identifier, str) and DAEMON_ID.fullmatch(identifier) is not None and isinstance(host, str) and isinstance(name, str),
                     "native-output")
+            if name in others:
+                continue
             if name != service["name"] or host not in service["hosts"]:
                 raise self.foreign("daemon smb." + identifier)
             images = row.get("container_image_digests") or []
