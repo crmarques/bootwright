@@ -220,6 +220,25 @@ def test_alertmanager_document_carries_default_webhook_urls(tmp_path):
     assert stream(monitor.stdin[0])["alertmanager"]["spec"]["user_data"] == {"default_webhook_urls": WEBHOOKS}
 
 
+def test_monitoring_unit_refuses_an_absent_image_setting_before_any_write(tmp_path):
+    request = monitoring_request()
+    markers = units.markers_for(tmp_path, request)
+    before = units.records(markers)
+    monitor = Monitor(request)
+    grafana = "mgr/cephadm/container_image_grafana"
+    monitor.config = [entry for entry in monitor.config if entry["name"] != grafana]
+    with pytest.raises(ceph_native.NativeFailure, match="^foreign-image$") as caught:
+        applying(monitor, markers).unit()
+    assert caught.value.native_error["cause"] == grafana
+    assert monitor.mutations == [] and monitor.stdin == [] and units.records(markers) == before
+    exporter = monitoring_request([documents()[1]])
+    del exporter["service"]["bindings"]
+    monitor = Monitor(exporter)
+    monitor.config = []
+    assert applying(monitor, units.markers_for(tmp_path / "exporter", exporter), {}).unit() == {"changed": True}
+    assert not any(argv[argv.index("--format") + 2:] == ["config", "dump"] for argv in monitor.log)
+
+
 @pytest.mark.parametrize("stored", [True, False])
 def test_monitoring_apply_continuation_reuses_material(tmp_path, stored):
     request = monitoring_request()
