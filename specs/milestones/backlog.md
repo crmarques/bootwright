@@ -3246,3 +3246,21 @@ Requires cell as `owner decision: <question>`.
   lock's `tested` list, warning only) is an explicit exception to D163, because
   it concerns Bootwright's own host and never refuses; the
   [controller spec](../controller.md#supported-hosts) records it.
+
+- **D168** (2026-10-20, the owner): the owner instructed that "finished lanes
+  that are complete and would make main functional with the feature it
+  implemented can be merged to main as soon as they are done". This supersedes
+  the owner-merge step of [D164](#decisions) (OD31 (b)), D160's OD1 and D159
+  clause (4), "merging waits for the owner" / "Merging `m2c` waits for the
+  owner": the session merges a checkpoint-passed,
+  feature-complete slice to local main as soon as it is done, without asking,
+  and pushing still waits for the owner. A lane that is a dependency of such a
+  slice and is itself complete goes with it and is reported (X61's first lane,
+  the matrix catalog and refusal table, went with X56); a lane of a slice whose
+  checkpoint has not passed, or whose gated lanes are open, stays on the local
+  branch `m2c`. The instruction changes no product spec. It records X56 and X57
+  in-tree: [B81](m2.md#b81) and [B492](m2.md#b492) await operator acceptance,
+  and [B477](m2.md#b477), [B478](m2.md#b478), [B479](m2.md#b479) and
+  [B489](m2.md#b489) stay in progress for their gated lanes. It also records
+  [B686](m2.md#b686) and [B687](m1.md#b687), found at the int-x57 and
+  int-x55-r checkpoints.
