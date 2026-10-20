@@ -99,7 +99,8 @@ def test_rbd_mirror_unit_without_a_count_waits_for_every_host(tmp_path):
 INVALID = {
     "service_id": lambda request: request["service"]["documents"][0].update(service_id="a"),
     "spec member": lambda request: request["service"]["documents"][0].update(spec={"mode": "x"}),
-    "two documents": lambda request: request["service"]["documents"].append(dict(copy.deepcopy(DOCUMENT), service_id="b", service_type="nfs")),
+    "two documents": lambda request: (request["service"]["documents"].append(dict(copy.deepcopy(DOCUMENT), service_id="b", service_type="nfs")),
+                                      request["delegated"].insert(0, {"name": "nfs.b", "hosts": ["node-1", "node-2"]})),
     "unit id": lambda request: request["service"].update(id="a"),
     "binding": lambda request: request["service"].update(bindings=[{"path": "/spec/x", "secretRef": "s", "serviceRef": "rbd-mirror"}]),
     "other type": lambda request: request["service"]["documents"][0].update(service_type="cephfs-mirror"),
