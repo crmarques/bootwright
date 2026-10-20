@@ -23,6 +23,8 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics, native_specializations
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_native_specializations as specs
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as tunnel_native
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_object_gateway as object_gateway
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_service_units as service_units
 
 PASSWORD = "Xq7-Lm2_Rv9.Tk4-Wz8_Hn3.Pb6-Jd5_"
 SYNTHETIC_CA = (pathlib.Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "ceph-discovery-synthetic-ca.golden").read_bytes()
@@ -368,6 +370,21 @@ def test_core_and_host_evidence_name_the_applied_specializations(core_request):
     assert "specializations" not in plain
     released = ceph_core.execute_host(request, "destroy", "d" * 64, AppliedTransport(core_request, ids, record))["evidence"]
     assert "specializations" not in released
+
+
+def test_unit_and_gateway_evidence_name_the_applied_specializations(monkeypatch):
+    monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
+    ids = ("ceph-mgr-without-license-contract", "ceph-call-home-opt-in")
+    for request, fake in ((service_units.unit_request("direct"), service_units.Transport), (object_gateway.gateway_request(), object_gateway.Transport)):
+        for operation in ("observe", "apply"):
+            evidences = []
+            for applied in (ids, ()):
+                transport = fake(request)
+                transport.applied = set(applied)
+                evidences.append(ceph_core.execute(request, operation, "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)["evidence"])
+            named, plain = evidences
+            assert named["specializations"] == sorted(ids) and ceph_core.evidence(named, "d" * 64, request) is named
+            assert "specializations" not in plain and {key: value for key, value in named.items() if key != "specializations"} == plain
 
 
 def test_evidence_without_specializations_still_reads(core_request):
