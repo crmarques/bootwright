@@ -294,6 +294,15 @@ func TestErasureProfileDefaultsFrozenPerPlugin(t *testing.T) {
 	}
 }
 
+func TestErasurePoolMinSizeIsTheMonitorDerivation(t *testing.T) {
+	for _, test := range []struct{ k, m, size, minSize int }{{2, 1, 3, 2}, {4, 1, 5, 4}, {2, 2, 4, 3}, {4, 2, 6, 5}} {
+		r, err := planned(t, planCatalog(6, 6, nil, erasurePool("volumes", requestMap("dataChunks", test.k, "codingChunks", test.m))), api.StoragePool, "volumes")
+		if err != nil || r.Pool.Size != test.size || r.Pool.MinSize != test.minSize {
+			t.Fatalf("an erasure-coded %d+%d pool planned %+v (%v), want size %d and min_size %d", test.k, test.m, r.Pool, err, test.size, test.minSize)
+		}
+	}
+}
+
 func TestPoolReplicasFallBackToPolicyBeforeDefaults(t *testing.T) {
 	policy := childOf(api.StoragePlacementPolicy, "durable", "ruleName", "durable-hosts", "replicated", requestMap("size", 3, "minSize", 3))
 	inherited := childOf(api.StoragePool, "volumes", "type", "replicated", "role", "rbd", "placementPolicyRef", "durable")

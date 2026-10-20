@@ -268,7 +268,11 @@ restriction applies; the selected release's monitor refuses a profile it does
 not accept, reported through `nativeError`. The plugin is `isa` when omitted.
 `isa` and `jerasure` are the plugins Bootwright realizes, because its profile
 readback proves exactly their stored keys; `clay`, `lrc` and `shec` refuse at
-admission as not realized. The technique is `reed_sol_van`. The stripe unit is
+admission as not realized. The technique is `reed_sol_van`. The pool's `size`
+is `dataChunks+codingChunks` and its `min_size` is the monitor's own
+derivation at pool creation, `dataChunks + min(1, codingChunks-1)`, so a pool
+with one coding chunk has `min_size` equal to `dataChunks`; Bootwright freezes
+and observes both and never sets either. The stripe unit is
 a multiple of 4096 bytes (4096 when omitted), always passed, and `dataChunks`
 times it fits the native 32-bit stripe width. `spec.erasure.parameters` and a non-default
 `crushRoot` refuse at plan. An erasure-coded `rbd` or `cephfs-data` pool

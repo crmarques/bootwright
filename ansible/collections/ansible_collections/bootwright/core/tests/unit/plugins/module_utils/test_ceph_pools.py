@@ -9,7 +9,8 @@ The scripted monitor below answers the upstream v20.2.1 shapes the worker reads;
   jerasure-per-chunk-alignment=false (src/erasure-code/jerasure/ErasureCodeJerasure.cc:61-77, :410-424; ErasureCodeJerasure.h:124-135);
 - an erasure-coded pool create derives rule <pool> with set_chooseleaf_tries 5, set_choose_tries 100, take, chooseleaf_indep, emit
   (src/erasure-code/ErasureCode.cc:70-84; OSDMonitor.cc:13686-13694); the CLI exits with the errno, ERANGE 34 from check_pg_num
-  (OSDMonitor.cc:8006-8056; src/ceph.in:1306-1310);
+  (OSDMonitor.cc:8006-8056; src/ceph.in:1306-1310); its size is k+m and its min_size k+min(1, m-1)
+  (OSDMonitor::prepare_pool_size, OSDMonitor.cc:7799-7806);
 - `osd pool ls detail` keys (src/osd/osd_types.cc:1568-1653) and `osd tree` nodes with children and device_class.
 """
 
@@ -66,7 +67,7 @@ def pool_value(kind="replicated", role="rbd", plugin="isa", device_class="", **c
 def erasure_pool(k, m, plugin="isa", device_class=""):
     pool = pool_value("erasure", plugin=plugin, device_class=device_class)
     pool["erasure"].update(dataChunks=k, codingChunks=m)
-    pool.update(size=k + m, minSize=k + 1)
+    pool.update(size=k + m, minSize=k + min(1, m - 1))
     return pool
 
 
@@ -170,7 +171,7 @@ class World:
         if kind == "erasure":
             profile = self.profiles[target]
             self.rules.setdefault(name, rule(len(self.rules) + 2, name, 3, profile["crush-device-class"]))
-            size, minimum, width = int(profile["k"]) + int(profile["m"]), int(profile["k"]) + 1, int(profile["k"]) * int(profile["stripe_unit"])
+            size, minimum, width = int(profile["k"]) + int(profile["m"]), int(profile["k"]) + min(1, int(profile["m"]) - 1), int(profile["k"]) * int(profile["stripe_unit"])
         else:
             size, minimum, width = 3, 2, 0
         crush_rule = self.rules[name if kind == "erasure" else target]["rule_id"]
@@ -878,6 +879,18 @@ def test_any_k_m_profile_reaches_the_profile_set(k, m, plugin):
     assert ("osd", "erasure-code-profile", "set", "volumes", "k=" + str(k), "m=" + str(m), "plugin=" + plugin, "technique=reed_sol_van",
             "crush-failure-domain=host", "crush-root=default", "stripe_unit=4096") in world.log
     assert ready(native)[0] is True
+
+
+@pytest.mark.parametrize("k, m, minimum", [(2, 1, 2), (4, 1, 4), (2, 2, 3), (4, 2, 5)])
+def test_erasure_min_size_is_the_monitor_derivation(k, m, minimum):
+    world = World([["hdd"]] * (k + m))
+    native, unused = resource(world, "pool", erasure_pool(k, m), count=k + m)
+    assert native.request["pool"]["minSize"] == minimum
+    assert native.pool() == {"changed": True}
+    assert world.entry("volumes")["min_size"] == minimum and ready(native)[0] is True
+    assert not any(entry[:3] == ("osd", "pool", "set") and "min_size" in entry for entry in world.log)
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        resource(World(), "pool", dict(erasure_pool(k, m), minSize=k + 1 if m == 1 else k), count=k + m)
 
 
 @pytest.mark.parametrize("plugin, extra, accepted", [

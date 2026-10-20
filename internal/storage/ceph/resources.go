@@ -180,7 +180,7 @@ func erasureOf(p *Pool, e api.Value) {
 	p.Erasure = &PoolErasure{CodingChunks: m, DataChunks: k, DeviceClass: class, FailureDomain: "host", Plugin: plugin, Profile: p.Name, ProfileDefaults: defaults,
 		Root: "default", StripeUnit: int(positiveOr(e.Get("stripeUnit"), 4096)), Technique: "reed_sol_van"}
 	p.CrushRule = p.Name
-	p.Size, p.MinSize = k+m, k+1
+	p.Size, p.MinSize = k+m, k+min(1, m-1)
 	p.Overwrites = p.Role == "rbd" || p.Role == "cephfs-data"
 }
 
