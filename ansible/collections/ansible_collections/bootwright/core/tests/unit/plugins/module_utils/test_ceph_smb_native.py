@@ -107,7 +107,8 @@ def simplified(resource):
     if kind == "ceph.smb.share":
         value.update(name=value.get("name") or value["share_id"], readonly=value.get("readonly", False), browseable=value.get("browseable", True),
                      restrict_access=value.get("restrict_access", False), comment=None, max_connections=None, custom_smb_share_options=None,
-                     login_control=None)
+                     login_control=[dict({"category": "user", "access": "read"}, **entry) for entry in value["login_control"]]
+                     if value.get("login_control") else None)
         value["cephfs"] = dict({"path": "/", "subvolumegroup": "", "subvolume": "", "provider": "samba-vfs"}, **value["cephfs"])
     elif kind == "ceph.smb.cluster":
         value.update(custom_smb_global_options=None, custom_ports=None, bind_addrs=None, remote_control=None, domain_settings=None,
@@ -326,13 +327,20 @@ def changed(kind):
     return {"values": {"users": [{"name": "smbuser", "password": "x"}], "groups": []}}
 
 
-def test_a_differing_attempt_record_refuses_identity():
-    value, monitor = request("ceph.smb.cluster"), Monitor()
-    markers = Markers({"smb-attempt." + name_of(value) + ".json": dict(intent(value), owner="apply-456")})
-    with pytest.raises(ceph_native.NativeFailure, match="^smb-identity$") as caught:
-        worker(value, monitor, markers).smb_apply({})
-    assert caught.value.native_error["cause"] == name_of(value) + " is not the resource this operation attempted"
-    assert applies(monitor) == []
+@pytest.mark.parametrize("phase", ["smb_apply", "smb_observe"])
+def test_a_differing_attempt_record_refuses_identity(phase):
+    value = request("ceph.smb.cluster")
+    attempt_name, applied_name = "smb-attempt." + name_of(value) + ".json", "smb-applied." + name_of(value) + ".json"
+    foreign = [{attempt_name: dict(intent(value), owner="apply-456")},
+               {attempt_name: intent(value), applied_name: dict(intent(value), owner="apply-456")},
+               {attempt_name: intent(value), applied_name: dict(intent(value), native=dict(value["native"], auth_mode="active-directory"))}]
+    for planted in foreign:
+        monitor, markers = Monitor(), Markers(planted)
+        present(monitor, value)
+        with pytest.raises(ceph_native.NativeFailure, match="^smb-identity$") as caught:
+            getattr(worker(value, monitor, markers), phase)(*([{}] if phase == "smb_apply" else []))
+        assert caught.value.native_error["cause"] == name_of(value) + " is not the resource this operation attempted"
+        assert applies(monitor) == [] and markers.writes == [] and monitor.mutations == []
 
 
 def unsuccessful_answers(value):
@@ -503,10 +511,20 @@ def test_smb_readback_accepts_native_shapes_and_refuses_refused_leaves():
     assert caught.value.native_error["cause"] == name_of(value) + " holds a field Bootwright does not realize"
     for empty in ({}, []):
         assert native.matches(dict(shapes[0], custom_smb_share_options=empty)) is True
+    controlled = request("ceph.smb.share")
+    controlled["native"]["login_control"] = [{"name": "alice"}]
+    native = worker(controlled, Monitor())
+    filled = simplified(controlled["native"])
+    assert filled["login_control"] == [{"name": "alice", "category": "user", "access": "read"}]
+    assert native.matches(filled) is True
+    assert native.matches(dict(filled, login_control=[{"name": "alice", "category": "user", "access": "read-write"}])) is False
     cluster = request("ceph.smb.cluster")
     native = worker(cluster, Monitor())
     observed = cluster_resource(client_compat="default", placement={"count": 2, "hosts": [{"hostname": "node-1", "network": "", "name": ""}, "node-2"]})
     assert native.matches(observed) is True
+    cluster["native"]["custom_dns"] = ["192.0.2.53", "192.0.2.52"]
+    assert worker(cluster, Monitor()).matches(cluster_resource(custom_dns=["192.0.2.52", "192.0.2.53"])) is True
+    assert worker(cluster, Monitor()).matches(cluster_resource(custom_dns=["192.0.2.52"])) is False
     with pytest.raises(ceph_native.Refusal, match="^native-output$"):
         native.matches(cluster_resource(placement={"count": 2, "hosts": [{"hostname": "node-1", "network": "192.0.2.0/24"}, "node-2"]}))
     with pytest.raises(ceph_native.NativeFailure, match="^smb-identity$"):
