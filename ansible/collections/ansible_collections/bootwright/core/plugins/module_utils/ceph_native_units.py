@@ -27,6 +27,52 @@ from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import
 # service_id, and the hook that proves its endpoint into evidence, if any.
 UnitType = collections.namedtuple("UnitType", ("validate", "check", "claim", "settle", "expected", "readiness", "daemon_types", "frontend", "images",
                                                "leaves", "singletons", "endpoint"))
+# The RBD mirror daemon runs the Ceph image as a singleton service without a service_id, spec member or listener.
+MIRROR_TYPES = ("rbd-mirror",)
+
+
+def mirror_validate(unit, request, hosts):
+    """The one rbd-mirror document without a service_id, spec or binding; its networks, when declared, are exact networks."""
+    del request, hosts
+    require(unit["id"] == "" and "bindings" not in unit and len(unit["documents"]) == 1)
+    document = unit["documents"][0]
+    require(document["service_type"] == "rbd-mirror" and "service_id" not in document and "spec" not in document)
+    if "networks" in document:
+        ceph_native_nfs.networks(document["networks"])
+
+
+def mirror_check(worker, unit):
+    """The RBD mirror unit runs the Ceph image, so it reads no auxiliary image setting before its apply."""
+    del worker, unit
+
+
+def mirror_claim(worker, unit, checked):
+    """The RBD mirror unit claims nothing before its apply."""
+    del worker, unit, checked
+
+
+def mirror_settle(worker, unit):
+    """The RBD mirror unit settles nothing after its apply."""
+    del worker, unit
+
+
+def mirror_expected(unit):
+    """The rbd-mirror daemons the one document places."""
+    placement = unit["documents"][0]["placement"]
+    return {("rbd-mirror", "rbd-mirror"): placement.get("count", len(placement["hosts"]))}
+
+
+def mirror_readiness(worker, unit, blocking):
+    """Nothing beyond the daemons running on the frozen Ceph image."""
+    del worker, unit, blocking
+    return True
+
+
+def mirror_frontend(unit):
+    """The RBD mirror unit has no ingress."""
+    del unit
+
+
 UNIT_TYPES = {
     "monitoring": UnitType(ceph_native_observability.validate, ceph_native_observability.check, ceph_native_observability.claim,
                            ceph_native_observability.settle, ceph_native_observability.expected, ceph_native_observability.readiness,
@@ -42,6 +88,8 @@ UNIT_TYPES = {
                              ceph_native_observability.gateway_frontend, ceph_native_observability.GATEWAY_IMAGES,
                              {(kind, path): variable for kind, path, variable in ceph_native_observability.GATEWAY_LEAVES},
                              frozenset(ceph_native_observability.GATEWAY_TYPES), ceph_native_observability.gateway_endpoint),
+    "rbd-mirror": UnitType(mirror_validate, mirror_check, mirror_claim, mirror_settle, mirror_expected, mirror_readiness, MIRROR_TYPES, mirror_frontend,
+                           {"rbd-mirror": None}, {}, frozenset(MIRROR_TYPES), None),
 }
 PHASES = frozenset(("unit", "ingress_firewall"))
 # The ingress firewall check reads only these host tools, never with a write, reload or query form.
@@ -67,7 +115,7 @@ INPUTS_VERSION = "ceph-service-inputs-v1"
 MAX_DAEMONS = 256
 PENDING = re.compile(r"(?:(?:" + "|".join(sorted({name for unit in UNIT_TYPES.values() for name in unit.daemon_types} | {"vip", "module"}))
                      + r")@(?:(?:nfs|ingress)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}|"
-                     + "|".join(ceph_native_observability.MONITORING_TYPES + ceph_native_observability.GATEWAY_TYPES)
+                     + "|".join(ceph_native_observability.MONITORING_TYPES + ceph_native_observability.GATEWAY_TYPES + MIRROR_TYPES)
                      + r")|(?:tls|http)@(?:" + "|".join(ceph_native_observability.GATEWAY_TYPES) + r"))\Z")
 BINDING_MEMBERS = frozenset(("path", "secretRef", "serviceRef"))
 # The non-secret stand-in a bound leaf holds wherever the worker normalizes, records or compares a document.

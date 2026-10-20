@@ -118,10 +118,12 @@ DAEMON_TYPES = {
     "snmp-gateway": ("delegated", "delegated", False, "none"),
     "mgmt-gateway": ("delegated", "delegated", False, "none"),
     "smb": ("delegated", "delegated", False, "none"),
+    "rbd-mirror": ("delegated", "delegated", False, "none"),
 }
-# A service another block executes, listed by its cephadm service_name: rgw.<id>, ingress.<id>, nfs.<id>, smb.<id> or a singleton's type.
+# A service another block executes, listed by its cephadm service_name: rgw.<id>, ingress.<id>, nfs.<id>, smb.<id> or a singleton's type,
+# rbd-mirror among them.
 DELEGATED_SERVICE = re.compile(r"(?:(?:rgw|ingress|nfs|smb)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}"
-                               r"|alertmanager|ceph-exporter|grafana|mgmt-gateway|node-exporter|prometheus|snmp-gateway)\Z")
+                               r"|alertmanager|ceph-exporter|grafana|mgmt-gateway|node-exporter|prometheus|rbd-mirror|snmp-gateway)\Z")
 
 
 def supported_transport(request):
@@ -505,7 +507,7 @@ def delegated_daemon(daemon, request):
     service = daemon.get("service_name")
     require(isinstance(service, str) and service in delegated, "foreign-service")
     kind = daemon["daemon_type"]
-    if kind in ceph_native_observe.SINGLETONS:
+    if kind in ceph_native_observe.LISTED_SINGLETONS:
         require(service == kind, "foreign-service")
     else:
         require(service.startswith(ceph_native_observe.DELEGATED_TYPES[kind] + "."), "foreign-service")

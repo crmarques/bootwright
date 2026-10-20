@@ -232,8 +232,8 @@ Do not impose global uniqueness on the bare `service_id`. Any authored native
 
 `service_id` follows one table keyed by service type, with three states.
 Forbidden: `mon`, `mgr`, `prometheus`, `alertmanager`, `grafana`,
-`node-exporter`, `ceph-exporter`, `snmp-gateway`, `mgmt-gateway` and
-`oauth2-proxy`, the native singletons that cephadm refuses with an ID because
+`node-exporter`, `ceph-exporter`, `snmp-gateway`, `mgmt-gateway`,
+`oauth2-proxy` and `rbd-mirror`, the native singletons that cephadm refuses with an ID because
 they are not in `REQUIRES_SERVICE_ID` (IBM's python3-ceph-common 20.2.1-405
 `ServiceSpec.validate`). Native-required: `mds`, `rgw`, `ingress` and `nfs`; every row in this state is a type in cephadm's
 `REQUIRES_SERVICE_ID` (container, ingress, iscsi, mds, nfs, nvmeof, rgw, smb,
@@ -301,6 +301,22 @@ is still a directory that is not a link and that neither group nor others may
 write, re-proved unchanged after use. Its `unit.meta` and `unit.image` keep the
 root-or-Ceph-user owner rule, and no other daemon type gains this.
 
+The `rbd-mirror` service runs in its own service-unit block. The core request
+lists it in `delegated` by its singleton service name `rbd-mirror` with its
+eligible hosts. Its document carries only placement and optional `networks`:
+cephadm has no `rbd-mirror` ServiceSpec subclass, so the generic ServiceSpec
+takes no `spec` member for it, and it refuses a `service_id` for it. cephadm
+names its daemons `rbd-mirror.<host short name>.<six lowercase letters>`
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py#L922-L966)),
+and the daemon binds no listener of its own. In the daemon-type table an
+`rbd-mirror` daemon is admitted only when its `service_name` is `rbd-mirror`,
+that service is listed and its host is among its hosts; it is never counted
+toward readiness or compared with the Ceph image there, and its unit block
+requires it to run the frozen Ceph image. In the host layout it is identified
+by that listed singleton, and its directory keeps the root-or-Ceph-user owner
+rule. Bootwright realizes only the daemon: no pool or image mirroring, peer or
+replication relationship comes from this service.
+
 `serviceRef` is a scalar exact reference to this registry in the already
 selected cluster. It is not a Bootwright object name, may contain native dots,
 and is resolved through the registry rather than guessed by splitting an
@@ -317,7 +333,9 @@ An authored `service_type: smb` refuses at its `service_type` because the SMB
 manager module generates that service from a StorageSMBResource, and
 `service_type: iscsi` refuses because Bootwright does not realize the iSCSI
 gateway; block access over the network goes through the NVMe-oF gateway
-([B481](milestones/m2.md#b481)).
+([B481](milestones/m2.md#b481)). `service_type: cephfs-mirror` refuses because
+Bootwright does not realize CephFS snapshot mirroring
+([B483](milestones/m2.md#b483)).
 The [resource contract](storage-resources.md) owns those relationships.
 
 ### RGW, ingress and NFS records
@@ -450,7 +468,9 @@ enables it for a declared `nfs` service through the cluster's settings block.
 The `prometheus` manager module is derived from the declared prometheus
 service: cephadm enables it itself when it deploys that service (D159 clause
 9), so `spec.ceph.mgrModules` refuses it at its entry, with or without the
-service. `ceph.cephadm.workarounds` is retired (D160, OD25): no workaround had
+service. `mirroring` in `spec.ceph.mgrModules` refuses at its entry because it
+serves CephFS snapshot mirroring, which Bootwright does not realize.
+`ceph.cephadm.workarounds` is retired (D160, OD25): no workaround had
 a recorded effect, and the strict decoder refuses the field with that reason.
 
 ### Observability and management gateway records

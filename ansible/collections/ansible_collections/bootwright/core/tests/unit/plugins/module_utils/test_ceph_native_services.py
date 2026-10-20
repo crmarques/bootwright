@@ -160,6 +160,35 @@ def test_observe_refuses_unlisted_delegated_daemon(core_request, change):
 def test_validate_admits_delegated_member(core_request):
     with_delegated(core_request)
     assert ceph_native.validate(core_request) is core_request
+    assert ceph_native.DELEGATED_SERVICE.fullmatch("rbd-mirror") and not ceph_native.DELEGATED_SERVICE.fullmatch("rbd-mirror.a")
+
+
+def rbd_mirror_daemon(host, service="rbd-mirror", daemon_type="rbd-mirror"):
+    """One `ceph orch ps` row of an rbd-mirror daemon: cephadm names a service without an ID by its type and gives each daemon
+    the ID <host short name>.<six letters> (cephadm/module.py get_unique_name, v20.2.1 L922-L966)."""
+    return {"daemon_type": daemon_type, "daemon_id": host.split(".")[0] + ".abcdef", "service_name": service, "hostname": host, "status": 0,
+            "container_image_digests": ["registry.example.test/other@sha256:" + "a" * 64]}
+
+
+@pytest.mark.parametrize("change", ["listed", "unlisted", "outside-hosts", "with-service-id", "wrong-type"])
+def test_observe_cluster_tolerates_rbd_mirror_only_as_a_delegated_unit_daemon(core_request, change):
+    with_delegated(core_request)
+    hosts = [host["name"] for host in core_request["hosts"]]
+    if change != "unlisted":
+        core_request["delegated"] = sorted(core_request["delegated"] + [{"name": "rbd-mirror", "hosts": hosts[:2]}], key=lambda entry: entry["name"])
+    assert ceph_native.validate(core_request) is core_request
+    answers = core_fixtures.memory_observation_answers(core_request)
+    rows = {"listed": [rbd_mirror_daemon(host) for host in hosts[:2]], "unlisted": [rbd_mirror_daemon(hosts[0])],
+            "outside-hosts": [rbd_mirror_daemon(hosts[2])], "with-service-id": [rbd_mirror_daemon(hosts[0], "rbd-mirror.a")],
+            "wrong-type": [rbd_mirror_daemon(hosts[0], "nfs.files")]}[change]
+    answers[("orch", "ps")] += rows
+    native, unused = core_fixtures.worker(core_request, answers)
+    if change == "listed":
+        assert native.observe()["ready"] is True
+    else:
+        with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
+            native.observe()
+    assert native.markers.writes == []
 
 
 @pytest.mark.parametrize("change", ["empty", "cluster-family", "unknown-host", "duplicate-host", "no-hosts", "unsorted", "duplicate-name",

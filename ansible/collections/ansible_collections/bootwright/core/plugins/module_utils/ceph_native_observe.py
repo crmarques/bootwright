@@ -29,12 +29,12 @@ MAX_METADATA = 4096
 CLUSTER_TYPES = frozenset(("mon", "mgr", "osd", "crash", "ceph-exporter", "mds"))
 # Each daemon type another block executes, mapped to its cephadm service type (orchestrator daemon_type_to_service).
 DELEGATED_TYPES = {"alertmanager": "alertmanager", "grafana": "grafana", "haproxy": "ingress", "keepalived": "ingress", "mgmt-gateway": "mgmt-gateway",
-                   "nfs": "nfs", "node-exporter": "node-exporter", "prometheus": "prometheus", "rgw": "rgw", "smb": "smb",
-                   "snmp-gateway": "snmp-gateway"}
+                   "nfs": "nfs", "node-exporter": "node-exporter", "prometheus": "prometheus", "rgw": "rgw", "rbd-mirror": "rbd-mirror",
+                   "smb": "smb", "snmp-gateway": "snmp-gateway"}
 # Singletons on an auxiliary image: cephadm names the service by its type, and each daemon directory may belong to the image's own user.
 SINGLETONS = frozenset(("alertmanager", "grafana", "mgmt-gateway", "node-exporter", "prometheus", "snmp-gateway"))
-# Services listed by their type alone: the singletons and the Ceph-image ceph-exporter.
-LISTED_SINGLETONS = SINGLETONS | {"ceph-exporter"}
+# Services listed by their type alone: the auxiliary singletons and the Ceph-image ceph-exporter and rbd-mirror.
+LISTED_SINGLETONS = SINGLETONS | {"ceph-exporter", "rbd-mirror"}
 TYPES = CLUSTER_TYPES | frozenset(DELEGATED_TYPES)
 NAME = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
 IMAGE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}\Z")
@@ -282,7 +282,7 @@ def delegated_service(name, service, listed):
     """The listed service a delegated daemon belongs to: cephadm names it <type>.<service_id>.<suffix> (get_unique_name with
     prefix=service_id), and its unit.meta, once written, must name that same listed service."""
     kind = name.split(".", 1)[0]
-    if kind in SINGLETONS:
+    if kind in LISTED_SINGLETONS:
         matches = [entry for entry in listed if entry == kind]
     else:
         matches = [entry for entry in listed

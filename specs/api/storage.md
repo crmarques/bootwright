@@ -41,14 +41,15 @@ cluster whose `spec.serviceRef` names it; an unbound one refuses at its
 zone exist. `spec.ceph.mgrModules` admits `cephadm` and
 `rbd_support`; `nfs` and `prometheus` refuse as derived from a declared NFS or
 prometheus service (D159 clause 9), and `smb` refuses as derived from a
-declared StorageSMBResource cluster; every other module refuses until its
-service owner. Retired daemon helpers, topology roles/devices and drivegroup
+declared StorageSMBResource cluster; `mirroring` refuses because Bootwright
+does not realize CephFS snapshot mirroring; every other module refuses until
+its service owner. Retired daemon helpers, topology roles/devices and drivegroup
 wrappers refuse with their replacement path, and the retired
 `ceph.cephadm.workarounds` list refuses with its reason. Machine bindings,
 hostnames, labels, sites and locations remain under topology. A declared
-`smb` or `iscsi` service refuses at its `service_type`: SMB daemons are
-generated from a StorageSMBResource and Bootwright does not realize the iSCSI
-gateway (see [service identity](../storage-native-api.md#service-identity-and-references)).
+`smb`, `iscsi` or `cephfs-mirror` service refuses at its `service_type`: SMB
+daemons are generated from a StorageSMBResource, and Bootwright does not
+realize the iSCSI gateway or CephFS snapshot mirroring (see [service identity](../storage-native-api.md#service-identity-and-references)).
 Unsupported
 service families, options with unqualified effects and protected leaves
 without a release-qualified binding refuse explicitly. There is no arbitrary

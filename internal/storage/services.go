@@ -58,6 +58,8 @@ func (a *admission) clusterServices(ceph api.Value) {
 			a.issue("api.invariant", indexed("$.spec.ceph.mgrModules", i), "manager module "+row.module+" is derived from the declared "+row.family+" services", "remove "+row.module+" from spec.ceph.mgrModules; Bootwright enables it for a declared "+row.family+" service")
 		} else if module == "smb" {
 			a.issue("api.invariant", indexed("$.spec.ceph.mgrModules", i), "manager module smb is derived from the declared StorageSMBResource clusters", "remove smb from spec.ceph.mgrModules; Bootwright enables it for a declared StorageSMBResource cluster")
+		} else if module == "mirroring" {
+			a.issue("api.invariant", indexed("$.spec.ceph.mgrModules", i), "manager module mirroring serves CephFS snapshot mirroring, which Bootwright does not realize", "remove mirroring from spec.ceph.mgrModules")
 		} else if !slices.Contains([]string{"cephadm", "rbd_support"}, module) {
 			a.invalid("$.spec.ceph.mgrModules", "manager module requires its qualified service owner")
 		}

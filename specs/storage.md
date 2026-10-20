@@ -237,6 +237,11 @@ them:
   must name the gateway's `virtual_ip` (an IP address entry) or, without one,
   every host of its placement (a DNS name or a matching wildcard), or the
   apply refuses naming the Secret; no certificate byte enters the refusal.
+  For RBD mirroring, a declared `rbd-mirror` service forms one
+  `ceph-service-<cluster>-rbd-mirror` block whose one singleton document
+  carries no `service_id` or `spec`; its daemons run the Ceph image, so it
+  needs no auxiliary image, and its deadline is apply 2280 s, observe 720 s,
+  destroy 1380 s. A cluster name longer than 39 characters refuses.
 - A StorageCluster that declares an `oauth2-proxy` service, and each child
   planned through it, refuses at planning with `lifecycle.unsupported`
   "StorageCluster <cluster> declares an oauth2-proxy service, and Bootwright

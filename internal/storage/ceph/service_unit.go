@@ -46,6 +46,7 @@ var unitTypes = map[string]unitType{
 	"mgmt-gateway": {units: gatewayUnits, dependencies: gatewayDependencies, impacts: gatewayImpacts, apply: unitBudget{calls: 3, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 	"monitoring":   {units: monitoringUnits, dependencies: noUnitDependencies, impacts: monitoringImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 	"nfs":          {units: nfsUnits, dependencies: noUnitDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 3, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
+	"rbd-mirror":   {units: mirrorUnits, dependencies: noUnitDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 }
 
 func noUnitDependencies(api.Object, ServiceUnit) []string { return nil }
@@ -420,6 +421,30 @@ func monitoringUnits(cluster api.Object) ([]ServiceUnit, error) {
 			return nil, unrealizedBinding(binding.ServiceRef)
 		}
 		unit.Bindings = append(unit.Bindings, ServiceBinding(binding))
+	}
+	return []ServiceUnit{unit}, nil
+}
+
+var MirrorTypes = []string{"rbd-mirror"}
+
+func mirrorUnits(cluster api.Object) ([]ServiceUnit, error) {
+	services := slices.DeleteFunc(cluster.Spec().Get("ceph", "services").Items(), func(svc api.Value) bool {
+		return !slices.Contains(MirrorTypes, svc.Get("service_type").Text())
+	})
+	if len(services) == 0 {
+		return []ServiceUnit{}, nil
+	}
+	unit := ServiceUnit{Documents: []json.RawMessage{}, Type: "rbd-mirror"}
+	if !reconciliation.ValidSegment(ServiceUnitBlockID(cluster.Name(), unit)) {
+		return nil, failure("api.invariant", "StorageCluster "+cluster.Name()+" has a name too long to identify its RBD mirror service block, whose identity holds at most 63 characters",
+			"rename the StorageCluster to at most 39 characters")
+	}
+	for _, svc := range services {
+		document, err := unitDocumentOf(cluster, svc, func(api.Value) any { return nil })
+		if err != nil {
+			return nil, err
+		}
+		unit.Documents = append(unit.Documents, document)
 	}
 	return []ServiceUnit{unit}, nil
 }

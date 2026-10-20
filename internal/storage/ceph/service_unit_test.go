@@ -6,6 +6,7 @@ import (
 	"maps"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -106,7 +107,7 @@ func TestServiceUnitDeadlineIndependentOfHostCount(t *testing.T) {
 }
 
 func TestUnitTypeRegistryCarriesHooksAndExtraDependencies(t *testing.T) {
-	if keys := slices.Sorted(maps.Keys(unitTypes)); !slices.Equal(keys, []string{"mgmt-gateway", "monitoring", "nfs"}) {
+	if keys := slices.Sorted(maps.Keys(unitTypes)); !slices.Equal(keys, []string{"mgmt-gateway", "monitoring", "nfs", "rbd-mirror"}) {
 		t.Fatalf("the registry holds %v", keys)
 	}
 	nfs := unitTypes["nfs"]
@@ -258,5 +259,77 @@ func TestServiceUnitEvidence(t *testing.T) {
 	absent.Daemons = unitEvidence(r).Daemons[1:]
 	if effect, err := EvaluateEvidence(evidenceBytes(t, absent), r, "digest", false); err == nil || effect != reconciliation.EffectUnknown {
 		t.Fatalf("absent unit evidence carrying a daemon is %s (%v)", effect, err)
+	}
+}
+
+func rbdMirrorRequestService() api.Value {
+	return requestMap("service_type", "rbd-mirror", "placement", requestMap("label", "mon", "count", 2))
+}
+
+func TestRBDMirrorUnitTypeRegistered(t *testing.T) {
+	plan := cephPlan(t, settingsCatalog(t, []api.Value{rbdMirrorRequestService()}))
+	unit := blockOf(t, plan, "ceph-service-example-rbd-mirror")
+	if unit.Kind != string(api.StorageCluster) || unit.Object != "example" || !slices.Equal(unit.Exclusive, []string{"ceph/example"}) || len(unit.Requires) != 0 ||
+		!slices.Equal(unit.Dependencies, []string{"ceph-cluster-example", "ceph-image-example"}) ||
+		!slices.Equal(unit.Impacts, []string{"realize Ceph service rbd-mirror of example"}) {
+		t.Fatalf("the rbd-mirror block is %+v", unit.BlockDefinition)
+	}
+	ids := cephIDs(plan)
+	if slices.Index(ids, unit.ID) < slices.Index(ids, "ceph-cluster-example") {
+		t.Fatalf("the rbd-mirror block is not ordered after the cluster block: %v", ids)
+	}
+	r, err := DecodeRequest(unit.Request)
+	if err != nil || r.Service == nil || r.Service.Type != "rbd-mirror" || r.Service.ID != "" || len(r.Service.Bindings) != 0 || len(r.Service.Documents) != 1 {
+		t.Fatalf("the rbd-mirror request is %+v (%v)", r, err)
+	}
+	var document unitDocument
+	if err := json.Unmarshal(r.Service.Documents[0], &document); err != nil || len(document.Placement.Hosts) == 0 {
+		t.Fatalf("the rbd-mirror document is %s (%v)", r.Service.Documents[0], err)
+	}
+	hosts, _ := json.Marshal(document.Placement.Hosts)
+	if want := `{"placement":{"count":2,"hosts":` + string(hosts) + `},"service_type":"rbd-mirror"}`; string(r.Service.Documents[0]) != want {
+		t.Fatalf("the rbd-mirror document is %s, want %s", r.Service.Documents[0], want)
+	}
+	core, err := DecodeRequest(blockOf(t, plan, "ceph-cluster-example").Request)
+	if err != nil || !slices.ContainsFunc(core.Delegated, func(d DelegatedService) bool {
+		return d.Name == "rbd-mirror" && slices.Equal(d.Hosts, document.Placement.Hosts)
+	}) {
+		t.Fatalf("the core request delegates %+v (%v)", core.Delegated, err)
+	}
+	for _, raw := range core.Services {
+		var service nativeService
+		if err := json.Unmarshal(raw, &service); err != nil || service.ServiceType == "rbd-mirror" {
+			t.Fatalf("the core request carries %s (%v)", raw, err)
+		}
+	}
+}
+
+func TestRBDMirrorUnitDeadlineAndIdentity(t *testing.T) {
+	for _, hosts := range []int{3, 6} {
+		catalog := planCatalog(hosts, hosts, func(spec api.Value) api.Value {
+			return spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), rbdMirrorRequestService())...), "ceph", "services")
+		})
+		cluster, _ := catalog.Find(api.StorageCluster, "example")
+		base, err := New(api.StorageCluster, nil).request(catalog, cluster, "synthetic")
+		if err != nil {
+			t.Fatal(diagnostics.Of(err))
+		}
+		units, err := serviceUnitRequests(base, cluster)
+		if err != nil || len(units) != 1 || units[0].Service.Type != "rbd-mirror" {
+			t.Fatalf("%d hosts plan units %+v (%v)", hosts, units, err)
+		}
+		for operation, want := range map[string]time.Duration{"apply": 2280 * time.Second, "observe": 720 * time.Second, "destroy": 1380 * time.Second} {
+			if got, err := cephDeadline(units[0], operation); err != nil || got != want {
+				t.Fatalf("with %d hosts the rbd-mirror %s deadline is %v (%v), want %v", hosts, operation, got, err, want)
+			}
+		}
+		long := api.NewObject(api.StorageCluster, strings.Repeat("c", 40), api.Value{}, cluster.Spec())
+		_, err = mirrorUnits(long)
+		refusedWith(t, err, "api.invariant", "StorageCluster "+long.Name()+" has a name too long to identify its RBD mirror service block, whose identity holds at most 63 characters",
+			"rename the StorageCluster to at most 39 characters")
+		fits := api.NewObject(api.StorageCluster, strings.Repeat("c", 39), api.Value{}, cluster.Spec())
+		if units, err := mirrorUnits(fits); err != nil || len(units) != 1 || len(ServiceUnitBlockID(fits.Name(), units[0])) != 63 {
+			t.Fatalf("a 39-character cluster plans %+v (%+v)", units, diagnostics.Of(err))
+		}
 	}
 }

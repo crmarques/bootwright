@@ -108,10 +108,50 @@ func TestServiceIDTableMatchesCephadmRequiresServiceID(t *testing.T) {
 }
 
 func TestUnimplementedServiceRemedyNamesImplementedTypes(t *testing.T) {
-	cluster, catalog := withMDSService(t, fixtureCatalog(), m("service_type", "cephfs-mirror", "placement", m("label", "mgr")))
+	cluster, catalog := withMDSService(t, fixtureCatalog(), m("service_type", "example-family", "placement", m("label", "mgr")))
 	found := issuesAt(Validate(cluster, catalog), "$.spec.ceph.services[3].service_type")
-	if len(found) != 1 || found[0].Remediation != "select an implemented MON, MGR, OSD, MDS, RGW, ingress, NFS, Prometheus, Alertmanager, Grafana, node-exporter, ceph-exporter, SNMP gateway, management gateway or oauth2-proxy service, or wait for its owning service slice" {
+	if len(found) != 1 || found[0].Remediation != "select an implemented MON, MGR, OSD, MDS, RGW, ingress, NFS, Prometheus, Alertmanager, Grafana, node-exporter, ceph-exporter, SNMP gateway, management gateway, oauth2-proxy or RBD mirror service, or wait for its owning service slice" {
 		t.Fatalf("unimplemented family remedy: %#v", found)
+	}
+}
+
+func rbdMirrorService(fields ...any) api.Value {
+	return m(append([]any{"service_type", "rbd-mirror", "placement", m("label", "mgr", "count", 2)}, fields...)...)
+}
+
+func TestRBDMirrorServiceAdmittedWithPlacementOnly(t *testing.T) {
+	const field = "$.spec.ceph.services[3]"
+	for _, service := range []api.Value{rbdMirrorService(), rbdMirrorService("networks", api.StringList("192.0.2.0/24"))} {
+		cluster, catalog := withMDSService(t, fixtureCatalog(), service)
+		if found := issuesUnder(Validate(cluster, catalog), field); len(found) != 0 {
+			t.Fatalf("rbd-mirror with placement refused: %#v", found)
+		}
+	}
+	cluster, catalog := withMDSService(t, fixtureCatalog(), rbdMirrorService("spec", m("mode", "x")))
+	if found := issuesUnder(Validate(cluster, catalog), field); len(found) != 1 || found[0].Code != "api.field" || !strings.HasPrefix(found[0].Field, field+".spec") {
+		t.Fatalf("rbd-mirror spec member: %#v", found)
+	}
+	cluster, catalog = withMDSService(t, fixtureCatalog(), rbdMirrorService("service_id", "a"))
+	exactIssue(t, Validate(cluster, catalog), "api.invariant", field+".service_id", "native singleton services omit service_id; other IDs use the qualified name grammar", "")
+}
+
+func TestCephFSMirrorServiceRefusedAsNotRealized(t *testing.T) {
+	const field = "$.spec.ceph.services[3]"
+	cluster, catalog := withMDSService(t, fixtureCatalog(), m("service_type", "cephfs-mirror", "placement", m("label", "mgr")))
+	issues := issuesUnder(Validate(cluster, catalog), field)
+	exactIssue(t, issues, "api.invariant", field+".service_type", "Bootwright does not realize CephFS snapshot mirroring", "remove this cephfs-mirror service from spec.ceph.services")
+	if len(issues) != 1 || strings.ContainsAny(issues[0].Message+issues[0].Remediation, "0123456789") || strings.Contains(issues[0].Message+issues[0].Remediation, "Preview") || strings.Contains(issues[0].Message+issues[0].Remediation, "IBM") {
+		t.Fatalf("cephfs-mirror refusal: %#v", issues)
+	}
+}
+
+func TestMirroringManagerModuleRefused(t *testing.T) {
+	cluster := find(t, fixtureCatalog(), api.StorageCluster, "storage")
+	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.StringList("mirroring"), "ceph", "mgrModules"))
+	issues := Validate(cluster, replace(fixtureCatalog(), cluster))
+	exactIssue(t, issues, "api.invariant", "$.spec.ceph.mgrModules[0]", "manager module mirroring serves CephFS snapshot mirroring, which Bootwright does not realize", "remove mirroring from spec.ceph.mgrModules")
+	if found := issuesAt(issues, "$.spec.ceph.mgrModules"); len(found) != 0 {
+		t.Fatalf("generic module refusal: %#v", found)
 	}
 }
 

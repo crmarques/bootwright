@@ -24,7 +24,7 @@ func projectServices(r *Request, cluster api.Object) error {
 	})
 	for _, svc := range services {
 		t := svc.Get("service_type").Text()
-		if slices.Contains(delegatedFamilies, t) || slices.Contains(MonitoringTypes, t) || slices.Contains(GatewayTypes, t) {
+		if slices.Contains(delegatedFamilies, t) || slices.Contains(MonitoringTypes, t) || slices.Contains(GatewayTypes, t) || slices.Contains(MirrorTypes, t) {
 			hosts, err := serviceHosts(cluster, svc)
 			if err != nil {
 				return err
