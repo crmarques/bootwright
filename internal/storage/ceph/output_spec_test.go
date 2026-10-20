@@ -47,6 +47,36 @@ func scopeRowPattern(t *testing.T, kind string) *regexp.Regexp {
 	return nil
 }
 
+// TestEndpointsRowNamesTheBootstrapHostProbe holds the output contract's
+// endpoints row to the gateway proof storage.md owns: the apply's worker probes
+// a management or object gateway from the bootstrap host, and no controller
+// connect stands behind a ready gateway or its certificate fingerprint.
+func TestEndpointsRowNamesTheBootstrapHostProbe(t *testing.T) {
+	data, err := os.ReadFile(outputSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var row string
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if strings.HasPrefix(line, "| `endpoints` |") {
+			row = line
+		}
+	}
+	if row == "" {
+		t.Fatalf("%s names no endpoints row", outputSpec)
+	}
+	for _, claim := range []string{"probe from the cluster's bootstrap host", "certificate that probe observed"} {
+		if !strings.Contains(row, claim) {
+			t.Errorf("the endpoints row does not say %q", claim)
+		}
+	}
+	for _, claim := range []string{"controller's connect", "that connect observed"} {
+		if strings.Contains(row, claim) {
+			t.Errorf("the endpoints row claims %q, but the gateway proof runs on the bootstrap host", claim)
+		}
+	}
+}
+
 // TestScopeTableSpellsEveryRenderedClientAndImageScope holds the client and
 // image scope functions to the output contract's scope table, with and without
 // the optional data pool suffix each one renders.
