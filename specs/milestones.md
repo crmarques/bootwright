@@ -29,7 +29,7 @@ remain delivered.
 - **Next for agents:** [M2c](milestones/m2.md#m2c)'s remaining lanes under D159
   on `m2c`, with M1c's X55/X60 as foundation gaps, each merged to main at its
   slice's checkpoint (D168).
-- **Next for operator:** review D159 to D168. Other provider and cluster
+- **Next for operator:** review D159 to D169. Other provider and cluster
   gates keep their acceptance.
 
 ## Scope rules

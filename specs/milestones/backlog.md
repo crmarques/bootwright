@@ -213,7 +213,7 @@ Alias cell.
 | [B661](#b661) | new, 2026-10-19 (X102) | enabling | Ceph host runtime image profile | The cephadm payload bound is raised or derived and an oversized payload refuses with its measured size | The largest current payload is 1,676,391 bytes; a future refusal, not a defect |
 | [B662](#b662) | new, 2026-10-19 (X102) | safety | Ceph lifecycle, Devices and destructive ownership | An intent-marked OSD device with partial LVM metadata refuses with a named token and a supported recovery | Nothing is adopted or zapped today; a real remedy needs an owned-zap design |
 | [B663](#b663) | new, 2026-10-19 (X102) | enabling | Storage adapter | Authored package candidates mark only the chosen root, keeping DNF's own no-match text | No wrong plan was observed; refusing glob characters would be a Bootwright version grammar |
-| [B664](#b664) | new, 2026-10-19 (X102); assigned to M2c lane x59-d4-host-pull-route on 2026-10-19 (D166) | product | the owner for scope, then Storage adapter | Mirror or disconnected IBM package sources are decided, with the publisher key location authored beside them | Fail-closed today; D166 decided the scope and assigns the fix to M2c lane x59-d4-host-pull-route |
+| [B664](#b664) | new, 2026-10-19 (X102); assigned to M2c lane x59-d4-host-pull-route on 2026-10-19 (D166); field decided on 2026-10-20 (D169) | product | the owner for scope, then Storage adapter | Mirror or disconnected IBM package sources are decided, with the publisher key location authored beside them | Fail-closed today; D166 decided the scope and assigns the fix to M2c lane x59-d4-host-pull-route, and D169 decided the field `ceph.packageRepositoryKey` that lane adds |
 | [B665](#b665) | new, 2026-10-19 (X103) | enabling | Developer tooling, with the code-implementation skill | Commits that change a trust anchor say so; `scripts/check-commits` resolves `Refs:` tokens, the subject length and attribution trailers; policy changes land apart from reformats | Process tooling; history stays as it is |
 | [B666](#b666) | new, 2026-10-19 (X103) | enabling | Infrastructure, substrate libvirt | The firewall readiness barrier reloads systemd only when something changed, and destroy removes its stale staging files | Each leftover is inert and the reload is harmless; fixing it adds durable creation state for no behavioural gain |
 | [B667](#b667) | new, 2026-10-19 (X103) | enabling | CLI presentation and help | Compact `cluster info` explains not-applicable access rows once, and `session` and `exec` help list the SSH flags | The output matches the spec today and the "More detail" pointer keeps the flags discoverable |
@@ -2206,7 +2206,13 @@ fingerprint stays the trust anchor, and the `el10cp` signer is recorded in
 `el10cp` package is inspected. **Why parked:** it fails closed today and needed
 a scope decision. **Assigned:** M2c lane x59-d4-host-pull-route on 2026-10-19
 ([D166](#decisions)), which takes the key from the declared mirror under its
-trust bundle. **Requires:** none; D166 answered the owner decision. **Definition:**
+trust bundle. **Decided outcome:** D166 took the "if so" branch, and
+[D169](#decisions) (2026-10-20, the owner) chose "Add the field": a new
+required field `ceph.packageRepositoryKey` whenever `ceph.packageRepository` is
+authored, using that repository's scheme, host and port and its trust bundle,
+with the key's fingerprint matching the code pin. Lane x59-d4-host-pull-route
+adds it and stays the item's carrier; the item keeps its state until that lane
+lands. **Requires:** none; D166 and D169 answered the owner decision. **Definition:**
 `Needs definition`. **Exit evidence:** a package-source test with an authored
 key location whose fingerprint differs from the pin and refuses.
 
@@ -3300,3 +3306,22 @@ Requires cell as `owner decision: <question>`.
   delivered; [B484](m2.md#b484) stays in progress for the acceptance matrix
   lanes X61-L2 to X61-L9 and the lanes D166 released, x61-ceph-fips,
   x61-host-variants-example and X61-L6 (none implemented).
+
+- **D169** (2026-10-20, the owner): the owner answered the session's three
+  questions for M2c's follow-up program, choosing the recommended option each
+  time. (1) [B620](m2.md#b620) (`ceph.ibm.packages.source: subscription` and
+  `ceph.osSubscriptionRef` are admitted but never read): "Remove the fields
+  (Recommended)". Both fields leave the API (pre-1.x, no compatibility) and may
+  be re-added when a subscription package source is implemented; an M2c lane
+  removes them with admission, spec and example updates. (2) [B627](m2.md#b627)
+  (the core and host evidence `specializations` member and its `cluster info`
+  line): "Carry it in M2c (Recommended)". The next M2c lane that moves the Ceph
+  core contract adds the member and the line with B627's exit evidence, so no
+  version moves for B627 alone. (3) [B664](#b664)'s fix in lane
+  x59-d4-host-pull-route: "Add the field (Recommended)". A new required field
+  `ceph.packageRepositoryKey` whenever `ceph.packageRepository` is authored,
+  using the repository's scheme, host and port and its trust bundle, with the
+  key's fingerprint matching the code pin, as B664's recorded outcome requires.
+  The answers change no product spec by themselves and no delivery state:
+  B620, B627 and B664 stay in their current state until their lanes land, and
+  each lane updates the owning spec.
