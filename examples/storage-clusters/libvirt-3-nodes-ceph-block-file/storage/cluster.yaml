@@ -15,7 +15,7 @@ spec:
 
     image:
       base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
-      version: v9.9.2
+      version: v9.9.2-26947
 
     ibm:
       callHome: enabled

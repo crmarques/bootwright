@@ -3256,6 +3256,8 @@ Requires cell as `owner decision: <question>`.
   lock's `tested` list, warning only) is an explicit exception to D163, because
   it concerns Bootwright's own host and never refuses; the
   [controller spec](../controller.md#supported-hosts) records it.
+  *Correction (2026-10-20):* the tag in clause (1) does not exist in the
+  registry; `v9.9.2-26947` replaces it under [D171](#decisions).
 
 - **D166** (2026-10-19, the owner): the owner answered the session's question
   about the two audit defects that X102 parked and that held eight M2c lanes,
@@ -3341,3 +3343,42 @@ Requires cell as `owner decision: <question>`.
   a partial enrollment and clusters above six hosts stay out of B688. The
   decision changes no product spec by itself and no delivery state: B688 stays
   not started until its first lane lands, and each lane updates the owning spec.
+
+- **D171** (2026-10-20, the owner): the owner confirmed from the entitlement
+  registry the coordinates of the Ceph image the examples author, and the
+  auxiliary images of that build. (1) The tag `v9.9.2-26729` that
+  [D165](#decisions) recorded does not exist: a pull gives "manifest unknown".
+  The build tag that exists is `v9.9.2-26947`, `cp.icr.io/cp/ibm-ceph/ceph-9-rhel10`
+  with ceph-common and cephadm 20.2.2-349.el10cp, manifest
+  `sha256:6cb6f09bae7b1da7e7d1e9a594dec7d90b76829af94683f11ac5cc37b402f5ca`;
+  the floating alias `v9.9.2` also exists. The examples now author
+  `v9.9.2-26947` in place of both the nonexistent build tag and the alias.
+  (2) The auxiliary images of `v9.9.2-26947`: applying OD28 (a) of
+  [D164](#decisions) (1), the owner chose "I'll pin digests". Each example that
+  declares one of these families authors the image as `ceph.images.<name>`, with
+  `base` set to the listed repository and `version` set to the digest. The
+  defaults were read from the image with `ceph.cephadm.images.DefaultImages` and
+  the digests resolved by the owner with `skopeo inspect`, as recorded in the
+  owner's [values file](file:///home/crmarques/tmp/bootwright-scratch/m2c/rebase/aux-values-v9.9.2-26947.md):
+
+  | cephadm name | base | version (digest) |
+  | --- | --- | --- |
+  | haproxy | cp.icr.io/cp/ibm-ceph/haproxy-rhel10 | sha256:59d020dd7a02ad25248ae3766914f5bc5a241de77c2257fcad7124c13eea82f1 |
+  | keepalived | cp.icr.io/cp/ibm-ceph/keepalived-rhel10 | sha256:4ade24fea1bf11cc0c2e88af631597f21bc586562da3001ea15b8d10e0860694 |
+  | prometheus | cp.icr.io/cp/ibm-ceph/prometheus | sha256:f4d613a79bebcb4deeb0b5f9b1f231ba8046572978207abe242bc7c9cf589789 |
+  | alertmanager | cp.icr.io/cp/ibm-ceph/prometheus-alertmanager | sha256:7331dd1e3aabe689ae45470e560472dc39aeeea611c3c479e266bae9140243ed |
+  | node_exporter | cp.icr.io/cp/ibm-ceph/prometheus-node-exporter | sha256:4d4e3433d212042b07534c042d512bf1f8c65a43823b20e6f1b05da5cd88f0ba |
+  | grafana | cp.icr.io/cp/ibm-ceph/grafana-rhel10 | sha256:12006a7f211b2bf24893e39f7e5ea208b8d641d1dd9c9b562a0c502663484141 |
+  | loki | cp.icr.io/cp/ibm-ceph/logging-loki-rhel8 | sha256:e7e4c7c372a02aa2fbab9a0f3af48475f0df860164551e8562565983576dc61c |
+  | alloy | cp.icr.io/cp/ibm-ceph/alloy-rhel10 | sha256:4f645e6ee02545ceb29cd01fb42e2d9de03e1e48e509281898a325cc72d14b85 |
+  | nvmeof | cp.icr.io/cp/ibm-ceph/nvmeof-rhel10 | sha256:4727ed1dd465b8d0064d8da6064b32f39068fca558fea9a78c3d65f41923b226 |
+  | snmp_gateway | cp.icr.io/cp/ibm-ceph/snmp-notifier-rhel10 | sha256:ecf89943abe681278df906508ef1ff011661654170488be27e2ab3eeaaa339ba |
+  | samba | cp.icr.io/cp/ibm-ceph/samba-server-rhel10 | sha256:3b8f9164c478d267427e51e0b387c9e32ae3566e3a2078471e16d44ac6807cf1 |
+  | samba_metrics | cp.icr.io/cp/ibm-ceph/samba-metrics-rhel10 | sha256:090f5d43981a51923b593da36b9010d43d67264691a625ff2b92005676574f29 |
+  | nginx | cp.icr.io/cp/ibm-ceph/nginx-126-rhel10 | sha256:c7ba454e04aab177e3d2e283e679412dc90477d77848715ebabd3db9af4b45af |
+  | oauth2_proxy | cp.icr.io/cp/ibm-ceph/oauth2-proxy-rhel10 | sha256:bdeafeb29fdd9d46a29b148a99d9df200aa7cd1867037911ffcfc1b270f9a2a9 |
+
+  promtail is not used: its default lives on registry.redhat.io, outside the
+  entitlement registry, so the examples use alloy. The decision changes no
+  product spec and no delivery state; a lane that authors an auxiliary image in
+  an example uses this table.

@@ -20,7 +20,7 @@ are the owners of these selections as of 2026-10-18:
 | --- | --- |
 | IBM Storage Ceph release | `9.9.2.0`, based on Ceph `20.2.2` |
 | Guest OS and native RPM build | RHEL `9.8`; `20.2.2-349.el9cp` |
-| Container repository and build tag | `cp.icr.io/cp/ibm-ceph/ceph-9-rhel10:v9.9.2-26729`, confirmed by the owner (D165) |
+| Container repository and build tag | `cp.icr.io/cp/ibm-ceph/ceph-9-rhel10:v9.9.2-26947`, confirmed by the owner (D171) |
 | cephadm-ansible RPM | `5.0.3-1.el9cp` |
 
 The signed [RHEL 9 cephadm RPM](https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/cephadm-20.2.2-349.el9cp.noarch.rpm)
