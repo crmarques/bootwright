@@ -359,6 +359,19 @@ def test_an_attempted_resource_another_actor_rewrote_refuses_identity(kind):
     assert applies(monitor) == [] and markers.writes == [] and monitor.mutations == []
 
 
+@pytest.mark.parametrize("kind", TYPES)
+def test_an_attempted_resource_without_its_applied_record_observes_partial(kind):
+    value, monitor = request(kind), Monitor()
+    present(monitor, value)
+    if kind == "ceph.smb.share":
+        monitor.resources["ceph.smb.cluster.files"] = cluster_resource()
+        monitor.daemons = [daemon("node-1"), daemon("node-2")]
+    observed = worker(value, monitor, Markers(records(value))).smb_observe()
+    assert observed["owned"] is True and observed["exists"] is True
+    assert observed["ready"] is False and observed["partial"] is True and observed["resource"] == name_of(value)
+    assert monitor.mutations == []
+
+
 def unsuccessful_answers(value):
     echoed = dict(value["native"], auth={"username": "operator", "password": JOIN_SECRET})
     failed = {"results": [{"resource": echoed, "msg": NATIVE_SENTINEL, "success": False}], "success": False}
