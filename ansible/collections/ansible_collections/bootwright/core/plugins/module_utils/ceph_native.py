@@ -117,9 +117,10 @@ DAEMON_TYPES = {
     "prometheus": ("delegated", "delegated", False, "none"),
     "snmp-gateway": ("delegated", "delegated", False, "none"),
     "mgmt-gateway": ("delegated", "delegated", False, "none"),
+    "smb": ("delegated", "delegated", False, "none"),
 }
-# A service another block executes, listed by its cephadm service_name: rgw.<id>, ingress.<id>, nfs.<id> or a singleton's type.
-DELEGATED_SERVICE = re.compile(r"(?:(?:rgw|ingress|nfs)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}"
+# A service another block executes, listed by its cephadm service_name: rgw.<id>, ingress.<id>, nfs.<id>, smb.<id> or a singleton's type.
+DELEGATED_SERVICE = re.compile(r"(?:(?:rgw|ingress|nfs|smb)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}"
                                r"|alertmanager|ceph-exporter|grafana|mgmt-gateway|node-exporter|prometheus|snmp-gateway)\Z")
 
 
@@ -1095,8 +1096,10 @@ class Custody:
 class Worker:
     """One native host boundary. The controller supplies only fixed phases."""
 
+    admit = staticmethod(validate)
+
     def __init__(self, request, host, run=bounded_command, markers=None):
-        self.request = validate(request)
+        self.request = self.admit(request)
         self.host = next((h for h in request["hosts"] if h["name"] == host), None)
         require(self.host is not None)
         self.run = run
@@ -3605,6 +3608,9 @@ def dispatch(envelope):
     if phase in HOST_PHASES:
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime
         return ceph_host_runtime.dispatch(envelope)
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_smb_native
+    if phase in ceph_smb_native.PHASES:
+        return ceph_smb_native.dispatch(envelope)
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_nfs, ceph_native_object, ceph_native_resources, ceph_native_units
     request = envelope["request"]
     resource = isinstance(request, dict) and request.get("action") in ceph_native_resources.ACTIONS

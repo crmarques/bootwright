@@ -261,6 +261,21 @@ func smbClusterIDs(c api.Catalog, cluster string) []string {
 	return ids
 }
 
+func smbDelegated(c api.Catalog, cluster api.Object) ([]DelegatedService, error) {
+	var out []DelegatedService
+	for _, object := range clusterSMBResources(c, cluster.Name()) {
+		if object.Spec().Get("native", "resource_type").Text() != api.SMBCluster {
+			continue
+		}
+		service, err := smbServiceOf(cluster, object)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, DelegatedService{Name: service.Name, Hosts: service.Hosts})
+	}
+	return out, nil
+}
+
 func smbImages(auxiliary []AuxiliaryReference) []SMBImage {
 	var images []SMBImage
 	for _, a := range auxiliary {

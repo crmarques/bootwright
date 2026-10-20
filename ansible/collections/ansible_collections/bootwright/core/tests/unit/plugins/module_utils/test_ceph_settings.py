@@ -175,6 +175,17 @@ def test_settings_enables_derived_nfs_module_when_an_nfs_service_is_declared():
     assert monitor.mutations == []
 
 
+def test_settings_enables_derived_smb_module_with_always_on_union():
+    held = [entry(HAPROXY_KEY, HAPROXY), entry(KEEPALIVED_KEY, KEEPALIVED)]
+    monitor = Monitor(held, enabled=("iostat",), always_on=("balancer",))
+    assert worker(monitor, settings_request(modules=("smb",))).settings() == {"changed": True}
+    assert monitor.mutations == [("mgr", "module", "enable", "smb")]
+    for enabled, always_on in ((("iostat", "smb"), ("balancer",)), (("iostat",), ("balancer", "smb"))):
+        monitor = Monitor(held, enabled=enabled, always_on=always_on)
+        assert worker(monitor, settings_request(modules=("smb",))).settings() == {"changed": False}
+        assert monitor.mutations == []
+
+
 def test_settings_proves_its_writes_took_effect():
     class Ignoring(Monitor):
         def run(self, argv, data=b"", timeout=60):

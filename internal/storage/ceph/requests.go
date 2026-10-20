@@ -320,6 +320,12 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	if err := projectServices(&r, cluster); err != nil {
 		return Request{}, err
 	}
+	delegated, err := smbDelegated(c, cluster)
+	if err != nil {
+		return Request{}, err
+	}
+	r.Delegated = append(r.Delegated, delegated...)
+	slices.SortStableFunc(r.Delegated, func(a, b DelegatedService) int { return strings.Compare(a.Name, b.Name) })
 
 	selectDevices(&r)
 	return r, nil

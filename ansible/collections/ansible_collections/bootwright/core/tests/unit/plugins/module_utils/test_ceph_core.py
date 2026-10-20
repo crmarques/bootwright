@@ -420,7 +420,7 @@ def test_private_input_is_opened_without_links_and_not_in_argv(core_request, tmp
         assert set(envelope["sources"]) == {"ceph_native", "ceph_native_observe", "ceph_native_resources", "ceph_tunnel", "ceph_tunnel_staging",
                                             "ceph_tunnel_custody", "ceph_host_route_probe", "ceph_host_runtime", "native_diagnostics",
                                             "native_specializations", "ceph_pull_broker", "ceph_native_nfs", "ceph_native_observability",
-                                            "ceph_native_units", "ceph_native_object"}
+                                            "ceph_native_units", "ceph_native_object", "ceph_smb_native"}
         assert 0 < envelope["budget"] <= min(640, timeout - 1)
         return 0, b'{"ok":true,"result":{"changed":false}}'
 
@@ -2006,6 +2006,7 @@ def test_resource_phases_ship_in_their_own_module():
     assert modules[modules.index("ceph_native_nfs") + 1] == "ceph_native_observability"
     assert modules[modules.index("ceph_native_observability") + 1] == "ceph_native_units"
     assert modules[modules.index("ceph_native_units") + 1] == "ceph_native_object"
+    assert modules[modules.index("ceph_native_object") + 1] == "ceph_smb_native"
     assert tuple(ceph_core.Transport.native_sources()) == modules
     phases = {"pool", "client", "client_read", "policy", "rbd", "filesystem", "filesystem_ranks", "filesystem_groups", "subvolume", "settings"}
     assert ceph_native_resources.PHASES == phases and not ceph_native_resources.PHASES & ceph_native.CORE_PHASES

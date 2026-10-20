@@ -29,7 +29,8 @@ MAX_METADATA = 4096
 CLUSTER_TYPES = frozenset(("mon", "mgr", "osd", "crash", "ceph-exporter", "mds"))
 # Each daemon type another block executes, mapped to its cephadm service type (orchestrator daemon_type_to_service).
 DELEGATED_TYPES = {"alertmanager": "alertmanager", "grafana": "grafana", "haproxy": "ingress", "keepalived": "ingress", "mgmt-gateway": "mgmt-gateway",
-                   "nfs": "nfs", "node-exporter": "node-exporter", "prometheus": "prometheus", "rgw": "rgw", "snmp-gateway": "snmp-gateway"}
+                   "nfs": "nfs", "node-exporter": "node-exporter", "prometheus": "prometheus", "rgw": "rgw", "smb": "smb",
+                   "snmp-gateway": "snmp-gateway"}
 # Singletons on an auxiliary image: cephadm names the service by its type, and each daemon directory may belong to the image's own user.
 SINGLETONS = frozenset(("alertmanager", "grafana", "mgmt-gateway", "node-exporter", "prometheus", "snmp-gateway"))
 # Services listed by their type alone: the singletons and the Ceph-image ceph-exporter.

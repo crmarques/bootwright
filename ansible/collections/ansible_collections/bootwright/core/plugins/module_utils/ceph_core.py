@@ -20,7 +20,7 @@ import time
 from ansible_collections.bootwright.core.plugins.module_utils import (
     adapter_protocol, ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_nfs, ceph_native_observability,
     ceph_native_resources, ceph_native_observe, ceph_native_units, ceph_native_object, ceph_native_worker, ceph_package_sources, ceph_package_worker,
-    ceph_packages, ceph_tunnel,
+    ceph_packages, ceph_smb_native, ceph_tunnel,
     ceph_tunnel_staging, ceph_tunnel_custody, native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
 )
 
@@ -395,8 +395,8 @@ class Transport:
     @staticmethod
     def native_sources():
         modules = (native_diagnostics, native_specializations, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
-                   ceph_native_resources, ceph_native_nfs, ceph_native_observability, ceph_native_units, ceph_native_object, ceph_host_route_probe,
-                   ceph_pull_broker, ceph_host_runtime)
+                   ceph_native_resources, ceph_native_nfs, ceph_native_observability, ceph_native_units, ceph_native_object, ceph_smb_native,
+                   ceph_host_route_probe, ceph_pull_broker, ceph_host_runtime)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
         ceph_native.require(tuple(sources) == ceph_native_worker.MODULES, "transport")
         return sources
@@ -956,74 +956,21 @@ def execute_host(request, operation, request_digest, transport):
     return {"changed": changed, "evidence": observation}
 
 
-SMB_VERSION = "ceph-smb-v1"
-SMB_EVIDENCE_VERSION = "ceph-smb-evidence-v1"
-# Each SMB manager resource type with the native member naming its identity.
-SMB_TYPES = {"ceph.smb.cluster": "cluster_id", "ceph.smb.share": "share_id", "ceph.smb.join.auth": "auth_id", "ceph.smb.usersgroups": "users_groups_id"}
-SMB_SERVED = ("ceph.smb.cluster", "ceph.smb.share")
-SMB_REQUIRED = frozenset(("bindings", "cluster", "controller", "id", "machines", "native", "object", "resourceType", "scope", "version"))
-SMB_OPTIONAL = frozenset(("clusterIDs", "images", "service"))
+SMB_VERSION = ceph_smb_native.VERSION
+SMB_EVIDENCE_VERSION = ceph_smb_native.EVIDENCE_VERSION
+SMB_TYPES = ceph_smb_native.TYPES
+SMB_SERVED = ceph_smb_native.SERVED
+SMB_REQUIRED = ceph_smb_native.REQUIRED
+SMB_OPTIONAL = ceph_smb_native.OPTIONAL
 SMB_EVIDENCE = frozenset(("daemons", "exists", "fsid", "owned", "owner", "partial", "ready", "removed", "request", "resource", "version"))
-SMB_USER_PASSWORD = re.compile(r"/values/users/(?:0|[1-9][0-9]{0,3})/password\Z")
+SMB_USER_PASSWORD = ceph_smb_native.USER_PASSWORD
 SMB_FSID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
-SMB_IMAGE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}\Z")
-
-
-def smb_ascending(values):
-    """A nonempty list of distinct names in byte order."""
-    return isinstance(values, list) and bool(values) and all(ceph_native.named(value) for value in values) and values == sorted(set(values))
-
-
-def smb_bindings(value):
-    """The Secret references a join auth or usersgroups resource binds, and none on a served resource."""
-    bindings = value["bindings"]
-    ceph_native.require(isinstance(bindings, list))
-    for binding in bindings:
-        ceph_native.require(isinstance(binding, dict) and set(binding) == {"path", "secretRef"} and ceph_native.named(binding["secretRef"]))
-        ceph_native.require(isinstance(binding["path"], str))
-    paths = [binding["path"] for binding in bindings]
-    if value["resourceType"] in SMB_SERVED:
-        ceph_native.require(not bindings)
-    elif value["resourceType"] == "ceph.smb.join.auth":
-        ceph_native.require(paths == ["/auth/password"])
-    else:
-        ceph_native.require(bool(paths) and all(SMB_USER_PASSWORD.fullmatch(path) for path in paths) and paths == sorted(set(paths)))
-
-
-def smb_service(value, scope):
-    """A served resource's SMB service, the declared SMB cluster IDs and both samba images beneath the scope registry."""
-    if value["resourceType"] not in SMB_SERVED:
-        ceph_native.require(not SMB_OPTIONAL & set(value))
-        return
-    ceph_native.require(SMB_OPTIONAL <= set(value))
-    service, identities, images = value["service"], value["clusterIDs"], value["images"]
-    ceph_native.require(isinstance(service, dict) and set(service) == {"clustered", "hosts", "name"} and type(service["clustered"]) is bool)
-    ceph_native.require(smb_ascending(service["hosts"]) and smb_ascending(identities))
-    own = value["id"] if value["resourceType"] == "ceph.smb.cluster" else value["native"].get("cluster_id")
-    ceph_native.require(service["name"] == "smb." + str(own) and own in identities)
-    ceph_native.require(isinstance(images, list) and [entry.get("name") if isinstance(entry, dict) else None for entry in images] == ["samba", "samba_metrics"])
-    for entry in images:
-        ceph_native.require(set(entry) == {"image", "name"} and isinstance(entry["image"], str) and SMB_IMAGE.fullmatch(entry["image"]) is not None)
-        ceph_native.require(entry["image"].startswith(scope["registry"] + "/"))
+SMB_IMAGE = ceph_smb_native.IMAGE
 
 
 def smb_request(value):
     """A completed SMB block request: the frozen resource with its cluster scope; every failure is the request's."""
-    ceph_native.require(isinstance(value, dict) and SMB_REQUIRED <= set(value) and not set(value) - SMB_REQUIRED - SMB_OPTIONAL)
-    ceph_native.require(value["version"] == SMB_VERSION and value["resourceType"] in SMB_TYPES)
-    ceph_native.require(all(ceph_native.named(value[key]) for key in ("cluster", "controller", "object")))
-    native, identity = value["native"], value["id"]
-    ceph_native.require(isinstance(native, dict) and native.get("resource_type") == value["resourceType"])
-    ceph_native.require(isinstance(identity, str) and identity != "" and native.get(SMB_TYPES[value["resourceType"]]) == identity)
-    ceph_native.require(smb_ascending(value["machines"]))
-    try:
-        scope = ceph_native.validate_scope(value["scope"])
-    except ceph_native.Refusal:
-        raise ceph_native.Refusal("request") from None
-    ceph_native.require(scope["cluster"] == value["cluster"])
-    smb_bindings(value)
-    smb_service(value, scope)
-    return value
+    return ceph_smb_native.validate(value)
 
 
 def smb_evidence(value, request_digest, request=None):
