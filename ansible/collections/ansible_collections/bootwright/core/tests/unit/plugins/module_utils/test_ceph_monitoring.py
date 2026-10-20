@@ -300,6 +300,27 @@ def test_export_without_bound_leaves_is_accepted(tmp_path):
     assert observing(monitor, markers)[0] is True
 
 
+@pytest.mark.parametrize("name,leaves", [
+    ("grafana", {"initial_admin_password": FOREIGN}),
+    ("grafana", {"initial_admin_password": ""}),
+    ("snmp-gateway", {"credentials": {"snmp_v3_auth_username": AUTH_USERNAME}}),
+])
+def test_foreign_service_with_its_own_credential_refuses_foreign_service(tmp_path, name, leaves):
+    request = monitoring_request()
+    document = copy.deepcopy(next(item for item in documents() if item["service_type"] == name))
+    document["spec"].update(leaves)
+    monitor = Monitor(request, specs={name: document})
+    markers = units.markers_for(tmp_path / "apply", request)
+    with pytest.raises(ceph_native.Refusal, match="^foreign-service$") as caught:
+        applying(monitor, markers).unit()
+    assert not isinstance(caught.value, ceph_native.NativeFailure) and monitor.mutations == []
+    assert not any(entry.endswith("-attempt.json") for entry in os.listdir(markers.path))
+    for held in (markers, units.markers_for(tmp_path / "observe", request)):
+        with pytest.raises(ceph_native.Refusal, match="^foreign-service$") as caught:
+            observing(monitor, held)
+        assert not isinstance(caught.value, ceph_native.NativeFailure)
+
+
 def test_prometheus_module_observed_through_mgr_services(tmp_path):
     request = monitoring_request()
     markers = units.markers_for(tmp_path, request)

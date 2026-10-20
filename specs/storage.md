@@ -623,11 +623,13 @@ input, the unit's inputs record and every attempt and completion record hold
 placeholders only. The bound values, lent from the runner's private material
 to that apply phase alone, are spliced in memory into the one
 `ceph orch apply -i -` stream and never reach arguments, records, evidence or
-refusals. A stored specification whose bound leaves equal the bound values, or
-which omits them all, is the applied document; a stored leaf of another value,
-an empty one, or some leaves without the others refuses
-`service-credential-foreign`, because Bootwright never replaces a credential of
-a deployed service. A lost reply continues with the same material and never
+refusals. The credential comparison covers only a service whose attempt record
+this block holds; any other stored specification of a unit service refuses
+`foreign-service` whatever credential it stores. For a covered service, a
+stored specification whose bound leaves equal the bound values, or which omits
+them all, is the applied document; a stored leaf of another value, an empty
+one, or some leaves without the others refuses `service-credential-foreign`,
+because Bootwright never replaces a credential of a deployed service. A lost reply continues with the same material and never
 sends a stored document again. Readiness needs every document completed, each
 type's daemon count running on its frozen image (the Ceph image for
 ceph-exporter) and, with a prometheus service, an available MGR and a

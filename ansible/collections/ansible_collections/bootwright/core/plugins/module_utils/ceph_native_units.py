@@ -365,12 +365,13 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
 
     def bound_specs(self, stored):
         """The stored specifications with each bound document in placeholder form: its bound leaves all omitted, or each a string
-        equal to the bound one where this phase holds it; any other stored leaf is not its Secret's."""
+        equal to the bound one where this phase holds it; any other stored leaf is not its Secret's. Only a document this unit's
+        attempt record covers is compared: another stored one stays as stored, so the ownership checks refuse it as foreign first."""
         result = dict(stored)
         held = self.bound if isinstance(self.bound, dict) else {}
         for name, pairs in self.bound_leaves().items():
             value = stored.get(name)
-            if not isinstance(value, dict):
+            if not isinstance(value, dict) or self.markers.read("service-" + name + "-attempt.json") is None:
                 continue
             found = [(path, variable) + leaf(value, path) for path, variable in pairs]
             for path, variable, present, current in found:
