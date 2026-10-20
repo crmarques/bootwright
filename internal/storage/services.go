@@ -51,7 +51,9 @@ func (a *admission) clusterServices(ceph api.Value) {
 		a.issue(issue.Code, issue.Field, issue.Message, issue.Remediation)
 	}
 	for i, module := range ceph.Get("mgrModules").Strings() {
-		if at := slices.IndexFunc(derivedManagerModules, func(row derivedManagerModule) bool { return row.module == module }); at >= 0 {
+		if module == "prometheus" {
+			a.prometheusModule(ceph, i)
+		} else if at := slices.IndexFunc(derivedManagerModules, func(row derivedManagerModule) bool { return row.module == module }); at >= 0 {
 			row := derivedManagerModules[at]
 			a.issue("api.invariant", indexed("$.spec.ceph.mgrModules", i), "manager module "+row.module+" is derived from the declared "+row.family+" services", "remove "+row.module+" from spec.ceph.mgrModules; Bootwright enables it for a declared "+row.family+" service")
 		} else if !slices.Contains([]string{"cephadm", "rbd_support"}, module) {
@@ -59,10 +61,6 @@ func (a *admission) clusterServices(ceph api.Value) {
 		}
 	}
 	a.nativeServices(ceph, false)
-	if ceph.Get("cephadm", "workarounds").Len() != 0 {
-		a.deferred("$.spec.ceph.cephadm.workarounds", "management-gateway workarounds require the later qualified management service", "workarounds from $.spec.ceph.cephadm", "B479")
-	}
-
 }
 
 func (a *admission) prefixes(values api.Value, field string) []netip.Prefix {

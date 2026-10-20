@@ -31,9 +31,6 @@ spec:
       ansible:
         packageVersion: 5.0.0-1.el9cp
 
-      workarounds:
-        - mgmt-gateway-spec-dependency-recording
-
       addressRef: ssh
 
       clusterSSH:

@@ -231,8 +231,11 @@ Do not impose global uniqueness on the bare `service_id`. Any authored native
 `service_name` must agree with the identity computed by the provider schema.
 
 `service_id` follows one table keyed by service type, with three states.
-Forbidden: `mon` and `mgr`, the native singletons that cephadm refuses with an
-ID. Native-required: `mds`, `rgw`, `ingress` and `nfs`; every row in this state is a type in cephadm's
+Forbidden: `mon`, `mgr`, `prometheus`, `alertmanager`, `grafana`,
+`node-exporter`, `ceph-exporter`, `snmp-gateway`, `mgmt-gateway` and
+`oauth2-proxy`, the native singletons that cephadm refuses with an ID because
+they are not in `REQUIRES_SERVICE_ID` (IBM's python3-ceph-common 20.2.1-405
+`ServiceSpec.validate`). Native-required: `mds`, `rgw`, `ingress` and `nfs`; every row in this state is a type in cephadm's
 `REQUIRES_SERVICE_ID` (container, ingress, iscsi, mds, nfs, nvmeof, rgw, smb,
 [upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py#L804-L813)),
 and later family slices add their rows. Bootwright-required: `osd`, which
@@ -415,6 +418,89 @@ StorageCluster. Diagnostics name the field, never the authored address.
 The `nfs` manager module is derived from the declared NFS services (D159
 clause 9): `spec.ceph.mgrModules` refuses it at its entry, and Bootwright
 enables it for a declared `nfs` service through the cluster's settings block.
+The `prometheus` manager module is derived from the declared prometheus
+service: cephadm enables it itself when it deploys that service (D159 clause
+9), so `spec.ceph.mgrModules` refuses it at its entry, with or without the
+service. `ceph.cephadm.workarounds` is retired (D160, OD25): no workaround had
+a recorded effect, and the strict decoder refuses the field with that reason.
+
+### Observability and management gateway records
+
+Admission accepts `prometheus`, `alertmanager`, `grafana`, `node-exporter`,
+`ceph-exporter`, `snmp-gateway`, `mgmt-gateway` and `oauth2-proxy` documents
+under closed records whose members and spelling follow IBM's
+python3-ceph-common 20.2.1-405 ServiceSpec schema (the source read for these
+records, not a pinned build). Each is a singleton whose `service_id` is
+forbidden ([service identity](#service-identity-and-references)). Planning
+refuses each of them until its auxiliary image can be selected
+([refusal table](storage.md#refusal-table)), and `ceph-exporter` until its
+lifecycle is delivered.
+
+| Type | Admitted `spec` members |
+| --- | --- |
+| `prometheus` | `port` (1-65535), `retention_time`, `retention_size`, `only_bind_port_on_networks` |
+| `alertmanager` | `port` (1-65535), `only_bind_port_on_networks`, `user_data` with only `default_webhook_urls` |
+| `grafana` | `port` (1-65535), `protocol` (`http` or `https`), `anonymous_access`, `only_bind_port_on_networks` |
+| `node-exporter` | `port` (1-65535) |
+| `ceph-exporter` | `port` (1-65535), `prio_limit` (at least 0), `stats_period` (at least 1) |
+| `snmp-gateway` | required `snmp_version` (`V2c` or `V3`) and `snmp_destination`; `port` (1-65535), `engine_id`, `auth_protocol` (`MD5` or `SHA`), `privacy_protocol` (`DES` or `AES`) |
+| `mgmt-gateway` | required `port` (1-65535); `ssl`, `enable_auth`, `ssl_protocols` (`TLSv1.2`, `TLSv1.3`), `ssl_ciphers`, `virtual_ip`, `enable_health_check_endpoint` |
+| `oauth2-proxy` | required `provider_display_name`, `client_id` and `oidc_issuer_url`; `https_address`, `redirect_url`, `scope`, `email_domains`, `allowlist_domains` |
+
+The management gateway's default port differs between builds, so `port` is
+required and the endpoint never depends on a release default. Every other
+member of the schema refuses at its own field with an owner:
+
+- Inline credentials (grafana `initial_admin_password`, snmp-gateway
+  `credentials`, oauth2-proxy `client_secret` and `cookie_secret`) and inline
+  TLS material (mgmt-gateway and oauth2-proxy `ssl_cert` and `ssl_key`) never
+  appear in a native document; they belong to
+  [secret bindings](#secret-bindings), where no row admits them yet.
+- Parked by D160 (OD26): cephadm-signed certificates (`custom_sans`) and the
+  management gateway's `certificate_source`.
+- TLS options of the monitoring services and oauth2-proxy (`ssl`,
+  `certificate_source`) are not supported yet; the selected release's native
+  default applies.
+- Members with no qualified effect contract refuse: prometheus and
+  node-exporter `targets`, `remote_write_url` and
+  `remote_write_allowed_metrics`; alertmanager `secure`; ceph-exporter
+  `addrs`; and the management gateway's session, stapling and server-token
+  options. ceph-exporter `sock_dir` refuses because cephadm discards it, so
+  the stored service would not match the document.
+- oauth2-proxy `ssl_insecure_skip_verify` always refuses (D161): the proxy
+  verifies its identity provider's certificate.
+- An alertmanager `user_data` key other than `default_webhook_urls` refuses
+  at that key, because cephadm reads only that one
+  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L314-L324)).
+
+Value rules mirror the native `validate` methods, refused earlier at their
+field: prometheus `retention_time` is digits and one of `y`, `w`, `d`, `h`,
+`m`, `s`, and `retention_size` digits and one of `B`, `KB`, `MB`, `GB`, `TB`,
+`PB`, `EB`, in exactly that form; alertmanager `port` is never 9094, which
+cephadm reserves for the cluster listener; each `default_webhook_urls` entry
+is an `http` or `https` URL without user information; snmp-gateway
+`snmp_destination` is an IPv4 address or DNS name and a port, `engine_id` is
+10 to 64 hexadecimal characters of even length, and `snmp_version: V3` needs
+an `engine_id`; `only_bind_port_on_networks` needs service `networks`.
+Bootwright adds: the management gateway refuses `ssl: false`, because it would
+carry dashboard credentials in plaintext, and an empty `ssl_ciphers`; its
+`virtual_ip` is a bare address inside a declared public network; oauth2-proxy
+`https_address` is `host:port` with port 4180, the port cephadm reserves
+whatever the address names; `oidc_issuer_url` and `redirect_url` are `https`
+URLs without user information; and each `allowlist_domains` entry is
+`[.|*.]host[:port|:*]`.
+
+Across services, an snmp-gateway needs an alertmanager service, an
+oauth2-proxy needs a mgmt-gateway with `enable_auth: true`, and a
+mgmt-gateway with `enable_auth: true` needs an oauth2-proxy. The management
+gateway is a singleton, so a second one refuses as a duplicate identity.
+
+Some native types refuse by type at `service_type`. Log collection (`loki`,
+`alloy`, `promtail`) is not realized yet; only the gated log-collection lane
+admits it (D161, OD6 (d1)). `crash` is a derived child of the StorageCluster
+that cephadm bootstrap creates on every host, so an authored one would be its
+second owner (D160, OD25, SD-X57-3). Tracing (`jaeger-*`, `elasticsearch`),
+`node-proxy`, `agent` and `container` are not realized.
 
 ## Hosts, placement and CRUSH
 

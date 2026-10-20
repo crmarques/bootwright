@@ -377,7 +377,7 @@ func TestDeferredScopeRefusalsNameTheDeliveringItem(t *testing.T) {
 	requireRemedy(Validate(export, api.NewCatalog([]api.Object{external, export})), "$.spec", "remove this StorageExport from the input; parked item B107 delivers it")
 	cluster := find(t, catalog, api.StorageCluster, "storage")
 	changed := cluster.WithSpec(cluster.Spec().WithPath(api.StringList("mgmt-gateway-spec-dependency-recording"), "ceph", "cephadm", "workarounds"))
-	requireRemedy(Validate(changed, replace(catalog, changed)), "$.spec.ceph.cephadm.workarounds", "remove workarounds from $.spec.ceph.cephadm; B479 delivers it")
+	requireRemedy(Validate(changed, replace(catalog, changed)), "$.spec.ceph.cephadm.workarounds", "remove workarounds from $.spec.ceph.cephadm")
 	changed = cluster.WithSpec(cluster.Spec().WithPath(m("dataSites", api.StringList("site-a", "site-b"), "tiebreaker", m("site", "site-b")), "ceph", "topology", "stretch"))
 	requireRemedy(Validate(changed, replace(catalog, changed)), "$.spec.ceph.topology.stretch", "remove stretch from $.spec.ceph.topology; B486 delivers it")
 }

@@ -311,6 +311,14 @@ var nativeServiceTypes = []nativeServiceType{
 	{name: "rgw", label: "RGW", serviceID: serviceIDNative},
 	{name: "ingress", label: "ingress", serviceID: serviceIDNative},
 	{name: "nfs", label: "NFS", serviceID: serviceIDNative},
+	{name: "prometheus", label: "Prometheus", serviceID: serviceIDForbidden},
+	{name: "alertmanager", label: "Alertmanager", serviceID: serviceIDForbidden},
+	{name: "grafana", label: "Grafana", serviceID: serviceIDForbidden},
+	{name: "node-exporter", label: "node-exporter", serviceID: serviceIDForbidden},
+	{name: "ceph-exporter", label: "ceph-exporter", serviceID: serviceIDForbidden},
+	{name: "snmp-gateway", label: "SNMP gateway", serviceID: serviceIDForbidden},
+	{name: "mgmt-gateway", label: "management gateway", serviceID: serviceIDForbidden},
+	{name: "oauth2-proxy", label: "oauth2-proxy", serviceID: serviceIDForbidden},
 }
 
 func nativeServiceTypeOf(name string) (nativeServiceType, bool) {
@@ -382,6 +390,10 @@ func (a *admission) nativeServices(ceph api.Value, partial bool) {
 		if typeName == "" && partial {
 			continue
 		}
+		if refusal, ok := unrealizedServiceType(typeName); ok {
+			a.issue("api.invariant", field+".service_type", refusal.message, refusal.remedy)
+			continue
+		}
 		row, known := nativeServiceTypeOf(typeName)
 		if !known || shape == nil {
 			a.issue("api.invariant", field+".service_type", "native service family is not implemented by this storage consumer", implementedServiceRemedy())
@@ -450,6 +462,7 @@ func (a *admission) nativeServices(ceph api.Value, partial bool) {
 	if !partial {
 		a.nativeAllocationConflicts(ceph)
 		a.nativeServiceGraph(ceph)
+		a.observabilityGraph(ceph)
 	}
 	a.nativeBindings(ceph, partial)
 }
@@ -460,7 +473,10 @@ type refusedMember struct {
 }
 
 func (a *admission) withoutRefusedMembers(spec api.Value, typeName, field string) api.Value {
-	table := map[string][]refusedMember{"rgw": rgwRefusedMembers, "ingress": ingressRefusedMembers, "nfs": nfsRefusedMembers}[typeName]
+	table, ok := observabilityRefusedMembers[typeName]
+	if !ok {
+		table = map[string][]refusedMember{"rgw": rgwRefusedMembers, "ingress": ingressRefusedMembers, "nfs": nfsRefusedMembers}[typeName]
+	}
 	if spec.Type() != api.Mapping {
 		return spec
 	}
@@ -471,6 +487,9 @@ func (a *admission) withoutRefusedMembers(spec api.Value, typeName, field string
 				spec = spec.Without(member.Name)
 			}
 		}
+	}
+	if typeName == "alertmanager" {
+		return a.alertmanagerUserData(spec, field)
 	}
 	return spec
 }
@@ -483,6 +502,8 @@ func (a *admission) nativeFamily(service api.Value, typeName, field string, plac
 		a.ingressRecord(service, field, placed, partial)
 	case "nfs":
 		a.nfsRecord(service, field)
+	case "prometheus", "alertmanager", "grafana", "node-exporter", "ceph-exporter", "snmp-gateway", "mgmt-gateway", "oauth2-proxy":
+		a.observabilityRecord(service, typeName, field, partial)
 	}
 }
 
@@ -596,6 +617,8 @@ func RetiredField(kind api.Kind, field string) (api.Issue, bool) {
 		replacement = "$.spec.ceph.services"
 	case "$.spec.ceph.topology.osdDrivegroups":
 		replacement = "$.spec.ceph.services[].spec.data_devices"
+	case "$.spec.ceph.cephadm.workarounds":
+		return api.Issue{Code: "api.field", Field: field, Message: "the cephadm workaround list was retired; Bootwright realizes no cephadm workaround", Remediation: "remove workarounds from $.spec.ceph.cephadm"}, true
 	default:
 		if rest := strings.TrimPrefix(field, "$.spec.ceph.services["); rest != field {
 			index, tail, ok := strings.Cut(rest, "]")
@@ -643,6 +666,9 @@ func (a *admission) retiredCluster(ceph api.Value) {
 	}
 	if ceph.Has("topology", "osdDrivegroups") {
 		a.retired("$.spec.ceph.topology.osdDrivegroups")
+	}
+	if ceph.Has("cephadm", "workarounds") {
+		a.retired("$.spec.ceph.cephadm.workarounds")
 	}
 	for i, node := range ceph.Get("topology", "nodes").Items() {
 		for _, key := range []string{"roles", "devices", "osd"} {

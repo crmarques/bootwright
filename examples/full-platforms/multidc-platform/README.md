@@ -102,11 +102,10 @@ make build
 
 The expected result is failure with explicit diagnostics for:
 
-- Stretch topology, management-gateway workarounds and manager-module intent.
+- Stretch topology and manager-module intent.
 - Unqualified global Ceph options, including missing members of the currently
   qualified pool-default pair.
-- Prometheus, Grafana and Alertmanager native services and the Grafana Secret
-  binding path.
+- The Grafana Secret binding path, which no binding row admits yet.
 - Four `StorageExport` objects.
 
 The exact diagnostic set is pinned by `TestActualCLIRefusesFutureReferenceFeatures`

@@ -271,3 +271,51 @@ func TestSubvolumeSchemaIsClosedWithExactBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestB479ServiceSchemasAreClosed(t *testing.T) {
+	refused := map[string][]string{
+		"prometheus":    {"targets", "remote_write_url", "remote_write_allowed_metrics", "ssl", "certificate_source"},
+		"alertmanager":  {"ssl", "certificate_source", "secure"},
+		"grafana":       {"ssl", "certificate_source", "initial_admin_password"},
+		"node-exporter": {"targets", "remote_write_url", "remote_write_allowed_metrics", "ssl", "certificate_source"},
+		"ceph-exporter": {"ssl", "certificate_source", "sock_dir", "addrs"},
+		"snmp-gateway":  {"credentials"},
+		"mgmt-gateway":  {"ssl_cert", "ssl_key", "custom_sans", "certificate_source", "ssl_prefer_server_ciphers", "ssl_session_tickets", "ssl_session_timeout", "ssl_session_cache", "server_tokens", "ssl_stapling", "ssl_stapling_verify"},
+		"oauth2-proxy":  {"ssl", "certificate_source", "ssl_cert", "ssl_key", "custom_sans", "client_secret", "cookie_secret", "ssl_insecure_skip_verify"},
+	}
+	required := map[string][]string{"mgmt-gateway": {"port"}, "snmp-gateway": {"snmp_version", "snmp_destination"}, "oauth2-proxy": {"provider_display_name", "client_id", "oidc_issuer_url"}}
+	var closed func(*Shape) bool
+	closed = func(shape *Shape) bool {
+		if shape.Type == Mapping && shape.Open {
+			return false
+		}
+		for _, field := range shape.Fields {
+			if !closed(field.Shape) {
+				return false
+			}
+		}
+		return shape.Element == nil || closed(shape.Element)
+	}
+	for serviceType, members := range refused {
+		shape := StorageNativeServiceSpecSchema(serviceType)
+		if shape == nil || !closed(shape) {
+			t.Fatalf("%s lacks a closed native record", serviceType)
+		}
+		checkStorageShape(t, shape)
+		for _, member := range members {
+			if _, ok := shape.Field(member); ok {
+				t.Fatalf("%s admits refused member %s", serviceType, member)
+			}
+		}
+		for _, field := range shape.Fields {
+			if field.Required != slices.Contains(required[serviceType], field.Name) {
+				t.Fatalf("%s.%s required = %v", serviceType, field.Name, field.Required)
+			}
+		}
+	}
+	ceph, _ := Schema(StorageCluster).Field("ceph")
+	cephadm, _ := ceph.Shape.Field("cephadm")
+	if _, ok := cephadm.Shape.Field("workarounds"); ok {
+		t.Fatal("the retired cephadm workaround list is still admitted")
+	}
+}

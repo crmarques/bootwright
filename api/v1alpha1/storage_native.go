@@ -38,6 +38,22 @@ func StorageNativeServiceSpecSchema(serviceType string) *Shape {
 		return record(required("backend_service", nonempty()), required("virtual_ip", nonempty()), field("frontend_port", integer("1", "65535")), field("monitor_port", integer("1", "65535")), field("first_virtual_router_id", integer("1", "255")), field("virtual_interface_networks", set(nonempty())), field("health_check_interval", nonempty()), field("keepalive_only", boolean()), field("enable_haproxy_protocol", boolean()), field("haproxy_peer_communication_port", integer("1", "65535")), field("ssl", boolean()), field("certificate_source", enumeration("inline", "reference", "cephadm-signed")))
 	case "nfs":
 		return record(field("port", integer("1", "65535")), field("monitoring_port", integer("1", "65535")), field("virtual_ip", nonempty()), field("enable_haproxy_protocol", boolean()))
+	case "prometheus":
+		return record(field("port", integer("1", "65535")), field("retention_time", nonempty()), field("retention_size", nonempty()), field("only_bind_port_on_networks", boolean()))
+	case "alertmanager":
+		return record(field("port", integer("1", "65535")), field("only_bind_port_on_networks", boolean()), field("user_data", record(field("default_webhook_urls", set(nonempty())))))
+	case "grafana":
+		return record(field("port", integer("1", "65535")), field("protocol", enumeration("http", "https")), field("anonymous_access", boolean()), field("only_bind_port_on_networks", boolean()))
+	case "node-exporter":
+		return record(field("port", integer("1", "65535")))
+	case "ceph-exporter":
+		return record(field("port", integer("1", "65535")), field("prio_limit", integer("0", "")), field("stats_period", integer("1", "")))
+	case "snmp-gateway":
+		return record(required("snmp_version", enumeration("V2c", "V3")), required("snmp_destination", nonempty()), field("port", integer("1", "65535")), field("engine_id", nonempty()), field("auth_protocol", enumeration("MD5", "SHA")), field("privacy_protocol", enumeration("DES", "AES")))
+	case "mgmt-gateway":
+		return record(required("port", integer("1", "65535")), field("ssl", boolean()), field("enable_auth", boolean()), field("ssl_protocols", set(enumeration("TLSv1.2", "TLSv1.3"))), field("ssl_ciphers", array(nonempty())), field("virtual_ip", nonempty()), field("enable_health_check_endpoint", boolean()))
+	case "oauth2-proxy":
+		return record(field("https_address", nonempty()), required("provider_display_name", nonempty()), required("client_id", nonempty()), required("oidc_issuer_url", nonempty()), field("redirect_url", nonempty()), field("scope", nonempty()), field("email_domains", set(nonempty())), field("allowlist_domains", set(nonempty())))
 	default:
 		return nil
 	}

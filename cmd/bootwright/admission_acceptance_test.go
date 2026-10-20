@@ -262,16 +262,12 @@ func referenceRefusals() []diagnosticTuple {
 		return diagnosticTuple{"api.invariant", kind, name, laterServiceRefusal}
 	}
 	return []diagnosticTuple{
-		cluster("$.spec.ceph.cephadm.workarounds"),
 		cluster("$.spec.ceph.config.global.mon_osd_down_out_subtree_limit"),
 		cluster("$.spec.ceph.config.global.osd_pool_default_pg_autoscale_mode"),
 		{"api.required", storageClusterKind, multidcCluster, "$.spec.ceph.config.global.osd_pool_default_min_size"},
 		{"api.required", storageClusterKind, multidcCluster, "$.spec.ceph.config.global.osd_pool_default_size"},
 		cluster("$.spec.ceph.mgrModules"),
 		cluster("$.spec.ceph.topology.stretch"),
-		cluster("$.spec.ceph.services[3].service_type"),
-		cluster("$.spec.ceph.services[4].service_type"),
-		cluster("$.spec.ceph.services[5].service_type"),
 		cluster("$.spec.ceph.serviceBindings[0].secrets[0].path"),
 		family("StorageExport", "ceph-multidc-01-odf-hub-multidc-01"),
 		family("StorageExport", "ceph-multidc-01-odf-hub-multidc-02"),

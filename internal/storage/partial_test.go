@@ -94,6 +94,17 @@ func TestPartialValidationIssuesAlsoRefuseTheCompleteObject(t *testing.T) {
 		{"native ingress modes", appendService(ingress.WithPath(api.BoolValue(true), "spec", "keepalive_only").WithPath(api.BoolValue(true), "spec", "enable_haproxy_protocol"))},
 		{"native ingress host bits", appendService(ingress.WithPath(api.StringList("192.0.2.5/24"), "spec", "virtual_interface_networks"))},
 		{"native ingress signed certificate", appendService(ingress.WithPath(api.StringValue("cephadm-signed"), "spec", "certificate_source"))},
+		{"native gateway plaintext", appendService(m("service_type", "mgmt-gateway", "placement", m("label", "mgr"), "spec", m("ssl", false, "port", 9443)))},
+		{"native gateway prefixed VIP", appendService(m("service_type", "mgmt-gateway", "placement", m("label", "mgr"), "spec", m("port", 9443, "virtual_ip", "192.0.2.50/24")))},
+		{"native oauth2-proxy port", appendService(m("service_type", "oauth2-proxy", "placement", m("label", "mgr"), "spec", m("provider_display_name", "IdP", "client_id", "ceph", "oidc_issuer_url", "https://idp.example.test/realms/ceph", "https_address", "0.0.0.0:4181")))},
+		{"native grafana inline password", appendService(m("service_type", "grafana", "placement", m("label", "mgr"), "spec", m("initial_admin_password", "material")))},
+		{"native tracing service", appendService(m("service_type", "jaeger-agent", "placement", m("label", "mgr")))},
+		{"native authored crash", appendService(m("service_type", "crash", "placement", m("label", "mgr")))},
+		{"native alertmanager webhook key", appendService(m("service_type", "alertmanager", "placement", m("label", "mgr"), "spec", m("user_data", m("webhook_urls", api.StringList("https://hooks.example.test/a")))))},
+		{"native prometheus retention", appendService(m("service_type", "prometheus", "placement", m("label", "mgr"), "spec", m("retention_time", "14days")))},
+		{"native retired workarounds", edit(api.StorageCluster, "storage", func(s api.Value) api.Value {
+			return s.WithPath(api.StringList("mgmt-gateway-spec-dependency-recording"), "ceph", "cephadm", "workarounds")
+		})},
 		{"native NFS binding", edit(api.StorageCluster, "storage", func(s api.Value) api.Value {
 			s = s.WithPath(api.ListValue(append(s.Get("ceph", "services").Items(), nfs)...), "ceph", "services")
 			return s.WithPath(api.ListValue(m("serviceRef", "nfs.files", "secrets", api.ListValue(m("path", "/spec/ssl_cert", "secretRef", "a")))), "ceph", "serviceBindings")

@@ -193,3 +193,15 @@ func TestEffectiveCapacityAndFilesystemLayoutsCannotBypassOwnership(t *testing.T
 		t.Fatalf("missing mdsServiceRef: %#v", found)
 	}
 }
+
+func TestWorkaroundsRetiredWithItsOwnRemedy(t *testing.T) {
+	issue, ok := RetiredField(api.StorageCluster, "$.spec.ceph.cephadm.workarounds")
+	want := api.Issue{Code: "api.field", Field: "$.spec.ceph.cephadm.workarounds", Message: "the cephadm workaround list was retired; Bootwright realizes no cephadm workaround", Remediation: "remove workarounds from $.spec.ceph.cephadm"}
+	if !ok || issue != want {
+		t.Fatalf("retired workarounds: %#v", issue)
+	}
+	text := issue.Message + issue.Remediation
+	if strings.Contains(text, "native-service migration") || strings.Contains(text, "replace ") || strings.ContainsAny(text, "0123456789") {
+		t.Fatalf("retired workarounds reuse the helper retirement or name a release: %q", text)
+	}
+}

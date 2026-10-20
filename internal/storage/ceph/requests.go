@@ -291,7 +291,7 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 		return Request{}, failure(issue.Code, issue.Message, issue.Remediation)
 	}
 	r.Config = config
-	if spec.Get("mgrModules").Len() != 0 || spec.Get("cephadm", "workarounds").Len() != 0 || spec.Get("cephadm", "bootstrap", "singleHostDefaults").Bool() {
+	if spec.Get("mgrModules").Len() != 0 || spec.Get("cephadm", "bootstrap", "singleHostDefaults").Bool() {
 		return Request{}, failure("lifecycle.unsupported", "the core adapter does not yet realize additional cluster configuration", "use only the qualified core MON/MGR/OSD profile")
 	}
 	for _, binding := range spec.Get("serviceBindings").Items() {

@@ -13,41 +13,28 @@ import (
 )
 
 func TestNativeServiceRefusalsPointAtTheAuthoredService(t *testing.T) {
+	const authored = "      - service_type: mds\n        service_id: odf-cephfs\n"
 	sources := exampleSources(t)
-	var authored []byte
-	for _, file := range sources.Files {
-		if filepath.Base(filepath.Dir(file.Path())) == "ceph" && filepath.Base(file.Path()) == "cluster.yaml" {
-			authored = file.Bytes()
+	var edited []byte
+	for i, file := range sources.Files {
+		if filepath.Base(filepath.Dir(file.Path())) == "ceph" && filepath.Base(file.Path()) == "cluster.yaml" && strings.Count(string(file.Bytes()), authored) == 1 {
+			edited = []byte(strings.Replace(string(file.Bytes()), authored, "      - service_type: jaeger-agent\n\n        placement:\n          label: mon\n\n"+authored, 1))
+			sources.Files[i] = desiredstate.NewSourceFile(file.Path(), edited)
 		}
 	}
-	var out, errOut bytes.Buffer
-	run(context.Background(), []string{"validate", "-f", sources.Roots[0], "--output", "json"}, &out, &errOut)
-	var result struct{ Diagnostics []diagnostics.Diagnostic }
-	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
-		t.Fatal(err, out.String())
+	if edited == nil {
+		t.Fatal("reference MDS service declaration moved")
 	}
-	want := map[string]int{
-		"$.spec.ceph.services[3].service_type": authoredStorageLine(t, authored, "- service_type: prometheus"),
-		"$.spec.ceph.services[4].service_type": authoredStorageLine(t, authored, "- service_type: grafana"),
-		"$.spec.ceph.services[5].service_type": authoredStorageLine(t, authored, "- service_type: alertmanager"),
-	}
-	got := map[string]int{}
-	for _, d := range result.Diagnostics {
-		if d.Object == nil || d.Object.Kind != "StorageCluster" || !strings.HasSuffix(d.Field, ".service_type") {
-			continue
+	_, _, err := wireCompiler().Compile(context.Background(), sources)
+	found := []diagnostics.Diagnostic{}
+	for _, d := range diagnostics.Of(err) {
+		if d.Object != nil && d.Object.Kind == "StorageCluster" && strings.HasSuffix(d.Field, ".service_type") {
+			found = append(found, d)
 		}
-		if d.Source == nil || filepath.Base(filepath.Dir(d.Source.Path)) != "ceph" || filepath.Base(d.Source.Path) != "cluster.yaml" {
-			t.Fatalf("service refusal lacks its authored source: %+v", d)
-		}
-		got[d.Field] = d.Source.Line
 	}
-	if len(got) != len(want) {
-		t.Fatalf("service refusals: got %v want %v", got, want)
-	}
-	for field, line := range want {
-		if got[field] != line {
-			t.Fatalf("service refusals: got %v want %v", got, want)
-		}
+	line := authoredStorageLine(t, edited, "- service_type: jaeger-agent")
+	if len(found) != 1 || found[0].Field != "$.spec.ceph.services[6].service_type" || found[0].Message != "Bootwright does not realize tracing services" || found[0].Source == nil || found[0].Source.Line != line || filepath.Base(found[0].Source.Path) != "cluster.yaml" {
+		t.Fatalf("service refusals: %+v want line %d", found, line)
 	}
 }
 

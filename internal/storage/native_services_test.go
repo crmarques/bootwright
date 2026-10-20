@@ -85,7 +85,7 @@ func TestServiceIDTableMatchesCephadmRequiresServiceID(t *testing.T) {
 				t.Fatalf("%s requires a Bootwright-only ID", row.name)
 			}
 		case serviceIDForbidden:
-			if row.name != "mon" && row.name != "mgr" {
+			if slices.Contains(requiresServiceID, row.name) || row.name == "osd" {
 				t.Fatalf("%s forbids an ID cephadm admits", row.name)
 			}
 		}
@@ -108,9 +108,9 @@ func TestServiceIDTableMatchesCephadmRequiresServiceID(t *testing.T) {
 }
 
 func TestUnimplementedServiceRemedyNamesImplementedTypes(t *testing.T) {
-	cluster, catalog := withMDSService(t, fixtureCatalog(), m("service_type", "container", "service_id", "objects", "placement", m("label", "mgr")))
+	cluster, catalog := withMDSService(t, fixtureCatalog(), m("service_type", "cephfs-mirror", "placement", m("label", "mgr")))
 	found := issuesAt(Validate(cluster, catalog), "$.spec.ceph.services[3].service_type")
-	if len(found) != 1 || found[0].Remediation != "select an implemented MON, MGR, OSD, MDS, RGW, ingress or NFS service, or wait for its owning service slice" {
+	if len(found) != 1 || found[0].Remediation != "select an implemented MON, MGR, OSD, MDS, RGW, ingress, NFS, Prometheus, Alertmanager, Grafana, node-exporter, ceph-exporter, SNMP gateway, management gateway or oauth2-proxy service, or wait for its owning service slice" {
 		t.Fatalf("unimplemented family remedy: %#v", found)
 	}
 }
