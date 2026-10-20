@@ -28,3 +28,24 @@ func TestB479DefaultPortCollision(t *testing.T) {
 	requireBound(t, graphIssues(t, []api.Value{b479Service("alertmanager"), b479Service("grafana", "port", 9094)}), s4+".spec.port", "node-1", "the Alertmanager cluster listener (9094) of "+s3)
 	requireOnly(t, graphIssues(t, []api.Value{b479Service("alertmanager", "port", 9094)}), s3+".spec.port", "api.invariant", "cephadm reserves port 9094 for the Alertmanager cluster listener", "choose another spec.port")
 }
+
+func TestB479OmittedPortReservesItsDefault(t *testing.T) {
+	snmp := b479Service("snmp-gateway", "snmp_version", "V2c", "snmp_destination", "192.0.2.9:162")
+	for _, tc := range []struct {
+		name     string
+		services []api.Value
+		later    string
+		earlier  string
+	}{
+		{"grafana 3000", []api.Value{b479Service("grafana"), b479Service("node-exporter", "port", 3000)}, "[4]", "[3]"},
+		{"node-exporter 9100", []api.Value{b479Service("node-exporter"), b479Service("grafana", "port", 9100)}, "[4]", "[3]"},
+		{"ceph-exporter 9926", []api.Value{b479Service("ceph-exporter"), b479Service("grafana", "port", 9926)}, "[4]", "[3]"},
+		{"snmp-gateway 9464", []api.Value{snmp, b479Service("alertmanager"), b479Service("grafana", "port", 9464)}, "[5]", "[3]"},
+		{"alertmanager 9093", []api.Value{b479Service("alertmanager"), b479Service("grafana", "port", 9093)}, "[4]", "[3]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			const at = "$.spec.ceph.services"
+			requireBound(t, graphIssues(t, tc.services), at+tc.later+".spec.port", "node-1", at+tc.earlier+".spec.port")
+		})
+	}
+}
