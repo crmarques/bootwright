@@ -1,0 +1,48 @@
+{
+  "bindings": [],
+  "cluster": "example",
+  "clusterIDs": [
+    "files"
+  ],
+  "controller": "controller",
+  "id": "docs",
+  "images": [
+    {
+      "image": "cp.icr.io/synthetic/samba@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "name": "samba"
+    },
+    {
+      "image": "cp.icr.io/synthetic/samba-metrics@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "name": "samba_metrics"
+    }
+  ],
+  "machines": [
+    "node-1",
+    "node-2",
+    "node-3"
+  ],
+  "native": {
+    "cephfs": {
+      "path": "/",
+      "subvolume": "docs",
+      "subvolumegroup": "csi",
+      "volume": "files"
+    },
+    "cluster_id": "files",
+    "name": "Docs",
+    "resource_type": "ceph.smb.share",
+    "share_id": "docs"
+  },
+  "object": "smb-docs",
+  "resourceType": "ceph.smb.share",
+  "service": {
+    "clustered": true,
+    "hosts": [
+      "node-1",
+      "node-2",
+      "node-3"
+    ],
+    "name": "smb.files"
+  },
+  "version": "ceph-smb-v1"
+}

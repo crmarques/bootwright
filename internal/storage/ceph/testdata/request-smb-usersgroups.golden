@@ -1,0 +1,38 @@
+{
+  "bindings": [
+    {
+      "path": "/values/users/0/password",
+      "secretRef": "alice-password"
+    },
+    {
+      "path": "/values/users/1/password",
+      "secretRef": "bob-password"
+    }
+  ],
+  "cluster": "example",
+  "controller": "controller",
+  "id": "users",
+  "machines": [
+    "node-1",
+    "node-2",
+    "node-3"
+  ],
+  "native": {
+    "resource_type": "ceph.smb.usersgroups",
+    "users_groups_id": "users",
+    "values": {
+      "groups": [],
+      "users": [
+        {
+          "name": "alice"
+        },
+        {
+          "name": "bob"
+        }
+      ]
+    }
+  },
+  "object": "smb-users",
+  "resourceType": "ceph.smb.usersgroups",
+  "version": "ceph-smb-v1"
+}

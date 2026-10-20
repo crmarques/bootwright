@@ -1,0 +1,26 @@
+{
+  "bindings": [
+    {
+      "path": "/auth/password",
+      "secretRef": "join-password"
+    }
+  ],
+  "cluster": "example",
+  "controller": "controller",
+  "id": "join",
+  "machines": [
+    "node-1",
+    "node-2",
+    "node-3"
+  ],
+  "native": {
+    "auth": {
+      "username": "Administrator"
+    },
+    "auth_id": "join",
+    "resource_type": "ceph.smb.join.auth"
+  },
+  "object": "smb-join",
+  "resourceType": "ceph.smb.join.auth",
+  "version": "ceph-smb-v1"
+}

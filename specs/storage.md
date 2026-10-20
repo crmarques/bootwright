@@ -122,12 +122,14 @@ Ceph image's rules, the authored-digest rule included, and is frozen in the
 image request and evidence. The cluster and host blocks take frozen auxiliary
 digests only from that original resolution proof. A settings block
 `ceph-settings-<cluster>`, planned only when the cluster freezes an auxiliary
-image or a declared service derives a manager module, is the single writer of
-these cluster-global settings: it sets each frozen auxiliary digest with
+image, a declared service derives a manager module or a StorageSMBResource
+names the cluster, is the single writer of these cluster-global settings: it
+sets each frozen auxiliary digest with
 `ceph config set mgr mgr/cephadm/container_image_<name> <image>` and enables
-each derived manager module (`nfs` for a declared `nfs` service) with
-`ceph mgr module enable`. It writes a setting only while the monitor
-configuration database holds no entry for it, accepts an entry that holds
+each derived manager module (`nfs` for a declared `nfs` service, `smb` when a
+StorageSMBResource names the cluster) with `ceph mgr module enable`. It writes
+a setting only while the monitor configuration database holds no entry for it,
+accepts an entry that holds
 exactly the frozen digest in the `mgr` section, and refuses `foreign-image`
 before any write for any other entry of that setting (another value, section,
 mask or location), never overwriting it. Every other block only reads these
@@ -307,6 +309,7 @@ links each matrix combination that this table refuses.
 | A replication network that a Ceph host has no address inside | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring `ceph.networks.clusterCIDRs` while the Machine of a `ceph.topology.nodes[]` entry declares no IP address inside any of them, a Machine whose addresses are assigned at runtime included; `<host>` is the first such node's native hostname in declaration order, `<machine>` its Machine and `<cidrs>` the declared networks joined by a comma and a space | `Ceph host <host> (Machine <machine>) has no address inside the replication networks <cidrs>` | `add an address inside one of <cidrs> to the network of <machine>, or remove spec.ceph.networks.clusterCIDRs` |
 | An ingress that resolves to no declared service | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` an `ingress` whose `spec.backend_service` resolves to no declared service; `<service>` is the first such ingress's qualified name in name order | `Bootwright does not deploy the native service <service> yet` | `remove <service> from spec.ceph.services, together with its spec.ceph.serviceBindings entries` |
 | A native service whose auxiliary image is not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that the previous row does not refuse; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type` and `<name>` the first image name it needs in name order, `keepalived` for an `ingress` with `spec.keepalive_only` | `no auxiliary image is selected for the <family> service <service>; its daemons need cephadm's container_image_<name>, and Bootwright keeps no default` | `remove <service> from spec.ceph.services, together with its spec.ceph.serviceBindings entries` |
+| StorageSMBResource objects whose samba images are not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, that a StorageSMBResource of any resource type names in its `clusterRef` and that neither of the two previous rows refuses; `<smb>` is the first such StorageSMBResource in name order and `<cluster>` the StorageCluster | `StorageSMBResource <smb> needs cephadm's container_image_samba and container_image_samba_metrics; no auxiliary image is selected for them, and Bootwright keeps no default` | `remove every StorageSMBResource whose spec.clusterRef is <cluster> from the selected Environment` |
 
 ## Bootstrap identity and continuation
 

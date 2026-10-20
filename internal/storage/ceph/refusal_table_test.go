@@ -19,10 +19,12 @@ const refusalSpec = "../../../specs/storage.md"
 
 // refusalCase is the set of edits to the pinned catalog's StorageCluster spec
 // that one row of the refusal table refuses, and the value of each placeholder
-// the row's reason and remedy write in angle brackets.
+// the row's reason and remedy write in angle brackets, with the objects the
+// row adds to the catalog.
 type refusalCase struct {
 	edits  map[string]func(api.Value) api.Value
 	values map[string]string
+	extra  []api.Object
 }
 
 // TestCephRefusalTableMatchesUnsupported holds the Ceph capability's
@@ -60,6 +62,9 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 				return spec.WithPath(api.ListValue(services...), "ceph", "services")
 			},
 		}, values: map[string]string{"<family>": "prometheus", "<service>": "prometheus", "<name>": "prometheus"}},
+		"StorageSMBResource objects whose samba images are not selected": {edits: map[string]func(api.Value) api.Value{
+			"a join auth and a users resource": nil,
+		}, values: map[string]string{"<smb>": "smb-join", "<cluster>": "example"}, extra: []api.Object{smbUsers(), smbJoin()}},
 	}
 	refused := map[api.Kind]string{api.StorageCluster: "example", api.StoragePool: "volumes", api.StorageClient: "consumer"}
 	for _, row := range refusalTable(t) {
@@ -72,6 +77,7 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 		for _, edit := range slices.Sorted(maps.Keys(test.edits)) {
 			t.Run(row.name+"/"+edit, func(t *testing.T) {
 				catalog := pinnedCatalog(t, test.edits[edit])
+				catalog = api.NewCatalog(append(catalog.Objects(), test.extra...))
 				state := compilation.NewState(catalog, catalog, nil)
 				for kind, name := range refused {
 					want := []lifecycle.Refusal{{Kind: string(kind), Name: name, Reason: expand(row.reason, test.values), Remediation: expand(row.remedy, test.values)}}

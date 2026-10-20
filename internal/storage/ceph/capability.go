@@ -107,7 +107,7 @@ func (c Capability) objectRequests(catalog api.Catalog, object api.Object, conte
 	}
 	requests := []Request{request}
 	if c.kind == api.StorageCluster {
-		if settings, needed := settingsRequest(request, object); needed {
+		if settings, needed := settingsRequest(catalog, request, object); needed {
 			requests = append(requests, settings)
 		}
 		units, err := serviceUnitRequests(request, object)
@@ -233,6 +233,8 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 		if reason, remedy, gap := undeployedDelegated(cluster); gap {
 			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
 		} else if reason, remedy, gap := unselectedAuxiliary(cluster); gap {
+			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
+		} else if reason, remedy, gap := unselectedSMBImages(state.Effective(), cluster); gap {
 			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
 		}
 	}

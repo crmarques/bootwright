@@ -211,7 +211,8 @@ def test_settings_observe_reads_only():
 
 @pytest.mark.parametrize("change", [
     lambda r: r.pop("settings"),
-    lambda r: r.update(settings={"modules": ["smb"]}),
+    lambda r: r.update(settings={"modules": ["prometheus"]}),
+    lambda r: r.update(settings={"modules": ["smb", "nfs"]}),
     lambda r: r.update(settings={"modules": ["nfs", "nfs"]}),
     lambda r: r.update(settings={"modules": "nfs"}),
     lambda r: r.update(settings={"modules": ["nfs"], "images": []}),
@@ -222,6 +223,8 @@ def test_settings_request_validation(change):
     request = settings_request()
     assert ceph_native.validate(request) is request
     assert ceph_native.validate(settings_request(modules=())) is not None
+    assert ceph_native.validate(settings_request(modules=("nfs", "smb"))) is not None
+    assert ceph_native.validate(settings_request(modules=("smb",), auxiliary=[])) is not None
     assert ceph_native.validate(settings_request(auxiliary=[])) is not None
     change(request)
     with pytest.raises(ceph_native.Refusal, match="^request$"):

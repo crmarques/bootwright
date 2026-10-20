@@ -80,7 +80,7 @@ func serviceUnitRequests(base Request, cluster api.Object) ([]Request, error) {
 
 func unitDependencies(r Request, cluster api.Object) []string {
 	dependencies := []string{ClusterBlockID(r.Cluster), ImageBlockID(r.Cluster)}
-	if _, needed := settingsRequest(r, cluster); needed {
+	if _, needed := settingsRequest(api.Catalog{}, r, cluster); needed {
 		dependencies = append(dependencies, SettingsBlockID(r.Cluster))
 	}
 	if t, known := unitTypes[r.Service.Type]; known {

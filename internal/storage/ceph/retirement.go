@@ -81,6 +81,50 @@ func (c Capability) observeRetirement(ctx context.Context, e lifecycle.Execution
 }
 
 func EvaluateRetirement(data []byte, r Request, retired bool) (reconciliation.EffectState, error) {
+	return evaluateRetirement(data, retirementFor(r), retired)
+}
+
+func (SMBCapability) HostMachines(block reconciliation.Block) ([]string, error) {
+	r, err := DecodeSMBRequest(block.Request)
+	if err != nil {
+		return nil, err
+	}
+	return slices.Clone(r.Machines), nil
+}
+
+func (c SMBCapability) retirement(ctx context.Context, e lifecycle.Execution) (json.RawMessage, error) {
+	r, err := c.identity(ctx, e)
+	if err != nil {
+		return nil, err
+	}
+	want := Retirement{Action: "smb", Cluster: r.Cluster, FSID: FSIDFor(e.ApplyOperation, r.Cluster), RetiredWith: r.Machines}
+	evidence, err := json.Marshal(want)
+	if err != nil {
+		return nil, failure("lifecycle.state", "the Ceph retirement evidence cannot be encoded", "")
+	}
+	if _, err := evaluateRetirement(evidence, want, true); err != nil {
+		return nil, err
+	}
+	return evidence, nil
+}
+
+func (c SMBCapability) retire(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
+	evidence, err := c.retirement(ctx, e)
+	if err != nil {
+		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+	}
+	return lifecycle.Result{Outcome: reconciliation.OutcomeChanged, Evidence: evidence}, nil
+}
+
+func (c SMBCapability) observeRetirement(ctx context.Context, e lifecycle.Execution) (lifecycle.Observation, error) {
+	evidence, err := c.retirement(ctx, e)
+	if err != nil {
+		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
+	}
+	return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
+}
+
+func evaluateRetirement(data []byte, want Retirement, retired bool) (reconciliation.EffectState, error) {
 	if !retired {
 		return reconciliation.EffectUnknown, evidenceFailure()
 	}
@@ -97,8 +141,7 @@ func EvaluateRetirement(data []byte, r Request, retired bool) (reconciliation.Ef
 			return reconciliation.EffectUnknown, evidenceFailure()
 		}
 	}
-	want := retirementFor(r)
-	if r.FSID == "" || len(want.RetiredWith) == 0 || e.Action != want.Action || e.Cluster != want.Cluster || e.FSID != want.FSID || !slices.Equal(e.RetiredWith, want.RetiredWith) {
+	if want.FSID == "" || len(want.RetiredWith) == 0 || e.Action != want.Action || e.Cluster != want.Cluster || e.FSID != want.FSID || !slices.Equal(e.RetiredWith, want.RetiredWith) {
 		return reconciliation.EffectUnknown, evidenceFailure()
 	}
 	return reconciliation.EffectCompleted, nil

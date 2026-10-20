@@ -14,7 +14,6 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/storage"
 )
 
 const resourcesModule = "collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native_resources.py"
@@ -127,7 +126,7 @@ func TestSettingsBlockEmittedOnlyWhenNeeded(t *testing.T) {
 	catalog := delegatedCatalog(nil, nil)
 	cluster, _ := catalog.Find(api.StorageCluster, "example")
 	base := Request{Version: Version, Action: "cluster", Cluster: "example", Auxiliary: frozenAuxiliaryReferences()}
-	r, needed := settingsRequest(base, cluster)
+	r, needed := settingsRequest(catalog, base, cluster)
 	if !needed || r.Action != "settings" || r.Settings == nil || r.Settings.Modules == nil || len(r.Settings.Modules) != 0 || len(r.Auxiliary) != 2 {
 		t.Fatalf("frozen auxiliary images without a derived module make %+v (%v)", r, needed)
 	}
@@ -159,7 +158,7 @@ func TestSettingsBlockIsTheOnlyWriterOfAuxiliaryImageKeys(t *testing.T) {
 }
 
 func TestDerivedModulesMatchTheWorker(t *testing.T) {
-	if got, want := pythonTuple(t, resourcesModule, "DERIVED_MODULES"), storage.DerivableManagerModules(); !slices.Equal(got, want) {
+	if got, want := pythonTuple(t, resourcesModule, "DERIVED_MODULES"), settingsModules(); !slices.Equal(got, want) {
 		t.Fatalf("the worker derives %q, Go derives %q", got, want)
 	}
 }

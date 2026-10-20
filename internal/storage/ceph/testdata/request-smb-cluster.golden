@@ -1,0 +1,61 @@
+{
+  "bindings": [],
+  "cluster": "example",
+  "clusterIDs": [
+    "files"
+  ],
+  "controller": "controller",
+  "id": "files",
+  "images": [
+    {
+      "image": "cp.icr.io/synthetic/samba@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "name": "samba"
+    },
+    {
+      "image": "cp.icr.io/synthetic/samba-metrics@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "name": "samba_metrics"
+    }
+  ],
+  "machines": [
+    "node-1",
+    "node-2",
+    "node-3"
+  ],
+  "native": {
+    "auth_mode": "user",
+    "cluster_id": "files",
+    "clustering": "always",
+    "placement": {
+      "count": 2,
+      "hosts": [
+        "node-1",
+        "node-2",
+        "node-3"
+      ]
+    },
+    "public_addrs": [
+      {
+        "address": "192.0.2.80/24"
+      }
+    ],
+    "resource_type": "ceph.smb.cluster",
+    "user_group_settings": [
+      {
+        "ref": "users",
+        "source_type": "resource"
+      }
+    ]
+  },
+  "object": "smb-files",
+  "resourceType": "ceph.smb.cluster",
+  "service": {
+    "clustered": true,
+    "hosts": [
+      "node-1",
+      "node-2",
+      "node-3"
+    ],
+    "name": "smb.files"
+  },
+  "version": "ceph-smb-v1"
+}

@@ -36,9 +36,10 @@ GROUP_ATTEMPT = "ceph-subvolume-group-attempt-v1"
 SUBVOLUME_ATTEMPT = "ceph-subvolume-attempt-v1"
 # The manager option cephadm registers per auxiliary image, read in section mgr (src/pybind/mgr/cephadm/module.py:499-500).
 IMAGE_KEY = "mgr/cephadm/container_image_"
-# The manager modules a declared service family derives; internal/storage/services.go holds the same set.
+# The manager modules a declared family derives: nfs from internal/storage/services.go, smb from internal/storage/ceph/settings.go.
 DERIVED_MODULES = (
     "nfs",
+    "smb",
 )
 SUBVOLUME_MEMBERS = frozenset(("filesystem", "gid", "group", "mode", "name", "pool", "sizeBytes", "uid"))
 # A subvolume's user metadata key: printable ASCII, stored lower case (doc/cephfs/fs-volumes.rst:572-575).
