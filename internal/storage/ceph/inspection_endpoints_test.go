@@ -251,6 +251,24 @@ func TestClusterInfoEndpoints(t *testing.T) {
 		}
 	})
 
+	t.Run("another cluster's management gateway and NFS units add no row", func(t *testing.T) {
+		f := &endpointFixture{}
+		for _, unit := range []ServiceUnit{bound, nfsUnitWithIngress(t)} {
+			r := runtimeRequest()
+			r.Cluster = "other"
+			r.Action, r.Service = "service", &unit
+			block := f.block(t, string(api.StorageCluster), "other", r)
+			f.blocks = append(f.blocks, block)
+			f.prove(t, block, reached(digest))
+		}
+		own := f.service(t, bound)
+		f.prove(t, own, reached(digest))
+		rows := InspectEndpoints("example", f.blocks, f.proofs)
+		if len(rows) != 1 || rows[0].Service != "mgmt-gateway" || rows[0].Status != EndpointReady {
+			t.Fatalf("rows %+v", rows)
+		}
+	})
+
 	t.Run("rows are ordered by service", func(t *testing.T) {
 		f := &endpointFixture{}
 		f.gateway(t, "plain", plainGatewayRequest(t))
