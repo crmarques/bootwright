@@ -141,7 +141,7 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 		a.invalid("$.spec.clusterRef", "this storage child requires a managed cluster")
 		return a.issues
 	}
-	if item, ok := map[api.Kind]string{api.StorageExport: "B489"}[object.Kind()]; ok {
+	if item, ok := map[api.Kind]string{api.StorageExport: "B86"}[object.Kind()]; ok {
 		if !managed {
 			item = "parked item B107"
 		}

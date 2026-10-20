@@ -91,7 +91,7 @@ effects. No new field inherits an undocumented default from another resource.
 | `StoragePool` | Pool identity, replicated/EC protection, application, PG/autoscaler, quota, compression and supported mirroring intent. EC `rbd`/`cephfs-data` pools derive irreversible overwrite enablement; mirroring is [B483](milestones/m2.md#b483)'s. | Services and resources reference owned pools; native auto-created pools require an explicitly recorded derived owner. |
 | `StorageFilesystem` | Metadata/data-pool composition, default/layout, active ranks and standby/replay resource policy, declared subvolume groups; several filesystems per cluster. | `spec.mdsServiceRef` binds one declared MDS service whose `service_id` is the filesystem name; placement and container configuration belong to that service. One `ceph fs new` creates the native filesystem. |
 | `StorageObjectGateway` | The realm, zone group and zone it creates (never with `--default`), its zone placement binding, its derived zone pools and its endpoint identity. | `spec.serviceRef` binds exactly one declared rgw service by full native identity; the gateway executes that service and the ingress whose `spec.backend_service` is it. It embeds no daemon placement, frontend, configuration or ingress specification. |
-| `StorageExport` | Existing Data Foundation handoff, or the external-details arm. | It waits for the resources and access material it describes; it neither creates an add-on nor becomes a general native-command resource. |
+| `StorageExport` | Existing Data Foundation handoff, or the external-details arm. Admission refuses it until [B86](milestones/m4.md#b86) delivers managed export material, or parked item [B107](milestones/backlog.md#b107) the external-details arm. | It waits for the resources and access material it describes; it neither creates an add-on nor becomes a general native-command resource. |
 
 Their existing non-daemon fields remain unless an owning approved migration
 changes them. B474 records retired daemon helper paths explicitly. A
@@ -946,7 +946,7 @@ provisioning rows remain required by the coverage matrix.
 | NVMe-oF gateway resources, B480 | Native service/group, subsystem NQN, listener address/transport, namespace ID and `StorageRBDImage` reference; initiator NQN/host authorization links to the subsystem. | No automatic unowned image creation or wildcard host access. Defaults and generated IDs are frozen/captured. Listener reachability, ANA/HA and release-supported security are qualified together. |
 | iSCSI resources, B481 | Not realized: no iSCSI kind exists, and admission refuses `service_type: iscsi` at that field. | Refused before any effect; block access over the network uses NVMe-oF (B480). No NVMe field substitutes for an iSCSI one. |
 | Replication peers, B483 | Explicit source and destination cluster/resource references, protocol/replication mode, peer identity, endpoint trust and credential ownership. | Both endpoints are declared managed resources. One relationship owner coordinates bootstrap and removal; no ambient peer lookup, context crossing or foreign adoption. |
-| Access material/handoff, B489 | Declared principal/resource set, selected trust/endpoints and produced-material identity; existing `StorageExport` retains its own consumer shape. | Material is scoped, privately captured and withdrawn through custody. Its sensitive-output interface remains B489's separate approval gate; P2 authorizes no reveal command. |
+| Access material/handoff, B489 | Declared principal/resource set, selected trust/endpoints and produced-material identity; managed `StorageExport` material (its produced schema, principals and custody) belongs to [B86](milestones/m4.md#b86), which reuses this boundary; `StorageExport` retains its own consumer shape. | Material is scoped, privately captured and withdrawn through custody. Its sensitive-output interface remains B489's separate approval gate; P2 authorizes no reveal command. |
 
 A native name in an imperative provider request is always projected from this
 declared identity/reference graph. These records also settle availability of
@@ -972,7 +972,7 @@ run concurrently under Storage's claims and lease rules.
 | S3 | Realm/zone and pool layout → native RGW service bound to logical gateway → account/user → bucket/policy; declared ingress/public endpoint → scoped S3 access material. |
 | NFS on RGW | Owned bucket, gateway and object principal plus native NFS service → bucket-bound native export → qualified endpoint and client restrictions. |
 | Replication | Both declared cluster/resource endpoints and their access dependencies → explicit peer relationship → initial synchronization proof; native replication direction is not a cyclic Bootwright creation edge. |
-| Data Foundation handoff | Declared RBD pool, filesystem, optional object gateway and scoped access dependencies → existing StorageExport material; downstream installation remains separate. |
+| Data Foundation handoff | Declared RBD pool, filesystem, optional object gateway and scoped access dependencies → existing StorageExport material; downstream installation remains separate. Its material is [B86](milestones/m4.md#b86)'s. |
 
 For example, the NFS example consumes `documents` only after the
 `StorageSubvolume` exists and its native path is observed; `documents` consumes

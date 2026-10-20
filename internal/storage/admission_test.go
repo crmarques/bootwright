@@ -429,7 +429,7 @@ func TestDeferredScopeRefusalsNameTheDeliveringItem(t *testing.T) {
 		}
 		t.Fatalf("missing %s remediation %q: %#v", field, remediation, issues)
 	}
-	for kind, item := range map[api.Kind]string{api.StorageExport: "B489"} {
+	for kind, item := range map[api.Kind]string{api.StorageExport: "B86"} {
 		candidates := catalog.OfKind(kind)
 		if len(candidates) == 0 {
 			t.Fatalf("fixture has no %s", kind)
