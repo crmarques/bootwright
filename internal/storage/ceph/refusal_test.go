@@ -403,3 +403,29 @@ func TestSMBRefusalsNameOnlyNextStepsAFailedApplyCanTake(t *testing.T) {
 		}
 	}
 }
+
+func TestAnSSHPolicyRefusalReachesTheOperatorWithItsRemedy(t *testing.T) {
+	const excluded = "a Ceph host's pinned SSH host key is of a type this controller's SSH crypto policy excludes, so Bootwright opened no session to it"
+	const unavailable = "this controller's SSH crypto policy could not be read or evaluated, so Bootwright opened no Ceph session"
+	const tunnel = "the SSH crypto policy inside the selected Ceph image admits none of the algorithms of a Ceph host's pinned host key, so cephadm's tunnel could not reach that host and nothing was changed on it"
+	for reason, message := range map[string]string{"ssh-policy-host-excluded": excluded, "ssh-policy-unavailable": unavailable, "tunnel-host-key-excluded": tunnel} {
+		t.Run(reason, func(t *testing.T) {
+			r := coreRequest()
+			_, err := New(api.StorageCluster, &refusingRunner{reason: reason}).Observe(context.Background(), withMaterial(executionFor(t, r), r))
+			if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.unsupported" || d[0].Message != message || d[0].Remediation == "" {
+				t.Fatalf("a cluster %s refusal reached the operator as %+v", reason, d)
+			}
+			if reason == "tunnel-host-key-excluded" {
+				return
+			}
+			e, _, proofs := hostExecution(t, "node-1")
+			result, err := NewHost(&refusingRunner{reason: reason}).WithProofs(proofs).Apply(context.Background(), e)
+			if d := diagnostics.Of(err); len(d) != 1 || d[0].Code != "lifecycle.unsupported" || d[0].Message != message || result.Outcome != reconciliation.OutcomeFailed {
+				t.Fatalf("a host %s refusal reached the operator as %+v %+v", reason, result, d)
+			}
+			if d := smbRefusal(t, reason); len(d) != 1 || d[0].Code != "lifecycle.unsupported" || d[0].Message != message {
+				t.Fatalf("an SMB %s refusal reached the operator as %+v", reason, d)
+			}
+		})
+	}
+}

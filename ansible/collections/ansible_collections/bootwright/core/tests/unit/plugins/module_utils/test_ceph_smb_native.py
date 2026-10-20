@@ -47,7 +47,7 @@ def scope(transport="native"):
               "devices": [{"path": "/dev/sda", "serial": "drive-scsi" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    return {"controller": "controller", "version": "ceph-core-v22", "cluster": "example", "owner": OWNER, "fsid": FSID,
+    return {"controller": "controller", "version": "ceph-core-v23", "cluster": "example", "owner": OWNER, "fsid": FSID,
             "image": "registry.example.test/example/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "synthetic-package"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible", "packageRepository": "https://publisher.example.test/ceph",
@@ -842,7 +842,7 @@ class Clock:
 def material_files(directory, values):
     """The runner's protected material files: the SSH pair, then one password file per binding, each holding its value."""
     paths = {}
-    for name, data in [("sshKey", "PRIVATE-KEY-SENTINEL"), ("knownHosts", "node-1 ssh-ed25519 PUBLIC")] + list(values.items()):
+    for name, data in [("sshKey", "PRIVATE-KEY-SENTINEL"), ("knownHosts", "192.0.2.1 ssh-ed25519 PUBLIC")] + list(values.items()):
         path = directory / name
         path.write_text(data, encoding="utf-8")
         path.chmod(0o600)

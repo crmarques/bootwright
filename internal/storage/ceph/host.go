@@ -333,6 +333,7 @@ func hostRefusals() map[string]error {
 	for reason, refusal := range packageRefusals() {
 		out[reason] = refusal
 	}
+	maps.Copy(out, sshPolicyRefusals())
 	for _, reason := range []string{"request", "artifact", "ownership", "evidence", "material", "foreign-cluster", "native-command", "native-timeout", "native-output", "unknown", "transport", "remote-refusal", "adapter-exception"} {
 		out[reason] = failure("lifecycle.unknown", "the Ceph host preparation could not prove its "+reason+" boundary", "inspect the retained operation evidence before continuing")
 	}

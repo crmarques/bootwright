@@ -532,7 +532,7 @@ def host_scope(request):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v22")
+    require(request["version"] == "ceph-core-v23")
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])
@@ -1878,6 +1878,7 @@ class Worker:
         if self.request["clusterSSHTransport"] == "verified-tunnel":
             expected |= {"clusterPrivateKey", "knownHosts"}
         require(set(private) == expected, "material")
+        self.tunnel_host_key_preflight(private)
         registry = registry_material(self.request, private["registryJSON"])
         public = private["clusterPublicKey"]
         require(isinstance(public, str) and len(public) <= 32768 and len(public.strip().splitlines()) == 1, "material")
@@ -2046,6 +2047,28 @@ class Worker:
                 "image": self.request["image"], "uid": uid, "label": label,
                 "nativeUser": self.request["clusterSSHUser"], "hosts": helper.targets(self.request)}
 
+    def tunnel_host_key_preflight(self, private):
+        """Before any authorization effect, a manager host proves its tunnel client admits an algorithm of every pinned host key."""
+        if self.request["clusterSSHTransport"] != "verified-tunnel":
+            return
+        managers = next(s["placement"]["hosts"] for s in self.request["services"] if s["service_type"] == "mgr")
+        if self.host["name"] not in managers:
+            return
+        helper, unused = tunnel_helpers()
+        require(isinstance(private["knownHosts"], str), "material")
+        hosts = helper.targets(self.request)
+        self._tunnel_host_keys(lambda: helper.outer_configuration(self.manager_policy(), hosts, helper.known_hosts(private["knownHosts"].encode(), hosts)))
+
+    def _tunnel_host_keys(self, render):
+        """Render tunnel material; a pinned key the image's policy excludes is a named native failure naming its host and key type."""
+        helper, unused = tunnel_helpers()
+        try:
+            return render()
+        except helper.HostKeyRefusal as error:
+            raise NativeFailure("tunnel-host-key-excluded", self.native_coordinate(),
+                                "host " + error.host + " pins a " + error.key_type
+                                + " host key, and the HostKeyAlgorithms of the selected image's SSH crypto policy admit none of its algorithms") from None
+
     def transport(self, private):
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_tunnel_custody as custody
         require(self.markers.owned(), "ownership")
@@ -2055,8 +2078,8 @@ class Worker:
         policy = self.manager_policy()
         helper, unused = tunnel_helpers()
         source = getattr(helper, "_BOOTWRIGHT_SOURCE", None) or inspect.getsource(helper)
-        files = helper.bundle(self.request, private["clusterPrivateKey"].encode(), private["knownHosts"].encode(),
-                              source.encode(), policy, public=private["clusterPublicKey"])
+        files = self._tunnel_host_keys(lambda: helper.bundle(self.request, private["clusterPrivateKey"].encode(), private["knownHosts"].encode(),
+                                                             source.encode(), policy, public=private["clusterPublicKey"]))
         original = custody.retain(self.markers, "transport-original", scope, files)
         record = {"scope": scope, "custodyID": original["custodyID"], "manifest": json.loads(files["manifest.json"])}
         owned = self.markers.read("transport.json")

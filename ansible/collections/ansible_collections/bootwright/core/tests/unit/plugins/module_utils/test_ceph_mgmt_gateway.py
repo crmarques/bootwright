@@ -305,7 +305,7 @@ def test_transport_reads_each_phase_material(tmp_path):
         return path
 
     request = gateway_request()
-    material = {"sshKey": write("identity", "key"), "knownHosts": write("known", "hosts"),
+    material = {"sshKey": write("identity", "key"), "knownHosts": write("known", "192.0.2.1 ssh-ed25519 PUBLIC"),
                 "mgmtGatewayCertificate": write("certificate", CERT), "mgmtGatewayKey": write("private", KEY)}
     transport = ceph_core.Transport(request, material, run=lambda argv, data=b"", timeout=None: (0, b'{"ok": true, "result": {}}'))
     assert transport.unit_material("unit") == MATERIAL and transport.unit_material("observe") == SEEN and transport.unit_material() == MATERIAL

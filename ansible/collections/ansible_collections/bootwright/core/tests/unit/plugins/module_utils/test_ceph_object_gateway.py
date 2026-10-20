@@ -1075,7 +1075,7 @@ def test_gateway_tls_material_never_reaches_a_refusal_detail(tmp_path):
         ceph_native.private_write(path, data.encode())
         return path
 
-    material = {"sshKey": write("identity", "fleet-private"), "knownHosts": write("known", "node-1 ssh-ed25519 AAAA\n"),
+    material = {"sshKey": write("identity", "fleet-private"), "knownHosts": write("known", "192.0.2.1 ssh-ed25519 AAAA\n"),
                 "gatewayCertificate": write("certificate", CERT), "gatewayKey": write("key", KEY)}
     flattened = " ".join(KEY.splitlines())
     sent = []
@@ -1134,13 +1134,14 @@ def test_execute_gateway_passes_bound_material_per_phase(monkeypatch):
 
 
 def test_transport_admits_the_gateway_material(tmp_path):
-    def write(name):
+    def write(name, data=None):
         path = str(tmp_path / name)
-        ceph_native.private_write(path, name.encode())
+        ceph_native.private_write(path, name.encode() if data is None else data)
         return path
 
     request = gateway_request()
-    material = {"sshKey": write("identity"), "knownHosts": write("known"), "gatewayCertificate": write("certificate"), "gatewayKey": write("key")}
+    material = {"sshKey": write("identity"), "knownHosts": write("known", b"192.0.2.1 ssh-ed25519 PUBLIC"), "gatewayCertificate": write("certificate"),
+                "gatewayKey": write("key")}
     calls = []
 
     def run(argv, data=b"", timeout=None):

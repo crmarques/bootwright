@@ -87,8 +87,11 @@ A present policy without its own `HostKeyAlgorithms` is still evaluated, and
 OpenSSH 10.x's compiled default list excludes `ssh-rsa`, so an RSA pin narrows
 to `rsa-sha2-512,rsa-sha2-256`. Only a host with no policy backend (or one with
 no crypto directive) keeps the pinned list unevaluated. `-F /dev/null` drops
-the policy entirely; the Ceph controller transport still does that (the Ceph
-transport part of [B346](../../specs/milestones/m1.md#b346)).
+the policy entirely. The Ceph controller transport now keeps the policy too, by
+the same `ssh -G` evaluation and the guest session's option set, and its
+contained tunnel intersects the pinned keys with the Ceph image's own policy
+([B625](../../specs/milestones/m2.md#b625);
+[security](../../specs/security.md#network-remote-systems-and-privilege)).
 
 Pinned by `TestSessionRefusesAPinnedHostKeyThePolicyExcludes`,
 `TestSessionPinsOnlyTheIntersection`, `TestSessionPolicyEvaluationFailureRefuses`,

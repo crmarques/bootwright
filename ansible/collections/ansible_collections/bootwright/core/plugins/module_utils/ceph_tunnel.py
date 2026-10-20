@@ -36,8 +36,26 @@ CRYPTO_DIRECTIVES = frozenset((
 ))
 
 
+HOST_KEY_ALGORITHMS = {
+    "ssh-ed25519": ("ssh-ed25519",),
+    "ssh-rsa": ("rsa-sha2-512", "rsa-sha2-256"),
+    "ecdsa-sha2-nistp256": ("ecdsa-sha2-nistp256",),
+    "ecdsa-sha2-nistp384": ("ecdsa-sha2-nistp384",),
+    "ecdsa-sha2-nistp521": ("ecdsa-sha2-nistp521",),
+}
+
+
 class TunnelRefusal(ValueError):
     """A fixed reason, without paths, keys, requests or native output."""
+
+
+class HostKeyRefusal(TunnelRefusal):
+    """A pinned host key whose every algorithm the effective policy excludes; it names only the host and the key type."""
+
+    def __init__(self, host, key_type):
+        super().__init__("tunnel-host-key-excluded")
+        self.host = host
+        self.key_type = key_type
 
 
 def require(condition):
@@ -69,7 +87,7 @@ def crypto_policy(value):
 
 def targets(request):
     """A native address selects exactly one original installation endpoint."""
-    require(isinstance(request, dict) and request.get("version") == "ceph-core-v22")
+    require(isinstance(request, dict) and request.get("version") == "ceph-core-v23")
     require(request.get("clusterSSHTransport") == "verified-tunnel")
     require(named(request.get("owner")) and named(request.get("clusterSSHUser")))
     try:
@@ -166,7 +184,70 @@ def known_hosts(value, hosts):
     return ("\n".join(host_token(host) + " " + bound[host_token(host)] for host in hosts) + "\n").encode()
 
 
-def outer_configuration(policy=""):
+def pattern_matches(name, pattern):
+    """OpenSSH match_pattern: '*' and '?' are the only wildcards, and the match is case-sensitive."""
+    expression = "".join(".*" if char == "*" else "." if char == "?" else re.escape(char) for char in pattern)
+    return re.fullmatch(expression, name, re.DOTALL) is not None
+
+
+def listed(name, patterns):
+    """OpenSSH match_pattern_list: a matching negated item excludes the name; otherwise any matching item admits it."""
+    found = False
+    for item in patterns.split(","):
+        if item.startswith("!"):
+            if pattern_matches(name, item[1:]):
+                return False
+        elif pattern_matches(name, item):
+            found = True
+    return found
+
+
+def policy_host_key_algorithms(policy):
+    """The policy's HostKeyAlgorithms value: under ssh_config(5) the first obtained value wins; None without one."""
+    for line in crypto_policy(policy).splitlines():
+        match = re.fullmatch(r"([A-Za-z]+)\s*(?:=\s*|\s+)(.*)", line)
+        if match is not None and match.group(1).lower() == "hostkeyalgorithms":
+            value = match.group(2).strip()
+            require(value != "" and len(value.split()) == 1)
+            return value
+    return None
+
+
+def pinned_host_key_algorithms(key_type, value):
+    """The pinned key's algorithms, in pinned order, that a HostKeyAlgorithms value admits under ssh_config(5) list and pattern rules.
+
+    An absent value, or one that appends ('+') or prepends ('^') to the client's default, keeps every algorithm; one that removes ('-')
+    keeps those it does not list; any other value keeps only those it lists.
+    """
+    require(key_type in HOST_KEY_ALGORITHMS)
+    candidates = HOST_KEY_ALGORITHMS[key_type]
+    if value is None or value[:1] in ("+", "^"):
+        return list(candidates)
+    if value[:1] == "-":
+        return [name for name in candidates if not listed(name, value[1:])]
+    return [name for name in candidates if listed(name, value)]
+
+
+def host_blocks(policy, hosts, known):
+    """One block per host, in the given order, pinning only the algorithms of its known key the policy admits."""
+    require(isinstance(known, bytes))
+    try:
+        lines = [line.split() for line in known.decode("ascii").splitlines()]
+    except UnicodeError:
+        raise TunnelRefusal("native-tunnel-unproved") from None
+    value = policy_host_key_algorithms(policy)
+    result = ""
+    for host in hosts:
+        found = [fields for fields in lines if fields and fields[0] == host_token(host)]
+        require(len(found) == 1 and len(found[0]) >= 2)
+        algorithms = pinned_host_key_algorithms(found[0][1], value)
+        if not algorithms:
+            raise HostKeyRefusal(host["name"], found[0][1])
+        result += "Host " + host["address"] + "\n  HostKeyAlgorithms " + ",".join(algorithms) + "\n"
+    return result
+
+
+def outer_configuration(policy="", hosts=(), known=b""):
     """One isolated OpenSSH configuration, with no executable-valued directive."""
     options = (
         ("UserKnownHostsFile", CONTAINER_ROOT + "/known_hosts"),
@@ -188,7 +269,8 @@ def outer_configuration(policy=""):
         ("ServerAliveInterval", "15"), ("ServerAliveCountMax", "3"),
         ("ExitOnForwardFailure", "yes"), ("LogLevel", "ERROR"),
     )
-    return ("Host *\n" + "".join("  " + key + " " + value + "\n" for key, value in options) + crypto_policy(policy)).encode()
+    blocks = host_blocks(policy, hosts, known)
+    return (blocks + "Host *\n" + "".join("  " + key + " " + value + "\n" for key, value in options) + crypto_policy(policy)).encode()
 
 
 def native_configuration(hosts):
@@ -212,9 +294,10 @@ def bundle(request, private_key, frozen_known_hosts, proxy_source, policy="", pu
     require(isinstance(private_key, bytes) and 0 < len(private_key) <= MAX_FILE)
     require(isinstance(proxy_source, bytes) and 0 < len(proxy_source) <= MAX_FILE)
     policy = crypto_policy(policy)
-    files = {"identity": private_key, "known_hosts": known_hosts(frozen_known_hosts, hosts),
-             "outer_config": outer_configuration(policy), "native_config": native_configuration(hosts), "proxy.py": proxy_source}
-    manifest = {"version": "ceph-tunnel-v2", "owner": request["owner"], "fsid": request["fsid"],
+    known = known_hosts(frozen_known_hosts, hosts)
+    files = {"identity": private_key, "known_hosts": known,
+             "outer_config": outer_configuration(policy, hosts, known), "native_config": native_configuration(hosts), "proxy.py": proxy_source}
+    manifest = {"version": "ceph-tunnel-v3", "owner": request["owner"], "fsid": request["fsid"],
                 "nativeUser": request["clusterSSHUser"], "hosts": hosts, "cryptoPolicy": policy,
                 "identityPublicKey": public_key(public),
                 "files": {name: hashlib.sha256(value).hexdigest() for name, value in files.items() if name != "identity"}}
@@ -232,8 +315,8 @@ def unique_object(pairs):
 
 def validate_manifest(value):
     require(isinstance(value, dict) and set(value) == {"version", "owner", "fsid", "nativeUser", "hosts", "cryptoPolicy", "identityPublicKey", "files"})
-    require(value["version"] == "ceph-tunnel-v2")
-    request = {"version": "ceph-core-v22", "clusterSSHTransport": "verified-tunnel",
+    require(value["version"] == "ceph-tunnel-v3")
+    request = {"version": "ceph-core-v23", "clusterSSHTransport": "verified-tunnel",
                "owner": value["owner"], "fsid": value["fsid"], "clusterSSHUser": value["nativeUser"], "hosts": value["hosts"]}
     require(targets(request) == value["hosts"])
     require(all(set(host) == {"name", "address", "port"} for host in value["hosts"]))
@@ -285,7 +368,7 @@ def verified_bundle(path, expected, uid, readonly):
     require(files["manifest.json"] == canonical(manifest) + b"\n")
     require(all(hashlib.sha256(files[name]).hexdigest() == manifest["files"][name] for name in FILES - {"identity"}))
     require(files["known_hosts"] == known_hosts(files["known_hosts"], manifest["hosts"]))
-    require(files["outer_config"] == outer_configuration(manifest["cryptoPolicy"]))
+    require(files["outer_config"] == outer_configuration(manifest["cryptoPolicy"], manifest["hosts"], files["known_hosts"]))
     require(files["native_config"] == native_configuration(manifest["hosts"]))
     require(readonly or expected is not None)
     require(expected is None or files == expected)

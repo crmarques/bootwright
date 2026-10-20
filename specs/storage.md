@@ -486,7 +486,8 @@ diagnostic and remedy; a native or package worker's refusal is named by the
 token its endpoint raised, and a package helper's own failure by the package
 phase it failed in: resolution, signature or transaction. Its detail names that
 token and the code site that refused, or an exception type and site, never a
-value. A token the block gives no remedy is published as `unknown`, or
+value; an SSH crypto-policy refusal's detail is instead the host name and the
+key type, both public. A token the block gives no remedy is published as `unknown`, or
 `remote-refusal` from a native worker, with the token in the detail, so no
 refusal reaches the operator without its reason. A refusal inside the package
 worker whose token is outside that worker's closed set is published as
@@ -505,8 +506,9 @@ failed, so the next apply observes that block first and resolves it from the
 observed evidence, a host block through its preparation evidence. Only the
 entries coded `lifecycle.unsupported` (`unsupported-release`,
 `package-license`, `package-platform`, `dashboard-verify`,
-`client-quiescence-unqualified`, `call-home-unqualified` and
-`native-option-undeclared`) leave it failed. A censored failure that names
+`client-quiescence-unqualified`, `call-home-unqualified`,
+`native-option-undeclared`, `ssh-policy-host-excluded`,
+`ssh-policy-unavailable` and `tunnel-host-key-excluded`) leave it failed. A censored failure that names
 no refusal stays the generic adapter failure, which fails the attempt.
 
 ## Devices and destructive ownership

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import copy
 import hashlib
@@ -35,7 +36,7 @@ def core_request():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v22", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v23", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -385,11 +386,12 @@ def test_rbd_apply_calls_the_rbd_phase(core_request, monkeypatch):
 
 
 def test_ssh_uses_only_pinned_trust_and_literal_fixed_worker(core_request):
-    argv = ceph_core.ssh_argv(core_request["hosts"][0], "/private/key", "/private/known", "print('fixed')")
+    argv = ceph_core.ssh_argv(core_request["hosts"][0], "/private/key", "/private/known", "print('fixed')",
+                              ssh_config="/private/ssh_config", host_key_algorithms="ssh-ed25519")
     assert argv[0] == "/usr/bin/ssh"
-    assert argv[argv.index("-F") + 1] == "/dev/null"
-    for value in ("StrictHostKeyChecking=yes", "UserKnownHostsFile=/private/known", "GlobalKnownHostsFile=/dev/null", "IdentityAgent=none", "ProxyCommand=none",
-                  "BatchMode=yes"):
+    assert argv[argv.index("-F") + 1] == "/private/ssh_config"
+    for value in ("StrictHostKeyChecking=yes", "UserKnownHostsFile=/private/known", "GlobalKnownHostsFile=none", "IdentityAgent=none", "ProxyCommand=none",
+                  "BatchMode=yes", "HostKeyAlgorithms=ssh-ed25519"):
         assert value in argv
     assert argv[-1].startswith("/usr/bin/sudo -n /usr/bin/python3 -I -c ")
     assert "accept-new" not in " ".join(argv)
@@ -397,17 +399,46 @@ def test_ssh_uses_only_pinned_trust_and_literal_fixed_worker(core_request):
 
 def test_worker_budget_stays_within_a_fixed_launcher_ceiling(core_request):
     host = core_request["hosts"][0]
-    assert ceph_core.ssh_argv(host, "/private/key", "/private/known", "print('fixed')", 4285, worker_ceiling=4285)[-1].endswith(" 4285")
+    session = {"ssh_config": "/private/ssh_config", "host_key_algorithms": "ssh-ed25519"}
+    assert ceph_core.ssh_argv(host, "/private/key", "/private/known", "print('fixed')", 4285, worker_ceiling=4285, **session)[-1].endswith(" 4285")
     for budget, ceiling in ((641, 640), (4285, 1920), (700, 700)):
         with pytest.raises(ceph_native.Refusal, match="transport"):
-            ceph_core.ssh_argv(host, "/private/key", "/private/known", "print('fixed')", budget, worker_ceiling=ceiling)
+            ceph_core.ssh_argv(host, "/private/key", "/private/known", "print('fixed')", budget, worker_ceiling=ceiling, **session)
+
+
+def test_authorize_refuses_an_excluded_tunnel_pin_before_any_effect(core_request, tmp_path, monkeypatch):
+    request = dict(core_request, clusterSSHTransport="verified-tunnel")
+    markers = tunnel_native.Markers(tmp_path / request["fsid"])
+    effects = []
+    native = ceph_native.Worker(request, "node-1", run=lambda *args, **kwargs: effects.append("run"), markers=markers)
+    native.selection = specs.selection(specs.synthesized(request["cephadm"]["packageVersion"]))
+    tunnel_native.seed_profile(native)
+    native._profile["policy"] = "Ciphers aes256-gcm@openssh.com\nHostKeyAlgorithms ecdsa-sha2-nistp256,rsa-sha2-512\n"
+    for name in ("registry_preflight", "prepare_registry", "tunnel_policy_preflight", "transport", "tunnel_guest_policy"):
+        setattr(native, name, lambda *args, name=name: effects.append(name))
+    monkeypatch.setattr(ceph_native.pwd, "getpwnam", lambda user: effects.append("account") or ceph_native.require(False, "cluster-account"))
+    public = tunnel_native.public_key()
+    pins = {"192.0.2.1": "ecdsa-sha2-nistp256", "192.0.2.2": "ssh-ed25519", "192.0.2.3": "ssh-rsa"}
+    blobs = {key_type: base64.b64encode(len(key_type).to_bytes(4, "big") + key_type.encode() + b"\0\0\0\x20" + b"k" * 32).decode()
+             for key_type in pins.values()}
+    known = "".join(address + " " + key_type + " " + blobs[key_type] + "\n" for address, key_type in pins.items())
+    private = {"clusterPublicKey": public, "clusterPrivateKey": "private fixture", "knownHosts": known,
+               "registryJSON": json.dumps({"url": request["registry"], "username": "fixture-user", "password": PASSWORD})}
+    with pytest.raises(ceph_native.NativeFailure, match="^tunnel-host-key-excluded$") as refused:
+        native.authorize(private)
+    assert refused.value.native_error["cause"] == ("host node-2 pins a ssh-ed25519 host key, and the HostKeyAlgorithms of the selected image's SSH "
+                                                   "crypto policy admit none of its algorithms")
+    assert not any(blob in repr(refused.value.native_error) for blob in blobs.values()) and PASSWORD not in repr(refused.value.native_error)
+    assert effects == [] and markers.writes == []
+    assert ceph_core.refusal(ceph_native.RemoteRefusal("native-refusal:tunnel-host-key-excluded@ceph_native.authorize:1"),
+                             ceph_core.CLUSTER_REASONS)[0] == "tunnel-host-key-excluded"
 
 
 def test_private_input_is_opened_without_links_and_not_in_argv(core_request, tmp_path):
     key = tmp_path / "key"
     known = tmp_path / "known"
     key.write_text("PRIVATE-KEY-SENTINEL")
-    known.write_text("node-1 ssh-ed25519 PUBLIC")
+    known.write_text("192.0.2.1 ssh-ed25519 PUBLIC")
     key.chmod(0o600)
     known.chmod(0o600)
     calls = []
@@ -1873,8 +1904,8 @@ def test_an_orchestrator_read_while_the_manager_restarts_is_unfinished_not_refus
 
 def test_the_bootstrap_call_runs_alone_under_its_own_longer_budget(core_request, tmp_path):
     key, known = tmp_path / "key", tmp_path / "known"
-    for path in (key, known):
-        path.write_text("fixture")
+    for path, text in ((key, "fixture"), (known, "192.0.2.1 ssh-ed25519 PUBLIC")):
+        path.write_text(text)
         path.chmod(0o600)
     calls = []
 
@@ -2058,7 +2089,7 @@ def test_host_profile_relays_the_bound_bundle(core_request, tmp_path):
     bound = dict(scope, registryTrustBundleRef="registry-ca")
     bundle_text = SYNTHETIC_CA.decode("utf-8")
     projection = "".join(ceph_registry_discovery.certificates(SYNTHETIC_CA))
-    paths = {"sshKey": "PRIVATE-KEY-SENTINEL", "knownHosts": "node-1 ssh-ed25519 PUBLIC",
+    paths = {"sshKey": "PRIVATE-KEY-SENTINEL", "knownHosts": "192.0.2.1 ssh-ed25519 PUBLIC",
              "registryJSON": json.dumps({"url": scope["registry"], "username": "registry-user", "password": PASSWORD}), "registryCA": bundle_text}
     for name, text in paths.items():
         (tmp_path / name).write_text(text)
@@ -2093,7 +2124,7 @@ def test_every_bundle_consumer_reaches_the_same_verdict(core_request, tmp_path, 
     }
     tmp_path.chmod(0o700)
     scope = dict({key: value for key, value in core_request.items() if key != "action"}, registryTrustBundleRef="registry-ca")
-    paths = {"sshKey": b"PRIVATE-KEY-SENTINEL", "knownHosts": b"node-1 ssh-ed25519 PUBLIC", "registryCA": bundles[kind],
+    paths = {"sshKey": b"PRIVATE-KEY-SENTINEL", "knownHosts": b"192.0.2.1 ssh-ed25519 PUBLIC", "registryCA": bundles[kind],
              "registryJSON": json.dumps({"url": scope["registry"], "username": "registry-user", "password": PASSWORD}).encode()}
     for name, data in paths.items():
         (tmp_path / name).write_bytes(data)
@@ -2130,7 +2161,7 @@ def test_scope_refuses_a_bundle_reference_that_is_not_a_name(core_request, value
 
 def test_host_profile_refuses_an_oversized_bound_bundle_before_the_run(core_request, tmp_path):
     scope = dict({key: value for key, value in core_request.items() if key != "action"}, registryTrustBundleRef="registry-ca")
-    paths = {"sshKey": "PRIVATE-KEY-SENTINEL", "knownHosts": "node-1 ssh-ed25519 PUBLIC",
+    paths = {"sshKey": "PRIVATE-KEY-SENTINEL", "knownHosts": "192.0.2.1 ssh-ed25519 PUBLIC",
              "registryJSON": json.dumps({"url": scope["registry"], "username": "registry-user", "password": PASSWORD}),
              "registryCA": "#" * (ceph_pull_broker.MAX_TRUST + 1)}
     for name, text in paths.items():

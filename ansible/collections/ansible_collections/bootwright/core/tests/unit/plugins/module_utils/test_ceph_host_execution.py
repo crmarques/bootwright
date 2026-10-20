@@ -143,7 +143,7 @@ def test_the_long_call_carries_the_credential_only_on_protected_stdin(host_reque
     known = tmp_path / "known"
     registry = tmp_path / "registry"
     key.write_text("PRIVATE-KEY-SENTINEL")
-    known.write_text("node-2 ssh-ed25519 PUBLIC")
+    known.write_text("192.0.2.2 ssh-ed25519 PUBLIC")
     registry.write_text(json.dumps({"url": "cp.icr.io", "username": "registry-user", "password": PASSWORD}))
     for path in (key, known, registry):
         path.chmod(0o600)
@@ -172,7 +172,7 @@ def test_every_other_host_phase_keeps_the_ordinary_ceiling(host_request, tmp_pat
     key = tmp_path / "key"
     known = tmp_path / "known"
     key.write_text("PRIVATE-KEY-SENTINEL")
-    known.write_text("node-2 ssh-ed25519 PUBLIC")
+    known.write_text("192.0.2.2 ssh-ed25519 PUBLIC")
     key.chmod(0o600)
     known.chmod(0o600)
     calls = []
@@ -228,7 +228,7 @@ def test_the_long_launcher_raises_only_its_own_ceiling():
 
 def package_transport(host_request, tmp_path, output):
     material = {}
-    for name, value in (("sshKey", "PRIVATE-KEY-SENTINEL"), ("knownHosts", "node-2 ssh-ed25519 PUBLIC"), ("packageCA1", "PUBLIC-CERTIFICATE")):
+    for name, value in (("sshKey", "PRIVATE-KEY-SENTINEL"), ("knownHosts", "192.0.2.2 ssh-ed25519 PUBLIC"), ("packageCA1", "PUBLIC-CERTIFICATE")):
         path = tmp_path / name
         path.write_text(value)
         path.chmod(0o600)
@@ -325,7 +325,7 @@ def test_the_package_call_relays_the_bound_repository_bundle(host_request, tmp_p
     bound = copy.deepcopy(host_request["cluster"])
     bound["packages"]["packageRepositoryTrustBundleRef"] = "repository-ca"
     tmp_path.chmod(0o700)
-    texts = {"sshKey": b"PRIVATE-KEY-SENTINEL", "knownHosts": b"node-2 ssh-ed25519 PUBLIC", "packageCA1": b"PUBLIC-CERTIFICATE",
+    texts = {"sshKey": b"PRIVATE-KEY-SENTINEL", "knownHosts": b"192.0.2.2 ssh-ed25519 PUBLIC", "packageCA1": b"PUBLIC-CERTIFICATE",
              "packageRepositoryCA": bundle_text.encode(), "notUTF8": b"# \xff\n" + core_fixtures.SYNTHETIC_CA, "empty": b"# no certificate block\n"}
     for name, data in texts.items():
         (tmp_path / name).write_bytes(data)

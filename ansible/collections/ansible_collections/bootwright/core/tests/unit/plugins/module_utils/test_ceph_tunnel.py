@@ -11,7 +11,7 @@ import subprocess
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_tunnel
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_ssh_policy, ceph_tunnel
 
 
 def key():
@@ -22,7 +22,7 @@ def key():
 
 @pytest.fixture
 def tunnel_request():
-    return {"version": "ceph-core-v22", "clusterSSHTransport": "verified-tunnel", "owner": "apply-example",
+    return {"version": "ceph-core-v23", "clusterSSHTransport": "verified-tunnel", "owner": "apply-example",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "clusterSSHUser": "operator",
             "hosts": [{"name": "node-2", "address": "2001:db8::2", "port": 2222},
                       {"name": "node-1", "address": "192.0.2.1", "port": 22}]}
@@ -54,7 +54,9 @@ def test_bundle_freezes_only_original_endpoints_and_exact_material(material):
     assert set(material) == ceph_tunnel.FILES | {"manifest.json"}
     assert all(value["files"][name] == hashlib.sha256(material[name]).hexdigest() for name in ceph_tunnel.FILES - {"identity"})
     assert b"private fixture" not in material["manifest.json"]
-    assert b"2001:db8::2" not in material["outer_config"]
+    blocks, unused, tail = material["outer_config"].partition(b"Host *\n")
+    assert blocks == b"Host 192.0.2.1\n  HostKeyAlgorithms ssh-ed25519\nHost 2001:db8::2\n  HostKeyAlgorithms ssh-ed25519\n"
+    assert b"2001:db8::2" not in tail and b"192.0.2.1" not in tail
 
 
 @pytest.mark.parametrize("field,value", [
@@ -310,6 +312,7 @@ def test_open_ssh_evaluates_isolated_policy_without_connecting(tmp_path, materia
     assert values["identityfile"] == "/run/bootwright-ceph-ssh/identity"
     assert [line for line in result.stdout.splitlines() if line.startswith("identityfile ")] == ["identityfile /run/bootwright-ceph-ssh/identity"]
     assert values["ciphers"] == "aes256-gcm@openssh.com"
+    assert values["hostkeyalgorithms"] == "ssh-ed25519"
     assert "proxycommand" not in values
     assert "proxyjump" not in values
 
@@ -360,3 +363,80 @@ def test_provider_parser_proves_private_public_correspondence_without_new_crypto
         with pytest.raises(ceph_tunnel.TunnelRefusal, match="native-tunnel-unproved"):
             ceph_tunnel.identity_correspondence(material["identity"], key())
     assert calls == ["private-parser"]
+
+
+def typed_key(key_type):
+    name = key_type.encode()
+    return key_type + " " + base64.b64encode(len(name).to_bytes(4, "big") + name + (32).to_bytes(4, "big") + b"k" * 32).decode()
+
+
+def pinned(tunnel_request, *types):
+    hosts = ceph_tunnel.targets(tunnel_request)
+    lines = "".join(ceph_tunnel.host_token(host) + " " + typed_key(key_type) + "\n" for host, key_type in zip(hosts, types))
+    return hosts, ceph_tunnel.known_hosts(lines.encode(), hosts)
+
+
+ALL = {name: list(value) for name, value in ceph_tunnel.HOST_KEY_ALGORITHMS.items()}
+ECDSA = ("ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521")
+
+
+# ssh_config(5) HostKeyAlgorithms and PATTERNS (https://man.openbsd.org/ssh_config.5): the first obtained value wins, a leading '+' appends to
+# and '^' prepends to the default, '-' removes the listed patterns from it, '*' and '?' are wildcards and a '!' item negates its match.
+@pytest.mark.parametrize("policy,admitted", [
+    ("Ciphers aes256-gcm@openssh.com\n", ALL),
+    ("HostKeyAlgorithms ssh-ed25519,rsa-sha2-512\n", dict({name: [] for name in ECDSA}, **{"ssh-ed25519": ["ssh-ed25519"], "ssh-rsa": ["rsa-sha2-512"]})),
+    ("HostKeyAlgorithms=rsa-sha2-256\nHostKeyAlgorithms ssh-ed25519\n", dict({name: [] for name in ECDSA}, **{"ssh-ed25519": [], "ssh-rsa": ["rsa-sha2-256"]})),
+    ("HostKeyAlgorithms +ssh-dss\n", ALL),
+    ("HostKeyAlgorithms ^ssh-ed25519\n", ALL),
+    ("HostKeyAlgorithms -ssh-ed25519\n", dict(ALL, **{"ssh-ed25519": []})),
+    ("HostKeyAlgorithms -ssh-*\n", dict(ALL, **{"ssh-ed25519": []})),
+    ("HostKeyAlgorithms -rsa-sha2-2??\n", dict(ALL, **{"ssh-rsa": ["rsa-sha2-512"]})),
+    ("HostKeyAlgorithms ecdsa-*\n", dict(ALL, **{"ssh-ed25519": [], "ssh-rsa": []})),
+    ("HostKeyAlgorithms !ssh-ed25519,*\n", dict(ALL, **{"ssh-ed25519": []})),
+    ("HostKeyAlgorithms SSH-ED25519,rsa-sha2-512,rsa-sha2-256\n",
+     dict({name: [] for name in ECDSA}, **{"ssh-ed25519": [], "ssh-rsa": ["rsa-sha2-512", "rsa-sha2-256"]})),
+])
+def test_tunnel_outer_configuration_host_key_algorithms_are_the_intersection_with_the_policy(tunnel_request, policy, admitted):
+    for key_type, want in admitted.items():
+        hosts, known = pinned(tunnel_request, key_type, key_type)
+        if not want:
+            with pytest.raises(ceph_tunnel.HostKeyRefusal, match="^tunnel-host-key-excluded$"):
+                ceph_tunnel.outer_configuration(policy, hosts, known)
+            continue
+        rendered = ceph_tunnel.outer_configuration(policy, hosts, known)
+        blocks = "".join("Host " + host["address"] + "\n  HostKeyAlgorithms " + ",".join(want) + "\n" for host in hosts).encode()
+        assert rendered == blocks + ceph_tunnel.outer_configuration(policy)
+        assert ceph_tunnel.outer_configuration(policy).startswith(b"Host *\n  UserKnownHostsFile " + ceph_tunnel.CONTAINER_ROOT.encode() + b"/known_hosts\n")
+
+
+def test_tunnel_outer_configuration_refuses_an_empty_intersection_naming_the_host(tunnel_request):
+    hosts, known = pinned(tunnel_request, "ecdsa-sha2-nistp256", "ssh-ed25519")
+    policy = "HostKeyAlgorithms ecdsa-sha2-nistp256\n"
+    with pytest.raises(ceph_tunnel.HostKeyRefusal) as refused:
+        ceph_tunnel.outer_configuration(policy, hosts, known)
+    assert (str(refused.value), refused.value.host, refused.value.key_type) == ("tunnel-host-key-excluded", "node-2", "ssh-ed25519")
+    assert isinstance(refused.value, ceph_tunnel.TunnelRefusal)
+    with pytest.raises(ceph_tunnel.HostKeyRefusal):
+        ceph_tunnel.bundle(tunnel_request, b"private fixture", known, b"fixed fixture source\n", policy, public=key())
+
+
+def test_tunnel_outer_configuration_and_direct_argv_share_one_builder(tunnel_request, monkeypatch):
+    hosts, known = pinned(tunnel_request, "ssh-ed25519", "ssh-ed25519")
+    monkeypatch.setattr(ceph_tunnel, "pinned_host_key_algorithms", lambda key_type, value: ["ecdsa-sha2-nistp384"])
+    assert b"  HostKeyAlgorithms ecdsa-sha2-nistp384\n" in ceph_tunnel.outer_configuration("", hosts, known)
+    controller = {"configuration": "", "hostKeyAlgorithms": "ssh-ed25519"}
+    assert ceph_ssh_policy.host_key_algorithms(controller, known, hosts[0]) == "ecdsa-sha2-nistp384"
+
+
+def test_restart_refuses_an_outer_configuration_without_its_host_blocks(tmp_path, material):
+    value = manifest(material)
+    changed = dict(material, outer_config=ceph_tunnel.outer_configuration(value["cryptoPolicy"]))
+    value["files"]["outer_config"] = hashlib.sha256(changed["outer_config"]).hexdigest()
+    changed["manifest.json"] = ceph_tunnel.canonical(value) + b"\n"
+    root = tmp_path / "transport"
+    publish(root, changed)
+    with pytest.raises(ceph_tunnel.TunnelRefusal, match="^native-tunnel-unproved$"):
+        ceph_tunnel.verify_bundle(str(root), expected=changed)
+    original = tmp_path / "original"
+    publish(original, material)
+    assert ceph_tunnel.verify_bundle(str(original), expected=material) == manifest(material)

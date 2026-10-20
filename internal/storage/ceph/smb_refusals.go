@@ -1,6 +1,7 @@
 package ceph
 
 import (
+	"maps"
 	"slices"
 	"strings"
 
@@ -26,6 +27,7 @@ func smbRefusals() map[string]error {
 	for _, reason := range []string{"request", "artifact", "ownership", "evidence", "material", "transport", "remote-refusal", "adapter-exception", "native-command", "native-timeout", "native-output", "unknown", "foreign-cluster"} {
 		out[reason] = failure("lifecycle.unknown", "the Ceph SMB adapter could not prove its "+reason+" boundary", "inspect the retained operation evidence before continuing")
 	}
+	maps.Copy(out, sshPolicyRefusals())
 	return out
 }
 

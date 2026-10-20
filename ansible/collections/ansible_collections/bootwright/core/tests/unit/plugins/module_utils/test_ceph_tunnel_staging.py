@@ -16,7 +16,7 @@ CURRENT = "20.2.1-405.el9cp"
 
 @pytest.fixture
 def stage_request():
-    return {"version": "ceph-core-v22", "clusterSSHTransport": "verified-tunnel", "owner": "apply-example",
+    return {"version": "ceph-core-v23", "clusterSSHTransport": "verified-tunnel", "owner": "apply-example",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "bootstrap": "node-1.example.test", "monIP": "192.0.2.1", "clusterNetworks": [], "callHome": "enabled",

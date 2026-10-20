@@ -20,7 +20,7 @@ import time
 from ansible_collections.bootwright.core.plugins.module_utils import (
     adapter_protocol, ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_nfs, ceph_native_observability,
     ceph_native_resources, ceph_native_observe, ceph_native_units, ceph_native_object, ceph_native_worker, ceph_package_sources, ceph_package_worker,
-    ceph_packages, ceph_registry_discovery, ceph_smb_native, ceph_tunnel,
+    ceph_packages, ceph_registry_discovery, ceph_smb_native, ceph_ssh_policy, ceph_tunnel,
     ceph_tunnel_staging, ceph_tunnel_custody, native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
 )
 
@@ -43,7 +43,7 @@ HOST_REASONS = (
     "package-resolution", "package-signature", "package-transaction", "request", "artifact", "ownership", "evidence", "material", "packages",
     "package-artifact", "package-drift", "package-journal", "package-license",
     "package-limit", "package-timeout", "package-platform", "package-host", "foreign-cluster", "native-command", "native-timeout", "native-output",
-    "unknown", "transport", "remote-refusal", "adapter-exception",
+    "unknown", "transport", "remote-refusal", "adapter-exception", "ssh-policy-host-excluded", "ssh-policy-unavailable",
 )
 CLUSTER_REASONS = (
     "unsupported-release", "runtime-profile", "device-identity", "cache-unproved", "dashboard-identity", "dashboard-drift", "dashboard-policy",
@@ -56,12 +56,12 @@ CLUSTER_REASONS = (
     "foreign-rbd-image", "rbd-image-identity", "foreign-filesystem", "filesystem-identity", "filesystem-multiple-disabled", "foreign-subvolume-group",
     "mds-coverage", "foreign-subvolume", "subvolume-identity", "foreign-image", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign",
     "object-zone-pools", "object-endpoint-certificate", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape",
-    "ingress-firewall", "service-credential-foreign",
+    "ingress-firewall", "service-credential-foreign", "ssh-policy-host-excluded", "ssh-policy-unavailable", "tunnel-host-key-excluded",
 )
 SMB_REASONS = (
     "request", "artifact", "ownership", "evidence", "material", "transport", "remote-refusal", "adapter-exception", "native-command",
     "native-timeout", "native-output", "unknown", "foreign-cluster", "foreign-image", "foreign-service", "smb-identity", "smb-result",
-    "smb-unavailable", "smb-directory", "smb-module-disabled",
+    "smb-unavailable", "smb-directory", "smb-module-disabled", "ssh-policy-host-excluded", "ssh-policy-unavailable",
 )
 
 
@@ -116,6 +116,8 @@ def refusal(error, reasons):
         named = str(error.detail or "").split(":", 1)
         token = named[-1].partition("@")[0] if named[0] == "native-refusal" else named[0]
         return (token if token in reasons else "remote-refusal"), error.detail or None
+    if isinstance(error, ceph_ssh_policy.PolicyRefusal) and error.detail:
+        return (str(error) if str(error) in reasons else "unknown"), error.detail
     detail = ceph_native_worker.cause(error)
     if isinstance(error, ceph_native.Refusal):
         return (str(error) if str(error) in reasons else "unknown"), detail
@@ -307,33 +309,9 @@ def bootstrap_launcher(supervisor_source, host_source):
             "f.update(REMOTE_LIMIT=" + str(BOOTSTRAP_CEILING) + ",PHASE='bootstrap');f['main'](s)")
 
 
-def ssh_argv(host, key, known_hosts, source, worker_budget=None, *, worker_ceiling=640):
+def ssh_argv(host, key, known_hosts, source, worker_budget=None, *, worker_ceiling=640, ssh_config, host_key_algorithms):
     """SSH remote execution requires one string; quote only fixed worker code."""
-    options = {
-        "UserKnownHostsFile": known_hosts,
-        "GlobalKnownHostsFile": "/dev/null",
-        "KnownHostsCommand": "none",
-        "VerifyHostKeyDNS": "no",
-        "UpdateHostKeys": "no",
-        "CheckHostIP": "no",
-        "StrictHostKeyChecking": "yes",
-        "IdentitiesOnly": "yes",
-        "PasswordAuthentication": "no",
-        "KbdInteractiveAuthentication": "no",
-        "GSSAPIAuthentication": "no",
-        "HostbasedAuthentication": "no",
-        "IdentityAgent": "none",
-        "ForwardAgent": "no",
-        "ProxyCommand": "none",
-        "ProxyJump": "none",
-        "BatchMode": "yes",
-        "ConnectTimeout": "10",
-        "ServerAliveInterval": "15",
-        "ServerAliveCountMax": "3",
-    }
-    argv = ["/usr/bin/ssh", "-T", "-F", "/dev/null", "-i", key, "-p", str(host["port"])]
-    for name, value in options.items():
-        argv.extend(["-o", name + "=" + value])
+    argv = ceph_ssh_policy.session_argv(ssh_config, known_hosts, host_key_algorithms, key, host["port"])
     python = ["/usr/bin/sudo", "-n", "/usr/bin/python3", "-I", "-c", source]
     if worker_budget is not None:
         ceph_native.require(worker_ceiling in WORKER_CEILINGS and type(worker_budget) in (int, float) and 0 < worker_budget <= worker_ceiling, "transport")
@@ -345,12 +323,29 @@ def ssh_argv(host, key, known_hosts, source, worker_budget=None, *, worker_ceili
 class Transport:
     """No material value appears in arguments, environment, errors or logs."""
 
-    def __init__(self, request, material, run=ceph_native.bounded_command, *, scope=False, smb_secrets=0):
+    def __init__(self, request, material, run=ceph_native.bounded_command, *, scope=False, smb_secrets=0, policy=None):
         self.request = ceph_native.validate_scope(request) if scope else ceph_native.validate(request)
         ceph_native.require(type(smb_secrets) is int and 0 <= smb_secrets <= 10000, "material")
         self.material = material
         self.run = run
         self.smb_secrets = smb_secrets
+        self.policy = policy
+        self.preflighted = False
+
+    def ssh_policy(self):
+        """The controller's SSH crypto policy, evaluated once on first use; a block that opens no session never evaluates it."""
+        if self.policy is None:
+            self.policy = ceph_ssh_policy.controller_policy()
+        return self.policy
+
+    def preflight(self, known):
+        """Before the first session: every request host the frozen known_hosts pins has an algorithm the policy admits."""
+        if self.preflighted:
+            return
+        for host in self.request["hosts"]:
+            if ceph_ssh_policy.pinned(known, host):
+                ceph_ssh_policy.host_key_algorithms(self.ssh_policy(), known, host)
+        self.preflighted = True
 
     def _call(self, host, source, payload, timeout, worker_budget=None, *, worker_ceiling=640, failures=NATIVE_FAILURES):
         ceph_native.require(isinstance(self.material, dict), "material")
@@ -362,12 +357,17 @@ class Transport:
         allowed |= {"packageRepositoryCA"} if "packageRepositoryTrustBundleRef" in self.request.get("packages", {}) else set()
         ceph_native.require(set(self.material) <= allowed | package_material, "material")
         ceph_native.require(set(self.material) >= {"sshKey", "knownHosts"}, "material")
+        known_bytes = ceph_native.read_regular(self.material["knownHosts"], private=True)
+        self.preflight(known_bytes)
+        algorithms = ceph_ssh_policy.host_key_algorithms(self.ssh_policy(), known_bytes, host)
         with tempfile.TemporaryDirectory(prefix="bootwright-ceph-") as scratch:
             key = os.path.join(scratch, "identity")
             known = os.path.join(scratch, "known_hosts")
+            config = os.path.join(scratch, "ssh_config")
             ceph_native.private_write(key, ceph_native.read_regular(self.material["sshKey"], private=True))
-            ceph_native.private_write(known, ceph_native.read_regular(self.material["knownHosts"], private=True))
-            argv = ssh_argv(host, key, known, source, worker_budget, worker_ceiling=worker_ceiling)
+            ceph_native.private_write(known, known_bytes)
+            ceph_native.private_write(config, self.ssh_policy()["configuration"].encode())
+            argv = ssh_argv(host, key, known, source, worker_budget, worker_ceiling=worker_ceiling, ssh_config=config, host_key_algorithms=algorithms)
             sources = dict(payload.get("sources", {})) if isinstance(payload, dict) else {}
             private = payload.get("payload", {}).get("private", {}) if isinstance(payload, dict) else {}
             private = native_diagnostics.private_values(private)

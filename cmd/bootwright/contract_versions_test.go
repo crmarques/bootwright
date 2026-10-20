@@ -102,7 +102,7 @@ func automationFormats() map[string]automationFormat {
 		// The resolved package plan the host's package decision record holds.
 		"bootwright.native-plan-v1": host,
 
-		"ceph-tunnel-v2":                    core,
+		"ceph-tunnel-v3":                    core,
 		"ceph-tunnel-custody-v1":            core,
 		"ceph-tunnel-relabel-v1":            core,
 		"ceph-tunnel-stage-v1":              core,
@@ -147,7 +147,7 @@ func automationFormats() map[string]automationFormat {
 
 		"ceph-host-v5":                {class: formatMirrored},
 		"ceph-host-evidence-v1":       {class: formatMirrored},
-		"ceph-core-v22":               {class: formatMirrored},
+		"ceph-core-v23":               {class: formatMirrored},
 		"ceph-core-evidence-v8":       {class: formatMirrored},
 		"ceph-packages-v3":            {class: formatMirrored},
 		"ceph-image-v4":               {class: formatMirrored},

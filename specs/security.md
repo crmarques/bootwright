@@ -415,6 +415,23 @@ agent, forwarding or ambient identity, and carries `ServerAliveInterval=15` and
 `ServerAliveCountMax=3`, so a peer that stops answering ends the connection
 rather than the run's deadline.
 
+The Ceph host, cluster and SMB blocks' controller sessions take the
+controller's crypto-policy back end, reduced to its crypto directives, and the
+managed-OS guest session's option set, with `HostKeyAlgorithms` set to the
+pinned key's algorithms that the policy, as `ssh -G` evaluates it, admits, in
+pinned order. When it admits none for a host the request's known hosts pin,
+the block refuses `ssh-policy-host-excluded`, naming that host and its key
+type, before any host is contacted; a policy that cannot be read or evaluated
+refuses `ssh-policy-unavailable`. The contained cephadm tunnel's client runs
+inside the selected Ceph image and keeps that image's back end: its
+configuration pins, for each host, the pinned key's algorithms that the back
+end's first `HostKeyAlgorithms` value admits under the list and pattern rules
+of ssh_config(5) (no value, or a `+` or `^` form, keeps them all; a `-` form
+removes those it matches; any other value keeps those it matches). An empty
+intersection refuses `tunnel-host-key-excluded` before authorization changes
+anything. Strict host-key checking and the pinned known hosts are unchanged,
+and keeping a policy is not FIPS certification.
+
 The application request fixes exact targets and authorization before adapter
 execution. The adapter cannot widen targets, privileges, retries, or effects.
 Live remote identity, host-key or certificate identity, ownership, power state,

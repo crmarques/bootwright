@@ -21,7 +21,7 @@ options:
     type: str
     choices: [request, artifact, ownership, evidence, material, transport, remote-refusal, adapter-exception, native-command, native-timeout,
       native-output, unknown, foreign-cluster, foreign-image, foreign-service, smb-identity, smb-result, smb-unavailable, smb-directory,
-      smb-module-disabled]
+      smb-module-disabled, ssh-policy-host-excluded, ssh-policy-unavailable]
   detail:
     description: Non-secret refusal cause, a refusal name or an exception type and code site.
     type: str

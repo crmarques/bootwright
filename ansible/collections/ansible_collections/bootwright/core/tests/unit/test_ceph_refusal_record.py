@@ -21,7 +21,7 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
 from ansible_collections.bootwright.core.plugins.action import ceph_cluster_protocol as protocol
-from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol, ceph_core, ceph_native
+from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol, ceph_core, ceph_native, ceph_ssh_policy
 from ansible_collections.bootwright.core.plugins.modules import ceph_cluster, ceph_cluster_protocol, ceph_host
 
 ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
@@ -151,10 +151,28 @@ def test_an_exception_names_its_type_and_site_and_never_its_text(monkeypatch):
     ("native-unknown:KeyError@ceph_native.dispatch:9", ceph_core.HOST_REASONS, "remote-refusal"),
     ("native-unknown:image-pull@ceph_native.dispatch:9", ceph_core.HOST_REASONS, "remote-refusal"),
     ("native-timeout", ceph_core.HOST_REASONS, "native-timeout"),
+    ("native-refusal:tunnel-host-key-excluded@ceph_native._tunnel_host_keys:12", ceph_core.CLUSTER_REASONS, "tunnel-host-key-excluded"),
+    ("native-refusal:tunnel-host-key-excluded@ceph_native._tunnel_host_keys:12", ceph_core.HOST_REASONS, "remote-refusal"),
+    ("native-refusal:tunnel-host-key-excluded@ceph_native._tunnel_host_keys:12", ceph_core.SMB_REASONS, "remote-refusal"),
     (None, ceph_core.HOST_REASONS, "remote-refusal"),
 ])
 def test_a_worker_refusal_is_named_by_its_endpoints_token_only_when_the_block_names_it(detail, reasons, want):
     assert ceph_core.refusal(ceph_native.RemoteRefusal(detail), reasons) == (want, detail)
+
+
+@pytest.mark.parametrize("module, execute, role, entry, call, registered", [
+    (ceph_cluster, "execute", "storage_ceph_core", "apply", "bootwright.core.ceph_cluster", "storage_ceph_core_result"),
+    (ceph_host, "execute_host", "storage_ceph_host", "prepare", "bootwright.core.ceph_host", "storage_ceph_host_result"),
+])
+def test_an_ssh_policy_refusal_keeps_its_host_and_key_type_detail(monkeypatch, module, execute, role, entry, call, registered):
+    error = ceph_ssh_policy.PolicyRefusal(ceph_ssh_policy.EXCLUDED, "node-2:ssh-ed25519")
+    failure = failed(module, execute, error, monkeypatch)
+    assert failure["reason"] == "ssh-policy-host-excluded" and failure["detail"] == "node-2:ssh-ed25519"
+    named = naming(role, entry, call, registered)
+    assert published(named, registered, registered_failure(failure)) == [
+        {"phase": "refused", "reason": "ssh-policy-host-excluded", "detail": "node-2:ssh-ed25519"}]
+    unavailable = ceph_ssh_policy.PolicyRefusal(ceph_ssh_policy.UNAVAILABLE)
+    assert ceph_core.refusal(unavailable, ceph_core.CLUSTER_REASONS)[0] == "ssh-policy-unavailable"
 
 
 def test_a_local_refusal_outside_the_block_is_unknown_with_its_token_kept():

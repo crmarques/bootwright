@@ -629,7 +629,7 @@ def test_transport_admits_the_unit_material(tmp_path):
         return path
 
     request = monitoring_request()
-    material = {"sshKey": write("identity"), "knownHosts": write("known")}
+    material = {"sshKey": write("identity"), "knownHosts": write("known", b"192.0.2.1 ssh-ed25519 PUBLIC")}
     material.update({name: write(name) for name in MATERIAL})
     calls = []
 
