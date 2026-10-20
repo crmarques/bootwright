@@ -28,7 +28,9 @@ description:
     No component from the artifact server's content root down may be a
     symbolic link. Its ancestors may be, and every directory the walk to the
     content root passes through, links resolved, must be owned by root and
-    writable by neither group nor other.
+    writable by neither group nor other. The media block proves the same
+    layout before it publishes, and a refusal of either names the directory to
+    fix, never a URL or a token.
 options:
   request:
     description: Frozen installation request naming the reserved publication root.
@@ -105,79 +107,11 @@ import stat
 from urllib.parse import urlsplit
 
 from ansible.module_utils.basic import AnsibleModule
-
-DIRECTORY = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-
-
-LINKS = 40
-OWNER = 0
-
-
-def trusted(fd):
-    """Refuse an ancestor directory anyone but root could change."""
-    info = os.fstat(fd)
-    if info.st_uid != OWNER or info.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
-        raise ValueError('untrusted publication ancestor')
-
-
-def ancestor(names):
-    """Open a directory, following links only through root-owned directories."""
-    pending, trail, links = list(names), [], 0
-    fd = os.open('/', DIRECTORY)
-    try:
-        trusted(fd)
-        while pending:
-            part = pending.pop(0)
-            if part in ('', '.'):
-                continue
-            if part == '..':
-                trail = trail[:-1]
-                child = ancestor(trail)
-            else:
-                try:
-                    child = os.open(part, DIRECTORY, dir_fd=fd)
-                except OSError as error:
-                    if error.errno not in (errno.ELOOP, errno.ENOTDIR):
-                        raise
-                    if not stat.S_ISLNK(os.stat(part, dir_fd=fd, follow_symlinks=False).st_mode):
-                        raise
-                    links += 1
-                    if links > LINKS:
-                        raise
-                    target = os.readlink(part, dir_fd=fd)
-                    pending[:0] = target.split('/')
-                    if not target.startswith('/'):
-                        continue
-                    trail, child = [], os.open('/', DIRECTORY)
-                else:
-                    trail.append(part)
-            os.close(fd)
-            fd = child
-            trusted(fd)
-        return fd
-    except Exception:
-        os.close(fd)
-        raise
-
-
-def open_root(path):
-    """Open the reserved root, following no link from the server's content root down."""
-    parts = path.split('/')
-    if not path.startswith('/') or any(p in ('.', '..') for p in parts):
-        raise ValueError('invalid publication root')
-    parts = list(filter(None, parts))
-    if len(parts) < 6 or parts[-4:-2] != ['public', 'private']:
-        raise ValueError('invalid publication root')
-    fd = ancestor(parts[:-5])
-    try:
-        for part in parts[-5:]:
-            child = os.open(part, DIRECTORY, dir_fd=fd)
-            os.close(fd)
-            fd = child
-        return fd
-    except Exception:
-        os.close(fd)
-        raise
+from ansible_collections.bootwright.core.plugins.module_utils.containercluster_publication import (
+    DIRECTORY,
+    LayoutError,
+    open_root,
+)
 
 
 def relative(base, image):
@@ -211,6 +145,20 @@ def identity(root, token):
         return info.st_dev, info.st_ino
     finally:
         os.close(directory)
+
+
+def source_identity(root, token, path):
+    """The published image's identity, refusing a link in its place by the reserved root's name."""
+    try:
+        return identity(root, token)
+    except OSError as error:
+        if error.errno not in (errno.ELOOP, errno.ENOTDIR):
+            raise
+    except ValueError:
+        pass
+    raise LayoutError(path, 'holds the published image through a symbolic link or another entry that is not a '
+                            'directory holding a regular file, and no entry from the artifact server\'s content root '
+                            'down may be one')
 
 
 def retire(root, token, expected):
@@ -268,7 +216,7 @@ def operate(request, source, image, operation, presented=()):
         raise ValueError('published source is unavailable')
     root = open_root(publication['path'])
     try:
-        expected = identity(root, source_token)
+        expected = source_identity(root, source_token, publication['path'])
         if operation == 'sweep':
             return sweep(root, expected, presented)
         token = relative(publication['url'], image)
@@ -335,6 +283,9 @@ def main():
     }, supports_check_mode=False)
     try:
         result = operate(**module.params)
+    except LayoutError as error:
+        module.fail_json(msg='the reserved cluster image publication could not be proved: %s; fix that directory '
+                             'and repeat the operation' % error)
     except (OSError, ValueError, KeyError):
         module.fail_json(msg='the reserved cluster image publication could not be proved')
     if result.get('refused'):

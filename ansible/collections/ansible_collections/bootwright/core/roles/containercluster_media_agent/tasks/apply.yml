@@ -45,6 +45,17 @@
       run bootwright apply --stage controller before building its image
     quiet: true
 
+# The publication tasks in build.yml follow links, and the installation block's
+# walk to the reserved root refuses one from the content root down and any
+# ancestor above it others could change. The same rule is proved here, before
+# anything is created, minted, published or relabelled, so such a layout is
+# refused naming the directory to fix rather than published and then refused by
+# every state read of the installation.
+- name: Prove the layout the image is published in
+  bootwright.core.containercluster_media_layout:
+    request: '{{ bootwright_cluster_media_request }}'
+    operation: publish
+
 - name: Observe what this block has already published
   bootwright.core.containercluster_media_inspect:
     request: '{{ bootwright_cluster_media_request }}'

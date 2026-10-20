@@ -413,7 +413,20 @@ The directories above the content root may be symbolic links, so a controller
 can move its services root onto a larger disk, but every directory the walk to
 the content root passes through, each link resolved, must be owned by root and
 writable by neither group nor other; any other layout refuses as a publication
-that could not be proved, in apply, observation and removal alike.
+that could not be proved, in apply, observation and removal alike. The media
+block proves the same layout, by the one rule both blocks share, before it
+creates, mints, publishes, relabels or removes anything: it refuses a symbolic
+link from the content root down to its published image or an untrusted
+resolved ancestor, so a layout the installation would refuse is never
+published. Because its later tasks resolve paths again, it also requires
+every existing directory from the content root down to be owned by root and
+writable by neither group nor other
+(`test_the_apply_proves_the_layout_before_it_includes_the_build`). A missing
+directory beneath the content root is accepted, because the publication
+creates it; a missing content root refuses a publication and leaves a removal
+nothing to remove. Either block's refusal names the directory to fix, never a
+URL or a token
+(`test_a_refusal_names_the_directory_and_no_url_or_token`).
 
 That contract requires the fetching controller to verify the serving
 certificate. A physical management controller does so under the trust its

@@ -21,6 +21,13 @@
     status: running
   no_log: true
 
+# The removal follows links, so the layout is proved first, by the rule the
+# publication proved, and a missing content root leaves nothing to remove.
+- name: Prove the layout the image was published in
+  bootwright.core.containercluster_media_layout:
+    request: '{{ bootwright_cluster_media_request }}'
+    operation: remove
+
 - name: Remove the subtree this block owns beneath the served root
   ansible.builtin.file:
     path: '{{ containercluster_media_agent_private }}'

@@ -7677,7 +7677,8 @@ exceptions.
 2026-10-20. The delivering commit records the verification commands and
 results. [B709](m3.md#b709) and [B710](m3.md#b710) are implemented and tested
 in-tree and stay on the M3 page awaiting the compact operator run with
-[B66](m3.md#b66). **Items:** B314, delivered in-tree.
+[B66](m3.md#b66). **Items:** B314, delivered in-tree; B796, a follow-up
+delivered in-tree on 2026-10-20.
 
 **Outcome:** no node is handed the media block's own publication. Each
 fetching insert serves a fresh private hard link under its own token, and a
@@ -7763,6 +7764,34 @@ its own cryptographic token. Observation proves ownership through the source
 image's device and inode; eject retires that node's token and proves absence.
 Tests cover distinct tokens, post-eject HTTP 404, foreign inodes and paths,
 verified publication and safe cleanup. Capability URLs enter no records.
+
+#### B796
+
+A follow-up found by the audit fixes of B314 and delivered on 2026-10-20. The
+media block proves, before it creates, mints, publishes, relabels or removes
+anything, the layout the install block's token walk accepts, through one rule
+in the `containercluster_publication` module utility that both blocks use: no
+symbolic link from the artifact server's content root down to the published
+image, and every resolved ancestor above it owned by root and writable by
+neither group nor other. Either block's refusal names the directory to fix,
+never a URL or a token, so a layout the walk refuses is no longer published
+first and then refused by every state read of the install block. No frozen
+request version moved. **Guard tests:**
+`test_a_symlink_from_the_content_root_down_refuses_naming_it`,
+`test_a_symlink_beneath_the_reserved_root_refuses_naming_the_reserved_root`,
+`test_a_resolved_ancestor_others_can_write_refuses_naming_it`,
+`test_a_resolved_ancestor_root_does_not_own_refuses_naming_it`,
+`test_a_symlinked_ancestor_is_accepted`,
+`test_a_directory_missing_beneath_the_content_root_is_accepted` and
+`test_a_missing_content_root_refuses_a_publication_and_is_nothing_to_remove`
+(the shared rule); `test_an_accepted_layout_changes_nothing` and
+`test_a_refusal_names_the_directory_and_no_url_or_token` (the media layout
+module); `test_a_published_image_reached_through_a_link_refuses_naming_the_reserved_root`
+and `test_the_module_names_the_directory_to_fix_and_no_url_or_token` (the token
+module); `test_the_apply_proves_the_layout_before_it_includes_the_build` and
+`test_the_destroy_proves_the_layout_before_it_removes_the_reserved_subtree`
+(the media role's order). Each carries a mutation check recorded in its commit
+body.
 
 ### X118 — M3c completion and bootstrap diagnosis
 

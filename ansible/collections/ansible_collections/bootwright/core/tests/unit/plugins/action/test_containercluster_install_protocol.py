@@ -22,6 +22,7 @@ import pathlib
 import tempfile
 from unittest import mock
 
+from ansible_collections.bootwright.core.plugins.module_utils import containercluster_publication
 from ansible_collections.bootwright.core.plugins.modules import containercluster_media_token
 from types import SimpleNamespace
 
@@ -313,7 +314,7 @@ def resolved_media(results, published=PUBLISHED):
     scope["containercluster_install_agent_before"] = {"observation": {"identity": IDENTITY, "url": published}}
     scope["containercluster_install_agent_state"] = {}
     identities = []
-    with tempfile.TemporaryDirectory() as directory, mock.patch.object(containercluster_media_token, "trusted", lambda fd: None):
+    with tempfile.TemporaryDirectory() as directory, mock.patch.object(containercluster_publication, "trusted", lambda fd, path: None):
         if published:
             root = pathlib.Path(directory, "server", "public", "private", "clusters", "sno")
             source = root / TOKEN

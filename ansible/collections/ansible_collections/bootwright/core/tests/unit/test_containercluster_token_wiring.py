@@ -9,6 +9,7 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.module_utils.testing import patch_module_args
 from ansible.template import Templar
 
+from ansible_collections.bootwright.core.plugins.module_utils import containercluster_publication as publication
 from ansible_collections.bootwright.core.plugins.modules import containercluster_media_token as token
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / 'roles' / 'containercluster_install_agent'
@@ -142,15 +143,15 @@ def trusted_tree(tmp_path, monkeypatch):
     for parent in tmp_path.parents:
         info = os.stat(parent)
         system.add((info.st_dev, info.st_ino))
-    original = token.trusted
+    original = publication.trusted
 
-    def trusted(fd):
+    def trusted(fd, path):
         info = os.fstat(fd)
         if (info.st_dev, info.st_ino) not in system:
-            original(fd)
+            original(fd, path)
 
-    monkeypatch.setattr(token, 'OWNER', os.getuid())
-    monkeypatch.setattr(token, 'trusted', trusted)
+    monkeypatch.setattr(publication, 'OWNER', os.getuid())
+    monkeypatch.setattr(publication, 'trusted', trusted)
 
 
 def test_the_ownership_read_calls_an_insert_link_own_and_any_other_file_foreign(tmp_path, trusted_tree):

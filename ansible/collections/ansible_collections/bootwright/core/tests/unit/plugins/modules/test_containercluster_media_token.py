@@ -6,6 +6,7 @@ import os
 import pytest
 from ansible.module_utils.testing import patch_module_args
 
+from ansible_collections.bootwright.core.plugins.module_utils import containercluster_publication as publication
 from ansible_collections.bootwright.core.plugins.modules import containercluster_media_token as token
 
 
@@ -18,15 +19,15 @@ def trust_the_test_tree(tmp_path, monkeypatch):
     for parent in tmp_path.parents:
         info = os.stat(parent)
         system.add((info.st_dev, info.st_ino))
-    original = token.trusted
+    original = publication.trusted
 
-    def trusted(fd):
+    def trusted(fd, path):
         info = os.fstat(fd)
         if (info.st_dev, info.st_ino) not in system:
-            original(fd)
+            original(fd, path)
 
-    monkeypatch.setattr(token, 'OWNER', os.getuid())
-    monkeypatch.setattr(token, 'trusted', trusted)
+    monkeypatch.setattr(publication, 'OWNER', os.getuid())
+    monkeypatch.setattr(publication, 'trusted', trusted)
 
 
 def content(tmp_path):
@@ -95,9 +96,56 @@ def test_a_symlink_from_the_content_root_down_refuses(tmp_path, depth):
     component.rename(component.with_name('moved'))
     os.symlink('moved', component)
     for operation in ['inspect', 'publish', 'remove', 'sweep']:
-        with pytest.raises(OSError):
+        with pytest.raises(publication.LayoutError) as refused:
             token.operate(request, source, source, operation)
+        assert refused.value.directory == str(component)
+        assert 'symbolic link' in str(refused.value)
     assert (reserved(tmp_path) / 'abcdef' / 'agent.iso').read_bytes() == b'image'
+
+
+@pytest.mark.parametrize('level', ['directory', 'image'])
+def test_a_published_image_reached_through_a_link_refuses_naming_the_reserved_root(tmp_path, level):
+    request, source = published(tmp_path)
+    root = reserved(tmp_path)
+    if level == 'directory':
+        (root / 'abcdef').rename(root / 'elsewhere')
+        os.symlink('elsewhere', root / 'abcdef')
+    else:
+        (root / 'abcdef' / 'agent.iso').rename(root / 'image')
+        os.symlink('../image', root / 'abcdef' / 'agent.iso')
+    for operation in ['inspect', 'publish', 'remove', 'sweep']:
+        with pytest.raises(publication.LayoutError) as refused:
+            token.operate(request, source, source, operation)
+        assert refused.value.directory == str(root)
+        assert 'abcdef' not in str(refused.value)
+
+
+def refusal(request, source, capsys):
+    capsys.readouterr()
+    with patch_module_args({'request': request, 'source': source, 'image': source, 'operation': 'inspect'}), pytest.raises(SystemExit):
+        token.main()
+    output = capsys.readouterr().out
+    result = json.loads(output)
+    assert result['failed']
+    for secret in ['https://', '192.0.2.1', 'abcdef', 'insert-']:
+        assert secret not in output
+    return result['msg']
+
+
+def test_the_module_names_the_directory_to_fix_and_no_url_or_token(tmp_path, capsys):
+    request, source = published(tmp_path)
+    inserted = token.operate(request, source, '', 'publish')['url']
+    component = content(tmp_path) / 'public'
+    component.rename(component.with_name('moved'))
+    os.symlink('moved', component)
+    message = refusal(request, source, capsys)
+    assert str(component) + ' is a symbolic link' in message
+    assert inserted.split('/')[-2] not in message
+    os.unlink(component)
+    component.with_name('moved').rename(component)
+    disk = moved(tmp_path, 'disk/services')
+    (disk / 'services').chmod(0o775)
+    assert str(disk / 'services') + ' is writable by its group or by others' in refusal(request, source, capsys)
 
 
 @pytest.mark.parametrize('link', ['absolute', 'relative', 'chained', 'parent'])
@@ -124,12 +172,14 @@ def test_a_resolved_ancestor_others_can_write_refuses(tmp_path, mode):
     request, source = published(tmp_path)
     disk = moved(tmp_path, 'disk/services')
     disk.chmod(mode)
-    with pytest.raises(ValueError):
+    with pytest.raises(publication.LayoutError) as refused:
         token.operate(request, source, source, 'inspect')
+    assert refused.value.directory == str(disk)
     disk.chmod(0o755)
     (disk / 'services').chmod(mode)
-    with pytest.raises(ValueError):
+    with pytest.raises(publication.LayoutError) as refused:
         token.operate(request, source, source, 'inspect')
+    assert refused.value.directory == str(disk / 'services')
 
 
 def test_a_writable_directory_holding_the_link_refuses(tmp_path):
@@ -137,8 +187,9 @@ def test_a_writable_directory_holding_the_link_refuses(tmp_path):
     moved(tmp_path, 'disk/services')
     tmp_path.chmod(0o777)
     try:
-        with pytest.raises(ValueError):
+        with pytest.raises(publication.LayoutError) as refused:
             token.operate(request, source, source, 'inspect')
+        assert refused.value.directory == str(tmp_path)
     finally:
         tmp_path.chmod(0o700)
 
@@ -146,9 +197,11 @@ def test_a_writable_directory_holding_the_link_refuses(tmp_path):
 def test_a_resolved_ancestor_root_does_not_own_refuses(tmp_path, monkeypatch):
     request, source = published(tmp_path)
     moved(tmp_path, 'disk/services')
-    monkeypatch.setattr(token, 'OWNER', os.getuid() + 1)
-    with pytest.raises(ValueError):
+    monkeypatch.setattr(publication, 'OWNER', os.getuid() + 1)
+    with pytest.raises(publication.LayoutError) as refused:
         token.operate(request, source, source, 'inspect')
+    assert refused.value.directory == str(tmp_path)
+    assert 'not owned by root' in str(refused.value)
 
 
 def test_a_root_outside_the_reserved_shape_refuses(tmp_path):
