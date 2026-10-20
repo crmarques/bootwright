@@ -30,7 +30,7 @@ def scope():
               "devices": [{"path": "/dev/sda", "serial": "drive-scsi" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    return {"controller": "controller", "version": "ceph-core-v19", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v20", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "cp.icr.io/example/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "synthetic-package"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible", "packageRepository": "https://publisher.example.test/ceph",
