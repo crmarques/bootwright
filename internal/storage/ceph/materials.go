@@ -25,6 +25,14 @@ func materialPart(material map[string]secrets.Material, name string, part secret
 }
 
 func registryTrustFile(e lifecycle.Execution, ref string) ([]lifecycle.MaterialFile, error) {
+	return trustFile(e, ref, "registry-ca", "registryCA")
+}
+
+func packageRepositoryTrustFile(e lifecycle.Execution, ref string) ([]lifecycle.MaterialFile, error) {
+	return trustFile(e, ref, "package-repository-ca", "packageRepositoryCA")
+}
+
+func trustFile(e lifecycle.Execution, ref, name, variable string) ([]lifecycle.MaterialFile, error) {
 	if ref == "" {
 		return nil, nil
 	}
@@ -33,7 +41,7 @@ func registryTrustFile(e lifecycle.Execution, ref string) ([]lifecycle.MaterialF
 		return nil, err
 	}
 	clear(value)
-	return []lifecycle.MaterialFile{{Name: "registry-ca", Secret: ref, Part: secrets.CertificatePart, Variable: "registryCA"}}, nil
+	return []lifecycle.MaterialFile{{Name: name, Secret: ref, Part: secrets.CertificatePart, Variable: variable}}, nil
 }
 
 // boundMaterial builds only protected, per-run files. Registry passwords and

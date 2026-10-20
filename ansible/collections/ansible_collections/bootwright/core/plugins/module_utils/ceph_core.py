@@ -359,6 +359,7 @@ class Transport:
         allowed |= ceph_native_units.MATERIAL_VARIABLES
         allowed |= {"smbSecret" + str(index) for index in range(self.smb_secrets)}
         allowed |= {"registryCA"} if "registryTrustBundleRef" in self.request else set()
+        allowed |= {"packageRepositoryCA"} if "packageRepositoryTrustBundleRef" in self.request.get("packages", {}) else set()
         ceph_native.require(set(self.material) <= allowed | package_material, "material")
         ceph_native.require(set(self.material) >= {"sshKey", "knownHosts"}, "material")
         with tempfile.TemporaryDirectory(prefix="bootwright-ceph-") as scratch:
@@ -500,11 +501,19 @@ class Transport:
         material = "packageCA" + str(index)
         ceph_native.require(material in self.material, "material")
         certificate = ceph_native.read_regular(self.material[material], private=True).decode("utf-8")
+        private = {"certificate": certificate}
+        if "packageRepositoryTrustBundleRef" in self.request["packages"]:
+            ceph_native.require("packageRepositoryCA" in self.material, "material")
+            try:
+                bundle = ceph_native.read_regular(self.material["packageRepositoryCA"], private=True).decode("utf-8")
+            except UnicodeError:
+                raise ceph_native.Refusal("material") from None
+            private["packageRepositoryCA"] = self.trust_bundle(bundle)
         modules = (native_diagnostics, ceph_native_worker, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
                    native_resolution, native_signatures, native_apply, ceph_package_sources, ceph_crypto_policy, ceph_packages)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
         result = self._call(host, inspect.getsource(ceph_package_worker),
-                            {"sources": sources, "payload": {"request": self.request, "host": host["name"], "private": {"certificate": certificate}}}, 1980,
+                            {"sources": sources, "payload": {"request": self.request, "host": host["name"], "private": private}}, 1980,
                             failures=ceph_package_worker.REASONS)
         ceph_native.require(set(result) == {"changed", "ready", "planDigest"} and type(result["changed"]) is bool and result["ready"] is True
                             and ceph_native.digest(result["planDigest"]), "packages")
@@ -929,7 +938,7 @@ def dashboard_phase(request, operation, request_digest, bootstrap, transport, ob
 
 def host_request(value):
     """A frozen host block request: its cluster's host scope and one of its hosts."""
-    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "version"} and value["version"] == "ceph-host-v4")
+    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "version"} and value["version"] == "ceph-host-v5")
     cluster = ceph_native.validate_scope(value["cluster"])
     ceph_native.require("packages" in cluster)
     ceph_native.require(sum(host["name"] == value["host"] for host in cluster["hosts"]) == 1)

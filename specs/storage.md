@@ -73,7 +73,8 @@ Registry and repository entitlement, transport trust, cluster SSH trust and
 required publisher authenticity are explicit inputs. Registry login cannot
 weaken TLS verification, and a declared Entitlement `registry.trustBundleRef`
 is the only TLS anchor of that registry for image resolution and guest pulls,
-and a supplied digest does not substitute for required
+and a declared `ceph.packageRepositoryTrustBundleRef` is the only TLS anchor
+of the authored package repository for package acquisition, and a supplied digest does not substitute for required
 publisher trust. FIPS, CephX, encryption and call-home choices retain their
 independent API, trust and authorization requirements. Native tools determine
 whether the selected versions can realize those choices; Bootwright does not
@@ -155,7 +156,13 @@ certificate. Storage uses the shared package resolver for its Ceph-owned roots;
 it does not acquire RHSM registration or install another domain's prerequisites.
 Freeze repository metadata, the complete signed RPM closure, authenticated
 package headers and the before/after RPM inventory in a separate durable
-package decision before installation. Continuation uses that decision and
+package decision before installation. Acquisition reads the authored
+`ceph.packageRepository`, or its source default, over HTTPS without proxy or
+redirect and never from another repository; it verifies that repository
+against `ceph.packageRepositoryTrustBundleRef` alone when it is set and
+against the host trust store otherwise, and a connection the anchor does not
+verify fails the package phase with a native error that names the repository
+and the anchor, never a credential. Continuation uses that decision and
 refuses an unrelated inventory or changed installed payload. An explicitly
 accepted IBM license authorizes only the provider's required `ACCEPT_EULA=yes`
 transaction environment; missing acceptance refuses before package effects.
@@ -329,7 +336,6 @@ links each matrix combination that this table refuses.
 | A native service whose auxiliary image is not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that `ceph.images` does not set, and that the previous row does not refuse; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type`, `<name>` the first image it needs in name order that `ceph.images` does not set (only `keepalived` for an `ingress` with `spec.keepalive_only`) and `<cluster>` the StorageCluster | `the <family> service <service> needs cephadm's container_image_<name>, and spec.ceph.images.<name> is not set; Bootwright keeps no default` | `set spec.ceph.images.<name> of StorageCluster <cluster> to an image beneath its Entitlement registry, or remove <service> from its spec.ceph.services, together with its spec.ceph.serviceBindings entries` |
 | StorageSMBResource objects whose samba images are not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, that a StorageSMBResource of any resource type names in its `clusterRef` while `ceph.images` does not set both `samba` and `samba_metrics`, and that neither of the two previous rows refuses; `<smb>` is the first such StorageSMBResource in name order, `<name>` is `samba` unless `ceph.images` sets it, else `samba_metrics`, and `<cluster>` the StorageCluster | `StorageSMBResource <smb> needs cephadm's container_image_<name>, and spec.ceph.images.<name> is not set; Bootwright keeps no default` | `set spec.ceph.images.<name> of StorageCluster <cluster> to an image beneath its Entitlement registry, or remove every StorageSMBResource whose spec.clusterRef is <cluster> from the selected Environment` |
 | An auxiliary image that no declared service needs | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, setting `ceph.images.<name>` for an image that no service in `ceph.services` and no StorageSMBResource naming it needs (per the auxiliary image table, with `samba` and `samba_metrics` for a StorageSMBResource) and that none of the three previous rows refuses; `<name>` is the first such name in name order and `<cluster>` the StorageCluster | `spec.ceph.images.<name> is set, but no declared service or StorageSMBResource of StorageCluster <cluster> needs cephadm's container_image_<name>` | `remove spec.ceph.images.<name> from StorageCluster <cluster>` |
-| A package repository trust bundle that package acquisition does not use yet | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, setting `ceph.packageRepositoryTrustBundleRef`; `<cluster>` is the StorageCluster | `StorageCluster <cluster> sets spec.ceph.packageRepositoryTrustBundleRef, and Bootwright does not verify a Ceph package repository with a declared trust bundle yet` | `remove spec.ceph.packageRepositoryTrustBundleRef from StorageCluster <cluster>` |
 
 ## Bootstrap identity and continuation
 

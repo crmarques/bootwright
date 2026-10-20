@@ -35,7 +35,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 
 ROOT = "/var/lib/bootwright/ceph-host"
 PACKAGE_ROOT = "/var/lib/bootwright/ceph-packages"
-VERSION = "ceph-host-v4"
+VERSION = "ceph-host-v5"
 PROFILE_VERSION = "ceph-runtime-profile-v3"
 ROUTE_VERSION = "ceph-host-route-v2"
 DEVICES_VERSION = "ceph-device-identities-v1"
@@ -920,7 +920,7 @@ def route_cases(value):
 @contextlib.contextmanager
 def staged(directory, synthetic, uid, gid):
     """Retain the synthetic bytes outside the read-only mounted children."""
-    request = {"version": "ceph-core-v21", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
+    request = {"version": "ceph-core-v22", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
                "clusterSSHTransport": "verified-tunnel", "clusterSSHUser": probe.USER,
                "hosts": [{"name": probe.HOST, "address": probe.ADDRESS, "port": probe.OUTER_PORT}]}
     known = ("[" + probe.ADDRESS + "]:" + str(probe.OUTER_PORT) + " " + synthetic["keys"]["outer"]["public"] + "\n").encode()

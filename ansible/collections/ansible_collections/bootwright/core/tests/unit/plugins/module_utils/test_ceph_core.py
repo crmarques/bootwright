@@ -35,7 +35,7 @@ def core_request():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v21", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v22", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -1577,7 +1577,7 @@ class ReadinessTransport:
 
 
 def package_intent(core_request):
-    core_request["packages"] = {"version": "ceph-packages-v2", "licenseAccepted": True, "sources": [
+    core_request["packages"] = {"version": "ceph-packages-v3", "licenseAccepted": True, "sources": [
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "publicationPath": "/private/example/os-tree",
          "url": "https://192.0.2.10:8443/os/rhel/tree", "certificateRef": "serving-tls"}
         for host in core_request["hosts"]]}

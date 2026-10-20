@@ -42,7 +42,7 @@ def package_request():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1 << 30}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v21", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v22", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "5.0.3-1", "packageRepository": "https://publisher.example.test/ceph",
@@ -51,7 +51,7 @@ def package_request():
             "registry": "registry.example.test", "callHome": "enabled", "publicNetworks": ["192.0.2.0/24"], "clusterNetworks": [], "hosts": hosts,
             "services": [{"service_type": "mon", "placement": {"hosts": names}}, {"service_type": "mgr", "placement": {"hosts": names, "count": 2}},
                          {"service_type": "osd", "service_id": "data", "placement": {"hosts": names}, "spec": {"data_devices": {"paths": ["/dev/vdb"]}}}],
-            "packages": {"version": "ceph-packages-v2", "licenseAccepted": True,
+            "packages": {"version": "ceph-packages-v3", "licenseAccepted": True,
                          "sources": [{"host": name, "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "c" * 64, "mediaSize": 1000000,
                                       "publicationPath": "/var/lib/bootwright-services/example/artifact-server/artifacts/public/os/rhel/tree",
                                       "url": "https://192.0.2.10:8443/os/rhel/tree", "certificateRef": "serving-tls"} for name in names]}}
@@ -159,6 +159,20 @@ def boundary(package_request, monkeypatch):
 
 def prepare(package_request, boundary):
     return packages.prepare(package_request, "node-1", "public-certificate", acquisition=boundary.acquisition, journal=boundary.journal)
+
+
+@pytest.mark.parametrize("site, reason, written", [("repositories", "package-resolution", []), ("payloads", "package-signature", ["decision.json"])])
+def test_an_unverified_repository_fails_its_package_phase_before_any_effect(package_request, boundary, site, reason, written):
+    message = "TLS verification of the package repository " + package_request["packageRepository"] + " failed against trust bundle Secret repository-ca"
+
+    def unverified(*args):
+        raise sources.RepositoryTrustFailure(message)
+
+    setattr(boundary.acquisition, site, unverified)
+    with pytest.raises(ceph_native.NativeFailure) as failure:
+        prepare(package_request, boundary)
+    assert str(failure.value) == reason and failure.value.native_error["cause"] == message
+    assert boundary.journal.writes == written and "transaction" not in boundary.events
 
 
 def test_frozen_complete_closure_and_publisher_checks_precede_eula_transaction(package_request, boundary):
@@ -325,17 +339,132 @@ def test_acquisition_never_uses_proxy_redirect_or_unverified_tls(package_request
 
     monkeypatch.setattr(sources.ssl, "create_default_context", context)
     monkeypatch.setattr(sources.urllib.request, "build_opener", lambda *handlers: openers.append(handlers) or SimpleNamespace())
-    sources.Acquisition(package_request["packages"]["sources"][0], "public-certificate")
+    sources.Acquisition(package_request["packages"]["sources"][0], "public-certificate", repository=sources.IBM_BASE)
     assert contexts == [{"cadata": "public-certificate"}, {}]
     assert all(handlers[0].proxies == {} for handlers in openers)
     with pytest.raises(ceph_native.Refusal):
         sources.NoRedirect().redirect_request(None, None, 302, None, None, "https://foreign.example.test")
 
 
+def recording_openers(monkeypatch):
+    contexts, openers = [], []
+
+    def context(**kwargs):
+        contexts.append(kwargs)
+        return SimpleNamespace(minimum_version=None)
+
+    monkeypatch.setattr(sources.ssl, "create_default_context", context)
+    monkeypatch.setattr(sources.urllib.request, "build_opener", lambda *handlers: openers.append(handlers) or SimpleNamespace(handlers=handlers))
+    return contexts, openers
+
+
+def test_acquisition_without_a_bundle_keeps_the_host_trust_store(package_request, monkeypatch):
+    source = package_request["packages"]["sources"][0]
+    contexts, openers = recording_openers(monkeypatch)
+    acquisition = sources.Acquisition(source, "public-certificate", repository="https://mirror.example.test/ceph")
+    assert contexts == [{"cadata": "public-certificate"}, {}] and len(openers) == 2
+    assert acquisition.repository_opener is acquisition.public and acquisition.anchor == "the host trust store"
+    contexts.clear()
+    openers.clear()
+    acquisition = sources.Acquisition(source, "public-certificate", repository="https://mirror.example.test/ceph", trust="bundle", trust_ref="repository-ca")
+    assert contexts == [{"cadata": "public-certificate"}, {}, {"cadata": "bundle"}] and len(openers) == 3
+    assert acquisition.repository_opener is not acquisition.public and acquisition.repository_opener is not acquisition.local
+    assert acquisition.anchor == "trust bundle Secret repository-ca"
+    for handlers in openers:
+        assert handlers[0].proxies == {} and isinstance(handlers[1], sources.NoRedirect)
+    bundle = acquisition.repository_opener.handlers[2]._context
+    assert bundle.minimum_version == sources.ssl.TLSVersion.TLSv1_2
+    for trust, trust_ref in (("bundle", None), (None, "repository-ca"), ("bundle", "Bad Name"), ("", "repository-ca"), (b"bundle", "repository-ca")):
+        with pytest.raises(ceph_native.Refusal, match="^material$"):
+            sources.Acquisition(source, "public-certificate", repository="https://mirror.example.test/ceph", trust=trust, trust_ref=trust_ref)
+
+    def rejecting(**kwargs):
+        if "bundle" in kwargs.get("cadata", ""):
+            raise sources.ssl.SSLError("no certificate")
+        return SimpleNamespace(minimum_version=None)
+
+    monkeypatch.setattr(sources.ssl, "create_default_context", rejecting)
+    with pytest.raises(ceph_native.Refusal, match="^material$"):
+        sources.Acquisition(source, "public-certificate", repository="https://mirror.example.test/ceph", trust="bundle", trust_ref="repository-ca")
+
+
+class Recorder:
+    def __init__(self, name, seen):
+        self.name, self.seen = name, seen
+
+    def open(self, request, timeout):
+        self.seen.append((self.name, request.full_url))
+        response = io.BytesIO(b"payload")
+        response.status, response.headers, response.geturl = 200, {}, lambda: request.full_url
+        return response
+
+
+def test_vendor_mode_unchanged(package_request, monkeypatch):
+    seen = []
+    recording_openers(monkeypatch)
+    source = package_request["packages"]["sources"][0]
+    acquisition = sources.Acquisition(source, "public-certificate", repository=sources.IBM_BASE)
+    assert acquisition.repository_opener is acquisition.public
+    acquisition.local, acquisition.public = Recorder("local", seen), Recorder("public", seen)
+    acquisition.repository_opener = acquisition.public
+    for url in (sources.IBM_BASE + "/repodata/repomd.xml", sources.IBM_KEY, source["url"] + "/BaseOS/repodata/repomd.xml"):
+        acquisition.stream(url, io.BytesIO(), 7)
+    assert [entry[0] for entry in seen] == ["public", "public", "local"]
+    called = []
+    monkeypatch.setattr(packages, "prepare", lambda *args, **kwargs: called.append(kwargs) or {})
+    payload = {"request": dict(package_request, packageRepository=sources.IBM_BASE), "host": "node-1", "private": {"certificate": "public-certificate"}}
+    packages.entrypoint(payload)
+    assert called == [{"trust": None}]
+    with pytest.raises(ceph_native.Refusal, match="^material$"):
+        packages.entrypoint(dict(payload, private={"certificate": "public-certificate", "packageRepositoryCA": "bundle"}))
+    bound = copy.deepcopy(payload)
+    bound["request"]["packages"]["packageRepositoryTrustBundleRef"] = "repository-ca"
+    with pytest.raises(ceph_native.Refusal, match="^material$"):
+        packages.entrypoint(bound)
+    packages.entrypoint(dict(bound, private={"certificate": "public-certificate", "packageRepositoryCA": "bundle"}))
+    assert called == [{"trust": None}, {"trust": "bundle"}]
+
+
+def test_signer_rule_unchanged_for_a_mirror(package_request, monkeypatch, tmp_path):
+    seen = []
+    recording_openers(monkeypatch)
+    mirror = "https://mirror.example.test/ceph"
+    acquisition = sources.Acquisition(package_request["packages"]["sources"][0], "public-certificate", repository=mirror,
+                                      trust="bundle", trust_ref="repository-ca")
+    acquisition.local, acquisition.public, acquisition.repository_opener = Recorder("local", seen), Recorder("public", seen), Recorder("repository", seen)
+    plan = plan_fixture()
+    root = next(p for p in plan["packages"] if p["name"] == "cephadm")
+    root["source"] = dict(root["source"], url=mirror + "/cephadm.rpm", sha256=hashlib.sha256(b"payload").hexdigest(), bytes=7)
+    plan["packages"] = [root]
+    acquisition.payloads(str(tmp_path), plan)
+    assert seen == [("repository", mirror + "/cephadm.rpm")]
+    root["signer"] = native_signatures.RHEL_SIGNER
+    with pytest.raises(ceph_native.Refusal, match="^packages$"):
+        acquisition.payloads(str(tmp_path), plan)
+    assert len(seen) == 1
+
+
+def test_package_scope_admits_only_a_named_repository_trust_bundle(package_request):
+    package_request["packages"]["packageRepositoryTrustBundleRef"] = "repository-ca"
+    assert sources.source_for(package_request, "node-1")["host"] == "node-1"
+    ceph_native.validate_scope(package_request)
+    for value in ("", "Bad Name", "a\nb", 5):
+        package_request["packages"]["packageRepositoryTrustBundleRef"] = value
+        with pytest.raises(ceph_native.Refusal, match="^request$"):
+            ceph_native.validate_scope(package_request)
+        with pytest.raises(ceph_native.Refusal):
+            sources.source_for(package_request, "node-1")
+    package_request["packages"]["packageRepositoryTrustBundleRef"] = "repository-ca"
+    package_request["packages"]["version"] = "ceph-packages-v2"
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate_scope(package_request)
+
+
 def test_stream_download_enforces_hash_size_budget_and_origin(package_request):
     source = package_request["packages"]["sources"][0]
     acquisition = object.__new__(sources.Acquisition)
     acquisition.repository_base = sources.IBM_BASE
+    acquisition.repository_opener = None
     acquisition.source, acquisition.total, acquisition.deadline = source, 0, sources.time.monotonic() + 10
 
     class Response(io.BytesIO):

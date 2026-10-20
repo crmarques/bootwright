@@ -231,15 +231,17 @@ def installed_headers(plan, expected):
     return True
 
 
-def prepare(request, host, certificate, *, acquisition=None, journal=None):
+def prepare(request, host, certificate, *, trust=None, acquisition=None, journal=None):
     source = ceph_package_sources.source_for(request, host)
     ceph_native.require(ceph_native.supported_transport(request), "unsupported-release")
     ceph_native.require(os.geteuid() == 0, "packages")
     ceph_native.require(isinstance(certificate, str), "material")
+    trust_ref = request["packages"].get("packageRepositoryTrustBundleRef")
+    ceph_native.require((trust is None) == (trust_ref is None) and (trust is None or isinstance(trust, str)), "material")
     host_admission(request)
     binding = native_resolution.digest({"request": request, "host": host, "source": source,
                                         "certificateSHA256": hashlib.sha256(certificate.encode()).hexdigest()})
-    acquire = acquisition or ceph_package_sources.Acquisition(source, certificate, repository=request["packageRepository"])
+    acquire = acquisition or ceph_package_sources.Acquisition(source, certificate, repository=request["packageRepository"], trust=trust, trust_ref=trust_ref)
     with (journal or Journal(request)) as durable, tempfile.TemporaryDirectory(prefix="bootwright-ceph-packages-") as scratch:
         grant = transaction_request(request)
         record = durable.read("decision.json")
@@ -294,5 +296,8 @@ def prepare(request, host, certificate, *, acquisition=None, journal=None):
 
 def entrypoint(payload):
     ceph_native.require(isinstance(payload, dict) and set(payload) == {"request", "host", "private"}, "packages")
-    ceph_native.require(isinstance(payload["private"], dict) and set(payload["private"]) == {"certificate"}, "material")
-    return prepare(payload["request"], payload["host"], payload["private"]["certificate"])
+    request = payload["request"]
+    ceph_native.require(isinstance(request, dict) and isinstance(request.get("packages"), dict), "packages")
+    private = {"certificate", "packageRepositoryCA"} if "packageRepositoryTrustBundleRef" in request["packages"] else {"certificate"}
+    ceph_native.require(isinstance(payload["private"], dict) and set(payload["private"]) == private, "material")
+    return prepare(request, payload["host"], payload["private"]["certificate"], trust=payload["private"].get("packageRepositoryCA"))

@@ -17,7 +17,7 @@ import (
 )
 
 const HostImplementation = "storage-ceph-host-v1"
-const HostVersion = "ceph-host-v4"
+const HostVersion = "ceph-host-v5"
 const HostEvidenceVersion = "ceph-host-evidence-v1"
 const SharedLabel = "system_u:object_r:container_file_t:s0"
 const maxHostEvidence = 16384
@@ -261,6 +261,9 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 			if cluster.RegistryTrustBundleRef != "" {
 				plan.Secrets = append(plan.Secrets, cluster.RegistryTrustBundleRef)
 			}
+			if ref := cluster.Packages.PackageRepositoryTrustBundleRef; ref != "" {
+				plan.Secrets = append(plan.Secrets, ref)
+			}
 		}
 	}
 	slices.Sort(plan.Secrets)
@@ -369,6 +372,12 @@ func hostMaterial(e lifecycle.Execution, r HostRequest, operation string, reader
 	if operation == "apply" {
 		index, _ := r.source()
 		files = append(files, lifecycle.MaterialFile{Name: "package-ca-" + host.Name, Secret: r.Cluster.Packages.Sources[index].CertificateRef, Part: secrets.CertificatePart, Variable: packageCertificateVariable(index)})
+		repository, err := packageRepositoryTrustFile(e, r.Cluster.Packages.PackageRepositoryTrustBundleRef)
+		if err != nil {
+			cleanup()
+			return e, nil, func() {}, err
+		}
+		files = append(files, repository...)
 		registry, err := imageRegistryMaterial(e, r.Cluster.RegistryRef, r.Cluster.Registry)
 		if err != nil {
 			cleanup()

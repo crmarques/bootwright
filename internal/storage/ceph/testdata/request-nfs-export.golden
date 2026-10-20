@@ -183,5 +183,5 @@
       "service_type": "mds"
     }
   ],
-  "version": "ceph-core-v21"
+  "version": "ceph-core-v22"
 }

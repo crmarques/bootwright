@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -48,7 +47,7 @@ func TestCoreConfigIsFrozenAcrossClusterChildrenAndChangedIntent(t *testing.T) {
 		if err != nil || bytes.Equal(original, next) {
 			t.Fatal("changed memory target did not change frozen request")
 		}
-		old := bytes.Replace(original, []byte(`"version":"ceph-core-v21"`), []byte(`"version":"ceph-core-v20"`), 1)
+		old := bytes.Replace(original, []byte(`"version":"ceph-core-v22"`), []byte(`"version":"ceph-core-v20"`), 1)
 		if _, err := DecodeRequest(old); err == nil {
 			t.Fatal("old frozen request silently migrated")
 		}
@@ -333,52 +332,38 @@ func TestDeclaredRegistryTrustBundlePlansOnceConsumed(t *testing.T) {
 	}
 }
 
-func TestDeclaredTrustRefusesAtPlanUntilConsumed(t *testing.T) {
-	cases := map[string]struct {
-		catalog        api.Catalog
-		reason, remedy string
-	}{
-		"package repository": {pinnedCatalog(t, func(spec api.Value) api.Value {
-			return spec.WithPath(api.StringValue("https://packages.example.test/ceph"), "ceph", "packageRepository").WithPath(api.StringValue("repository-ca"), "ceph", "packageRepositoryTrustBundleRef")
-		}),
-			"StorageCluster example sets spec.ceph.packageRepositoryTrustBundleRef, and Bootwright does not verify a Ceph package repository with a declared trust bundle yet",
-			"remove spec.ceph.packageRepositoryTrustBundleRef from StorageCluster example"},
+func TestDeclaredPackageRepositoryTrustBundlePlansOnceConsumed(t *testing.T) {
+	catalog := pinnedCatalog(t, func(spec api.Value) api.Value {
+		return spec.WithPath(api.StringValue("https://packages.example.test/ceph"), "ceph", "packageRepository").WithPath(api.StringValue("repository-ca"), "ceph", "packageRepositoryTrustBundleRef")
+	})
+	if _, err := baseRequest(catalog, catalog.OfKind(api.StorageCluster)[0], "synthetic"); err != nil {
+		t.Fatalf("base request: %v", diagnostics.Of(err))
 	}
-	for name, test := range cases {
-		t.Run(name, func(t *testing.T) {
-			for _, id := range []string{"D1", "OD", "X59", "B493", "B619", "9.9"} {
-				if strings.Contains(test.reason, id) || strings.Contains(test.remedy, id) {
-					t.Fatalf("the refusal names %q", id)
-				}
-			}
-			catalog := test.catalog
-			_, err := baseRequest(catalog, catalog.OfKind(api.StorageCluster)[0], "synthetic")
-			d := diagnostics.Of(err)
-			if len(d) != 1 || d[0].Code != "lifecycle.unsupported" || d[0].Message != test.reason || d[0].Remediation != test.remedy {
-				t.Fatalf("base request: %+v %v", d, err)
-			}
-			state := compilation.NewState(catalog, catalog, nil)
-			runner := &recordingRunner{}
-			for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool, api.StorageClient} {
-				object := catalog.OfKind(kind)[0]
-				if _, err := New(kind, runner).request(catalog, object, "synthetic"); err == nil {
-					t.Fatalf("%s: request planned with undelivered trust", kind)
-				}
-				want := []lifecycle.Refusal{{Kind: string(kind), Name: object.Name(), Reason: test.reason, Remediation: test.remedy}}
-				if got := New(kind, runner).Unsupported(state); !reflect.DeepEqual(got, want) {
-					t.Fatalf("%s: refuses %+v, want %+v", kind, got, want)
-				}
-			}
-			input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: state, Controller: "controller"}
-			if plan, err := NewImage(runner).Plan(context.Background(), input); err == nil || len(plan.Definitions) != 0 {
-				t.Fatalf("image plan: %+v %v", plan, err)
-			}
-			if plan, err := NewHost(runner).Plan(context.Background(), input); err == nil || len(plan.Definitions) != 0 {
-				t.Fatalf("host plan: %+v %v", plan, err)
-			}
-			if runner.calls != 0 {
-				t.Fatalf("the runner ran %d times", runner.calls)
-			}
-		})
+	state := compilation.NewState(catalog, catalog, nil)
+	runner := &recordingRunner{}
+	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool, api.StorageClient} {
+		if got := New(kind, runner).Unsupported(state); len(got) != 0 {
+			t.Fatalf("%s: refuses %+v", kind, got)
+		}
+	}
+	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: state, Controller: "controller"}
+	if plan, err := New(api.StorageCluster, runner).Plan(context.Background(), input); err != nil || len(plan.Definitions) == 0 || slices.Contains(plan.Secrets, "repository-ca") {
+		t.Fatalf("core plan: %v %v", plan.Secrets, diagnostics.Of(err))
+	}
+	if plan, err := NewImage(runner).Plan(context.Background(), input); err != nil || slices.Contains(plan.Secrets, "repository-ca") {
+		t.Fatalf("image plan: %v %v", plan.Secrets, diagnostics.Of(err))
+	}
+	plan, err := NewHost(runner).Plan(context.Background(), input)
+	if err != nil || len(plan.Definitions) != 3 || !slices.Contains(plan.Secrets, "repository-ca") {
+		t.Fatalf("host plan: %v %v", plan.Secrets, diagnostics.Of(err))
+	}
+	for _, definition := range plan.Definitions {
+		r, err := DecodeHostRequest(definition.Request)
+		if err != nil || r.Cluster.Packages.PackageRepositoryTrustBundleRef != "repository-ca" || r.Cluster.PackageRepository != "https://packages.example.test/ceph" {
+			t.Fatalf("host request %+v %v", r.Cluster.Packages, err)
+		}
+	}
+	if runner.calls != 0 {
+		t.Fatalf("the runner ran %d times", runner.calls)
 	}
 }

@@ -70,11 +70,6 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 				return spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/haproxy", "version", "synthetic-1"), "ceph", "images", "haproxy")
 			},
 		}, values: map[string]string{"<name>": "haproxy", "<cluster>": "example"}},
-		"A package repository trust bundle that package acquisition does not use yet": {edits: map[string]func(api.Value) api.Value{
-			"an authored repository with a trust bundle": func(spec api.Value) api.Value {
-				return spec.WithPath(api.StringValue("https://packages.example.test/ceph"), "ceph", "packageRepository").WithPath(api.StringValue("repository-ca"), "ceph", "packageRepositoryTrustBundleRef")
-			},
-		}, values: map[string]string{"<cluster>": "example"}},
 	}
 	refused := map[api.Kind]string{api.StorageCluster: "example", api.StoragePool: "volumes", api.StorageClient: "consumer"}
 	for _, row := range refusalTable(t) {

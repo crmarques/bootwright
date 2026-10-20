@@ -554,6 +554,49 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 	}
 }
 
+func TestHostApplyLendsThePackageRepositoryTrustBundle(t *testing.T) {
+	e, r, proofs := hostExecution(t, "node-2")
+	r.Cluster.Packages.PackageRepositoryTrustBundleRef = "repository-ca"
+	canonical, err := r.canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Block.Request = canonical
+	if e.Block.RequestDigest, err = reconciliation.RequestDigest(e.Block.BlockDefinition); err != nil {
+		t.Fatal(err)
+	}
+	runner := &capturingRunner{recordingRunner: recordingRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: preparedEvidence(t, e, r, nil)}}}
+	if _, err := NewHost(runner).WithProofs(proofs).Apply(context.Background(), e); err == nil || runner.calls != 0 {
+		t.Fatalf("host preparation ran without its bound repository trust bundle: %v", err)
+	}
+	e.Material["repository-ca"] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: []byte(gatewayCertificatePEM)})
+	if _, err := NewHost(runner).WithProofs(proofs).Apply(context.Background(), e); err != nil || runner.calls != 1 {
+		t.Fatalf("host apply %v", diagnostics.Of(err))
+	}
+	index, _ := r.source()
+	variables := []string{}
+	var bundle lifecycle.MaterialFile
+	for _, file := range runner.request.Materials {
+		variables = append(variables, file.Variable)
+		if file.Variable == "packageRepositoryCA" {
+			bundle = file
+		}
+	}
+	if !slices.Equal(variables, []string{"sshKey", "knownHosts", packageCertificateVariable(index), "packageRepositoryCA", "registryJSON"}) ||
+		bundle != (lifecycle.MaterialFile{Name: "package-repository-ca", Secret: "repository-ca", Part: secrets.CertificatePart, Variable: "packageRepositoryCA"}) {
+		t.Fatalf("host material %+v", runner.request.Materials)
+	}
+	observer := &recordingRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: preparedEvidence(t, e, r, nil)}}
+	if _, err := NewHost(observer).WithProofs(proofs).Observe(context.Background(), e); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range observer.request.Materials {
+		if file.Secret == "repository-ca" {
+			t.Fatalf("observation lent the repository bundle %+v", observer.request.Materials)
+		}
+	}
+}
+
 func TestHostRequestCarriesTheRegistryTrustBundle(t *testing.T) {
 	catalog := withRegistryTrust(pinnedCatalog(t, nil))
 	plan, err := NewHost(nil).Plan(context.Background(), lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"})

@@ -116,13 +116,16 @@ source default, not a release catalog. Independent publisher signatures remain
 required for its selected RPMs.
 
 `ceph.packageRepositoryTrustBundleRef` optionally names a `caBundle` Secret
-that is to be the only TLS trust anchor for the authored
-`ceph.packageRepository`. It is admitted only with an authored
-`ceph.packageRepository`, so the source default never takes a private bundle;
-a missing Secret or a Secret of another type refuses at admission. Package
-acquisition does not consume it yet, so planning refuses a StorageCluster that
-sets it ([refusal table](../storage.md#refusal-table)) instead of accepting
-and ignoring it.
+that is the only TLS trust anchor for the authored `ceph.packageRepository`:
+host package acquisition verifies that repository's metadata and package
+downloads against the bundle alone (no host trust store, default path or
+environment override), and against the host trust store when the field is
+omitted; it never falls back to another repository. It is admitted only with
+an authored `ceph.packageRepository`, so the source default never takes a
+private bundle; a missing Secret or a Secret of another type refuses at
+admission. The bundle authenticates the connection only: each selected RPM
+still needs its publisher signature, and the IBM publisher key is still read
+from its fixed public location ([B664](../milestones/backlog.md#b664)).
 
 `ceph.ibm.callHome` is `enabled` or `disabled`. `enabled` keeps the
 provider's Call Home reporting active after bootstrap; `disabled` leaves it

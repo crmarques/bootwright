@@ -14,6 +14,7 @@ from pathlib import Path, PurePosixPath
 import re
 import ssl
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -37,8 +38,10 @@ COMPS_PROLOG = re.compile(rb"""\A(?:<\?xml\s{1,8}version=(["'])1\.0\1(?:\s{1,8}e
 def source_for(request, host):
     ceph_native.validate_scope(request)
     package = request.get("packages")
-    ceph_native.require(isinstance(package, dict) and set(package) == {"version", "licenseAccepted", "sources"}, "packages")
-    ceph_native.require(package["version"] == "ceph-packages-v2" and package["licenseAccepted"] is True, "packages")
+    ceph_native.require(isinstance(package, dict) and {"version", "licenseAccepted", "sources"} <= set(package)
+                        <= {"version", "licenseAccepted", "sources", "packageRepositoryTrustBundleRef"}, "packages")
+    ceph_native.require(package["version"] == "ceph-packages-v3" and package["licenseAccepted"] is True, "packages")
+    ceph_native.require("packageRepositoryTrustBundleRef" not in package or ceph_native.named(package["packageRepositoryTrustBundleRef"]), "packages")
     sources = package["sources"]
     ceph_native.require(isinstance(sources, list) and len(sources) == len(request["hosts"]), "packages")
     names = []
@@ -85,10 +88,14 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise ceph_native.Refusal("packages")
 
 
+class RepositoryTrustFailure(Exception):
+    """A package repository connection its TLS anchor did not verify; the message names only the repository and the anchor."""
+
+
 class Acquisition:
     """Never use ambient proxies, redirect credentials or unverified HTTPS."""
 
-    def __init__(self, source, certificate, budget=1800, *, repository=IBM_BASE):
+    def __init__(self, source, certificate, budget=1800, *, repository, trust=None, trust_ref=None):
         ceph_native.require(isinstance(certificate, str) and 0 < len(certificate.encode()) <= 1 << 20, "material")
         self.repository_base = safe_url(repository).rstrip("/")
         self.source = source
@@ -101,6 +108,19 @@ class Acquisition:
         public = ssl.create_default_context()
         public.minimum_version = ssl.TLSVersion.TLSv1_2
         self.public = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect(), urllib.request.HTTPSHandler(context=public))
+        ceph_native.require((trust is None) == (trust_ref is None), "material")
+        if trust is None:
+            self.repository_opener = self.public
+            self.anchor = "the host trust store"
+            return
+        ceph_native.require(isinstance(trust, str) and 0 < len(trust.encode()) <= 1 << 20 and ceph_native.named(trust_ref), "material")
+        try:
+            bundle = ssl.create_default_context(cadata=trust)
+        except (ssl.SSLError, ValueError, TypeError):
+            raise ceph_native.Refusal("material") from None
+        bundle.minimum_version = ssl.TLSVersion.TLSv1_2
+        self.repository_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect(), urllib.request.HTTPSHandler(context=bundle))
+        self.anchor = "trust bundle Secret " + trust_ref
 
     def stream(self, url, output, limit, expected=None, size=None):
         safe_url(url)
@@ -108,10 +128,15 @@ class Acquisition:
         ceph_native.require(url.startswith(prefix) or url.startswith(self.repository_base + "/") or url == IBM_KEY, "packages")
         remaining = self.deadline - time.monotonic()
         ceph_native.require(remaining > 0, "package-timeout")
-        opener = self.local if url.startswith(prefix) else self.public
+        if url.startswith(prefix):
+            opener = self.local
+        elif url == IBM_KEY:
+            opener = self.public
+        else:
+            opener = self.repository_opener
         request = urllib.request.Request(url, headers={"Accept-Encoding": "identity"})
         hasher, count = hashlib.sha256(), 0
-        with opener.open(request, timeout=min(60, remaining)) as response:
+        with self.open(opener, request, min(60, remaining)) as response:
             ceph_native.require(response.status == 200 and response.geturl() == url, "packages")
             ceph_native.require(response.headers.get("Content-Encoding", "identity") == "identity", "packages")
             while True:
@@ -126,6 +151,18 @@ class Acquisition:
                 output.write(block)
         ceph_native.require(count > 0 and (size is None or count == size) and (expected is None or hasher.hexdigest() == expected), "packages")
         return hasher.hexdigest()
+
+    def open(self, opener, request, timeout):
+        if opener is not self.repository_opener:
+            return opener.open(request, timeout=timeout)
+        try:
+            return opener.open(request, timeout=timeout)
+        except urllib.error.URLError as error:
+            if not isinstance(error.reason, ssl.SSLCertVerificationError):
+                raise
+        except ssl.SSLCertVerificationError:
+            pass
+        raise RepositoryTrustFailure("TLS verification of the package repository " + self.repository_base + " failed against " + self.anchor)
 
     def bytes(self, url, limit):
         import io

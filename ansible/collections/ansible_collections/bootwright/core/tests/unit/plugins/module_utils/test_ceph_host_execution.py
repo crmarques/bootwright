@@ -14,9 +14,11 @@ import sys
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_worker, ceph_package_worker, ceph_packages, native_diagnostics,
+    ceph_core, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_worker, ceph_package_worker, ceph_packages, ceph_pull_broker,
+    ceph_registry_discovery, native_diagnostics,
 )
 from ansible_collections.bootwright.core.plugins.modules import ceph_host
+from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as core_fixtures
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_host_runtime as host_fixtures
 
 DIGEST = "d" * 64
@@ -32,12 +34,12 @@ POOL = {"application": "rbd", "autoscale": {"bulk": False, "maxPGs": 0, "minPGs"
 def host_request(request_value):
     cluster = copy.deepcopy(request_value)
     del cluster["action"]
-    cluster["packages"] = {"version": "ceph-packages-v2", "licenseAccepted": True, "sources": [
+    cluster["packages"] = {"version": "ceph-packages-v3", "licenseAccepted": True, "sources": [
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "e" * 64, "mediaSize": 1024,
          "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"}
         for host in cluster["hosts"]]}
-    return {"version": "ceph-host-v4", "cluster": cluster, "host": "node-2"}
+    return {"version": "ceph-host-v5", "cluster": cluster, "host": "node-2"}
 
 
 request_value = host_fixtures.request_value
@@ -314,3 +316,37 @@ def test_the_host_module_binds_its_transport_to_the_frozen_scope(host_request, m
     monkeypatch.setattr(ceph_core, "execute_host", execute_host)
     ceph_host.main()
     assert reached == {"result": {"changed": False}, "call": (host_request, operation, DIGEST, host_request["cluster"])}
+
+
+def test_the_package_call_relays_the_bound_repository_bundle(host_request, tmp_path):
+    # The synthetic CA fixture opens with a comment line the projection drops.
+    bundle_text = core_fixtures.SYNTHETIC_CA.decode("utf-8")
+    projection = "".join(ceph_registry_discovery.certificates(core_fixtures.SYNTHETIC_CA))
+    bound = copy.deepcopy(host_request["cluster"])
+    bound["packages"]["packageRepositoryTrustBundleRef"] = "repository-ca"
+    tmp_path.chmod(0o700)
+    texts = {"sshKey": b"PRIVATE-KEY-SENTINEL", "knownHosts": b"node-2 ssh-ed25519 PUBLIC", "packageCA1": b"PUBLIC-CERTIFICATE",
+             "packageRepositoryCA": bundle_text.encode(), "notUTF8": b"# \xff\n" + core_fixtures.SYNTHETIC_CA, "empty": b"# no certificate block\n"}
+    for name, data in texts.items():
+        (tmp_path / name).write_bytes(data)
+        (tmp_path / name).chmod(0o600)
+    material = {name: str(tmp_path / name) for name in ("sshKey", "knownHosts", "packageCA1", "packageRepositoryCA")}
+    calls = []
+
+    def run(argv, data, timeout):
+        calls.append((argv, data))
+        return 0, b'{"ok":true,"result":{"changed":false,"ready":true,"planDigest":"' + b"a" * 64 + b'"}}'
+
+    result = ceph_core.Transport(bound, material, run=run, scope=True).packages(bound["hosts"][1])
+    assert result["ready"] is True and len(calls) == 1
+    argv, data = calls[0]
+    assert json.loads(data)["payload"]["private"] == {"certificate": "PUBLIC-CERTIFICATE", "packageRepositoryCA": projection}
+    assert projection.isascii() and "#" not in projection and ceph_pull_broker.bundle_context(projection).cert_store_stats()["x509_ca"] == 1
+    assert projection.splitlines()[1] not in " ".join(argv)
+    unbound = {name: path for name, path in material.items() if name != "packageRepositoryCA"}
+    refused = [(bound, unbound), (host_request["cluster"], material),
+               (bound, dict(material, packageRepositoryCA=str(tmp_path / "notUTF8"))), (bound, dict(material, packageRepositoryCA=str(tmp_path / "empty")))]
+    for request_value, private in refused:
+        with pytest.raises(ceph_native.Refusal, match="^material$"):
+            ceph_core.Transport(request_value, private, run=run, scope=True).packages(request_value["hosts"][1])
+    assert len(calls) == 1

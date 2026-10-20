@@ -167,6 +167,45 @@ func TestPackageRequestGolden(t *testing.T) {
 	}
 }
 
+func TestPackageRequestFreezesTheRepositoryTrustBundle(t *testing.T) {
+	objects := packageCatalog().Objects()
+	for i, object := range objects {
+		if object.Kind() == api.StorageCluster {
+			objects[i] = object.WithSpec(object.Spec().WithPath(api.StringValue("https://packages.example.test/ceph"), "ceph", "packageRepository").WithPath(api.StringValue("repository-ca"), "ceph", "packageRepositoryTrustBundleRef"))
+		}
+	}
+	catalog := api.NewCatalog(objects)
+	cluster, _ := catalog.Find(api.StorageCluster, "example")
+	r, err := baseRequest(catalog, cluster, "synthetic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Controller = "controller"
+	if r.Packages, err = packageSources(catalog, r, "synthetic"); err != nil || r.Packages.PackageRepositoryTrustBundleRef != "repository-ca" {
+		t.Fatalf("package request %+v %v", r.Packages, err)
+	}
+	for i := range r.Packages.Sources {
+		r.Packages.Sources[i].MediaSHA256 = strings.Repeat("a", 64)
+		r.Packages.Sources[i].MediaSize = 123456
+	}
+	data, err := r.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	matchesGolden(t, "request-packages-trust-bundle", data, false)
+	decoded, err := DecodeRequest(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if roundtrip, err := decoded.Canonical(); err != nil || !bytes.Equal(data, roundtrip) {
+		t.Fatal("package request lost its repository trust bundle")
+	}
+	plain, err := packageRequest(t).Canonical()
+	if err != nil || bytes.Contains(plain, []byte("packageRepositoryTrustBundleRef")) {
+		t.Fatalf("a request without a bundle carries its key: %v", err)
+	}
+}
+
 func TestEveryCapabilityDeadlineCoversItsFrozenBudgets(t *testing.T) {
 	r := packageRequest(t)
 	hosts := len(r.Hosts)

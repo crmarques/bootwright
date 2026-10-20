@@ -532,7 +532,7 @@ def host_scope(request):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v21")
+    require(request["version"] == "ceph-core-v22")
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])
@@ -573,8 +573,10 @@ def scope_checks(request):
     hosts, seen = validate_hosts(request)
     package = request.get("packages")
     if package is not None:
-        require(isinstance(package, dict) and set(package) == {"version", "licenseAccepted", "sources"})
-        require(package["version"] == "ceph-packages-v2" and package["licenseAccepted"] is True)
+        require(isinstance(package, dict) and {"version", "licenseAccepted", "sources"} <= set(package)
+                <= {"version", "licenseAccepted", "sources", "packageRepositoryTrustBundleRef"})
+        require(package["version"] == "ceph-packages-v3" and package["licenseAccepted"] is True)
+        require("packageRepositoryTrustBundleRef" not in package or named(package["packageRepositoryTrustBundleRef"]))
         require(isinstance(package["sources"], list) and len(package["sources"]) == len(hosts))
         names = []
         required_source = {"host", "profile", "media", "publicationPath", "url", "certificateRef"}

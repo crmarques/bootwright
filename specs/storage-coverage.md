@@ -68,8 +68,9 @@ installation media are a separate prerequisite.
 Guest pull credentials are confined by the invocation-local broker described
 in [storage](storage.md); the native client receives no real
 registry credential or token. Synthetic boundary tests include foreign realms,
-redirects, uncredentialed bypass, local mutual-TLS access, and a registry trust
-bundle that verifies, one that does not, and none.
+redirects, uncredentialed bypass, local mutual-TLS access, a registry trust
+bundle that verifies, one that does not, and none, and a package repository
+trust bundle that verifies, one that does not, and none.
 
 Each host-preparation block derives account, code and crypto-policy facts from
 the exact immutable image pulled with the original registry binding. Its
