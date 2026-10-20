@@ -776,8 +776,9 @@ def observation(value, ready, blocking=(), directory=False, daemons=None):
 class Remote:
     """A recording transport: `smb_apply` answers changed, each `smb_observe` the next scripted observation (the last repeats)."""
 
-    def __init__(self, value, observations):
+    def __init__(self, value, observations, applied=None):
         self.value, self.observations, self.calls, self.reads = value, list(observations), [], 0
+        self.applied = {"changed": True} if applied is None else applied
 
     def smb_material(self):
         self.reads += 1
@@ -786,7 +787,7 @@ class Remote:
     def smb(self, host, phase, value, private=None, *, timeout=660):
         self.calls.append((host["name"], phase, copy.deepcopy(private), timeout))
         if phase == "smb_apply":
-            return {"changed": True}
+            return copy.deepcopy(self.applied)
         return copy.deepcopy(self.observations.pop(0) if len(self.observations) > 1 else self.observations[0])
 
 
@@ -868,6 +869,16 @@ def test_cluster_readiness_does_not_wait_for_daemons(kind):
     with pytest.raises(ceph_native.Refusal, match="^smb-result$"):
         ceph_core.execute_smb(copy.deepcopy(value), "apply", DIGEST, remote, now=clock.now, pause=clock.pause)
     assert [phase for unused, phase, unused, unused in remote.calls] == ["smb_apply", "smb_observe"] and clock.pauses == []
+
+
+@pytest.mark.parametrize("kind", ["ceph.smb.cluster", "ceph.smb.share"])
+@pytest.mark.parametrize("applied", [{}, {"changed": "yes"}, {"changed": 1}, {"changed": True, "output": "x"}, ["changed"], "changed"])
+def test_an_smb_apply_answer_outside_its_closed_shape_refuses_evidence(kind, applied):
+    value, clock = request(kind), Clock()
+    remote = Remote(value, [observation(value, True, daemons=[])], applied=applied)
+    with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+        ceph_core.execute_smb(copy.deepcopy(value), "apply", DIGEST, remote, now=clock.now, pause=clock.pause)
+    assert [phase for unused, phase, unused, unused in remote.calls] == ["smb_apply"] and clock.pauses == []
 
 
 def test_share_readiness_waits_for_generated_service_on_eligible_hosts():
