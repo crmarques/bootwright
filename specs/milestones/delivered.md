@@ -7261,3 +7261,71 @@ it. The profile rows that exercise a private registry belong to
 bundle; there is no older-version reader, so an incomplete operation or
 context planned by an earlier build is finished or destroyed with that build.
 No other behavior changed.
+
+### X61 — Ceph transport crypto policy
+
+**Owner:** Storage, with Machine and Trust. An enabling slice of
+[M2c](m2.md#m2c) whose other work is still open: this record covers B625, the
+one item of X61 that completed, and X61's [B484](m2.md#b484) stays on the M2
+page with what it has delivered in-tree. B625 was found while planning M2c's
+X60: the Ceph controller-to-host SSH passed `-F /dev/null` and no
+`HostKeyAlgorithms`, so it ran on OpenSSH's compiled defaults instead of the
+controller's crypto policy, and the contained tunnel's outer configuration
+intersected no host-key algorithm with the pinned keys. **Items:** B625,
+delivered by the lane x61-ceph-transport-policy and the fixes of the int-x61
+checkpoint, merged to main under [D168](backlog.md#decisions).
+
+**Outcome:** every Ceph controller-to-host session takes the controller's
+crypto-policy back end, reduced to its crypto directives, and the managed-OS
+guest session's option set, with `HostKeyAlgorithms` set to the pinned key's
+algorithms that the policy admits, in pinned order; strict pinned known hosts
+stay. The contained tunnel's client runs inside the selected Ceph image and
+keeps that image's back end: its outer configuration pins, for each host, the
+pinned algorithms that the back end's first `HostKeyAlgorithms` value admits.
+Both paths share one builder. An empty intersection refuses before any host
+is contacted: `ssh-policy-host-excluded` for the direct path and
+`tunnel-host-key-excluded` for the tunnel, which the int-x61 review moved
+before the cluster block claims or authorizes any host, naming the host and
+the key type and the guest's FIPS switch as the remedy; a policy that cannot
+be evaluated refuses `ssh-policy-unavailable`. The three refusals are
+`lifecycle.unsupported`, so they leave their block failed. A destroy opens no
+session and never evaluates the policy. [Security](../security.md#network-remote-systems-and-privilege)
+and [storage](../storage.md#bootstrap-identity-and-continuation) own the
+behavior.
+
+**Guard tests:** `test_ceph_transport_uses_the_reduced_policy_config_not_dev_null`,
+`test_ceph_transport_host_key_algorithms_are_the_intersection_with_the_policy`,
+`test_ceph_transport_refuses_an_empty_intersection_naming_the_host`,
+`test_ceph_transport_under_fips_policy_admits_ecdsa_and_refuses_ed25519_pins`,
+`test_ceph_transport_keeps_strict_pinned_known_hosts` and
+`test_ceph_transport_evaluates_the_controller_policy_once_and_never_on_destroy`
+(unit tests of the direct path); `test_ceph_transport_option_set_matches_the_managed_os_guest_session`
+(the parity test with the managed-OS guest session);
+`test_tunnel_outer_configuration_host_key_algorithms_are_the_intersection_with_the_policy`,
+`test_tunnel_outer_configuration_refuses_an_empty_intersection_naming_the_host`,
+`test_tunnel_outer_configuration_and_direct_argv_share_one_builder` and
+`test_restart_refuses_an_outer_configuration_without_its_host_blocks` (the
+tunnel path); `test_an_excluded_tunnel_pin_refuses_before_any_host_is_claimed_or_authorized`
+and `test_authorize_refuses_an_excluded_tunnel_pin_before_any_effect` (the
+pre-claim refusal); `test_pinned_algorithms_match_the_host_key_algorithms_filter`;
+and the Go `TestAnSSHPolicyRefusalReachesTheOperatorWithItsRemedy` and
+`TestAnExcludedHostKeyRemedyNamesTheGuestKeyLeverAndDestroyFirst`, each with a
+mutation check recorded in its commit body. The gates were `make focus`,
+`make docs-check`, the storage, `cmd/bootwright` and architecture packages, the
+collection unit, lint and sanity suites and the int-x61 checkpoint's full
+gates and adversarial review. They are offline, as B625's exit evidence
+required (unit tests of both paths, the parity test and the empty-intersection
+refusal test); no live FIPS row is part of it. Keeping a policy is not FIPS
+certification: the Ceph FIPS rows belong to [B484](m2.md#b484) and stay unrun.
+
+**Not yet implemented:** X61's other work. The acceptance matrix lanes X61-L2
+to X61-L9 are not implemented, nor are the lanes D166 released from their hold,
+x61-ceph-fips (the ECDSA synthetic probe keys of [B660](backlog.md#b660) and
+the FIPS host proofs), x61-host-variants-example and X61-L6. B484 names them.
+The int-x61 review left no finding unfixed.
+
+**Constraints left behind:** `ceph-core-v23` and `ceph-tunnel-v3` moved with
+this work; there is no older-version reader, so an incomplete operation or
+context holding a `ceph-core-v22` block or a `ceph-tunnel-v2` bundle from an
+earlier build is finished or destroyed with that build. No other behavior
+changed.

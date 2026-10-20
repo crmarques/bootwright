@@ -90,7 +90,7 @@ no crypto directive) keeps the pinned list unevaluated. `-F /dev/null` drops
 the policy entirely. The Ceph controller transport now keeps the policy too, by
 the same `ssh -G` evaluation and the guest session's option set, and its
 contained tunnel intersects the pinned keys with the Ceph image's own policy
-([B625](../../specs/milestones/m2.md#b625);
+([B625](../../specs/milestones/delivered.md#x61--ceph-transport-crypto-policy);
 [security](../../specs/security.md#network-remote-systems-and-privilege)).
 
 Pinned by `TestSessionRefusesAPinnedHostKeyThePolicyExcludes`,

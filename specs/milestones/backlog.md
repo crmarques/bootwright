@@ -3025,7 +3025,7 @@ Requires cell as `owner decision: <question>`.
   basis is a vendor support table is removed (D157). Decision and question IDs
   never appear in operator-visible strings. (16) Under D158, Ceph on FIPS-mode
   hosts belongs to [B484](m2.md#b484) and the Ceph controller-to-host
-  crypto-policy defect to [B625](m2.md#b625), both in X61; X60 keeps the OS arms
+  crypto-policy defect to [B625](delivered.md#x61--ceph-transport-crypto-policy), both in X61; X60 keeps the OS arms
   B75, B76 and B77 and controller access B346. Each overturned clause reopens
   the work it shaped as a new item.
 - **D160** (2026-10-15, the owner; recorded on 2026-10-18 under D159): after
@@ -3295,3 +3295,8 @@ Requires cell as `owner decision: <question>`.
   is delivered; [B483](m2.md#b483) stays in progress for the replication lanes
   (D160, OD18 (A) and OD19 (a)) and [B493](m2.md#b493) for the host pull route
   and the disconnected profile.
+  It then merged X61's lane x61-ceph-transport-policy after the int-x61
+  checkpoint: [B625](delivered.md#x61--ceph-transport-crypto-policy) is
+  delivered; [B484](m2.md#b484) stays in progress for the acceptance matrix
+  lanes X61-L2 to X61-L9 and the lanes D166 released, x61-ceph-fips,
+  x61-host-variants-example and X61-L6 (none implemented).
