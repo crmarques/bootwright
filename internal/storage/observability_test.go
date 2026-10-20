@@ -283,6 +283,34 @@ func TestB479ServiceIDIsForbidden(t *testing.T) {
 	}
 }
 
+func TestServicesWithoutANativeNetworksFieldRefuseNetworks(t *testing.T) {
+	minimal := b479Minimal()
+	networked := func(service api.Value) api.Value { return service.With("networks", api.StringList("192.0.2.0/24")) }
+	for _, row := range []struct {
+		serviceType string
+		services    []api.Value
+	}{
+		{"ceph-exporter", []api.Value{networked(minimal["ceph-exporter"])}},
+		{"snmp-gateway", []api.Value{networked(minimal["snmp-gateway"]), minimal["alertmanager"]}},
+	} {
+		cluster, catalog := withServices(t, fixtureCatalog(), row.services...)
+		want := api.Issue{Code: "api.invariant", Field: "$.spec.ceph.services[3].networks",
+			Message:     "cephadm's " + row.serviceType + " service spec has no networks field, so cephadm would reject this document",
+			Remediation: "remove networks from this " + row.serviceType + " service"}
+		for _, issues := range [][]api.Issue{Validate(cluster, catalog), ValidatePartial(cluster, catalog)} {
+			if found := issuesAt(issues, want.Field); len(found) != 1 || found[0] != want {
+				t.Fatalf("%s networks: %#v", row.serviceType, found)
+			}
+		}
+	}
+	for _, serviceType := range []string{"prometheus", "alertmanager", "grafana", "node-exporter"} {
+		cluster, catalog := withServices(t, fixtureCatalog(), networked(minimal[serviceType]))
+		if found := issuesAt(Validate(cluster, catalog), "$.spec.ceph.services[3].networks"); len(found) != 0 {
+			t.Fatalf("%s networks refused: %#v", serviceType, found)
+		}
+	}
+}
+
 func TestB479ValueRulesFollowTheNativeGrammar(t *testing.T) {
 	alertmanager := b479Service("alertmanager")
 	for _, row := range []struct {

@@ -491,6 +491,9 @@ member of the schema refuses at its own field with an owner:
   `addrs`; and the management gateway's session, stapling and server-token
   options. ceph-exporter `sock_dir` refuses because cephadm discards it, so
   the stored service would not match the document.
+- Service `networks` refuses on `ceph-exporter` and `snmp-gateway`, whose
+  ServiceSpec has no `networks` field, so cephadm would reject the document
+  before it is stored; the monitoring unit's worker refuses the same request.
 - oauth2-proxy `ssl_insecure_skip_verify` always refuses (D161): the proxy
   verifies its identity provider's certificate.
 - An alertmanager `user_data` key other than `default_webhook_urls` refuses

@@ -61,6 +61,8 @@ MEMBERS = {
     "prometheus": frozenset(("only_bind_port_on_networks", "port", "retention_size", "retention_time")),
     "snmp-gateway": frozenset(("auth_protocol", "engine_id", "port", "privacy_protocol", "snmp_destination", "snmp_version")),
 }
+# The types whose cephadm ServiceSpec has no networks field, as admission refuses them.
+UNNETWORKED = frozenset(("ceph-exporter", "snmp-gateway"))
 CHOICES = {"auth_protocol": ("MD5", "SHA"), "privacy_protocol": ("DES", "AES"), "protocol": ("http", "https"), "snmp_version": ("V2c", "V3")}
 FLAGS = frozenset(("anonymous_access", "only_bind_port_on_networks"))
 MAX_TEXT = 256
@@ -136,6 +138,7 @@ def validate(unit, request, hosts):
         require(all(member(name, value) for name, value in spec.items()))
         require(document["service_type"] != "snmp-gateway" or {"snmp_destination", "snmp_version"} <= set(spec))
         if "networks" in document:
+            require(document["service_type"] not in UNNETWORKED)
             ceph_native_nfs.networks(document["networks"])
     frozen = {entry["name"] for entry in request.get("auxiliary", [])}
     require(set(needed_images(unit)) <= frozen)

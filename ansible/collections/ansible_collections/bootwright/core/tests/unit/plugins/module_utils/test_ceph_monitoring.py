@@ -555,6 +555,8 @@ INVALID = {
     "binding to an unrealized leaf": lambda request: request["service"]["bindings"][0].update(path="/spec/protocol"),
     "bindings out of order": lambda request: request["service"]["bindings"].reverse(),
     "unselected auxiliary": lambda request: request.update(auxiliary=AUXILIARY[:3]),
+    "networks on ceph-exporter": lambda request: request["service"]["documents"][1].update(networks=["192.0.2.0/24"]),
+    "networks on snmp-gateway": lambda request: request["service"]["documents"][5].update(networks=["192.0.2.0/24"]),
 }
 
 
@@ -565,6 +567,13 @@ def test_monitoring_request_validation(case):
     INVALID[case](request)
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         ceph_native.validate(request)
+
+
+def test_monitoring_service_networks_validate_where_cephadm_has_the_field():
+    request = monitoring_request()
+    for index in (0, 2, 3, 4):
+        request["service"]["documents"][index]["networks"] = ["192.0.2.0/24"]
+    assert ceph_native.validate(request) is not None
 
 
 def test_unit_material_reaches_only_the_apply_phase():

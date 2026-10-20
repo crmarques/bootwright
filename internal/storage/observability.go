@@ -59,6 +59,8 @@ var observabilityRefusedMembers = map[string][]refusedMember{
 	},
 }
 
+var unnetworkedServiceTypes = []string{"ceph-exporter", "snmp-gateway"}
+
 var unrealizedServiceTypes = []refusedMember{
 	{names: []string{"loki", "alloy", "promtail"}, message: "Bootwright does not realize log collection yet", remedy: "remove this service from spec.ceph.services; B479 tracks log collection"},
 	{names: []string{"crash"}, message: "cephadm bootstrap creates the crash service on every host as a derived child of the StorageCluster, so a declared crash service would be its second owner", remedy: "remove the crash service from spec.ceph.services; the cluster keeps its derived crash service"},
@@ -116,6 +118,9 @@ func validPort(text string) bool {
 func (a *admission) observabilityRecord(service api.Value, typeName, field string, partial bool) {
 	spec := service.Get("spec")
 	at := field + ".spec."
+	if slices.Contains(unnetworkedServiceTypes, typeName) && service.Has("networks") {
+		a.issue("api.invariant", field+".networks", "cephadm's "+typeName+" service spec has no networks field, so cephadm would reject this document", "remove networks from this "+typeName+" service")
+	}
 	if slices.Contains([]string{"prometheus", "alertmanager", "grafana"}, typeName) && spec.Get("only_bind_port_on_networks").Bool() && service.Get("networks").Len() == 0 {
 		a.issue("api.invariant", at+"only_bind_port_on_networks", "only_bind_port_on_networks needs the service networks it binds to", "declare networks on this service or omit spec.only_bind_port_on_networks")
 	}
