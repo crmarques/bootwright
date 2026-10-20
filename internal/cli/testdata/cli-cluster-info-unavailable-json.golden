@@ -144,7 +144,8 @@
             "name": "rbd-data",
             "status": "pending"
           }
-        ]
+        ],
+        "endpoints": []
       }
     ]
   },

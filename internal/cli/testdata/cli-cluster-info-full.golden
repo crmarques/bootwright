@@ -89,6 +89,14 @@
       Dashboard status     ready
       Certificate SHA-256  AB:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C:0C
                            (self-signed; compare before accepting the browser warning)
+      Endpoint  mgmt-gateway  ready
+                https://192.0.2.50:9443/
+                CD:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E:0E
+                (cephadm-signed; compare before accepting the browser warning)
+      Endpoint  nfs.files  ready
+                nfs://192.0.2.60:2049/
+      Endpoint  rgw.objects  unproved: the apply did not prove this endpoint reachable
+                https://objects.lab.test:8443/
     Evidence
       Status    ready
       FSID      6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b

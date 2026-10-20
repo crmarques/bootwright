@@ -499,6 +499,7 @@ A managed Ceph StorageCluster entry adds these fields, in this order, after its
 | `status` | `ready`, or `unavailable` with a `reason` and the remedy `bootwright apply --context <context> --stage clusters` when the evidence above is missing; an unavailable entry omits the fields that evidence would carry. |
 | `dashboard` | `{status, user, urls, certificateSHA256}`: `status` is `ready`, or `unproved` with a `reason` when the apply could not reach the dashboard; `user` is the administrator account; `urls` and `certificateSHA256` are those the apply proved. |
 | `resources` | `[{kind, name, status, scope}]`: the rows `status` reports under this cluster, in the same order with the same `status`, on a ready and an unavailable entry alike. `scope` is a one-line redacted statement of the object in the spellings below, built from the request the current operation froze for it; it is omitted when no request of this build froze the object. For StorageObjectGateway it is the gateway request, not the zone pools that object also freezes. StorageExport, which no capability realizes, takes it from its declaration. No `scope` carries a key, password, Secret reference or other Secret material. |
+| `endpoints` | `[{service, urls, certificateSHA256, issuer, status, reason}]`: one row for each management gateway, NFS service and object gateway request the current operation froze for this cluster, ordered by `service`; always an array, empty on an unavailable entry. `service` is `mgmt-gateway`, `nfs.<service_id>` or `rgw.<service_id>`. Each URL derives from the frozen request and spells an IPv6 host in brackets. The management gateway is `https://<virtual_ip>:<port>/`, or `https://<host>:<port>/` for each placement host when it declares no virtual IP. An NFS service behind an ingress is `nfs://<ingress virtual IP>:<port>/`, the port being the NFS `port` behind a keepalive-only ingress and otherwise the ingress `frontend_port`, default 2049; without an ingress it is the NFS `virtual_ip`, else each placement host, at the NFS `port`, default 2049. An object gateway is `https` when its terminating document, the ingress when one fronts it and otherwise the rgw service, sets `ssl`, else `http`, at the ingress `frontend_port`, else `rgw_frontend_port`, else 443 or 80, on its endpoint FQDN, else the ingress virtual IP, else each placement host. `status` is `ready` when the apply evidence of that block in the current operation, for the same frozen request, proves the endpoint ready (a management or object gateway also reached by the controller's connect), else `unproved` with a `reason`; an NFS service without an ingress is always `unproved`, because the apply proves an NFS address only through the virtual IP of an ingress in front of it. `certificateSHA256` is the fingerprint that connect observed, present only on a `ready` TLS endpoint. `issuer` is `bound` when the request binds a stored certificate and `cephadm` when cephadm signs it, and is omitted for a plaintext endpoint. No endpoint carries Secret material. |
 
 | Kind | `scope` |
 | --- | --- |
@@ -562,7 +563,10 @@ SSH node, and gives context- and cluster-qualified invocation templates for
 applicable commands, including `--node` for SSH and `-- <command>...` for a
 required payload. A managed Ceph entry also shows its release, FSID, image
 reference and digest, monitors, administrator command and dashboard URLs, user
-and status. Unavailable and unimplemented templates are visibly labeled;
+and status. Access lists each endpoint after the dashboard with its service and
+status, and its reason when unproved; full detail adds its URLs and, for a ready
+TLS endpoint, its certificate SHA-256 and issuer. Unavailable and unimplemented
+templates are visibly labeled;
 inapplicable entries explain the restriction and offer no invocation template.
 A template is guidance, never an executable handoff or a promise of readiness.
 

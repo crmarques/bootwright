@@ -227,7 +227,7 @@ func TestClusterInfoReportsEachKindFromDesiredStateAndEvidence(t *testing.T) {
 		Image:     &Image{Reference: "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074", Digest: "sha256:" + strings.Repeat("a", 64), Platform: "linux/amd64"},
 		Monitors:  []Monitor{{Host: "rhel-01", FQDN: "rhel-01.lab.test", Address: "192.0.2.11"}},
 		Dashboard: &Dashboard{Status: DashboardReady, User: "admin", CertificateSHA256: strings.Repeat("c", 64), URLs: testDashboard().URLs},
-		Resources: []Resource{},
+		Resources: []Resource{}, Endpoints: []Endpoint{},
 	}
 	if !reflect.DeepEqual(*managed.Ceph, want) {
 		t.Fatalf("ceph = %+v, want %+v", *managed.Ceph, want)

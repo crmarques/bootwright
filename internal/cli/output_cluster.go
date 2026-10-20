@@ -61,6 +61,16 @@ type managedCephPresentation struct {
 	Remedy      string                 `json:"remedy,omitempty"`
 	Dashboard   *dashboardPresentation `json:"dashboard,omitempty"`
 	Resources   []resourcePresentation `json:"resources"`
+	Endpoints   []endpointPresentation `json:"endpoints"`
+}
+
+type endpointPresentation struct {
+	Service           string   `json:"service"`
+	URLs              []string `json:"urls"`
+	CertificateSHA256 string   `json:"certificateSHA256,omitempty"`
+	Issuer            string   `json:"issuer,omitempty"`
+	Status            string   `json:"status"`
+	Reason            string   `json:"reason,omitempty"`
 }
 
 type resourcePresentation struct {
@@ -148,7 +158,7 @@ func validManagedCeph(ceph *inspection.ManagedCeph) bool {
 	if ceph.Dashboard != nil && !validDashboard(ceph.Dashboard) {
 		return false
 	}
-	if !validResources(ceph.Resources) {
+	if !validResources(ceph.Resources) || !validEndpoints(ceph.Endpoints) {
 		return false
 	}
 	switch ceph.Status {
@@ -157,9 +167,35 @@ func validManagedCeph(ceph *inspection.ManagedCeph) bool {
 			ceph.Dashboard != nil
 	case inspection.StatusUnavailable:
 		return ceph.Reason != "" && ceph.Remedy != "" && ceph.FSID == "" && ceph.Image == nil && len(ceph.Monitors) == 0 && ceph.CephCommand == "" &&
-			(ceph.Dashboard == nil || ceph.Dashboard.Revealed)
+			len(ceph.Endpoints) == 0 && (ceph.Dashboard == nil || ceph.Dashboard.Revealed)
 	}
 	return false
+}
+
+var endpointSchemes = []string{"https://", "http://", "nfs://"}
+
+func validEndpoints(endpoints []inspection.Endpoint) bool {
+	for index, e := range endpoints {
+		if e.Service == "" || len(e.URLs) == 0 || (e.Status == inspection.EndpointReady) != (e.Reason == "") ||
+			e.Status != inspection.EndpointReady && e.Status != inspection.EndpointUnproved ||
+			index > 0 && endpoints[index-1].Service >= e.Service || !validEndpointIssuer(e) {
+			return false
+		}
+		for _, url := range e.URLs {
+			if !slices.ContainsFunc(endpointSchemes, func(scheme string) bool { return strings.HasPrefix(url, scheme) }) ||
+				strings.HasPrefix(url, "https://") != (e.Issuer != "") {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func validEndpointIssuer(e inspection.Endpoint) bool {
+	if e.Issuer != "" && e.Issuer != inspection.IssuerBound && e.Issuer != inspection.IssuerCephadm {
+		return false
+	}
+	return e.CertificateSHA256 == "" || dashboardFingerprint.MatchString(e.CertificateSHA256) && e.Status == inspection.EndpointReady && e.Issuer != ""
 }
 
 var resourceStatuses = []string{inspection.ResourceUnsupported, inspection.ResourcePending, inspection.ResourceDone, inspection.ResourceFailed, inspection.ResourceUnknown}
@@ -253,6 +289,17 @@ func displayManagedCeph(ceph *inspection.ManagedCeph) *managedCephPresentation {
 		AdminNode: escapeDisplayLine(ceph.AdminNode), CephCommand: escapeDisplayLine(ceph.CephCommand),
 		Status: escapeDisplayLine(ceph.Status), Reason: escapeDisplayLine(ceph.Reason), Remedy: escapeDisplayLine(ceph.Remedy),
 		Dashboard: displayDashboard(ceph.Dashboard), Resources: make([]resourcePresentation, 0, len(ceph.Resources)),
+		Endpoints: make([]endpointPresentation, 0, len(ceph.Endpoints)),
+	}
+	for _, e := range ceph.Endpoints {
+		urls := make([]string, 0, len(e.URLs))
+		for _, url := range e.URLs {
+			urls = append(urls, escapeDisplayLine(url))
+		}
+		shown.Endpoints = append(shown.Endpoints, endpointPresentation{
+			Service: escapeDisplayLine(e.Service), URLs: urls, CertificateSHA256: escapeDisplayLine(e.CertificateSHA256),
+			Issuer: escapeDisplayLine(e.Issuer), Status: escapeDisplayLine(e.Status), Reason: escapeDisplayLine(e.Reason),
+		})
 	}
 	for _, r := range ceph.Resources {
 		shown.Resources = append(shown.Resources, resourcePresentation{
@@ -407,6 +454,9 @@ func writeManagedCeph(text *display, contextName, cluster string, ceph *inspecti
 	if ceph.Dashboard != nil {
 		text.mutedFields(dashboardAccessFields(ceph.Dashboard)...)
 	}
+	if rows := endpointAccessFields(ceph.Endpoints, full); len(rows) != 0 {
+		text.mutedFields(rows...)
+	}
 	text.subsection("Evidence")
 	fields := []field{{Label: "Status", Value: ceph.Status}}
 	if ceph.Status != inspection.StatusReady {
@@ -465,6 +515,31 @@ func dashboardAccessFields(d *inspection.Dashboard) []field {
 	fields = append(fields, field{Label: "Dashboard status", Value: status})
 	if d.CertificateSHA256 != "" {
 		fields = append(fields, field{Label: "Certificate SHA-256", Value: colonHex(d.CertificateSHA256) + "  (self-signed; compare before accepting the browser warning)"})
+	}
+	return fields
+}
+
+func endpointAccessFields(endpoints []inspection.Endpoint, full bool) []field {
+	fields := []field{}
+	for _, e := range endpoints {
+		value := e.Service + "  " + e.Status
+		if e.Reason != "" {
+			value += ": " + e.Reason
+		}
+		fields = append(fields, field{Label: "Endpoint", Value: value})
+		if !full {
+			continue
+		}
+		for _, url := range e.URLs {
+			fields = append(fields, field{Value: url})
+		}
+		if e.CertificateSHA256 != "" {
+			note := "(bound certificate)"
+			if e.Issuer == inspection.IssuerCephadm {
+				note = "(cephadm-signed; compare before accepting the browser warning)"
+			}
+			fields = append(fields, field{Value: colonHex(e.CertificateSHA256) + "  " + note})
+		}
 	}
 	return fields
 }

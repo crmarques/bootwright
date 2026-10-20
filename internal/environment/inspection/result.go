@@ -25,6 +25,11 @@ const (
 	DashboardActive   = "active"
 	DashboardStandby  = "standby"
 
+	EndpointReady    = "ready"
+	EndpointUnproved = "unproved"
+	IssuerBound      = "bound"
+	IssuerCephadm    = "cephadm"
+
 	ResourceUnsupported = "unsupported"
 	ResourcePending     = "pending"
 	ResourceDone        = "done"
@@ -97,6 +102,7 @@ type ManagedCeph struct {
 	Remedy      string
 	Dashboard   *Dashboard
 	Resources   []Resource
+	Endpoints   []Endpoint
 }
 
 type Resource struct {
@@ -104,6 +110,15 @@ type Resource struct {
 	Name   string
 	Status string
 	Scope  string
+}
+
+type Endpoint struct {
+	Service           string
+	URLs              []string
+	CertificateSHA256 string
+	Issuer            string
+	Status            string
+	Reason            string
 }
 
 type StorageEntry struct {

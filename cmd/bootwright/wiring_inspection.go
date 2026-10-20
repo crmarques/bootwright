@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
@@ -89,7 +90,36 @@ func (c cephInspection) ManagedCeph(ctx context.Context, contextName string, cat
 	for _, url := range d.URLs {
 		proof.Dashboard.URLs = append(proof.Dashboard.URLs, inspection.DashboardURL{Host: url.Host, URL: url.URL, Role: url.Role})
 	}
+	proof.Endpoints, err = c.endpoints(ctx, contextName, cluster.Name(), proofs)
+	if err != nil {
+		return inspection.CephProof{}, err
+	}
 	return proof, nil
+}
+
+func (c cephInspection) endpoints(ctx context.Context, contextName, cluster string, proofs []lifecycle.BlockEvidence) ([]inspection.Endpoint, error) {
+	found, err := c.reconciler.StorageResources(ctx, contextName)
+	if err != nil {
+		return nil, err
+	}
+	var frozen []reconciliation.Block
+	if found != nil {
+		frozen = found.Frozen
+	}
+	all := slices.Clone(proofs)
+	for _, name := range ceph.EndpointGateways(cluster, frozen) {
+		gateway, err := c.reconciler.Evidence(ctx, contextName, string(api.StorageObjectGateway), name)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, gateway...)
+	}
+	endpoints := []inspection.Endpoint{}
+	for _, row := range ceph.InspectEndpoints(cluster, frozen, all) {
+		endpoints = append(endpoints, inspection.Endpoint{Service: row.Service, URLs: row.URLs, CertificateSHA256: row.CertificateSHA256,
+			Issuer: row.Issuer, Status: row.Status, Reason: row.Reason})
+	}
+	return endpoints, nil
 }
 
 type installProofs struct{ reconciler evidenceReader }

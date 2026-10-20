@@ -43,4 +43,28 @@ func TestStructuredClusterInfoYAMLEqualsJSON(t *testing.T) {
 			t.Fatalf("resource %d scope = %#v, want %q", index, scope, want[index])
 		}
 	}
+	endpoints, _ := storage[0].(map[string]any)["endpoints"].([]any)
+	services := []string{}
+	for _, row := range endpoints {
+		services = append(services, row.(map[string]any)["service"].(string))
+	}
+	if !reflect.DeepEqual(services, []string{"mgmt-gateway", "nfs.files", "rgw.objects"}) {
+		t.Fatalf("endpoint services = %v", services)
+	}
+	for _, format := range []string{"json", "yaml"} {
+		var out bytes.Buffer
+		if err := writeClusterInfo(WithPresentation(&out, PresentationOptions{Format: format}), io.Discard, "cluster info", storageOnly(unavailableCeph()), true); err != nil {
+			t.Fatal(err)
+		}
+		var document map[string]any
+		if format == "yaml" {
+			document = structuredDocument(t, out.String())
+		} else if err := json.Unmarshal(out.Bytes(), &document); err != nil {
+			t.Fatal(err)
+		}
+		entry := document["result"].(map[string]any)["storage"].([]any)[0].(map[string]any)
+		if rows, present := entry["endpoints"].([]any); !present || len(rows) != 0 {
+			t.Fatalf("%s: an unavailable entry's endpoints = %#v", format, entry["endpoints"])
+		}
+	}
 }

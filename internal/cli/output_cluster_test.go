@@ -94,6 +94,12 @@ func readyCeph() *inspection.ManagedCeph {
 			{Kind: "StorageClient", Name: "rbd-canary", Status: inspection.ResourceDone, Scope: "client.rbd-canary read-write on pool rbd-data"},
 			{Kind: "StorageObjectGateway", Name: "objects", Status: inspection.ResourceUnsupported, Scope: "zone lab/lab/lab-a"},
 		},
+		Endpoints: []inspection.Endpoint{
+			{Service: "mgmt-gateway", URLs: []string{"https://192.0.2.50:9443/"}, CertificateSHA256: "cd" + strings.Repeat("0e", 31), Issuer: inspection.IssuerCephadm, Status: inspection.EndpointReady},
+			{Service: "nfs.files", URLs: []string{"nfs://192.0.2.60:2049/"}, Status: inspection.EndpointReady},
+			{Service: "rgw.objects", URLs: []string{"https://objects.lab.test:8443/"}, Issuer: inspection.IssuerBound, Status: inspection.EndpointUnproved,
+				Reason: "the apply did not prove this endpoint reachable"},
+		},
 	}
 }
 

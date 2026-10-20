@@ -183,7 +183,7 @@ func TestInspectionWiringMapsEvidenceReadersToProofs(t *testing.T) {
 	}
 }
 
-func TestCephInspectionReportsAReasonWithoutProofsAndTheFSIDWithThem(t *testing.T) {
+func inspectedStorageCluster() (api.Catalog, api.Object) {
 	machineObject := func(name, address string) api.Object {
 		addresses := api.ListValue(api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("mgmt")}, api.FieldValue{Name: "address", Value: api.StringValue(address)}))
 		return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(
@@ -193,13 +193,14 @@ func TestCephInspectionReportsAReasonWithoutProofsAndTheFSIDWithThem(t *testing.
 	node := api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("rhel-01")}, api.FieldValue{Name: "fqdn", Value: api.StringValue("rhel-01.lab.test")}, api.FieldValue{Name: "machineRef", Value: api.StringValue("m1")})
 	cluster := api.NewObject(api.StorageCluster, "storage", api.Value{}, api.MapValue(
 		api.FieldValue{Name: "ceph", Value: api.MapValue(api.FieldValue{Name: "topology", Value: api.MapValue(api.FieldValue{Name: "nodes", Value: api.ListValue(node)})})}))
-	catalog := api.NewCatalog([]api.Object{cluster, machineObject("m1", "192.0.2.11")})
-	reader := &readerFake{}
-	proof, err := (cephInspection{reconciler: reader}).ManagedCeph(context.Background(), "lab", catalog, cluster)
-	if err != nil || proof.Reason == "" || proof.FSID != "" || !slices.Equal(reader.reads, []string{"StorageCluster/storage"}) {
-		t.Fatalf("proof without evidence = %+v (%v) after reads %v", proof, err, reader.reads)
-	}
-	digest := "sha256:" + strings.Repeat("e", 64)
+	return api.NewCatalog([]api.Object{cluster, machineObject("m1", "192.0.2.11")}), cluster
+}
+
+const inspectedDigest = "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+
+func inspectedClusterProofs(t *testing.T) []lifecycle.BlockEvidence {
+	t.Helper()
+	digest := inspectedDigest
 	image, err := json.Marshal(ceph.ImageEvidence{Postcondition: true, Release: "9.9.1.2", Base: "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9", Tag: "v9.9.1-25074", Digest: digest, Platform: ceph.PinnedPlatform, Request: "digest"})
 	if err != nil {
 		t.Fatal(err)
@@ -213,10 +214,21 @@ func TestCephInspectionReportsAReasonWithoutProofsAndTheFSIDWithThem(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader.proofs = map[string][]lifecycle.BlockEvidence{"StorageCluster/storage": {
+	return []lifecycle.BlockEvidence{
 		{Kind: "StorageCluster", Object: "storage", Implementation: ceph.ImageImplementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: image},
 		{Kind: "StorageCluster", Object: "storage", Implementation: ceph.Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: bootstrap},
-	}}
+	}
+}
+
+func TestCephInspectionReportsAReasonWithoutProofsAndTheFSIDWithThem(t *testing.T) {
+	catalog, cluster := inspectedStorageCluster()
+	reader := &readerFake{}
+	proof, err := (cephInspection{reconciler: reader}).ManagedCeph(context.Background(), "lab", catalog, cluster)
+	if err != nil || proof.Reason == "" || proof.FSID != "" || !slices.Equal(reader.reads, []string{"StorageCluster/storage"}) {
+		t.Fatalf("proof without evidence = %+v (%v) after reads %v", proof, err, reader.reads)
+	}
+	digest := inspectedDigest
+	reader.proofs = map[string][]lifecycle.BlockEvidence{"StorageCluster/storage": inspectedClusterProofs(t)}
 	proof, err = (cephInspection{reconciler: reader}).ManagedCeph(context.Background(), "lab", catalog, cluster)
 	if err != nil || proof.Reason != "" || proof.FSID != "6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b" || proof.Image.Digest != digest || proof.Image.Platform != "linux/amd64" ||
 		len(proof.Monitors) != 1 || proof.Monitors[0].Host != "rhel-01" || proof.Monitors[0].FQDN != "rhel-01.lab.test" || proof.Monitors[0].Address != "198.51.100.11" {
@@ -252,6 +264,53 @@ func TestDashboardCustodyReadsTheClusterBlocksDashboardEntry(t *testing.T) {
 	failure := errors.New("the custody store is unreadable")
 	if _, _, err := (dashboardCustody{reader: &producedFake{failed: failure}}).DashboardPassword(context.Background(), "lab", "storage"); !errors.Is(err, failure) {
 		t.Fatalf("custody failure = %v", err)
+	}
+}
+
+func TestCephInspectionReadsEndpointEvidence(t *testing.T) {
+	catalog, cluster := inspectedStorageCluster()
+	frozen := func(kind, object string, r ceph.Request, digest string) reconciliation.Block {
+		r.Version = ceph.Version
+		data, err := r.Canonical()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Kind: kind, Object: object, Implementation: ceph.Implementation, Request: data}, RequestDigest: strings.Repeat(digest, 64)}
+	}
+	mgmtDocument := json.RawMessage(`{"placement":{"hosts":["rhel-01.lab.test"]},"service_type":"mgmt-gateway","spec":{"port":9443,"virtual_ip":"192.0.2.60"}}`)
+	rgwDocument := json.RawMessage(`{"placement":{"hosts":["rhel-01.lab.test"]},"service_id":"objects","service_type":"rgw","spec":{"rgw_realm":"lab","rgw_zone":"lab","rgw_zonegroup":"lab","ssl":true}}`)
+	mgmt := frozen("StorageCluster", "storage", ceph.Request{Action: "service", Cluster: "storage", Service: &ceph.ServiceUnit{Type: "mgmt-gateway", Documents: []json.RawMessage{mgmtDocument}}}, "a")
+	objects := frozen("StorageObjectGateway", "objects", ceph.Request{Action: "gateway", Cluster: "storage", Gateway: &ceph.Gateway{Name: "objects", Endpoint: "s3.lab.test", Documents: []json.RawMessage{rgwDocument}}}, "b")
+	foreign := frozen("StorageObjectGateway", "foreign", ceph.Request{Action: "gateway", Cluster: "other", Gateway: &ceph.Gateway{Name: "foreign", Documents: []json.RawMessage{rgwDocument}}}, "c")
+	proved := func(block reconciliation.Block, action string) lifecycle.BlockEvidence {
+		data, err := json.Marshal(ceph.Evidence{Version: ceph.EvidenceVersion, Request: block.RequestDigest, Action: action, Owner: "apply", FSID: "6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b", Owned: true, Exists: true, Ready: true,
+			Health: "HEALTH_OK", Hosts: []string{}, Monitors: []string{}, MGRStandbys: []string{}, MonAddrs: []ceph.MonitorAddress{}, OSDs: []ceph.OSDEvidence{}, Daemons: []ceph.UnitDaemon{},
+			Endpoint: ceph.EndpointEvidence{CertificateSHA256: strings.Repeat("d", 64), Reachable: true}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return lifecycle.BlockEvidence{Kind: block.Kind, Object: block.Object, Implementation: block.Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: data}
+	}
+	reader := &readerFake{
+		proofs: map[string][]lifecycle.BlockEvidence{
+			"StorageCluster/storage":       append(inspectedClusterProofs(t), proved(mgmt, "service")),
+			"StorageObjectGateway/objects": {proved(objects, "gateway")},
+			"StorageObjectGateway/foreign": {proved(foreign, "gateway")},
+		},
+		resources: &lifecycle.StorageResourcesResult{Frozen: []reconciliation.Block{mgmt, objects, foreign}},
+	}
+	proof, err := (cephInspection{reconciler: reader}).ManagedCeph(context.Background(), "lab", catalog, cluster)
+	want := []inspection.Endpoint{
+		{Service: "mgmt-gateway", URLs: []string{"https://192.0.2.60:9443/"}, CertificateSHA256: strings.Repeat("d", 64), Issuer: inspection.IssuerCephadm, Status: inspection.EndpointReady},
+		{Service: "rgw.objects", URLs: []string{"https://s3.lab.test:443/"}, CertificateSHA256: strings.Repeat("d", 64), Issuer: inspection.IssuerCephadm, Status: inspection.EndpointReady},
+	}
+	if err != nil || !reflect.DeepEqual(proof.Endpoints, want) || !slices.Equal(reader.reads, []string{"StorageCluster/storage", "resources/lab", "StorageObjectGateway/objects"}) {
+		t.Fatalf("endpoints = %+v (%v) after reads %v, want %+v", proof.Endpoints, err, reader.reads, want)
+	}
+	bare := &readerFake{proofs: map[string][]lifecycle.BlockEvidence{"StorageCluster/storage": inspectedClusterProofs(t)}}
+	proof, err = (cephInspection{reconciler: bare}).ManagedCeph(context.Background(), "lab", catalog, cluster)
+	if err != nil || proof.Endpoints == nil || len(proof.Endpoints) != 0 || proof.FSID == "" {
+		t.Fatalf("a missing resources result gave %#v (%v)", proof.Endpoints, err)
 	}
 }
 

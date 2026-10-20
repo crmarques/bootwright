@@ -300,7 +300,7 @@ func (s Service) cephEntry(ctx context.Context, selected string, catalog api.Cat
 	ceph := cluster.Spec().Get("ceph")
 	entry := ManagedCeph{
 		Management: ManagementManaged, Release: ceph.Get("release").Text(),
-		AdminNode: ceph.Get("cephadm", "bootstrap", "node").Text(), Resources: []Resource{},
+		AdminNode: ceph.Get("cephadm", "bootstrap", "node").Text(), Resources: []Resource{}, Endpoints: []Endpoint{},
 	}
 	if resources != nil {
 		entry.Resources = resources
@@ -324,6 +324,9 @@ func (s Service) cephEntry(ctx context.Context, selected string, catalog api.Cat
 	entry.Monitors = proof.Monitors
 	dashboard := proof.Dashboard
 	entry.Dashboard = &dashboard
+	if proof.Endpoints != nil {
+		entry.Endpoints = proof.Endpoints
+	}
 	entry.CephCommand = "bootwright cluster exec --context " + selected + " --name " + cluster.Name() + " --node " + entry.AdminNode +
 		" -- sudo -n ceph --conf " + root + "/ceph.conf --keyring " + root + "/ceph.client.admin.keyring"
 	return entry, nil

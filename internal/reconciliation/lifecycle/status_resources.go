@@ -115,7 +115,7 @@ func (s Service) storageResources(ctx context.Context, view View, result *Storag
 	result.Clusters = realizedStorage(result.Clusters, realized)
 	kinds := storageChildKinds()
 	for _, block := range plan.Blocks {
-		if slices.Contains(kinds, api.Kind(block.Kind)) {
+		if block.Kind == string(api.StorageCluster) || slices.Contains(kinds, api.Kind(block.Kind)) {
 			result.Frozen = append(result.Frozen, block)
 		}
 	}

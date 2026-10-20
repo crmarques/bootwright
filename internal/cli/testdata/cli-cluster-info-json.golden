@@ -193,6 +193,33 @@
             "status": "unsupported",
             "scope": "zone lab/lab/lab-a"
           }
+        ],
+        "endpoints": [
+          {
+            "service": "mgmt-gateway",
+            "urls": [
+              "https://192.0.2.50:9443/"
+            ],
+            "certificateSHA256": "cd0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e",
+            "issuer": "cephadm",
+            "status": "ready"
+          },
+          {
+            "service": "nfs.files",
+            "urls": [
+              "nfs://192.0.2.60:2049/"
+            ],
+            "status": "ready"
+          },
+          {
+            "service": "rgw.objects",
+            "urls": [
+              "https://objects.lab.test:8443/"
+            ],
+            "issuer": "bound",
+            "status": "unproved",
+            "reason": "the apply did not prove this endpoint reachable"
+          }
         ]
       }
     ]

@@ -1,6 +1,7 @@
 package ceph
 
 import (
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -186,6 +187,284 @@ func inspectMonitors(catalog api.Catalog, cluster api.Object, names []string, ad
 	}
 	slices.SortFunc(monitors, func(a, b MonitorInspection) int { return strings.Compare(a.Host, b.Host) })
 	return monitors, ""
+}
+
+const (
+	EndpointReady    = "ready"
+	EndpointUnproved = "unproved"
+	IssuerBound      = "bound"
+	IssuerCephadm    = "cephadm"
+)
+
+const (
+	noEndpointProof   = "no apply of this context's current operation has proved this endpoint"
+	unreachedEndpoint = "the apply did not prove this endpoint reachable"
+	unprobedNFS       = "the apply proves an NFS service's address only through the virtual IP of an ingress in front of it"
+)
+
+type EndpointInspection struct {
+	Service           string
+	URLs              []string
+	CertificateSHA256 string
+	Issuer            string
+	Status            string
+	Reason            string
+}
+
+type endpointSpec struct {
+	FrontendPort    *int64
+	KeepaliveOnly   bool
+	Port            *int64
+	RGWFrontendPort *int64
+	SSL             bool
+	VirtualIP       string
+}
+
+type endpointDocument struct {
+	Placement   nativePlacement
+	ServiceID   string
+	ServiceType string
+	Spec        endpointSpec
+}
+
+type endpointCandidate struct {
+	row      EndpointInspection
+	proved   func(Evidence) bool
+	digest   bool
+	unprobed bool
+}
+
+func specNumber(spec map[string]any, key string) *int64 {
+	number, ok := spec[key].(float64)
+	if !ok || number != math.Trunc(number) {
+		return nil
+	}
+	value := int64(number)
+	return &value
+}
+
+func specFlag(spec map[string]any, key string) bool {
+	flag, _ := spec[key].(bool)
+	return flag
+}
+
+func endpointDocuments(r Request) (map[string]endpointDocument, bool) {
+	raw := unitDocuments(r)
+	if raw == nil {
+		return nil, false
+	}
+	documents := map[string]endpointDocument{}
+	for _, document := range raw {
+		spec, _ := document.Spec.(map[string]any)
+		address, _ := spec["virtual_ip"].(string)
+		documents[document.ServiceType] = endpointDocument{
+			Placement: document.Placement, ServiceID: document.ServiceID, ServiceType: document.ServiceType,
+			Spec: endpointSpec{FrontendPort: specNumber(spec, "frontend_port"), KeepaliveOnly: specFlag(spec, "keepalive_only"), Port: specNumber(spec, "port"),
+				RGWFrontendPort: specNumber(spec, "rgw_frontend_port"), SSL: specFlag(spec, "ssl"), VirtualIP: address},
+		}
+	}
+	return documents, true
+}
+
+func EndpointGateways(cluster string, frozen []reconciliation.Block) []string {
+	names := []string{}
+	for _, block := range frozen {
+		if block.Kind != string(api.StorageObjectGateway) || block.Implementation != Implementation {
+			continue
+		}
+		if r, err := DecodeRequest(block.Request); err == nil && r.Action == "gateway" && r.Gateway != nil && r.Cluster == cluster {
+			names = append(names, block.Object)
+		}
+	}
+	slices.Sort(names)
+	return slices.Compact(names)
+}
+
+func InspectEndpoints(cluster string, frozen []reconciliation.Block, proofs []lifecycle.BlockEvidence) []EndpointInspection {
+	rows := []EndpointInspection{}
+	for _, block := range frozen {
+		if block.Implementation != Implementation {
+			continue
+		}
+		r, err := DecodeRequest(block.Request)
+		if err != nil {
+			continue
+		}
+		candidate, ok := endpointCandidateOf(cluster, block, r)
+		if !ok || len(candidate.row.URLs) == 0 {
+			continue
+		}
+		rows = append(rows, candidate.settle(block, r, proofs))
+	}
+	slices.SortStableFunc(rows, func(a, b EndpointInspection) int { return strings.Compare(a.Service, b.Service) })
+	return rows
+}
+
+func endpointCandidateOf(cluster string, block reconciliation.Block, r Request) (endpointCandidate, bool) {
+	unit := block.Kind == string(api.StorageCluster) && block.Object == cluster && r.Action == "service" && r.Service != nil
+	switch {
+	case unit && r.Service.Type == "mgmt-gateway":
+		return mgmtEndpoint(r)
+	case unit && r.Service.Type == "nfs":
+		return nfsEndpoint(r)
+	case block.Kind == string(api.StorageObjectGateway) && r.Action == "gateway" && r.Gateway != nil && r.Cluster == cluster:
+		return gatewayEndpoint(r)
+	}
+	return endpointCandidate{}, false
+}
+
+func (c endpointCandidate) settle(block reconciliation.Block, r Request, proofs []lifecycle.BlockEvidence) EndpointInspection {
+	row := c.row
+	row.Status = EndpointUnproved
+	if c.unprobed {
+		row.Reason = unprobedNFS
+		return row
+	}
+	evidence, found := endpointProof(block, r, proofs)
+	switch {
+	case !found:
+		row.Reason = noEndpointProof
+	case !c.proved(evidence):
+		row.Reason = unreachedEndpoint
+	default:
+		row.Status = EndpointReady
+		if c.digest {
+			row.CertificateSHA256 = evidence.Endpoint.CertificateSHA256
+		}
+	}
+	return row
+}
+
+func endpointProof(block reconciliation.Block, r Request, proofs []lifecycle.BlockEvidence) (Evidence, bool) {
+	var found Evidence
+	count := 0
+	for _, proof := range proofs {
+		if proof.Kind != block.Kind || proof.Object != block.Object || proof.Implementation != block.Implementation ||
+			proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone {
+			continue
+		}
+		evidence, err := decodeEvidence(proof.Evidence)
+		if err != nil || evidence.Version != EvidenceVersion || evidence.Request != block.RequestDigest || evidence.Action != r.Action {
+			continue
+		}
+		found = evidence
+		count++
+	}
+	return found, count == 1
+}
+
+func endpointURLs(scheme string, hosts []string, port int64) []string {
+	urls := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		if strings.Contains(host, ":") {
+			host = "[" + host + "]"
+		}
+		urls = append(urls, scheme+"://"+host+":"+strconv.FormatInt(port, 10)+"/")
+	}
+	return urls
+}
+
+func bareAddress(address string) string {
+	bare, _, _ := strings.Cut(address, "/")
+	return bare
+}
+
+func sortedHosts(document endpointDocument) []string {
+	return slices.Sorted(slices.Values(document.Placement.Hosts))
+}
+
+func mgmtEndpoint(r Request) (endpointCandidate, bool) {
+	unit := r.Service
+	documents, ok := endpointDocuments(r)
+	gateway, found := documents["mgmt-gateway"]
+	if !ok || !found || gateway.Spec.Port == nil {
+		return endpointCandidate{}, false
+	}
+	hosts := sortedHosts(gateway)
+	if gateway.Spec.VirtualIP != "" {
+		hosts = []string{gateway.Spec.VirtualIP}
+	}
+	issuer := IssuerCephadm
+	if len(unit.Bindings) != 0 {
+		issuer = IssuerBound
+	}
+	return endpointCandidate{
+		row:    EndpointInspection{Service: "mgmt-gateway", URLs: endpointURLs("https", hosts, *gateway.Spec.Port), Issuer: issuer},
+		proved: func(e Evidence) bool { return e.Ready && e.Endpoint.Reachable }, digest: true,
+	}, true
+}
+
+func nfsEndpoint(r Request) (endpointCandidate, bool) {
+	unit := r.Service
+	documents, ok := endpointDocuments(r)
+	nfs, found := documents["nfs"]
+	if !ok || !found {
+		return endpointCandidate{}, false
+	}
+	row := EndpointInspection{Service: "nfs." + unit.ID}
+	port := int64(2049)
+	if nfs.Spec.Port != nil {
+		port = *nfs.Spec.Port
+	}
+	ingress, fronted := documents["ingress"]
+	if !fronted {
+		hosts := sortedHosts(nfs)
+		if nfs.Spec.VirtualIP != "" {
+			hosts = []string{bareAddress(nfs.Spec.VirtualIP)}
+		}
+		row.URLs = endpointURLs("nfs", hosts, port)
+		return endpointCandidate{row: row, unprobed: true}, true
+	}
+	if !ingress.Spec.KeepaliveOnly {
+		port = 2049
+		if ingress.Spec.FrontendPort != nil {
+			port = *ingress.Spec.FrontendPort
+		}
+	}
+	row.URLs = endpointURLs("nfs", []string{bareAddress(ingress.Spec.VirtualIP)}, port)
+	return endpointCandidate{row: row, proved: func(e Evidence) bool { return e.Ready }}, true
+}
+
+func gatewayEndpoint(r Request) (endpointCandidate, bool) {
+	gateway := r.Gateway
+	documents, ok := endpointDocuments(r)
+	rgw, found := documents["rgw"]
+	if !ok || !found {
+		return endpointCandidate{}, false
+	}
+	ingress, fronted := documents["ingress"]
+	terminating := rgw
+	if fronted {
+		terminating = ingress
+	}
+	scheme, port := "http", int64(80)
+	if terminating.Spec.SSL {
+		scheme, port = "https", 443
+	}
+	switch {
+	case fronted && ingress.Spec.FrontendPort != nil:
+		port = *ingress.Spec.FrontendPort
+	case rgw.Spec.RGWFrontendPort != nil:
+		port = *rgw.Spec.RGWFrontendPort
+	}
+	hosts := sortedHosts(rgw)
+	switch {
+	case gateway.Endpoint != "":
+		hosts = []string{gateway.Endpoint}
+	case fronted:
+		hosts = []string{bareAddress(ingress.Spec.VirtualIP)}
+	}
+	issuer := ""
+	if scheme == "https" {
+		issuer = IssuerCephadm
+		if len(gateway.Bindings) != 0 {
+			issuer = IssuerBound
+		}
+	}
+	return endpointCandidate{
+		row:    EndpointInspection{Service: "rgw." + rgw.ServiceID, URLs: endpointURLs(scheme, hosts, port), Issuer: issuer},
+		proved: func(e Evidence) bool { return e.Ready && e.Endpoint.Reachable }, digest: scheme == "https",
+	}, true
 }
 
 var scopeRows = map[api.Kind]func(api.Catalog, string, []reconciliation.Block) string{

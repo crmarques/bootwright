@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -65,6 +66,7 @@ func newStorageRowsHarness(t *testing.T) *storageRowsHarness {
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{
 		storageBlock("pool-rbd", api.StoragePool, "rbd"),
 		storageBlock("client-app", api.StorageClient, "app"),
+		storageBlock("cluster-ceph", api.StorageCluster, "ceph"),
 	})
 	objects := []api.Object{
 		api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue(
@@ -162,11 +164,11 @@ func TestStatusStorageResourceRows(t *testing.T) {
 	if got := storageRows(t, status); !reflect.DeepEqual(got, want) {
 		t.Fatalf("rows after an apply = %+v, want %+v", got, want)
 	}
-	if len(found.Frozen) != 2 {
+	if len(found.Frozen) != 3 {
 		t.Fatalf("frozen blocks = %+v", found.Frozen)
 	}
 	for _, block := range found.Frozen {
-		if (block.Kind+"/"+block.Object != "StoragePool/rbd" && block.Kind+"/"+block.Object != "StorageClient/app") ||
+		if !slices.Contains([]string{"StoragePool/rbd", "StorageClient/app", "StorageCluster/ceph"}, block.Kind+"/"+block.Object) ||
 			string(block.Request) != `{"name":"`+block.ID+`"}` {
 			t.Fatalf("frozen block = %+v", block)
 		}

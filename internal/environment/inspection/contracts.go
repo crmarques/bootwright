@@ -19,6 +19,7 @@ type CephProof struct {
 	Image     Image
 	Monitors  []Monitor
 	Dashboard Dashboard
+	Endpoints []Endpoint
 }
 
 type Custodied struct {
