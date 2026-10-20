@@ -5,6 +5,15 @@ edits:
     replace: "      - service_type: nfs\n        service_id: shares\n\n        placement:\n          count: 1\n          label: ceph-core\n"
     with: "      - service_type: nfs\n        service_id: shares\n\n        placement:\n          count: 2\n          label: ceph-core\n\n        spec:\n          port: 12049\n          enable_haproxy_protocol: true\n\n      - service_type: ingress\n        service_id: nfs.shares\n\n        placement:\n          count: 2\n          label: ceph-core\n\n        spec:\n          backend_service: nfs.shares\n          virtual_ip: 198.51.100.51/24\n          frontend_port: 2049\n          monitor_port: 9049\n          enable_haproxy_protocol: true\n"
 
+select:
+  - file: storage/cluster.yaml
+    replace: "\n    ibm:\n"
+    with: "\n    images:\n      haproxy:\n        base: cp.icr.io/cp/synthetic/haproxy\n        version: synthetic-1\n      keepalived:\n        base: cp.icr.io/cp/synthetic/keepalived\n        version: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n\n    ibm:\n"
+
+images: [haproxy, keepalived]
+
+planned: [ceph-service-ceph-lab-nfs-shares]
+
 expect:
   - kind: StorageCluster
     name: ceph-lab

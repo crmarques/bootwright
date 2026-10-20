@@ -744,3 +744,32 @@ func TestSMBClustersAreDelegatedInTheCoreRequest(t *testing.T) {
 		t.Fatalf("a cluster without SMB resources delegates %+v", plain)
 	}
 }
+
+func TestSMBPlansWithSelectedSambaImages(t *testing.T) {
+	plain := smbCatalog(t, subvolumeOf(), smbUsers(), smbJoin(), smbFiles(requestMap("label", "mon", "count", 2)), smbDocs())
+	cluster, _ := plain.Find(api.StorageCluster, "example")
+	spec := cluster.Spec()
+	for _, name := range []string{"samba", "samba_metrics"} {
+		spec = spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/"+name, "version", "synthetic-1"), "ceph", "images", name)
+	}
+	objects := plain.Objects()
+	for i := range objects {
+		if objects[i].Identity() == cluster.Identity() {
+			objects[i] = cluster.WithSpec(spec)
+		}
+	}
+	catalog := api.NewCatalog(objects)
+	notRefused(t, compilation.NewState(catalog, catalog, nil), "the SMB resources with their samba images")
+	want := []SMBImage{{Name: "samba", Image: PinnedRegistry + "/synthetic/samba:synthetic-1"}, {Name: "samba_metrics", Image: PinnedRegistry + "/synthetic/samba_metrics:synthetic-1"}}
+	plan := smbPlan(t, catalog)
+	for _, name := range []string{"smb-files", "smb-docs"} {
+		r, err := DecodeSMBRequest(blockOf(t, plan, SMBBlockID(name)).Request)
+		if err != nil {
+			t.Fatal(diagnostics.Of(err))
+		}
+		if !slices.Equal(r.Images, want) {
+			t.Fatalf("%s froze images %+v, want %+v", name, r.Images, want)
+		}
+	}
+	blockOf(t, plan, "ceph-settings-example")
+}

@@ -12,6 +12,13 @@ spec:
     image:
       base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
       version: v9.9.2-26729
+    images:
+      haproxy:
+        base: cp.icr.io/cp/synthetic/haproxy
+        version: synthetic-1
+      keepalived:
+        base: cp.icr.io/cp/synthetic/keepalived
+        version: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
     ibm:
       callHome: enabled
       packages:

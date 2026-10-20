@@ -865,6 +865,62 @@ def test_auxiliary_reference_resolves_its_own_linux_amd64_digest(tmp_path, monke
         discovery.resolution(dict(GOLDEN["request"], auxiliary=[digested]), GOLDEN["digest"], "sha256:" + "c" * 64, [child])
 
 
+DIGEST_BASE = REGISTRY + "/cp/ibm-ceph/keepalived-synthetic"
+DIGEST_NAMESPACE = DIGEST_BASE.split("/", 1)[1]
+
+
+class DigestAuxiliaryClient(Client):
+    """A third repository of the same authority whose authored digest is the linux/amd64 manifest it serves."""
+
+    def __init__(self):
+        super().__init__(indexed=False)
+        self.config["config"] = {"Entrypoint": ["/usr/sbin/keepalived"]}
+        self.manifest["config"].update(digest=sha(raw(self.config)), size=len(raw(self.config)))
+        self.digest = sha(raw(self.manifest))
+        challenge = AUTH.replace(SCOPE, "repository:" + DIGEST_NAMESPACE + ":pull")
+        self.rows = [(401, {"www-authenticate": challenge}, b""), response({"token": "synthetic-token", "expires_in": 3600}),
+                     response(self.manifest, discovery.MANIFEST_TYPES[0]), response(self.config, discovery.CONFIG_TYPES[0])]
+
+
+def test_each_authored_auxiliary_reference_resolves_its_linux_amd64_digest(tmp_path, monkeypatch):
+    tmp_path.chmod(0o700)
+    path = tmp_path / "registry"
+    path.write_bytes(raw({"url": REGISTRY, "username": "cp", "password": "synthetic-secret"}))
+    path.chmod(0o600)
+    checks = []
+    fake_tls(monkeypatch, checks)
+    digested_client = DigestAuxiliaryClient()
+    clients = {REPOSITORY: Client(), AUX_BASE: AuxiliaryClient(), DIGEST_BASE: digested_client}
+    requests = []
+
+    def registry(context, request):
+        requests.append(request)
+        return clients[request["base"]]
+
+    monkeypatch.setattr(discovery, "Registry", registry)
+    keepalived = {"name": "keepalived", "base": DIGEST_BASE, "tag": "", "image": DIGEST_BASE + "@" + digested_client.digest}
+    request = dict(GOLDEN["request"], auxiliary=[AUX_ENTRY, keepalived])
+    result = discovery.execute("apply", request, GOLDEN["digest"], {"registryJSON": str(path)})
+    haproxy_child = sha(raw(clients[AUX_BASE].manifest))
+    children = [haproxy_child, digested_client.digest]
+    assert len({haproxy_child, digested_client.digest, sha(raw(clients[REPOSITORY].manifest))}) == 3
+    assert result["evidence"]["digest"] == sha(raw(clients[REPOSITORY].manifest))
+    assert result["evidence"]["auxiliary"] == [
+        {"name": "haproxy", "base": AUX_BASE, "tag": "synthetic-2", "digest": children[0], "platform": "linux/amd64"},
+        {"name": "keepalived", "base": DIGEST_BASE, "tag": "", "digest": children[1], "platform": "linux/amd64"},
+    ]
+    assert [value["base"] for value in requests] == [REPOSITORY, AUX_BASE, DIGEST_BASE]
+    assert all("auxiliary" not in value for value in requests[1:])
+    assert all(client.rows == [] for client in clients.values())
+    for client, namespace in ((clients[AUX_BASE], AUX_NAMESPACE), (digested_client, DIGEST_NAMESPACE)):
+        token_path = client.calls[1][0]
+        assert discovery.urllib.parse.parse_qs(token_path.split("?", 1)[1])["scope"] == ["repository:" + namespace + ":pull"]
+        assert client.calls[1][1] == clients[REPOSITORY].calls[1][1]
+        assert all(call[0].startswith("/v2/" + namespace + "/") for call in client.calls if not call[0].startswith("/oauth/"))
+    assert digested_client.calls[2][0] == "/v2/" + DIGEST_NAMESPACE + "/manifests/" + digested_client.digest
+    assert len(checks) == 5 and set(checks) == {"tls"} and "synthetic-secret" not in str(result)
+
+
 @pytest.mark.parametrize("auxiliary", [
     [dict(AUX_ENTRY, name="base")],
     [dict(AUX_ENTRY, name="keepalived"), AUX_ENTRY],

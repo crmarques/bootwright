@@ -378,3 +378,61 @@ func TestCephExporterPlansItsMonitoringUnit(t *testing.T) {
 		t.Fatalf("a ceph-exporter cluster refuses %+v", got)
 	}
 }
+
+func authoredDigestCatalog(t *testing.T, catalog api.Catalog, names ...string) (api.Catalog, map[string]string) {
+	t.Helper()
+	cluster, found := catalog.Find(api.StorageCluster, "example")
+	if !found {
+		t.Fatal("the catalog has no StorageCluster example")
+	}
+	spec, want := cluster.Spec(), map[string]string{}
+	for i, name := range names {
+		base, digest := PinnedRegistry+"/synthetic/"+name, "sha256:"+strings.Repeat(string("0123456789abcdef"[i+1]), 64)
+		spec = spec.WithPath(requestMap("base", base, "version", digest), "ceph", "images", name)
+		want[name] = base + "@" + digest
+	}
+	objects := catalog.Objects()
+	for i := range objects {
+		if objects[i].Identity() == cluster.Identity() {
+			objects[i] = cluster.WithSpec(spec)
+		}
+	}
+	return api.NewCatalog(objects), want
+}
+
+func TestMonitoringAndGatewayPlanWithSelectedImages(t *testing.T) {
+	services := append([]api.Value{
+		auxiliaryService("prometheus", "", api.Value{}), auxiliaryService("alertmanager", "", api.Value{}),
+		auxiliaryService("grafana", "", api.Value{}), auxiliaryService("node-exporter", "", api.Value{}),
+	}, vipGateway("192.0.2.60")...)
+	plain := gatewayCatalog(t, services, []api.Value{tlsBinding("mgmt-gateway", "mgmt-tls")})
+	names := []string{"alertmanager", "grafana", "keepalived", "nginx", "node_exporter", "prometheus"}
+	catalog, want := authoredDigestCatalog(t, plain, names...)
+	state := compilation.NewState(catalog, catalog, nil)
+	notRefused(t, state, "the monitoring services and the management gateway with their images")
+	plan := cephPlan(t, catalog)
+	blockOf(t, plan, "ceph-settings-example")
+	for _, id := range []string{"ceph-service-example-monitoring", "ceph-service-example-mgmt-gateway"} {
+		if !slices.Contains(blockOf(t, plan, id).Dependencies, "ceph-settings-example") {
+			t.Fatalf("%s does not depend on ceph-settings-example: %v", id, blockOf(t, plan, id).Dependencies)
+		}
+	}
+	image, err := DecodeImageRequest(blockOf(t, plan, ImageBlockID("example")).Request)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	var got []string
+	for _, a := range image.Auxiliary {
+		got = append(got, a.Name)
+		if a.Image != want[a.Name] || !strings.HasPrefix(a.Image, a.Base+"@sha256:") || a.Tag != "" {
+			t.Fatalf("the image request lists %+v for %s, want %s", a, a.Name, want[a.Name])
+		}
+	}
+	if !slices.Equal(got, names) {
+		t.Fatalf("the image request lists %v, want %v", got, names)
+	}
+	without, _ := authoredDigestCatalog(t, plain, slices.DeleteFunc(slices.Clone(names), func(name string) bool { return name == "nginx" })...)
+	unauthoredRefusal(t, compilation.NewState(without, without, nil), "mgmt-gateway", "mgmt-gateway", "nginx")
+	surplus, _ := authoredDigestCatalog(t, plain, append(slices.Clone(names), "haproxy")...)
+	unneededRefusal(t, compilation.NewState(surplus, surplus, nil), "haproxy")
+}

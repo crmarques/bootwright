@@ -320,13 +320,16 @@ allowed client network. Its runbook records an NFSv4 mount, write and read
 from an allowed guest and a refused mount from the denied guest. No tracked
 example authors an auxiliary image, because their values come from the owner
 for each release ([B477](milestones/m2.md#b477)), so ingress is covered offline
-only: `TestIngressFixturesRefuseUntilAuxiliaryImagesAreSelected` applies an RGW
-ingress on two hosts, an NFS keepalive-only ingress and an NFS haproxy-protocol
-ingress ([fixtures](../cmd/bootwright/testdata/ingress/)) to these examples and
-asserts the [refusal](storage.md#refusal-table) of a native service whose
-auxiliary image is not selected, and pins each fixture's effective
-StorageCluster. P2 keeps TLS ingress, VIP failover, multi-active NFS and the
-client guest.
+only. `TestIngressFixturesPlanWithSelectedImages` applies an RGW ingress on two
+hosts, an NFS keepalive-only ingress and an NFS haproxy-protocol ingress
+([fixtures](../cmd/bootwright/testdata/ingress/)) to these examples with
+synthetic `spec.ceph.images` coordinates, asserts that every production binding
+plans and that the image and cluster blocks carry exactly those images, and pins
+each fixture's effective StorageCluster.
+`TestIngressFixturesWithoutTheirImagesRefuseNamingTheField` applies the same
+variants without the images and asserts the [refusal](storage.md#refusal-table)
+of a native service whose auxiliary image is not selected. P2 keeps TLS
+ingress, VIP failover, multi-active NFS and the client guest.
 
 ### Profile runbooks
 
