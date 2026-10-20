@@ -347,6 +347,18 @@ def test_a_differing_attempt_record_refuses_identity(phase):
         assert applies(monitor) == [] and markers.writes == [] and monitor.mutations == []
 
 
+@pytest.mark.parametrize("kind", TYPES)
+def test_an_attempted_resource_another_actor_rewrote_refuses_identity(kind):
+    value, monitor = request(kind), Monitor()
+    markers = Markers(records(value))
+    present(monitor, value)
+    monitor.resources[name_of(value)].update(REWRITTEN[kind])
+    with pytest.raises(ceph_native.NativeFailure, match="^smb-identity$") as caught:
+        worker(value, monitor, markers).smb_apply(private_of(value))
+    assert caught.value.native_error["cause"] == name_of(value) + " is not the resource this operation attempted"
+    assert applies(monitor) == [] and markers.writes == [] and monitor.mutations == []
+
+
 def unsuccessful_answers(value):
     echoed = dict(value["native"], auth={"username": "operator", "password": JOIN_SECRET})
     failed = {"results": [{"resource": echoed, "msg": NATIVE_SENTINEL, "success": False}], "success": False}
