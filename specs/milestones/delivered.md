@@ -7383,7 +7383,7 @@ mutation check recorded in its commit body. The gates were `make quick`,
 sanity suites, the regenerated contract goldens `storage-ceph-core-v3` and
 `storage-ceph-host-v1`, and the int-ready-v4a checkpoint's full gates (all but
 `make vulncheck`, which fails for GO-2026-6809 on main as well,
-[B690](m1.md#b690)) and adversarial review. They are offline, as B627's exit evidence required; no live row is part
+B690, delivered by [X156](#x156--go-toolchain-vulnerability-gate-go12610)) and adversarial review. They are offline, as B627's exit evidence required; no live row is part
 of it.
 
 **Digest and version effects:** the member rode the core contract move that the
@@ -7889,3 +7889,33 @@ staged, interrupted, killed-wait, stalled-node, settled and removal drills,
 plus Q6's 25-hour image continuation. Effective-state and cluster-plan goldens
 and continuation, mixed-state resolution, boot replay and three-Machine
 `Stop first` journeys qualify the in-tree paths.
+
+### X156 — Go toolchain vulnerability gate, go1.26.10
+
+**Owner:** Architecture. A defect slice of [M1](m1.md), found at the
+int-ready-v4a checkpoint of X57 on 2026-10-20 and delivered at the owner's
+request of 2026-10-21, after CI failed on main at 88ddee07f. **Items:** B690.
+**Decisions:** none.
+
+**Outcome, B690:** Go moves from go1.26.9 to go1.26.10: `scripts/go` selects it
+and both modules' `go` directives name it, so CI's setup-go installs the same
+Go. go1.26.10 fixes GO-2026-6809, the distrust of compromised intermediate
+certificates in `crypto/x509`, which the code reaches through
+`internal/managedos/medialocal/acquirer.go`'s `download.Read`, so
+`make vulncheck`, and with it `make check`, passes again. The
+[version output](../cli/commands.md#version-output) example and the
+[build knowledge](../../.agents/knowledge/build-toolchain.md) move with it.
+Both modules' requirements are unchanged, and Go 1.27 stays parked
+([B273](backlog.md#b273)). It repeats
+[X67](#x67--go-toolchain-vulnerability-gate)'s move.
+
+**Gates:** on go1.26.10, `make vulncheck` reports no vulnerabilities; `make
+check-offline`, `make tidy-check`, `make modules-check`, `make docs-check` and
+`make race` pass, and `./scripts/check-commits` accepts the commit. The
+Ansible suites did not rerun, because no Ansible file changed. No real-host
+run.
+
+**Digest and version effects:** none; no automation, content or plan digest and
+no request or record version moves, so a live context continues under a build
+that contains X156. **Constraints left behind:** setup-go's cache key names the
+Go version, so the first CI run after X156 starts with a cold Go cache.

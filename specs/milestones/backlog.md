@@ -3714,8 +3714,8 @@ Requires cell as `owner decision: <question>`.
   [B86](m4.md#b86)'s) stay in progress; and [B688](m2.md#b688), split from B79
   and B475, is Specified by the owner's acceptance (D170) with no code. It
   records [B689](m2.md#b689) (Ceph file logging for a declared log agent) and
-  [B690](m1.md#b690) (the Go toolchain's move to go1.26.10, which clears
-  GO-2026-6809 in `make vulncheck`). Under that order M2c is paused: X57's SSO,
+  B690 (the Go toolchain's move to go1.26.10, which clears
+  GO-2026-6809 in `make vulncheck`, delivered by [X156](delivered.md#x156--go-toolchain-vulnerability-gate-go12610)). Under that order M2c is paused: X57's SSO,
   all X56b and X58 lanes, X59's host pull route, disconnected profile,
   replication and multisite lanes, B620's field removal and X61's other lanes
   are not implemented, and no M2c item has operator evidence.

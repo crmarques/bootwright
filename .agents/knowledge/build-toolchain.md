@@ -1,6 +1,6 @@
 # Build toolchain and version metadata
 
-The M1a gates use [scripts/go](../../scripts/go) to select exactly Go 1.26.9
+The M1a gates use [scripts/go](../../scripts/go) to select exactly Go 1.26.10
 through `GOTOOLCHAIN`. A module's `go` directive sets a minimum and a `toolchain`
 directive is a suggestion; neither alone fixes the toolchain used by every
 gate. Preserve the explicit selection when changing build tooling. The
