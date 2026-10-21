@@ -354,3 +354,34 @@ def test_qualified_scsi_ssd_proof_and_osd_submission_use_same_stable_alias(devic
     monkeypatch.setattr(ceph_native.os.path, "realpath", lambda path: "/dev/sdb" if path == alias else path)
     with pytest.raises(ceph_native.Refusal, match="device-identity"):
         native.osd_prepare()
+
+
+@pytest.mark.parametrize("tpm", [False, True])
+@pytest.mark.parametrize("damage", [None, "tag", "child"])
+def test_encrypted_owned_data_recovery_proves_observed_mapping_and_flags(device_world, tpm, damage):
+    native, disk, signatures, rows, unused_calls = device_world
+    native.request["services"][-1]["spec"].update(encrypted=True, tpm2=tpm)
+    native.osd_prepare()
+    partial_osd(native, disk, signatures, rows)
+    rows[0]["lv_tags"] += ",ceph.encrypted=1,ceph.with_tpm=" + str(int(tpm))
+    volume = disk["children"][0]
+    volume["fstype"] = "crypto_LUKS"
+    volume["children"] = [{"path": "/dev/mapper/synthetic-lv-uuid", "type": "crypt", "fstype": "ceph_bluestore"}]
+    original = native.command
+
+    def command(argv, **kwargs):
+        if argv[:2] == ["/usr/sbin/cryptsetup", "luksDump"]:
+            return b"Tokens:\n  0: systemd-tpm2\nDigests:\n"
+        return original(argv, **kwargs)
+
+    native.command = command
+    if damage == "tag":
+        rows[0]["lv_tags"] = rows[0]["lv_tags"].replace("ceph.encrypted=1", "ceph.encrypted=0")
+    elif damage == "child":
+        volume["children"][0]["type"] = "lvm"
+    if damage is None:
+        assert native.osd_prepare() == {"changed": True}
+        assert native.osd_prepare() == {"changed": False}
+    else:
+        with pytest.raises(ceph_native.Refusal, match="foreign-osd"):
+            native.osd_prepare()

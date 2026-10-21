@@ -132,3 +132,72 @@ def test_native_normalization_cannot_change_variant_effects(core_request, monkey
         with pytest.raises(ceph_native.Refusal, match="^osd-unqualified$"):
             native.normalized_services(groups)
         assert native.markers.writes == []
+
+
+@pytest.mark.parametrize("damage", [None, "encryption", "tpm", "mapping", "token", "db-link", "foreign", "extra", "retained"])
+def test_completed_variant_proof_observes_native_crypto_and_auxiliary_identity(core_request, damage):
+    variants(core_request)
+    native, unused = fixtures.worker(core_request, {})
+    native.markers.records["osd-device-intent.json"] = native.osd_device_scope()
+    host = core_request["hosts"][0]
+    rows, disks = [], []
+    for index, device in enumerate(host["devices"]):
+        role = ("block", "db", "wal")[index]
+        uuid = "volume-" + role
+        tags = {"ceph.cluster_fsid": core_request["fsid"], "ceph.type": role, "ceph.osd_id": "0",
+                "ceph.osd_fsid": "6da65e47-8789-4a1c-88e8-3bbd195719a1", "ceph.encrypted": "1", "ceph.with_tpm": "1",
+                "ceph.block_uuid": "volume-block", "ceph.db_uuid": "volume-db", "ceph.wal_uuid": "volume-wal"}
+        rows.append({"lv_path": "/dev/ceph/" + role, "lv_uuid": uuid, "devices": device["path"] + "(0)", "tags": tags})
+        disks.append({"path": device["path"], "type": "disk", "serial": device["serial"], "size": device["sizeBytes"],
+                      "children": [{"path": "/dev/ceph/" + role, "type": "lvm", "fstype": "crypto_LUKS", "children": [
+                          {"path": "/dev/mapper/" + uuid, "type": "crypt", "fstype": "ceph_bluestore"}]}]})
+    if damage in ("encryption", "tpm"):
+        rows[0]["tags"]["ceph.encrypted" if damage == "encryption" else "ceph.with_tpm"] = "0"
+    elif damage == "mapping":
+        disks[0]["children"][0]["children"][0]["path"] = "/dev/mapper/foreign"
+    elif damage == "db-link":
+        rows[0]["tags"]["ceph.db_uuid"] = "foreign"
+    elif damage == "foreign":
+        rows[1]["tags"]["ceph.cluster_fsid"] = "foreign"
+    elif damage == "extra":
+        rows.append(copy.deepcopy(rows[1]))
+    elif damage == "retained":
+        native.markers.records[native.osd_identity_marker("/dev/vdb")] = {"id": 99}
+    for row in rows:
+        row["lv_tags"] = ",".join(k + "=" + v for k, v in row.pop("tags").items())
+    calls = []
+
+    def command(argv, **kwargs):
+        calls.append(argv)
+        if argv[0] == "/usr/bin/lsblk":
+            return {"blockdevices": disks}
+        if argv[0] == "/usr/sbin/lvs":
+            return {"report": [{"lv": rows}]}
+        assert argv[:2] == ["/usr/sbin/cryptsetup", "luksDump"]
+        return b"Tokens:\n  0: systemd-tpm2\nDigests:\n" if damage != "token" else b"Tokens:\nDigests:\n"
+
+    native.command = command
+    if damage is None:
+        native.prove_completed_osd_variants()
+    else:
+        with pytest.raises(ceph_native.Refusal):
+            native.prove_completed_osd_variants()
+    assert native.markers.writes == []
+    assert all("--dump-master-key" not in argv and "--dump-volume-key" not in argv for argv in calls)
+
+
+def test_existing_host_readiness_round_requires_variant_proof(core_request):
+    native, unused = fixtures.worker(core_request, {})
+    native.daemons = lambda: [{"name": "osd.0"}]
+    native.prove_registry = lambda: None
+    calls = []
+    native.prove_completed_osd_variants = lambda: calls.append("proved")
+    assert native.host_state()["exists"]
+    assert calls == ["proved"]
+
+    def refuse():
+        raise ceph_native.Refusal("foreign-osd")
+
+    native.prove_completed_osd_variants = refuse
+    with pytest.raises(ceph_native.Refusal, match="foreign-osd"):
+        native.host_state()

@@ -1547,7 +1547,89 @@ class Worker:
             pending = self.verify_manager_mounts(daemons, observing=True)
             if pending:
                 return {"name": self.host["name"], "owned": owned, "exists": exists, "pending": pending}
+        if owned and any(str(d.get("name", "")).startswith("osd.") for d in daemons):
+            self.prove_completed_osd_variants()
         return {"name": self.host["name"], "owned": owned, "exists": exists}
+
+    def prove_completed_osd_variants(self):
+        services = [s for s in self.request["services"] if s["service_type"] == "osd" and self.host["name"] in s["placement"]["hosts"]
+                    and any(s["spec"].get(k) for k in ("encrypted", "tpm2", "db_devices", "wal_devices"))]
+        if not services:
+            return
+        require(self.markers.owned() and self.markers.read("osd-device-intent.json") == self.osd_device_scope(), "ownership")
+        observed = self.command(["/usr/bin/lsblk", "--json", "--bytes", "--paths", "--output", "PATH,TYPE,SERIAL,SIZE,FSTYPE,MOUNTPOINTS"])
+        output = self.command(["/usr/sbin/lvs", "--reportformat", "json", "--options", "lv_path,lv_uuid,lv_tags,devices"])
+        require(isinstance(observed, dict) and isinstance(observed.get("blockdevices"), list), "native-output")
+        require(isinstance(output, dict) and isinstance(output.get("report"), list) and len(output["report"]) == 1, "native-output")
+        rows = output["report"][0].get("lv")
+        require(isinstance(rows, list) and len(rows) <= 1024, "native-output")
+        for service in services:
+            spec, allocations = service["spec"], {}
+            for field, role in (("data_devices", "block"), ("db_devices", "db"), ("wal_devices", "wal")):
+                for path in spec.get(field, {}).get("paths", []):
+                    device = next(d for d in self.host["devices"] if d["path"] == path)
+                    disks = [d for d in observed["blockdevices"] if d.get("path") == os.path.realpath(path)]
+                    require(len(disks) == 1, "device-identity")
+                    disk = disks[0]
+                    require(disk.get("type") == "disk" and disk.get("serial") == device["serial"]
+                            and disk.get("size") == device["sizeBytes"] and not any(disk.get("mountpoints") or []), "device-identity")
+                    selected = []
+                    for row in rows:
+                        require(isinstance(row, dict) and isinstance(row.get("devices"), str), "native-output")
+                        paths = [p.strip().split("(", 1)[0] for p in row["devices"].split(",")]
+                        if os.path.realpath(path) not in paths:
+                            continue
+                        require(paths == [os.path.realpath(path)] and isinstance(row.get("lv_tags"), str), "foreign-osd")
+                        tags = {}
+                        for tag in row["lv_tags"].split(","):
+                            key, separator, value = tag.strip().partition("=")
+                            require(separator and key not in tags, "foreign-osd")
+                            tags[key] = value
+                        require(tags.get("ceph.cluster_fsid") == self.request["fsid"] and tags.get("ceph.type") == role, "foreign-osd")
+                        require(re.fullmatch(r"[0-9]+", tags.get("ceph.osd_id", "")) is not None
+                                and re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", tags.get("ceph.osd_fsid", "")), "foreign-osd")
+                        require(isinstance(row.get("lv_uuid"), str) and row["lv_uuid"] and isinstance(row.get("lv_path"), str), "foreign-osd")
+                        self.prove_osd_crypto(row, tags, disk.get("children") or [], spec)
+                        if role == "block":
+                            retained = self.markers.read(self.osd_identity_marker(os.path.realpath(path)))
+                            identity = {"path": os.path.realpath(path), "id": int(tags["ceph.osd_id"]),
+                                        "uuid": tags["ceph.osd_fsid"], "lvUUID": row["lv_uuid"]}
+                            require(retained is None or retained == identity, "foreign-osd")
+                        selected.append((row, tags))
+                    require(selected and (role != "block" or len(selected) == 1), "foreign-osd")
+                    require(len(disk.get("children") or []) == len(selected), "foreign-osd")
+                    allocations.setdefault(role, []).extend(selected)
+            blocks = allocations["block"]
+            require(len({t["ceph.osd_id"] for r, t in blocks}) == len(blocks), "foreign-osd")
+            for role in ("db", "wal"):
+                auxiliary = allocations.get(role, [])
+                require(len({r["lv_uuid"] for r, t in auxiliary}) == len(auxiliary), "foreign-osd")
+                for row, tags in auxiliary:
+                    matches = [t for r, t in blocks if t["ceph.osd_id"] == tags["ceph.osd_id"]
+                               and t["ceph.osd_fsid"] == tags["ceph.osd_fsid"] and t.get("ceph." + role + "_uuid") == row["lv_uuid"]]
+                    require(len(matches) == 1, "foreign-osd")
+                if role in allocations:
+                    require(len(auxiliary) == len(blocks), "foreign-osd")
+
+    def prove_osd_crypto(self, row, tags, children, spec):
+        require(tags.get("ceph.encrypted", "0") == str(int(spec.get("encrypted", False)))
+                and tags.get("ceph.with_tpm", "0") == str(int(spec.get("tpm2", False))), "foreign-osd")
+        matches = [c for c in children if os.path.realpath(c.get("path", "")) == os.path.realpath(row["lv_path"])]
+        require(len(matches) == 1 and matches[0].get("type") == "lvm" and not any(matches[0].get("mountpoints") or []), "foreign-osd")
+        volume = matches[0]
+        if spec.get("encrypted"):
+            mappings = volume.get("children") or []
+            require(volume.get("fstype") == "crypto_LUKS" and len(mappings) == 1, "foreign-osd")
+            volume = mappings[0]
+            require(volume.get("type") == "crypt"
+                    and os.path.realpath(volume.get("path", "")) == os.path.realpath("/dev/mapper/" + row["lv_uuid"]), "foreign-osd")
+            if spec.get("tpm2"):
+                metadata = self.command(["/usr/sbin/cryptsetup", "luksDump", row["lv_path"]], json_result=False)
+                require(isinstance(metadata, bytes) and len(metadata) <= 128 << 10, "native-output")
+                tokens = metadata.split(b"Tokens:\n")
+                require(len(tokens) == 2 and re.search(rb"(?m)^\s+[0-9]+: systemd-tpm2\s*$", tokens[1].split(b"Digests:", 1)[0]), "foreign-osd")
+        require(not volume.get("children") and not any(volume.get("mountpoints") or [])
+                and volume.get("fstype") in (None, "", "ceph_bluestore"), "foreign-osd")
 
     def prerequisites(self):
         hostname = self.command(["/usr/bin/hostname"], json_result=False).decode("ascii").strip()
@@ -1829,9 +1911,10 @@ class Worker:
                     and re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", tags.get("ceph.osd_fsid", "")), "foreign-osd")
             require(isinstance(row.get("lv_uuid"), str) and row["lv_uuid"] and isinstance(row.get("lv_path"), str), "foreign-osd")
             children = item.get("children") or []
-            require(len(children) == 1 and os.path.realpath(children[0].get("path", "")) == os.path.realpath(row["lv_path"])
-                    and children[0].get("type") == "lvm" and not children[0].get("children")
-                    and not any(children[0].get("mountpoints") or []) and children[0].get("fstype") in (None, "", "ceph_bluestore"), "foreign-osd")
+            specs = [s["spec"] for s in self.request["services"] if s["service_type"] == "osd"
+                     and self.host["name"] in s["placement"]["hosts"] and actual in s["spec"]["data_devices"]["paths"]]
+            require(len(specs) == 1 and len(children) == 1, "foreign-osd")
+            self.prove_osd_crypto(row, tags, children, specs[0])
             candidates.append({"path": actual, "id": int(tags["ceph.osd_id"]), "uuid": tags["ceph.osd_fsid"], "lvUUID": row["lv_uuid"]})
         require(len(candidates) == 1, "foreign-osd")
         retained = self.markers.read(self.osd_identity_marker(actual))

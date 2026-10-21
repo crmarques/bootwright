@@ -668,8 +668,14 @@ OSD per data device. All selected paths are distinct within a drive group and
 across services on a host; dynamic selectors, slots and sizes remain
 unsupported. TPM2 requires encryption and a declared TPM profile. Omitted
 options retain native BlueStore defaults. Any nonempty or partial DB/WAL
-device refuses before submission; [B662](milestones/backlog.md#b662) owns recovery. Encryption keys remain
-in Ceph's store and are never read or exported by Bootwright.
+device refuses before submission; [B662](milestones/backlog.md#b662) owns
+recovery. Read-only host readiness separately proves completed data/DB/WAL
+allocations by OSD identity and LV UUID relationships. Encryption requires
+matching native `ceph.encrypted` and `ceph.with_tpm` tags and an active LUKS
+mapper for the exact LV; TPM2 also requires a `systemd-tpm2` token in the
+non-key `cryptsetup luksDump` text metadata. A submitted ServiceSpec alone
+does not establish readiness. Encryption keys remain in Ceph's store and
+are never read or exported by Bootwright.
 
 P1's HDD-data/SSD-DB prerequisite is bounded to declared libvirt `media: hdd`
 and `media: ssd` disks. The frozen request binds rotational identity as well
