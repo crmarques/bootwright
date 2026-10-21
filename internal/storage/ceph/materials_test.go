@@ -299,3 +299,5 @@ func (dependencyProofs) PackageTree(proofs []lifecycle.BlockEvidence, profile st
 	}
 	return PackageTree{Context: request.Identity.Context, Media: request.Media.Name, MediaSHA256: request.Media.SHA256, MediaSize: request.Media.Size, Path: request.Publication.Path}, nil
 }
+
+func (dependencyProofs) FIPS([]lifecycle.BlockEvidence, string, string) error { return nil }

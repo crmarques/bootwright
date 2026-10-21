@@ -314,3 +314,43 @@ func TestAFrozenGuestHostKeyTypeThisExecutableDoesNotGenerateRefuses(t *testing.
 		t.Fatalf("refusal = %#v", reported)
 	}
 }
+
+func TestDependentFIPSRequiresCompletedInstallationProof(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		catalog := labCatalog()
+		if enabled {
+			catalog = labCatalog(fipsProfile())
+		}
+		request := pinnedRequest(t, catalog)
+		canonical, err := request.Canonical()
+		if err != nil {
+			t.Fatal(err)
+		}
+		marker, _ := MarkerFor(request, "digest")
+		var evidence map[string]any
+		if err := json.Unmarshal(completeEvidence(request, "digest", string(marker)), &evidence); err != nil {
+			t.Fatal(err)
+		}
+		evidence["fips"] = enabled
+		evidence["hostKey"] = rsaPublicLine(2048)
+		raw, _ := json.Marshal(evidence)
+		proof := lifecycle.BlockEvidence{Kind: Kind, Object: request.Identity.Object, Implementation: Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: raw,
+			Block: reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Kind: Kind, Object: request.Identity.Object, Implementation: Implementation, Request: canonical}, RequestDigest: "digest"}}
+		err = ProvedFIPS([]lifecycle.BlockEvidence{proof}, request.Identity.Object, request.Address)
+		if (err == nil) != enabled {
+			t.Fatalf("enabled %t: %v", enabled, diagnostics.Of(err))
+		}
+		if enabled {
+			for _, proofs := range [][]lifecycle.BlockEvidence{nil, {proof, proof}} {
+				if ProvedFIPS(proofs, request.Identity.Object, request.Address) == nil {
+					t.Fatal("accepted missing or duplicate installation")
+				}
+			}
+			evidence["fips"] = false
+			proof.Evidence, _ = json.Marshal(evidence)
+			if ProvedFIPS([]lifecycle.BlockEvidence{proof}, request.Identity.Object, request.Address) == nil {
+				t.Fatal("accepted missing native FIPS proof")
+			}
+		}
+	}
+}

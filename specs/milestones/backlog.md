@@ -204,7 +204,7 @@ Alias cell.
 | [B657](#b657) | new, 2026-10-19 (X102) | safety | Storage package resolution, with Security | Plan packages from the `broker` root must be RHEL-signed and sourced from the host's DVD tree | No trust break today: every package is verified under its repository's pinned signer, and no IBM repository ships `openssl` |
 | [B658](#b658) | new, 2026-10-19 (X102) | enabling | Storage preflight and State reconciliation | Cross-context capacity admission states its limit or holds a host-scoped reservation | No spec violation, a short window, and a reservation would be new durable cross-context state |
 | [B659](#b659) | new, 2026-10-19 (X102) | product | Ceph core lifecycle | An apply that stopped after enrollment continues from per-host receipts instead of refusing `partial-cluster` | Needs a new durable recovery protocol, and the native API spec declares it out of scope |
-| [B660](#b660) | new, 2026-10-19 (X102); assigned to M2c lane x61-ceph-fips on 2026-10-19 (D166) | safety | Ceph host runtime route probe, with the future FIPS core profile | The route probe's synthetic keys follow the cluster key's type under FIPS | Declared FIPS is refused at planning; D166 assigns the probe key contract to M2c lane x61-ceph-fips |
+| [B660](#b660) | new, 2026-10-19 (X102); assigned to M2c lane x61-ceph-fips on 2026-10-19 (D166) | safety | Ceph host runtime route probe, with the future FIPS core profile | The route probe's synthetic keys follow the cluster key's type under FIPS | In-tree key selection and refusals implemented; operator FIPS acceptance stays with B484 |
 | [B661](#b661) | new, 2026-10-19 (X102) | enabling | Ceph host runtime image profile | The cephadm payload bound is raised or derived and an oversized payload refuses with its measured size | The largest current payload is 1,676,391 bytes; a future refusal, not a defect |
 | [B662](#b662) | new, 2026-10-19 (X102) | safety | Ceph lifecycle, Devices and destructive ownership | An intent-marked OSD device with partial LVM metadata refuses with a named token and a supported recovery | Nothing is adopted or zapped today; a real remedy needs an owned-zap design |
 | [B663](#b663) | new, 2026-10-19 (X102) | enabling | Storage adapter | Authored package candidates mark only the chosen root, keeping DNF's own no-match text | No wrong plan was observed; refusing glob characters would be a Bootwright version grammar |
@@ -2148,19 +2148,13 @@ enrollment state, and a test that an unrecorded state still refuses.
 
 ### B660
 
-When the FIPS core profile is implemented, the route probe's synthetic keys
-must follow the cluster key's type (RSA or ECDSA), and a FIPS-mode host with an
-ed25519 cluster key must refuse with a named key-type reason before
-preparation. Found by the audit (`ceph-ssh-runtime-1`). **Outcome:** the probe
-follows the cluster key's type, and the native fact (the 20.2.2 cephadm SSH
-module's key handling) is recorded in the
-[native SSH knowledge](../../.agents/knowledge/ibm-ceph-native-ssh.md).
-**Why parked:** declared FIPS is refused at planning, and changing the probe's
-key contract belongs to that profile. **Assigned:** M2c lane x61-ceph-fips on
-2026-10-19 ([D166](#decisions)), which generates ECDSA synthetic probe keys on
-FIPS hosts. **Requires:** the FIPS core profile.
-**Definition:** `Candidate`. **Exit evidence:** a probe test per key type under
-a FIPS-mode fixture, and the named refusal for the ed25519 case.
+Assigned to M2c lane x61-ceph-fips on 2026-10-19 ([D166](#decisions)), under
+[B484](m2.md#b484). The in-tree route probe selects ECDSA synthetic keys from
+the observed FIPS kernel state and keeps inherited crypto policy. Declared
+and bound Ed25519 cluster keys refuse before host preparation. Host-independent
+fixtures cover key selection, native policy mismatches and no-effect refusals.
+Operator FIPS acceptance remains open with B484; this claims no provider
+qualification. D166's ECDSA selection supersedes following an RSA cluster key.
 
 ### B661
 

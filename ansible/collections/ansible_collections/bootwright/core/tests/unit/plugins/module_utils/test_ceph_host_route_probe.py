@@ -20,6 +20,11 @@ import pytest
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_route_probe as PROBE
 
 
+@pytest.fixture(autouse=True)
+def kernel_fips_fixture(monkeypatch):
+    monkeypatch.setattr(PROBE, "fips_enabled", lambda: False)
+
+
 def synthetic():
     keys = {}
     for index, name in enumerate(PROBE.KEYS):
@@ -93,6 +98,27 @@ def test_prepare_material_is_private_protocol_and_never_promotes(monkeypatch):
     assert set(result) == {"schema", "ok", "synthetic"}
     assert result["ok"] is True
     assert result["synthetic"] == value
+
+
+@pytest.mark.parametrize("enabled, algorithm", [(False, "ssh-ed25519"), (True, "ecdsa-sha2-nistp256")])
+def test_prepare_selects_synthetic_keys_from_kernel_fips_state(monkeypatch, enabled, algorithm):
+    value = synthetic()
+    names = iter(PROBE.KEYS)
+    generated = []
+
+    def keygen(selected):
+        generated.append(selected)
+        key = value["keys"][next(names)]
+        public = key["public"].replace("ssh-ed25519 ", algorithm + " ")
+        return types.SimpleNamespace(export_private_key=lambda format: key["private"].encode(),
+                                     export_public_key=lambda format: public.encode())
+
+    monkeypatch.setattr(PROBE, "account", lambda: (4242, 4343))
+    monkeypatch.setattr(PROBE, "public_crypto_policy", lambda: "")
+    monkeypatch.setattr(PROBE, "fips_enabled", lambda: enabled, raising=False)
+    result = PROBE.prepare(types.SimpleNamespace(generate_private_key=keygen))
+    assert generated == [algorithm] * len(PROBE.KEYS)
+    assert result["ok"] is True
 
 
 def test_mutable_synthetic_mount_refuses_before_reading_material(tmp_path, monkeypatch):

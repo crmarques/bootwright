@@ -190,6 +190,11 @@ type AuxiliaryReference struct {
 	Name  string `json:"name"`
 }
 
+type Security struct {
+	CephXKeyType string `json:"cephxKeyType"`
+	FIPS         bool   `json:"fips"`
+}
+
 type Request struct {
 	Action                   string                       `json:"action"`
 	AnsiblePackageVersion    string                       `json:"ansiblePackageVersion"`
@@ -227,6 +232,7 @@ type Request struct {
 	RegistryRef              string                       `json:"registryRef"`
 	RegistryTrustBundleRef   string                       `json:"registryTrustBundleRef,omitempty"`
 	Release                  string                       `json:"release"`
+	Security                 *Security                    `json:"security,omitempty"`
 	Service                  *ServiceUnit                 `json:"service,omitempty"`
 	Services                 []json.RawMessage            `json:"services"`
 	Settings                 *Settings                    `json:"settings,omitempty"`
@@ -242,7 +248,7 @@ func DecodeRequest(data []byte) (Request, error) {
 func scopeOf(r Request) ClusterScope {
 	return ClusterScope{AnsiblePackageVersion: r.AnsiblePackageVersion, Auxiliary: r.Auxiliary, Bootstrap: r.Bootstrap, CallHome: r.CallHome, Cephadm: r.Cephadm, Cluster: r.Cluster,
 		ClusterKeyRef: r.ClusterKeyRef, ClusterNetworks: r.ClusterNetworks, ClusterSSHTransport: r.ClusterSSHTransport, ClusterSSHUser: r.ClusterSSHUser,
-		Config: r.Config, Controller: r.Controller, FSID: r.FSID, Hosts: r.Hosts, Image: r.Image, MonIP: r.MonIP,
+		Security: r.Security, Config: r.Config, Controller: r.Controller, FSID: r.FSID, Hosts: r.Hosts, Image: r.Image, MonIP: r.MonIP,
 		NFSGaneshaPackageVersion: r.NFSGaneshaPackageVersion, Owner: r.Owner, PackageRepository: r.PackageRepository, Packages: r.Packages,
 		PublicNetworks: r.PublicNetworks, Registry: r.Registry, RegistryRef: r.RegistryRef, RegistryTrustBundleRef: r.RegistryTrustBundleRef, Release: r.Release, Services: r.Services, Version: r.Version}
 }
@@ -299,8 +305,11 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	if r.ClusterSSHTransport != "native" && r.ClusterSSHTransport != "verified-tunnel" {
 		return Request{}, failure("api.invariant", "unknown Ceph SSH transport", "select native or verified-tunnel; each transport requires artifact qualification")
 	}
-	if r.ClusterSSHUser == "" || r.ClusterKeyRef == "" || r.RegistryRef == "" || spec.Has("topology", "stretch") || spec.Get("security", "fips", "enabled").Bool() || spec.Get("security", "cephx", "keyType").Present() && spec.Get("security", "cephx", "keyType").Text() != "aes" {
+	if r.ClusterSSHUser == "" || r.ClusterKeyRef == "" || r.RegistryRef == "" || spec.Has("topology", "stretch") || spec.Get("security", "cephx", "keyType").Present() && spec.Get("security", "cephx", "keyType").Text() != "aes" {
 		return Request{}, failure("lifecycle.unsupported", "the requested Ceph trust or topology profile is not implemented by the core adapter", "declare the cluster SSH key, registry entitlement and a non-stretch CephX core profile")
+	}
+	if r.Security, err = securityPolicy(c, spec, r.ClusterKeyRef); err != nil {
+		return Request{}, err
 	}
 	if len(r.PublicNetworks) == 0 {
 		return Request{}, failure("api.required", "core Ceph requires an explicit public network", "declare ceph.networks.publicCIDRs")
@@ -354,6 +363,12 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 	}
 	for _, node := range spec.Get("topology", "nodes").Items() {
 		m, _ := c.Find(api.Machine, node.Get("machineRef").Text())
+		if r.Security != nil && r.Security.FIPS {
+			profile, found := c.Find(api.MachineInstallProfile, m.Spec().Get("os", "installProfileRef").Text())
+			if !found || !machine.Installed(m) || !profile.Spec().Get("customizations", "security", "fips", "enabled").Bool() {
+				return failure("api.invariant", "FIPS Ceph requires an installed FIPS profile on Machine/"+m.Name(), "enable customizations.security.fips.enabled on every Ceph Machine's install profile")
+			}
+		}
 		ssh, ok := machine.SSH(m)
 		provider, _ := c.Find(api.InfraProvider, m.Spec().Get("substrate", "providerRef").Text())
 		if !ok || !machine.Installed(m) || !provider.Spec().Has("libvirt") || ssh.PrivateKeyRef == "" || ssh.PasswordRef != "" || ssh.OperatorIdentity || ssh.User != r.ClusterSSHUser || ssh.PrivateKeyRef == r.ClusterKeyRef {
@@ -592,4 +607,21 @@ func dataDeviceSet(r Request) map[string]bool {
 		}
 	}
 	return selected
+}
+
+func securityPolicy(c api.Catalog, spec api.Value, keyRef string) (*Security, error) {
+	if !spec.Get("security").Present() {
+		return nil, nil
+	}
+	policy := &Security{FIPS: spec.Get("security", "fips", "enabled").Bool(), CephXKeyType: "aes"}
+	if policy.FIPS {
+		key, found := c.Find(api.Secret, keyRef)
+		if found && key.Spec().Has("source", "generated") {
+			kind := key.Spec().Get("source", "generated", "keyType").Text()
+			if kind == "" || kind == "ed25519" {
+				return nil, failure("api.value", "FIPS Ceph refuses an Ed25519 cluster SSH key", "set the cluster key Secret's source.generated.keyType to ecdsa-p256 or rsa")
+			}
+		}
+	}
+	return policy, nil
 }

@@ -78,7 +78,15 @@ of the authored package repository for package acquisition, and a supplied diges
 publisher trust. FIPS, CephX, encryption and call-home choices retain their
 independent API, trust and authorization requirements. Native tools determine
 whether the selected versions can realize those choices; Bootwright does not
-screen their version compatibility. Adapter
+screen their version compatibility. A FIPS Ceph request freezes its FIPS and
+AES CephX policy, requires a completed FIPS installation proof for every host,
+and checks each host's kernel and inherited crypto policy before cluster
+claims. Ed25519 cluster SSH keys and authored AES256K CephX policy refuse
+before host preparation. Synthetic route keys use ECDSA on an observed FIPS
+kernel. Native auth keys must prove the declared AES type before readiness
+or client-key publication; a mismatch retains ownership and reports its cause,
+without changing native cipher policy. No FIPS service allowlist or vendor
+qualification is inferred. Adapter
 [version specializations](architecture.md#implementations-and-version-variation)
 adapt native mechanics to capabilities read from the frozen, authenticated
 artifacts; they neither screen nor approve a selection.

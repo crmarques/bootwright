@@ -103,7 +103,7 @@ func automationFormats() map[string]automationFormat {
 		// for the manager account, the cephadm cache and the OSD identities.
 		"ceph-runtime-profile-v3":   persistedBy(ceph.HostImplementation, ceph.Implementation),
 		"ceph-device-identities-v1": persistedBy(ceph.HostImplementation, ceph.Implementation),
-		"ceph-host-route-v2":        host,
+		"ceph-host-route-v3":        host,
 		"ceph-package-decision-v1":  host,
 		"ceph-package-artifacts-v1": host,
 		"ceph-package-complete-v1":  host,

@@ -521,7 +521,7 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 	}
 	want := []string{"ansiblePackageVersion", "auxiliary", "bootstrap", "callHome", "cephadm", "cluster", "clusterKeyRef", "clusterNetworks", "clusterSSHTransport", "clusterSSHUser",
 		"config", "controller", "fsid", "hosts", "image", "monIP", "nfsGaneshaPackageVersion", "owner", "packageRepository", "packages", "publicNetworks", "registry",
-		"registryRef", "registryTrustBundleRef", "release", "services", "version"}
+		"registryRef", "registryTrustBundleRef", "release", "security", "services", "version"}
 	slices.Sort(want)
 	if got := jsonNames(reflect.TypeFor[ClusterScope]()); !slices.Equal(got, want) {
 		t.Fatalf("ClusterScope members %v, want %v", got, want)
@@ -535,6 +535,7 @@ func TestRequestSchemaChangeLeavesHostDigest(t *testing.T) {
 	r.PackageRepository, r.NFSGaneshaPackageVersion = "https://publisher.example.test/ceph", "synthetic-ganesha-1"
 	r.MonIP, r.ClusterSSHUser, r.CallHome = "192.0.2.1", "operator", "enabled"
 	r.RegistryTrustBundleRef = "registry-ca"
+	r.Security = &Security{FIPS: true, CephXKeyType: "aes"}
 	r.PublicNetworks, r.ClusterNetworks = []string{"192.0.2.0/24"}, []string{"198.51.100.0/24"}
 	r.Action, r.Pool, r.Client = "pool", &Pool{Name: "volumes"}, &Client{Name: "consumer", Pool: "volumes", Access: "read-only"}
 	scope := scopeOf(r)
@@ -638,3 +639,5 @@ func TestHostRequestCarriesTheRegistryTrustBundle(t *testing.T) {
 		t.Fatalf("host material %+v", runner.request.Materials)
 	}
 }
+
+func (hostProofs) FIPS([]lifecycle.BlockEvidence, string, string) error { return nil }

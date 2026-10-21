@@ -143,6 +143,10 @@ func (m *fleetMachines) RemovesHost(reconciliation.Block) bool { return !m.keeps
 
 type fleetProofs struct{}
 
+func (fleetProofs) FIPS([]lifecycle.BlockEvidence, string, string) error {
+	return errors.New("this synthetic fleet has no FIPS installation proof")
+}
+
 func (fleetProofs) DataDisk(block reconciliation.Block, _ []byte, path, serial string, _ int64, _ bool) bool {
 	return block.Kind == string(api.Machine) && path == "/dev/vdb" && serial == block.Object
 }

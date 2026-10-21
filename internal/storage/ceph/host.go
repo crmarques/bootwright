@@ -48,6 +48,7 @@ type ClusterScope struct {
 	RegistryRef              string                       `json:"registryRef"`
 	RegistryTrustBundleRef   string                       `json:"registryTrustBundleRef,omitempty"`
 	Release                  string                       `json:"release"`
+	Security                 *Security                    `json:"security,omitempty"`
 	Services                 []json.RawMessage            `json:"services"`
 	Version                  string                       `json:"version"`
 }
@@ -259,6 +260,9 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 			plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: HostBlockID(cluster.Cluster, host.Machine), Description: description, Stage: reconciliation.StageClusters,
 				Requires: requires, Dependencies: []string{ImageBlockID(cluster.Cluster)}, Exclusive: []string{"ceph-host/" + host.Machine}, Impacts: impacts, Consumes: []string{},
 				Kind: string(api.StorageCluster), Object: cluster.Cluster, Implementation: HostImplementation, ContentDigest: HostContentDigest(), Request: canonical})
+			if cluster.Security != nil && cluster.Security.FIPS {
+				plan.Secrets = append(plan.Secrets, cluster.ClusterKeyRef)
+			}
 			plan.Secrets = append(plan.Secrets, cluster.RegistryRef, host.SSHKeyRef, source.CertificateRef)
 			if host.HostKeyRef != "" {
 				plan.Secrets = append(plan.Secrets, host.HostKeyRef)
@@ -323,7 +327,7 @@ func provedFor(e lifecycle.Execution) []lifecycle.BlockEvidence {
 }
 
 func hostRefusals() map[string]error {
-	out := map[string]error{"unsupported-release": unsupportedFailure()}
+	out := map[string]error{"unsupported-release": unsupportedFailure(), "fips-policy": adapterRefusals()["fips-policy"]}
 	for reason, message := range map[string]string{
 		"image-pull":      "the frozen Ceph image or an auxiliary image digest could not be pulled within its three bounded attempts",
 		"image-platform":  "a pulled image is not its frozen linux/amd64 digest",
@@ -434,6 +438,12 @@ func (c HostCapability) Apply(ctx context.Context, e lifecycle.Execution) (lifec
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
 	host, _ := r.target()
+	if err := proveClusterKey(e, r.Cluster.Security, r.Cluster.ClusterKeyRef); err != nil {
+		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+	}
+	if err := proveFIPS(e, Request{Security: r.Cluster.Security, Hosts: []Host{host}}, c.proofs); err != nil {
+		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+	}
 	if err := proveDisks(e, Request{Hosts: []Host{host}}, c.proofs); err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}

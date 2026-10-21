@@ -38,3 +38,19 @@ func ProvedHostKey(proofs []lifecycle.BlockEvidence, machine, address string) (t
 	}
 	return *selected, nil
 }
+
+func ProvedFIPS(proofs []lifecycle.BlockEvidence, machine, address string) error {
+	if _, err := ProvedHostKey(proofs, machine, address); err != nil {
+		return err
+	}
+	for _, proof := range proofs {
+		if proof.Kind != Kind || proof.Object != machine || proof.Implementation != Implementation {
+			continue
+		}
+		frozen, err := DecodeRequest(proof.Block.Request)
+		if err != nil || !frozen.fips() {
+			return refusal("lifecycle.state", "dependent access requires the Machine's original installation to have enabled FIPS mode", "install the dependent Machine with its FIPS profile")
+		}
+	}
+	return nil
+}

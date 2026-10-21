@@ -108,6 +108,8 @@ argument_specs:
             required: true
           service:
             type: dict
+          security:
+            type: dict
           settings:
             type: dict
           subvolume:

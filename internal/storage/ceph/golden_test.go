@@ -174,3 +174,30 @@ func TestEvidenceGolden(t *testing.T) {
 	digest, _ := json.Marshal(map[string]string{"digest": ContentDigest()})
 	matchesGolden(t, "content-digest", digest, false)
 }
+
+func TestFIPSSecurityGolden(t *testing.T) {
+	r := frozenGoldenRequest()
+	r.Security = &Security{FIPS: true, CephXKeyType: "aes"}
+	data, err := r.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	matchesGolden(t, "request-fips", data, false)
+	if _, err := DecodeRequest(data); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFIPSHostSecurityGolden(t *testing.T) {
+	r := packageRequest(t)
+	r.Security = &Security{FIPS: true, CephXKeyType: "aes"}
+	host := HostRequest{Cluster: scopeOf(r), Host: r.Hosts[0].Name, Version: HostVersion}
+	data, err := host.canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	matchesGolden(t, "request-host-fips", data, false)
+	if _, err := DecodeHostRequest(data); err != nil {
+		t.Fatal(err)
+	}
+}

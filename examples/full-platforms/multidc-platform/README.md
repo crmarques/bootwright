@@ -108,6 +108,7 @@ The expected result is failure with explicit diagnostics for:
 - Stretch topology and manager-module intent.
 - Unqualified global Ceph options, including missing members of the currently
   qualified pool-default pair.
+- A FIPS Ceph node without a managed FIPS installation profile.
 - Four `StorageExport` objects.
 
 The exact diagnostic set is pinned by `TestActualCLIRefusesFutureReferenceFeatures`

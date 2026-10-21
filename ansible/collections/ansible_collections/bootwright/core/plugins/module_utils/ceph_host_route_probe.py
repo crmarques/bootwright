@@ -177,13 +177,29 @@ def public_crypto_policy():
     return text
 
 
+def fips_enabled():
+    # The contained probe observes the host kernel, never an authored flag.
+    try:
+        with open("/proc/sys/crypto/fips_enabled", "rb") as stream:
+            value = stream.read(3)
+    except FileNotFoundError:
+        return False
+    require(value in (b"0\n", b"1\n"))
+    return value == b"1\n"
+
+
+def synthetic_algorithm():
+    return "ecdsa-sha2-nistp256" if fips_enabled() else "ssh-ed25519"
+
+
 def prepare(ssh):
     with phase("account"):
         uid, gid = account()
     keys = {}
     with phase("keys"):
+        algorithm = synthetic_algorithm()
         for name in KEYS:
-            key = ssh.generate_private_key("ssh-ed25519")
+            key = ssh.generate_private_key(algorithm)
             keys[name] = {"private": key.export_private_key("openssh").decode("ascii"),
                           "public": key.export_public_key("openssh").decode("ascii").strip()}
     with phase("crypto"):
@@ -209,7 +225,7 @@ def validate_synthetic(value, uid, gid):
         require(isinstance(private, str) and 0 < len(private) <= 8192 and private.isascii())
         require(private.startswith("-----BEGIN OPENSSH PRIVATE KEY-----\n") and private.endswith("-----END OPENSSH PRIVATE KEY-----\n"))
         require(isinstance(public, str) and 0 < len(public) <= 4096 and public.isascii())
-        require(public.startswith("ssh-ed25519 ") and len(public.split()) == 2 and "\n" not in public and "\r" not in public)
+        require(public.startswith(synthetic_algorithm() + " ") and len(public.split()) == 2 and "\n" not in public and "\r" not in public)
     require(len({key["public"] for key in value["keys"].values()}) == len(KEYS))
     require(len(canonical(value)) <= MAX_SYNTHETIC)
     return value

@@ -712,10 +712,13 @@ class ResourceWorker(ceph_native.Worker):
             entry = result[0]
             require(entry["entity"] == "client." + self.request["client"]["name"] and entry["caps"] == self.caps(), "client-identity")
             key = entry["key"]
+            ceph_native.prove_cephx_key(self.request, key)
             require(isinstance(key, str) and 0 < len(key) <= 1024, "client-identity")
             decoded = base64.b64decode(key, validate=True)
             require(0 < len(decoded) <= 256 and base64.b64encode(decoded).decode("ascii") == key and canonical(result) == data, "client-identity")
             return result
+        except ceph_native.NativeFailure:
+            raise
         except (ValueError, UnicodeError, TypeError, KeyError):
             raise Refusal("client-identity") from None
 
@@ -735,6 +738,7 @@ class ResourceWorker(ceph_native.Worker):
         try:
             require(isinstance(output, bytes) and len(output) <= 1025 and output.endswith(b"\n") and output.count(b"\n") == 1, "client-identity")
             key = output[:-1].decode("ascii")
+            ceph_native.prove_cephx_key(self.request, key)
         except UnicodeError:
             raise Refusal("client-identity") from None
         return canonical([{"entity": "client." + name, "key": key, "caps": self.caps()}])

@@ -253,6 +253,7 @@ func TestReferenceReadmeListsExactlyTheReferenceRefusals(t *testing.T) {
 		"External endpoint sources on the two baremetal ContainerClusters.":                                        func(d diagnosticTuple) bool { return d.kind == "ContainerCluster" },
 		"Stretch topology and manager-module intent.":                                                              stretch,
 		"Unqualified global Ceph options, including missing members of the currently qualified pool-default pair.": global,
+		"A FIPS Ceph node without a managed FIPS installation profile.":                                            func(d diagnosticTuple) bool { return d.field == "$.spec.ceph.topology.nodes[6].machineRef" },
 		"Four `StorageExport` objects.":                                                                            export,
 	}
 	data, err := os.ReadFile(filepath.Join(examplePath(t, "multidc-platform"), "README.md"))
@@ -332,6 +333,7 @@ func referenceRefusals() []diagnosticTuple {
 		{"api.required", storageClusterKind, multidcCluster, "$.spec.ceph.config.global.osd_pool_default_size"},
 		cluster("$.spec.ceph.mgrModules"),
 		cluster("$.spec.ceph.topology.stretch"),
+		cluster("$.spec.ceph.topology.nodes[6].machineRef"),
 		family("StorageExport", "ceph-multidc-01-odf-hub-multidc-01"),
 		family("StorageExport", "ceph-multidc-01-odf-hub-multidc-02"),
 		family("StorageExport", "ceph-multidc-01-odf-ocp-multidc-01"),

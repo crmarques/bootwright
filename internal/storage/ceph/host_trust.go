@@ -30,3 +30,38 @@ func provedHostKey(h Host, e lifecycle.Execution, readers DependencyProofs) (tru
 	}
 	return readers.HostKey(proofs, h.Machine, h.Address)
 }
+
+func proveFIPS(e lifecycle.Execution, r Request, readers DependencyProofs) error {
+	if r.Security == nil || !r.Security.FIPS {
+		return nil
+	}
+	if readers == nil {
+		return failure("lifecycle.state", "Ceph installation proof readers are not bound", "")
+	}
+	proofs := e.ApplyProved
+	if len(proofs) == 0 {
+		proofs = e.Proved
+	}
+	for _, host := range r.Hosts {
+		if err := readers.FIPS(proofs, host.Machine, host.Address); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func proveClusterKey(e lifecycle.Execution, policy *Security, ref string) error {
+	if policy == nil || !policy.FIPS {
+		return nil
+	}
+	public, err := materialPart(e.Material, ref, secrets.PublicKeyPart)
+	if err != nil {
+		return err
+	}
+	defer clear(public)
+	key, err := trust.ParseAuthorizedKey(string(public))
+	if err != nil || key.Type == "ssh-ed25519" {
+		return failure("api.value", "FIPS Ceph refuses the bound cluster SSH key", "bind an ECDSA or RSA cluster SSH key")
+	}
+	return nil
+}

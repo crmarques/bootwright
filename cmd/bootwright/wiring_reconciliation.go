@@ -312,6 +312,10 @@ func currentSelection(store contexts.SelectionStore) func(context.Context) (stri
 
 type cephDependencyProofs struct{}
 
+func (cephDependencyProofs) FIPS(proofs []lifecycle.BlockEvidence, machine, address string) error {
+	return installation.ProvedFIPS(proofs, machine, address)
+}
+
 func (cephDependencyProofs) DataDisk(block reconciliation.Block, evidence []byte, path, serial string, size int64, rotational bool) bool {
 	return libvirt.ProvedDataDisk(block, evidence, path, serial, size, rotational)
 }

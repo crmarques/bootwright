@@ -94,6 +94,7 @@ def ceph_directory(directory, request, owned):
 
 
 def host_admission(request):
+    ceph_native.prove_fips(request)
     actual_platform()
     directory = ceph_root()
     if directory is None:

@@ -50,6 +50,7 @@ UNIT_DAEMON = re.compile(r"[a-z][a-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\Z")
 # The refusals each block's Go caller remedies by name (hostRefusals,
 # adapterRefusals and smbRefusals in internal/storage/ceph); a test holds them equal.
 HOST_REASONS = (
+    "fips-policy",
     "unsupported-release", "image-pull", "image-platform", "image-profile", "route-probe", "device-identity", "runtime-profile", "not-ready",
     "package-resolution", "package-signature", "package-transaction", "request", "artifact", "ownership", "evidence", "material", "packages",
     "package-artifact", "package-drift", "package-journal", "package-license",
@@ -57,6 +58,7 @@ HOST_REASONS = (
     "unknown", "transport", "remote-refusal", "adapter-exception", "ssh-policy-host-excluded", "ssh-policy-unavailable",
 )
 CLUSTER_REASONS = (
+    "fips-policy", "cephx-policy",
     "unsupported-release", "runtime-profile", "device-identity", "cache-unproved", "enrollment-budget",
     "dashboard-identity", "dashboard-drift", "dashboard-policy",
     "dashboard-verify", "pool-identity", "pool-drift", "client-quiescence-unqualified", "native-option-undeclared", "call-home-unqualified",

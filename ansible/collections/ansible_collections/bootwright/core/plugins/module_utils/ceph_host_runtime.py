@@ -37,7 +37,7 @@ ROOT = "/var/lib/bootwright/ceph-host"
 PACKAGE_ROOT = "/var/lib/bootwright/ceph-packages"
 VERSION = "ceph-host-v6"
 PROFILE_VERSION = "ceph-runtime-profile-v3"
-ROUTE_VERSION = "ceph-host-route-v2"
+ROUTE_VERSION = "ceph-host-route-v3"
 DEVICES_VERSION = "ceph-device-identities-v1"
 EVIDENCE_VERSION = "ceph-host-evidence-v2"
 PROFILE = "runtime-profile.json"
@@ -694,6 +694,7 @@ class HostRuntime:
 
     def profile(self, private):
         """Pull the frozen digest, then prove its runtime facts in contained probes."""
+        ceph_native.prove_fips(self.request)
         deadline = self.clock() + PROFILE_CALL_SECONDS
         expected = {"registryJSON"} | ({"registryCA"} if "registryTrustBundleRef" in self.request else set())
         require(isinstance(private, dict) and set(private) == expected, "material")

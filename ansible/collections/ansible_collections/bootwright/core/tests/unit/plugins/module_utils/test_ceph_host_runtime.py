@@ -38,6 +38,7 @@ POOL = {"application": "rbd", "autoscale": {"bulk": False, "maxPGs": 0, "minPGs"
 
 @pytest.fixture(autouse=True)
 def injected_broker(monkeypatch):
+    monkeypatch.setattr(probe, "fips_enabled", lambda: False)
     original = runtime.ceph_pull_broker.Broker
 
     class Broker:

@@ -60,7 +60,7 @@ WORKER_DEADLINE = None
 SCOPE_MEMBERS = frozenset(("controller", "version", "cluster", "owner", "fsid", "image", "cephadm", "bootstrap", "hosts", "services", "clusterSSHUser",
                            "clusterSSHTransport", "monIP", "publicNetworks", "clusterNetworks", "callHome", "release", "ansiblePackageVersion",
                            "packageRepository", "clusterKeyRef", "registryRef", "registry"))
-SCOPE_OPTIONAL = frozenset(("auxiliary", "config", "packages", "nfsGaneshaPackageVersion", "registryTrustBundleRef"))
+SCOPE_OPTIONAL = frozenset(("security", "auxiliary", "config", "packages", "nfsGaneshaPackageVersion", "registryTrustBundleRef"))
 # cephadm's container_image_<name> settings an auxiliary image may fill, in name order.
 AUXILIARY_NAMES = (
     "alertmanager", "alloy", "grafana", "haproxy", "keepalived", "loki", "nginx", "node_exporter",
@@ -441,6 +441,30 @@ def bounded_command(argv, data=b"", timeout=60, limit=MAX_OUTPUT, environment=No
                     pipe.close()
 
 
+def prove_fips(request):
+    if not request.get("security", {}).get("fips"):
+        return
+    try:
+        with open("/proc/sys/crypto/fips_enabled", "rb") as stream:
+            kernel = stream.read(3)
+        policy = read_regular("/etc/crypto-policies/state/current", maximum=4096).strip()
+    except (OSError, Refusal):
+        raise NativeFailure("fips-policy", "FIPS host policy", b"the host kernel or inherited crypto policy cannot be proved") from None
+    if kernel != b"1\n" or policy.split(b":")[0] != b"FIPS":
+        raise NativeFailure("fips-policy", "FIPS host policy", b"the host kernel and inherited crypto policy must both report FIPS mode")
+
+
+def prove_cephx_key(request, key):
+    if "security" not in request:
+        return
+    try:
+        require(isinstance(key, str) and len(key) <= 1024)
+        raw = base64.b64decode(key, validate=True)
+        require(len(raw) == 28 and int.from_bytes(raw[:2], "little") == 1 and int.from_bytes(raw[10:12], "little") == 16)
+    except (ValueError, TypeError, Refusal):
+        raise NativeFailure("cephx-policy", "CephX key policy", b"a native key does not prove the requested aes type and 16-byte key length") from None
+
+
 def validate(request):
     """Admit only the implemented core envelope, including concrete devices."""
     require(isinstance(request, dict))
@@ -554,6 +578,10 @@ def host_scope(request):
 
 def scope_checks(request):
     require(request["version"] == "ceph-core-v30")
+    if "security" in request:
+        security = request["security"]
+        require(isinstance(security, dict) and set(security) == {"fips", "cephxKeyType"})
+        require(type(security["fips"]) is bool and security["cephxKeyType"] == "aes")
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])
@@ -1534,6 +1562,7 @@ class Worker:
         return value["uid"]
 
     def host_state(self):
+        prove_fips(self.request)
         owned = self.markers.owned()
         daemons = self.daemons()
         exists = bool(daemons)
@@ -1632,6 +1661,7 @@ class Worker:
                 and volume.get("fstype") in (None, "", "ceph_bluestore"), "foreign-osd")
 
     def prerequisites(self):
+        prove_fips(self.request)
         hostname = self.command(["/usr/bin/hostname"], json_result=False).decode("ascii").strip()
         require(hostname == self.host["name"], "host-identity")
         self.verify_tool()
@@ -1645,6 +1675,7 @@ class Worker:
         return result
 
     def claim(self):
+        prove_fips(self.request)
         existing = self.daemons()
         owned = self.markers.owned()
         require(owned or not existing, "foreign-cluster")
@@ -3620,9 +3651,19 @@ class Worker:
         self.blocking = sorted(name for name in blocking if HEALTH_CHECK.fullmatch(name))[:16]
         return status, status == "HEALTH_OK" or bool(checks) and not blocking
 
+    def prove_cluster_policy(self):
+        prove_fips(self.request)
+        require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
+        if "security" in self.request:
+            keys = self.ceph("auth", "ls")
+            require(isinstance(keys, dict) and isinstance(keys.get("auth_dump"), list) and keys["auth_dump"], "cephx-policy")
+            for entry in keys["auth_dump"]:
+                require(isinstance(entry, dict), "cephx-policy")
+                prove_cephx_key(self.request, entry.get("key"))
+
     def observe_cluster(self, evidence, daemons):
         pending = []
-        require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
+        self.prove_cluster_policy()
         evidence["exists"] = True
         self.prove_registry()
         self.provider_registry_absent()

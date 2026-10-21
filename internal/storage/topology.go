@@ -154,6 +154,9 @@ func (a *admission) machineAddress(machine api.Object, name, field string) {
 }
 
 func (a *admission) topology(ceph api.Value) {
+	if ceph.Get("security", "fips", "enabled").Bool() && ceph.Get("security", "cephx", "keyType").Text() == "aes256k" {
+		a.invalid("$.spec.ceph.security.cephx.keyType", "FIPS storage refuses AES256K CephX keys")
+	}
 	nodes := ceph.Get("topology", "nodes").Items()
 	fqdns, names, machines := []string{}, []string{}, []string{}
 	for i, node := range nodes {
@@ -168,8 +171,8 @@ func (a *admission) topology(ceph api.Value) {
 			if site := textOf(machine.Spec(), "placement", "site"); site != "" && textOf(node, "site") != "" && site != textOf(node, "site") {
 				a.invalid(field+".site", "storage node site must agree with its Machine placement")
 			}
-			if ceph.Get("security", "fips", "enabled").Bool() && machine.Spec().Has("os", "installProfileRef") {
-				if profile, ok := a.catalog.Find(api.MachineInstallProfile, textOf(machine.Spec(), "os", "installProfileRef")); ok && !profile.Spec().Get("customizations", "security", "fips", "enabled").Bool() {
+			if ceph.Get("security", "fips", "enabled").Bool() {
+				if profile, ok := a.catalog.Find(api.MachineInstallProfile, textOf(machine.Spec(), "os", "installProfileRef")); !ok || machine.Spec().Get("os", "provided").Bool() || !profile.Spec().Get("customizations", "security", "fips", "enabled").Bool() {
 					a.invalid(field+".machineRef", "FIPS storage requires a FIPS install profile on installed nodes")
 				}
 			}
