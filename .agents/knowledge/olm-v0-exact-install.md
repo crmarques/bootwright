@@ -4,8 +4,8 @@ What a Subscription pin fixes, how InstallPlan approval works, what proves the
 intended operator is up, and which native behaviors move an install after it.
 [OLM installation](../../specs/add-ons.md#olm-installation) and
 [readiness](../../specs/add-ons.md#readiness) own the required behavior; the
-program is [B750](../../specs/milestones/m4.md#b750), the adapter
-[B751](../../specs/milestones/m4.md#b751), and the packages that apply it are
+program is [B750](../../specs/milestones/delivered.md#b750), the adapter
+[B751](../../specs/milestones/delivered.md#b751), and the packages that apply it are
 [B83](../../specs/milestones/m4.md#b83) and
 [B735](../../specs/milestones/m4.md#b735). The `oc` mechanics are in
 [kubernetes-object-ownership-with-oc.md](kubernetes-object-ownership-with-oc.md).
@@ -142,8 +142,8 @@ full Subscription spec that overrides `channel`, `name`, `source`,
 `sourceNamespace`, `startingCSV` and `installPlanApproval` (RV-R1 correction 3,
 confirmed in the ACM operator code). The detail is in
 [acm-hub-install.md](acm-hub-install.md). The dependent approval step is part
-of [B750](../../specs/milestones/m4.md#b750) and
-[B751](../../specs/milestones/m4.md#b751). Because Bootwright approves a plan
+of [B750](../../specs/milestones/delivered.md#b750) and
+[B751](../../specs/milestones/delivered.md#b751). Because Bootwright approves a plan
 on a Subscription it did not create, it checks every spec field the
 annotation sets, the Subscription's creation time against its creator's, and
 the plan's `status.bundleLookups[].catalogSourceRef`, never only

@@ -2736,7 +2736,7 @@ Two clusters of one context whose MetalLB pools overlap on a shared layer 2
 network would both answer ARP for one address. Refusing this needs a rule over
 every `metallb` instance of the effective catalog. The package interface sees
 one instance and its cluster's facts, so the rule would be an add-on admission
-rule of [B752](m4.md#b752)'s instance function. Parked on 2026-10-20 (D173):
+rule of [B752](delivered.md#b752)'s instance function. Parked on 2026-10-20 (D173):
 no profile shares a network between two clusters' pools. **Revive when** a
 profile shares one network between two clusters' pools.
 
@@ -2966,7 +2966,7 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | B63 | 2026-10-20 | Alias L4. Folded under [D172](#decisions) into [B713](delivered.md#b713); each later shape carries its own lifecycle journeys. |
 | B65 | 2026-10-20 | Alias L6. Retired under [D172](#decisions): every M3 item carries the contract, crash, replay, cancellation and real-system evidence of its own binding. |
 | B397 | 2026-10-20 | Folded under [D172](#decisions) into [B308](delivered.md#b308), whose refusal-table rows include the off-controller boot-image server. |
-| B89 | 2026-10-20 | Alias C10. Moved from M6 and folded under [D173](#decisions) into [B752](m4.md#b752) (built-in packages need no acquisition; authored packages are input-tree data frozen with the context) and [B754](m4.md#b754) (the registration commands are removed); its `add-ons/_store` exception is parked as [B771](#b771). |
+| B89 | 2026-10-20 | Alias C10. Moved from M6 and folded under [D173](#decisions) into [B752](delivered.md#b752) (built-in packages need no acquisition; authored packages are input-tree data frozen with the context) and [B754](delivered.md#b754) (the registration commands are removed); its `add-ons/_store` exception is parked as [B771](#b771). |
 | B365 | 2026-10-20 | Folded under [D173](#decisions) into [B771](#b771), which removes the `add-ons/_store` exception and its marker, so the hard-linked-marker disagreement leaves with them. |
 
 ## Decisions
@@ -3921,7 +3921,7 @@ Requires cell as `owner decision: <question>`.
   and [B92](m4.md#b92), "acm/gitops" read as Red Hat Advanced Cluster
   Management and Red Hat OpenShift GitOps, move to M4e, [B93](m4.md#b93) to
   M4f and B90 to M4, each with a dated alias; B89 retires, folded into
-  [B752](m4.md#b752) and [B754](m4.md#b754), with `add-ons add` and
+  [B752](delivered.md#b752) and [B754](delivered.md#b754), with `add-ons add` and
   `add-ons delete` removed ([Q30](m4.md#m4a-open-decisions)); M6 is retired as
   M5 was, its page a stub holding no item, its Status row kept
   `not started`, and its number never reused; M7 requires M4 instead of M6.
@@ -3929,7 +3929,7 @@ Requires cell as `owner decision: <question>`.
   ([Q36](m4.md#m4a-open-decisions)); X134 keeps its ID as M4c's
   network-package slice, which B83 and B735 leave for X138, and M3d's
   cluster-network block narrows its dependency on B83 to the program and
-  adapter it consumes ([B750](m4.md#b750), [B751](m4.md#b751)). (5) "ibm data
+  adapter it consumes ([B750](delivered.md#b750), [B751](delivered.md#b751)). (5) "ibm data
   foundation add-ons" is read as one package, `fdf`, installing the operator
   package `odf-operator` from IBM's catalog or, expected but unverified until
   [B761](m4.md#b761), the same package from Red Hat's, as the binding names

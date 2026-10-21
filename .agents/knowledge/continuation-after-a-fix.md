@@ -73,10 +73,10 @@ lock continues with no `setup`.
   request, so another build does not continue the operation: the continuation
   refuses naming the first block that differs, and the way out is a destroy. A
   fix confined to the cluster objects role or its modules (planned by
-  [B751](../../specs/milestones/m4.md#b751)) moves no content digest and no
+  [B751](../../specs/milestones/delivered.md#b751)) moves no content digest and no
   request byte, so it continues a live operation like any other automation fix
   here: rebuild, then `apply`. The approval-rule tags of
-  [B750](../../specs/milestones/m4.md#b750) are in the content digest from its
+  [B750](../../specs/milestones/delivered.md#b750) are in the content digest from its
   first delivery, so [B759](../../specs/milestones/m4.md#b759) lifts a planning
   refusal and adds adapter behavior only, which moves the automation digest and
   nothing else.

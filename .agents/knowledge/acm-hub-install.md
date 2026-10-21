@@ -3,8 +3,8 @@
 What installing the ACM hub involves: the operator, the `MultiClusterHub`, the
 multicluster engine it brings, readiness, and removal. The package is
 [B91](../../specs/milestones/m4.md#b91), the dependent approval it needs is
-[B750](../../specs/milestones/m4.md#b750) and
-[B751](../../specs/milestones/m4.md#b751), and the live proof is
+[B750](../../specs/milestones/delivered.md#b750) and
+[B751](../../specs/milestones/delivered.md#b751), and the live proof is
 [B766](../../specs/milestones/m4.md#b766). The OLM mechanics are in
 [olm-v0-exact-install.md](olm-v0-exact-install.md).
 

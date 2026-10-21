@@ -404,11 +404,6 @@ alphanumeric character and otherwise contains only ASCII alphanumerics, `.`,
 A non-empty `--sha256` is 64 case-insensitive hexadecimal digits, optionally
 prefixed by exact lowercase `sha256:`, and normalizes to lowercase hexadecimal.
 
-An explicitly empty `--version=` is absence. Omission of both version forms
-selects the catalog's declared default. Add-on registration uses only an
-embedded, content-identified catalog release; these flags do not accept a path,
-URL, or arbitrary package.
-
 `cluster info --secrets=true` requires an explicitly supplied `--name` naming
 exactly one cluster after list normalization, and a list of several is
 `cli.usage`; the default-all selection applies only when sensitive values are

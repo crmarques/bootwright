@@ -7957,10 +7957,9 @@ owns the contract.
 and clearing), `internal/reconciliation/lifecycle/produced_test.go`
 (non-disclosure and custody lifetime), and the cluster-object adapter tests.
 
-### X137 — Add-on diagnostics portion
+### X137 — Typed built-in packages and diagnostics
 
-**Item:** B321. **Owner:** Add-ons. B752 remains in progress in
-[M4](m4.md#b752), held by the full verification gate.
+**Items:** B321 and B752. **Owner:** Add-ons.
 The [binding API](../api/addons.md) and [add-on lifecycle](../add-ons.md)
 own the behavior. The delivering commit records in-tree gate results.
 
@@ -7972,3 +7971,82 @@ retain the schema diagnostic instead of duplicated domain errors.
 
 **Guard tests:** `internal/addons/instances_test.go` and the add-on admission
 and binding tests.
+
+#### B752
+
+Bindings select typed built-in packages through an immutable registry;
+normalization and decoding retain defaults. Registry qualification rejects
+duplicate OLM identities and unread capabilities, with explicit configuration
+examples proving conditional readers. Actual instance configuration drives
+capability dependencies, cycle checks, Last ordering and admission hooks over
+cluster facts. Authored bindings remain on their existing path.
+
+**Guard tests:** `internal/addons/instances_test.go`,
+`internal/addons/packages/registry_test.go` and
+`cmd/bootwright/package_admission_test.go` (production schema, hooks and typed
+decoding). Package installation acceptance is separate.
+
+### X136 — Cluster object program and adapter
+
+**Items:** B750 and B751. **Owner:** Add-ons, with Container cluster.
+The delivering commit records the exact in-tree gate commands and results.
+Native operator acceptance remains with the consuming package's rehearsal.
+
+#### B750
+
+The immutable `cluster-objects-v1` program defines bounded objects, readiness
+checks, Secret placement and exact/dependent approvals, canonical digests,
+ownership receipts and observation proofs. Instance and network capabilities
+share the driver. [Cluster object program](../add-ons.md#the-cluster-object-program)
+owns the contract.
+
+**Guard tests:** `internal/addons/clusterobjects/program_test.go`,
+`internal/addons/clusterobjects/evidence_test.go` and the shared capability
+contract suite.
+
+#### B751
+
+The native adapter executes frozen programs through `oc`, creates owned
+objects without patching existing ones, compares continuations, checks
+readiness and performs only the bounded InstallPlan approval mutations.
+Ambiguous or foreign evidence stays unknown or refuses; native observations
+exclude Secret values.
+
+**Guard tests:**
+`ansible/collections/ansible_collections/bootwright/core/tests/unit/test_cluster_objects.py`
+and
+`ansible/collections/ansible_collections/bootwright/core/tests/unit/test_cluster_objects_programs.py`.
+No live Kubernetes API acceptance is claimed.
+
+### X140 — Built-in package listing
+
+**Item:** B754. **Owners:** Add-ons and CLI. The delivering commit records
+in-tree gate commands and results.
+
+#### B754
+
+`add-ons list` presents built-in package metadata in human and JSON output
+without a context or network access. `add-ons add` and `add-ons delete` are
+removed from the command catalog, help and completion. The
+[command catalog](../cli/commands.md) owns the surface.
+
+**Guard tests:** `cmd/bootwright/main_test.go`, CLI catalog and completion tests,
+and listing output goldens.
+
+### X142 — Cluster address facts
+
+**Item:** B756. **Owners:** Container cluster and Add-ons.
+The delivering commit records in-tree gate commands and results.
+
+#### B756
+
+Package admission receives canonical machine, cluster and service networks,
+node interfaces and routes, resolved endpoints and reserved address holders.
+Derivation reuses endpoint-ownership claims and is stable under catalog
+permutation. [Cluster facts](../api/addons.md) owns the package boundary.
+Gateway and secondary-network extensions remain B758, whose prerequisites
+and live proof are still open.
+
+**Guard tests:** `internal/containercluster/addon_facts_test.go`
+(endpoint sources, node composition, claim parity, determinism and network
+settings), and package pool admission tests.

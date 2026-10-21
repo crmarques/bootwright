@@ -4,7 +4,7 @@ What the file `openshift-install agent create image` writes is, how long it
 lives, which authority it trusts and which user it names. The block that lends
 the file to a dependent block is
 [B64](../../specs/milestones/delivered.md#b64); the cluster object adapter that reads
-through it is [B751](../../specs/milestones/m4.md#b751). The file's life in the
+through it is [B751](../../specs/milestones/delivered.md#b751). The file's life in the
 installer work area, including the rewrite after `install-complete`, is in
 [openshift-agent-work-area.md](openshift-agent-work-area.md).
 

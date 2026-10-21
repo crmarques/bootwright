@@ -4,8 +4,8 @@ What `oc` and the Kubernetes API do when Bootwright creates an object, decides
 whether it owns it, waits on it and deletes it. The
 [cluster object adapter](../../specs/add-ons.md#the-cluster-object-adapter)
 owns the required behavior; the program and its ownership evidence are
-[B750](../../specs/milestones/m4.md#b750), the adapter is
-[B751](../../specs/milestones/m4.md#b751), and the first live proof is
+[B750](../../specs/milestones/delivered.md#b750), the adapter is
+[B751](../../specs/milestones/delivered.md#b751), and the first live proof is
 [B755](../../specs/milestones/m4.md#b755). The OLM objects are in
 [olm-v0-exact-install.md](olm-v0-exact-install.md).
 
