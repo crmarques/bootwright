@@ -3835,7 +3835,9 @@ Requires cell as `owner decision: <question>`.
   cluster-facing requirements of M3e and M3f. B688 to B699 and X105 to X109 are
   left unused so this session cannot collide with M2c's concurrent allocations;
   the numbers carry no meaning, and integration re-checks main for B688 or
-  later and X105 or later and renumbers the unlanded items on a collision. New
+  later and X105 or later and renumbers the unlanded items on a collision. The
+  integration on 2026-10-20 found M2c had taken B688 to B690 and no collision.
+  New
   items B700 to B748: shared
   foundation items B700 to B704 sit on M1's page under M1c and M1g, scheduled
   with their first M3 consumer (D158); B727 and B735 sit on M4's page; B736 to

@@ -27,7 +27,7 @@ under [X98](milestones/delivered.md#x98--m1-owner-acceptance) and M2b under
 remain delivered.
 
 - **Next for agents:** [M2c](milestones/m2.md#m2c)'s remaining lanes resume on
-  `m2c` later, each merged at its checkpoint (D168).
+  `m2` later, each merged at its checkpoint (D168).
 - **Next for operator:** review D159 to D173. Other provider and cluster
   gates keep their acceptance.
 
