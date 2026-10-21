@@ -551,7 +551,7 @@ def host_scope(request):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v29")
+    require(request["version"] == "ceph-core-v30")
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])
@@ -1152,10 +1152,10 @@ class Worker:
             kept = candidate
         return base + "; specializations " + kept if kept else base
 
-    def command(self, argv, data=b"", timeout=60, json_result=True, recover=None):
+    def command(self, argv, data=b"", timeout=60, json_result=True, recover=None, secrets=()):
         code, output = self.run(argv, data=data, timeout=timeout)
         if code != 0 and (recover is None or not recover(code, output)):
-            raise NativeFailure("native-command", self.native_coordinate(), getattr(output, "stderr", b"") or output, secrets=(data,))
+            raise NativeFailure("native-command", self.native_coordinate(), getattr(output, "stderr", b"") or output, secrets=(data,) + tuple(secrets))
         if not json_result:
             return output
         try:
@@ -1195,14 +1195,14 @@ class Worker:
     def manager_label(self):
         return self.runtime_profile()["label"]
 
-    def ceph(self, *args, data=b"", json_result=True):
+    def ceph(self, *args, data=b"", json_result=True, secrets=()):
         proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verified-tunnel" else contextlib.nullcontext()
         with proof:
             return self.command([
                 "/usr/bin/ceph", "--conf", os.path.join(self.markers.path, "ceph.conf"),
                 "--keyring", os.path.join(self.markers.path, "ceph.client.admin.keyring"),
                 "--format", "json", *args,
-            ], data=data, json_result=json_result)
+            ], data=data, json_result=json_result, secrets=secrets)
 
     def recovery_enabled(self):
         return self.request["clusterSSHTransport"] == "verified-tunnel" and self.markers.read("bootstrap-scope.json") is not None
@@ -3673,8 +3673,9 @@ def dispatch(envelope):
     export = isinstance(request, dict) and request.get("action") == "nfs-export"
     user = isinstance(request, dict) and request.get("action") == "object-user"
     bucket = isinstance(request, dict) and request.get("action") == "object-bucket"
+    rgw = export and isinstance(request.get("nfsExport"), dict) and "objectUser" in request["nfsExport"]
     kind = (ceph_native_object.ObjectWorker if gateway else ceph_native_object.UserWorker if user else ceph_native_object.BucketWorker if bucket
-            else ceph_native_units.UnitWorker if unit else ceph_native_nfs.ExportWorker if export
+            else ceph_native_units.UnitWorker if unit else ceph_native_object.ExportUserWorker if rgw else ceph_native_nfs.ExportWorker if export
             else ceph_native_resources.ResourceWorker if resource else Worker)
     worker = kind(request, envelope["host"])
     worker.horizon = worker.clock() + MANAGER_HORIZON

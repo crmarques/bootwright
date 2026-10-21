@@ -156,7 +156,7 @@
         }
       }
     ],
-    "version": "ceph-core-v29"
+    "version": "ceph-core-v30"
   },
   "host": "node-1",
   "version": "ceph-host-v5"

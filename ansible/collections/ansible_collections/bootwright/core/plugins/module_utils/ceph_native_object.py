@@ -16,8 +16,11 @@ so no key ever reaches an argument; the pair crosses only stdout and is retained
 StorageObjectBucket: radosgw-admin creates no bucket and puts no bucket policy (its command table, src/rgw/radosgw-admin/radosgw-admin.cc:946-977),
 so the worker signs S3 CreateBucket and PutBucketPolicy with AWS Signature Version 4 under its owner's key pair, read in memory from `user info`
 and never answered, logged or recorded, and sends them to an rgw daemon of the gateway's backend service; over TLS the daemon's leaf is pinned by
-SHA-256 to the bound certificate before any byte is sent. Like the core worker it imports only the target Python standard library and the core
-worker modules.
+SHA-256 to the bound certificate before any byte is sent. An NFS export of an object user extends the NFS export worker: the NFS manager
+and NFS-Ganesha find RGW users through the default realm and its default zone only (src/rgw/driver/rados/rgw_zone.cc:1166-1245,
+doc/mgr/nfs.rst:429-430), so its block, the one place Bootwright sets a default, makes its gateway's realm the default realm when none is set
+and its zone that realm's default zone, refusing a default realm of another realm before any write. Like the core worker it imports only the
+target Python standard library and the core worker modules.
 """
 
 from __future__ import annotations
@@ -39,7 +42,7 @@ import time
 import unicodedata
 import urllib.parse
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_units
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_nfs, ceph_native_units
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import (
     Custody, NativeFailure, Refusal, canonical, named, read_regular, require, unique_object,
 )
@@ -66,7 +69,7 @@ PLACEMENT = "default-placement"
 # RGWSpec.get_port: 443 with ssl, else 80 (IBM python3-ceph-common 20.2.1 service_spec.py:1888-1909).
 HTTP_PORT = 80
 HTTPS_PORT = 443
-PENDING = re.compile(r"(?:(?:rgw|http|tls)@rgw|tls@ingress)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
+PENDING = re.compile(r"(?:(?:rgw|http|tls)@rgw|tls@ingress|default@realm)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
 MEMBERS = frozenset(("bindings", "dataExtraPool", "dataPool", "documents", "endpoint", "indexPool", "name", "realm", "zone", "zoneGroup", "zonePools"))
 KINDS = ("realm", "zonegroup", "zone")
 LISTS = {"realm": "realms", "zonegroup": "zonegroups", "zone": "zones"}
@@ -100,6 +103,7 @@ EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 S3_CODE = re.compile(rb"<Code>([A-Za-z0-9.]{1,64})</Code>")
 S3_MESSAGE = re.compile(rb"<Message>([ -~]{0,256})</Message>")
 BUCKET_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}\Z")
+EXPORT_USER_MEMBERS = frozenset(("gateway", "name", "realm", "zone", "zoneGroup"))
 
 
 def label(value):
@@ -235,6 +239,13 @@ def validate_user(request, hosts):
     require(named(user["name"]) and label(user["name"]) and user["name"] not in RESERVED_USERS)
     require(named(user["gateway"]) and label(user["gateway"]) and all(label(user[key]) for key in ("realm", "zoneGroup", "zone")))
     require(display_name(user["displayName"]))
+
+
+def validate_export_user(user):
+    """The object user an NFS export serves: its native user ID and its gateway's names, as the user's own block froze them."""
+    require(isinstance(user, dict) and set(user) == EXPORT_USER_MEMBERS)
+    require(named(user["name"]) and label(user["name"]) and user["name"] not in RESERVED_USERS)
+    require(named(user["gateway"]) and label(user["gateway"]) and all(label(user[key]) for key in ("realm", "zoneGroup", "zone")))
 
 
 def user_material(data, uid, reason="object-user-identity"):
@@ -1274,3 +1285,120 @@ class BucketWorker(UserWorker):
             proved = stored is not None
         evidence["resource"] = {"id": self.bucket()["name"], "path": ""} if proved else {"id": "", "path": ""}
         return ready and proved
+
+
+class ExportGateway(UserWorker):
+    """The object user an RGW export serves, seen through its gateway's records; every instance attribute is the export worker's."""
+
+    def __init__(self, worker):  # pylint: disable=super-init-not-called
+        self.worker = worker
+
+    def __getattr__(self, name):
+        return getattr(self.worker, name)
+
+    def user(self):
+        return dict(self.worker.request["nfsExport"]["objectUser"], displayName="")
+
+    def default_id(self, kind):
+        """`realm list` and `zone list` name the default realm, and that realm's default zone, as `default_info`, empty when none is set
+        (src/rgw/radosgw-admin/radosgw-admin.cc:5297-5325, :6447-6475, src/rgw/driver/rados/rgw_zone.cc:981-1004)."""
+        value = self.radosgw(kind, "list")
+        current = value.get("default_info") if isinstance(value, dict) else None
+        require(isinstance(current, str) and (current == "" or ZONE_ID.fullmatch(current) is not None), "native-output")
+        return current
+
+    def default_realm(self, ids):
+        """Whether the gateway's realm is the default realm; any other default realm refuses before any write."""
+        current = self.default_id("realm")
+        if current not in ("", ids["realm"]):
+            user = self.user()
+            raise NativeFailure("nfs-export-realm-default", self.native_coordinate(), "the default realm has ID " + current + ", not realm "
+                                + user["realm"] + " of StorageObjectGateway " + user["gateway"])
+        return current == ids["realm"]
+
+    def defaulted(self, ids):
+        return self.default_realm(ids) and self.default_id("zone") == ids["zone"]
+
+    def completed_user(self):
+        """The user is the object user this operation created in the gateway's zone: its completion record says so."""
+        user = self.user()
+        expected = {"owner": self.request["owner"], "fsid": self.request["fsid"], "gateway": user["gateway"], "user": user["name"],
+                    "realm": user["realm"], "zoneGroup": user["zoneGroup"], "zone": user["zone"]}
+        record = self.markers.read(self.user_record("complete"))
+        require(isinstance(record, dict) and isinstance(record.get("displayName"), str)
+                and {key: value for key, value in record.items() if key != "displayName"} == expected, "ownership")
+
+
+class ExportUserWorker(ceph_native_nfs.ExportWorker):
+    """One NFS export of one object user: `fsal: {name: RGW, user_id}` at path `/` (src/pybind/mgr/nfs/export.py:899-931). On add the NFS
+    manager reads the user's first S3 key itself (:263-288, :1015-1016); an update must carry the stored pair unchanged (:1037-1045), so the
+    worker reads the user's one key pair from `user info` into its memory, splices it into the apply's stdin only and redacts each key."""
+
+    pair = None
+    stored = None
+    ids = None
+
+    def gateway_view(self):
+        return ExportGateway(self)
+
+    def stored_keys(self, fsal):
+        self.stored = (fsal.get("access_key_id"), fsal.get("secret_access_key"))
+
+    def user_pair(self):
+        """The user's one active S3 key pair, which the NFS manager takes as its first key; in this worker's memory only."""
+        if self.pair is None:
+            site = self.gateway_view()
+            site.completed_user()
+            self.pair = json.loads(site.native_pair(site.info()))
+        return self.pair
+
+    def same_keys(self):
+        held = self.user_pair()
+        stored = self.stored if isinstance(self.stored, tuple) else (None, None)
+        return all(isinstance(value, str) for value in stored) and hmac.compare_digest(
+            canonical(list(stored)), canonical([held["accessKey"], held["secretKey"]]))
+
+    def prove_backing(self, info):
+        """The gateway's records, committed period and radosgw-admin, the user this operation created with one active key, no default
+        realm of another realm, and an existing export that holds that key; all before any write."""
+        site = self.gateway_view()
+        site.verify_tool()
+        self.ids = site.proved_user_zone()
+        self.user_pair()
+        site.default_realm(self.ids)
+        if info and not self.same_keys():
+            raise self.foreign("that this operation created holds another S3 key than user " + self.export()["objectUser"]["name"])
+
+    def bind_backing(self):
+        """The zone becomes its realm's default zone and, when no default realm is set, the realm the default one: the zone first, so the
+        default realm never lacks a default zone, which RGW would replace with a created `default` zone (rgw_zone.cc:1199-1217)."""
+        site, ids = self.gateway_view(), self.ids
+        if site.defaulted(ids):
+            return False
+        site.radosgw("zone", "default", *site.site("realm", "zone"), json_result=False)
+        if not site.default_realm(ids):
+            site.radosgw("realm", "default", *site.site("realm"), json_result=False)
+        require(site.defaulted(ids), "not-ready")
+        return True
+
+    def payload(self, intent, expected):
+        """An update carries the user's pair, which equals the stored one; an add carries none, as the NFS manager fetches it."""
+        if expected != "updated":
+            return super().payload(intent, expected)
+        pair = self.user_pair()
+        native = intent["native"]
+        keyed = dict(native, fsal=dict(native["fsal"], access_key_id=pair["accessKey"], secret_access_key=pair["secretKey"]))
+        return canonical(keyed), (pair["accessKey"], pair["secretKey"])
+
+    def backing_ready(self, info):
+        """Read-only: the gateway's names still listed and recorded, its realm and zone the defaults, and the export holding the user's key."""
+        site = self.gateway_view()
+        ids = site.foreign_check(site.listed() if site.root_present() else {kind: set() for kind in KINDS})
+        if len(ids) != len(KINDS):
+            return False
+        if not self.same_keys():
+            raise self.foreign("that this operation created holds another S3 key than user " + self.export()["objectUser"]["name"])
+        if not site.defaulted(ids):
+            self.blocking.append("default@realm." + site.user()["realm"])
+            return False
+        return True

@@ -14,9 +14,10 @@ type NFSExportClient struct {
 }
 
 type NFSExportFSAL struct {
-	CmountPath string `json:"cmount_path"`
-	FSName     string `json:"fs_name"`
+	CmountPath string `json:"cmount_path,omitempty"`
+	FSName     string `json:"fs_name,omitempty"`
 	Name       string `json:"name"`
+	UserID     string `json:"user_id,omitempty"`
 }
 
 type NFSExportNative struct {
@@ -32,14 +33,23 @@ type NFSExportNative struct {
 	Transports    []string          `json:"transports"`
 }
 
+type NFSExportObjectUser struct {
+	Gateway   string `json:"gateway"`
+	Name      string `json:"name"`
+	Realm     string `json:"realm"`
+	Zone      string `json:"zone"`
+	ZoneGroup string `json:"zoneGroup"`
+}
+
 type NFSExport struct {
-	Filesystem    string          `json:"filesystem"`
-	Group         string          `json:"group"`
-	Name          string          `json:"name"`
-	Native        NFSExportNative `json:"native"`
-	Service       string          `json:"service"`
-	Subvolume     string          `json:"subvolume"`
-	SubvolumePath string          `json:"subvolumePath,omitempty"`
+	Filesystem    string               `json:"filesystem"`
+	Group         string               `json:"group"`
+	Name          string               `json:"name"`
+	Native        NFSExportNative      `json:"native"`
+	ObjectUser    *NFSExportObjectUser `json:"objectUser,omitempty"`
+	Service       string               `json:"service"`
+	Subvolume     string               `json:"subvolume"`
+	SubvolumePath string               `json:"subvolumePath,omitempty"`
 }
 
 func NFSExportBlockID(name string) string { return "ceph-nfs-export-" + name }
@@ -76,7 +86,15 @@ func nfsExportRequest(c api.Catalog, export api.Object, contextName string) (Req
 	}
 	var r Request
 	frozen := NFSExport{Name: name, Service: spec.Get("serviceID").Text()}
-	if ref := spec.Get("subvolumeRef").Text(); ref != "" {
+	if ref := spec.Get("objectUserRef").Text(); ref != "" {
+		user, _ := c.Find(api.StorageObjectUser, ref)
+		request, err := objectUserRequest(c, user, contextName)
+		if err != nil {
+			return Request{}, err
+		}
+		u := request.ObjectUser
+		r, frozen.ObjectUser = request, &NFSExportObjectUser{Gateway: u.Gateway, Name: u.Name, Realm: u.Realm, Zone: u.Zone, ZoneGroup: u.ZoneGroup}
+	} else if ref := spec.Get("subvolumeRef").Text(); ref != "" {
 		subvolume, _ := c.Find(api.StorageSubvolume, ref)
 		request, err := subvolumeRequest(c, subvolume, contextName)
 		if err != nil {
@@ -105,7 +123,10 @@ func nfsExportRequest(c api.Catalog, export api.Object, contextName string) (Req
 			"add a spec.ceph.services entry with service_type nfs and this service_id to StorageCluster "+r.Cluster+", or set spec.serviceID to the service_id of a declared nfs service")
 	}
 	frozen.Native = nfsExportNativeOf(spec.Get("native"), frozen.Filesystem)
-	r.Action, r.Filesystem, r.Subvolume, r.Pool, r.NFSExport = "nfs-export", nil, nil, nil, &frozen
+	if frozen.ObjectUser != nil {
+		frozen.Native.FSAL = NFSExportFSAL{Name: "RGW", UserID: frozen.ObjectUser.Name}
+	}
+	r.Action, r.Filesystem, r.Subvolume, r.Pool, r.ObjectUser, r.NFSExport = "nfs-export", nil, nil, nil, nil, &frozen
 	return r, nil
 }
 

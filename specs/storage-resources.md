@@ -92,7 +92,7 @@ effects. No new field inherits an undocumented default from another resource.
 | `StoragePlacementPolicy` | Reusable CRUSH placement and pool protection policy. | OSD topology supplies its proved failure domains; policy does not deploy OSDs. |
 | `StoragePool` | Pool identity, replicated/EC protection, application, PG/autoscaler, quota, compression and supported mirroring intent. EC `rbd`/`cephfs-data` pools derive irreversible overwrite enablement; mirroring is [B483](milestones/m2.md#b483)'s. | Services and resources reference owned pools; native auto-created pools require an explicitly recorded derived owner. |
 | `StorageFilesystem` | Metadata/data-pool composition, default/layout, active ranks and standby/replay resource policy, declared subvolume groups; several filesystems per cluster. | `spec.mdsServiceRef` binds one declared MDS service whose `service_id` is the filesystem name; placement and container configuration belong to that service. One `ceph fs new` creates the native filesystem. |
-| `StorageObjectGateway` | The realm, zone group and zone it creates (never with `--default`), its zone placement binding, its derived zone pools and its endpoint identity. | `spec.serviceRef` binds exactly one declared rgw service by full native identity; the gateway executes that service and the ingress whose `spec.backend_service` is it. It embeds no daemon placement, frontend, configuration or ingress specification. |
+| `StorageObjectGateway` | The realm, zone group and zone it creates (never with `--default`; only an export of one of its users makes them the defaults, under [StorageNFSExport](#storagenfsexport)), its zone placement binding, its derived zone pools and its endpoint identity. | `spec.serviceRef` binds exactly one declared rgw service by full native identity; the gateway executes that service and the ingress whose `spec.backend_service` is it. It embeds no daemon placement, frontend, configuration or ingress specification. |
 | `StorageExport` | Existing Data Foundation handoff, or the external-details arm. Admission refuses it until [B762](milestones/m4.md#b762) admits a managed export, whose material is [B86](milestones/m4.md#b86)'s, or parked item [B107](milestones/backlog.md#b107) the external-details arm. | It waits for the resources and access material it describes; it neither creates an add-on nor becomes a general native-command resource. |
 
 Their existing non-daemon fields remain unless an owning approved migration
@@ -168,7 +168,8 @@ The DNS-label grammar of `realm`, `zoneGroup` and `zone` is an explicit
 effect restriction of Bootwright; Ceph accepts more. Bootwright never passes
 `--default`, so a gateway never sets the cluster's default realm; inside its
 own realm, native creation records the first zone group and zone as that
-realm's defaults. The storage domain is the single Environment's
+realm's defaults. The only writer of a default is the export block of a
+[StorageNFSExport](#storagenfsexport) bound to one of the gateway's users. The storage domain is the single Environment's
 `domains.storageClusters`, else `domains.clusters`, else `domains.base`, the
 same domain that derives node FQDNs.
 
@@ -676,11 +677,12 @@ spec:
 | `serviceID` | Required service ID of one declared nfs service of that cluster; it resolves `nfs.<serviceID>` by full-name equality, so an rgw or other service with the same ID never satisfies it. |
 | `filesystemRef` | CephFS backing: a StorageFilesystem of the same cluster. |
 | `subvolumeRef` | CephFS backing: a StorageSubvolume of the same cluster; its filesystem is the subvolume's `filesystemRef`. |
+| `objectUserRef` | RGW backing: a [StorageObjectUser](#storageobjectuser-field-record) of the same cluster, whose buckets the export lists at its root (a user export, `ceph nfs export create rgw --user-id`). |
 | `native` | Required mapping holding the export in the native export JSON shape, checked against the closed member table below. |
 
-Exactly one of `filesystemRef` and `subvolumeRef` is required; both, or
-neither, refuse. Object backing is not admitted yet, and there is no
-`spec.secrets`: an export declaration carries no credential.
+Exactly one of `filesystemRef`, `subvolumeRef` and `objectUserRef` is
+required; two, or none, refuse. There is no `spec.secrets`: an export
+declaration carries no credential. A single-bucket export is not admitted.
 
 The `native` mapping follows the
 [native export interface](https://docs.ceph.com/en/tentacle/mgr/nfs/#create-or-update-export-via-json-specification)
@@ -689,16 +691,16 @@ and keeps cephadm's snake_case spelling. Its members are closed:
 | Member | Contract | Frozen default |
 | --- | --- | --- |
 | `pseudo` | Required clean absolute path other than `/`; unique among the exports of one nfs service. | None. |
-| `path` | Clean absolute path in the bound filesystem. | `/` for a `filesystemRef` binding; none for a subvolume binding. |
+| `path` | Clean absolute path in the bound filesystem; exactly `/` for an `objectUserRef` binding. | `/` for a `filesystemRef` or `objectUserRef` binding; none for a subvolume binding. |
 | `access_type` | `RW`, `RO` or `NONE`. | `RO`. |
 | `squash` | One of the native squash tokens `root`, `root_squash`, `rootsquash`, `rootid`, `root_id_squash`, `rootidsquash`, `all`, `all_squash`, `allsquash`, `all_anomnymous`, `allanonymous`, `no_root_squash`, `none` and `noidsquash`. | `no_root_squash`. |
 | `security_label` | Boolean. | `true`. |
 | `protocols` | Required in complete input and exactly `[4]`; NFSv3 refuses. | None: an omitted list would serve NFSv3 and NFSv4, so omission refuses. |
 | `transports` | `[TCP]`; UDP refuses as an incompatible transport for NFSv4. | `[TCP]`. |
 | `sectype` | `[sys]` when present; Kerberos (`krb5`, `krb5i`, `krb5p`) refuses and native `none` is not a supported option. | None. |
-| `fsal.name` | Required `CEPH`; `RGW` refuses because object backing is not admitted yet. | None. |
-| `fsal.fs_name` | Name of the bound filesystem; an authored value must agree with the binding. | The bound filesystem. |
-| `fsal.cmount_path` | Clean absolute path that is `/`, equal to `path`, or an ancestor directory of `path`. | `/`. |
+| `fsal.name` | Required: `CEPH` with a filesystem or subvolume binding, `RGW` with `objectUserRef`; any other pairing refuses. | None. |
+| `fsal.fs_name` | `CEPH` only: name of the bound filesystem; an authored value must agree with the binding. | The bound filesystem. |
+| `fsal.cmount_path` | `CEPH` only: clean absolute path that is `/`, equal to `path`, or an ancestor directory of `path`. | `/`. |
 | `clients[]` | Each entry requires a non-empty `addresses` set of literal IP addresses or CIDRs, plus `access_type` and `squash` with the export-level tokens. | Addresses take their canonical form (masked prefix or bare address). |
 
 Bootwright narrows native in three explicit restrictions. The cmount rule is
@@ -714,7 +716,9 @@ binding's `path` are never added.
 Refused members name the field, the reason and the next step: `export_id`
 (the NFS manager generates the export ID, which Bootwright records),
 `cluster_id` (the NFS cluster is the service `spec.serviceID` names),
-`fsal.user_id` (the NFS manager derives the CephFS principal),
+`fsal.user_id` (the binding supplies the principal: the NFS manager derives
+a CephFS one, and `objectUserRef` names the RGW user, which the frozen export
+carries as `fsal.user_id`),
 `fsal.cephx_key`, `fsal.access_key_id` and `fsal.secret_access_key` (an export
 declaration carries no key) and `fsal.sec_label_xattr` (no qualified effect
 contract). No refusal echoes a member's value.
@@ -726,6 +730,32 @@ Retired fields refuse at decode with their replacement: `spec.port` and
 StorageNFSExport per export entry, each binding `spec.filesystemRef` or
 `spec.subvolumeRef` and holding that entry's native export under
 `spec.native`.
+
+An export of an object user resolves that user through the cluster's
+default realm: the NFS manager reads the user's first S3 key with
+`radosgw-admin user info --uid` and no realm, and NFS-Ganesha's RGW library
+starts with no `rgw_realm`, so both read the default realm and its default
+zone, and RGW creates a `default` zone when either is missing. This is an
+explicit effect restriction, the only place Bootwright sets a default:
+
+- Admission refuses an `objectUserRef` export whose cluster declares more
+  than one StorageObjectGateway, because one realm is the default realm.
+- The export block requires the user's block and proves, before any write,
+  the gateway's records and committed period, the user's completion record
+  and its one active S3 key, and that the default realm is unset or the
+  gateway's realm. A default realm of another realm refuses
+  `nfs-export-realm-default`; Bootwright never moves a default realm another
+  tool set.
+- It then makes the gateway's zone its realm's default zone, a pointer of the
+  gateway's own realm, and, when no default realm is set, the gateway's realm
+  the default realm: the zone first, so the default realm never lacks a
+  default zone. Readiness proves both defaults; a moved default is not ready.
+- On add the export carries no key and the NFS manager reads it; an update
+  must carry the stored key pair unchanged, so the worker reads the user's
+  pair from `radosgw-admin user info` into its memory and adds it to the
+  apply's input only, never to a record, argument, log or evidence. An
+  existing export holding another key than the user's refuses
+  `nfs-export-foreign`.
 
 The export block resolves at execution what admission cannot prove: a
 subvolume binding's `path` comes from the proved subvolume when omitted, an
@@ -1268,7 +1298,7 @@ run concurrently under Storage's claims and lease rules.
 | NFS on CephFS | Filesystem/subvolume and native NFS service → individual export with derived principal; NFS service → mode-qualified ingress, when declared; client access waits for export and endpoint readiness. |
 | SMB on CephFS | Filesystem/group/subvolume plus native SMB auth/usersgroups resources → SMB cluster → share; the SMB manager derives its daemons → qualified client access. |
 | S3 | Realm/zone and pool layout → native RGW service bound to logical gateway → account/user → bucket/policy; declared ingress/public endpoint → scoped S3 access material. |
-| NFS on RGW | Owned bucket, gateway and object principal plus native NFS service → bucket-bound native export → qualified endpoint and client restrictions. |
+| NFS on RGW | Gateway and object user plus native NFS service → the gateway's realm and zone as the defaults → user-bound native export of the user's buckets → qualified endpoint and client restrictions. |
 | Replication | Both declared cluster/resource endpoints and their access dependencies → explicit peer relationship → initial synchronization proof; native replication direction is not a cyclic Bootwright creation edge. |
 | Data Foundation handoff | Declared RBD pool, filesystem, optional object gateway and scoped access dependencies → existing StorageExport material; downstream installation remains separate. Its material is [B86](milestones/m4.md#b86)'s. |
 

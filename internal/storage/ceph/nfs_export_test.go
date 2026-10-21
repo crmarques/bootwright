@@ -87,6 +87,42 @@ func TestNFSExportBlockDependsOnUnitAndBacking(t *testing.T) {
 	}
 }
 
+func rgwExportNative() api.Value {
+	return exportNative("fsal", requestMap("name", "RGW"), "path", "/")
+}
+
+func objectExportCatalog(native api.Value) api.Catalog {
+	return planCatalog(3, 3, func(spec api.Value) api.Value { return withShares(withPairAndHTTPRGW(spec)) }, objectGateway("objects"), objectUserObject("app-writer"),
+		childOf(api.StorageNFSExport, "docs", "serviceID", "shares", "objectUserRef", "app-writer", "native", native))
+}
+
+func TestNFSExportOfAnObjectUserRequiresTheUserAndFreezesItsGatewayZone(t *testing.T) {
+	block := exportPlan(t, objectExportCatalog(rgwExportNative()))
+	if !slices.Equal(block.Dependencies, []string{"ceph-cluster-example", "ceph-image-example", "ceph-service-example-nfs-shares"}) ||
+		!slices.Equal(block.Requires, []reconciliation.ObjectRef{{Kind: string(api.StorageObjectUser), Object: "app-writer"}}) {
+		t.Fatalf("the object export block depends on %v and requires %v", block.Dependencies, block.Requires)
+	}
+	matchesGolden(t, "request-nfs-export-object", block.Request, false)
+	r, err := DecodeRequest(block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	x := r.NFSExport
+	user := NFSExportObjectUser{Gateway: "objects", Name: "app-writer", Realm: "objects", Zone: "objects", ZoneGroup: "objects"}
+	if r.Action != "nfs-export" || r.ObjectUser != nil || r.Gateway != nil || r.Pool != nil || x == nil || x.ObjectUser == nil || *x.ObjectUser != user ||
+		x.Filesystem != "" || x.Group != "" || x.Subvolume != "" || x.Native.Path != "/" || x.Native.FSAL != (NFSExportFSAL{Name: "RGW", UserID: "app-writer"}) {
+		t.Fatalf("the object export froze as %+v %+v", r, x)
+	}
+	for _, refused := range []string{"access_key_id", "secret_access_key", "cmount_path", "fs_name", "subvolumePath"} {
+		if strings.Contains(string(block.Request), `"`+refused+`"`) {
+			t.Fatalf("the object export request carries %s", refused)
+		}
+	}
+	if cephfs := plannedExport(t, exportCatalog(3, withShares, subvolumeExport(exportNative()))).NFSExport; cephfs.ObjectUser != nil || cephfs.Native.FSAL.UserID != "" {
+		t.Fatalf("a CephFS export froze an object user: %+v", cephfs)
+	}
+}
+
 func TestNFSExportRequestGolden(t *testing.T) {
 	r := plannedExport(t, exportCatalog(3, withShares, subvolumeExport(exportNative())))
 	want := NFSExport{Filesystem: "files", Group: "csi", Name: "docs", Service: "shares", Subvolume: "docs"}
@@ -112,8 +148,8 @@ func TestNFSExportRequestGolden(t *testing.T) {
 	}
 }
 
-func TestNFSExportRequestCarriesNoUserID(t *testing.T) {
-	refused := []string{"user_id", "export_id", "cluster_id", "cephx_key", "access_key_id", "secret_access_key", "sec_label_xattr"}
+func TestNFSExportRequestCarriesNoGeneratedMemberOrKey(t *testing.T) {
+	refused := []string{"export_id", "cluster_id", "cephx_key", "access_key_id", "secret_access_key", "sec_label_xattr", "user_id"}
 	var walk func(reflect.Type)
 	walk = func(typ reflect.Type) {
 		for typ.Kind() == reflect.Slice || typ.Kind() == reflect.Pointer {
@@ -123,7 +159,7 @@ func TestNFSExportRequestCarriesNoUserID(t *testing.T) {
 			return
 		}
 		for field := range typ.Fields() {
-			if name, _, _ := strings.Cut(field.Tag.Get("json"), ","); slices.Contains(refused, name) {
+			if name, _, _ := strings.Cut(field.Tag.Get("json"), ","); slices.Contains(refused[:len(refused)-1], name) {
 				t.Fatalf("%s carries %s", typ, name)
 			}
 			walk(field.Type)

@@ -164,7 +164,7 @@ func normalizeNFSExport(spec api.Value, catalog api.Catalog) api.Value {
 	}
 	native = native.Default("access_type", api.StringValue("RO")).Default("squash", api.StringValue("no_root_squash")).Default("security_label", api.BoolValue(true)).Default("transports", api.StringList("TCP"))
 	filesystem := textOf(spec, "filesystemRef")
-	if spec.Has("filesystemRef") && !spec.Has("subvolumeRef") {
+	if spec.Has("filesystemRef") && !spec.Has("subvolumeRef") || spec.Has("objectUserRef") {
 		native = native.Default("path", api.StringValue("/"))
 	} else if subvolume, ok := catalog.Find(api.StorageSubvolume, textOf(spec, "subvolumeRef")); ok && !spec.Has("filesystemRef") {
 		filesystem = textOf(subvolume.Spec(), "filesystemRef")

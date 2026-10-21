@@ -231,7 +231,7 @@ func TestANFSExportForeignRefusalNamesItsNextStep(t *testing.T) {
 	effect, d := nfsExportRefusal(t, "nfs-export-foreign")
 	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
 		d[0].Message != "an NFS export exists at the StorageNFSExport's pseudo path on its NFS service that this operation did not create, "+
-			"or the export this operation created is gone or now has another export ID or CephFS principal" ||
+			"or the export this operation created is gone or now has another export ID, CephFS principal or S3 key" ||
 		d[0].Remediation != "find the export the native error names with ceph nfs export info <service> <pseudo>; for an export this operation did not create, "+
 			"set another spec.native.pseudo on the StorageNFSExport or remove the foreign export outside Bootwright, then apply again; "+
 			"when the native error says the export this operation created is gone or changed, take back what this context owns with "+
@@ -261,6 +261,18 @@ func TestANFSExportPathEscapeRefusalNamesItsNextStep(t *testing.T) {
 			"for the subvolume or a directory below it, and set spec.native.fsal.cmount_path to / or a directory that contains the export path, "+
 			"then apply again; Bootwright wrote nothing for this export" {
 		t.Fatalf("an nfs-export-path-escape refusal reached the operator as %s %+v", effect, d)
+	}
+}
+
+func TestANFSExportRealmDefaultRefusalNamesItsNextStep(t *testing.T) {
+	effect, d := nfsExportRefusal(t, "nfs-export-realm-default")
+	if effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+		d[0].Message != "an export of an RGW user needs its StorageObjectGateway's realm as the cluster's default realm, through which the NFS manager "+
+			"and NFS-Ganesha find the user, and another realm is the default realm" ||
+		d[0].Remediation != "find the default realm with radosgw-admin realm list on the bootstrap host; when nothing else relies on it, clear it with "+
+			"radosgw-admin realm default rm outside Bootwright, then apply again; Bootwright wrote nothing for this export and never moves a default "+
+			"realm another tool set" {
+		t.Fatalf("an nfs-export-realm-default refusal reached the operator as %s %+v", effect, d)
 	}
 }
 
@@ -350,7 +362,7 @@ func TestEachSMBBlockNamesExactlyTheRefusalsItsModuleMayPublish(t *testing.T) {
 func TestResourceRefusalsNameTheirNextStep(t *testing.T) {
 	refusals := adapterRefusals()
 	generic := diagnostics.Of(refusals["native-output"])[0].Remediation
-	for _, reason := range []string{"foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget", "foreign-rbd-image", "rbd-image-identity", "foreign-subvolume", "subvolume-identity", "pool-drift", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign", "object-zone-pools", "object-endpoint-certificate", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape", "ingress-firewall", "sso-unverified"} {
+	for _, reason := range []string{"foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget", "foreign-rbd-image", "rbd-image-identity", "foreign-subvolume", "subvolume-identity", "pool-drift", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign", "object-zone-pools", "object-endpoint-certificate", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape", "nfs-export-realm-default", "ingress-firewall", "sso-unverified"} {
 		d := diagnostics.Of(refusals[reason])
 		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Remediation == generic || strings.Contains(d[0].Message, "could not prove its") {
 			t.Fatalf("%s reaches the operator as %+v", reason, d)

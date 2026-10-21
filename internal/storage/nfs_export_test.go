@@ -51,7 +51,7 @@ func TestNFSExportNativeRecordIsClosed(t *testing.T) {
 	}{
 		{[]string{"export_id"}, "the NFS manager generates the export ID", "omit spec.native.export_id; Bootwright records the generated ID"},
 		{[]string{"cluster_id"}, "the NFS cluster is the service spec.serviceID names", "omit spec.native.cluster_id"},
-		{[]string{"fsal", "user_id"}, "the NFS manager derives the CephFS principal of an export", "omit spec.native.fsal.user_id"},
+		{[]string{"fsal", "user_id"}, "the binding supplies the export's principal: the NFS manager derives a CephFS one, and spec.objectUserRef names the RGW one", "omit spec.native.fsal.user_id"},
 		{[]string{"fsal", "cephx_key"}, keyless, "omit spec.native.fsal.cephx_key"},
 		{[]string{"fsal", "sec_label_xattr"}, "this NFS export option has no qualified effect contract", "omit spec.native.fsal.sec_label_xattr"},
 		{[]string{"fsal", "access_key_id"}, keyless, "omit spec.native.fsal.access_key_id"},
@@ -139,10 +139,11 @@ func TestNFSExportPseudoUniquePerService(t *testing.T) {
 func TestNFSExportBackingExactlyOne(t *testing.T) {
 	catalog := nfsExportCatalog(t)
 	none, changed := nfsExportWith(t, catalog, func(spec api.Value) api.Value { return spec.Without("filesystemRef") })
-	exactIssue(t, Validate(none, changed), "api.required", "$.spec", "an NFS export requires exactly one of spec.filesystemRef and spec.subvolumeRef", "set spec.filesystemRef or spec.subvolumeRef")
+	backing := "an NFS export requires exactly one of spec.filesystemRef, spec.subvolumeRef and spec.objectUserRef"
+	exactIssue(t, Validate(none, changed), "api.required", "$.spec", backing, "set spec.filesystemRef or spec.subvolumeRef for CephFS, or spec.objectUserRef for an RGW user's buckets")
 	both, changed := nfsExportWith(t, catalog, func(spec api.Value) api.Value { return spec.With("subvolumeRef", api.StringValue("docs")) })
-	exactIssue(t, Validate(both, changed), "api.invariant", "$.spec", "an NFS export requires exactly one of spec.filesystemRef and spec.subvolumeRef", "keep only one of spec.filesystemRef and spec.subvolumeRef")
-	exactIssue(t, ValidatePartial(both, changed), "api.invariant", "$.spec", "an NFS export requires exactly one of spec.filesystemRef and spec.subvolumeRef", "keep only one of spec.filesystemRef and spec.subvolumeRef")
+	exactIssue(t, Validate(both, changed), "api.invariant", "$.spec", backing, "keep only one of spec.filesystemRef, spec.subvolumeRef and spec.objectUserRef")
+	exactIssue(t, ValidatePartial(both, changed), "api.invariant", "$.spec", backing, "keep only one of spec.filesystemRef, spec.subvolumeRef and spec.objectUserRef")
 	subvolume, changed := nfsExportWith(t, catalog, func(spec api.Value) api.Value {
 		return spec.Without("filesystemRef").With("subvolumeRef", api.StringValue("docs"))
 	})
@@ -289,14 +290,65 @@ func TestNFSExportFrozenDefaultsAndBindingFSName(t *testing.T) {
 	disagreement(otherSubvolume, replace(changed, otherSubvolume))
 }
 
-func TestNFSExportRefusesObjectBackingAndKerberos(t *testing.T) {
+func TestNFSExportRefusesKerberos(t *testing.T) {
 	catalog := nfsExportCatalog(t)
-	export, changed := nfsExportWith(t, catalog, nativeEdit(m("name", "RGW"), "fsal"))
-	exactIssue(t, Validate(export, changed), "api.invariant", "$.spec.native.fsal.name", "NFS exports of object storage are not supported by Bootwright yet", "bind spec.filesystemRef or spec.subvolumeRef and set spec.native.fsal.name: CEPH")
-	export, changed = nfsExportWith(t, catalog, nativeEdit(api.StringList("krb5p"), "sectype"))
+	export, changed := nfsExportWith(t, catalog, nativeEdit(api.StringList("krb5p"), "sectype"))
 	exactIssue(t, Validate(export, changed), "api.invariant", "$.spec.native.sectype", "Kerberos is not supported by Bootwright yet", "set spec.native.sectype: [sys] or omit spec.native.sectype")
 	export, changed = nfsExportWith(t, catalog, nativeEdit(api.StringList("sys"), "sectype"))
 	requireAdmits(t, export, changed)
 	export, changed = nfsExportWith(t, catalog, nativeEdit(api.StringList("none"), "sectype"))
 	requireIssue(t, Validate(export, changed), "$.spec.native.sectype[0]")
+}
+
+func objectExportCatalog(t *testing.T) (api.Object, api.Catalog) {
+	t.Helper()
+	_, catalog := withMDSService(t, fixtureCatalog(), rgwService(qualifiedRGWSpec()))
+	_, catalog = withGraph(t, catalog, []api.Value{nfsService(m())})
+	catalog = replace(catalog, objectUser("app-writer"))
+	export := object(api.StorageNFSExport, "buckets", m("clusterRef", "storage", "serviceID", "files", "objectUserRef", "app-writer", "native",
+		m("pseudo", "/buckets", "protocols", []api.Value{v(4)}, "fsal", m("name", "RGW"))))
+	export, _ = Normalize(export, replace(catalog, export))
+	return export, replace(catalog, export)
+}
+
+func TestNFSExportOfAnObjectUserServesItsBuckets(t *testing.T) {
+	export, catalog := objectExportCatalog(t)
+	requireAdmits(t, export, catalog)
+	if !export.Spec().Get("native", "path").Equal(api.StringValue("/")) || export.Spec().Has("native", "fsal", "cmount_path") || export.Spec().Has("native", "fsal", "fs_name") {
+		t.Fatalf("an RGW export normalized to %#v", export.Spec().Get("native"))
+	}
+	if again, _ := Normalize(export, catalog); !again.Spec().Equal(export.Spec()) {
+		t.Fatal("RGW export normalization is not idempotent")
+	}
+	for _, member := range []string{"fs_name", "cmount_path"} {
+		changed := export.WithSpec(export.Spec().WithPath(api.StringValue("/"), "native", "fsal", member))
+		exactIssue(t, Validate(changed, replace(catalog, changed)), "api.invariant", "$.spec.native.fsal."+member, member+" is a CephFS member that the RGW FSAL does not hold", "omit spec.native.fsal."+member)
+		exactIssue(t, ValidatePartial(changed, replace(catalog, changed)), "api.invariant", "$.spec.native.fsal."+member, member+" is a CephFS member that the RGW FSAL does not hold", "")
+	}
+	bucket := export.WithSpec(export.Spec().WithPath(api.StringValue("/app-data"), "native", "path"))
+	exactIssue(t, Validate(bucket, replace(catalog, bucket)), "api.invariant", "$.spec.native.path", "an export of an RGW user serves the path /, whose entries are the user's buckets", "set spec.native.path: / or omit it")
+	ceph := export.WithSpec(export.Spec().WithPath(m("name", "CEPH"), "native", "fsal"))
+	exactIssue(t, Validate(ceph, replace(catalog, ceph)), "api.invariant", "$.spec.native.fsal.name", "spec.objectUserRef exports an RGW user's buckets, which only the RGW FSAL serves", "set spec.native.fsal.name: RGW, or replace spec.objectUserRef with spec.filesystemRef or spec.subvolumeRef")
+	if partial := ValidatePartial(ceph, replace(catalog, ceph)); len(partial) != 0 {
+		t.Fatalf("a partial fragment was refused for a cross-field FSAL choice: %#v", partial)
+	}
+	unbound := export.WithSpec(export.Spec().Without("objectUserRef").With("filesystemRef", api.StringValue("files")))
+	exactIssue(t, Validate(unbound, replace(catalog, unbound)), "api.invariant", "$.spec.native.fsal.name", "an RGW export serves the buckets of the StorageObjectUser that spec.objectUserRef names", "set spec.objectUserRef to a StorageObjectUser of this cluster, or set spec.native.fsal.name: CEPH and bind spec.filesystemRef or spec.subvolumeRef")
+	both := export.WithSpec(export.Spec().With("filesystemRef", api.StringValue("files")))
+	exactIssue(t, ValidatePartial(both, replace(catalog, both)), "api.invariant", "$.spec", "an NFS export requires exactly one of spec.filesystemRef, spec.subvolumeRef and spec.objectUserRef", "keep only one of spec.filesystemRef, spec.subvolumeRef and spec.objectUserRef")
+	catalog = replace(catalog, objectUser("far-writer", "clusterRef", "elsewhere"))
+	user := export.WithSpec(export.Spec().With("objectUserRef", api.StringValue("far-writer")))
+	exactIssue(t, Validate(user, replace(catalog, user)), "api.invariant", "$.spec.objectUserRef", "referenced storage child belongs to a different cluster", "")
+}
+
+func TestNFSExportOfAnObjectUserRefusesASecondGateway(t *testing.T) {
+	export, catalog := objectExportCatalog(t)
+	_, catalog = withGraph(t, catalog, []api.Value{moreRGW()})
+	catalog = replace(catalog, secondGateway())
+	exactIssue(t, Validate(export, catalog), "api.invariant", "$.spec.objectUserRef",
+		"StorageNFSExport buckets exports an RGW user, which the NFS manager and NFS-Ganesha reach only through the cluster's default realm, and only one StorageObjectGateway can own it; StorageCluster storage declares the gateways objects, second",
+		"keep one StorageObjectGateway in StorageCluster storage, or remove spec.objectUserRef and this export")
+	foreign := object(api.StorageCluster, "other", find(t, catalog, api.StorageCluster, "storage").Spec())
+	catalog = replace(replace(catalog, foreign), secondGateway("clusterRef", "other"))
+	requireAdmits(t, export, catalog)
 }

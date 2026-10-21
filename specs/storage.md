@@ -301,7 +301,8 @@ them:
   exclusive `ceph/<cluster>`) realizes one StorageNFSExport on the bootstrap
   host. It depends on the cluster and image blocks and on its NFS service-unit
   block `ceph-service-<cluster>-nfs-<serviceID>` by ID, and on its backing
-  StorageFilesystem or StorageSubvolume through that object; its deadline is
+  StorageFilesystem, StorageSubvolume or StorageObjectUser through that
+  object; its deadline is
   fixed (apply 2280 s, observe 720 s, destroy 1380 s) and does not grow with
   the host count.
 - An SMB block `ceph-smb-<object>` (Kind StorageSMBResource, implementation
@@ -1033,6 +1034,28 @@ and pseudo path only. The block never removes an export, creates or removes an
 NFS service, or changes a client key; it retires with the cluster's hosts, and
 [B491](milestones/m2.md#b491) owns its online removal. Mounting from a client
 is the operator's acceptance.
+
+An `objectUserRef` binding freezes `fsal: {name: RGW, user_id: <user>}`, path
+`/` and its gateway's realm, zone group and zone. Before any write the apply
+also proves, as the user block does, the gateway's records, its committed
+period and recorded `radosgw-admin`; the user's completion record of this
+operation (`ownership`); the user's one active S3 key in `user info`
+(`object-user-identity`); for an existing export, that its stored key pair
+equals the user's (`nfs-export-foreign`); and with `radosgw-admin realm list`
+that the default realm is unset or the gateway's realm
+(`nfs-export-realm-default`). The NFS manager and NFS-Ganesha find the user
+only through the default realm and its default zone, so the block then runs
+`radosgw-admin zone default` for the gateway's zone, the realm's own pointer,
+and, when no default realm is set, `radosgw-admin realm default` for the
+gateway's realm, and proves both with `realm list` and `zone list`; the
+[field record](storage-resources.md#storagenfsexport) states this effect
+restriction. On add the export JSON carries no key, and the NFS manager reads
+the user's first key itself; an update must carry the stored pair, so the
+worker reads it from `user info` into its memory, adds it to the apply's stdin
+only and redacts each key from any refusal. Readiness also proves the stored
+key pair, the gateway's names and both defaults; a moved default is not ready
+(`default@realm.<realm>`) and the next apply sets it again, unless another
+realm became the default.
 
 A StorageSMBResource is realized by its SMB block `ceph-smb-<object>`. Its
 request freezes the admitted native document with only two changes, the

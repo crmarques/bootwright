@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v29"
+const Version = "ceph-core-v30"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {

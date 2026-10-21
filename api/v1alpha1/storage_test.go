@@ -64,10 +64,10 @@ func TestNFSExportSchemaShape(t *testing.T) {
 	for _, field := range schema.Fields {
 		names = append(names, field.Name)
 	}
-	if !slices.Equal(names, []string{"clusterRef", "serviceID", "filesystemRef", "subvolumeRef", "native"}) {
+	if !slices.Equal(names, []string{"clusterRef", "serviceID", "filesystemRef", "subvolumeRef", "objectUserRef", "native"}) {
 		t.Fatalf("StorageNFSExport fields = %v", names)
 	}
-	for name, required := range map[string]bool{"serviceID": true, "native": true, "filesystemRef": false, "subvolumeRef": false} {
+	for name, required := range map[string]bool{"serviceID": true, "native": true, "filesystemRef": false, "subvolumeRef": false, "objectUserRef": false} {
 		if field, _ := schema.Field(name); field.Required != required {
 			t.Fatalf("StorageNFSExport %s required = %t", name, field.Required)
 		}
@@ -75,7 +75,7 @@ func TestNFSExportSchemaShape(t *testing.T) {
 	if native, _ := schema.Field("native"); !native.Shape.Open || !native.Shape.Atomic {
 		t.Fatal("native must be an open atomic mapping checked by admission")
 	}
-	for name, kind := range map[string]Kind{"filesystemRef": StorageFilesystem, "subvolumeRef": StorageSubvolume} {
+	for name, kind := range map[string]Kind{"filesystemRef": StorageFilesystem, "subvolumeRef": StorageSubvolume, "objectUserRef": StorageObjectUser} {
 		if field, _ := schema.Field(name); !slices.Equal(field.Shape.Reference, []Kind{kind}) {
 			t.Fatalf("%s must reference %s", name, kind)
 		}

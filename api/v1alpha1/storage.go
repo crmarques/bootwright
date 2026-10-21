@@ -126,7 +126,7 @@ func storageObjectBucketSchema() *Shape {
 }
 
 func storageNFSExportSchema() *Shape {
-	return record(required("clusterRef", ref(StorageCluster)), required("serviceID", nonempty()), field("filesystemRef", ref(StorageFilesystem)), field("subvolumeRef", ref(StorageSubvolume)), required("native", native()))
+	return record(required("clusterRef", ref(StorageCluster)), required("serviceID", nonempty()), field("filesystemRef", ref(StorageFilesystem)), field("subvolumeRef", ref(StorageSubvolume)), field("objectUserRef", ref(StorageObjectUser)), required("native", native()))
 }
 
 func StorageNFSExportNativeSchema() *Shape {

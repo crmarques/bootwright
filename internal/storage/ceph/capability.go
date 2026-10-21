@@ -199,6 +199,9 @@ func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, 
 		if request.NFSExport.Subvolume != "" {
 			backing = reconciliation.ObjectRef{Kind: string(api.StorageSubvolume), Object: request.NFSExport.Subvolume}
 		}
+		if request.NFSExport.ObjectUser != nil {
+			backing = reconciliation.ObjectRef{Kind: string(api.StorageObjectUser), Object: request.NFSExport.ObjectUser.Name}
+		}
 		requires = append(requires, backing)
 	case "object-user":
 		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageObjectGateway), Object: request.ObjectUser.Gateway})

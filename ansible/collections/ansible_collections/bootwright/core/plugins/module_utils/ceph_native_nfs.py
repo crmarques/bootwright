@@ -9,7 +9,9 @@ An NFS export applies one native export JSON with `nfs export apply <service> -i
 upserts by pseudo path, so the worker proves the pseudo path free or its own before the first apply and never sends an export ID, cluster
 ID or CephFS principal. It records the generated export ID and the derived principal once, and drops every FSAL secret
 `nfs export info` may print (src/pybind/mgr/nfs/ganesha_conf.py:261-271, :314-322) before any comparison, record or error.
-Like the core worker it imports only the target Python standard library, the core worker and its resource worker.
+An export of an RGW user carries `fsal: {name: RGW, user_id}` and path `/`; its proofs and the effects on its gateway's
+realm live in the object worker, which extends this one through the backing hooks. Like the core worker it imports only
+the target Python standard library, the core worker and its resource worker.
 """
 
 from __future__ import annotations
@@ -40,6 +42,7 @@ PORTS = ("frontend_port", "haproxy_peer_communication_port", "monitor_port", "mo
 EXPORT_APPLY_PHASES = ("nfs_export",)
 EXPORT_PHASES = frozenset(EXPORT_APPLY_PHASES)
 EXPORT_MEMBERS = frozenset(("filesystem", "group", "name", "native", "service", "subvolume"))
+EXPORT_OPTIONAL = frozenset(("objectUser", "subvolumePath"))
 NATIVE_REQUIRED = frozenset(("access_type", "clients", "fsal", "protocols", "pseudo", "security_label", "squash", "transports"))
 NATIVE_OPTIONAL = frozenset(("path", "sectype"))
 CLIENT_MEMBERS = frozenset(("access_type", "addresses", "squash"))
@@ -259,8 +262,9 @@ def validate_clients(clients):
         seen |= set(addresses)
 
 
-def validate_native(native, filesystem):
-    """The frozen native export: NFSv4 over TCP with sys security, a CephFS FSAL on the bound filesystem, and no generated member."""
+def validate_native(native, filesystem, user=None):
+    """The frozen native export: NFSv4 over TCP with sys security, a CephFS FSAL on the bound filesystem or the RGW FSAL of the bound
+    user at path `/` (src/pybind/mgr/nfs/export.py:778-780, :915-931), and no generated member."""
     require(isinstance(native, dict) and NATIVE_REQUIRED <= set(native) <= NATIVE_REQUIRED | NATIVE_OPTIONAL)
     require(clean(native["pseudo"], root=False) and ("path" not in native or clean(native["path"])))
     require(isinstance(native["access_type"], str) and native["access_type"] in ACCESS)
@@ -268,20 +272,31 @@ def validate_native(native, filesystem):
     require(canonical(native["protocols"]) == b"[4]" and canonical(native["transports"]) == b'["TCP"]')
     require("sectype" not in native or canonical(native["sectype"]) == b'["sys"]')
     fsal = native["fsal"]
+    validate_clients(native["clients"])
+    if user is not None:
+        require(fsal == {"name": "RGW", "user_id": user} and native.get("path") == "/")
+        return
     require(isinstance(fsal, dict) and set(fsal) == {"cmount_path", "fs_name", "name"} and fsal["fs_name"] == filesystem and fsal["name"] == "CEPH")
     require(clean(fsal["cmount_path"]))
-    validate_clients(native["clients"])
 
 
 def validate_export(request, hosts):
     """One export of a declared NFS service, bound to a filesystem path or to the path its subvolume's creation proof reports."""
     del hosts
     nfs = request.get("nfsExport")
-    require(isinstance(nfs, dict) and EXPORT_MEMBERS <= set(nfs) <= EXPORT_MEMBERS | {"subvolumePath"})
-    require(named(nfs["name"]) and named(nfs["service"]) and named(nfs["filesystem"]))
+    require(isinstance(nfs, dict) and EXPORT_MEMBERS <= set(nfs) <= EXPORT_MEMBERS | EXPORT_OPTIONAL)
+    require(named(nfs["name"]) and named(nfs["service"]))
+    require("nfs." + nfs["service"] in [entry["name"] for entry in request.get("delegated", [])])
+    if "objectUser" in nfs:
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_object
+        user = nfs["objectUser"]
+        ceph_native_object.validate_export_user(user)
+        require(nfs["filesystem"] == nfs["group"] == nfs["subvolume"] == "" and "subvolumePath" not in nfs)
+        validate_native(nfs["native"], "", user["name"])
+        return
+    require(named(nfs["filesystem"]))
     require(nfs["subvolume"] == "" or named(nfs["subvolume"]))
     require(nfs["group"] == "" or named(nfs["group"]) and nfs["subvolume"] != "")
-    require("nfs." + nfs["service"] in [entry["name"] for entry in request.get("delegated", [])])
     validate_native(nfs["native"], nfs["filesystem"])
     if nfs["subvolume"] == "":
         require("path" in nfs["native"] and "subvolumePath" not in nfs)
@@ -312,6 +327,8 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
         """The path to export: authored, or the subvolume's proved path; within that subvolume and below its CephFS mount."""
         nfs = self.export()
         native = nfs["native"]
+        if native["fsal"]["name"] == "RGW":
+            return native["path"]
         if nfs["subvolume"] == "":
             path = native["path"]
         else:
@@ -347,6 +364,7 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
         info = self.manager_retry(self.ceph, "nfs", "export", "info", nfs["service"], nfs["native"]["pseudo"])
         require(isinstance(info, dict), "native-output")
         if isinstance(info.get("fsal"), dict):
+            self.stored_keys(info["fsal"])
             info = dict(info, fsal={key: value for key, value in info["fsal"].items() if key not in FSAL_SECRETS})
         if not info:
             return info
@@ -358,11 +376,31 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
         require(fsal["name"] != "CEPH" or isinstance(fsal.get("user_id"), str) and USER_ID.fullmatch(fsal["user_id"]) is not None, "native-output")
         return info
 
+    def stored_keys(self, fsal):
+        """Backing hook: an RGW export reads the S3 keys `nfs export info` prints, in memory only; a CephFS export keeps none."""
+
+    def prove_backing(self, info):
+        """Backing hook: read-only proofs of the bound backing after the export's own, before any write; a CephFS export has none."""
+
+    def bind_backing(self):
+        """Backing hook: the bound backing's effects, after every proof and before the export's apply; whether one changed anything."""
+        return False
+
+    def backing_ready(self, info):
+        """Backing hook: read-only readiness of the bound backing for a recorded export."""
+        del info
+        return True
+
+    def payload(self, intent, expected):
+        """The JSON the apply sends and the secrets its diagnostics redact: the frozen native export itself."""
+        del expected
+        return canonical(intent["native"]), ()
+
     @staticmethod
     def projection(native):
-        """The stored export as authored: no generated ID, cluster or principal, its protocol and transport lists in one order."""
+        """The stored export as authored: no generated ID, cluster or CephFS principal, its protocol and transport lists in one order."""
         result = {key: value for key, value in native.items() if key not in ("export_id", "cluster_id")}
-        result["fsal"] = {key: value for key, value in native["fsal"].items() if key != "user_id"}
+        result["fsal"] = {key: value for key, value in native["fsal"].items() if key != "user_id" or native["fsal"].get("name") == "RGW"}
         for key in ("protocols", "transports"):
             if isinstance(result[key], list):
                 result[key] = sorted(result[key], key=canonical)
@@ -401,9 +439,9 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
     def applied(self, intent, expected):
         """One declarative apply of the frozen JSON on stdin; a failure, a warning or another state is the NFS manager's answer, never retried."""
         nfs = self.export()
-        payload = canonical(intent["native"])
+        payload, secrets = self.payload(intent, expected)
         try:
-            answer = self.tunnel_effect("nfs", "export", "apply", nfs["service"], "-i", "-", data=payload)
+            answer = self.tunnel_effect("nfs", "export", "apply", nfs["service"], "-i", "-", data=payload, secrets=secrets)
         except NativeFailure as error:
             if str(error) != "native-command":
                 raise
@@ -413,7 +451,7 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
         require(isinstance(answer, list) and len(answer) == 1 and isinstance(answer[0], dict) and answer[0].get("pseudo") == nfs["native"]["pseudo"],
                 "native-output")
         if answer[0].get("state") != expected:
-            raise NativeFailure("nfs-export-apply", self.native_coordinate(), canonical(answer), secrets=(payload,))
+            raise NativeFailure("nfs-export-apply", self.native_coordinate(), canonical(answer), secrets=(payload,) + secrets)
 
     def readback(self, intent, identity=None):
         info = self.info()
@@ -436,19 +474,21 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
         attempt, identity = self.held(intent)
         info = self.info()
         attempt_name, identity_name = self.records()
+        if identity is not None and (not info or self.identity_of(info) != identity):
+            raise self.foreign("that this operation created is gone or changed")
+        if identity is None and info and attempt is None:
+            raise self.foreign("has no creation record of this operation")
+        if identity is None and info and not self.matches(info, intent):
+            raise self.foreign("is not the export this operation attempted")
+        self.prove_backing(info)
+        bound = self.bind_backing()
         if identity is not None:
-            if not info or self.identity_of(info) != identity:
-                raise self.foreign("that this operation created is gone or changed")
             if self.matches(info, intent):
-                return {"changed": False}
+                return {"changed": bound}
             self.applied(intent, "updated")
             self.readback(intent, identity)
             return {"changed": True}
         if info:
-            if attempt is None:
-                raise self.foreign("has no creation record of this operation")
-            if not self.matches(info, intent):
-                raise self.foreign("is not the export this operation attempted")
             self.markers.write(identity_name, self.identity_of(info))
             return {"changed": True}
         if attempt is None:
@@ -483,4 +523,4 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
         evidence["owned"] = attempt is not None
         evidence["exists"] = evidence["owned"] or bool(info)
         evidence["resource"] = {"id": str(identity["exportId"]), "path": intent["native"]["pseudo"]} if recorded else {"id": "", "path": ""}
-        return ready and recorded and self.matches(info, intent)
+        return ready and recorded and self.matches(info, intent) and self.backing_ready(info)
