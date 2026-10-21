@@ -1,0 +1,79 @@
+implementation: addon-instance-v1
+content-digest: 993b57e89d799b7d6b525517aa2dd88e8f31ece5cba2c1f1dcf19e590385f16c
+automation-formats: none
+request-schema:
+  binding string
+  budgetSeconds int64
+  cluster string
+  package string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  producedInputs []struct lifecycle.ProducedInput
+  producedInputs[].kind string
+  producedInputs[].object string
+  producedInputs[].output string
+  program opaque
+  secrets []string
+  tool struct instance.Tool
+  tool.compatibility string
+  tool.kind string
+  tool.version string
+  version string
+evidence-schema:
+  receipts []struct clusterobjects.Receipt
+  receipts[].apiVersion string
+  receipts[].kind string
+  receipts[].namespace string
+  receipts[].name string
+  receipts[].namespaced bool
+  receipts[].uid string
+  receipts[].desiredDigest string
+  receipts[].disposition string
+  olm []struct clusterobjects.OLMFacts
+  olm[].namespace string
+  olm[].subscription string
+  olm[].installPlan struct clusterobjects.InstallPlan
+  olm[].installPlan.name string
+  olm[].installPlan.uid string
+  olm[].installPlan.csvs []string
+  olm[].installedCSV string
+  olm[].csvVersion string
+  olm[].upgradePending bool
+  olm[].maxOpenShiftVersion string
+  olm[].catalogImage string
+  olm[].bundleImage string
+  dependents []struct clusterobjects.DependentFacts
+  dependents[].namespace string
+  dependents[].subscription string
+  dependents[].uid string
+  dependents[].installPlan struct clusterobjects.InstallPlan
+  dependents[].installPlan.name string
+  dependents[].installPlan.uid string
+  dependents[].installPlan.csvs []string
+  dependents[].installedCSV string
+  checks []struct clusterobjects.CheckResult
+  checks[].unknown bool omitempty
+  checks[].index int
+  checks[].satisfied bool
+  checks[].stale bool
+  checks[].lastObservation string
+  observations []struct clusterobjects.ObjectObservation
+  observations[].apiVersion string
+  observations[].kind string
+  observations[].namespace string
+  observations[].name string
+  observations[].namespaced bool
+  observations[].ownership string
+  observations[].equal bool
+  absent bool
+  classification string
+  postcondition bool
+  request string
+  retired bool omitempty
+  version string

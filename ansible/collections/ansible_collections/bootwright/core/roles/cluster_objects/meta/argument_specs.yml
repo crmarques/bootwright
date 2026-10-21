@@ -1,0 +1,108 @@
+argument_specs:
+  apply:
+    short_description: Run the frozen cluster object program.
+    options:
+      cluster_objects_request:
+        type: dict
+        required: true
+        description: Frozen program and operation identity with its budget.
+
+      cluster_objects_program:
+        type: dict
+        required: true
+        description: Shared cluster object program.
+        options:
+          version:
+            type: str
+            required: true
+            choices: [cluster-objects-v1]
+            description: Shared program contract version.
+          steps:
+            type: list
+            elements: dict
+            required: true
+            description: Ordered object actions and readiness gates.
+          checks:
+            type: list
+            elements: dict
+            required: true
+            description: Final readiness checks.
+
+      cluster_objects_oc:
+        type: str
+        required: true
+        description: Absolute path of the qualified cluster client.
+
+      cluster_objects_material:
+        type: dict
+        required: true
+        description: Lent kubeconfig material path.
+
+      cluster_objects_evidence:
+        type: dict
+        required: true
+        description: Previously recorded ownership receipts.
+
+      cluster_objects_evidence_version:
+        type: str
+        required: true
+        description: The consuming capability evidence version.
+
+      cluster_objects_digest:
+        type: str
+        required: true
+        description: Frozen request digest.
+
+  observe:
+    short_description: Read the frozen cluster object program once.
+    options:
+      cluster_objects_request:
+        type: dict
+        required: true
+        description: Frozen program and operation identity with its budget.
+
+      cluster_objects_program:
+        type: dict
+        required: true
+        description: Shared cluster object program.
+        options:
+          version:
+            type: str
+            required: true
+            choices: [cluster-objects-v1]
+            description: Shared program contract version.
+          steps:
+            type: list
+            elements: dict
+            required: true
+            description: Ordered object actions and readiness gates.
+          checks:
+            type: list
+            elements: dict
+            required: true
+            description: Final readiness checks.
+
+      cluster_objects_oc:
+        type: str
+        required: true
+        description: Absolute path of the qualified cluster client.
+
+      cluster_objects_material:
+        type: dict
+        required: true
+        description: Lent kubeconfig material path.
+
+      cluster_objects_evidence:
+        type: dict
+        required: true
+        description: Previously recorded ownership receipts.
+
+      cluster_objects_evidence_version:
+        type: str
+        required: true
+        description: The consuming capability evidence version.
+
+      cluster_objects_digest:
+        type: str
+        required: true
+        description: Frozen request digest.

@@ -1,0 +1,13 @@
+{
+  "absent": false,
+  "checks": null,
+  "classification": "retired",
+  "dependents": null,
+  "observations": null,
+  "olm": null,
+  "postcondition": true,
+  "receipts": null,
+  "request": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "retired": true,
+  "version": "addon-instance-evidence-v1"
+}

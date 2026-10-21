@@ -353,5 +353,22 @@ func issue(code, field, message string) api.Issue {
 	if !strings.HasPrefix(field, "$") {
 		field = "$." + field
 	}
-	return api.Issue{Code: code, Field: field, Message: message}
+	remedy := ""
+	if strings.Contains(field, ".steps[") {
+		switch {
+		case strings.HasSuffix(field, ".source.git"):
+			remedy = "remove source.git and use co-located add-on content"
+		case strings.Contains(field, "extraVars"):
+			remedy = "remove the reserved or credential variable and use declared Secret references for credentials"
+		case strings.HasSuffix(field, ".source.path"):
+			remedy = "set source.path to a clean absolute directory path"
+		default:
+			remedy = "use a clean contained path in the declared content directory, with a YAML suffix for a playbook"
+		}
+		message = strings.TrimSuffix(message, ".")
+		if len(message) > 0 {
+			message = strings.ToLower(message[:1]) + message[1:]
+		}
+	}
+	return api.Issue{Code: code, Field: field, Message: message, Remediation: remedy}
 }

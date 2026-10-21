@@ -283,3 +283,24 @@ func (j *CapabilityJourney) Unstamp(t *testing.T) int {
 func (j *CapabilityJourney) Declaring(objects ...api.Object) {
 	j.Service.compiler = testCompiler{state: diffState(objects...)}
 }
+
+func (p plannedCapability) ProducedInputs(block reconciliation.Block) ([]ProducedInput, error) {
+	if consumer, ok := p.Capability.(ProducedInputConsumer); ok {
+		return consumer.ProducedInputs(block)
+	}
+	return nil, nil
+}
+func (p plannedCapability) ProducedOutputs(block reconciliation.Block) ([]string, error) {
+	if producer, ok := p.Capability.(ProducedOutputProvider); ok {
+		return producer.ProducedOutputs(block)
+	}
+	return nil, nil
+}
+func (p plannedCapability) StageTail(block reconciliation.BlockDefinition) (reconciliation.ObjectRef, bool, error) {
+	if tail, ok := p.Capability.(StageTailConsumer); ok {
+		return tail.StageTail(block)
+	}
+	return reconciliation.ObjectRef{}, false, nil
+}
+
+func (p plannedCapability) RetiresOffline() bool { return retiresOffline(p.Capability) }

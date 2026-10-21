@@ -1,0 +1,143 @@
+{
+  "checks": [
+    {
+      "condition": {
+        "apiVersion": "metallb.io/v1beta1",
+        "kind": "MetalLB",
+        "name": "metallb",
+        "namespace": "metallb-system",
+        "namespaced": true,
+        "status": "True",
+        "type": "Available"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "kind": "wait",
+      "wait": [
+        {
+          "condition": {
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "name": "metallbs.metallb.io",
+            "namespace": "",
+            "namespaced": false,
+            "status": "True",
+            "type": "Established"
+          }
+        }
+      ]
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "MetalLB",
+          "metadata": {
+            "name": "metallb",
+            "namespace": "metallb-system"
+          }
+        },
+        "desiredDigest": "da038716c924b57cc21ab572986d9d189591d8d53ce767975fe4fd3ecaa8a0e2",
+        "kind": "MetalLB",
+        "name": "metallb",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "kind": "wait",
+      "wait": [
+        {
+          "condition": {
+            "apiVersion": "metallb.io/v1beta1",
+            "kind": "MetalLB",
+            "name": "metallb",
+            "namespace": "metallb-system",
+            "namespaced": true,
+            "status": "True",
+            "type": "Available"
+          }
+        },
+        {
+          "condition": {
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "name": "ipaddresspools.metallb.io",
+            "namespace": "",
+            "namespaced": false,
+            "status": "True",
+            "type": "Established"
+          }
+        },
+        {
+          "condition": {
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "name": "l2advertisements.metallb.io",
+            "namespace": "",
+            "namespaced": false,
+            "status": "True",
+            "type": "Established"
+          }
+        }
+      ]
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "secondary",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "198.51.100.80-198.51.100.90"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "5450f7a96020df82bbe783283de0cf8e45abe6dd340e86bae85fc77cd2e284ca",
+        "kind": "IPAddressPool",
+        "name": "secondary",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "secondary",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "interfaces": [
+              "eth1"
+            ],
+            "ipAddressPools": [
+              "secondary"
+            ]
+          }
+        },
+        "desiredDigest": "d5408dccf6ee1ded77c4318ab0bea9e744c26d577a8957b5cced590c20c26cf4",
+        "kind": "L2Advertisement",
+        "name": "secondary",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    }
+  ],
+  "version": "cluster-objects-v1"
+}

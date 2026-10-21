@@ -6,6 +6,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
+	addonpackages "github.com/crmarques/bootwright/internal/addons/packages"
 )
 
 // ToolRequest describes a declarative tool requirement and publisher family.
@@ -30,6 +31,10 @@ type InstalledTool struct {
 // SelectTools consumes only the selected effective graph. Download mirrors
 // change acquisition, never target version or compatibility requirements.
 func SelectTools(catalog api.Catalog) ([]ToolRequest, error) {
+	return SelectToolsWithRegistry(catalog, addonpackages.Builtin())
+}
+
+func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]ToolRequest, error) {
 	environments := catalog.OfKind(api.Environment)
 	if len(environments) != 1 {
 		return nil, selectionFailure(api.Object{}, "api.invariant", "", "tool selection requires exactly one effective Environment")
@@ -65,6 +70,15 @@ func SelectTools(catalog api.Catalog) ([]ToolRequest, error) {
 			if !slices.Contains(addon.Spec().Get("provides").Strings(), "kubevirt") {
 				continue
 			}
+			result = append(result, virtctl)
+		}
+	}
+	instances, issues := addons.Instances(catalog, registry)
+	if len(issues) > 0 {
+		return nil, selectionFailure(api.Object{}, "api.reference", "$.spec.packages", "target tool selection requires fully resolved package capabilities")
+	}
+	for _, instance := range instances {
+		if slices.Contains(instance.Package.Provides, "kubevirt") {
 			result = append(result, virtctl)
 		}
 	}

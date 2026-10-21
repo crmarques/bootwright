@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "add-ons list",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "addOns": [
+      {
+        "name": "metallb",
+        "provides": [
+          "metallb"
+        ],
+        "requires": [],
+        "olmPackage": "metallb-operator",
+        "defaultSource": "redhat-operators",
+        "configuration": [
+          "pools",
+          "subscription",
+          "timeout"
+        ]
+      },
+      {
+        "name": "nmstate",
+        "provides": [
+          "nmstate"
+        ],
+        "requires": [],
+        "olmPackage": "kubernetes-nmstate-operator",
+        "defaultSource": "redhat-operators",
+        "configuration": [
+          "subscription",
+          "timeout"
+        ]
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

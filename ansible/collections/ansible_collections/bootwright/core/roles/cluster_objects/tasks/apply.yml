@@ -1,0 +1,40 @@
+---
+- name: Validate the frozen cluster object program version
+  ansible.builtin.assert:
+    that:
+      - cluster_objects_program.version == 'cluster-objects-v1'
+    quiet: true
+    fail_msg: The frozen cluster object program version is unsupported.
+
+- name: Hand off the frozen cluster object program
+  bootwright.core.cluster_objects_protocol:
+    phase: loaded
+    budget: "{{ cluster_objects_request.budgetSeconds }}"
+  register: cluster_objects_loaded
+
+- name: Execute the shared cluster object program
+  bootwright.core.cluster_objects_write:
+    request: >-
+      {{ cluster_objects_request | combine({'program': cluster_objects_program, 'oc': cluster_objects_oc,
+      'kubeconfig': cluster_objects_material.kubeconfig,
+      'deadline': cluster_objects_loaded.deadline,
+      'receipts': cluster_objects_evidence.receipts | default([])}) }}
+  register: cluster_objects_result
+  failed_when: false
+  no_log: true
+  diff: false
+
+- name: Report the bounded cluster object refusal
+  ansible.builtin.fail:
+    msg: "{{ cluster_objects_result.msg | default('cluster object execution did not return evidence') }}"
+  when: cluster_objects_result.state is not defined
+
+- name: Publish bounded cluster object evidence
+  bootwright.core.cluster_objects_protocol:
+    phase: completed
+    version: "{{ cluster_objects_evidence_version }}"
+    digest: "{{ cluster_objects_digest }}"
+    state: "{{ cluster_objects_result.state }}"
+    outcome: "{{ 'changed' if cluster_objects_result.changed else 'unchanged' }}"
+    observed: false
+  no_log: true

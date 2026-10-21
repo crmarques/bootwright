@@ -665,9 +665,6 @@ removal completes. A consumer reaches the cluster only at the server the entry
 names, verifies it against the entry's authority, and reads a foreign or
 silent answer as `unknown`.
 
-Not yet met: no block can name a produced input; tracked as
-[B64](milestones/m3.md#b64).
-
 ### Block transitions
 
 | Block state | Step | Leads to |
@@ -931,10 +928,6 @@ Which add-on kinds select an effect is owned by
 is that only a `ClusterAddonBinding` is an effect-bearing kind that the add-on
 capability claims, and what it cannot realize it reports as
 [add-on refusals](add-ons.md#refusal-table).
-
-Not yet met: the engine treats `ClusterAddon` and `ClusterAddonProfile` as
-effect-bearing kinds and refuses all three add-on kinds as unclaimed; tracked
-as [B83](milestones/m4.md#b83).
 
 The engine's own refusals, of objects no capability of this executable claims,
 are the rows below, and `TestUnclaimedObjectTableMatchesTheEngine` holds

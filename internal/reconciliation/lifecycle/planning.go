@@ -113,6 +113,14 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	if err := refuseOwnSocketConflicts(state.Effective(), controller, binding.reservations, placed); err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
+	definitions, err = s.dependOnStageTails(definitions)
+	if err != nil {
+		return reconciliation.Plan{}, capabilityBinding{}, err
+	}
+	definitions, err = s.dependOnProducedInputs(definitions)
+	if err != nil {
+		return reconciliation.Plan{}, capabilityBinding{}, err
+	}
 	definitions = dependOnController(definitions)
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, definitions)
 	if err != nil {

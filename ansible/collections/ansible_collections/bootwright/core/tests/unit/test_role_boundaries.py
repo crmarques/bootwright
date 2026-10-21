@@ -287,14 +287,24 @@ def handoff_problems(where, tasks):
 def test_every_entry_point_hands_the_runner_loaded_before_anything_else():
     entries = entry_points()
     assert len(entries) >= ENTRY_POINTS, "the walk no longer sees every playbook's entry point"
-    files = {label(path) for path in entries.values()}
+    shared = {"cluster_objects/tasks/apply.yml", "cluster_objects/tasks/observe.yml"}
+    files = {label(path) for path in entries.values()} | shared
     problems = []
     for path in sorted(set(entries.values())):
-        problems.extend(handoff_problems(label(path), load(path)))
+        tasks = load(path)
+        delegated = (path.parent.parent.name in ("addons_instance", "containercluster_network") and len(tasks) >= 1
+                     and all(action(task) == "ansible.builtin.assert" for task in tasks[:-1])
+                     and tasks[-1].get("ansible.builtin.include_role", {}).get("name") == "bootwright.core.cluster_objects"
+                     and tasks[-1]["ansible.builtin.include_role"].get("tasks_from") == path.stem)
+        if not delegated:
+            problems.extend(handoff_problems(label(path), tasks))
+    for name in shared:
+        problems.extend(handoff_problems(name, load(ROLES / name)))
     for path in task_files():
         tasks = load(path)
         handed = sum(phase(task) == "loaded" for task in walk(tasks))
-        if label(path) in files and handed != 1:
+        delegated = path.parent.parent.name in ("addons_instance", "containercluster_network") and handed == 0
+        if label(path) in files and handed != 1 and not delegated:
             problems.append("%s is an entry point that hands the runner loaded %d times" % (label(path), handed))
         if label(path) not in files and handed:
             problems.append("%s hands the runner loaded, which only an entry point does, once" % label(path))
@@ -1013,3 +1023,22 @@ def test_an_unanswered_host_firewall_refuses_with_its_remedy():
     assert action(refusal) == "ansible.builtin.assert" and refusal.get("when") == wait.get("when"), refusal
     assert arguments(refusal).get("that") == ["(substrate_libvirt_host_firewall_state.rc | default(1)) == 0"], refusal
     assert "start firewalld.service" in str(arguments(refusal).get("fail_msg")), refusal
+
+
+# The shared object transport executes only the located oc. The action plugins
+# select fixed module names; only the write module owns create and approval.
+def test_cluster_object_module_executable_boundary():
+    import ast
+    source = (COLLECTION / "plugins/module_utils/cluster_objects_native.py").read_text()
+    tree = ast.parse(source)
+    calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+             and isinstance(node.func, ast.Attribute) and node.func.attr == "run"]
+    assert len(calls) == 1
+    assert "command = [oc, \"--kubeconfig\", kubeconfig, \"--request-timeout=30s\"] + argv" in source
+    assert "shell=True" not in source
+    read = (COLLECTION / "plugins/modules/cluster_objects_read.py").read_text()
+    assert "native.get(request)" in read and "native.create" not in read and "native.approve" not in read
+    for entry in ("apply", "observe"):
+        task = next(task for task in load(ROLES / ("cluster_objects/tasks/" + entry + ".yml"))
+                    if "bootwright.core.cluster_objects_" + ("write" if entry == "apply" else "read") in task)
+        assert task["no_log"] is True and task["diff"] is False

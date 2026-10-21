@@ -55,6 +55,7 @@ import (
 // contractRow is one binding buildCapabilities offers and the example that
 // plans blocks for it.
 type contractRow struct {
+	retirementOnly bool
 	kind           string
 	implementation string
 	example        string
@@ -158,6 +159,7 @@ func (r contractRow) binding() lifecycle.CapabilityBinding {
 
 func contractRows() []contractRow {
 	return []contractRow{
+		contractAddonRow(), contractNetworkRow(),
 		{kind: string(api.StorageCluster), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
 		{kind: string(api.StoragePlacementPolicy), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
 		{kind: string(api.StoragePool), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
@@ -255,7 +257,10 @@ func contractDependentEffects(t *testing.T, row contractRow, example contractExa
 	material := contractMaterial(t, example, example.plans[row.binding()].Secrets)
 	for _, block := range example.frozen(row.binding()) {
 		execution := lifecycle.Execution{
-			ApplyOperation: "op-0123456789abcdef0123456789abcdef", Operation: "op-0123456789abcdef0123456789abcdef", Attempt: 1, Block: block,
+			Operation: "op-0123456789abcdef0123456789abcdef", ApplyOperation: "op-0123456789abcdef0123456789abcdef", ApplyRegistered: "2026-01-01T00:00:00Z", Attempt: 1, Block: block,
+			LendProduced: func(context.Context, lifecycle.ProducedInput) (secrets.Material, error) {
+				return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("private-test-material")}), nil
+			},
 			Launch: prerequisites.PythonLaunch{Program: "/runtime/bin/python", Shim: "/runtime/bootwright-python"}, Material: material,
 		}
 		for _, operation := range []string{"apply", "observe", "destroy", "observe-removal"} {
@@ -360,7 +365,16 @@ type contractExample struct {
 
 func contractExampleOf(t *testing.T, resolver capabilityResolver, name string) contractExample {
 	t.Helper()
-	state, _ := compileAcceptance(t, contractSources(t, name))
+	if name == "contract-secondary-network" {
+		return contractNetworkExample(t, resolver)
+	}
+	if name == "addon-fixture" {
+		contractInstallFixtureRegistry(t, resolver, nil)
+	}
+	state, _ := compileAcceptance(t, contractSources(t, contractSourceName(name)))
+	if name == "addon-fixture" {
+		state = contractAddonState(state)
+	}
 	identity := lifecycle.ContextIdentity{Name: strings.ReplaceAll(name, "+", "-")}
 	example := contractExample{
 		state:   state,
@@ -599,7 +613,10 @@ func contractEffects(t *testing.T, row contractRow, example contractExample, cap
 	material := contractMaterial(t, example, example.plans[row.binding()].Secrets)
 	for _, block := range example.frozen(row.binding()) {
 		execution := lifecycle.Execution{
-			Operation: "op-0123456789abcdef0123456789abcdef", Attempt: 1, Block: block,
+			Operation: "op-0123456789abcdef0123456789abcdef", ApplyOperation: "op-0123456789abcdef0123456789abcdef", ApplyRegistered: "2026-01-01T00:00:00Z", Attempt: 1, Block: block,
+			LendProduced: func(context.Context, lifecycle.ProducedInput) (secrets.Material, error) {
+				return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("private-test-material")}), nil
+			},
 			Launch:   prerequisites.PythonLaunch{Program: "/runtime/bin/python", Shim: "/runtime/bootwright-python"},
 			Material: material,
 			LocateTool: func(_ context.Context, tool controller.InstalledTool) (string, error) {
@@ -722,6 +739,9 @@ func contractRequests(row contractRow, block reconciliation.Block, capability li
 		sent := runner.sent()
 		property := operation + "-request"
 		want, runs := operation, 1
+		if row.retirementOnly && operation == "destroy" {
+			runs = 0
+		}
 		if operation == "observe-removal" {
 			want = "observe"
 			if row.removalObservesNothing != "" {
@@ -766,7 +786,7 @@ func contractRunnerFailures(row contractRow, block reconciliation.Block, capabil
 		{"a failure diagnosed unknown", diagnostics.NewFailure("lifecycle.unknown", "the adapter cannot tell what it did", ""), reconciliation.OutcomeUnknown},
 		{"a diagnosed failure", diagnostics.NewFailure("lifecycle.state", "the adapter refused within its boundary", ""), reconciliation.OutcomeFailed},
 	}
-	for _, operation := range []string{"apply", "destroy"} {
+	for _, operation := range contractMutationOperations(row) {
 		for _, script := range scripted {
 			runner.script(lifecycle.RunResult{}, script.err)
 			result, _, err := contractCall(capability, operation, execution)
@@ -807,7 +827,7 @@ func contractEvidence(t *testing.T, row contractRow, example contractExample, bl
 	if row.readiness != "" {
 		foreign = append(foreign, contractUnready(t, row, execution, other), contractRemovalPartial(t, row, execution, other))
 	}
-	for _, operation := range []string{"apply", "destroy"} {
+	for _, operation := range contractMutationOperations(row) {
 		for _, outcome := range []string{"changed", "unchanged"} {
 			for _, evidence := range append([]json.RawMessage{json.RawMessage(`{}`)}, foreign...) {
 				runner.script(lifecycle.RunResult{Outcome: outcome, Evidence: evidence}, nil)
@@ -928,6 +948,9 @@ func contractEvidenceKinds(t *testing.T, row contractRow, block reconciliation.B
 		attempts[1].evidence = append(attempts[1].evidence, noEffect)
 	}
 	for _, attempt := range attempts {
+		if row.retirementOnly && attempt.operation == "destroy" {
+			continue
+		}
 		for _, outcome := range []string{"changed", "unchanged"} {
 			for _, evidence := range attempt.evidence {
 				runner.script(lifecycle.RunResult{Outcome: outcome, Evidence: evidence}, nil)
@@ -987,6 +1010,9 @@ func contractEvidenceControls(t *testing.T, row contractRow, block reconciliatio
 		{"destroy", "changed", absence, reconciliation.OutcomeChanged},
 	}
 	for _, control := range controls {
+		if row.retirementOnly && control.operation == "destroy" {
+			control.want = reconciliation.OutcomeUnchanged
+		}
 		runner.script(lifecycle.RunResult{Outcome: control.outcome, Evidence: control.evidence}, nil)
 		if result, _, err := contractCall(capability, control.operation, execution); result.Outcome != control.want {
 			t.Errorf("%s: the evidence fixture %s no longer proves a %s of %s reporting %s (%q, %v)",

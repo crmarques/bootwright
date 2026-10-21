@@ -227,6 +227,17 @@ func (s Service) inspect(ctx context.Context, view RunView, store recordReader, 
 		if err != nil {
 			return err
 		}
+		lend, release, lendErr := s.producedLender(block, planDefinitions(read.owningPlan), false, s.producedInContext(read.context.Name))
+		if lendErr != nil {
+			return lendErr
+		}
+		defer release()
+		execution.LendProduced = lend
+		execution.ApplyRegistered = read.owning.Created
+		execution.PreviousEvidence, err = previousBlockEvidence(ctx, store, read.owning.ID, block.ID)
+		if err != nil {
+			return err
+		}
 		observed, err := capability.Observe(ctx, execution)
 		ClearProduced(observed.Produced)
 		observed.Produced = nil

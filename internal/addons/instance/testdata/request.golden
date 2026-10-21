@@ -1,0 +1,156 @@
+{
+  "binding": "binding",
+  "budgetSeconds": 60,
+  "cluster": "cluster",
+  "package": "fixture",
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "producedInputs": [
+    {
+      "kind": "ContainerCluster",
+      "object": "cluster",
+      "output": "kubeconfig"
+    }
+  ],
+  "program": {
+    "checks": [
+      {
+        "csvSucceeded": {
+          "csv": "fixture.v1.0.0",
+          "namespace": "fixture-operator",
+          "subscription": "fixture"
+        }
+      },
+      {
+        "condition": {
+          "apiVersion": "example.test/v1",
+          "kind": "Fixture",
+          "name": "fixture",
+          "namespace": "fixture-operator",
+          "namespaced": true,
+          "status": "True",
+          "type": "Available"
+        }
+      }
+    ],
+    "steps": [
+      {
+        "create": {
+          "apiVersion": "v1",
+          "body": {
+            "apiVersion": "v1",
+            "kind": "Namespace",
+            "metadata": {
+              "name": "fixture-operator"
+            }
+          },
+          "desiredDigest": "a1f0588f338e3b8362bc779ae512a0fec3b43dd363bf3500183c1cc4dd49c6bb",
+          "kind": "Namespace",
+          "name": "fixture-operator",
+          "namespace": "",
+          "namespaced": false
+        },
+        "kind": "create"
+      },
+      {
+        "create": {
+          "apiVersion": "operators.coreos.com/v1",
+          "body": {
+            "apiVersion": "operators.coreos.com/v1",
+            "kind": "OperatorGroup",
+            "metadata": {
+              "name": "fixture",
+              "namespace": "fixture-operator"
+            },
+            "spec": {
+              "targetNamespaces": [
+                "fixture-operator"
+              ]
+            }
+          },
+          "desiredDigest": "3814e9c1a91c3e6ccffa59827505232f6a9e3d30713b47317a4a1af964f4dc49",
+          "kind": "OperatorGroup",
+          "name": "fixture",
+          "namespace": "fixture-operator",
+          "namespaced": true
+        },
+        "kind": "create"
+      },
+      {
+        "kind": "subscribe",
+        "subscribe": {
+          "approval": "exact",
+          "csv": "fixture.v1.0.0",
+          "object": {
+            "apiVersion": "operators.coreos.com/v1alpha1",
+            "body": {
+              "apiVersion": "operators.coreos.com/v1alpha1",
+              "kind": "Subscription",
+              "metadata": {
+                "name": "fixture",
+                "namespace": "fixture-operator"
+              },
+              "spec": {
+                "channel": "stable",
+                "installPlanApproval": "Manual",
+                "name": "fixture",
+                "source": "catalog",
+                "sourceNamespace": "openshift-marketplace",
+                "startingCSV": "fixture.v1.0.0"
+              }
+            },
+            "desiredDigest": "63739328c6a10d7b50daee5a954ae346a132a94c2a6a1fbedeb6d12efee8daf0",
+            "kind": "Subscription",
+            "name": "fixture",
+            "namespace": "fixture-operator",
+            "namespaced": true
+          }
+        }
+      },
+      {
+        "kind": "wait",
+        "wait": [
+          {
+            "resourceExists": {
+              "apiVersion": "apiextensions.k8s.io/v1",
+              "kind": "CustomResourceDefinition",
+              "name": "fixtures.example.test",
+              "namespace": "",
+              "namespaced": false
+            }
+          }
+        ]
+      },
+      {
+        "create": {
+          "apiVersion": "example.test/v1",
+          "body": {
+            "apiVersion": "example.test/v1",
+            "kind": "Fixture",
+            "metadata": {
+              "name": "fixture",
+              "namespace": "fixture-operator"
+            },
+            "spec": {}
+          },
+          "desiredDigest": "019d5dfe8db35e5e7439f53716a520f791da636c35aaf4e6e4c1318d4617d6f5",
+          "kind": "Fixture",
+          "name": "fixture",
+          "namespace": "fixture-operator",
+          "namespaced": true
+        },
+        "kind": "create"
+      }
+    ],
+    "version": "cluster-objects-v1"
+  },
+  "secrets": [],
+  "tool": {
+    "compatibility": "openshift",
+    "kind": "openshift-clients",
+    "version": "4.21.1"
+  },
+  "version": "addon-instance-request-v1"
+}

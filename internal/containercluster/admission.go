@@ -33,7 +33,7 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 		s = s.WithPath(api.StringList(declaredRoles(nodes)...), "security", "diskEncryption", "roles")
 	}
 	s = s.With("networking", normalizedNetworking(o, c, s.Get("networking")))
-	return o.WithSpec(s), nil
+	return NormalizeNetworkIntent(o.WithSpec(s)), nil
 }
 
 func normalizedDistribution(distribution api.Value) api.Value {
@@ -273,6 +273,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	issues = add(issues, infrastructureservices.ValidateRegistrySelection(install.Get("registries", "mirror"), c, "$.spec.install.registries.mirror")...)
 	issues = add(issues, validateEndpoints(o, c)...)
 	issues = add(issues, validateNetworks(o, c)...)
+	issues = add(issues, ValidateNetworkIntent(o, c)...)
 	return issues
 }
 

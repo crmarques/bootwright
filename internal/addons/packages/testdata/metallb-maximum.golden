@@ -1,0 +1,1115 @@
+{
+  "checks": [
+    {
+      "condition": {
+        "apiVersion": "metallb.io/v1beta1",
+        "kind": "MetalLB",
+        "name": "metallb",
+        "namespace": "metallb-system",
+        "namespaced": true,
+        "status": "True",
+        "type": "Available"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "kind": "wait",
+      "wait": [
+        {
+          "condition": {
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "name": "metallbs.metallb.io",
+            "namespace": "",
+            "namespaced": false,
+            "status": "True",
+            "type": "Established"
+          }
+        }
+      ]
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "MetalLB",
+          "metadata": {
+            "name": "metallb",
+            "namespace": "metallb-system"
+          }
+        },
+        "desiredDigest": "da038716c924b57cc21ab572986d9d189591d8d53ce767975fe4fd3ecaa8a0e2",
+        "kind": "MetalLB",
+        "name": "metallb",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "kind": "wait",
+      "wait": [
+        {
+          "condition": {
+            "apiVersion": "metallb.io/v1beta1",
+            "kind": "MetalLB",
+            "name": "metallb",
+            "namespace": "metallb-system",
+            "namespaced": true,
+            "status": "True",
+            "type": "Available"
+          }
+        },
+        {
+          "condition": {
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "name": "ipaddresspools.metallb.io",
+            "namespace": "",
+            "namespaced": false,
+            "status": "True",
+            "type": "Established"
+          }
+        },
+        {
+          "condition": {
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "name": "l2advertisements.metallb.io",
+            "namespace": "",
+            "namespaced": false,
+            "status": "True",
+            "type": "Established"
+          }
+        }
+      ]
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "pool-00",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "192.0.0.80-192.0.0.80",
+              "192.0.0.81-192.0.0.81",
+              "192.0.0.82-192.0.0.82",
+              "192.0.0.83-192.0.0.83",
+              "192.0.0.84-192.0.0.84",
+              "192.0.0.85-192.0.0.85",
+              "192.0.0.86-192.0.0.86",
+              "192.0.0.87-192.0.0.87",
+              "192.0.0.88-192.0.0.88",
+              "192.0.0.89-192.0.0.89",
+              "192.0.0.90-192.0.0.90",
+              "192.0.0.91-192.0.0.91",
+              "192.0.0.92-192.0.0.92",
+              "192.0.0.93-192.0.0.93",
+              "192.0.0.94-192.0.0.94",
+              "192.0.0.95-192.0.0.95"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "3cb3799dedf0c59784c36aec772cdda626243b67ba93e447c03836ea2b12321f",
+        "kind": "IPAddressPool",
+        "name": "pool-00",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "pool-00",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "pool-00"
+            ]
+          }
+        },
+        "desiredDigest": "bc63ef163f90bcc1aaac9a27bfab1a5918c03e33d4915407e5194a36e5e070ca",
+        "kind": "L2Advertisement",
+        "name": "pool-00",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "pool-01",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "192.0.1.80-192.0.1.80",
+              "192.0.1.81-192.0.1.81",
+              "192.0.1.82-192.0.1.82",
+              "192.0.1.83-192.0.1.83",
+              "192.0.1.84-192.0.1.84",
+              "192.0.1.85-192.0.1.85",
+              "192.0.1.86-192.0.1.86",
+              "192.0.1.87-192.0.1.87",
+              "192.0.1.88-192.0.1.88",
+              "192.0.1.89-192.0.1.89",
+              "192.0.1.90-192.0.1.90",
+              "192.0.1.91-192.0.1.91",
+              "192.0.1.92-192.0.1.92",
+              "192.0.1.93-192.0.1.93",
+              "192.0.1.94-192.0.1.94",
+              "192.0.1.95-192.0.1.95"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "0bbe4a6d7d6a36dcd6889c185a0d888dc44eb5d398b8c9d8a292206ab787fa82",
+        "kind": "IPAddressPool",
+        "name": "pool-01",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "pool-01",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "pool-01"
+            ]
+          }
+        },
+        "desiredDigest": "9342ebbe6fe62addecf7d65f6ad4b7ceebe01b5c5df92be71595879fe3753eab",
+        "kind": "L2Advertisement",
+        "name": "pool-01",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "pool-02",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "192.0.2.80-192.0.2.80",
+              "192.0.2.81-192.0.2.81",
+              "192.0.2.82-192.0.2.82",
+              "192.0.2.83-192.0.2.83",
+              "192.0.2.84-192.0.2.84",
+              "192.0.2.85-192.0.2.85",
+              "192.0.2.86-192.0.2.86",
+              "192.0.2.87-192.0.2.87",
+              "192.0.2.88-192.0.2.88",
+              "192.0.2.89-192.0.2.89",
+              "192.0.2.90-192.0.2.90",
+              "192.0.2.91-192.0.2.91",
+              "192.0.2.92-192.0.2.92",
+              "192.0.2.93-192.0.2.93",
+              "192.0.2.94-192.0.2.94",
+              "192.0.2.95-192.0.2.95"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "0b1ffdf152d9583d68abee76a59c00f8b30f0bff9f09a05d3f247999e159270e",
+        "kind": "IPAddressPool",
+        "name": "pool-02",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "pool-02",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "pool-02"
+            ]
+          }
+        },
+        "desiredDigest": "637f6cfe772f6717554f58d46ae3a42133f0ea167176880832f476be74bec190",
+        "kind": "L2Advertisement",
+        "name": "pool-02",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "pool-03",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "192.0.3.80-192.0.3.80",
+              "192.0.3.81-192.0.3.81",
+              "192.0.3.82-192.0.3.82",
+              "192.0.3.83-192.0.3.83",
+              "192.0.3.84-192.0.3.84",
+              "192.0.3.85-192.0.3.85",
+              "192.0.3.86-192.0.3.86",
+              "192.0.3.87-192.0.3.87",
+              "192.0.3.88-192.0.3.88",
+              "192.0.3.89-192.0.3.89",
+              "192.0.3.90-192.0.3.90",
+              "192.0.3.91-192.0.3.91",
+              "192.0.3.92-192.0.3.92",
+              "192.0.3.93-192.0.3.93",
+              "192.0.3.94-192.0.3.94",
+              "192.0.3.95-192.0.3.95"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "dbd1e1e748a8735f45652bdc05dbd621bd99d10a76843c8243b7331b94ae750e",
+        "kind": "IPAddressPool",
+        "name": "pool-03",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "pool-03",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "pool-03"
+            ]
+          }
+        },
+        "desiredDigest": "17e1f25bcd636cbff8b29a5a69552852ba40e5f0f1e341547d65e499e462c34b",
+        "kind": "L2Advertisement",
+        "name": "pool-03",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "pool-04",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "192.0.4.80-192.0.4.80",
+              "192.0.4.81-192.0.4.81",
+              "192.0.4.82-192.0.4.82",
+              "192.0.4.83-192.0.4.83",
+              "192.0.4.84-192.0.4.84",
+              "192.0.4.85-192.0.4.85",
+              "192.0.4.86-192.0.4.86",
+              "192.0.4.87-192.0.4.87",
+              "192.0.4.88-192.0.4.88",
+              "192.0.4.89-192.0.4.89",
+              "192.0.4.90-192.0.4.90",
+              "192.0.4.91-192.0.4.91",
+              "192.0.4.92-192.0.4.92",
+              "192.0.4.93-192.0.4.93",
+              "192.0.4.94-192.0.4.94",
+              "192.0.4.95-192.0.4.95"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "46693e63be6512b9fa34f4c0db0235042b8720dc3da12fbedb75d1fe0247ccc7",
+        "kind": "IPAddressPool",
+        "name": "pool-04",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "pool-04",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "pool-04"
+            ]
+          }
+        },
+        "desiredDigest": "1028d82ff22844fe2f66864c3809165dd6c61ded68ec37242296b76cd74ce0b6",
+        "kind": "L2Advertisement",
+        "name": "pool-04",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "pool-05",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "192.0.5.80-192.0.5.80",
+              "192.0.5.81-192.0.5.81",
+              "192.0.5.82-192.0.5.82",
+              "192.0.5.83-192.0.5.83",
+              "192.0.5.84-192.0.5.84",
+              "192.0.5.85-192.0.5.85",
+              "192.0.5.86-192.0.5.86",
+              "192.0.5.87-192.0.5.87",
+              "192.0.5.88-192.0.5.88",
+              "192.0.5.89-192.0.5.89",
+              "192.0.5.90-192.0.5.90",
+              "192.0.5.91-192.0.5.91",
+              "192.0.5.92-192.0.5.92",
+              "192.0.5.93-192.0.5.93",
+              "192.0.5.94-192.0.5.94",
+              "192.0.5.95-192.0.5.95"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "5cac7ada35d3f4f6398f376b3343edf4082eb088c415432ce2285997493e535e",
+        "kind": "IPAddressPool",
+        "name": "pool-05",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "pool-05",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "pool-05"
+            ]
+          }
+        },
+        "desiredDigest": "c4b71b89cc5e396d0c0bd12a986303babb1a06ac6aaf9ed65d83da321e0fc081",
+        "kind": "L2Advertisement",
+        "name": "pool-05",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "pool-06",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "192.0.6.80-192.0.6.80",
+              "192.0.6.81-192.0.6.81",
+              "192.0.6.82-192.0.6.82",
+              "192.0.6.83-192.0.6.83",
+              "192.0.6.84-192.0.6.84",
+              "192.0.6.85-192.0.6.85",
+              "192.0.6.86-192.0.6.86",
+              "192.0.6.87-192.0.6.87",
+              "192.0.6.88-192.0.6.88",
+              "192.0.6.89-192.0.6.89",
+              "192.0.6.90-192.0.6.90",
+              "192.0.6.91-192.0.6.91",
+              "192.0.6.92-192.0.6.92",
+              "192.0.6.93-192.0.6.93",
+              "192.0.6.94-192.0.6.94",
+              "192.0.6.95-192.0.6.95"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "468a489dec850c24539d041fba8a155060a04b9e02b698a49a801af74637467b",
+        "kind": "IPAddressPool",
+        "name": "pool-06",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "pool-06",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "pool-06"
+            ]
+          }
+        },
+        "desiredDigest": "11100bbb8c31dceb8ef1fc183c9a46628d5a70257fe25449154ad649a0d79854",
+        "kind": "L2Advertisement",
+        "name": "pool-06",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "pool-07",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "192.0.7.80-192.0.7.80",
+              "192.0.7.81-192.0.7.81",
+              "192.0.7.82-192.0.7.82",
+              "192.0.7.83-192.0.7.83",
+              "192.0.7.84-192.0.7.84",
+              "192.0.7.85-192.0.7.85",
+              "192.0.7.86-192.0.7.86",
+              "192.0.7.87-192.0.7.87",
+              "192.0.7.88-192.0.7.88",
+              "192.0.7.89-192.0.7.89",
+              "192.0.7.90-192.0.7.90",
+              "192.0.7.91-192.0.7.91",
+              "192.0.7.92-192.0.7.92",
+              "192.0.7.93-192.0.7.93",
+              "192.0.7.94-192.0.7.94",
+              "192.0.7.95-192.0.7.95"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "6958116a8c7361afed14143316d236865f98a00ad2321129ce9a84a6942c1237",
+        "kind": "IPAddressPool",
+        "name": "pool-07",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "pool-07",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "pool-07"
+            ]
+          }
+        },
+        "desiredDigest": "6e0d70317f6f124516706f0222ca5c08d270ee93171ccc67e5ac6d1d9a4cec3c",
+        "kind": "L2Advertisement",
+        "name": "pool-07",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "pool-08",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "192.0.8.80-192.0.8.80",
+              "192.0.8.81-192.0.8.81",
+              "192.0.8.82-192.0.8.82",
+              "192.0.8.83-192.0.8.83",
+              "192.0.8.84-192.0.8.84",
+              "192.0.8.85-192.0.8.85",
+              "192.0.8.86-192.0.8.86",
+              "192.0.8.87-192.0.8.87",
+              "192.0.8.88-192.0.8.88",
+              "192.0.8.89-192.0.8.89",
+              "192.0.8.90-192.0.8.90",
+              "192.0.8.91-192.0.8.91",
+              "192.0.8.92-192.0.8.92",
+              "192.0.8.93-192.0.8.93",
+              "192.0.8.94-192.0.8.94",
+              "192.0.8.95-192.0.8.95"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "e3245ebfbc6a4661ec83039bbd045c66192b735e26a46d70fa94d4d92a35912e",
+        "kind": "IPAddressPool",
+        "name": "pool-08",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "pool-08",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "pool-08"
+            ]
+          }
+        },
+        "desiredDigest": "bf706abf752db178d4c10e5fe1d14da8d58de53ac4d814a3eca9bb74334aabf7",
+        "kind": "L2Advertisement",
+        "name": "pool-08",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "pool-09",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "192.0.9.80-192.0.9.80",
+              "192.0.9.81-192.0.9.81",
+              "192.0.9.82-192.0.9.82",
+              "192.0.9.83-192.0.9.83",
+              "192.0.9.84-192.0.9.84",
+              "192.0.9.85-192.0.9.85",
+              "192.0.9.86-192.0.9.86",
+              "192.0.9.87-192.0.9.87",
+              "192.0.9.88-192.0.9.88",
+              "192.0.9.89-192.0.9.89",
+              "192.0.9.90-192.0.9.90",
+              "192.0.9.91-192.0.9.91",
+              "192.0.9.92-192.0.9.92",
+              "192.0.9.93-192.0.9.93",
+              "192.0.9.94-192.0.9.94",
+              "192.0.9.95-192.0.9.95"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "65b3853b2a7d4335e7af5662420ba7d1d2bb4aabca5ac29f25cbbdfbb6ac1c54",
+        "kind": "IPAddressPool",
+        "name": "pool-09",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "pool-09",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "pool-09"
+            ]
+          }
+        },
+        "desiredDigest": "bab25bb2b7cb5abe688551e828e910a58787cbf72510e996f4e097b196d14491",
+        "kind": "L2Advertisement",
+        "name": "pool-09",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "pool-10",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "192.0.10.80-192.0.10.80",
+              "192.0.10.81-192.0.10.81",
+              "192.0.10.82-192.0.10.82",
+              "192.0.10.83-192.0.10.83",
+              "192.0.10.84-192.0.10.84",
+              "192.0.10.85-192.0.10.85",
+              "192.0.10.86-192.0.10.86",
+              "192.0.10.87-192.0.10.87",
+              "192.0.10.88-192.0.10.88",
+              "192.0.10.89-192.0.10.89",
+              "192.0.10.90-192.0.10.90",
+              "192.0.10.91-192.0.10.91",
+              "192.0.10.92-192.0.10.92",
+              "192.0.10.93-192.0.10.93",
+              "192.0.10.94-192.0.10.94",
+              "192.0.10.95-192.0.10.95"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "a9f9517fb4492eb56fa60c666c8535d81edef677446f876da884c9c8cd121a92",
+        "kind": "IPAddressPool",
+        "name": "pool-10",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "pool-10",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "pool-10"
+            ]
+          }
+        },
+        "desiredDigest": "506abd628f028d318b23f154293290f4cb60e3543b6787ff3a2e10523d9a70b0",
+        "kind": "L2Advertisement",
+        "name": "pool-10",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "pool-11",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "192.0.11.80-192.0.11.80",
+              "192.0.11.81-192.0.11.81",
+              "192.0.11.82-192.0.11.82",
+              "192.0.11.83-192.0.11.83",
+              "192.0.11.84-192.0.11.84",
+              "192.0.11.85-192.0.11.85",
+              "192.0.11.86-192.0.11.86",
+              "192.0.11.87-192.0.11.87",
+              "192.0.11.88-192.0.11.88",
+              "192.0.11.89-192.0.11.89",
+              "192.0.11.90-192.0.11.90",
+              "192.0.11.91-192.0.11.91",
+              "192.0.11.92-192.0.11.92",
+              "192.0.11.93-192.0.11.93",
+              "192.0.11.94-192.0.11.94",
+              "192.0.11.95-192.0.11.95"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "ccf3896aaaeac9dbccf8c4944c628df4589b2f497b534c610fe5f6387c3265d7",
+        "kind": "IPAddressPool",
+        "name": "pool-11",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "pool-11",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "pool-11"
+            ]
+          }
+        },
+        "desiredDigest": "7b1755f17433e5eb4254bba1b18b702e9cd551c133d9cb7cd5f998a2fc5c5f5e",
+        "kind": "L2Advertisement",
+        "name": "pool-11",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "pool-12",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "192.0.12.80-192.0.12.80",
+              "192.0.12.81-192.0.12.81",
+              "192.0.12.82-192.0.12.82",
+              "192.0.12.83-192.0.12.83",
+              "192.0.12.84-192.0.12.84",
+              "192.0.12.85-192.0.12.85",
+              "192.0.12.86-192.0.12.86",
+              "192.0.12.87-192.0.12.87",
+              "192.0.12.88-192.0.12.88",
+              "192.0.12.89-192.0.12.89",
+              "192.0.12.90-192.0.12.90",
+              "192.0.12.91-192.0.12.91",
+              "192.0.12.92-192.0.12.92",
+              "192.0.12.93-192.0.12.93",
+              "192.0.12.94-192.0.12.94",
+              "192.0.12.95-192.0.12.95"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "4a0ce48a8613b1ce2ed1a1cce428a854c9b03d1fbd658d095480e2b992079ca3",
+        "kind": "IPAddressPool",
+        "name": "pool-12",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "pool-12",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "pool-12"
+            ]
+          }
+        },
+        "desiredDigest": "18a5321a3383467464b57e25c8dabfe743fae24b5e59d238d03b24b6d19f1b8b",
+        "kind": "L2Advertisement",
+        "name": "pool-12",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "pool-13",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "192.0.13.80-192.0.13.80",
+              "192.0.13.81-192.0.13.81",
+              "192.0.13.82-192.0.13.82",
+              "192.0.13.83-192.0.13.83",
+              "192.0.13.84-192.0.13.84",
+              "192.0.13.85-192.0.13.85",
+              "192.0.13.86-192.0.13.86",
+              "192.0.13.87-192.0.13.87",
+              "192.0.13.88-192.0.13.88",
+              "192.0.13.89-192.0.13.89",
+              "192.0.13.90-192.0.13.90",
+              "192.0.13.91-192.0.13.91",
+              "192.0.13.92-192.0.13.92",
+              "192.0.13.93-192.0.13.93",
+              "192.0.13.94-192.0.13.94",
+              "192.0.13.95-192.0.13.95"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "49bd97ea884c88b892228b0af60a292ff7b44e9eab504bff333ed4c9e5c3185f",
+        "kind": "IPAddressPool",
+        "name": "pool-13",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "pool-13",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "pool-13"
+            ]
+          }
+        },
+        "desiredDigest": "86bf510a50aed93e63a224c2ea0a1550ed9dfa1cefbedc03ec8f5ecf69de737f",
+        "kind": "L2Advertisement",
+        "name": "pool-13",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "pool-14",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "192.0.14.80-192.0.14.80",
+              "192.0.14.81-192.0.14.81",
+              "192.0.14.82-192.0.14.82",
+              "192.0.14.83-192.0.14.83",
+              "192.0.14.84-192.0.14.84",
+              "192.0.14.85-192.0.14.85",
+              "192.0.14.86-192.0.14.86",
+              "192.0.14.87-192.0.14.87",
+              "192.0.14.88-192.0.14.88",
+              "192.0.14.89-192.0.14.89",
+              "192.0.14.90-192.0.14.90",
+              "192.0.14.91-192.0.14.91",
+              "192.0.14.92-192.0.14.92",
+              "192.0.14.93-192.0.14.93",
+              "192.0.14.94-192.0.14.94",
+              "192.0.14.95-192.0.14.95"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "7c6b29e0d1d5a049be935dc77dbf7b10ac60c4313a4e3200e0b139434809342f",
+        "kind": "IPAddressPool",
+        "name": "pool-14",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "pool-14",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "pool-14"
+            ]
+          }
+        },
+        "desiredDigest": "926e4ec700f0e7314f57ce3c12d4696e687dfbf1122bdcf98fcd8237ed69ff41",
+        "kind": "L2Advertisement",
+        "name": "pool-14",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "pool-15",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "192.0.15.80-192.0.15.80",
+              "192.0.15.81-192.0.15.81",
+              "192.0.15.82-192.0.15.82",
+              "192.0.15.83-192.0.15.83",
+              "192.0.15.84-192.0.15.84",
+              "192.0.15.85-192.0.15.85",
+              "192.0.15.86-192.0.15.86",
+              "192.0.15.87-192.0.15.87",
+              "192.0.15.88-192.0.15.88",
+              "192.0.15.89-192.0.15.89",
+              "192.0.15.90-192.0.15.90",
+              "192.0.15.91-192.0.15.91",
+              "192.0.15.92-192.0.15.92",
+              "192.0.15.93-192.0.15.93",
+              "192.0.15.94-192.0.15.94",
+              "192.0.15.95-192.0.15.95"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "5227346f9480e039be8162c3a90c10371f9df8fe2792194c7921c788140f18c1",
+        "kind": "IPAddressPool",
+        "name": "pool-15",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "pool-15",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "pool-15"
+            ]
+          }
+        },
+        "desiredDigest": "81927c7b0d2a1f77480b39b741b734a70a6a5ae55b93453d0bf2ab6673d070df",
+        "kind": "L2Advertisement",
+        "name": "pool-15",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    }
+  ],
+  "version": "cluster-objects-v1"
+}

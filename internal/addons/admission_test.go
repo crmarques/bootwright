@@ -221,7 +221,7 @@ func TestCapabilitiesAndDuplicateBindings(t *testing.T) {
 		t.Fatal("capability from another cluster satisfied requirement")
 	}
 	duplicate := second.WithSpec(second.Spec().With("addonRefs", api.StringList("consumer", "provider")))
-	if !hasCode(Validate(first, api.NewCatalog([]api.Object{provider, consumer, first, duplicate})), "api.duplicate") {
+	if !hasCode(Validate(duplicate, api.NewCatalog([]api.Object{provider, consumer, first, duplicate})), "api.duplicate") {
 		t.Fatal("duplicate expanded cluster instance accepted")
 	}
 	provider = provider.WithSpec(provider.Spec().With("requires", api.StringList("reverse")))
@@ -230,7 +230,8 @@ func TestCapabilitiesAndDuplicateBindings(t *testing.T) {
 		t.Fatal("capability cycle accepted")
 	}
 	self := provider.WithSpec(m("provides", api.StringList("capability"), "requires", api.StringList("capability")))
-	if !hasCode(validateCapabilities([]api.Object{self}), "api.reference") {
+	selfBinding := obj(api.ClusterAddonBinding, "self", m("clusterRef", s("cluster"), "addonRefs", api.StringList(self.Name())))
+	if !hasCode(Validate(selfBinding, api.NewCatalog([]api.Object{self, selfBinding})), "api.reference") {
 		t.Fatal("self-provided capability satisfied requirement")
 	}
 }
@@ -240,8 +241,9 @@ func TestIssuesStayBounded(t *testing.T) {
 	for i := range refs {
 		refs[i] = fmt.Sprintf("missing-%d", i)
 	}
-	binding := obj(api.ClusterAddonBinding, "binding", m("addonRefs", api.StringList(refs...)))
-	_, issues := ExpandBinding(binding, api.NewCatalog(nil))
+	profile := obj(api.ClusterAddonProfile, "many", m("addonRefs", api.StringList(refs...)))
+	binding := obj(api.ClusterAddonBinding, "binding", m("profileRefs", api.StringList("many")))
+	_, issues := ExpandBinding(binding, api.NewCatalog([]api.Object{profile}))
 	if len(issues) != 999 {
 		t.Fatalf("unbounded graph diagnostics: %d", len(issues))
 	}

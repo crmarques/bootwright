@@ -47,9 +47,6 @@ provides `metallb` when it answers `LoadBalancer` Service addresses
 address requires it. An add-on with any `provides` value requires at least one
 effective readiness check after the readiness defaults below apply.
 
-Not yet met: nothing reads `nmstate` or `metallb`; tracked as
-[B726](../milestones/m3.md#b726) and [B727](../milestones/m4.md#b727).
-
 ### Accepted inputs and effects
 
 `spec.inputs` is an array with set semantics keyed by author-defined `name`.
@@ -220,9 +217,6 @@ A package is bound to one cluster at most once across that cluster's
 bindings, and packages take part in the capability graph with the add-ons
 the cluster's bindings select.
 
-Not yet met: `spec.packages` is an unknown field; tracked as
-[B752](../milestones/m4.md#b752).
-
 ## Admission diagnostics
 
 Add-on and package diagnostics follow the style of every other kind: a
@@ -252,10 +246,6 @@ other bindings. A direct `addonRefs` or `profileRefs` entry naming a missing
 object is reported by the reference rule at its own indexed field, with no
 second copy. Each step-content refusal carries a remedy.
 
-Not yet met: several faults of one kind on one binding merge into one
-unindexed diagnostic that names no input, capability or add-on; tracked as
-[B321](../milestones/m4.md#b321).
-
 ## Built-in packages
 
 Each member of `spec.packages` is named after one
@@ -266,6 +256,13 @@ package's closed configuration, and diagnostics name fields under
 duration of at most `5h50m` that defaults to the package's readiness
 timeout. A package's own rules check its configuration against the bound
 `ContainerCluster` and the effective catalog, never a live system.
+
+Registry construction proves that every provided capability has a reader or a
+defined downstream meaning. `NewRegistryWithExamples` accepts explicit
+configuration examples to prove conditional `RequiresFor` readers;
+`NewRegistry` supplies none. These examples establish registry conformance,
+while instance selection evaluates `RequiresFor` against each binding's
+actual normalized configuration.
 
 ### Subscription
 
@@ -291,9 +288,6 @@ The Kubernetes NMState Operator, providing `nmstate`
 ([coverage](../add-on-coverage.md#nmstate)). Its configuration
 is `subscription` (`source` defaults to `redhat-operators`) and `timeout`
 (default `30m`); it has no other field.
-
-Not yet met: no package is selectable; tracked as
-[B752](../milestones/m4.md#b752) and [B735](../milestones/m4.md#b735).
 
 ### Package metallb
 
@@ -356,14 +350,6 @@ again after a destroy.
 | Network or broadcast address | `api.invariant` | as above | `address <entry> of pool <pool> includes <address>, the network or broadcast address of <subnet>` | `exclude <address> from the pool` |
 | Overlapping network | `api.invariant` | as above | `address <entry> of pool <pool> overlaps <cidr>, the <network kind> of ContainerCluster/<cluster>` | `use addresses outside <cidr>` |
 | Overlapping pools | `api.duplicate` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` of the later pool | `pool <pool> overlaps pool <other> at <address>` | `make the addresses of <pool> and <other> disjoint` |
-
-Not yet met: the `metallb` package is not selectable and nothing admits its
-pools; tracked as [B84](../milestones/m4.md#b84) and
-[B727](../milestones/m4.md#b727).
-
-Not yet met: package admission reads none of the bound cluster's networks or
-addresses, and no pool can name an interface; tracked as
-[B756](../milestones/m4.md#b756) and [B758](../milestones/m4.md#b758).
 
 ### Package fdf
 

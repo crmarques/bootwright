@@ -1,5 +1,5 @@
 implementation: cluster-media-agent-v1
-content-digest: 9c9aa8d410f3d6401883baec5ecaa1ec21f9a0fdcfaac416b5e652814cb568b0
+content-digest: ed813aef84344363cc149044c7d3bf8b311993f730556212751483ab79e86edb
 automation-formats: none
 request-schema:
   agentConfig opaque
@@ -13,6 +13,12 @@ request-schema:
   image.path string
   image.url string
   installConfig opaque
+  manifests []struct agentinstall.InstallManifest
+  manifests[].apiVersion string
+  manifests[].content opaque
+  manifests[].file string
+  manifests[].kind string
+  manifests[].name string
   placement struct machine.Placement
   placement.address string omitempty
   placement.connection string

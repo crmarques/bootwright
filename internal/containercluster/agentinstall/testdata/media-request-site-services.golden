@@ -115,6 +115,7 @@
     "pullSecret": "",
     "sshKey": ""
   },
+  "manifests": [],
   "placement": {
     "connection": "local",
     "machine": "controller"
@@ -131,6 +132,6 @@
     "kind": "openshift-install",
     "version": "4.21.15"
   },
-  "version": "cluster-media-agent-v5",
+  "version": "cluster-media-agent-v6",
   "workRoot": "/var/lib/bootwright-clusters/lab/sno"
 }

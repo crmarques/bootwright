@@ -179,7 +179,7 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 		})
 		return observation, stageReading(runErr, target, as, tx.Identity().Name)
 	}
-	observation, byRemoval, runErr := resolutionReading(ctx, boundary, log, operation.Verb, block, observed, verb, removal, read)
+	observation, byRemoval, runErr := resolutionReading(ctx, boundary, log, operation.Verb, block, observed, verb, removal, retiresOffline(capability), read)
 	resolvedEffect, state, err := reconciliation.ResolutionTransition(observedEffect(observation, runErr, byRemoval))
 	if err != nil {
 		ClearProduced(observation.Produced)
@@ -255,15 +255,15 @@ func (s Service) retiredIn(removal bool, plan, removalPlan reconciliation.Plan) 
 
 // resolutionReading is the observation a resolution resolves block by, and
 // whether that is the removal's own check of observed, read for verb. A fresh
-// removal first reads the apply's block by the apply's own observation (D123):
+// removal first reads the apply's own observation (D123), except an offline retirement:
 // one that proves it completed resolves it done, so what it produced is
 // captured before any inverse runs. Anything less, which the log records, is
 // resolved by the removal's own check (D119). Every other resolution reads
 // observed once, for verb.
-func resolutionReading(ctx context.Context, boundary *logBoundary, log *operationstore.Log, applied reconciliation.Verb, block, observed reconciliation.Block, verb reconciliation.Verb, removal bool, read func(reconciliation.Block, reconciliation.Verb) (Observation, error)) (Observation, bool, error) {
-	if !removal {
+func resolutionReading(ctx context.Context, boundary *logBoundary, log *operationstore.Log, applied reconciliation.Verb, block, observed reconciliation.Block, verb reconciliation.Verb, removal, offline bool, read func(reconciliation.Block, reconciliation.Verb) (Observation, error)) (Observation, bool, error) {
+	if !removal || offline {
 		observation, err := read(observed, verb)
-		return observation, false, err
+		return observation, removal && offline, err
 	}
 	observation, err := read(block, applied)
 	if err == nil && observation.Effect == reconciliation.EffectCompleted {
@@ -455,6 +455,11 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 					Completed: len(settled), Declared: len(block.Groups)})
 			},
 		}
+		release, lendErr := s.prepareProducedExecution(ctx, tx, store, operation, plan, &execution)
+		if lendErr != nil {
+			return lendErr
+		}
+		defer release()
 		value, callErr := call(ctx, execution)
 		result = value
 		return callErr
@@ -648,4 +653,9 @@ func logFault(err error) error {
 	return failure("runtime.log",
 		"a required private operation log could not be maintained",
 		"restore the context store's private log tree before repeating the operation")
+}
+
+func retiresOffline(capability Capability) bool {
+	retirement, ok := capability.(OfflineRetirement)
+	return ok && retirement.RetiresOffline()
 }

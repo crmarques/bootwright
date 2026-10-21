@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 
+	addoncatalog "github.com/crmarques/bootwright/internal/addons/catalog"
+	addonpackages "github.com/crmarques/bootwright/internal/addons/packages"
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
@@ -133,6 +135,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	compiler := wireCompiler()
 	secrets := wireSecrets(deps, compiler)
 	services := wireStubs()
+	services.AddOnCatalog = addoncatalog.New(addonpackages.Builtin())
 	services.Contexts = wireContexts(deps, compiler, secrets.hooks)
 	services.Secrets, services.Encryption = secrets.custody, secrets.encryption
 	services.DesiredState = wireDesiredState(deps, compiler)

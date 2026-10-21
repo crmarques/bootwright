@@ -15,6 +15,8 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	addoncatalog "github.com/crmarques/bootwright/internal/addons/catalog"
+	addonpackages "github.com/crmarques/bootwright/internal/addons/packages"
 	"github.com/crmarques/bootwright/internal/availability"
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -554,6 +556,12 @@ func cliGoldens() []cliGolden {
 			"nothing repairs it, because Bootwright never changes the owner or mode of an existing state root")
 	}
 	return append([]cliGolden{
+		{golden: "cli-add-ons-list", args: "add-ons list", record: func(r *dispatchRecord) {
+			r.result.addOns, _ = addoncatalog.New(addonpackages.Builtin()).List(context.Background(), addoncatalog.ListRequest{})
+		}},
+		{golden: "cli-add-ons-list-json", args: "add-ons list --output json", record: func(r *dispatchRecord) {
+			r.result.addOns, _ = addoncatalog.New(addonpackages.Builtin()).List(context.Background(), addoncatalog.ListRequest{})
+		}},
 		{golden: "cli-container-preflight", args: "preflight container-cluster --context synthetic", record: func(r *dispatchRecord) { r.result.storagePreflight = containerPreflightReport(false) }},
 		{golden: "cli-container-preflight-json", args: "preflight container-cluster --context synthetic --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = containerPreflightReport(false) }},
 		{golden: "cli-container-preflight-pending-json", args: "preflight container-cluster --context synthetic --dry-run --output json", code: 1, record: func(r *dispatchRecord) {
@@ -1229,6 +1237,7 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 		}
 	}
 	jsonContracts := []string{
+		"add-ons list",
 		"validate", "preflight storage-cluster", "render effective", "status", "diff",
 		"secret check", "secret list", "secret info", "secret encryption status", "machine trust", "setup",
 		"machine list", "machine info", "machine start", "machine stop", "machine restart", "media list", "cluster list", "cluster info",

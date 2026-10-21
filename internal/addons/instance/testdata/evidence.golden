@@ -1,0 +1,125 @@
+{
+  "absent": false,
+  "checks": [
+    {
+      "index": 0,
+      "lastObservation": "",
+      "satisfied": true,
+      "stale": false
+    },
+    {
+      "index": 1,
+      "lastObservation": "",
+      "satisfied": true,
+      "stale": false
+    },
+    {
+      "index": 2,
+      "lastObservation": "",
+      "satisfied": true,
+      "stale": false
+    }
+  ],
+  "classification": "completed",
+  "dependents": [],
+  "observations": [
+    {
+      "apiVersion": "v1",
+      "equal": true,
+      "kind": "Namespace",
+      "name": "fixture-operator",
+      "namespace": "",
+      "namespaced": false,
+      "ownership": "own"
+    },
+    {
+      "apiVersion": "operators.coreos.com/v1",
+      "equal": true,
+      "kind": "OperatorGroup",
+      "name": "fixture",
+      "namespace": "fixture-operator",
+      "namespaced": true,
+      "ownership": "own"
+    },
+    {
+      "apiVersion": "operators.coreos.com/v1alpha1",
+      "equal": true,
+      "kind": "Subscription",
+      "name": "fixture",
+      "namespace": "fixture-operator",
+      "namespaced": true,
+      "ownership": "own"
+    },
+    {
+      "apiVersion": "example.test/v1",
+      "equal": true,
+      "kind": "Fixture",
+      "name": "fixture",
+      "namespace": "fixture-operator",
+      "namespaced": true,
+      "ownership": "own"
+    }
+  ],
+  "olm": [
+    {
+      "bundleImage": "",
+      "catalogImage": "",
+      "csvVersion": "",
+      "installPlan": {
+        "csvs": null,
+        "name": "",
+        "uid": ""
+      },
+      "installedCSV": "fixture.v1.0.0",
+      "maxOpenShiftVersion": "",
+      "namespace": "fixture-operator",
+      "subscription": "fixture",
+      "upgradePending": false
+    }
+  ],
+  "postcondition": true,
+  "receipts": [
+    {
+      "apiVersion": "v1",
+      "desiredDigest": "a1f0588f338e3b8362bc779ae512a0fec3b43dd363bf3500183c1cc4dd49c6bb",
+      "disposition": "created",
+      "kind": "Namespace",
+      "name": "fixture-operator",
+      "namespace": "",
+      "namespaced": false,
+      "uid": "uid-fixture-operator"
+    },
+    {
+      "apiVersion": "operators.coreos.com/v1",
+      "desiredDigest": "3814e9c1a91c3e6ccffa59827505232f6a9e3d30713b47317a4a1af964f4dc49",
+      "disposition": "created",
+      "kind": "OperatorGroup",
+      "name": "fixture",
+      "namespace": "fixture-operator",
+      "namespaced": true,
+      "uid": "uid-fixture"
+    },
+    {
+      "apiVersion": "operators.coreos.com/v1alpha1",
+      "desiredDigest": "63739328c6a10d7b50daee5a954ae346a132a94c2a6a1fbedeb6d12efee8daf0",
+      "disposition": "created",
+      "kind": "Subscription",
+      "name": "fixture",
+      "namespace": "fixture-operator",
+      "namespaced": true,
+      "uid": "uid-fixture"
+    },
+    {
+      "apiVersion": "example.test/v1",
+      "desiredDigest": "019d5dfe8db35e5e7439f53716a520f791da636c35aaf4e6e4c1318d4617d6f5",
+      "disposition": "created",
+      "kind": "Fixture",
+      "name": "fixture",
+      "namespace": "fixture-operator",
+      "namespaced": true,
+      "uid": "uid-fixture"
+    }
+  ],
+  "request": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "version": "addon-instance-evidence-v1"
+}

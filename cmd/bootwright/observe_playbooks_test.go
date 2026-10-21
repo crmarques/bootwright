@@ -48,6 +48,7 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		allow[observeTaskKey{role, file, module}] = observeAllowance{reason, holds}
 	}
 	for role, protocol := range map[string]string{
+		"cluster_objects":                "cluster_objects_protocol",
 		"containercluster_install_agent": "containercluster_install_protocol",
 		"containercluster_media_agent":   "containercluster_media_protocol",
 		"infra_artifact_server_nginx":    "artifact_server_protocol",
@@ -65,7 +66,7 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		add(role, "observe.yml", observeCollection+protocol, "publishes the handoff and evidence on the runner's own channel", read)
 	}
 	for _, role := range []string{
-		"containercluster_install_agent", "containercluster_media_agent", "managedos_install_anaconda",
+		"addons_instance", "containercluster_network", "containercluster_install_agent", "containercluster_media_agent", "managedos_install_anaconda",
 		"managedos_package_tree", "storage_ceph_core", "storage_ceph_host", "storage_ceph_image",
 		"storage_ceph_smb", "substrate_baremetal_machine", "substrate_libvirt_host", "substrate_libvirt_machine",
 	} {
@@ -74,6 +75,9 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 	for _, role := range []string{"storage_ceph_core", "storage_ceph_host", "storage_ceph_image", "storage_ceph_smb"} {
 		add(role, "observe.yml", "ansible.builtin.fail", "refuses an unproved observation without touching the host", read)
 	}
+	add("cluster_objects", "observe.yml", "ansible.builtin.assert", "validates the frozen shared program version", read)
+	add("cluster_objects", "observe.yml", "ansible.builtin.fail", "reports the bounded read-only adapter refusal", read)
+	add("cluster_objects", "observe.yml", observeCollection+"cluster_objects_read", "reads the frozen object program through projected oc get operations", read)
 	addObserveReads(add, read)
 	addObserveScratch(add, read)
 	return allow

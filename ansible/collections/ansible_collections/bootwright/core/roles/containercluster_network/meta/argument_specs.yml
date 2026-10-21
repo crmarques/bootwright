@@ -1,0 +1,84 @@
+argument_specs:
+  apply:
+    short_description: Install one frozen cluster network.
+    options:
+      bootwright_cluster_network_request:
+        type: dict
+        required: true
+        description: Frozen network request.
+        options:
+          budgetSeconds:
+            type: int
+            required: true
+          cluster:
+            type: str
+            required: true
+          placement:
+            type: dict
+            required: true
+          producedInputs:
+            type: list
+            elements: dict
+            required: true
+          program:
+            type: dict
+            required: true
+          tool:
+            type: dict
+            required: true
+          version:
+            type: str
+            required: true
+            choices: [cluster-network-request-v1]
+
+      bootwright_cluster_network_material:
+        type: dict
+        required: true
+        description: Lent material paths and operation identity.
+
+      bootwright_cluster_network_digest:
+        type: str
+        required: true
+        description: Frozen request digest.
+
+  observe:
+    short_description: Observe one frozen cluster network.
+    options:
+      bootwright_cluster_network_request:
+        type: dict
+        required: true
+        description: Frozen network request.
+        options:
+          budgetSeconds:
+            type: int
+            required: true
+          cluster:
+            type: str
+            required: true
+          placement:
+            type: dict
+            required: true
+          producedInputs:
+            type: list
+            elements: dict
+            required: true
+          program:
+            type: dict
+            required: true
+          tool:
+            type: dict
+            required: true
+          version:
+            type: str
+            required: true
+            choices: [cluster-network-request-v1]
+
+      bootwright_cluster_network_material:
+        type: dict
+        required: true
+        description: Lent material paths and operation identity.
+
+      bootwright_cluster_network_digest:
+        type: str
+        required: true
+        description: Frozen request digest.

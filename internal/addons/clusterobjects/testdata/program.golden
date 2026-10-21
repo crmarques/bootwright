@@ -1,0 +1,38 @@
+{
+  "checks": [
+    {
+      "resourceExists": {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "name": "settings",
+        "namespace": "operators",
+        "namespaced": true
+      }
+    }
+  ],
+  "steps": [
+    {
+      "create": {
+        "apiVersion": "v1",
+        "body": {
+          "apiVersion": "v1",
+          "data": {
+            "enabled": "true"
+          },
+          "kind": "ConfigMap",
+          "metadata": {
+            "name": "settings",
+            "namespace": "operators"
+          }
+        },
+        "desiredDigest": "89ec66223f0e31553122ec688c47bdd2a5d8edf0292b4216cb52a93c93a9bf29",
+        "kind": "ConfigMap",
+        "name": "settings",
+        "namespace": "operators",
+        "namespaced": true
+      },
+      "kind": "create"
+    }
+  ],
+  "version": "cluster-objects-v1"
+}

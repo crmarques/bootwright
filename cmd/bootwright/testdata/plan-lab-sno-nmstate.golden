@@ -1,0 +1,291 @@
+[
+  {
+    "id": "artifact-server-lab-artifacts",
+    "stage": "infra-components",
+    "dependencies": [],
+    "impacts": [
+      "create-container-unit bootwright-lab-sno-nmstate-artifacts-lab-artifacts",
+      "create-path /var/lib/bootwright-services/lab-sno-nmstate/artifact-server/lab-artifacts",
+      "open-listener 192.0.2.1:8080",
+      "open-listener 192.0.2.1:8443"
+    ]
+  },
+  {
+    "id": "controller-prerequisites",
+    "stage": "controller",
+    "dependencies": [],
+    "impacts": [
+      "install-host-package libvirt-client",
+      "install-host-package libvirt-daemon",
+      "install-host-package libvirt-daemon-driver-network",
+      "install-host-package libvirt-daemon-driver-qemu",
+      "install-host-package libvirt-daemon-driver-storage-core",
+      "install-host-package nmstate",
+      "install-host-package qemu-img",
+      "install-host-package qemu-kvm",
+      "install-host-package swtpm",
+      "install-host-package swtpm-tools",
+      "publish-target-client helm latest",
+      "publish-target-client openshift-clients 4.21.15",
+      "publish-target-client openshift-install 4.21.15"
+    ]
+  },
+  {
+    "id": "dns-lab-dns",
+    "stage": "infra-components",
+    "dependencies": [],
+    "impacts": [
+      "create-container-unit bootwright-lab-sno-nmstate-dns-lab-dns",
+      "create-path /var/lib/bootwright-services/lab-sno-nmstate/dns/lab-dns",
+      "open-listener 192.0.2.1:53"
+    ]
+  },
+  {
+    "id": "ntp-lab-ntp",
+    "stage": "infra-components",
+    "dependencies": [],
+    "impacts": [
+      "create-container-unit bootwright-lab-sno-nmstate-ntp-lab-ntp",
+      "create-path /var/lib/bootwright-services/lab-sno-nmstate/ntp/lab-ntp",
+      "open-listener 192.0.2.1:123"
+    ]
+  },
+  {
+    "id": "proxy-lab-proxy",
+    "stage": "infra-components",
+    "dependencies": [],
+    "impacts": [
+      "create-container-unit bootwright-lab-sno-nmstate-proxy-lab-proxy",
+      "create-path /var/lib/bootwright-services/lab-sno-nmstate/proxy/lab-proxy",
+      "open-listener 192.0.2.1:3128"
+    ]
+  },
+  {
+    "id": "substrate-host-lab-libvirt",
+    "stage": "substrates",
+    "dependencies": [],
+    "impacts": [
+      "create-bridge virbr-lab",
+      "create-libvirt-network bootwright-lab-sno-nmstate-lab-guests",
+      "create-libvirt-pool bootwright-lab-sno-nmstate-lab-libvirt-vmedia",
+      "create-path /var/lib/libvirt/images/bootwright/lab-sno-nmstate/providers/lab-libvirt/vmedia"
+    ]
+  },
+  {
+    "id": "cluster-media-sno",
+    "stage": "clusters",
+    "dependencies": [
+      "artifact-server-lab-artifacts"
+    ],
+    "impacts": [
+      "create-path /var/lib/bootwright-clusters/lab-sno-nmstate/sno",
+      "publish-content /var/lib/bootwright-services/lab-sno-nmstate/artifact-server/lab-artifacts/public/private/clusters/sno"
+    ]
+  },
+  {
+    "id": "machine-sno-01",
+    "stage": "machines",
+    "dependencies": [
+      "substrate-host-lab-libvirt"
+    ],
+    "impacts": [
+      "create-container-unit bootwright-lab-sno-nmstate-bmc-sno-01",
+      "create-disk /var/lib/libvirt/images/bootwright/lab-sno-nmstate/machines/sno-01/root.qcow2",
+      "create-libvirt-domain bootwright-lab-sno-nmstate-sno-01",
+      "create-path /var/lib/libvirt/images/bootwright/lab-sno-nmstate/machines/sno-01",
+      "open-listener 127.0.0.1:8000"
+    ]
+  },
+  {
+    "id": "cluster-install-sno",
+    "stage": "clusters",
+    "dependencies": [
+      "cluster-media-sno",
+      "dns-lab-dns",
+      "machine-sno-01",
+      "ntp-lab-ntp"
+    ],
+    "impacts": [
+      "install-cluster sno-01",
+      "power-on sno-01"
+    ]
+  },
+  {
+    "id": "addon-nmstate-sno",
+    "stage": "add-ons",
+    "dependencies": [
+      "cluster-install-sno",
+      "cluster-media-sno"
+    ],
+    "impacts": [
+      "install-addon nmstate sno"
+    ],
+    "request": {
+      "binding": "nmstate",
+      "budgetSeconds": 1800,
+      "cluster": "sno",
+      "package": "nmstate",
+      "placement": {
+        "connection": "local",
+        "machine": "controller"
+      },
+      "producedInputs": [
+        {
+          "kind": "ContainerCluster",
+          "object": "sno",
+          "output": "kubeconfig"
+        }
+      ],
+      "program": {
+        "checks": [
+          {
+            "csvSucceeded": {
+              "csv": "kubernetes-nmstate-operator.v0.0.0",
+              "namespace": "openshift-nmstate",
+              "subscription": "kubernetes-nmstate-operator"
+            }
+          },
+          {
+            "condition": {
+              "apiVersion": "nmstate.io/v1",
+              "kind": "NMState",
+              "name": "nmstate",
+              "namespace": "",
+              "namespaced": false,
+              "status": "True",
+              "type": "Available"
+            }
+          },
+          {
+            "condition": {
+              "apiVersion": "apps/v1",
+              "kind": "Deployment",
+              "name": "nmstate-webhook",
+              "namespace": "openshift-nmstate",
+              "namespaced": true,
+              "status": "True",
+              "type": "Available"
+            }
+          }
+        ],
+        "steps": [
+          {
+            "create": {
+              "apiVersion": "v1",
+              "body": {
+                "apiVersion": "v1",
+                "kind": "Namespace",
+                "metadata": {
+                  "name": "openshift-nmstate"
+                }
+              },
+              "desiredDigest": "dc1f67b3dbf29871a0966d34f946322c6fb91ea5cfa3e06afa6c0250319fb743",
+              "kind": "Namespace",
+              "name": "openshift-nmstate",
+              "namespace": "",
+              "namespaced": false
+            },
+            "kind": "create"
+          },
+          {
+            "create": {
+              "apiVersion": "operators.coreos.com/v1",
+              "body": {
+                "apiVersion": "operators.coreos.com/v1",
+                "kind": "OperatorGroup",
+                "metadata": {
+                  "name": "openshift-nmstate",
+                  "namespace": "openshift-nmstate"
+                },
+                "spec": {
+                  "targetNamespaces": [
+                    "openshift-nmstate"
+                  ]
+                }
+              },
+              "desiredDigest": "0afe966e438aef673ece640c38fd4c54c1cca44bc315dda78d5392275c0ec2c4",
+              "kind": "OperatorGroup",
+              "name": "openshift-nmstate",
+              "namespace": "openshift-nmstate",
+              "namespaced": true
+            },
+            "kind": "create"
+          },
+          {
+            "kind": "subscribe",
+            "subscribe": {
+              "approval": "exact",
+              "csv": "kubernetes-nmstate-operator.v0.0.0",
+              "object": {
+                "apiVersion": "operators.coreos.com/v1alpha1",
+                "body": {
+                  "apiVersion": "operators.coreos.com/v1alpha1",
+                  "kind": "Subscription",
+                  "metadata": {
+                    "name": "kubernetes-nmstate-operator",
+                    "namespace": "openshift-nmstate"
+                  },
+                  "spec": {
+                    "channel": "example-channel",
+                    "installPlanApproval": "Manual",
+                    "name": "kubernetes-nmstate-operator",
+                    "source": "redhat-operators",
+                    "sourceNamespace": "openshift-marketplace",
+                    "startingCSV": "kubernetes-nmstate-operator.v0.0.0"
+                  }
+                },
+                "desiredDigest": "ac419d6a9718d0228918d08baa14e8b13e0201e1af185f656bdf2746ef3d4d26",
+                "kind": "Subscription",
+                "name": "kubernetes-nmstate-operator",
+                "namespace": "openshift-nmstate",
+                "namespaced": true
+              }
+            }
+          },
+          {
+            "kind": "wait",
+            "wait": [
+              {
+                "condition": {
+                  "apiVersion": "apiextensions.k8s.io/v1",
+                  "kind": "CustomResourceDefinition",
+                  "name": "nmstates.nmstate.io",
+                  "namespace": "",
+                  "namespaced": false,
+                  "status": "True",
+                  "type": "Established"
+                }
+              }
+            ]
+          },
+          {
+            "create": {
+              "apiVersion": "nmstate.io/v1",
+              "body": {
+                "apiVersion": "nmstate.io/v1",
+                "kind": "NMState",
+                "metadata": {
+                  "name": "nmstate"
+                }
+              },
+              "desiredDigest": "13bc93a42eb57ae1b9ee23f6417dee32385249e6c978e6494d4ba78d70dab288",
+              "kind": "NMState",
+              "name": "nmstate",
+              "namespace": "",
+              "namespaced": false
+            },
+            "kind": "create"
+          }
+        ],
+        "version": "cluster-objects-v1"
+      },
+      "secrets": [],
+      "tool": {
+        "compatibility": "openshift",
+        "kind": "openshift-clients",
+        "version": "4.21.15"
+      },
+      "version": "addon-instance-request-v1"
+    }
+  }
+]

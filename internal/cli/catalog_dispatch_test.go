@@ -42,7 +42,7 @@ func TestCommandModesComeFromTheCatalog(t *testing.T) {
 		"cluster kubeconfig": true, "cluster keyring": true,
 	}
 	for _, spec := range commandCatalog() {
-		if implementedOperation(spec.path) != want[spec.path] {
+		if implementedOperation(spec.path) != (want[spec.path] || spec.path == "add-ons list") {
 			t.Errorf("%s: implemented = %t, want %t", spec.path, implementedOperation(spec.path), want[spec.path])
 		}
 		if privilegedOperation(spec.path) != want[spec.path] {

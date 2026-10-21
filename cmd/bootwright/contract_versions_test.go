@@ -16,7 +16,10 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/ansible"
+	"github.com/crmarques/bootwright/internal/addons/clusterobjects/driver"
+	"github.com/crmarques/bootwright/internal/addons/instance"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
+	"github.com/crmarques/bootwright/internal/containercluster/networking"
 	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/controller/runtimelock"
@@ -42,6 +45,8 @@ type contractVersion struct {
 
 func contractVersions() []contractVersion {
 	versions := []contractVersion{
+		{instance.Implementation, instance.ContentDigest(), reflect.TypeFor[instance.Request](), reflect.TypeFor[instance.Evidence]()},
+		{networking.Implementation, networking.ContentDigest(), reflect.TypeFor[networking.Request](), reflect.TypeFor[driver.Evidence]()},
 		{clients.Implementation, clients.ContentDigest(), reflect.TypeFor[clients.Request](), reflect.TypeFor[clients.Evidence]()},
 		{libvirt.HostImplementation, libvirt.HostContentDigest(), reflect.TypeFor[libvirt.HostRequest](), reflect.TypeFor[libvirt.HostEvidence]()},
 		{libvirt.MachineImplementation, libvirt.MachineContentDigest(), reflect.TypeFor[libvirt.MachineRequest](), reflect.TypeFor[libvirt.MachineEvidence]()},
@@ -90,6 +95,10 @@ func persistedBy(implementations ...string) automationFormat {
 func automationFormats() map[string]automationFormat {
 	host, core := persistedBy(ceph.HostImplementation), persistedBy(ceph.Implementation)
 	return map[string]automationFormat{
+		"addon-instance-request-v1":           {class: formatMirrored},
+		"cluster-network-request-v1":          {class: formatMirrored},
+		"cluster-objects-v1":                  {class: formatMirrored},
+		"bootwright.cluster-objects.owner-v1": {class: formatMirrored},
 		// The host block writes them; the core block's workers read them back
 		// for the manager account, the cephadm cache and the OSD identities.
 		"ceph-runtime-profile-v3":   persistedBy(ceph.HostImplementation, ceph.Implementation),
@@ -160,7 +169,7 @@ func automationFormats() map[string]automationFormat {
 		"machine-baremetal-v2":      {class: formatMirrored},
 		"os-package-tree-v1":        {class: formatMirrored},
 		"os-install-anaconda-v15":   {class: formatMirrored},
-		"cluster-media-agent-v5":    {class: formatMirrored},
+		"cluster-media-agent-v6":    {class: formatMirrored},
 		"cluster-install-agent-v5":  {class: formatMirrored},
 		"artifact-server-nginx-v2":  {class: formatMirrored},
 		"managed-service-v3":        {class: formatMirrored},

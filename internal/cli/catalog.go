@@ -9,8 +9,7 @@ type commandSpec struct {
 	flags   []flagSpec
 	payload bool
 	// implemented marks a command whose application use case is available.
-	// Every such command also needs the privileged context store, so available
-	// records both facts with the declaration instead of a separate list.
+	// available also marks commands that need the privileged context store.
 	implemented bool
 	privileged  bool
 	session     bool

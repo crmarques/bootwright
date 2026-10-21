@@ -212,7 +212,7 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 
 func (r *Runner) execute(ctx context.Context, command *cobra.Command, path string) int {
 	refused := refusalStatus(path)
-	if r.config.BeginOperation != nil && implementedOperation(path) && ctx.Err() == nil {
+	if r.config.BeginOperation != nil && privilegedOperation(path) && ctx.Err() == nil {
 		operationContext, finish := r.config.BeginOperation(ctx)
 		if finish != nil {
 			defer finish()

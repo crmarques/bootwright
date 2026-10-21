@@ -237,7 +237,7 @@ Successful result objects have stable top-level fields:
 | `media add`, `media delete` | `name`, `outcome`, `size`, optional `sha256` |
 | `plan` | `context`, `verb`, `steps`, `stages`, `waves`, `widest`, `bound`, `startable`, `deferred`, `continuation`, `finalizes`, optional `anotherBuild`, `stops`, `stopsAfterOnline`, `receipt` |
 | `apply`, `destroy` | `context`, `verb`, `steps`, `blocks`, `settled`, `recovered`, `next`, `receipt` |
-| `add-ons list` | `addOns` |
+| `add-ons list` | `addOns` (each: `name`, `provides`, `requires`, `olmPackage`, `defaultSource`, `configuration`) |
 | `secret check`, `secret list`, `secret info` | `context`, `secrets` |
 | `secret encryption status` | `initialized`, `implementation`, `activeKey`, `keys`, `items` |
 | `media list` | `media` |

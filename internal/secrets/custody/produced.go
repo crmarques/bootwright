@@ -110,3 +110,27 @@ func (s Service) ReadProduced(ctx context.Context, request ReadProducedRequest) 
 	}
 	return read, found, nil
 }
+
+func (s Service) ReadProducedInArea(ctx context.Context, selected secretstore.Context, area secretstore.Area, block, name string) (secretstore.ProducedMaterial, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return secretstore.ProducedMaterial{}, false, err
+	}
+	if s.access == nil {
+		return secretstore.ProducedMaterial{}, false, secretstore.Failure("store.implementation", "secret service is not configured")
+	}
+	var result secretstore.ProducedMaterial
+	var found bool
+	err := s.access.MutateArea(ctx, selected, area, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+		if session == nil {
+			return nil
+		}
+		var err error
+		result, found, err = session.ReadProduced(ctx, block, name)
+		return err
+	})
+	if err != nil {
+		result.Material.Clear()
+		return secretstore.ProducedMaterial{}, false, err
+	}
+	return result, found, nil
+}

@@ -1,0 +1,68 @@
+{
+  "checks": [
+    {
+      "index": 0,
+      "lastObservation": "Available",
+      "satisfied": true,
+      "stale": true,
+      "unknown": true
+    }
+  ],
+  "dependents": [
+    {
+      "installPlan": {
+        "csvs": [
+          "engine.v1.0.0"
+        ],
+        "name": "engine-install",
+        "uid": "engine-plan"
+      },
+      "installedCSV": "engine.v1.0.0",
+      "namespace": "engine",
+      "subscription": "engine",
+      "uid": "engine-1"
+    }
+  ],
+  "observations": [
+    {
+      "apiVersion": "v1",
+      "equal": true,
+      "kind": "ConfigMap",
+      "name": "settings",
+      "namespace": "operators",
+      "namespaced": true,
+      "ownership": "own"
+    }
+  ],
+  "olm": [
+    {
+      "bundleImage": "registry.example.test/bundle:v1",
+      "catalogImage": "registry.example.test/catalog:v1",
+      "csvVersion": "1.0.0",
+      "installPlan": {
+        "csvs": [
+          "operator.v1.0.0"
+        ],
+        "name": "install-1",
+        "uid": "plan-1"
+      },
+      "installedCSV": "operator.v1.0.0",
+      "maxOpenShiftVersion": "4.21",
+      "namespace": "operators",
+      "subscription": "operator",
+      "upgradePending": true
+    }
+  ],
+  "receipts": [
+    {
+      "apiVersion": "v1",
+      "desiredDigest": "89ec66223f0e31553122ec688c47bdd2a5d8edf0292b4216cb52a93c93a9bf29",
+      "disposition": "created",
+      "kind": "ConfigMap",
+      "name": "settings",
+      "namespace": "operators",
+      "namespaced": true,
+      "uid": "uid-1"
+    }
+  ]
+}

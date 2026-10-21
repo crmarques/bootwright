@@ -6,8 +6,10 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/controller"
 )
 
@@ -251,5 +253,20 @@ func TestTargetToolsUseTheClusterReleaseGrammar(t *testing.T) {
 		if (err == nil) != (version == "4.22.0-rc.1") {
 			t.Fatalf("release %s: %v", version, err)
 		}
+	}
+}
+
+func TestTargetToolsReadPackageCapabilityFromInstanceSelection(t *testing.T) {
+	registry, err := addons.NewRegistry([]addons.Package{{Name: "fixture", Provides: []string{"kubevirt"}, Budget: time.Minute, Render: func(addons.Instance) (addons.Rendered, error) { return addons.Rendered{}, nil }}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	objects := selectionObjects()
+	objects = append(objects, api.NewObject(api.ClusterAddonBinding, "binding", api.Value{}, api.MapValue().With("clusterRef", api.StringValue("cluster")).WithPath(api.MapValue(), "packages", "fixture")))
+	tools, err := controller.SelectToolsWithRegistry(api.NewCatalog(objects), registry)
+	if err != nil || !slices.ContainsFunc(tools, func(tool controller.ToolRequest) bool {
+		return tool.Kind == "virtctl" && tool.Compatibility == "kubevirt"
+	}) {
+		t.Fatalf("package tools: %+v %v", tools, err)
 	}
 }

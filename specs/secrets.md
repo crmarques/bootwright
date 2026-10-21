@@ -358,8 +358,8 @@ repository credential, for example, is readable by Argo CD's components in
 their namespace, so a credential placed there should be one scoped to reading
 that repository.
 
-Not yet met: no block places a Secret in a cluster; tracked as
-[B753](milestones/m4.md#b753) and [B760](milestones/m4.md#b760).
+Not yet met: a placement cannot consume produced StorageExport material;
+tracked as [B760](milestones/m4.md#b760).
 
 ## Local keyring v4
 

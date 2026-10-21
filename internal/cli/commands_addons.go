@@ -9,11 +9,7 @@ import (
 )
 
 func addOnCatalogCommands() []commandSpec {
-	return []commandSpec{
-		{path: "add-ons list", short: "List add-on catalog registrations"},
-		{path: "add-ons add", short: "Register an immutable add-on catalog release", flags: []flagSpec{nameFlag(), stringFlag("version", "Select the catalog release version"), confirmationFlag()}},
-		{path: "add-ons delete", short: "Delete an add-on registration", flags: []flagSpec{nameFlag(), confirmationFlag()}},
-	}
+	return []commandSpec{commandSpec{path: "add-ons list", short: "List built-in add-on packages", implemented: true}}
 }
 
 func addOnPreflightCommand() commandSpec {
@@ -21,37 +17,19 @@ func addOnPreflightCommand() commandSpec {
 }
 
 type AddOnCatalogService interface {
-	List(context.Context, addoncatalog.ListRequest) error
-	Add(context.Context, addoncatalog.AddRequest) error
-	Delete(context.Context, addoncatalog.DeleteRequest) error
+	List(context.Context, addoncatalog.ListRequest) (*addoncatalog.ListResult, error)
 }
 
 type AddOnPreflightService interface {
 	Check(context.Context, addonpreflight.PreflightRequest) error
 }
 
-func (s Services) invokeAddOnCatalog(ctx context.Context, path string, values *requestValues, args []string) error {
+func (s Services) invokeAddOnCatalog(ctx context.Context, path string, values *requestValues, args []string) (commandResult, error) {
 	if s.AddOnCatalog == nil {
-		return errMissingService
+		return commandResult{}, errMissingService
 	}
-	switch path {
-	case "add-ons list":
-		return invokeRequest(ctx, values, addoncatalog.ListRequest{}, s.AddOnCatalog.List)
-	case "add-ons add":
-		return invokeRequest(ctx, values, addoncatalog.AddRequest{
-			Name:             values.addOnName(),
-			Version:          values.addOnVersion(),
-			SkipConfirmation: values.boolean("yes"),
-		}, s.AddOnCatalog.Add)
-	case "add-ons delete":
-		return invokeRequest(ctx, values, addoncatalog.DeleteRequest{
-			Name:             values.addOnName(),
-			Version:          values.addOnVersion(),
-			SkipConfirmation: values.boolean("yes"),
-		}, s.AddOnCatalog.Delete)
-	default:
-		return errors.New("command has no application dispatch")
-	}
+	result, err := invokeResult(ctx, values, addoncatalog.ListRequest{}, s.AddOnCatalog.List)
+	return commandResult{addOns: result}, err
 }
 
 func (s Services) invokeAddOnPreflight(ctx context.Context, path string, values *requestValues, args []string) error {

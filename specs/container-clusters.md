@@ -304,8 +304,8 @@ bootstrap and then fails it; such objects are applied after installation by the
 [cluster network block](#post-installation-network-configuration). A manifest
 holding secret material names its Secret, and the attempt substitutes it.
 
-Not yet met: the media block writes no manifest; tracked as
-[B719](milestones/m3.md#b719).
+Not yet met: MachineConfig and Secret-part manifest projections have no typed
+source; tracked as [B719](milestones/m3.md#b719).
 
 ### Installation features
 
@@ -1007,9 +1007,6 @@ retires it with its cluster without contacting it: the cluster leaves with its
 disks, or keeps running on physical nodes. A condition reporting `Degraded`, a
 policy matching no node and a foreign attachment definition each fail the block
 naming the object.
-
-Not yet met: no capability plans this block; tracked as
-[B726](milestones/m3.md#b726).
 
 ## Adapter boundary
 

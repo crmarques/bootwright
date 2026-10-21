@@ -66,6 +66,11 @@ func packageRoles() map[string]packageRole {
 		"internal/cli":                             cliRole,
 		"internal/availability":                    technicalRole,
 		"internal/addons":                          domainRole,
+		"internal/addons/packages":                 domainRole,
+		"internal/containercluster/networking":     applicationRole,
+		"internal/addons/clusterobjects":           domainRole,
+		"internal/addons/clusterobjects/driver":    applicationRole,
+		"internal/addons/instance":                 applicationRole,
 		"internal/containercluster":                domainRole,
 		"internal/controller":                      domainRole,
 		"internal/desiredstate":                    domainRole,
@@ -109,6 +114,10 @@ func packageRoles() map[string]packageRole {
 // entry is a new cross-context coupling and needs its reason stated here.
 func applicationDependencies() map[string][]string {
 	return map[string][]string{
+		// Secondary networks and package instances share the cluster-object execution protocol.
+		"internal/containercluster/networking":  {"internal/reconciliation/lifecycle", "internal/desiredstate/compilation", "internal/addons/clusterobjects/driver"},
+		"internal/addons/instance":              {"internal/reconciliation/lifecycle", "internal/desiredstate/compilation", "internal/addons/clusterobjects/driver"},
+		"internal/addons/clusterobjects/driver": {"internal/reconciliation/lifecycle"},
 		// The engine coordinates the contexts an operation crosses.
 		"internal/reconciliation/lifecycle": {
 			"internal/controller/prerequisites", "internal/desiredstate/compilation",

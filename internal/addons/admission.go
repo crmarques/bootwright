@@ -114,7 +114,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		_, issues := expandSelection(o, c)
 		return issues
 	case api.ClusterAddonBinding:
-		return validateBinding(o, c)
+		return ValidateWithRegistry(o, c, Registry{}, ClusterFacts{})
 	}
 	return nil
 }
@@ -298,6 +298,10 @@ func indexed(field string, index int) string { return field + "[" + strconv.Itoa
 func addonIssue(code, field, message, remediation string) api.Issue {
 	if !strings.HasPrefix(field, "$") {
 		field = "$." + field
+	}
+	message = strings.TrimSuffix(message, ".")
+	if len(message) > 0 && message[0] >= 'A' && message[0] <= 'Z' && !strings.HasPrefix(message, "ClusterAddon/") {
+		message = strings.ToLower(message[:1]) + message[1:]
 	}
 	return api.Issue{Code: code, Field: field, Message: message, Remediation: remediation}
 }

@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
+	addonpackages "github.com/crmarques/bootwright/internal/addons/packages"
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/containercluster"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -23,17 +25,27 @@ import (
 // wireCompiler binds the syntax adapter, the graph selection functions and each
 // context's pure admission rules. Composition supplies the functions; the
 // compiler owns phase order and diagnostics.
-func wireCompiler() compilation.Compiler {
+func wireCompiler() compilation.Compiler { return wireCompilerWithRegistry(addonpackages.Builtin()) }
+
+func wireCompilerWithRegistry(registry addons.Registry) compilation.Compiler {
 	selection := compilation.NewGraphSelector(addons.StorageAttachments, environment.Select)
 	return compilation.NewCompiler(yamlstream.Parser{}, selection.Select, compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate},
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidatePartial, Validate: secrets.Validate},
-		compilation.Rules{Normalize: addons.Normalize, ValidateAuthored: addons.ValidateAuthored, ValidatePartial: addons.ValidatePartial, Validate: addons.Validate},
+		compilation.Rules{Normalize: func(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
+			normalized, issues := addons.Normalize(o, c)
+			normalized, packageIssues := addons.NormalizePackages(normalized, registry)
+			return normalized, append(issues, packageIssues...)
+		}, ValidateAuthored: addons.ValidateAuthored, ValidatePartial: addons.ValidatePartial, Validate: func(o api.Object, c api.Catalog) []api.Issue {
+			return addons.ValidateWithRegistry(o, c, registry, containercluster.AddonFacts(c, o.Spec().Get("clusterRef").Text()))
+		}},
 		compilation.Rules{Normalize: customplaybooks.Normalize, ValidateAuthored: customplaybooks.ValidateAuthored, ValidatePartial: customplaybooks.ValidatePartial, Validate: customplaybooks.Validate},
 		compilation.Rules{RetiredField: storage.RetiredField, Normalize: storage.Normalize, ValidateAuthored: storage.ValidateAuthored, ValidatePartial: storage.ValidatePartial, Validate: storage.Validate},
 		compilation.Rules{Normalize: machine.Normalize, NormalizationOrigins: machine.NormalizationOrigins, ValidateAuthored: machine.ValidateAuthored, ValidatePartial: machine.ValidatePartial, Validate: machine.Validate},
 		compilation.Rules{Normalize: substrate.Normalize, ValidateAuthored: substrate.ValidateAuthored, ValidatePartial: substrate.ValidatePartial, Validate: substrate.Validate},
 		compilation.Rules{Normalize: managedos.Normalize, ValidateAuthored: managedos.ValidateAuthored, ValidatePartial: managedos.ValidatePartial, Validate: managedos.Validate},
-		compilation.Rules{Normalize: containercluster.Normalize, ValidateAuthored: containercluster.ValidateAuthored, ValidatePartial: containercluster.ValidatePartial, Validate: containercluster.Validate},
+		compilation.Rules{Normalize: containercluster.Normalize, ValidateAuthored: containercluster.ValidateAuthored, ValidatePartial: containercluster.ValidatePartial, Validate: func(o api.Object, c api.Catalog) []api.Issue {
+			return append(containercluster.Validate(o, c), containercluster.ValidateNetworkProviders(o, c, registry)...)
+		}},
 		compilation.Rules{Normalize: infrastructureservices.Normalize, ValidateAuthored: infrastructureservices.ValidateAuthored, ValidatePartial: infrastructureservices.ValidatePartial, Validate: infrastructureservices.Validate})
 }
 

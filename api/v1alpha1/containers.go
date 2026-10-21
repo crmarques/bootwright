@@ -49,6 +49,8 @@ func containerClusterSchema() *Shape {
 	install.Suppress = []Suppression{{Field: "mode", Value: StringValue("connected"), Fields: []string{"agent.bootArtifacts"}}}
 	networking := record(
 		field("networkType", nonempty()),
+		field("ovnKubernetesConfig", ovnKubernetesSchema()),
+		field("secondaryNetworks", secondaryNetworksSchema()),
 		field("clusterNetwork", array(record(required("cidr", cidr()), required("hostPrefix", integer("1", "128"))))),
 		field("serviceNetwork", array(cidr())),
 	)
@@ -67,4 +69,11 @@ func containerClusterSchema() *Shape {
 		field("security", security),
 		required("nodes", nonemptyArray(named(node))),
 	)
+}
+
+func ovnKubernetesSchema() *Shape {
+	return record(field("mtu", integer("576", "65536")), field("gatewayConfig", record(field("routingViaHost", boolean()), field("ipForwarding", enumeration("Restricted", "Global")))))
+}
+func secondaryNetworksSchema() *Shape {
+	return named(record(required("name", name()), required("topology", enumeration("Localnet")), required("uplink", record(required("bridge", lexical("ifname")), field("interface", lexical("ifname")))), field("vlan", integer("1", "4094")), field("mtu", integer("576", "65536")), defaulted("ipam", record(defaulted("mode", enumeration("Disabled", "Enabled"), StringValue("Disabled")), field("subnets", array(cidr())), field("excludeSubnets", array(cidr())), field("lifecycle", enumeration("Persistent"))), MapValue()), required("namespaceSelector", record(required("matchLabels", stringsMap())))))
 }

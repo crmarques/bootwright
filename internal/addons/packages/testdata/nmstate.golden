@@ -1,0 +1,63 @@
+{
+  "checks": [
+    {
+      "condition": {
+        "apiVersion": "nmstate.io/v1",
+        "kind": "NMState",
+        "name": "nmstate",
+        "namespace": "",
+        "namespaced": false,
+        "status": "True",
+        "type": "Available"
+      }
+    },
+    {
+      "condition": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "name": "nmstate-webhook",
+        "namespace": "openshift-nmstate",
+        "namespaced": true,
+        "status": "True",
+        "type": "Available"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "kind": "wait",
+      "wait": [
+        {
+          "condition": {
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "name": "nmstates.nmstate.io",
+            "namespace": "",
+            "namespaced": false,
+            "status": "True",
+            "type": "Established"
+          }
+        }
+      ]
+    },
+    {
+      "create": {
+        "apiVersion": "nmstate.io/v1",
+        "body": {
+          "apiVersion": "nmstate.io/v1",
+          "kind": "NMState",
+          "metadata": {
+            "name": "nmstate"
+          }
+        },
+        "desiredDigest": "13bc93a42eb57ae1b9ee23f6417dee32385249e6c978e6494d4ba78d70dab288",
+        "kind": "NMState",
+        "name": "nmstate",
+        "namespace": "",
+        "namespaced": false
+      },
+      "kind": "create"
+    }
+  ],
+  "version": "cluster-objects-v1"
+}

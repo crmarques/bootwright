@@ -4072,7 +4072,7 @@ func TestUnclaimedKindsRefuseBeforeRegistration(t *testing.T) {
 			api.FieldValue{Name: "management", Value: api.StringValue("external")},
 		)),
 		api.NewObject(api.StorageCluster, "ceph", api.Value{}, api.MapValue()),
-		api.NewObject(api.ClusterAddon, "gitops", api.Value{}, api.MapValue()),
+		api.NewObject(api.LoadBalancer, "lab-balancer", api.Value{}, api.MapValue(api.FieldValue{Name: "management", Value: api.StringValue("managed")})),
 		api.NewObject(api.Machine, "bare", api.Value{}, api.MapValue(
 			api.FieldValue{Name: "os", Value: api.MapValue(api.FieldValue{Name: "provided", Value: api.BoolValue(false)})},
 		)),
@@ -4094,7 +4094,7 @@ func TestUnclaimedKindsRefuseBeforeRegistration(t *testing.T) {
 		}
 	}
 	want := []diagnostics.Diagnostic{
-		unclaimed("ClusterAddon", "gitops", "no capability of this executable realizes the ClusterAddon kind"),
+		unclaimed("LoadBalancer", "lab-balancer", "no capability of this executable manages the LoadBalancer kind"),
 		unclaimed("Machine", "bare", "no capability of this executable realizes a Machine whose operating system is not provided"),
 		unclaimed("Proxy", "lab-proxy", "no capability of this executable manages the Proxy kind"),
 		unclaimed("StorageCluster", "ceph", "no capability of this executable realizes the StorageCluster kind"),

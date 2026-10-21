@@ -1,0 +1,29 @@
+{
+  "manifests": [
+    {
+      "apiVersion": "operator.openshift.io/v1",
+      "content": {
+        "apiVersion": "operator.openshift.io/v1",
+        "kind": "Network",
+        "metadata": {
+          "name": "cluster"
+        },
+        "spec": {
+          "defaultNetwork": {
+            "ovnKubernetesConfig": {
+              "gatewayConfig": {
+                "ipForwarding": "Global",
+                "routingViaHost": true
+              },
+              "mtu": 1400
+            },
+            "type": "OVNKubernetes"
+          }
+        }
+      },
+      "file": "bootwright-00-ovn-network.yaml",
+      "kind": "Network",
+      "name": "cluster"
+    }
+  ]
+}

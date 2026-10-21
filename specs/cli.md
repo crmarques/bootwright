@@ -139,9 +139,7 @@ is a usage error.
 
 An explicitly supplied empty scalar value is also a usage error unless this
 contract names one of these exceptions: `--context=` is omission and selects
-the current context; `add-ons add --version=` is absence and selects the catalog
-version under the [catalog rules](cli/commands.md#flag-relationships-and-safeguards);
-an optional `--sha256=` is absence; and comma-list
+the current context; an optional `--sha256=` is absence; and comma-list
 flags use their command-specific empty-list rules below.
 
 Empty-value rejection is occurrence-local: a later scalar occurrence does not

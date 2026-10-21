@@ -1,0 +1,23 @@
+---
+- name: Validate the frozen cluster network version
+  ansible.builtin.assert:
+    that:
+      - bootwright_cluster_network_request.version == 'cluster-network-request-v1'
+    quiet: true
+    fail_msg: The frozen cluster network request version is unsupported.
+
+- name: Run the shared cluster object program
+  ansible.builtin.include_role:
+    name: bootwright.core.cluster_objects
+    tasks_from: apply
+  vars:
+    cluster_objects_program: "{{ bootwright_cluster_network_request.program }}"
+    cluster_objects_request: >-
+      {{ bootwright_cluster_network_request | combine({'operation': bootwright_cluster_network_material.operation,
+      'block': bootwright_cluster_network_material.block,
+      'registered': bootwright_cluster_network_material.registered}) }}
+    cluster_objects_oc: "{{ bootwright_cluster_network_material.oc }}"
+    cluster_objects_material: "{{ bootwright_cluster_network_material }}"
+    cluster_objects_evidence: "{{ bootwright_cluster_network_material.evidence | default('{}') | from_json }}"
+    cluster_objects_digest: "{{ bootwright_cluster_network_digest }}"
+    cluster_objects_evidence_version: cluster-network-evidence-v1

@@ -102,6 +102,14 @@ type Endpoint struct {
 // secret value: the pull secret, the cluster key, the serving certificate and
 // each trust bundle are named as declarations and reach the adapter at
 // execution.
+type InstallManifest struct {
+	APIVersion string         `json:"apiVersion"`
+	Content    map[string]any `json:"content"`
+	File       string         `json:"file"`
+	Kind       string         `json:"kind"`
+	Name       string         `json:"name"`
+}
+
 type MediaRequest struct {
 	AgentConfig map[string]any `json:"agentConfig"`
 	// Budgets bound the build in wall-clock time, and the run's deadline is
@@ -110,6 +118,7 @@ type MediaRequest struct {
 	Identity      Identity             `json:"identity"`
 	Image         Publication          `json:"image"`
 	InstallConfig map[string]any       `json:"installConfig"`
+	Manifests     []InstallManifest    `json:"manifests"`
 	Placement     machineref.Placement `json:"placement"`
 	PullSecretRef string               `json:"pullSecretRef"`
 	Release       Release              `json:"release"`
@@ -219,6 +228,9 @@ func (r InstallRequest) Canonical() ([]byte, error) {
 func DecodeMediaRequest(data []byte) (MediaRequest, error) {
 	request, err := reconciliation.ThawVersion[MediaRequest](data, "cluster media", mediaRequestVersion)
 	if err != nil {
+		return MediaRequest{}, err
+	}
+	if err := validateInstallManifests(request.Manifests); err != nil {
 		return MediaRequest{}, err
 	}
 	if err := onTheController(request.Placement, "cluster media"); err != nil {

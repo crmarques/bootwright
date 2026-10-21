@@ -82,16 +82,8 @@ func (s contextsSpy) Delete(ctx context.Context, request contexts.DeleteRequest)
 
 type addOnCatalogSpy struct{ record *dispatchRecord }
 
-func (s addOnCatalogSpy) List(ctx context.Context, request addoncatalog.ListRequest) error {
-	return s.record.called(ctx, "add-ons list", request)
-}
-
-func (s addOnCatalogSpy) Add(ctx context.Context, request addoncatalog.AddRequest) error {
-	return s.record.called(ctx, "add-ons add", request)
-}
-
-func (s addOnCatalogSpy) Delete(ctx context.Context, request addoncatalog.DeleteRequest) error {
-	return s.record.called(ctx, "add-ons delete", request)
+func (s addOnCatalogSpy) List(ctx context.Context, request addoncatalog.ListRequest) (*addoncatalog.ListResult, error) {
+	return s.record.result.addOns, s.record.called(ctx, "add-ons list", request)
 }
 
 type secretsSpy struct{ record *dispatchRecord }

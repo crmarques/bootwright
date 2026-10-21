@@ -95,8 +95,6 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 		{"context", "current"},
 		{"context", "delete", "--name", "example", "--purge"},
 		{"add-ons", "list"},
-		{"add-ons", "add", "--name", "example"},
-		{"add-ons", "delete", "--name", "example"},
 		{"secret", "set", "--name", "example", "--value-file", "secret.bin"},
 		{"secret", "generate"},
 		{"secret", "check"},
@@ -157,6 +155,12 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 			if args[0] == "context" && args[1] == "list" {
 				if code != 0 || stderr.Len() != 0 {
 					t.Fatalf("empty list: %d %s %s", code, stdout.String(), stderr.String())
+				}
+				return
+			}
+			if args[0] == "add-ons" && args[1] == "list" {
+				if code != 0 || stderr.Len() != 0 || !strings.Contains(stdout.String(), "nmstate") {
+					t.Fatalf("built-in list: %d %s %s", code, stdout.String(), stderr.String())
 				}
 				return
 			}

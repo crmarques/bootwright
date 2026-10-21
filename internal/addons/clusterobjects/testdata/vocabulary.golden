@@ -1,0 +1,131 @@
+{
+  "checks": [
+    {
+      "csvSucceeded": {
+        "csv": "operator.v1.0.0",
+        "namespace": "operators",
+        "subscription": "operator"
+      }
+    },
+    {
+      "condition": {
+        "apiVersion": "v1",
+        "failOn": [
+          {
+            "reason": "Invalid",
+            "status": "True",
+            "type": "Degraded"
+          }
+        ],
+        "kind": "ConfigMap",
+        "name": "settings",
+        "namespace": "operators",
+        "namespaced": true,
+        "status": "True",
+        "type": "Available"
+      }
+    },
+    {
+      "resourceExists": {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "name": "settings",
+        "namespace": "operators",
+        "namespaced": true
+      }
+    },
+    {
+      "statusPhase": {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "name": "settings",
+        "namespace": "operators",
+        "namespaced": true,
+        "path": "status.phase",
+        "values": [
+          "Ready"
+        ]
+      }
+    }
+  ],
+  "steps": [
+    {
+      "create": {
+        "apiVersion": "v1",
+        "body": {
+          "apiVersion": "v1",
+          "data": {
+            "enabled": "true"
+          },
+          "kind": "ConfigMap",
+          "metadata": {
+            "name": "settings",
+            "namespace": "operators"
+          }
+        },
+        "desiredDigest": "89ec66223f0e31553122ec688c47bdd2a5d8edf0292b4216cb52a93c93a9bf29",
+        "kind": "ConfigMap",
+        "name": "settings",
+        "namespace": "operators",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "kind": "place",
+      "place": {
+        "desiredDigest": "b404e082998470c28df25662189be75fb3d57c8b73aff7f5fdeb1ccccf0ba95e",
+        "keys": [
+          {
+            "key": "password",
+            "part": "password"
+          }
+        ],
+        "labels": {
+          "app": "sample"
+        },
+        "name": "credentials",
+        "namespace": "operators",
+        "secret": "credentials",
+        "strings": {
+          "username": "service"
+        },
+        "type": "Opaque"
+      }
+    },
+    {
+      "kind": "wait",
+      "wait": [
+        {
+          "resourceExists": {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "name": "settings",
+            "namespace": "operators",
+            "namespaced": true
+          }
+        }
+      ]
+    },
+    {
+      "approveDependent": {
+        "channel": "stable",
+        "creator": {
+          "apiVersion": "v1",
+          "kind": "ConfigMap",
+          "name": "settings",
+          "namespace": "operators",
+          "namespaced": true
+        },
+        "csv": "engine.v1.0.0",
+        "namespace": "engine",
+        "package": "engine",
+        "source": "catalog",
+        "sourceNamespace": "marketplace",
+        "subscription": "engine"
+      },
+      "kind": "approveDependent"
+    }
+  ],
+  "version": "cluster-objects-v1"
+}

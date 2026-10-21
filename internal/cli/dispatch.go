@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	addoncatalog "github.com/crmarques/bootwright/internal/addons/catalog"
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -26,6 +27,7 @@ var errMissingService = errors.New("application service is not configured")
 // commandResult is the closed set of successful application results understood
 // by this executable. Unavailable error-only ports return its zero value.
 type commandResult struct {
+	addOns           *addoncatalog.ListResult
 	validation       *compilation.Report
 	admission        *contexts.AdmissionResult
 	use              *contexts.UseResult
@@ -86,8 +88,8 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 	switch path {
 	case "context init", "context update", "context use", "context list", "context current", "context delete":
 		return s.invokeContexts(ctx, path, &values, args)
-	case "add-ons list", "add-ons add", "add-ons delete":
-		return commandResult{}, s.invokeAddOnCatalog(ctx, path, &values, args)
+	case "add-ons list":
+		return s.invokeAddOnCatalog(ctx, path, &values, args)
 	case "secret set", "secret generate", "secret check", "secret list", "secret info", "secret show", "secret delete":
 		return s.invokeSecrets(ctx, path, &values, args)
 	case "secret encryption init", "secret encryption status", "secret encryption rotate":

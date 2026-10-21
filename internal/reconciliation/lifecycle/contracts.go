@@ -486,7 +486,10 @@ type SSHReservation struct {
 // Execution is one authorized attempt against one frozen block. Material is
 // bounded memory owned by the caller and cleared after the attempt.
 type Execution struct {
-	Operation string
+	LendProduced     func(context.Context, ProducedInput) (secrets.Material, error)
+	PreviousEvidence json.RawMessage
+	ApplyRegistered  string
+	Operation        string
 	// ApplyOperation is the original persisted apply operation ID, including
 	// during destruction and read-only resolution. A provider may derive a
 	// stable native identity from it and its frozen object identity. Context
@@ -584,3 +587,22 @@ type Observation struct {
 	Evidence json.RawMessage
 	Produced []Produced
 }
+
+type ProducedInputConsumer interface {
+	ProducedInputs(reconciliation.Block) ([]ProducedInput, error)
+}
+
+type ProducedOutputProvider interface {
+	ProducedOutputs(reconciliation.Block) ([]string, error)
+}
+
+type ProducedBinder interface {
+	ReadProducedInArea(context.Context, secretstore.Context, secretstore.Area, string, string) (secretstore.ProducedMaterial, bool, error)
+	ReadProduced(context.Context, custody.ReadProducedRequest) (secretstore.ProducedMaterial, bool, error)
+}
+
+type StageTailConsumer interface {
+	StageTail(reconciliation.BlockDefinition) (reconciliation.ObjectRef, bool, error)
+}
+
+type OfflineRetirement interface{ RetiresOffline() bool }

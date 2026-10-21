@@ -7,11 +7,6 @@ those declarations cross and the lifecycle of the built-in packages a binding
 selects. [Add-on coverage](add-on-coverage.md) lists each built-in package
 with its objects, configuration, readiness and acceptance.
 
-Not yet met: no capability realizes an add-on, so a selection containing one
-refuses before registration under the
-[unrealizable-kind rule](state-reconciliation.md#stages-and-the-pause-boundary);
-tracked as [B83](milestones/m4.md#b83).
-
 ## Trust boundary
 
 An authored add-on package is declarative data under the
@@ -101,11 +96,6 @@ requires the instance that provides `nmstate`
 address pools and advertisements as its configuration
 ([B727](milestones/m4.md#b727)), never the cluster's.
 
-Not yet met: no binding selects a built-in package, the executable holds no
-package, no package runs last, and `ClusterAddon` and `ClusterAddonProfile`
-are still effect-bearing kinds; tracked as
-[B752](milestones/m4.md#b752) and [B735](milestones/m4.md#b735).
-
 Not yet met: no package configuration names a `StorageExport`; tracked as
 [B760](milestones/m4.md#b760).
 
@@ -123,19 +113,12 @@ observation, a foreign object refused, a plan of another CSV never approved,
 retirement contacting nothing); and parity with its coverage row. Its
 submilestone's operator gate qualifies it on a real cluster.
 
-Not yet met: no package is qualified; tracked as
-[B752](milestones/m4.md#b752).
-
 ## The package listing
 
 `bootwright add-ons list` reports each built-in package of the executable:
 its name, provided and required capabilities, OLM package, default catalog
 source and configuration members. It reads no context, file or network. No
 command registers, replaces or deletes a package.
-
-Not yet met: `add-ons list` is unavailable, and `add-ons add` and
-`add-ons delete` are recognized; tracked as
-[B754](milestones/m4.md#b754).
 
 ## Instances and blocks
 
@@ -168,9 +151,6 @@ admission bounds a budget at `5h50m`. An instance is never added to or removed
 from a completed apply, and repeating `apply` over a completed apply contacts no
 cluster ([D153](state-reconciliation.md#lifecycle-unit)).
 
-Not yet met: no capability plans an instance block; tracked as
-[B83](milestones/m4.md#b83).
-
 ## The cluster object program
 
 A program is ordered steps from a closed vocabulary: create an owned object,
@@ -196,9 +176,6 @@ freezes the same program section, version `cluster-objects-v1`, in its own
 request and runs it through the same adapter. The section carries every
 approval policy and Secret placement source the built-in packages use, so a
 later package moves no program version.
-
-Not yet met: no program type exists; tracked as
-[B750](milestones/m4.md#b750).
 
 ## Ownership receipts
 
@@ -227,10 +204,6 @@ naming its kind, namespace and name. Only a recorded `uid` proves ownership
 outright; the mark decides only for an object whose receipt was lost with an
 interrupted or failed attempt.
 
-Not yet met: no receipt is recorded and nothing creates a cluster object;
-tracked as [B750](milestones/m4.md#b750) and
-[B751](milestones/m4.md#b751).
-
 ## The cluster object adapter
 
 The adapter runs on the controller with the `oc` the controller stage
@@ -238,9 +211,9 @@ installed for the cluster's exact release and the kubeconfig
 [custody](state-reconciliation.md#produced-material-custody) lends as a
 material file, and bounds every request at 30 seconds. Two Bootwright modules
 start only that `oc`, by argument list: a read module that only reads and a
-write module that only creates objects and approves an InstallPlan. Every read
-and create names the resource by kind, version and group, never by a bare
-kind, plural or short name. For each owned object in program order it:
+write module that only creates objects and approves an InstallPlan. Every read names the resource by kind, version and group, never by a bare
+kind, plural or short name. A create uses `--filename=-` with the explicit
+`apiVersion` and `kind` in its input body. For each owned object in program order it:
 
 1. reads it by name; only the API's not-found answer is absence, and every
    other failed read is unknown, retried until the deadline before any
@@ -274,9 +247,6 @@ references and `status.bundleLookups`, never `status.plan`.
 Results name objects by kind, namespace and name only; no request body, API
 response or material reaches evidence, logs or output. The adapter has no
 removal entry point: an instance is [retired](#retirement).
-
-Not yet met: no adapter reaches a cluster API; tracked as
-[B751](milestones/m4.md#b751).
 
 ## OLM installation
 
@@ -338,9 +308,6 @@ checked like the package's own, and its absence after a completed apply is
 a partial realization. These approvals are the only writes to objects
 Bootwright did not create.
 
-Not yet met: no operator is installed; tracked as
-[B751](milestones/m4.md#b751) and [B83](milestones/m4.md#b83).
-
 Not yet met: every package uses exact approval; tracked as
 [B759](milestones/m4.md#b759).
 
@@ -368,9 +335,6 @@ bytes, stripped of control characters, and recorded only after validation of
 its grammar: an image reference by the reference grammar, a CSV or plan name
 as a DNS subdomain, `olm.maxOpenShiftVersion` as `<major>.<minor>`. An invalid
 value is recorded as `invalid` and never decides.
-
-Not yet met: nothing evaluates add-on readiness; tracked as
-[B751](milestones/m4.md#b751).
 
 ## Owned Secrets
 
@@ -405,9 +369,6 @@ only a `StorageExport`'s `external-details`. Planning refuses any other
 producer kind or output, in particular every `kubeconfig` and `dashboard`
 output, naming the placement.
 
-Not yet met: no package places a Secret; tracked as
-[B753](milestones/m4.md#b753).
-
 Not yet met: no placement takes produced material; tracked as
 [B760](milestones/m4.md#b760).
 
@@ -423,9 +384,6 @@ program, whose comparisons report what is done `unchanged`.
 `bootwright diff --observe` reads the same observation and reports
 differences, never repairs them.
 
-Not yet met: no instance is observed; tracked as
-[B83](milestones/m4.md#b83).
-
 ## Retirement
 
 An instance is retired with its cluster and never removed online. Every
@@ -440,9 +398,6 @@ removal's description states and its impacts omit. An effect outside the
 cluster is never an add-on effect but a block of the domain that owns it,
 with its own inverse. Removing one instance from a running cluster is parked
 as [B769](milestones/backlog.md#b769).
-
-Not yet met: no instance is retired; tracked as
-[B83](milestones/m4.md#b83).
 
 ## GitOps handoff evidence
 
@@ -508,9 +463,6 @@ the refused ClusterAddon, `<binding>` the binding, `<package>` the package,
 | --- | --- | --- | --- |
 | An authored add-on | a `ClusterAddon` a binding selects, directly or through a profile | `<addon> is an authored add-on package, which needs the custom-package lifecycle this executable does not offer` | `select a built-in package under spec.packages of <binding>, or remove <addon> from its selection` |
 | An oversized instance | a package whose rendered program for `<cluster>` passes a bound | `the program of package <package> for <cluster> passes its <bound>` | `reduce the configuration of package <package> in <binding>` |
-
-Not yet met: nothing reports these refusals; tracked as
-[B83](milestones/m4.md#b83).
 
 ## Design
 

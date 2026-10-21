@@ -1,5 +1,5 @@
   bootwright / add-ons list
-      List add-on catalog registrations. This command is recognized but not implemented.
+      List built-in add-on packages
 
   Usage
     bootwright add-ons list [flags]
@@ -16,3 +16,6 @@
 
   More detail
     Use --help --detail full to include SSH overrides.
+
+  Examples
+    bootwright add-ons list --output json

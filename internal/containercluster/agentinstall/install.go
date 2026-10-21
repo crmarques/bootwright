@@ -471,3 +471,11 @@ func (c InstallCapability) pinValues(execution lifecycle.Execution, request Inst
 // order, so the adapter reads the credential of the node it is booting without
 // a name the request would have to make safe for a variable.
 func nodeVariable(index int) string { return "Node" + strconv.Itoa(index) }
+
+// ProducedOutputs names the custodied administrator identity this install proves.
+func (c InstallCapability) ProducedOutputs(block reconciliation.Block) ([]string, error) {
+	if _, err := DecodeInstallRequest(block.Request); err != nil {
+		return nil, err
+	}
+	return []string{KubeconfigOutput}, nil
+}

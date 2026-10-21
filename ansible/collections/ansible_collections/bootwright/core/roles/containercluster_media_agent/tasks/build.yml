@@ -83,6 +83,27 @@
         mode: '0600'
       changed_when: true
 
+    - name: Create the install-time manifest directory
+      ansible.builtin.file:
+        path: '{{ containercluster_media_agent_work }}/openshift'
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      when: bootwright_cluster_media_request.manifests | length > 0
+      changed_when: false
+
+    - name: Write the frozen install-time manifests
+      ansible.builtin.copy:
+        content: '{{ item.content | bootwright.core.to_installer_yaml }}'
+        dest: '{{ containercluster_media_agent_work }}/openshift/{{ item.file }}'
+        owner: root
+        group: root
+        mode: '0600'
+      loop: '{{ bootwright_cluster_media_request.manifests }}'
+      no_log: true
+      changed_when: true
+
     # The build runs under timeout with the budget the request froze, so it
     # returns within that budget and one kill-after grace. Any other failure
     # is the installer's own and fails here as before.

@@ -61,9 +61,7 @@ process or network access. “Mutate” permits only the named, planned effects.
 | `bootwright context list` | none | contexts in canonical name order | read local state |
 | `bootwright context current` | `--short` false | current context details, or only its name with `--short` | read local state |
 | `bootwright context delete` | required `--name <name>` and `--purge`; `--allow-orphans` and `--yes` false | permanent local deletion summary, saying whether it abandoned objects, which its confirmation names with `bootwright status --context <name>` as their inventory or says cannot be listed, and the host reservation keys it released | guarded removal under [permanent deletion](../contexts.md#permanent-deletion); never resource mutation |
-| `bootwright add-ons list` | none | built-in catalog and machine-local registrations | read embedded and local catalog state |
-| `bootwright add-ons add` | required `--name <name>[:<version>]`; `--version <version>` default catalog default; `--yes` false | registered immutable catalog release | local add-on registration |
-| `bootwright add-ons delete` | required `--name <name>[:<version>]`; `--yes` false | removed matching registration | local add-on registration deletion |
+| `bootwright add-ons list` | none | built-in packages, their capabilities, OLM package, default source and configuration members | read executable registry |
 | `bootwright secret set` | required `--name`; type-specific `--value-file`, `--value-stdin`, `--username`, `--password-file`, `--password-stdin`, `--certificate-file`, `--private-key-file`, `--public-key-file` under [Secrets](../secrets.md); `--yes` false | stored identity and parts, never values | local confidential write |
 | `bootwright secret generate` | optional `--name`; `--renew` false | changed and unchanged Secret names | atomic selected generated-material batch |
 | `bootwright secret check` | none | declared availability/type checks | bounded material reads; no values emitted |
@@ -406,7 +404,6 @@ alphanumeric character and otherwise contains only ASCII alphanumerics, `.`,
 A non-empty `--sha256` is 64 case-insensitive hexadecimal digits, optionally
 prefixed by exact lowercase `sha256:`, and normalizes to lowercase hexadecimal.
 
-`add-ons add --name <name>:<version>` conflicts with a non-empty `--version`.
 An explicitly empty `--version=` is absence. Omission of both version forms
 selects the catalog's declared default. Add-on registration uses only an
 embedded, content-identified catalog release; these flags do not accept a path,

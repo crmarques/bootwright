@@ -7,7 +7,11 @@ import (
 
 	"github.com/crmarques/bootwright/ansible"
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/addons/instance"
+	"github.com/crmarques/bootwright/internal/addons/packages"
+	"github.com/crmarques/bootwright/internal/containercluster"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
+	"github.com/crmarques/bootwright/internal/containercluster/networking"
 	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -123,6 +127,10 @@ func (r capabilityResolver) Resolve(kind, implementation string) (lifecycle.Capa
 // state never names a playbook.
 func operationPlaybook() map[string]string {
 	bindings := map[string]string{
+		networking.Implementation + "/apply":            "containercluster/network_apply.yml",
+		networking.Implementation + "/observe":          "containercluster/network_observe.yml",
+		instance.Implementation + "/apply":              "addons/instance_apply.yml",
+		instance.Implementation + "/observe":            "addons/instance_observe.yml",
 		artifactserver.Implementation + "/apply":        "infrastructureservices/artifact_server_apply.yml",
 		artifactserver.Implementation + "/observe":      "infrastructureservices/artifact_server_observe.yml",
 		artifactserver.Implementation + "/destroy":      "infrastructureservices/artifact_server_destroy.yml",
@@ -183,6 +191,10 @@ type capabilityRunner interface {
 // records is the reader the installation capability freezes its images from.
 func buildCapabilitiesWith(clock systemClock, controller controllerDependencies, runner capabilityRunner, records installation.MediaRecords) capabilityResolver {
 	resolver := capabilityResolver{{
+		kind: networking.Kind, implementation: networking.Implementation, capability: networking.New(runner, packages.Builtin()),
+	}, {
+		kind: instance.Kind, implementation: instance.Implementation, capability: instance.New(runner, packages.Builtin(), containercluster.AddonFacts),
+	}, {
 		kind: clients.Kind, implementation: clients.Implementation,
 		capability: clients.New(controller.Tools, controller.StagePackages, controller.Setup, controller.ClientInstaller),
 	}, {

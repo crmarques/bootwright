@@ -284,7 +284,7 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	needs.Machines = sortedUnique(needs.Machines)
 	mediaRequest := MediaRequest{
 		AgentConfig: agent, Budgets: mediaBudgets, Identity: identity(MediaBlockID(name)), Image: image,
-		InstallConfig: install, Placement: placement, PullSecretRef: pullSecret,
+		InstallConfig: install, Manifests: installManifests(cluster), Placement: placement, PullSecretRef: pullSecret,
 		Release: release, SSHKeyRef: sshKey, TLSCertificateRef: certificate, Tool: tool,
 		TrustBundleRefs: cluster.Spec().Get("install", "additionalTrustBundleRefs").Strings(),
 		Version:         mediaRequestVersion, WorkRoot: WorkRoot(contextName, name),

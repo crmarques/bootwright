@@ -1,0 +1,216 @@
+{
+  "checks": [
+    {
+      "csvSucceeded": {
+        "csv": "metallb-operator.v0.0.0",
+        "namespace": "metallb-system",
+        "subscription": "metallb-operator-sub"
+      }
+    },
+    {
+      "condition": {
+        "apiVersion": "metallb.io/v1beta1",
+        "kind": "MetalLB",
+        "name": "metallb",
+        "namespace": "metallb-system",
+        "namespaced": true,
+        "status": "True",
+        "type": "Available"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "create": {
+        "apiVersion": "v1",
+        "body": {
+          "apiVersion": "v1",
+          "kind": "Namespace",
+          "metadata": {
+            "name": "metallb-system"
+          }
+        },
+        "desiredDigest": "f82f56effb5feee2558aedd8df1df413c9ae7366703c169d95aa7ae75c349d27",
+        "kind": "Namespace",
+        "name": "metallb-system",
+        "namespace": "",
+        "namespaced": false
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "operators.coreos.com/v1",
+        "body": {
+          "apiVersion": "operators.coreos.com/v1",
+          "kind": "OperatorGroup",
+          "metadata": {
+            "name": "metallb-operator",
+            "namespace": "metallb-system"
+          },
+          "spec": {}
+        },
+        "desiredDigest": "1bc5ea098ec080340efea30347fd42b6cc8e7522fe13ab5526f55094fa1a90f0",
+        "kind": "OperatorGroup",
+        "name": "metallb-operator",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "kind": "subscribe",
+      "subscribe": {
+        "approval": "exact",
+        "csv": "metallb-operator.v0.0.0",
+        "object": {
+          "apiVersion": "operators.coreos.com/v1alpha1",
+          "body": {
+            "apiVersion": "operators.coreos.com/v1alpha1",
+            "kind": "Subscription",
+            "metadata": {
+              "name": "metallb-operator-sub",
+              "namespace": "metallb-system"
+            },
+            "spec": {
+              "channel": "example-channel",
+              "installPlanApproval": "Manual",
+              "name": "metallb-operator",
+              "source": "redhat-operators",
+              "sourceNamespace": "openshift-marketplace",
+              "startingCSV": "metallb-operator.v0.0.0"
+            }
+          },
+          "desiredDigest": "b1047980264cdeeab0c4cf60936ca81de59c1a6c25a71b80cf3ffdbd43a43bef",
+          "kind": "Subscription",
+          "name": "metallb-operator-sub",
+          "namespace": "metallb-system",
+          "namespaced": true
+        }
+      }
+    },
+    {
+      "kind": "wait",
+      "wait": [
+        {
+          "condition": {
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "name": "metallbs.metallb.io",
+            "namespace": "",
+            "namespaced": false,
+            "status": "True",
+            "type": "Established"
+          }
+        }
+      ]
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "MetalLB",
+          "metadata": {
+            "name": "metallb",
+            "namespace": "metallb-system"
+          }
+        },
+        "desiredDigest": "da038716c924b57cc21ab572986d9d189591d8d53ce767975fe4fd3ecaa8a0e2",
+        "kind": "MetalLB",
+        "name": "metallb",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "kind": "wait",
+      "wait": [
+        {
+          "condition": {
+            "apiVersion": "metallb.io/v1beta1",
+            "kind": "MetalLB",
+            "name": "metallb",
+            "namespace": "metallb-system",
+            "namespaced": true,
+            "status": "True",
+            "type": "Available"
+          }
+        },
+        {
+          "condition": {
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "name": "ipaddresspools.metallb.io",
+            "namespace": "",
+            "namespaced": false,
+            "status": "True",
+            "type": "Established"
+          }
+        },
+        {
+          "condition": {
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "name": "l2advertisements.metallb.io",
+            "namespace": "",
+            "namespaced": false,
+            "status": "True",
+            "type": "Established"
+          }
+        }
+      ]
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "IPAddressPool",
+          "metadata": {
+            "name": "services",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "addresses": [
+              "198.51.100.128-198.51.100.135"
+            ],
+            "autoAssign": true
+          }
+        },
+        "desiredDigest": "86586c5bd5f5762148e21f208eaeeffd05012bd1411743f40fb01d6a5fabba4f",
+        "kind": "IPAddressPool",
+        "name": "services",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "create": {
+        "apiVersion": "metallb.io/v1beta1",
+        "body": {
+          "apiVersion": "metallb.io/v1beta1",
+          "kind": "L2Advertisement",
+          "metadata": {
+            "name": "services",
+            "namespace": "metallb-system"
+          },
+          "spec": {
+            "ipAddressPools": [
+              "services"
+            ]
+          }
+        },
+        "desiredDigest": "edb6ca668ae2c355c605cbf881021b2bd4a4fe87a741ec7fd1f6c919c25532cc",
+        "kind": "L2Advertisement",
+        "name": "services",
+        "namespace": "metallb-system",
+        "namespaced": true
+      },
+      "kind": "create"
+    }
+  ],
+  "version": "cluster-objects-v1"
+}

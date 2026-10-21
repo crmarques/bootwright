@@ -3,41 +3,37 @@ package containercluster
 import (
 	"fmt"
 	"net/netip"
+	"slices"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-func endpointCollisions(cluster api.Object, catalog api.Catalog, slot string, endpoint api.Value, address netip.Addr) []api.Issue {
-	var issues []api.Issue
-	field := "$.spec.install.endpoints." + slot + ".address"
-	source := sourceType(endpoint)
-	if source == "node" || source == "loadBalancer" {
-		field = "$.spec.install.endpoints." + slot + ".source"
-	}
+type addressClaim struct {
+	Object  api.Object
+	Path    string
+	Address netip.Addr
+}
+
+func addressClaims(catalog api.Catalog) []addressClaim {
+	var claims []addressClaim
 	claim := func(holder api.Object, path, raw string) {
-		other, err := netip.ParseAddr(raw)
+		address, err := netip.ParseAddr(raw)
 		if prefix, e := netip.ParsePrefix(raw); e == nil {
-			other, err = prefix.Addr(), nil
+			address, err = prefix.Addr(), nil
 		}
-		if err != nil || other.IsUnspecified() || other.Unmap() != address.Unmap() {
-			return
+		if err == nil && !address.IsUnspecified() {
+			claims = append(claims, addressClaim{holder, path, address.Unmap()})
 		}
-		issues = add(issues, invariantRemediation(field, fmt.Sprintf("endpoint address %s is already held by %s at %s", address, holder.Identity(), path), "choose an endpoint address distinct from the other declared holder"))
 	}
 	for _, holder := range catalog.Objects() {
 		spec := holder.Spec()
 		switch holder.Kind() {
 		case api.ContainerCluster:
-			if holder.Name() == cluster.Name() {
-				continue
-			}
-			for _, otherSlot := range endpointSlots {
-				claim(holder, "spec.install.endpoints."+otherSlot+".address", spec.Get("install", "endpoints", otherSlot, "address").Text())
+			for _, slot := range endpointSlots {
+				claim(holder, "spec.install.endpoints."+slot+".address", spec.Get("install", "endpoints", slot, "address").Text())
 			}
 		case api.Machine:
-			if source == "node" && cluster.Spec().Get("nodes").Len() == 1 && cluster.Spec().Get("nodes").Items()[0].Get("machineRef").Text() == holder.Name() {
-				continue
-			}
 			for i, entry := range spec.Get("network", "addresses").Items() {
 				claim(holder, fmt.Sprintf("spec.network.addresses[%d].address", i), entry.Get("address").Text())
 			}
@@ -50,9 +46,6 @@ func endpointCollisions(cluster api.Object, catalog api.Catalog, slot string, en
 			claim(holder, "spec.libvirt.bmcEmulationDefaults.bindAddress", spec.Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text())
 		case api.LoadBalancer:
 			for i, entry := range spec.Get("bindAddresses").Items() {
-				if source == "loadBalancer" && endpoint.Get("source", "loadBalancerRef").Text() == holder.Name() && (entry.Get("name").Text() == endpoint.Get("source", "bindAddressRef").Text() || spec.Get("bindAddresses").Len() == 1 && endpoint.Get("source", "bindAddressRef").Text() == "") {
-					continue
-				}
 				claim(holder, fmt.Sprintf("spec.bindAddresses[%d].address", i), entry.Get("address").Text())
 			}
 		case api.DNSServer, api.NTPServer, api.Proxy, api.ArtifactServer, api.Registry:
@@ -64,14 +57,55 @@ func endpointCollisions(cluster api.Object, catalog api.Catalog, slot string, en
 			for i, entry := range spec.Get("endpoints").Items() {
 				claim(holder, fmt.Sprintf("spec.endpoints[%d].address", i), entry.Get("address").Text())
 				if found {
-					for _, hostAddress := range host.Spec().Get("network", "addresses").Items() {
-						if hostAddress.Get("name").Text() == entry.Get("addressRef").Text() {
-							claim(holder, fmt.Sprintf("spec.endpoints[%d].addressRef", i), hostAddress.Get("address").Text())
+					for _, address := range host.Spec().Get("network", "addresses").Items() {
+						if address.Get("name").Text() == entry.Get("addressRef").Text() {
+							claim(holder, fmt.Sprintf("spec.endpoints[%d].addressRef", i), address.Get("address").Text())
 						}
 					}
 				}
 			}
 		}
 	}
+	slices.SortFunc(claims, func(a, b addressClaim) int {
+		if n := strings.Compare(a.Object.Identity(), b.Object.Identity()); n != 0 {
+			return n
+		}
+		return strings.Compare(a.Path, b.Path)
+	})
+	return claims
+}
+
+func endpointCollisions(cluster api.Object, catalog api.Catalog, slot string, endpoint api.Value, address netip.Addr) []api.Issue {
+	var issues []api.Issue
+	field := "$.spec.install.endpoints." + slot + ".address"
+	source := sourceType(endpoint)
+	if source == "node" || source == "loadBalancer" {
+		field = "$.spec.install.endpoints." + slot + ".source"
+	}
+	for _, claim := range addressClaims(catalog) {
+		if claim.Address != address.Unmap() || endpointOwnsClaim(cluster, catalog, endpoint, claim) {
+			continue
+		}
+		issues = add(issues, invariantRemediation(field, fmt.Sprintf("endpoint address %s is already held by %s at %s", address, claim.Object.Identity(), claim.Path), "choose an endpoint address distinct from the other declared holder"))
+	}
 	return issues
+}
+
+func endpointOwnsClaim(cluster api.Object, catalog api.Catalog, endpoint api.Value, claim addressClaim) bool {
+	holder := claim.Object
+	if holder.Kind() == api.ContainerCluster {
+		return holder.Name() == cluster.Name()
+	}
+	if holder.Kind() == api.Machine {
+		return sourceType(endpoint) == "node" && cluster.Spec().Get("nodes").Len() == 1 && cluster.Spec().Get("nodes").Items()[0].Get("machineRef").Text() == holder.Name()
+	}
+	if holder.Kind() != api.LoadBalancer || sourceType(endpoint) != "loadBalancer" || endpoint.Get("source", "loadBalancerRef").Text() != holder.Name() {
+		return false
+	}
+	for i, entry := range holder.Spec().Get("bindAddresses").Items() {
+		if claim.Path == fmt.Sprintf("spec.bindAddresses[%d].address", i) {
+			return entry.Get("name").Text() == endpoint.Get("source", "bindAddressRef").Text() || holder.Spec().Get("bindAddresses").Len() == 1 && endpoint.Get("source", "bindAddressRef").Text() == ""
+		}
+	}
+	return false
 }

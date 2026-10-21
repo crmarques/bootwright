@@ -16,7 +16,6 @@ import (
 // package's own unavailable_test.go.
 func stubCapabilities() map[string]bool {
 	return map[string]bool{
-		"internal/addons/catalog":                true,
 		"internal/addons/preflight":              true,
 		"internal/containercluster/installation": true,
 		"internal/environment/preflight":         true,

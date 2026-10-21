@@ -95,22 +95,6 @@ func (v *requestValues) validationContext() string {
 	return v.text("context")
 }
 
-func (v *requestValues) addOnName() string {
-	name, _, _ := strings.Cut(v.text("name"), ":")
-	return name
-}
-
-func (v *requestValues) addOnVersion() string {
-	_, version, found := strings.Cut(v.text("name"), ":")
-	if found {
-		return version
-	}
-	if v.flags.Lookup("version") == nil {
-		return ""
-	}
-	return v.text("version")
-}
-
 func (v *requestValues) authorizations() []string {
 	var tokens []string
 	for _, value := range v.strings("authorize") {

@@ -199,8 +199,6 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 				}
 			}
 		}
-	case "add-ons add", "add-ons delete":
-		return validateAddonSelection(flags)
 	case "secret set":
 		if message := validateSecretInput(flags); message != "" {
 			return message
@@ -261,20 +259,6 @@ func validateSetupFlags(flags *pflag.FlagSet) string {
 	return ""
 }
 
-func validateAddonSelection(flags *pflag.FlagSet) string {
-	name, version, combined := strings.Cut(stringValue(flags, "name"), ":")
-	if name == "" || strings.ContainsAny(name, "/\\ \t\r\n") || strings.ContainsAny(version, "/\\ \t\r\n") || (combined && (version == "" || strings.Contains(version, ":"))) {
-		return "--name must identify an add-on and optional version"
-	}
-	if strings.ContainsAny(stringValue(flags, "version"), "/\\ \t\r\n:") {
-		return "--version must identify a catalog release"
-	}
-	if combined && stringValue(flags, "version") != "" {
-		return "an inline add-on version conflicts with --version"
-	}
-	return ""
-}
-
 func validateRenderDirectories(flags *pflag.FlagSet) string {
 	input, output := stringValue(flags, "input-dir"), stringValue(flags, "output-dir")
 	if input != "" {
@@ -294,7 +278,7 @@ func validateRenderDirectories(flags *pflag.FlagSet) string {
 }
 
 func allowsEmpty(path, name string) bool {
-	return name == "context" || name == "sha256" || name == "clusters" || name == "machines" || name == "replace" || (path == "add-ons add" && name == "version")
+	return name == "context" || name == "sha256" || name == "clusters" || name == "machines" || name == "replace"
 }
 
 func dnsLabel(value string) bool {

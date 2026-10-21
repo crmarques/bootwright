@@ -115,6 +115,7 @@ func presentationCommand(path string) bool {
 
 func helpExample(path string) string {
 	examples := map[string]string{
+		"add-ons list": "--output json",
 		"machine info": "--context lab --name node", "secret info": "--context lab --name ssh-key",
 		"context init": "--name lab --input-dir ./input", "context update": "--name lab --input-dir ./input", "context use": "--name lab", "context list": "", "context current": "--short", "context delete": "--name lab --purge",
 		"secret set": "--name token --value-file ./token --yes", "secret generate": "--name ssh-key", "secret check": "--output json", "secret list": "--output json", "secret show": "--name token --part value", "secret delete": "--name token", "secret encryption init": "", "secret encryption status": "", "secret encryption rotate": "",

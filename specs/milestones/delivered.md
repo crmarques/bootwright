@@ -7890,6 +7890,8 @@ plus Q6's 25-hour image continuation. Effective-state and cluster-plan goldens
 and continuation, mixed-state resolution, boot replay and three-Machine
 `Stop first` journeys qualify the in-tree paths.
 
+
+
 ### X156 — Go toolchain vulnerability gate, go1.26.10
 
 **Owner:** Architecture. A defect slice of [M1](m1.md), found at the
@@ -7919,3 +7921,54 @@ run.
 no request or record version moves, so a live context continues under a build
 that contains X156. **Constraints left behind:** setup-go's cache key names the
 Go version, so the first CI run after X156 starts with a cold Go cache.
+
+### X135 — Accepted M4a definition
+
+**Items:** B749. **Owner:** Add-ons, with Container cluster, Storage and Secrets.
+
+### B749
+
+The M4b to M4f contract, coverage and implementation baseline was defined in
+commit `d5e7acb42` and accepted by the owner on 2026-10-21 (D174). Its
+recorded `make docs-check` and `make focus` gates passed. Acceptance approves
+the recommended baseline and authorizes no operator-run gate. The owner
+separately requested M4b and M4c implementation and their named M3
+prerequisites; M4d to M4f retain their explicit-request gate.
+
+### X121 — Produced-input lending portion
+
+**Item:** B64 (L5). **Owners:** State reconciliation and Secrets, with
+Container cluster. Only B64 is delivered; B250 and B715 remain planned in
+[M3](m3.md#planned-slices). The delivering commit records gate commands and
+results; this delivery grants no cluster acceptance.
+
+#### B64
+
+Consumers freeze producer references and dependencies, then borrow several
+produced entries through operation-scoped custody. Apply and continuation
+withhold unproved material; removal can borrow retained entries. Missing,
+undeclared and expired references refuse, and borrowed material is cleared.
+The cluster-object adapter uses the lent kubeconfig with bounded authenticated
+API access. [Produced material custody](../state-reconciliation.md#produced-material-custody)
+owns the contract.
+
+**Guard tests:** `internal/reconciliation/lifecycle/produced_inputs_test.go`
+(multiple producers and kinds, continuation, unproved/missing/expired entries
+and clearing), `internal/reconciliation/lifecycle/produced_test.go`
+(non-disclosure and custody lifetime), and the cluster-object adapter tests.
+
+### X137 — Add-on diagnostics portion
+
+**Item:** B321. **Owner:** Add-ons. B752 remains in progress in
+[M4](m4.md#b752), held by the full verification gate.
+The [binding API](../api/addons.md) and [add-on lifecycle](../add-ons.md)
+own the behavior. The delivering commit records in-tree gate results.
+
+#### B321
+
+Admission names each missing input, capability or add-on at its indexed field,
+includes a remedy and identifies actual cycle members. Missing references
+retain the schema diagnostic instead of duplicated domain errors.
+
+**Guard tests:** `internal/addons/instances_test.go` and the add-on admission
+and binding tests.

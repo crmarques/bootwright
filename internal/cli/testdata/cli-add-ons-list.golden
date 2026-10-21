@@ -1,0 +1,3 @@
+NAME  PROVIDES  REQUIRES  OLM PACKAGE  DEFAULT SOURCE  CONFIGURATION
+metallb  metallb  none  metallb-operator  redhat-operators  pools,subscription,timeout
+nmstate  nmstate  none  kubernetes-nmstate-operator  redhat-operators  subscription,timeout

@@ -247,7 +247,7 @@ Alias cell.
 | [B771](#b771) | new, 2026-10-20 (D173); folds B365 | defect | Add-ons, with Workspace | The `add-ons/_store` selection exception, its marker and its reader rules leave the input reader | Dead surface now that B89 is retired; removing input-reader rules is not needed by any M4 package |
 | [B772](#b772) | new, 2026-10-20 (D173) | product | Add-ons | A package installed through OLM v1 (`ClusterExtension`) | ODF/FDF, ACM, MCE and GitLab do not qualify; own-namespace installs are Technology Preview |
 | [B773](#b773) | new, 2026-10-20 (D173) | product | Add-ons | A registry credential merged into a cluster's global pull secret with an exact-entry receipt | Its inverse never runs under retirement; the install pull secret carries entitlements from first boot |
-| [B774](#b774) | new, 2026-10-20 (D173) | safety | Container cluster, with Add-ons | Add-on work uses a scoped cluster identity instead of the 10-year administrator certificate | Needs an identity minted and revoked per operation; [B64](m3.md#b64) lends the installer's kubeconfig today |
+| [B774](#b774) | new, 2026-10-20 (D173) | safety | Container cluster, with Add-ons | Add-on work uses a scoped cluster identity instead of the 10-year administrator certificate | Needs an identity minted and revoked per operation; [B64](delivered.md#b64) lends the installer's kubeconfig today |
 | [B775](#b775) | new, 2026-10-20 (D173) | product | Add-ons | NMState's probe host on a disconnected cluster, as package configuration | M3 refuses disconnected clusters |
 | [B776](#b776) | new, 2026-10-20 (D173) | product | Add-ons | A MetalLB pool on a secondary interface forwarded by a per-interface NNCP instead of the cluster's `ipForwarding: Global` | The cluster-wide setting serves every documented release; per-interface NNCP forwarding is documented only from 4.22 and needs the `nmstate` package |
 | [B777](#b777) | new, 2026-10-20 (D173) | safety | Add-ons | MetalLB pools of two clusters on one layer 2 network refused when they overlap | Needs admission across add-on instances, which the package interface does not offer; no profile shares a network between two clusters' pools |
@@ -359,7 +359,7 @@ the remaining matrix.
 One typed, invertible executable custom-playbook journey. The reserved schema
 cannot prove effects, ownership or non-exfiltration; it needs [the legacy lifecycle baseline](delivered.md#m1e--lifecycle-engine-and-managed-artifact-serving), the plan and
 execution journeys of [B713](delivered.md#b713) and the produced input of
-[B64](m3.md#b64) and a named journey. **Exit evidence:** a same-change API replacement of the
+[B64](delivered.md#b64) and a named journey. **Exit evidence:** a same-change API replacement of the
 [reserved shape](../deferred/custom-playbooks.md), immutable source and
 dependencies, exact targets, bounded secrets, authorization, continuation,
 failure injection and isolated-runner qualification.
@@ -2701,7 +2701,7 @@ minted per operation and revoked after it), keeping the installer's 10-year
 `system:admin` certificate (no rotation entry was found; Kubernetes has no
 client-certificate revocation) for installation only.
 Parked on 2026-10-20 (D173): it needs an identity minted and revoked per
-operation, and [B64](m3.md#b64) lends the installer's kubeconfig today.
+operation, and [B64](delivered.md#b64) lends the installer's kubeconfig today.
 **Revive when** the owner asks for a scoped identity or a package needs
 permissions the lent kubeconfig must not carry.
 
@@ -3828,7 +3828,7 @@ Requires cell as `owner decision: <question>`.
   and D163. (3) [B88](m3.md#b88) moves from M5 to M3e; M5 is retired, its page a
   stub holding no item, its Status row kept `not started`, and its number never
   reused. M4 requires M2 and M3c instead of M3, so M3d consumes M4's B83 and B84
-  after their first delivery, and B83 requires [B64](m3.md#b64). (4) B62, B63,
+  after their first delivery, and B83 requires [B64](delivered.md#b64). (4) B62, B63,
   B65 and the parked B397 retire into named items; the parked B411, B462, B622
   and B680 move into M3b; B64, B66, B67, B69, B71, B195, B250, B251, B259, B260
   and B314 are redefined, B71 requiring only B61; B87 and B99 gain the
@@ -3893,7 +3893,7 @@ Requires cell as `owner decision: <question>`.
   status and all B/X/D identifiers, as D131 did for M2 and D172 for M3; M4's
   title becomes "Cluster add-ons". Taken by the session, pending the owner's
   review: (1) M4a is definition only, delivered as enabling slice X135 whose
-  one item, [B749](m4.md#b749), is M4's coverage and contract definition and
+  one item, [B749](delivered.md#b749), is M4's coverage and contract definition and
   completes when the owner accepts the baseline, as D134 accepted M2a; it
   grants no implementation authority. (2) "code skelleton to handle add-ons
   fully" is read as the one built-in lifecycle every M4c to M4f package uses:
@@ -3980,3 +3980,11 @@ Requires cell as `owner decision: <question>`.
   is amended to allow that per-cluster early handoff; this clause stays
   pending until the owner answers [Q60](m4.md#m4a-open-decisions). No
   implementation slice is activated and no host operation is authorized.
+
+- **D174** (2026-10-21, the owner's requests): the owner accepted M4a's
+  recommended definition baseline and requested implementation of M4b and
+  M4c on `m4`. The owner also authorized their missing M3 prerequisites:
+  B64's produced-input lending, B719's typed OVN gateway manifests and
+  B726's secondary-network block. D173's implementation waiver applies;
+  operator rehearsals and their acceptance remain separate gates. No M4d
+  to M4f implementation or host operation is authorized by these requests.

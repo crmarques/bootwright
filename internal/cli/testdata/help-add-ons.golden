@@ -6,9 +6,7 @@
 
   Commands
   COMMAND   PURPOSE
-  add       Register an immutable add-on catalog release (unavailable)
-  delete    Delete an add-on registration (unavailable)
-  list      List add-on catalog registrations (unavailable)
+  list      List built-in add-on packages
 
   Common flags
       --ascii       Use ASCII status markers

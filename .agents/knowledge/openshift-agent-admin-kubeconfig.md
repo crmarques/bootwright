@@ -3,7 +3,7 @@
 What the file `openshift-install agent create image` writes is, how long it
 lives, which authority it trusts and which user it names. The block that lends
 the file to a dependent block is
-[B64](../../specs/milestones/m3.md#b64); the cluster object adapter that reads
+[B64](../../specs/milestones/delivered.md#b64); the cluster object adapter that reads
 through it is [B751](../../specs/milestones/m4.md#b751). The file's life in the
 installer work area, including the rewrite after `install-complete`, is in
 [openshift-agent-work-area.md](openshift-agent-work-area.md).
@@ -69,7 +69,7 @@ statement here carries its fact, and an id only records where it was read.
 
 Taken together, the file is a static, ten-year, unrevocable, group-readable
 cluster-administrator credential. That is why add-on work is given a lent copy
-and keeps none ([B64](../../specs/milestones/m3.md#b64)). The required
+and keeps none ([B64](../../specs/milestones/delivered.md#b64)). The required
 handling is in [secrets](../../specs/secrets.md) and
 [container clusters](../../specs/container-clusters.md), not here.
 

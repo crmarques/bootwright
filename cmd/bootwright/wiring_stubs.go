@@ -1,7 +1,6 @@
 package main
 
 import (
-	addoncatalog "github.com/crmarques/bootwright/internal/addons/catalog"
 	addonpreflight "github.com/crmarques/bootwright/internal/addons/preflight"
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/containercluster/installation"
@@ -15,7 +14,6 @@ import (
 // unavailable result instead of a placeholder.
 func wireStubs() cli.Services {
 	return cli.Services{
-		AddOnCatalog:         addoncatalog.Service{},
 		AddOnPreflight:       addonpreflight.Service{},
 		EnvironmentPreflight: environmentpreflight.Service{},
 		Installer:            installation.Service{},

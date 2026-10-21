@@ -93,5 +93,50 @@ func addonProfileSchema() *Shape {
 func addonBindingSchema() *Shape {
 	configs := array(record(required("addonRef", ref(ClusterAddon)), field("inputs", named(record(required("name", nonempty()), required("value", nonempty()))))))
 	configs.NameKey = "addonRef"
-	return record(required("clusterRef", ref(ContainerCluster)), field("profileRefs", array(ref(ClusterAddonProfile))), field("addonRefs", array(ref(ClusterAddon))), field("addonConfigs", configs))
+	return record(required("clusterRef", ref(ContainerCluster)), field("profileRefs", array(ref(ClusterAddonProfile))), field("addonRefs", array(ref(ClusterAddon))), field("addonConfigs", configs), field("packages", addonPackagesSchema()))
+}
+
+type PackageSubscription struct {
+	Channel         string                `json:"channel"`
+	StartingCSV     string                `json:"startingCSV"`
+	Source          string                `json:"source"`
+	SourceNamespace string                `json:"sourceNamespace"`
+	CatalogSource   *PackageCatalogSource `json:"catalogSource,omitempty"`
+}
+type PackageCatalogSource struct {
+	Name                  string `json:"name"`
+	Image                 string `json:"image"`
+	Priority              int64  `json:"priority"`
+	PollInterval          string `json:"pollInterval,omitempty"`
+	SecurityContextConfig string `json:"securityContextConfig"`
+}
+type NMStateConfig struct {
+	Subscription PackageSubscription `json:"subscription"`
+	Timeout      string              `json:"timeout"`
+}
+type MetalLBConfig struct {
+	Subscription PackageSubscription `json:"subscription"`
+	Timeout      string              `json:"timeout"`
+	Pools        []MetalLBPool       `json:"pools,omitempty"`
+}
+type MetalLBPool struct {
+	Name       string     `json:"name"`
+	Addresses  []string   `json:"addresses"`
+	AutoAssign bool       `json:"autoAssign"`
+	L2         *MetalLBL2 `json:"l2,omitempty"`
+}
+type MetalLBL2 struct {
+	Interface string `json:"interface,omitempty"`
+}
+
+func packageSubscriptionSchema() *Shape {
+	return record(required("channel", nonempty()), required("startingCSV", nonempty()), field("source", dns()), defaulted("sourceNamespace", name(), StringValue("openshift-marketplace")), field("catalogSource", record(required("name", name()), required("image", image()), required("priority", integer("", "")), field("pollInterval", duration()), defaulted("securityContextConfig", enumeration("legacy", "restricted"), StringValue("restricted")))))
+}
+func packageBaseSchema() *Shape {
+	return record(required("subscription", packageSubscriptionSchema()), defaulted("timeout", duration(), StringValue("30m")))
+}
+func addonPackagesSchema() *Shape {
+	metallb := packageBaseSchema()
+	metallb.Fields = append(metallb.Fields, field("pools", named(record(required("name", name()), required("addresses", nonemptyArray(array(nonempty()))), defaulted("autoAssign", boolean(), BoolValue(true)), field("l2", record(field("interface", nonempty())))))))
+	return record(field("nmstate", packageBaseSchema()), field("metallb", metallb))
 }

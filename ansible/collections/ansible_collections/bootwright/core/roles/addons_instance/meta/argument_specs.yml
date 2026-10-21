@@ -1,0 +1,124 @@
+argument_specs:
+  apply:
+    short_description: Install one frozen add-on instance.
+    options:
+      bootwright_addon_instance_request:
+        type: dict
+        required: true
+        description: Frozen instance request.
+        options:
+          binding:
+            type: str
+            required: true
+            description: Frozen binding field.
+          budgetSeconds:
+            type: int
+            required: true
+            description: Frozen budgetSeconds field.
+          cluster:
+            type: str
+            required: true
+            description: Frozen cluster field.
+          package:
+            type: str
+            required: true
+            description: Frozen package field.
+          placement:
+            type: dict
+            required: true
+            description: Frozen placement field.
+          producedInputs:
+            type: list
+            required: true
+            description: Frozen producedInputs field.
+            elements: dict
+          program:
+            type: dict
+            required: true
+            description: Frozen program field.
+          secrets:
+            type: list
+            required: true
+            description: Frozen secrets field.
+            elements: str
+          tool:
+            type: dict
+            required: true
+            description: Frozen tool field.
+          version:
+            type: str
+            required: true
+            description: Frozen version field.
+            choices: [addon-instance-request-v1]
+
+      bootwright_addon_instance_material:
+        type: dict
+        required: true
+        description: Lent material paths and operation identity.
+
+      bootwright_addon_instance_digest:
+        type: str
+        required: true
+        description: Frozen request digest.
+
+  observe:
+    short_description: Observe one frozen add-on instance.
+    options:
+      bootwright_addon_instance_request:
+        type: dict
+        required: true
+        description: Frozen instance request.
+        options:
+          binding:
+            type: str
+            required: true
+            description: Frozen binding field.
+          budgetSeconds:
+            type: int
+            required: true
+            description: Frozen budgetSeconds field.
+          cluster:
+            type: str
+            required: true
+            description: Frozen cluster field.
+          package:
+            type: str
+            required: true
+            description: Frozen package field.
+          placement:
+            type: dict
+            required: true
+            description: Frozen placement field.
+          producedInputs:
+            type: list
+            required: true
+            description: Frozen producedInputs field.
+            elements: dict
+          program:
+            type: dict
+            required: true
+            description: Frozen program field.
+          secrets:
+            type: list
+            required: true
+            description: Frozen secrets field.
+            elements: str
+          tool:
+            type: dict
+            required: true
+            description: Frozen tool field.
+          version:
+            type: str
+            required: true
+            description: Frozen version field.
+            choices: [addon-instance-request-v1]
+
+      bootwright_addon_instance_material:
+        type: dict
+        required: true
+        description: Lent material paths and operation identity.
+
+      bootwright_addon_instance_digest:
+        type: str
+        required: true
+        description: Frozen request digest.

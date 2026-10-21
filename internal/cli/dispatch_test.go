@@ -45,8 +45,6 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"context current", contexts.CurrentRequest{}},
 		{"context delete", contexts.DeleteRequest{Name: "demo", Purge: true, AllowOrphans: true, SkipConfirmation: true}},
 		{"add-ons list", addoncatalog.ListRequest{}},
-		{"add-ons add", addoncatalog.AddRequest{Name: "demo", Version: "", SkipConfirmation: true}},
-		{"add-ons delete", addoncatalog.DeleteRequest{Name: "demo", Version: "", SkipConfirmation: true}},
 		{"secret set", custody.SetRequest{ContextName: "example", Name: "demo", Input: secrets.Input{ValueFile: "secret.bin"}, SkipConfirmation: true}},
 		{"secret generate", custody.GenerateRequest{ContextName: "example", Name: "demo", Renew: true}},
 		{"secret check", custody.CheckRequest{ContextName: "example"}},
@@ -236,27 +234,6 @@ func TestDispatchSelectionAndSourceTranslation(t *testing.T) {
 			}
 			if value == "," && len(selection) != 0 {
 				t.Fatalf("explicit empty selection = %v", selection)
-			}
-		}
-	})
-	t.Run("add-on version", func(t *testing.T) {
-		for _, tc := range []struct{ name, version, want string }{
-			{"demo:1.2.3", "", "1.2.3"}, {"demo", "2.0.0", "2.0.0"}, {"demo", "", ""},
-		} {
-			flags := dispatchFlags()
-			if err := flags.Set("name", tc.name); err != nil {
-				t.Fatal(err)
-			}
-			if err := flags.Set("version", tc.version); err != nil {
-				t.Fatal(err)
-			}
-			record := &dispatchRecord{}
-			if _, err := dispatchSpies(record).invoke(context.Background(), "add-ons add", flags, nil); err != nil {
-				t.Fatal(err)
-			}
-			request := record.request.(addoncatalog.AddRequest)
-			if request.Name != "demo" || request.Version != tc.want {
-				t.Fatalf("request = %#v", request)
 			}
 		}
 	})

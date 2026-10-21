@@ -26,7 +26,7 @@ PACKAGE = "ansible_collections.bootwright.core.plugins.action."
 # loaded record every entry point hands first.
 PROTOCOLS = {
     "artifact_server_protocol", "ceph_cluster_protocol", "ceph_image_protocol", "ceph_smb_protocol",
-    "containercluster_install_protocol", "containercluster_media_protocol",
+    "cluster_objects_protocol", "containercluster_install_protocol", "containercluster_media_protocol",
     "controller_protocol", "infra_service_protocol", "machine_power_protocol", "managedos_install_protocol", "managedos_tree_protocol",
     "substrate_host_protocol", "substrate_machine_protocol", "substrate_physical_protocol",
 }
@@ -35,6 +35,8 @@ PROTOCOLS = {
 # run with arguments they refuse before reaching it.
 EFFECTS = {
     "controller_tool": "prepare_tool",
+    "cluster_objects_read": "Engine",
+    "cluster_objects_write": "Engine",
 }
 
 
@@ -61,7 +63,10 @@ def test_every_plugin_has_a_stub_run():
 
 @pytest.mark.parametrize("name", sorted(PROTOCOLS))
 def test_a_protocol_plugin_hands_the_runner_loaded_and_waits_for_its_acknowledgement(name, monkeypatch):
-    _module, result, records = running(name, {"phase": "loaded"}, monkeypatch)
+    arguments = {"phase": "loaded"}
+    if name == "cluster_objects_protocol":
+        arguments["budget"] = 600
+    _module, result, records = running(name, arguments, monkeypatch)
     assert not result.get("failed"), result
     assert result.get("changed") is False
     assert records == [({"phase": "loaded"}, True)]

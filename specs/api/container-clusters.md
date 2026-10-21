@@ -361,7 +361,7 @@ physical network and of the attachment definition workloads select.
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
 | `topology` | string | yes | `Localnet`. |
-| `uplink.bridge` | string | yes | `br-ex`, sharing the default bridge, or a new OVS bridge name of at most 15 characters. |
+| `uplink.bridge` | string | yes | `br-ex`, sharing the default bridge, or a new OVS bridge name: 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
 | `uplink.interface` | string | with a new bridge | An addressless `ethernet`, `bond` or `vlan` every node declares, other than its install interface. |
 | `vlan` | integer | no | Access VLAN `1..4094`; distinct among networks sharing an uplink. |
 | `mtu` | integer | no | `576..65536`, at least `1280` with an IPv6 subnet, at most the uplink interface's declared MTU. |
@@ -373,10 +373,6 @@ physical network and of the attachment definition workloads select.
 
 A cluster that declares a secondary network needs a binding that
 selects a package or add-on providing `nmstate`.
-
-Not yet met: `ovnKubernetesConfig` and `secondaryNetworks` are not admitted;
-tracked as [B719](../milestones/m3.md#b719) and
-[B726](../milestones/m3.md#b726).
 
 ## Security
 

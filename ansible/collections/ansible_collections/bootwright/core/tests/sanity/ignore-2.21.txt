@@ -36,3 +36,6 @@ plugins/modules/ssh_key_policy.py validate-modules:missing-gplv3-license
 plugins/modules/substrate_host_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/substrate_machine_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/substrate_physical_protocol.py validate-modules:missing-gplv3-license
+plugins/modules/cluster_objects_read.py validate-modules:missing-gplv3-license
+plugins/modules/cluster_objects_write.py validate-modules:missing-gplv3-license
+plugins/modules/cluster_objects_protocol.py validate-modules:missing-gplv3-license

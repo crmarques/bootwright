@@ -12,9 +12,6 @@ with its cluster, and removing one add-on from a running cluster is parked as
 executable, so naming it under `spec.packages` is an unknown field, never a
 silent omission.
 
-Not yet met: the definition baseline awaits the owner's acceptance; tracked as
-[B749](milestones/m4.md#b749).
-
 ## Release evidence
 
 The operator declares each package's OLM `channel` and `startingCSV`, and the
@@ -60,9 +57,8 @@ cluster; on a physical cluster that keeps running, its objects and placed
 Secrets stay, unmanaged, as its removal description says. A changed
 configuration over a completed apply is destroyed and applied again (D153).
 
-Not yet met: no built-in package is in the executable; tracked as
-[B735](milestones/m4.md#b735), [B84](milestones/m4.md#b84),
-[B727](milestones/m4.md#b727), [B85](milestones/m4.md#b85),
+Not yet met: the remaining built-in packages are absent; tracked as
+[B85](milestones/m4.md#b85),
 [B86](milestones/m4.md#b86), [B762](milestones/m4.md#b762),
 [B91](milestones/m4.md#b91), [B92](milestones/m4.md#b92),
 [B765](milestones/m4.md#b765), [B767](milestones/m4.md#b767) and
