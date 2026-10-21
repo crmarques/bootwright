@@ -361,7 +361,7 @@ func TestResourceRefusalsNameTheirNextStep(t *testing.T) {
 func TestAnUnverifiedSSORefusalNamesTheSkipAndItsRemedies(t *testing.T) {
 	d := diagnostics.Of(adapterRefusals()["sso-unverified"])
 	const message = "an oauth2-proxy daemon of a Ceph management gateway runs with a configuration that skips the identity provider's certificate verification, so Bootwright did not enable the dashboard's single sign-on"
-	const remedy = "the native error names the host, the daemon and where the skip was found; take back what this context owns with bootwright destroy --context <context>, then select a Ceph image whose cephadm renders oauth2-proxy without that skip with bootwright context update, or remove the oauth2-proxy service, its spec.ceph.serviceBindings entry and spec.enable_auth on the mgmt-gateway, then apply"
+	const remedy = "the native error names the host, the daemon and where the skip was found; take back what this context owns with bootwright destroy --context <context>, then with bootwright context update either select a Ceph image whose cephadm renders oauth2-proxy without that skip, or remove the oauth2-proxy service, its spec.ceph.serviceBindings entries and spec.enable_auth on the mgmt-gateway, then apply; Bootwright never changes an applied management gateway unit, so removing the service without that destroy refuses"
 	if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Message != message || d[0].Remediation != remedy {
 		t.Fatalf("an sso-unverified refusal reached the operator as %+v", d)
 	}

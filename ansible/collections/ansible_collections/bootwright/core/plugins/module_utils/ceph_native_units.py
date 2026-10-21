@@ -13,6 +13,8 @@ from __future__ import annotations
 # Exact type identity is the validation here: a bool is not an int and a capability object is never a subclass.
 # pylint: disable=unidiomatic-typecheck
 
+import base64
+import binascii
 import collections
 import hmac
 import ipaddress
@@ -152,6 +154,11 @@ PENDING = re.compile(r"(?:(?:" + "|".join(sorted({name for unit in UNIT_TYPES.va
 BINDING_MEMBERS = frozenset(("path", "secretRef", "serviceRef"))
 # The non-secret stand-in a bound leaf holds wherever the worker normalizes, records or compares a document.
 BOUND = "bootwright-bound:"
+# A leaf cephadm's ServiceSpec validates by length holds a stand-in of an admitted length: OAuth2ProxySpec admits a cookie_secret of 16,
+# 24 or 32 bytes, counted after URL-safe base64 decoding when it decodes (src/python-common/ceph/deployment/service_spec.py,
+# OAuth2ProxySpec._validate_cookie_secret); this 32-byte text does not decode.
+PLACEHOLDERS = {"/spec/cookie_secret": BOUND + "/spec/cookie_se"}
+COOKIE_SECRET_LENGTHS = (16, 24, 32)
 MATERIAL_VARIABLES = frozenset(variable for unit in UNIT_TYPES.values() for variable in unit.leaves.values())
 MAX_MATERIAL = 4096
 MATERIAL_LIMITS = {"mgmtGatewayCertificate": ceph_native_observability.MAX_CERTIFICATE, "mgmtGatewayKey": ceph_native_observability.MAX_KEY,
@@ -202,8 +209,25 @@ def material_names(request, phase="unit"):
     return names & ceph_native_observability.OBSERVED_LEAVES if phase in ("observe", "destroy") else frozenset()
 
 
+def placeholder(path):
+    """The non-secret stand-in a bound leaf at this pointer holds."""
+    return PLACEHOLDERS.get(path, BOUND + path)
+
+
+def cookie_secret(value):
+    """Whether cephadm admits an oauth2-proxy cookie_secret: its URL-safe base64 decoding, else its UTF-8 text, is 16, 24 or 32 bytes."""
+    try:
+        length = len(base64.urlsafe_b64decode(value))
+    except binascii.Error:
+        length = len(value.encode("utf-8"))
+    except ValueError:
+        return False
+    return length in COOKIE_SECRET_LENGTHS
+
+
 def material_value(variable, value):
-    """A bound value within its variable's bound: a certificate chain whose first block decodes, a PEM private key, else a short text."""
+    """A bound value within its variable's bound: a certificate chain whose first block decodes, a PEM private key, a cookie secret
+    cephadm admits, else a short text."""
     limit = MATERIAL_LIMITS.get(variable, MAX_MATERIAL)
     try:
         size = len(value.encode("utf-8")) if isinstance(value, str) else 0
@@ -213,6 +237,8 @@ def material_value(variable, value):
         return False
     if variable in CERTIFICATE_VARIABLES:
         return bool(ceph_native_observability.leaf(value))
+    if variable == "oauth2ProxyCookieSecret":
+        return cookie_secret(value)
     return variable not in KEY_VARIABLES or ceph_native_observability.PRIVATE_KEY.search(value) is not None
 
 
@@ -249,7 +275,7 @@ def placed(document, paths):
             present, target = step(target, part)
             require(present)
         require(isinstance(target, dict))
-        target[parts[-1]] = BOUND + path
+        target[parts[-1]] = placeholder(path)
     return value
 
 
@@ -487,7 +513,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         for path, variable in pairs:
             parts = path.split("/")[1:]
             present, found = leaf(value, path)
-            require(present and found == BOUND + path, "native-output")
+            require(present and found == placeholder(path), "native-output")
             require(isinstance(self.bound, dict) and variable in self.bound, "material")
             target = value
             for part in parts[:-1]:
@@ -633,16 +659,21 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
 
     def sso(self):
         """The unit's one dashboard write, on the bootstrap host after every proxy host proved its rendered configuration: enable the
-        dashboard's OAuth2 single sign-on unless it already is, then read it back."""
+        dashboard's OAuth2 single sign-on unless it already is, then read it back. The dashboard refuses the enable until the
+        orchestrator's daemon list shows a running oauth2-proxy, so until then nothing is written and the answer is pending."""
         require(self.markers.owned(), "ownership")
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
         self.sso_proxy()
         require(all(self.markers.read("service-" + name + "-complete.json") is not None for name in self.unit_names()), "not-ready")
         if ceph_native_observability.sso_enabled(self):
-            return {"changed": False}
+            return {"changed": False, "pending": False}
+        rows = self.ceph("orch", "ps", "--daemon_type", "oauth2-proxy")
+        require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows), "native-output")
+        if not any(row.get("daemon_type") == "oauth2-proxy" and type(row.get("status")) is int and row["status"] == 1 for row in rows):
+            return {"changed": False, "pending": True}
         self.tunnel_effect("dashboard", "sso", "enable", "oauth2", json_result=False)
         require(ceph_native_observability.sso_enabled(self), "not-ready")
-        return {"changed": True}
+        return {"changed": True, "pending": False}
 
     def unfinished(self, evidence):
         if self.request["action"] != "service":

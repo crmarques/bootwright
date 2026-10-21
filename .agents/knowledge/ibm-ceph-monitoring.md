@@ -122,15 +122,24 @@ from `-i`. Local roles and users are parked
 ([B683](../../specs/milestones/backlog.md#b683)). SSO itself is realized
 through the management gateway unit (`TestOAuth2ProxyNoLongerRefusesR16`).
 
-No cephadm code writes dashboard SSO:
+cephadm never enables dashboard SSO:
 [`config_dashboard`](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/mgmt_gateway.py)
-sets only the standby options, and the proxy's `post_remove` removes only its
-certificate and key. In
+sets only the standby options. The proxy's
+[`post_remove`](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/oauth2_proxy.py)
+disables it through the dashboard's `disable_oauth2_sso` when the last
+running oauth2-proxy daemon goes. In
 [sso.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/dashboard/services/sso.py)
-`dashboard sso enable oauth2` sets the module option `sso_oauth2` (read as
-`mgr/dashboard/sso_oauth2`), while `dashboard sso status` and `disable` answer
-`EPERM` without `python3-saml`. So the unit enables SSO itself and observes
-the option, never `sso status`.
+`dashboard sso enable oauth2` answers `EPERM` until the orchestrator's cached
+daemon list holds a running oauth2-proxy, then sets the module option
+`sso_oauth2` (read as `mgr/dashboard/sso_oauth2`), while `dashboard sso
+status` and `disable` answer `EPERM` without `python3-saml`. So the unit waits
+for `ceph orch ps --daemon_type oauth2-proxy` to list one running, enables SSO
+itself, and observes the option, never `sso status`.
+
+cephadm's `OAuth2ProxySpec` validation admits a `cookie_secret` of 16, 24 or
+32 bytes only, counted after URL-safe base64 decoding when it decodes, so
+every placeholder the unit normalizes in a secret's place must pass it
+(`test_every_bound_placeholder_passes_the_proxy_spec_validation`).
 
 ## Certificate manager
 

@@ -467,15 +467,18 @@ def config_path(args):
 
 def rendered_skip(value):
     """Whether a rendered oauth2-proxy configuration skips verification: "insecure", "verified" or "unproved". It reads the flat TOML
-    subset cephadm renders, line by line, and returns no other line."""
+    subset cephadm renders, line by line, and returns no other line. A line that names the key in any spelling yet is not the bare key's
+    assignment leaves it unproved."""
     found = []
     for line in value.splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
         key, separator, setting = line.partition("=")
-        if not separator or key.strip() != INSECURE_KEY:
+        if INSECURE_KEY not in line.lower().replace("-", "_"):
             continue
+        if not separator or key.strip() != INSECURE_KEY:
+            return "unproved"
         setting = setting.strip()
         if len(setting) >= 2 and setting[0] == setting[-1] and setting[0] in "\"'":
             setting = setting[1:-1]

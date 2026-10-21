@@ -873,7 +873,11 @@ With an oauth2-proxy, the unit also reads `container_image_oauth2_proxy`, and
 the proxy's five bound leaves (`client_secret`, `cookie_secret`, `ssl_cert`,
 `ssl_key` and `/custom_configs/0/content`) are lent to its apply phase only
 and spliced, like the gateway's, into the one apply stream after the
-`mgmt-gateway` document. The identity provider's CA bundle reaches the
+`mgmt-gateway` document. Their placeholders pass cephadm's spec validation,
+so the `cookie_secret` one holds 32 bytes; a bound `cookie_secret` that
+validation refuses, neither 16, 24 nor 32 bytes after URL-safe base64
+decoding when it decodes, else as text, refuses `material` before any effect.
+The identity provider's CA bundle reaches the
 container only through that document's `custom_configs` entry, which cephadm
 mounts at `/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem`; no plan, record,
 argument, evidence or diagnostic carries a bundle or secret byte or a hash of
@@ -885,8 +889,9 @@ provider certificate verification: neither its arguments
 (`--ssl-insecure-skip-verify`) nor its environment
 (`OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY`) nor the configuration file its
 `--config` argument names, read through its mount beneath
-`/var/lib/ceph/<fsid>/` without following a link, sets the skip, and, with a
-bound bundle, its CA mount holds exactly that bundle. The deployed
+`/var/lib/ceph/<fsid>/` without following a link, sets the skip (a line
+naming the key other than as its bare assignment leaves the daemon unproved),
+and, with a bound bundle, its CA mount holds exactly that bundle. The deployed
 container's rendered configuration is the postcondition, never one release's
 template. A skip refuses `sso-unverified`, naming the host, the daemon and
 whether the argument, environment or configuration skips; this is the unit's
@@ -895,8 +900,13 @@ never enabled through an unproved proxy. Until the placed daemon count runs
 proved, the window's exhaustion refuses `not-ready`. Then the bootstrap host
 runs the unit's one dashboard write, `ceph dashboard sso enable oauth2`, only
 when the dashboard module option `mgr/dashboard/sso_oauth2` is not already
-true, and reads it back. No cephadm code writes dashboard single sign-on.
-Readiness also needs the `oauth2-proxy` daemon count on its frozen image and
+true and once `ceph orch ps --daemon_type oauth2-proxy` lists a running
+daemon, which the enable requires; until then it writes nothing and asks
+again 10 s apart, each call begun within the proof's window, whose
+exhaustion refuses `not-ready`. Then it reads the option back. cephadm's only
+dashboard single sign-on write disables it when it removes the last running
+oauth2-proxy daemon, so readiness turns not-ready until the next apply enables
+it again. Readiness also needs the `oauth2-proxy` daemon count on its frozen image and
 that option true, which it reads and never writes (`dashboard sso status` is
 never run, because it answers EPERM without python3-saml); evidence's `sso`
 is then `"oauth2"`. A readiness timeout also names `oauth2-proxy@oauth2-proxy`

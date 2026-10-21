@@ -917,7 +917,7 @@ def sso_round(proxy, hosts, held, transport, deadline, now):
 def sso_proof(request, transport, now, pause):
     """After the unit's apply, before the dashboard's single sign-on is enabled: every proxy host proves, read-only, that each running
     oauth2-proxy container of this cluster verifies its identity provider's certificate and mounts the bound CA bundle. Rounds repeat
-    until the placed count runs proved; one native call of the block's Go deadline covers the window."""
+    until the placed count runs proved; one native call of the block's Go deadline covers the window, which the proof returns."""
     proxy = ceph_native_observability.gateway_documents(request["service"])[2]
     hosts = {host["name"]: host for host in request["hosts"]}
     held = transport.unit_material("sso_config")
@@ -925,7 +925,22 @@ def sso_proof(request, transport, now, pause):
     while True:
         daemons, proved = sso_round(proxy, hosts, held, transport, deadline, now)
         if proved and daemons == ceph_native_observability.placed_count(proxy):
-            return
+            return deadline
+        remaining = deadline - now()
+        ceph_native.require(remaining > 0, "not-ready")
+        pause(min(SSO_PAUSE, remaining))
+
+
+def sso_enable(bootstrap, transport, deadline, now, pause):
+    """The one single sign-on write: calls 10 s apart while the orchestrator does not yet list a running oauth2-proxy, which the
+    dashboard needs before it enables, each begun within the proof's window, so the block's one call beyond that window bounds the
+    last; whether the write changed anything."""
+    while True:
+        produced = transport.call(bootstrap, "sso")
+        ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed", "pending"} and type(produced["changed"]) is bool
+                            and type(produced["pending"]) is bool and not (produced["changed"] and produced["pending"]), "evidence")
+        if not produced["pending"]:
+            return produced["changed"]
         remaining = deadline - now()
         ceph_native.require(remaining > 0, "not-ready")
         pause(min(SSO_PAUSE, remaining))
@@ -949,10 +964,8 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
             ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
             changed = produced["changed"] or changed
         if request["action"] == "service" and proxied(request):
-            sso_proof(request, transport, now, pause)
-            produced = transport.call(bootstrap, "sso")
-            ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
-            changed = produced["changed"] or changed
+            deadline = sso_proof(request, transport, now, pause)
+            changed = sso_enable(bootstrap, transport, deadline, now, pause) or changed
         observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen)
         ceph_native.require(observation["ready"], "not-ready")
     elif operation == "destroy":
