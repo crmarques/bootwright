@@ -89,7 +89,7 @@ func TestGeneratedIntegrations(t *testing.T) {
 						want  []string
 					}{
 						{"commands", []string{"c"}, []string{"cluster", "completion", "context"}},
-						{"nested commands", []string{"cluster", "k"}, []string{"kubeconfig", "kubectl"}},
+						{"nested commands", []string{"cluster", "k"}, []string{"keyring", "kubeconfig", "kubectl"}},
 						{"flags", []string{"validate", "--o"}, []string{"--output"}},
 						{"enum", []string{"validate", "--output", ""}, []string{"json", "text", "yaml"}},
 						{"enum prefix", []string{"validate", "--output", "j"}, []string{"json"}},
