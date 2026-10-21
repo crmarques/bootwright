@@ -7,9 +7,10 @@ and their bindings; [Storage](storage.md) owns lifecycle, device safety and
 custody. [Provider coverage](storage-coverage.md) owns release qualification.
 
 **Current:** `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage`,
-`StorageFilesystem`, `StorageSubvolume`, `StorageClient` and
-`StorageNFSExport`, under its [field record](#storagenfsexport), are admitted
-and realized. `StorageSMBResource` is admitted under its
+`StorageFilesystem`, `StorageSubvolume`, `StorageClient`,
+`StorageObjectUser`, under its [field record](#storageobjectuser-field-record),
+and `StorageNFSExport`, under its [field record](#storagenfsexport), are
+admitted and realized. `StorageSMBResource` is admitted under its
 [field record](#storagesmbresource) and realized by its SMB block once its
 samba images are authored under `spec.ceph.images` of its StorageCluster
 ([refusal table](storage.md#refusal-table)). Native effects
@@ -1107,6 +1108,52 @@ unverified, because Red Hat's document says the file includes private keys;
 tracked as [B761](milestones/m4.md#b761). "Never its key" is Bootwright's
 security decision, not a native requirement.
 
+### StorageObjectUser field record
+
+[B477](milestones/m2.md#b477) owns this record. One RGW user in the zone of one
+StorageObjectGateway, realized by its
+[user block](storage.md#resources-readiness-and-access). Accounts, tenants,
+subusers, Swift keys, capabilities and quotas are not admitted;
+per-resource removal is [B491](milestones/m2.md#b491)'s.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectUser
+metadata:
+  name: app-writer
+
+spec:
+  clusterRef: ceph-example
+  objectGatewayRef: objects
+  displayName: App writer
+```
+
+| Field | Contract | Native projection |
+| --- | --- | --- |
+| `metadata.name` | The native user ID, a DNS label of at most 46 characters (its block identity is `ceph-object-user-<name>`), never `dashboard`. | `radosgw-admin user create --uid`; no tenant. |
+| `clusterRef` | Required managed StorageCluster. | None. |
+| `objectGatewayRef` | Required StorageObjectGateway of the same cluster. | The user is created in that gateway's realm, zone group and zone with `--rgw-realm`, `--rgw-zonegroup` and `--rgw-zone`. |
+| `displayName` | Optional text of at most 256 bytes without control characters; omitted, it is `metadata.name`. | `--display-name`. |
+
+The user ID `dashboard` is reserved because cephadm's dashboard integration
+creates a system user of that ID in every realm, which the gateway owns as a
+derived child. Bootwright passes no key argument: `radosgw-admin user create`
+generates one S3 key pair when none is given
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/rgw/radosgw-admin/radosgw-admin.cc#L6872-L6875)),
+and it accepts keys only as command-line arguments, which Bootwright never
+fills with secret bytes. The pair crosses only the command's output into the
+worker, is retained in the bootstrap host's protected custody area before the
+block reports, and becomes the block's produced material `object-user`, the
+canonical JSON `{"accessKey", "secretKey", "uid"}`; a retry reads it back and
+never rotates it. Bootwright retains any key of 1 to 128 visible ASCII
+characters and pins no build's key format. No command reveals the pair yet;
+[B489](milestones/m2.md#b489) owns access handoff.
+
+Admission refuses, before any effect: a gateway of another cluster, the user ID
+`dashboard`, a name longer than 46 characters and a display name over 256 bytes
+or with control characters. Planning propagates the bound gateway's planning
+refusals.
+
 ## Remaining resource families and consuming gates
 
 These families use the shared resource envelope and explicit dependency model.
@@ -1119,7 +1166,7 @@ provisioning rows remain required by the coverage matrix.
 | Family and owner | Identity and references that the field record must preserve | Default and lifecycle boundary |
 | --- | --- | --- |
 | Object realm/zonegroup/zone, B477/B483 | Resource identity includes the owned realm/zonegroup/zone IDs and parent references; zone pool layout references owned StoragePools. An object gateway binds its zone and native RGW service. | No ambient default realm/zone or untracked pools. One owner publishes shared realm/period state; peers reference it. |
-| Object accounts/users, B477 | Native account/user identity scoped by gateway/realm and tenant where supported; explicit account relationship and principal purpose. | No implicit administrator or account adoption. Bound or generated keys enter custody once; retries do not rotate them. |
+| Object accounts/users, B477 | Native account/user identity scoped by gateway/realm and tenant where supported; explicit account relationship and principal purpose. Users without tenant or account are current as `StorageObjectUser` ([field record](#storageobjectuser-field-record)); accounts and tenants are not. | No implicit administrator or account adoption. Bound or generated keys enter custody once; retries do not rotate them. |
 | Object buckets/policies, B477 | Gateway scope, explicit owning principal/account, native bucket name and recorded native identity; policy principal/resource references resolve declared owners. | Supported native policy documents retain their format. No ambient owner, untracked generated user or guessed tenant. Bucket deletion needs data-loss authorization and proved child ownership; foreign objects/dependents prevent unqualified cascade. |
 | CephX/client access, B80/B489 | `StorageClient` owns one principal with exactly one scope: an RBD pool with its derived data pools, a StorageFilesystem or a StorageSubvolume; B489 extends references to gateway resources and explicit access scope. | No default full administrator caps. Qualified caps derive from requested resource access or validated native capability syntax; unrestricted caps need an explicit privileged purpose. Manager-generated NFS/SMB principals are derived children, not duplicate resources. |
 | NVMe-oF gateway resources, B480 | Native service/group, subsystem NQN, listener address/transport, namespace ID and `StorageRBDImage` reference; initiator NQN/host authorization links to the subsystem. | No automatic unowned image creation or wildcard host access. Defaults and generated IDs are frozen/captured. Listener reachability, ANA/HA and release-supported security are qualified together. |

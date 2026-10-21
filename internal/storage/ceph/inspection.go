@@ -494,6 +494,7 @@ var scopeRows = map[api.Kind]func(api.Catalog, string, []reconciliation.Block) s
 	api.StorageFilesystem:      frozenScope(api.StorageFilesystem, "filesystem", filesystemScopeText),
 	api.StorageSubvolume:       frozenScope(api.StorageSubvolume, "subvolume", subvolumeScopeText),
 	api.StorageObjectGateway:   frozenScope(api.StorageObjectGateway, "gateway", gatewayScopeText),
+	api.StorageObjectUser:      frozenScope(api.StorageObjectUser, "object-user", objectUserScopeText),
 	api.StorageNFSExport:       frozenScope(api.StorageNFSExport, "nfs-export", nfsExportScopeText),
 	api.StorageSMBResource:     smbFrozenScope,
 	api.StorageExport:          declaredScope(api.StorageExport, exportScopeText),
@@ -570,6 +571,13 @@ func gatewayScopeText(r Request) string {
 		return ""
 	}
 	return "zone " + r.Gateway.Realm + "/" + r.Gateway.ZoneGroup + "/" + r.Gateway.Zone
+}
+
+func objectUserScopeText(r Request) string {
+	if r.ObjectUser == nil {
+		return ""
+	}
+	return "user " + r.ObjectUser.Name + " in zone " + r.ObjectUser.Realm + "/" + r.ObjectUser.ZoneGroup + "/" + r.ObjectUser.Zone
 }
 
 func nfsExportScopeText(r Request) string {

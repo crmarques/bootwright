@@ -42,6 +42,8 @@ BOOTSTRAP_CEILING = 1920
 BOOTSTRAP_BUDGET = 1800
 BOOTSTRAP_CALL = BOOTSTRAP_BUDGET + 60
 NATIVE_FAILURES = ("native-unknown", "native-refusal", "native-timeout")
+# The produced-material output each action writes on apply and observe: its Go caller reads exactly that one.
+OUTPUTS = {"client": "client", "cluster": "dashboard", "object-user": "object-user"}
 UNIT_DAEMON = re.compile(r"[a-z][a-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\Z")
 # The refusals each block's Go caller remedies by name (hostRefusals,
 # adapterRefusals and smbRefusals in internal/storage/ceph); a test holds them equal.
@@ -62,7 +64,8 @@ CLUSTER_REASONS = (
     "remote-refusal", "adapter-exception", "foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget",
     "foreign-rbd-image", "rbd-image-identity", "foreign-filesystem", "filesystem-identity", "filesystem-multiple-disabled", "foreign-subvolume-group",
     "mds-coverage", "foreign-subvolume", "subvolume-identity", "foreign-image", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign",
-    "object-zone-pools", "object-endpoint-certificate", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape",
+    "object-zone-pools", "object-endpoint-certificate", "object-user-foreign", "object-user-identity", "nfs-export-foreign", "nfs-export-apply",
+    "nfs-export-path-escape",
     "ingress-firewall", "service-credential-foreign", "ssh-policy-host-excluded", "ssh-policy-unavailable", "tunnel-host-key-excluded",
     "sso-unverified",
 )
@@ -163,6 +166,22 @@ def nfs_export_resource(resource, request):
     ceph_native.require(request is None or request["action"] == "nfs-export" and resource["path"] == request["nfsExport"]["native"]["pseudo"], "evidence")
 
 
+def object_user_resource(resource, request):
+    """An object user's resource is empty, or its native user ID once its retained key pair is proved; never a key."""
+    if resource == {"id": "", "path": ""}:
+        return
+    ceph_native.require(ceph_native_object.label(resource["id"]) and resource["path"] == "", "evidence")
+    ceph_native.require(request is None or request["action"] == "object-user" and resource["id"] == request["objectUser"]["name"], "evidence")
+
+
+def user_output(path, value, request):
+    """The produced key pair, exactly the retained canonical {accessKey, secretKey, uid} of this user, written to the protected output."""
+    ceph_native.require(isinstance(value, str) and value.isascii(), "material")
+    data = value.encode("ascii")
+    ceph_native_object.user_material(data, request["objectUser"]["name"], reason="material")
+    ceph_native.private_write(path, data)
+
+
 def specialization_ids(value):
     """A sorted, duplicate-free list of 1 or more ids the shipped registry declares."""
     return (isinstance(value, list) and 0 < len(value) <= len(SPECIALIZATION_IDS)
@@ -190,7 +209,7 @@ def evidence(value, request_digest, request=None):
     dashboard_evidence(value)
     endpoint_evidence(value, request)
     sso_evidence(value, request)
-    actions = ("cluster", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway", "nfs-export")
+    actions = ("cluster", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway", "nfs-export", "object-user")
     ceph_native.require(value["action"] in actions, "evidence")
     daemon_evidence(value, request)
     ceph_native.require(all(type(value[k]) is bool for k in ("owned", "exists", "ready", "removed", "partial")), "evidence")
@@ -211,9 +230,12 @@ def evidence(value, request_digest, request=None):
     elif value["action"] == "nfs-export":
         nfs_export_resource(resource, request)
         ceph_native.require(value["client"] == "", "evidence")
+    elif value["action"] == "object-user":
+        object_user_resource(resource, request)
+        ceph_native.require(value["client"] == "", "evidence")
     else:
         ceph_native.require(resource["path"] == "", "evidence")
-    ceph_native.require(resource["id"] == "" or value["action"] in ("subvolume", "gateway", "nfs-export")
+    ceph_native.require(resource["id"] == "" or value["action"] in ("subvolume", "gateway", "nfs-export", "object-user")
                         or value["action"] in ("pool", "policy", "filesystem") and ceph_native.RESOURCE_ID.fullmatch(resource["id"]) is not None
                         or value["action"] == "rbd" and ceph_native.RBD_IMAGE_ID.fullmatch(resource["id"]) is not None, "evidence")
     ceph_native.require(isinstance(value["osds"], list) and len(value["osds"]) <= 8192, "evidence")
@@ -764,9 +786,9 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         ceph_native.require(ceph_native.supported_transport(request), "unsupported-release")
     bootstrap = next(h for h in request["hosts"] if h["name"] == request["bootstrap"])
     outputs = outputs or {}
-    ceph_native.require(set(outputs) <= {"client", "dashboard"})
-    if request["action"] in ("client", "cluster") and operation in ("apply", "observe"):
-        ceph_native.require(set(outputs) == {"client" if request["action"] == "client" else "dashboard"}, "material")
+    ceph_native.require(set(outputs) <= set(OUTPUTS.values()))
+    if request["action"] in OUTPUTS and operation in ("apply", "observe"):
+        ceph_native.require(set(outputs) == {OUTPUTS[request["action"]]}, "material")
     elif operation in ("apply", "observe"):
         ceph_native.require(not outputs, "material")
     if request["action"] == "service":
@@ -775,6 +797,8 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         return execute_unit(request, operation, request_digest, transport, bootstrap, now=now, pause=pause, phases=ceph_native_nfs.EXPORT_APPLY_PHASES)
     if request["action"] == "gateway":
         return execute_gateway(request, operation, request_digest, transport, bootstrap, now=now, pause=pause)
+    if request["action"] == "object-user":
+        return execute_user(request, operation, request_digest, transport, bootstrap, outputs, now=now, pause=pause)
     changed = False
     if operation == "apply":
         preparations = [transport.call(host, "prerequisites") for host in request["hosts"]]
@@ -977,6 +1001,32 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
     if "mgmtGatewayCertificate" in seen:
         bound = hashlib.sha256(ceph_native_observability.leaf(seen["mgmtGatewayCertificate"])).hexdigest()
         ceph_native.require(observation["endpoint"]["certificateSHA256"] in ("", bound), "evidence")
+    return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
+
+
+def execute_user(request, operation, request_digest, transport, bootstrap, outputs, *, now, pause):
+    """An object user runs on the bootstrap host only: its preparation proof and its one phase, whose key pair reaches the protected
+    output before its readiness wait; an observation that proves it ready recaptures the retained pair read-only. Removal is the core
+    refusal."""
+    changed = False
+    if operation == "apply":
+        transport.call(bootstrap, "prerequisites")
+        produced = transport.call(bootstrap, "object_user")
+        ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed", "private"} and type(produced["changed"]) is bool, "evidence")
+        changed = produced["changed"]
+        user_output(outputs["object-user"], produced["private"], request)
+        observation = wait_unit(request, request_digest, bootstrap, transport, now, pause)
+        ceph_native.require(observation["ready"], "not-ready")
+    elif operation == "destroy":
+        changed = transport.call(bootstrap, "destroy")["changed"]
+        observation = observe_unit(request, request_digest, bootstrap, transport)
+        ceph_native.require(observation["removed"], "not-removed")
+    else:
+        observation = observe_unit(request, request_digest, bootstrap, transport)
+        if observation["ready"]:
+            produced = transport.call(bootstrap, "object_user_read")
+            ceph_native.require(isinstance(produced, dict) and set(produced) == {"private"}, "evidence")
+            user_output(outputs["object-user"], produced["private"], request)
     return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
 
 

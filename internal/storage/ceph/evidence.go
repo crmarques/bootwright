@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-const EvidenceVersion = "ceph-core-evidence-v9"
+const EvidenceVersion = "ceph-core-evidence-v10"
 
 const DashboardPort = "8443"
 
@@ -369,6 +369,9 @@ func validateScope(e Evidence, r Request) bool {
 	if r.Action == "nfs-export" {
 		return e.Client == "" && r.NFSExport != nil && (e.Resource == ResourceEvidence{} || exportID.MatchString(e.Resource.ID) && e.Resource.Path == r.NFSExport.Native.Pseudo)
 	}
+	if r.Action == "object-user" {
+		return e.Client == "" && r.ObjectUser != nil && (e.Resource == ResourceEvidence{} || e.Resource == ResourceEvidence{ID: r.ObjectUser.Name})
+	}
 	if e.Resource.Path != "" {
 		return false
 	}
@@ -420,6 +423,8 @@ func validateReady(e Evidence, r Request) bool {
 		return subvolumeResource(e, r)
 	case "nfs-export":
 		return r.NFSExport != nil && exportID.MatchString(e.Resource.ID) && e.Resource.Path == r.NFSExport.Native.Pseudo
+	case "object-user":
+		return r.ObjectUser != nil && e.Resource == ResourceEvidence{ID: r.ObjectUser.Name}
 	case "gateway":
 		return r.Gateway != nil && zoneID.MatchString(e.Resource.ID) && e.Resource.Path == r.Gateway.Endpoint && everyDocumentRuns(e, r) && e.Endpoint.Reachable
 	}

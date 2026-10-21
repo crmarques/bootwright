@@ -74,7 +74,7 @@ SUBVOLUME_PATH = re.compile(r"/volumes/(?:_nogroup|[A-Za-z0-9][A-Za-z0-9_.-]{0,1
 CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "tunnel_preflight", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount",
                          "cache", "enroll", "services", "dashboard", "dashboard_read", "observe", "bootstrap_state", "host_state", "destroy"))
 CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "tunnel_preflight", "observe", "bootstrap_state", "host_state", "dashboard_read"))
-EVIDENCE_VERSION = "ceph-core-evidence-v9"
+EVIDENCE_VERSION = "ceph-core-evidence-v10"
 # The specialization ids the last dispatched phase's worker applied; the remote wrapper reads it once per process.
 APPLIED = []
 DASHBOARD_USER = "admin"
@@ -443,7 +443,7 @@ def validate(request):
     """Admit only the implemented core envelope, including concrete devices."""
     require(isinstance(request, dict))
     required = SCOPE_MEMBERS | {"action"}
-    resources = {"pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway", "nfsExport"}
+    resources = {"pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway", "nfsExport", "objectUser"}
     require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"delegated"} - resources)
     hosts = scope_checks(request)
     validate_delegated(request, hosts)
@@ -461,6 +461,12 @@ def validate(request):
         require(not (resources - {"gateway"}) & set(request))
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_object
         ceph_native_object.validate(request, hosts)
+        return request
+    require(request["action"] == "object-user" or "objectUser" not in request)
+    if request["action"] == "object-user":
+        require(not (resources - {"objectUser"}) & set(request))
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_object
+        ceph_native_object.validate_user(request, hosts)
         return request
     require(request["action"] == "nfs-export" or "nfsExport" not in request)
     if request["action"] == "nfs-export":
@@ -539,7 +545,7 @@ def host_scope(request):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v27")
+    require(request["version"] == "ceph-core-v28")
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])
@@ -3659,16 +3665,20 @@ def dispatch(envelope):
     unit = isinstance(request, dict) and request.get("action") == "service"
     gateway = isinstance(request, dict) and request.get("action") == "gateway"
     export = isinstance(request, dict) and request.get("action") == "nfs-export"
-    kind = (ceph_native_object.ObjectWorker if gateway else ceph_native_units.UnitWorker if unit else ceph_native_nfs.ExportWorker if export
-            else ceph_native_resources.ResourceWorker if resource else Worker)
+    user = isinstance(request, dict) and request.get("action") == "object-user"
+    kind = (ceph_native_object.ObjectWorker if gateway else ceph_native_object.UserWorker if user else ceph_native_units.UnitWorker if unit
+            else ceph_native_nfs.ExportWorker if export else ceph_native_resources.ResourceWorker if resource else Worker)
     worker = kind(request, envelope["host"])
     worker.horizon = worker.clock() + MANAGER_HORIZON
     require(phase in CORE_PHASES or (resource and phase in ceph_native_resources.PHASES) or (unit and phase in ceph_native_units.PHASES)
-            or (gateway and phase in ceph_native_object.PHASES) or (export and phase in ceph_native_nfs.EXPORT_PHASES))
-    if phase not in CORE_READ_ONLY_PHASES and phase not in ceph_native_resources.READ_ONLY_PHASES:
+            or (gateway and phase in ceph_native_object.PHASES) or (export and phase in ceph_native_nfs.EXPORT_PHASES)
+            or (user and phase in ceph_native_object.USER_PHASES))
+    if phase not in CORE_READ_ONLY_PHASES and phase not in ceph_native_resources.READ_ONLY_PHASES and phase not in ceph_native_object.USER_READ_ONLY_PHASES:
         require(supported_transport(worker.request), "unsupported-release")
     if gateway:
         worker.tls = ceph_native_object.material(worker.request, phase, envelope["private"])
+    if user:
+        require(envelope["private"] == {}, "material")
     if unit:
         worker.bound = ceph_native_units.material(worker.request, phase, envelope["private"])
     if phase in ("tunnel_preflight", "bootstrap", "authorize", "tunnel_configure"):

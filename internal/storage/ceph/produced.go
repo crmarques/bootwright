@@ -34,6 +34,9 @@ func validateProduced(produced []lifecycle.Produced, r Request, present bool) er
 	if present && r.Action == "cluster" {
 		return validateDashboard(produced)
 	}
+	if present && r.Action == "object-user" {
+		return validateObjectUser(produced, r)
+	}
 	if !present || r.Action != "client" {
 		if len(produced) != 0 {
 			return evidenceFailure()
@@ -111,6 +114,47 @@ func cephFSClientCaps(c Client) (map[string]string, bool) {
 func strictlyAscending(values []string) bool {
 	for i := 1; i < len(values); i++ {
 		if values[i-1] >= values[i] {
+			return false
+		}
+	}
+	return true
+}
+
+type objectUserCredential struct {
+	AccessKey string `json:"accessKey"`
+	SecretKey string `json:"secretKey"`
+	UID       string `json:"uid"`
+}
+
+func validateObjectUser(produced []lifecycle.Produced, r Request) error {
+	if r.ObjectUser == nil || len(produced) != 1 || produced[0].Name != ObjectUserOutput || len(produced[0].Material.Parts()) != 1 {
+		return evidenceFailure()
+	}
+	value, ok := produced[0].Material.Part(secrets.ValuePart)
+	if !ok {
+		return evidenceFailure()
+	}
+	defer clear(value)
+	entry, err := reconciliation.DecodeEvidence[objectUserCredential](value, 4096, "Ceph object user material")
+	if err != nil || canonicaljson.Prove(value, entry, canonicaljson.Bare) != nil {
+		return evidenceFailure()
+	}
+	raw, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](value, 4096, "Ceph object user members")
+	if err != nil || !closedMembers(raw, "accessKey", "secretKey", "uid") {
+		return evidenceFailure()
+	}
+	if entry.UID != r.ObjectUser.Name || !visibleKey(entry.AccessKey) || !visibleKey(entry.SecretKey) {
+		return evidenceFailure()
+	}
+	return nil
+}
+
+func visibleKey(key string) bool {
+	if len(key) == 0 || len(key) > 128 {
+		return false
+	}
+	for i := 0; i < len(key); i++ {
+		if key[i] < 0x21 || key[i] > 0x7e {
 			return false
 		}
 	}

@@ -10,8 +10,10 @@ recorded realm that is gone refuses with no effect. The gateway's record is writ
 passes, before its first create, so a refused name leaves no record. A realm, zone group or zone of the gateway's
 names is adopted only under this operation's attempt record. The gateway never reads or creates an object user. A TLS service's
 `ssl_cert` and `ssl_key` are bound Secret leaves: the documents are normalized and recorded with fixed placeholders, the leaves are spliced into
-the apply stream in memory only, and readiness proves the served leaf by SHA-256. Like the core worker it imports only the target Python
-standard library and the core worker modules.
+the apply stream in memory only, and readiness proves the served leaf by SHA-256. A user request carries one StorageObjectUser in its
+gateway's zone: `radosgw-admin user create` without key arguments generates its S3 key pair (src/rgw/radosgw-admin/radosgw-admin.cc:6872-6875),
+so no key ever reaches an argument; the pair crosses only stdout and is retained in custody before it is produced. Like the core worker it
+imports only the target Python standard library and the core worker modules.
 """
 
 from __future__ import annotations
@@ -23,11 +25,15 @@ import contextlib
 import hashlib
 import hmac
 import ipaddress
+import json
 import os
 import re
+import unicodedata
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_units
-from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, canonical, named, read_regular, require
+from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import (
+    Custody, NativeFailure, Refusal, canonical, named, read_regular, require, unique_object,
+)
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native_observability import MAX_KEY, MAX_LEAF, PRIVATE_KEY, answers, leaf, served
 
 APPLY_PHASES = ("gateway_zone", "gateway_placement", "gateway_service")
@@ -57,6 +63,17 @@ KINDS = ("realm", "zonegroup", "zone")
 LISTS = {"realm": "realms", "zonegroup": "zonegroups", "zone": "zones"}
 MAX_NAMES = 1024
 TOOL_LIMIT = 64 * 1024 * 1024
+USER_APPLY_PHASES = ("object_user",)
+USER_READ_ONLY_PHASES = frozenset(("object_user_read",))
+USER_PHASES = frozenset(USER_APPLY_PHASES) | USER_READ_ONLY_PHASES
+USER_MEMBERS = frozenset(("displayName", "gateway", "name", "realm", "zone", "zoneGroup"))
+# cephadm's dashboard integration creates a system user of this ID in each realm; a StorageObjectUser never takes it.
+RESERVED_USERS = ("dashboard",)
+MAX_USERS = 65536
+MAX_DISPLAY = 256
+KEY_LIMIT = 128
+MAX_MATERIAL = 4096
+MATERIAL_MEMBERS = frozenset(("accessKey", "secretKey", "uid"))
 
 
 def label(value):
@@ -168,6 +185,40 @@ def validate(request, hosts):
         auxiliary = request.get("auxiliary", [])
         require(isinstance(auxiliary, list) and set(IMAGES) <= {entry.get("name") for entry in auxiliary if isinstance(entry, dict)})
     validate_bindings(gateway, documents)
+
+
+def display_name(value):
+    """Text of at most 256 bytes without control characters, as admission admits."""
+    return (isinstance(value, str) and 0 < len(value.encode("utf-8")) <= MAX_DISPLAY
+            and not any(unicodedata.category(c) == "Cc" or c in "  " for c in value))
+
+
+def visible(key):
+    """An S3 key as Bootwright retains it: 1 to 128 visible ASCII characters. radosgw-admin generates 20 of 0-9A-Z and 40 of A-Za-z0-9
+    (src/rgw/driver/rados/rgw_user.h:22-23, src/common/random_string.cc); Bootwright never pins that format."""
+    return isinstance(key, str) and 0 < len(key) <= KEY_LIMIT and all("!" <= c <= "~" for c in key)
+
+
+def validate_user(request, hosts):
+    """One object user of one gateway: its native user ID, never the reserved `dashboard`, its display name and its gateway's names."""
+    del hosts
+    user = request.get("objectUser")
+    require(isinstance(user, dict) and set(user) == USER_MEMBERS)
+    require(named(user["name"]) and label(user["name"]) and user["name"] not in RESERVED_USERS)
+    require(named(user["gateway"]) and label(user["gateway"]) and all(label(user[key]) for key in ("realm", "zoneGroup", "zone")))
+    require(display_name(user["displayName"]))
+
+
+def user_material(data, uid, reason="object-user-identity"):
+    """The retained key pair: canonical JSON of exactly {accessKey, secretKey, uid} for this user."""
+    try:
+        require(isinstance(data, bytes) and 0 < len(data) <= MAX_MATERIAL, reason)
+        value = json.loads(data, object_pairs_hook=unique_object)
+        require(isinstance(value, dict) and set(value) == MATERIAL_MEMBERS and value["uid"] == uid, reason)
+        require(visible(value["accessKey"]) and visible(value["secretKey"]) and canonical(value) == data, reason)
+        return value
+    except (ValueError, UnicodeError, TypeError):
+        raise Refusal(reason) from None
 
 
 def frontend(request):
@@ -646,3 +697,173 @@ class ObjectWorker(ceph_native_units.UnitWorker):
         if blocked is not None:
             self.pending(("tls@" if blocked == "tls" else "vip@") + name)
         return blocked is None
+
+
+class UserWorker(ObjectWorker):
+    """One object user in its gateway's zone: created once by radosgw-admin, whose generated S3 key pair crosses only stdout into this
+    worker and is retained in the root-only custody area before any result; a retry reads that pair back and never rotates it."""
+
+    def user(self):
+        return self.request["objectUser"]
+
+    def gateway(self):
+        user = self.user()
+        return {"name": user["gateway"], "realm": user["realm"], "zoneGroup": user["zoneGroup"], "zone": user["zone"]}
+
+    def recovery_scope(self):
+        """The cluster's bootstrap scope: the user member is this block's own input, never part of the cluster's authoring."""
+        unused, staging = ceph_native.tunnel_helpers()
+        scope = staging.recovery_scope({key: value for key, value in self.request.items() if key != "objectUser"})
+        require(canonical(self.markers.read("bootstrap-scope.json")) == canonical(scope), "ownership")
+        return scope
+
+    def user_record(self, suffix):
+        """Its records hold a `.` that custody's `object-user-<record>-<user>.json` names never do."""
+        return "object-user-" + suffix + "." + self.user()["name"] + ".json"
+
+    def user_intent(self):
+        user = self.user()
+        return {"owner": self.request["owner"], "fsid": self.request["fsid"], "gateway": user["gateway"], "user": user["name"],
+                "displayName": user["displayName"], "realm": user["realm"], "zoneGroup": user["zoneGroup"], "zone": user["zone"]}
+
+    def user_scope(self, ids):
+        return {"owner": self.request["owner"], "fsid": self.request["fsid"], "host": self.host["name"], "user": self.user_intent(),
+                "zoneID": ids["zone"]}
+
+    def user_store(self):
+        return Custody(self, "object-user", "-" + self.user()["name"], MAX_MATERIAL, lambda data: user_material(data, self.user()["name"]))
+
+    def user_foreign(self, detail):
+        user = self.user()
+        return NativeFailure("object-user-foreign", self.native_coordinate(), "user " + user["name"] + " in realm " + user["realm"] + " " + detail)
+
+    def user_command(self, *args):
+        """radosgw-admin user list, info or create in the gateway's zone. Its stdout can hold the user's keys, so it stays in this
+        worker's memory and a failure reports only stderr."""
+        argv = [RADOSGW_ADMIN, "--conf", os.path.join(self.markers.path, "ceph.conf"),
+                "--keyring", os.path.join(self.markers.path, "ceph.client.admin.keyring"),
+                "--format", "json", "user", *args, *self.site("realm", "zonegroup", "zone")]
+        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verified-tunnel" else contextlib.nullcontext()
+        with proof:
+            code, output = self.run(argv, timeout=60)
+        if code != 0:
+            raise NativeFailure("native-command", self.native_coordinate(), getattr(output, "stderr", b"") or b"radosgw-admin user " + args[0].encode())
+        try:
+            return json.loads(output)
+        except (ValueError, UnicodeError):
+            raise Refusal("native-output") from None
+
+    def users(self):
+        """`user list` prints the metadata keys of every user as one JSON array (src/rgw/radosgw-admin/radosgw-admin.cc:9740-9797)."""
+        value = self.user_command("list")
+        require(isinstance(value, list) and len(value) <= MAX_USERS and all(isinstance(uid, str) for uid in value), "native-output")
+        return set(value)
+
+    def info(self):
+        """`user info` prints RGWUserInfo::dump (src/rgw/rgw_common.cc:2837-2897); each S3 key as {user, access_key, secret_key, active,
+        create_date} (:3036-3050)."""
+        value = self.user_command("info", "--uid", self.user()["name"])
+        require(isinstance(value, dict) and value.get("user_id") == self.user()["name"], "native-output")
+        return value
+
+    def native_pair(self, info):
+        """The one S3 key the user holds, as retained material; a user with another key set is not this operation's."""
+        keys = info.get("keys")
+        require(isinstance(keys, list) and len(keys) == 1 and isinstance(keys[0], dict) and keys[0].get("user") == self.user()["name"],
+                "object-user-identity")
+        pair = {"accessKey": keys[0].get("access_key"), "secretKey": keys[0].get("secret_key"), "uid": self.user()["name"]}
+        require(visible(pair["accessKey"]) and visible(pair["secretKey"]), "object-user-identity")
+        return canonical(pair)
+
+    def prove_user(self, info, material):
+        """The user as created: its display name, unsuspended, one S3 key equal to the retained pair, no Swift key, subuser or
+        capability, no system, admin or account role."""
+        user = self.user()
+        held = canonical(material)
+        try:
+            same = hmac.compare_digest(self.native_pair(info), held)
+        finally:
+            del held
+        require(same and info.get("display_name") == user["displayName"] and info.get("suspended") == 0
+                and info.get("subusers") == [] and info.get("swift_keys") == [] and info.get("caps") == []
+                and info.get("system", False) is False and info.get("admin", False) is False
+                and info.get("type") == "rgw" and info.get("account_id") == "", "object-user-identity")
+
+    def proved_user_zone(self):
+        """The gateway's records and IDs, its committed period and the radosgw-admin its record holds."""
+        ids = self.proved_records()
+        require(self.committed(ids), "not-ready")
+        require(self.markers.read(self.record("tool")) == {"sha256": self.tool_digest()}, "artifact")
+        return ids
+
+    def object_user(self):
+        """Every proof before any write; the user created once under its attempt record; its key pair retained before the result."""
+        self.verify_tool()
+        ids = self.proved_user_zone()
+        intent = self.user_intent()
+        record, attempt = self.markers.read(self.user_record("intent")), self.markers.read(self.user_record("attempt"))
+        require(record is None or record == intent, "ownership")
+        require(attempt is None or attempt == intent, "ownership")
+        scope = self.user_scope(ids)
+        store = self.user_store()
+        unused, ready = store.records(scope)
+        listed = self.user()["name"] in self.users()
+        if listed and attempt is None:
+            raise self.user_foreign("has no creation record of this operation")
+        if not listed and (ready is not None or self.markers.read(self.user_record("complete")) is not None):
+            raise self.user_foreign("that this operation created is gone")
+        self.markers.write(self.user_record("intent"), intent)
+        if not listed:
+            self.markers.write(self.user_record("attempt"), intent)
+            created = self.user_command("create", "--uid", self.user()["name"], "--display-name", self.user()["displayName"])
+            require(isinstance(created, dict) and created.get("user_id") == self.user()["name"], "native-output")
+            del created
+        material = store.prepare(scope, lambda: self.native_pair(self.info()))
+        self.prove_user(self.info(), material)
+        self.markers.write(self.user_record("complete"), intent)
+        return {"changed": not listed, "private": canonical(material).decode("ascii")}
+
+    def object_user_read(self):
+        """Read-only recapture of the retained pair, proved against the user it was created for."""
+        self.verify_tool()
+        ids = self.proved_user_zone()
+        require(self.markers.read(self.user_record("intent")) == self.user_intent(), "ownership")
+        if self.user()["name"] not in self.users():
+            raise self.user_foreign("that this operation created is gone")
+        material = self.user_store().material(self.user_scope(ids))
+        self.prove_user(self.info(), material)
+        return {"private": canonical(material).decode("ascii")}
+
+    def unfinished(self, evidence):
+        if self.request["action"] != "object-user":
+            return super().unfinished(evidence)
+        evidence["owned"] = self.markers.read(self.user_record("intent")) == self.user_intent()
+        evidence["exists"] = evidence["owned"]
+        evidence["partial"] = evidence["owned"]
+        return evidence
+
+    def observe_resource(self, evidence, ready):
+        """Read-only: radosgw-admin runs only once the gateway's realm, zone group and zone are recorded and listed."""
+        if self.request["action"] != "object-user":
+            return super().observe_resource(evidence, ready)
+        intent = self.user_intent()
+        record = self.markers.read(self.user_record("intent"))
+        require(record is None or record == intent, "ownership")
+        owned = record is not None
+        present = self.root_present()
+        ids = self.foreign_check(self.listed() if present else {kind: set() for kind in KINDS})
+        listed = len(ids) == len(KINDS) and self.user()["name"] in self.users()
+        if listed and self.markers.read(self.user_record("attempt")) is None:
+            raise self.user_foreign("has no creation record of this operation")
+        if not listed and self.markers.read(self.user_record("complete")) is not None:
+            raise self.user_foreign("that this operation created is gone")
+        evidence["owned"] = owned
+        evidence["exists"] = owned or listed
+        proved = False
+        if owned and listed:
+            unused, retained = self.user_store().records(self.user_scope(ids))
+            if retained is not None:
+                self.prove_user(self.info(), self.user_store().material(self.user_scope(ids)))
+                proved = True
+        evidence["resource"] = {"id": self.user()["name"], "path": ""} if proved else {"id": "", "path": ""}
+        return ready and proved

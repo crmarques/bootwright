@@ -2953,6 +2953,15 @@ spec:
     fqdn: objects.ceph-multidc-01.clusters.example.com
 ---
 apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectUser
+metadata:
+  name: app-writer
+spec:
+  clusterRef: ceph-multidc-01
+  objectGatewayRef: objects
+  displayName: App writer
+---
+apiVersion: bootwright.io/v1alpha1
 kind: StorageNFSExport
 metadata:
   name: acceptance-nfs

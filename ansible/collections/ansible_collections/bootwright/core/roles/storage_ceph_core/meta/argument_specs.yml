@@ -76,6 +76,8 @@ argument_specs:
             required: true
           nfsExport:
             type: dict
+          objectUser:
+            type: dict
           owner:
             type: str
           packages:
@@ -111,7 +113,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [ceph-core-v27]
+            choices: [ceph-core-v28]
       bootwright_ceph_digest:
         type: str
         required: true
@@ -125,6 +127,7 @@ argument_specs:
           - Runner-owned private produced-material output paths.
           - C(client) receives a client action's generated CephX identity.
           - C(dashboard) receives a cluster action's dashboard administrator password.
+          - C(object-user) receives an object-user action's generated S3 key pair.
 
   observe:
     short_description: Observe a frozen Ceph resource without mutation.

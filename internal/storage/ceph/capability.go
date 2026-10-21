@@ -42,6 +42,8 @@ func (c Capability) request(catalog api.Catalog, object api.Object, contextName 
 		return subvolumeRequest(catalog, object, contextName)
 	case api.StorageNFSExport:
 		return nfsExportRequest(catalog, object, contextName)
+	case api.StorageObjectUser:
+		return objectUserRequest(catalog, object, contextName)
 	}
 	return Request{}, failure("lifecycle.unsupported", "the requested kind has no core Ceph adapter", "")
 }
@@ -193,6 +195,8 @@ func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, 
 			backing = reconciliation.ObjectRef{Kind: string(api.StorageSubvolume), Object: request.NFSExport.Subvolume}
 		}
 		requires = append(requires, backing)
+	case "object-user":
+		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageObjectGateway), Object: request.ObjectUser.Gateway})
 	case "gateway":
 		for _, suffix := range derivedZonePools(object) {
 			dependencies = append(dependencies, GatewayPoolBlockID(object.Name(), suffix))
@@ -262,6 +266,9 @@ func subjectOf(r Request, object string) string {
 	if r.NFSExport != nil {
 		return "NFS export " + object
 	}
+	if r.ObjectUser != nil {
+		return "object user " + object
+	}
 	if r.Pool != nil && r.Pool.Name != object {
 		return "zone pool " + r.Pool.Name + " of object gateway " + object
 	}
@@ -277,7 +284,7 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if err != nil {
 		return Request{}, err
 	}
-	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePlacementPolicy: "policy", api.StoragePool: "pool", api.StorageClient: "client", api.StorageRBDImage: "rbd", api.StorageFilesystem: "filesystem", api.StorageSubvolume: "subvolume", api.StorageObjectGateway: "pool", api.StorageNFSExport: "nfs-export"}[c.kind]
+	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePlacementPolicy: "policy", api.StoragePool: "pool", api.StorageClient: "client", api.StorageRBDImage: "rbd", api.StorageFilesystem: "filesystem", api.StorageSubvolume: "subvolume", api.StorageObjectGateway: "pool", api.StorageNFSExport: "nfs-export", api.StorageObjectUser: "object-user"}[c.kind]
 	object := r.Cluster
 	if r.Action == "policy" && r.Policy != nil {
 		object = r.Policy.Name
@@ -300,6 +307,9 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if r.Action == "nfs-export" && r.NFSExport != nil {
 		object = r.NFSExport.Name
 	}
+	if r.Action == "object-user" && r.ObjectUser != nil {
+		object = r.ObjectUser.Name
+	}
 	if c.kind == api.StorageObjectGateway {
 		object = gatewayPoolObject(e.Block, r)
 		if r.Action == "gateway" && r.Gateway != nil && e.Block.ID == GatewayBlockID(r.Gateway.Name) {
@@ -310,7 +320,7 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 		action = r.Action
 	}
 	if action == "" || r.Action != action || (r.Action == "settings") != (r.Settings != nil) || (r.Action == "service") != (r.Service != nil) || (r.Action == "gateway") != (r.Gateway != nil) ||
-		(r.Action == "nfs-export") != (r.NFSExport != nil) || r.NFSExport != nil && r.NFSExport.SubvolumePath != "" || r.Client != nil && r.Client.SubvolumePath != "" || e.Block.Kind != string(c.kind) || e.Block.Object != object {
+		(r.Action == "nfs-export") != (r.NFSExport != nil) || (r.Action == "object-user") != (r.ObjectUser != nil) || r.NFSExport != nil && r.NFSExport.SubvolumePath != "" || r.Client != nil && r.Client.SubvolumePath != "" || e.Block.Kind != string(c.kind) || e.Block.Object != object {
 		return Request{}, failure("lifecycle.state", "Ceph request does not match its frozen resource identity", "")
 	}
 	if r.Owner != "" || r.FSID != "" || e.ApplyOperation == "" {

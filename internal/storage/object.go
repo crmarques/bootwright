@@ -174,3 +174,19 @@ func (a *admission) rgwBinding(field string, service api.Value) {
 	}
 	a.issue("api.invariant", field+".service_id", "RGW service is not bound by a StorageObjectGateway of this cluster, so cephadm would deploy it before its realm, zone group and zone exist", "declare a StorageObjectGateway of this cluster whose spec.serviceRef names this service, or remove the RGW service")
 }
+
+func (a *admission) objectUser(cluster api.Object) {
+	spec, name := a.object.Spec(), a.object.Name()
+	if name == "dashboard" {
+		a.issue("api.invariant", "$.metadata.name", "the RGW user ID dashboard is reserved: cephadm's dashboard integration creates a user of that ID in every realm", "rename the StorageObjectUser; its metadata.name is its native RGW user ID")
+	}
+	if len(name) > 46 {
+		a.issue("api.invariant", "$.metadata.name", "an object user name longer than 46 characters does not fit its block identity ceph-object-user-<name> of at most 63 characters", "shorten metadata.name to at most 46 characters")
+	}
+	if spec.Has("objectGatewayRef") {
+		a.sameOwner(api.StorageObjectGateway, textOf(spec, "objectGatewayRef"), "$.spec.objectGatewayRef", cluster)
+	}
+	if display := spec.Get("displayName"); display.Present() && (len(display.Text()) > 256 || !NativeVersion(display.Text())) {
+		a.issue("api.invariant", "$.spec.displayName", "an RGW display name is at most 256 bytes of text without control characters", "shorten spec.displayName and remove its control characters, or omit it to use metadata.name")
+	}
+}

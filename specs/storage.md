@@ -285,6 +285,12 @@ them:
   declared placement StoragePool through that pool; its deadline
   is fixed (apply 4260 s, observe 720 s, destroy 1380 s) and does not grow with
   the host count.
+- An object user block `ceph-object-user-<user>` (Kind StorageObjectUser,
+  exclusive `ceph/<cluster>`) realizes one StorageObjectUser on the bootstrap
+  host. It depends on the cluster and image blocks by ID and on its
+  StorageObjectGateway through that object; its deadline is fixed (apply
+  2280 s, observe 1380 s, destroy 1380 s) and does not grow with the host
+  count.
 - An NFS export block `ceph-nfs-export-<export>` (Kind StorageNFSExport,
   exclusive `ceph/<cluster>`) realizes one StorageNFSExport on the bootstrap
   host. It depends on the cluster and image blocks and on its NFS service-unit
@@ -914,6 +920,36 @@ and `sso@oauth2-proxy`. Destroy leaves the dashboard's single sign-on setting
 to whole-cluster retirement; per-resource removal is
 [B491](milestones/m2.md#b491)'s.
 
+A StorageObjectUser is realized by its user block `ceph-object-user-<user>`
+on the bootstrap host, in one `object_user` phase. Before any write it proves
+the cluster's ownership record and FSID, the gateway's own records with its
+realm, zone group and zone still listed under their recorded IDs
+(`object-realm-foreign`), the gateway's committed period (`not-ready`) and
+`radosgw-admin` itself against the digest the gateway recorded (`artifact`).
+It runs `radosgw-admin` only with `--rgw-realm`, `--rgw-zonegroup` and
+`--rgw-zone` of its gateway. A user ID that `user list` reports without this
+operation's attempt record, or a user this operation created that is gone,
+refuses `object-user-foreign` before the user's record is written. The phase
+then records the user's intent and attempt and runs
+`user create --uid <user> --display-name <name>` once, with no key argument,
+so Ceph generates the S3 key pair. The pair crosses only that command's
+output, which stays in the worker's memory: a failed `radosgw-admin` user
+command reports its standard error only. The pair `user info` reports is
+retained in the protected custody area (a reserved root-only 0600 file and its
+identity record) before the phase answers; a lost reply is recovered under
+the attempt record from `user info`, and a retained pair is never read again
+from Ceph, regenerated or rotated. Readiness and every later phase prove with
+`user info` that the user has the frozen display name, is not suspended, has
+no subuser, Swift key, capability, system, admin or account role, and holds
+exactly one S3 key equal to the retained pair; anything else refuses
+`object-user-identity`. The phase answers the retained pair as the block's
+produced material `object-user`, and an observation that proves the user
+ready recaptures it read-only with `object_user_read`. Evidence carries the
+user ID only, never a key. The block never modifies, suspends or removes a
+user, and adds no key, subuser or capability; it retires with the cluster's
+hosts, and [B491](milestones/m2.md#b491) owns its online removal. S3 requests
+with the pair are the operator's acceptance.
+
 A StorageNFSExport is realized by its export block `ceph-nfs-export-<export>`
 on the bootstrap host. A subvolume binding binds the path the subvolume's
 applied creation proof reports and never constructs one. Before any write the
@@ -1209,7 +1245,10 @@ StorageClient's Ceph keyring only as the
 [client keyring export](cli.md#client-keyring-export) defines: one selected
 managed cluster and one of its declared clients, settled before any custody
 read, in the native keyring form, until the destroy that completes the
-removal withdraws it. This contract adds no other command or implicit reveal.
+removal withdraws it. A StorageObjectUser's S3 key pair is produced material
+of its user block with no reveal command yet
+([B489](milestones/m2.md#b489)). This contract adds no other command or
+implicit reveal.
 
 ## Removal and concurrency
 

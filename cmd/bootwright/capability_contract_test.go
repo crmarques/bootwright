@@ -168,6 +168,7 @@ func contractRows() []contractRow {
 		{kind: string(api.StorageFilesystem), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
 		{kind: string(api.StorageSubvolume), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph", completedFrom: cephCompletedFrom},
 		{kind: string(api.StorageObjectGateway), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph-object", completedFrom: cephCompletedFrom},
+		{kind: string(api.StorageObjectUser), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph-object+user", completedFrom: cephCompletedFrom},
 		{kind: string(api.StorageNFSExport), implementation: ceph.Implementation, example: "libvirt-3-nodes-ceph-nfs", completedFrom: cephCompletedFrom},
 		{kind: string(api.StorageCluster), implementation: ceph.HostImplementation, example: "libvirt-3-nodes-ceph", completedFrom: cephHostCompletedFrom},
 		{kind: string(api.StorageSMBResource), implementation: ceph.SMBImplementation, example: "libvirt-3-nodes-ceph+smb", completedFrom: cephSMBCompletedFrom},
@@ -214,7 +215,8 @@ const cephSMBCompletedFrom = "specs/storage.md, SMB resources: an SMB request ta
 // example and a synthetic overlay under testdata, for a kind no tracked example
 // declares yet.
 var contractOverlays = map[string][2]string{
-	"libvirt-3-nodes-ceph+smb": {"libvirt-3-nodes-ceph", filepath.Join("testdata", "capability-overlays", "ceph-smb")},
+	"libvirt-3-nodes-ceph+smb":         {"libvirt-3-nodes-ceph", filepath.Join("testdata", "capability-overlays", "ceph-smb")},
+	"libvirt-3-nodes-ceph-object+user": {"libvirt-3-nodes-ceph-object", filepath.Join("testdata", "capability-overlays", "ceph-object-user")},
 }
 
 func contractSources(t *testing.T, name string) desiredstate.Sources {
