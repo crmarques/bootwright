@@ -2962,6 +2962,27 @@ spec:
   displayName: App writer
 ---
 apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectBucket
+metadata:
+  name: app-data
+spec:
+  clusterRef: ceph-multidc-01
+  objectGatewayRef: objects
+  ownerRef: app-writer
+  policy:
+    Statement:
+      - Action:
+          - s3:GetObject
+        Effect: Allow
+        Principal:
+          AWS:
+            - arn:aws:iam:::user/app-reader
+        Resource:
+          - arn:aws:s3:::app-data/*
+        Sid: ReadOnlyForReader
+    Version: "2012-10-17"
+---
+apiVersion: bootwright.io/v1alpha1
 kind: StorageNFSExport
 metadata:
   name: acceptance-nfs

@@ -219,7 +219,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation,
 		capability: agentinstall.NewInstall(runner).WithIdentities(provedIdentities{}),
 	}}
-	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageRBDImage, api.StorageFilesystem, api.StorageSubvolume, api.StorageClient, api.StorageObjectGateway, api.StorageObjectUser, api.StorageNFSExport} {
+	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageRBDImage, api.StorageFilesystem, api.StorageSubvolume, api.StorageClient, api.StorageObjectGateway, api.StorageObjectUser, api.StorageObjectBucket, api.StorageNFSExport} {
 		resolver = append(resolver, boundCapability{kind: string(kind), implementation: ceph.Implementation, capability: ceph.New(kind, runner).WithProofs(cephDependencyProofs{})})
 	}
 	resolver = append(resolver, boundCapability{kind: string(api.StorageCluster), implementation: ceph.ImageImplementation, capability: ceph.NewImage(runner)})

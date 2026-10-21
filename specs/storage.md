@@ -291,6 +291,12 @@ them:
   StorageObjectGateway through that object; its deadline is fixed (apply
   2280 s, observe 1380 s, destroy 1380 s) and does not grow with the host
   count.
+- An object bucket block `ceph-object-bucket-<bucket>` (Kind
+  StorageObjectBucket, exclusive `ceph/<cluster>`) realizes one
+  StorageObjectBucket on the bootstrap host. It depends on the cluster and
+  image blocks by ID and on its owner StorageObjectUser through that object;
+  its deadline is fixed (apply 2280 s, observe 1380 s, destroy 1380 s) and
+  does not grow with the host count.
 - An NFS export block `ceph-nfs-export-<export>` (Kind StorageNFSExport,
   exclusive `ceph/<cluster>`) realizes one StorageNFSExport on the bootstrap
   host. It depends on the cluster and image blocks and on its NFS service-unit
@@ -950,6 +956,42 @@ user, and adds no key, subuser or capability; it retires with the cluster's
 hosts, and [B491](milestones/m2.md#b491) owns its online removal. S3 requests
 with the pair are the operator's acceptance.
 
+A StorageObjectBucket is realized by its bucket block
+`ceph-object-bucket-<bucket>` on the bootstrap host, in one `object_bucket`
+phase. Before any write it proves what the user block proves of the gateway
+(`object-realm-foreign`, `not-ready`, `artifact`), that its owner's completion
+record names this operation, gateway and zone (`ownership`), and reads the
+owner's one active S3 key pair with `user info` into the worker's memory
+(`object-user-identity` otherwise). A bucket that `bucket list` reports without
+this operation's attempt record, or one this operation created that is gone,
+refuses `object-bucket-foreign` before the bucket's record is written. The
+phase then records the bucket's intent and attempt and sends S3 CreateBucket,
+signed with AWS Signature Version 4 under the owner's pair, to the first
+running daemon of the gateway's rgw service, in daemon name order, that
+answers at its frozen frontend port with a status below 500. When that service terminates TLS, the block holds
+the bound certificate only (never its key) and sends a request only to a daemon
+whose served leaf has the bound leaf's SHA-256, with SNI set to the endpoint
+FQDN; every other daemon is sent nothing. `bucket stats` then proves the bucket
+under its name with no tenant, owned by its owner and in the gateway's zone
+group: a bucket owned by anyone else that this operation never proved refuses
+`object-bucket-foreign`, and the bucket ID is recorded. A lost reply is
+recovered under the attempt record from `bucket stats`, never by a second
+create. With a declared policy, the phase reads the stored one with
+GetBucketPolicy and, before the bucket's completion record, puts the declared
+canonical JSON with PutBucketPolicy when they differ. RGW's error answer to any
+S3 request refuses `object-bucket-s3`, naming the request, HTTP status, error
+code and message, never a key; no answering daemon is `not-ready` with
+`http@<service>` or `tls@<service>`. Readiness and every later phase prove with
+`bucket stats` the owner, the recorded bucket ID and the zone group, and with
+the owner's GetBucketPolicy that the stored policy is exactly the declared one,
+or absent when none is declared; that answer also proves the bucket usable by
+its owner, because RGW refuses a suspended bucket's owner `UserSuspended`.
+Another owner, ID, zone group or policy refuses `object-bucket-identity`, and
+the block never removes or replaces a policy it did not put. Evidence carries
+the bucket name only. The block never deletes a bucket or its objects; it
+retires with the cluster's hosts, and [B491](milestones/m2.md#b491) owns its
+online removal.
+
 A StorageNFSExport is realized by its export block `ceph-nfs-export-<export>`
 on the bootstrap host. A subvolume binding binds the path the subvolume's
 applied creation proof reports and never constructs one. Before any write the
@@ -1247,7 +1289,9 @@ managed cluster and one of its declared clients, settled before any custody
 read, in the native keyring form, until the destroy that completes the
 removal withdraws it. A StorageObjectUser's S3 key pair is produced material
 of its user block with no reveal command yet
-([B489](milestones/m2.md#b489)). This contract adds no other command or
+([B489](milestones/m2.md#b489)); a bucket block reads it only into its
+worker's memory to sign its owner's S3 requests and never retains, answers or
+records it. This contract adds no other command or
 implicit reveal.
 
 ## Removal and concurrency

@@ -44,6 +44,8 @@ func (c Capability) request(catalog api.Catalog, object api.Object, contextName 
 		return nfsExportRequest(catalog, object, contextName)
 	case api.StorageObjectUser:
 		return objectUserRequest(catalog, object, contextName)
+	case api.StorageObjectBucket:
+		return objectBucketRequest(catalog, object, contextName)
 	}
 	return Request{}, failure("lifecycle.unsupported", "the requested kind has no core Ceph adapter", "")
 }
@@ -91,6 +93,9 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 				for _, b := range r.Service.Bindings {
 					plan.Secrets = append(plan.Secrets, b.SecretRef)
 				}
+			}
+			if r.ObjectBucket != nil && r.ObjectBucket.CertificateRef != "" {
+				plan.Secrets = append(plan.Secrets, r.ObjectBucket.CertificateRef)
 			}
 		}
 	}
@@ -197,6 +202,8 @@ func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, 
 		requires = append(requires, backing)
 	case "object-user":
 		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageObjectGateway), Object: request.ObjectUser.Gateway})
+	case "object-bucket":
+		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageObjectUser), Object: request.ObjectBucket.Owner})
 	case "gateway":
 		for _, suffix := range derivedZonePools(object) {
 			dependencies = append(dependencies, GatewayPoolBlockID(object.Name(), suffix))
@@ -269,6 +276,9 @@ func subjectOf(r Request, object string) string {
 	if r.ObjectUser != nil {
 		return "object user " + object
 	}
+	if r.ObjectBucket != nil {
+		return "object bucket " + object
+	}
 	if r.Pool != nil && r.Pool.Name != object {
 		return "zone pool " + r.Pool.Name + " of object gateway " + object
 	}
@@ -284,7 +294,7 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if err != nil {
 		return Request{}, err
 	}
-	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePlacementPolicy: "policy", api.StoragePool: "pool", api.StorageClient: "client", api.StorageRBDImage: "rbd", api.StorageFilesystem: "filesystem", api.StorageSubvolume: "subvolume", api.StorageObjectGateway: "pool", api.StorageNFSExport: "nfs-export", api.StorageObjectUser: "object-user"}[c.kind]
+	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePlacementPolicy: "policy", api.StoragePool: "pool", api.StorageClient: "client", api.StorageRBDImage: "rbd", api.StorageFilesystem: "filesystem", api.StorageSubvolume: "subvolume", api.StorageObjectGateway: "pool", api.StorageNFSExport: "nfs-export", api.StorageObjectUser: "object-user", api.StorageObjectBucket: "object-bucket"}[c.kind]
 	object := r.Cluster
 	if r.Action == "policy" && r.Policy != nil {
 		object = r.Policy.Name
@@ -310,6 +320,9 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if r.Action == "object-user" && r.ObjectUser != nil {
 		object = r.ObjectUser.Name
 	}
+	if r.Action == "object-bucket" && r.ObjectBucket != nil {
+		object = r.ObjectBucket.Name
+	}
 	if c.kind == api.StorageObjectGateway {
 		object = gatewayPoolObject(e.Block, r)
 		if r.Action == "gateway" && r.Gateway != nil && e.Block.ID == GatewayBlockID(r.Gateway.Name) {
@@ -320,7 +333,7 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 		action = r.Action
 	}
 	if action == "" || r.Action != action || (r.Action == "settings") != (r.Settings != nil) || (r.Action == "service") != (r.Service != nil) || (r.Action == "gateway") != (r.Gateway != nil) ||
-		(r.Action == "nfs-export") != (r.NFSExport != nil) || (r.Action == "object-user") != (r.ObjectUser != nil) || r.NFSExport != nil && r.NFSExport.SubvolumePath != "" || r.Client != nil && r.Client.SubvolumePath != "" || e.Block.Kind != string(c.kind) || e.Block.Object != object {
+		(r.Action == "nfs-export") != (r.NFSExport != nil) || (r.Action == "object-user") != (r.ObjectUser != nil) || (r.Action == "object-bucket") != (r.ObjectBucket != nil) || r.NFSExport != nil && r.NFSExport.SubvolumePath != "" || r.Client != nil && r.Client.SubvolumePath != "" || e.Block.Kind != string(c.kind) || e.Block.Object != object {
 		return Request{}, failure("lifecycle.state", "Ceph request does not match its frozen resource identity", "")
 	}
 	if r.Owner != "" || r.FSID != "" || e.ApplyOperation == "" {

@@ -12,8 +12,12 @@ names is adopted only under this operation's attempt record. The gateway never r
 `ssl_cert` and `ssl_key` are bound Secret leaves: the documents are normalized and recorded with fixed placeholders, the leaves are spliced into
 the apply stream in memory only, and readiness proves the served leaf by SHA-256. A user request carries one StorageObjectUser in its
 gateway's zone: `radosgw-admin user create` without key arguments generates its S3 key pair (src/rgw/radosgw-admin/radosgw-admin.cc:6872-6875),
-so no key ever reaches an argument; the pair crosses only stdout and is retained in custody before it is produced. Like the core worker it
-imports only the target Python standard library and the core worker modules.
+so no key ever reaches an argument; the pair crosses only stdout and is retained in custody before it is produced. A bucket request carries one
+StorageObjectBucket: radosgw-admin creates no bucket and puts no bucket policy (its command table, src/rgw/radosgw-admin/radosgw-admin.cc:946-977),
+so the worker signs S3 CreateBucket and PutBucketPolicy with AWS Signature Version 4 under its owner's key pair, read in memory from `user info`
+and never answered, logged or recorded, and sends them to an rgw daemon of the gateway's backend service; over TLS the daemon's leaf is pinned by
+SHA-256 to the bound certificate before any byte is sent. Like the core worker it imports only the target Python standard library and the core
+worker modules.
 """
 
 from __future__ import annotations
@@ -24,11 +28,16 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import hmac
+import http.client
 import ipaddress
 import json
 import os
 import re
+import socket
+import ssl
+import time
 import unicodedata
+import urllib.parse
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_units
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import (
@@ -74,6 +83,20 @@ MAX_DISPLAY = 256
 KEY_LIMIT = 128
 MAX_MATERIAL = 4096
 MATERIAL_MEMBERS = frozenset(("accessKey", "secretKey", "uid"))
+BUCKET_APPLY_PHASES = ("object_bucket",)
+BUCKET_PHASES = frozenset(BUCKET_APPLY_PHASES)
+BUCKET_MEMBERS = frozenset(("backend", "certificateRef", "endpoint", "gateway", "name", "owner", "policy", "port", "realm", "zone", "zoneGroup"))
+MAX_BUCKETS = 65536
+MAX_POLICY = 65536
+MAX_RESPONSE = MAX_POLICY + 1
+S3_SERVICE = "s3"
+S3_TIMEOUT = 30
+SIGNING = "AWS4-HMAC-SHA256"
+UNRESERVED = "-_.~"
+EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
+S3_CODE = re.compile(rb"<Code>([A-Za-z0-9.]{1,64})</Code>")
+S3_MESSAGE = re.compile(rb"<Message>([ -~]{0,256})</Message>")
+BUCKET_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}\Z")
 
 
 def label(value):
@@ -221,6 +244,112 @@ def user_material(data, uid, reason="object-user-identity"):
         return value
     except (ValueError, UnicodeError, TypeError):
         raise Refusal(reason) from None
+
+
+def validate_bucket(request, hosts):
+    """One bucket of one owner in one gateway's zone: its native name, its backend service and port, TLS only with an endpoint and a bound
+    certificate, and its policy, empty or the canonical text of one JSON object."""
+    del hosts
+    bucket = request.get("objectBucket")
+    require(isinstance(bucket, dict) and set(bucket) == BUCKET_MEMBERS)
+    require(named(bucket["name"]) and label(bucket["name"]) and len(bucket["name"]) >= 3)
+    require(named(bucket["owner"]) and label(bucket["owner"]) and bucket["owner"] not in RESERVED_USERS)
+    require(named(bucket["gateway"]) and label(bucket["gateway"]) and all(label(bucket[key]) for key in ("realm", "zoneGroup", "zone")))
+    require(isinstance(bucket["backend"], str) and bucket["backend"].startswith("rgw.") and named(bucket["backend"][4:]))
+    require(port(bucket["port"]))
+    endpoint, certificate = bucket["endpoint"], bucket["certificateRef"]
+    require(isinstance(certificate, str) and (certificate == "" or named(certificate)))
+    require(isinstance(endpoint, str) and (endpoint == "") == (certificate == ""))
+    require(endpoint == "" or len(endpoint) <= 253 and all(label(part) for part in endpoint.split(".")))
+    policy = bucket["policy"]
+    require(isinstance(policy, str) and len(policy.encode("utf-8")) <= MAX_POLICY)
+    if policy:
+        try:
+            require(isinstance(json.loads(policy, object_pairs_hook=unique_object), dict))
+        except ValueError:
+            raise Refusal("request") from None
+
+
+def bucket_material(request, phase, private):
+    """With TLS at the backend, the bound certificate each phase that sends S3 requests pins the daemon's leaf to; never a key."""
+    require(isinstance(private, dict), "material")
+    expected = {"gatewayCertificate"} if request["objectBucket"]["certificateRef"] and phase in BUCKET_PHASES | {"observe", "destroy"} else set()
+    require(set(private) == expected, "material")
+    if expected:
+        leaf(private["gatewayCertificate"])
+    return private
+
+
+def amz_quote(value):
+    return urllib.parse.quote(value, safe=UNRESERVED)
+
+
+def canonical_query(query):
+    """Each name=value pair URI-encoded and sorted; a name without `=` has an empty value."""
+    pairs = []
+    for part in query.split("&") if query else ():
+        name, unused, value = part.partition("=")
+        pairs.append((amz_quote(urllib.parse.unquote(name)), amz_quote(urllib.parse.unquote(value))))
+    return "&".join(name + "=" + value for name, value in sorted(pairs))
+
+
+def canonical_request(method, path, query, headers, payload_hash):
+    """AWS Signature Version 4 canonical request: S3 paths are encoded once and never normalized; header names lowercased and sorted, values
+    trimmed with inner runs of spaces collapsed."""
+    entries = sorted((name.lower(), " ".join(value.split())) for name, value in headers.items())
+    signed = ";".join(name for name, unused in entries)
+    lines = [method, urllib.parse.quote(path, safe="/" + UNRESERVED), canonical_query(query)]
+    lines += [name + ":" + value for name, value in entries]
+    return "\n".join(lines + ["", signed, payload_hash]), signed
+
+
+def sigv4(method, path, query, headers, payload_hash, pair, region, service, stamp):
+    """The Authorization value of one request under Signature Version 4: headers must hold host and x-amz-date equal to stamp."""
+    request, signed = canonical_request(method, path, query, headers, payload_hash)
+    scope = stamp[:8] + "/" + region + "/" + service + "/aws4_request"
+    text = "\n".join((SIGNING, stamp, scope, hashlib.sha256(request.encode("utf-8")).hexdigest()))
+    key = ("AWS4" + pair["secretKey"]).encode("utf-8")
+    for part in (stamp[:8], region, service, "aws4_request"):
+        key = hmac.new(key, part.encode("utf-8"), hashlib.sha256).digest()
+    signature = hmac.new(key, text.encode("utf-8"), hashlib.sha256).hexdigest()
+    return SIGNING + " Credential=" + pair["accessKey"] + "/" + scope + ", SignedHeaders=" + signed + ", Signature=" + signature
+
+
+def s3_exchange(address, number, method, path, query, body, pair, region, *, pinned=None, clock=time.time):
+    """One signed S3 request to one daemon and its (status, code, message, body), or None when the daemon was not reached or, with pinned
+    (SNI name, leaf SHA-256), served another leaf, which is checked before the request is sent."""
+    host = ("[" + address + "]" if ":" in address else address) + ":" + str(number)
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(clock()))
+    digest = hashlib.sha256(body).hexdigest()
+    headers = {"host": host, "x-amz-content-sha256": digest, "x-amz-date": stamp}
+    headers["authorization"] = sigv4(method, path, query, headers, digest, pair, region, S3_SERVICE, stamp)
+    target = path + ("?" + query if query else "")
+    lines = [method + " " + target + " HTTP/1.1"] + [name + ": " + value for name, value in sorted(headers.items())]
+    data = ("\r\n".join(lines + ["content-length: " + str(len(body)), "connection: close", "", ""])).encode("ascii") + body
+    try:
+        with contextlib.ExitStack() as stack:
+            channel = stack.enter_context(socket.create_connection((address, number), timeout=S3_TIMEOUT))
+            if pinned is not None:
+                context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                context.minimum_version = ssl.TLSVersion.TLSv1_2
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
+                channel = stack.enter_context(context.wrap_socket(channel, server_hostname=pinned[0]))
+                presented = channel.getpeercert(binary_form=True)
+                if not isinstance(presented, bytes) or not hmac.compare_digest(hashlib.sha256(presented).hexdigest(), pinned[1]):
+                    return None
+            channel.sendall(data)
+            response = http.client.HTTPResponse(channel, method=method)
+            stack.callback(response.close)
+            response.begin()
+            answer = response.read(MAX_RESPONSE + 1)
+    except (OSError, ValueError, http.client.HTTPException):
+        return None
+    if len(answer) > MAX_RESPONSE:
+        return response.status, "", "", None
+    code, message = S3_CODE.search(answer), S3_MESSAGE.search(answer)
+    return (response.status, code[1].decode("ascii") if code else "", message[1].decode("ascii") if message else "",
+            answer if 200 <= response.status < 300 else None)
 
 
 def frontend(request):
@@ -869,4 +998,217 @@ class UserWorker(ObjectWorker):
                 self.prove_user(self.info(), self.user_store().material(self.user_scope(ids)))
                 proved = True
         evidence["resource"] = {"id": self.user()["name"], "path": ""} if proved else {"id": "", "path": ""}
+        return ready and proved
+
+
+class BucketWorker(UserWorker):
+    """One bucket of one object user this operation created, in that user's gateway zone: S3 creates it and puts its policy under the user's
+    key pair, held in this worker's memory only, and radosgw-admin proves its name, owner, zone group and bucket ID."""
+
+    pair = None
+    wall = staticmethod(time.time)
+
+    def bucket(self):
+        return self.request["objectBucket"]
+
+    def user(self):
+        bucket = self.bucket()
+        return {"name": bucket["owner"], "gateway": bucket["gateway"], "realm": bucket["realm"], "zoneGroup": bucket["zoneGroup"], "zone": bucket["zone"]}
+
+    def recovery_scope(self):
+        """The cluster's bootstrap scope: the bucket member is this block's own input, never part of the cluster's authoring."""
+        unused, staging = ceph_native.tunnel_helpers()
+        scope = staging.recovery_scope({key: value for key, value in self.request.items() if key != "objectBucket"})
+        require(canonical(self.markers.read("bootstrap-scope.json")) == canonical(scope), "ownership")
+        return scope
+
+    def bucket_record(self, suffix):
+        return "object-bucket-" + suffix + "." + self.bucket()["name"] + ".json"
+
+    def bucket_intent(self):
+        bucket = self.bucket()
+        return {"owner": self.request["owner"], "fsid": self.request["fsid"], "gateway": bucket["gateway"], "bucket": bucket["name"], "user": bucket["owner"],
+                "realm": bucket["realm"], "zoneGroup": bucket["zoneGroup"], "zone": bucket["zone"]}
+
+    def bucket_foreign(self, detail):
+        bucket = self.bucket()
+        return NativeFailure("object-bucket-foreign", self.native_coordinate(), "bucket " + bucket["name"] + " in realm " + bucket["realm"] + " " + detail)
+
+    def bucket_identity(self, detail):
+        return NativeFailure("object-bucket-identity", self.native_coordinate(), "bucket " + self.bucket()["name"] + " " + detail)
+
+    def bucket_command(self, *args):
+        return self.radosgw("bucket", *args, *self.site("realm", "zonegroup", "zone"))
+
+    def buckets(self):
+        """`bucket list` without a bucket or user prints every bucket's metadata key as one JSON array (src/rgw/driver/rados/rgw_bucket.cc:1868-1887)."""
+        value = self.bucket_command("list")
+        require(isinstance(value, list) and len(value) <= MAX_BUCKETS and all(isinstance(name, str) for name in value), "native-output")
+        return set(value)
+
+    def stats(self, ids):
+        """`bucket stats` (src/rgw/driver/rados/rgw_bucket.cc:1514-1583, owner as its string, src/rgw/rgw_basic_types.cc:207-229): the bucket
+        under its name with no tenant, its frozen owner, the gateway's zone group and the bucket ID this operation recorded."""
+        bucket = self.bucket()
+        value = self.bucket_command("stats", "--bucket", bucket["name"])
+        require(isinstance(value, dict) and value.get("bucket") == bucket["name"], "native-output")
+        identifier = value.get("id")
+        require(isinstance(identifier, str) and BUCKET_ID.fullmatch(identifier) is not None, "native-output")
+        recorded = self.markers.read(self.bucket_record("id"))
+        require(recorded is None or isinstance(recorded, dict) and set(recorded) == {"id"}, "ownership")
+        if (value.get("tenant") != "" or value.get("owner") != bucket["owner"]) and recorded is None:
+            raise self.bucket_foreign("is owned by " + text(value.get("tenant")) + "$" + text(value.get("owner")) + ", not " + bucket["owner"])
+        if value.get("tenant") != "" or value.get("owner") != bucket["owner"]:
+            raise self.bucket_identity("is owned by " + text(value.get("tenant")) + "$" + text(value.get("owner")) + ", not " + bucket["owner"])
+        if value.get("zonegroup") != ids["zonegroup"]:
+            raise self.bucket_identity("is in zone group " + text(value.get("zonegroup")) + ", not " + bucket["zoneGroup"])
+        if recorded is not None and recorded["id"] != identifier:
+            raise self.bucket_identity("now has bucket ID " + identifier + ", not the recorded " + text(recorded["id"]))
+        return identifier
+
+    def owned_user(self):
+        """The owner is the object user this operation created in this gateway's zone: its completion record says so."""
+        bucket = self.bucket()
+        expected = {"owner": self.request["owner"], "fsid": self.request["fsid"], "gateway": bucket["gateway"], "user": bucket["owner"],
+                    "realm": bucket["realm"], "zoneGroup": bucket["zoneGroup"], "zone": bucket["zone"]}
+        record = self.markers.read(self.user_record("complete"))
+        require(isinstance(record, dict) and isinstance(record.get("displayName"), str)
+                and {key: value for key, value in record.items() if key != "displayName"} == expected, "ownership")
+
+    def owner_pair(self):
+        """The owner's one active S3 key pair as `user info` reports it; it stays in this worker's memory and signs requests only."""
+        if self.pair is None:
+            self.owned_user()
+            self.pair = json.loads(self.native_pair(self.info()))
+        return self.pair
+
+    def targets(self):
+        """Each running rgw daemon of the backend service, in daemon name order, by the address it serves the frozen port on."""
+        bucket = self.bucket()
+        with self.manager_served():
+            rows = self.ceph("orch", "ps")
+        require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows), "native-output")
+        found = []
+        for row in rows:
+            if row.get("service_name") != bucket["backend"] or row.get("daemon_type") != "rgw":
+                continue
+            require(named(row.get("hostname")) and isinstance(row.get("daemon_id"), str), "native-output")
+            if type(row.get("status")) is int and row["status"] == 1:
+                address = self.daemon_address(row, bucket["port"])
+                if address is not None:
+                    found.append((row["daemon_id"], address))
+        return [address for unused, address in sorted(found)]
+
+    def s3(self, method, query, body=b""):
+        """The answer of the first backend daemon that answers below 500, or None; over TLS only a daemon that serves the bound leaf is sent a
+        request."""
+        bucket = self.bucket()
+        pinned = None
+        if bucket["certificateRef"]:
+            require(isinstance(self.tls, dict) and "gatewayCertificate" in self.tls, "material")
+            pinned = (bucket["endpoint"], hashlib.sha256(leaf(self.tls["gatewayCertificate"])).hexdigest())
+        pair = self.owner_pair()
+        for address in self.targets():
+            answer = s3_exchange(address, bucket["port"], method, "/" + bucket["name"], query, body, pair, bucket["zoneGroup"], pinned=pinned, clock=self.wall)
+            if answer is not None and answer[0] < 500:
+                return answer
+        self.pending(("tls@" if pinned else "http@") + bucket["backend"])
+        return None
+
+    def s3_refusal(self, method, query, answer):
+        status, code, message, unused = answer
+        target = method + " /" + self.bucket()["name"] + ("?" + query if query else "")
+        return NativeFailure("object-bucket-s3", self.native_coordinate(), target + ": HTTP " + str(status) + " " + code + " " + message,
+                             secrets=(self.pair["accessKey"], self.pair["secretKey"]))
+
+    def policy_state(self):
+        """The policy the owner reads (src/rgw/rgw_op.cc:8869-8905): the stored bytes, b"" for none, or None when no daemon answered. A
+        suspended bucket refuses its owner (src/rgw/rgw_op.cc:387-400), so either answer also proves the bucket usable by its owner."""
+        answer = self.s3("GET", "policy")
+        if answer is None:
+            return None
+        status, code, unused, body = answer
+        if status == 404 and code == "NoSuchBucketPolicy":
+            return b""
+        if status != 200 or body is None:
+            raise self.s3_refusal("GET", "policy", answer)
+        return body
+
+    def converge_policy(self, completed):
+        """Before completion the declared policy is put when the stored one differs; RGW stores the bytes sent (src/rgw/rgw_op.cc:8803-8840,
+        src/rgw/rgw_iam_policy.cc:1865-1868). Any other policy, or one on a bucket that declares none, is not this operation's."""
+        declared = self.bucket()["policy"].encode("utf-8")
+        stored = self.policy_state()
+        require(stored is not None, "not-ready")
+        if stored == declared:
+            return False
+        if completed or not declared:
+            raise self.bucket_identity("holds a bucket policy other than its declared one")
+        answer = self.s3("PUT", "policy", declared)
+        require(answer is not None, "not-ready")
+        if not 200 <= answer[0] < 300:
+            raise self.s3_refusal("PUT", "policy", answer)
+        require(self.policy_state() == declared, "not-ready")
+        return True
+
+    def object_bucket(self):
+        """Every proof before any write; the bucket created once under its attempt record and proved by `bucket stats`; then its policy."""
+        self.verify_tool()
+        ids = self.proved_user_zone()
+        self.owner_pair()
+        intent = self.bucket_intent()
+        record, attempt, complete = (self.markers.read(self.bucket_record(suffix)) for suffix in ("intent", "attempt", "complete"))
+        require(all(value is None or value == intent for value in (record, attempt, complete)), "ownership")
+        listed = self.bucket()["name"] in self.buckets()
+        if listed and attempt is None:
+            raise self.bucket_foreign("has no creation record of this operation")
+        if not listed and (complete is not None or self.markers.read(self.bucket_record("id")) is not None):
+            raise self.bucket_foreign("that this operation created is gone")
+        self.markers.write(self.bucket_record("intent"), intent)
+        changed = False
+        if not listed:
+            self.markers.write(self.bucket_record("attempt"), intent)
+            answer = self.s3("PUT", "")
+            require(answer is not None, "not-ready")
+            if not 200 <= answer[0] < 300:
+                raise self.s3_refusal("PUT", "", answer)
+            changed = True
+        self.markers.write(self.bucket_record("id"), {"id": self.stats(ids)})
+        changed = self.converge_policy(complete is not None) or changed
+        self.markers.write(self.bucket_record("complete"), intent)
+        return {"changed": changed}
+
+    def unfinished(self, evidence):
+        if self.request["action"] != "object-bucket":
+            return super().unfinished(evidence)
+        evidence["owned"] = self.markers.read(self.bucket_record("intent")) == self.bucket_intent()
+        evidence["exists"] = evidence["owned"]
+        evidence["partial"] = evidence["owned"]
+        return evidence
+
+    def observe_resource(self, evidence, ready):
+        """Read-only: radosgw-admin runs once the gateway's realm, zone group and zone are recorded and listed; S3 reads the policy only."""
+        if self.request["action"] != "object-bucket":
+            return super().observe_resource(evidence, ready)
+        record = self.markers.read(self.bucket_record("intent"))
+        require(record is None or record == self.bucket_intent(), "ownership")
+        owned = record is not None
+        present = self.root_present()
+        ids = self.foreign_check(self.listed() if present else {kind: set() for kind in KINDS})
+        listed = len(ids) == len(KINDS) and self.bucket()["name"] in self.buckets()
+        if listed and self.markers.read(self.bucket_record("attempt")) is None:
+            raise self.bucket_foreign("has no creation record of this operation")
+        complete = self.markers.read(self.bucket_record("complete"))
+        if not listed and (complete is not None or self.markers.read(self.bucket_record("id")) is not None):
+            raise self.bucket_foreign("that this operation created is gone")
+        evidence["owned"] = owned
+        evidence["exists"] = owned or listed
+        proved = False
+        if owned and listed and complete is not None:
+            self.stats(ids)
+            stored = self.policy_state()
+            if stored is not None and stored != self.bucket()["policy"].encode("utf-8"):
+                raise self.bucket_identity("holds a bucket policy other than its declared one")
+            proved = stored is not None
+        evidence["resource"] = {"id": self.bucket()["name"], "path": ""} if proved else {"id": "", "path": ""}
         return ready and proved

@@ -64,8 +64,8 @@ CLUSTER_REASONS = (
     "remote-refusal", "adapter-exception", "foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget",
     "foreign-rbd-image", "rbd-image-identity", "foreign-filesystem", "filesystem-identity", "filesystem-multiple-disabled", "foreign-subvolume-group",
     "mds-coverage", "foreign-subvolume", "subvolume-identity", "foreign-image", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign",
-    "object-zone-pools", "object-endpoint-certificate", "object-user-foreign", "object-user-identity", "nfs-export-foreign", "nfs-export-apply",
-    "nfs-export-path-escape",
+    "object-zone-pools", "object-endpoint-certificate", "object-user-foreign", "object-user-identity", "object-bucket-foreign",
+    "object-bucket-identity", "object-bucket-s3", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape",
     "ingress-firewall", "service-credential-foreign", "ssh-policy-host-excluded", "ssh-policy-unavailable", "tunnel-host-key-excluded",
     "sso-unverified",
 )
@@ -174,6 +174,14 @@ def object_user_resource(resource, request):
     ceph_native.require(request is None or request["action"] == "object-user" and resource["id"] == request["objectUser"]["name"], "evidence")
 
 
+def object_bucket_resource(resource, request):
+    """An object bucket's resource is empty, or its native bucket name once its identity and policy are proved."""
+    if resource == {"id": "", "path": ""}:
+        return
+    ceph_native.require(ceph_native_object.label(resource["id"]) and resource["path"] == "", "evidence")
+    ceph_native.require(request is None or request["action"] == "object-bucket" and resource["id"] == request["objectBucket"]["name"], "evidence")
+
+
 def user_output(path, value, request):
     """The produced key pair, exactly the retained canonical {accessKey, secretKey, uid} of this user, written to the protected output."""
     ceph_native.require(isinstance(value, str) and value.isascii(), "material")
@@ -209,7 +217,8 @@ def evidence(value, request_digest, request=None):
     dashboard_evidence(value)
     endpoint_evidence(value, request)
     sso_evidence(value, request)
-    actions = ("cluster", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway", "nfs-export", "object-user")
+    actions = ("cluster", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway", "nfs-export", "object-user",
+               "object-bucket")
     ceph_native.require(value["action"] in actions, "evidence")
     daemon_evidence(value, request)
     ceph_native.require(all(type(value[k]) is bool for k in ("owned", "exists", "ready", "removed", "partial")), "evidence")
@@ -233,9 +242,12 @@ def evidence(value, request_digest, request=None):
     elif value["action"] == "object-user":
         object_user_resource(resource, request)
         ceph_native.require(value["client"] == "", "evidence")
+    elif value["action"] == "object-bucket":
+        object_bucket_resource(resource, request)
+        ceph_native.require(value["client"] == "", "evidence")
     else:
         ceph_native.require(resource["path"] == "", "evidence")
-    ceph_native.require(resource["id"] == "" or value["action"] in ("subvolume", "gateway", "nfs-export", "object-user")
+    ceph_native.require(resource["id"] == "" or value["action"] in ("subvolume", "gateway", "nfs-export", "object-user", "object-bucket")
                         or value["action"] in ("pool", "policy", "filesystem") and ceph_native.RESOURCE_ID.fullmatch(resource["id"]) is not None
                         or value["action"] == "rbd" and ceph_native.RBD_IMAGE_ID.fullmatch(resource["id"]) is not None, "evidence")
     ceph_native.require(isinstance(value["osds"], list) and len(value["osds"]) <= 8192, "evidence")
@@ -799,6 +811,8 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         return execute_gateway(request, operation, request_digest, transport, bootstrap, now=now, pause=pause)
     if request["action"] == "object-user":
         return execute_user(request, operation, request_digest, transport, bootstrap, outputs, now=now, pause=pause)
+    if request["action"] == "object-bucket":
+        return execute_bucket(request, operation, request_digest, transport, bootstrap, now=now, pause=pause)
     changed = False
     if operation == "apply":
         preparations = [transport.call(host, "prerequisites") for host in request["hosts"]]
@@ -1027,6 +1041,27 @@ def execute_user(request, operation, request_digest, transport, bootstrap, outpu
             produced = transport.call(bootstrap, "object_user_read")
             ceph_native.require(isinstance(produced, dict) and set(produced) == {"private"}, "evidence")
             user_output(outputs["object-user"], produced["private"], request)
+    return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
+
+
+def execute_bucket(request, operation, request_digest, transport, bootstrap, *, now, pause):
+    """An object bucket runs on the bootstrap host only: its preparation proof and its one phase, then its readiness wait. With TLS at the
+    backend the bound certificate, never a key, reaches every phase, which pins the daemon's leaf to it. Removal is the core refusal."""
+    seen = transport.gateway_material(False) if request["objectBucket"]["certificateRef"] else None
+    changed = False
+    if operation == "apply":
+        transport.call(bootstrap, "prerequisites")
+        produced = transport.call(bootstrap, "object_bucket", seen) if seen else transport.call(bootstrap, "object_bucket")
+        ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
+        changed = produced["changed"]
+        observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen)
+        ceph_native.require(observation["ready"], "not-ready")
+    elif operation == "destroy":
+        changed = (transport.call(bootstrap, "destroy", seen) if seen else transport.call(bootstrap, "destroy"))["changed"]
+        observation = observe_unit(request, request_digest, bootstrap, transport, private=seen)
+        ceph_native.require(observation["removed"], "not-removed")
+    else:
+        observation = observe_unit(request, request_digest, bootstrap, transport, private=seen)
     return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
 
 

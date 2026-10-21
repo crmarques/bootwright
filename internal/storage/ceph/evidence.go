@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-const EvidenceVersion = "ceph-core-evidence-v10"
+const EvidenceVersion = "ceph-core-evidence-v11"
 
 const DashboardPort = "8443"
 
@@ -372,6 +372,9 @@ func validateScope(e Evidence, r Request) bool {
 	if r.Action == "object-user" {
 		return e.Client == "" && r.ObjectUser != nil && (e.Resource == ResourceEvidence{} || e.Resource == ResourceEvidence{ID: r.ObjectUser.Name})
 	}
+	if r.Action == "object-bucket" {
+		return e.Client == "" && r.ObjectBucket != nil && (e.Resource == ResourceEvidence{} || e.Resource == ResourceEvidence{ID: r.ObjectBucket.Name})
+	}
 	if e.Resource.Path != "" {
 		return false
 	}
@@ -425,6 +428,8 @@ func validateReady(e Evidence, r Request) bool {
 		return r.NFSExport != nil && exportID.MatchString(e.Resource.ID) && e.Resource.Path == r.NFSExport.Native.Pseudo
 	case "object-user":
 		return r.ObjectUser != nil && e.Resource == ResourceEvidence{ID: r.ObjectUser.Name}
+	case "object-bucket":
+		return r.ObjectBucket != nil && e.Resource == ResourceEvidence{ID: r.ObjectBucket.Name}
 	case "gateway":
 		return r.Gateway != nil && zoneID.MatchString(e.Resource.ID) && e.Resource.Path == r.Gateway.Endpoint && everyDocumentRuns(e, r) && e.Endpoint.Reachable
 	}

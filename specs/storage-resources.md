@@ -9,6 +9,7 @@ custody. [Provider coverage](storage-coverage.md) owns release qualification.
 **Current:** `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage`,
 `StorageFilesystem`, `StorageSubvolume`, `StorageClient`,
 `StorageObjectUser`, under its [field record](#storageobjectuser-field-record),
+`StorageObjectBucket`, under its [field record](#storageobjectbucket-field-record),
 and `StorageNFSExport`, under its [field record](#storagenfsexport), are
 admitted and realized. `StorageSMBResource` is admitted under its
 [field record](#storagesmbresource) and realized by its SMB block once its
@@ -1156,6 +1157,66 @@ Admission refuses, before any effect: a gateway of another cluster, the user ID
 with control characters or beginning with `-`. Planning propagates the bound gateway's planning
 refusals.
 
+### StorageObjectBucket field record
+
+[B477](milestones/m2.md#b477) owns this record. One S3 bucket of one
+StorageObjectUser in that user's StorageObjectGateway, with an optional native
+bucket policy, realized by its
+[bucket block](storage.md#resources-readiness-and-access). Tenants, versioning,
+object lock, lifecycle, quotas, CORS, website and access-control lists are not
+admitted; per-resource removal is [B491](milestones/m2.md#b491)'s.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectBucket
+metadata:
+  name: app-data
+
+spec:
+  clusterRef: ceph-example
+  objectGatewayRef: objects
+  ownerRef: app-writer
+
+  policy:
+    Version: "2012-10-17"
+
+    Statement:
+      - Effect: Allow
+        Action:
+          - s3:GetObject
+        Principal:
+          AWS:
+            - arn:aws:iam:::user/app-reader
+        Resource:
+          - arn:aws:s3:::app-data/*
+```
+
+| Field | Contract | Native projection |
+| --- | --- | --- |
+| `metadata.name` | The native bucket name, a DNS label of 3 to 44 characters (its block identity is `ceph-object-bucket-<name>`), so always a valid S3 bucket name. | The bucket of S3 CreateBucket; no tenant. |
+| `clusterRef` | Required managed StorageCluster. | None. |
+| `objectGatewayRef` | Required StorageObjectGateway of the same cluster. | The bucket is created through a running daemon of the gateway's rgw service, in its zone group. |
+| `ownerRef` | Required StorageObjectUser of the same cluster whose `objectGatewayRef` is this one. | The bucket's owner: every S3 request is signed with that user's key pair. |
+| `policy` | Optional mapping: the native S3 bucket policy document, of strings, integers, booleans, lists and mappings, at most 65536 bytes of JSON. | The body of S3 PutBucketPolicy, its canonical JSON (sorted keys). |
+
+`radosgw-admin` has no command that creates a bucket or puts a bucket policy
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/rgw/radosgw-admin/radosgw-admin.cc#L946-L977)),
+so the bucket block signs S3 CreateBucket and PutBucketPolicy with AWS
+Signature Version 4 under the owner's key pair, which it reads from
+`radosgw-admin user info` into the worker's memory only and never answers,
+logs, records or passes as an argument. RGW stores the policy bytes it is sent
+and GetBucketPolicy answers them
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/rgw/rgw_op.cc#L8803-L8905)),
+so the frozen canonical JSON is also what readiness compares. RGW parses and
+judges the policy; Bootwright validates only its shape and bound, and a policy
+RGW rejects refuses `object-bucket-s3` with RGW's error code and message.
+
+Admission refuses, before any effect: a gateway or owner of another cluster, an
+owner of another gateway, and a name shorter than 3 or longer than 44
+characters. Planning refuses a policy value that is not a string, integer,
+boolean, list or mapping, a policy over 65536 bytes of JSON, and propagates
+the bound gateway's planning refusals.
+
 ## Remaining resource families and consuming gates
 
 These families use the shared resource envelope and explicit dependency model.
@@ -1169,7 +1230,7 @@ provisioning rows remain required by the coverage matrix.
 | --- | --- | --- |
 | Object realm/zonegroup/zone, B477/B483 | Resource identity includes the owned realm/zonegroup/zone IDs and parent references; zone pool layout references owned StoragePools. An object gateway binds its zone and native RGW service. | No ambient default realm/zone or untracked pools. One owner publishes shared realm/period state; peers reference it. |
 | Object accounts/users, B477 | Native account/user identity scoped by gateway/realm and tenant where supported; explicit account relationship and principal purpose. Users without tenant or account are current as `StorageObjectUser` ([field record](#storageobjectuser-field-record)); accounts and tenants are not. | No implicit administrator or account adoption. Bound or generated keys enter custody once; retries do not rotate them. |
-| Object buckets/policies, B477 | Gateway scope, explicit owning principal/account, native bucket name and recorded native identity; policy principal/resource references resolve declared owners. | Supported native policy documents retain their format. No ambient owner, untracked generated user or guessed tenant. Bucket deletion needs data-loss authorization and proved child ownership; foreign objects/dependents prevent unqualified cascade. |
+| Object buckets/policies, B477 | Gateway scope, explicit owning principal/account, native bucket name and recorded native identity; policy principal/resource references resolve declared owners. Buckets of a `StorageObjectUser` with a native bucket policy are current as `StorageObjectBucket` ([field record](#storageobjectbucket-field-record)), whose policy is the native document with principals RGW resolves, not Bootwright; account-owned buckets and tenants are not. | Supported native policy documents retain their format. No ambient owner, untracked generated user or guessed tenant. Bucket deletion needs data-loss authorization and proved child ownership; foreign objects/dependents prevent unqualified cascade. |
 | CephX/client access, B80/B489 | `StorageClient` owns one principal with exactly one scope: an RBD pool with its derived data pools, a StorageFilesystem or a StorageSubvolume; B489 extends references to gateway resources and explicit access scope. | No default full administrator caps. Qualified caps derive from requested resource access or validated native capability syntax; unrestricted caps need an explicit privileged purpose. Manager-generated NFS/SMB principals are derived children, not duplicate resources. |
 | NVMe-oF gateway resources, B480 | Native service/group, subsystem NQN, listener address/transport, namespace ID and `StorageRBDImage` reference; initiator NQN/host authorization links to the subsystem. | No automatic unowned image creation or wildcard host access. Defaults and generated IDs are frozen/captured. Listener reachability, ANA/HA and release-supported security are qualified together. |
 | iSCSI resources, B481 | Not realized: no iSCSI kind exists, and admission refuses `service_type: iscsi` at that field. | Refused before any effect; block access over the network uses NVMe-oF (B480). No NVMe field substitutes for an iSCSI one. |

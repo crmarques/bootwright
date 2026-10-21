@@ -131,15 +131,18 @@ func unitMaterial(e lifecycle.Execution, r Request, operation string) ([]lifecyc
 }
 
 func gatewayMaterial(e lifecycle.Execution, r Request, operation string) ([]lifecycle.MaterialFile, error) {
-	secret := ""
+	secret, key := "", operation == "apply"
 	if r.Action == "gateway" {
 		secret = gatewayTLSSecret(r.Gateway)
+	}
+	if r.Action == "object-bucket" && r.ObjectBucket != nil {
+		secret, key = r.ObjectBucket.CertificateRef, false
 	}
 	if secret == "" {
 		return nil, nil
 	}
 	files := []lifecycle.MaterialFile{{Name: "gateway-certificate", Secret: secret, Part: secrets.CertificatePart, Variable: "gatewayCertificate"}}
-	if operation == "apply" {
+	if key {
 		files = append(files, lifecycle.MaterialFile{Name: "gateway-key", Secret: secret, Part: secrets.PrivateKeyPart, Variable: "gatewayKey"})
 	}
 	for _, file := range files {
@@ -203,6 +206,9 @@ func cephDeadline(r Request, operation string) (time.Duration, error) {
 	}
 	if r.Action == "object-user" {
 		return objectUserDeadline(operation), nil
+	}
+	if r.Action == "object-bucket" {
+		return objectBucketDeadline(operation), nil
 	}
 	nativeCalls, waits := len(r.Hosts)+2, 0
 	if operation == "observe" && r.Action == "cluster" {
@@ -268,6 +274,9 @@ func adapterRefusals() map[string]error {
 	out["object-endpoint-certificate"] = failure("lifecycle.unknown", "a TLS service of a StorageObjectGateway holds a certificate or private key other than the one its bound Secret holds", "find the service the native error names with ceph orch ls; Bootwright never replaces the certificate of a deployed gateway service: store the deployed certificate and key in the Secret again with bootwright secret set --name <secret> --certificate-file <path> --private-key-file <path>, or take back what this context owns with bootwright destroy --context <context>, then apply")
 	out["object-user-foreign"] = failure("lifecycle.unknown", "an RGW user of the StorageObjectUser's ID exists in its StorageObjectGateway's realm that this operation did not create, or the user this operation created is gone", "find the user the native error names with radosgw-admin user list --rgw-realm <realm> on the bootstrap host; for a user this operation did not create, rename the StorageObjectUser or remove the foreign user outside Bootwright, then apply again; when the native error says the user this operation created is gone, take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright never adopts an RGW user it did not create")
 	out["object-user-identity"] = failure("lifecycle.unknown", "the RGW user this operation created no longer matches its StorageObjectUser or the S3 key pair this context's custody retains: its display name, keys, subusers, Swift keys, capabilities or suspension changed, or the retained key pair is missing or unreadable", "inspect the user with radosgw-admin user info --uid <user> --rgw-realm <realm> on the bootstrap host and restore its display name, its one S3 key and its unsuspended state, removing any key, subuser or capability added outside Bootwright, then apply again; or take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright never rotates or regenerates the keys of a user it created")
+	out["object-bucket-foreign"] = failure("lifecycle.unknown", "a bucket of the StorageObjectBucket's name exists in its StorageObjectGateway's realm that this operation did not create, or the bucket this operation created is gone", "find the bucket the native error names with radosgw-admin bucket list --rgw-realm <realm> on the bootstrap host; for a bucket this operation did not create, rename the StorageObjectBucket or remove the foreign bucket outside Bootwright, then apply again; when the native error says the bucket this operation created is gone, take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright never adopts a bucket it did not create")
+	out["object-bucket-identity"] = failure("lifecycle.unknown", "the bucket this operation created no longer matches its StorageObjectBucket: another owner, bucket ID or zone group, or a bucket policy other than the declared one", "inspect the bucket with radosgw-admin bucket stats --bucket <bucket> --rgw-realm <realm> on the bootstrap host and its policy with an S3 GetBucketPolicy as its owner; restore its owner and the declared spec.policy, or remove a policy the StorageObjectBucket does not declare, outside Bootwright, then apply again; or take back what this context owns with bootwright destroy --context <context>, then apply")
+	out["object-bucket-s3"] = failure("lifecycle.unknown", "an RGW daemon of the StorageObjectGateway answered the StorageObjectBucket's S3 request, signed with its owner's key, with an error", "read the native error, which holds the S3 request, the HTTP status and RGW's error code and message: correct spec.policy for MalformedPolicy, choose another bucket name for BucketAlreadyExists, or restore the owner StorageObjectUser's key and unsuspended state for AccessDenied, InvalidAccessKeyId or UserSuspended, outside Bootwright, then apply again")
 	out["nfs-export-foreign"] = failure("lifecycle.unknown", "an NFS export exists at the StorageNFSExport's pseudo path on its NFS service that this operation did not create, or the export this operation created is gone or now has another export ID or CephFS principal", "find the export the native error names with ceph nfs export info <service> <pseudo>; for an export this operation did not create, set another spec.native.pseudo on the StorageNFSExport or remove the foreign export outside Bootwright, then apply again; when the native error says the export this operation created is gone or changed, take back what this context owns with bootwright destroy --context <context>, then apply; Bootwright never adopts or overwrites an NFS export it did not create")
 	out["nfs-export-apply"] = failure("lifecycle.unknown", "the NFS manager did not apply the StorageNFSExport's export cleanly: its NFS service is not listed, the apply failed or reported a warning, or the stored export differs from the one applied", "read the native error, which holds the NFS manager's answer; check the service with ceph nfs cluster ls and the export with ceph nfs export info <service> <pseudo>, correct what the error names outside Bootwright (a missing directory, a path another protocol claims, or NFS daemons that need ceph orch restart nfs.<service>), then apply again")
 	out["nfs-export-path-escape"] = failure("lifecycle.unknown", "the StorageNFSExport's spec.native.path does not lie within the StorageSubvolume it binds, or its spec.native.fsal.cmount_path is neither / nor the export path or a directory above it", "omit spec.native.path so the export serves the subvolume's own path, or set it to the path ceph fs subvolume getpath reports for the subvolume or a directory below it, and set spec.native.fsal.cmount_path to / or a directory that contains the export path, then apply again; Bootwright wrote nothing for this export")

@@ -9,6 +9,7 @@ func init() {
 	register(StorageSubvolume, storageSubvolumeSchema)
 	register(StorageObjectGateway, storageObjectGatewaySchema)
 	register(StorageObjectUser, storageObjectUserSchema)
+	register(StorageObjectBucket, storageObjectBucketSchema)
 	register(StorageNFSExport, storageNFSExportSchema)
 	register(StorageSMBResource, storageSMBResourceSchema)
 	register(StorageExport, storageExportSchema)
@@ -118,6 +119,10 @@ func storageObjectGatewaySchema() *Shape {
 
 func storageObjectUserSchema() *Shape {
 	return record(required("clusterRef", ref(StorageCluster)), required("objectGatewayRef", ref(StorageObjectGateway)), field("displayName", nonempty()))
+}
+
+func storageObjectBucketSchema() *Shape {
+	return record(required("clusterRef", ref(StorageCluster)), required("objectGatewayRef", ref(StorageObjectGateway)), required("ownerRef", ref(StorageObjectUser)), field("policy", native()))
 }
 
 func storageNFSExportSchema() *Shape {

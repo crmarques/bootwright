@@ -1,0 +1,9 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectUser
+metadata:
+  name: app-writer
+
+spec:
+  clusterRef: ceph-lab
+  objectGatewayRef: objects
+  displayName: App writer

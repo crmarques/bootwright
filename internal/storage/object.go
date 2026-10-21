@@ -192,3 +192,23 @@ func (a *admission) objectUser(cluster api.Object) {
 		a.issue("api.invariant", "$.spec.displayName", "StorageObjectUser "+name+" has a display name that begins with -, which radosgw-admin reads as an option instead of the display name", "start spec.displayName with another character, or omit it to use metadata.name")
 	}
 }
+
+func (a *admission) objectBucket(cluster api.Object) {
+	spec, name := a.object.Spec(), a.object.Name()
+	if len(name) < 3 {
+		a.issue("api.invariant", "$.metadata.name", "an S3 bucket name has at least 3 characters", "lengthen metadata.name to at least 3 characters; it is the native bucket name")
+	}
+	if len(name) > 44 {
+		a.issue("api.invariant", "$.metadata.name", "an object bucket name longer than 44 characters does not fit its block identity ceph-object-bucket-<name> of at most 63 characters", "shorten metadata.name to at most 44 characters")
+	}
+	gateway := textOf(spec, "objectGatewayRef")
+	if spec.Has("objectGatewayRef") {
+		a.sameOwner(api.StorageObjectGateway, gateway, "$.spec.objectGatewayRef", cluster)
+	}
+	if !spec.Has("ownerRef") {
+		return
+	}
+	if owner, ok := a.sameOwner(api.StorageObjectUser, textOf(spec, "ownerRef"), "$.spec.ownerRef", cluster); ok && textOf(owner.Spec(), "objectGatewayRef") != gateway {
+		a.issue("api.invariant", "$.spec.ownerRef", "StorageObjectBucket "+name+" is owned by StorageObjectUser "+owner.Name()+" of another StorageObjectGateway, whose zone cannot hold this bucket", "set spec.ownerRef to a StorageObjectUser whose spec.objectGatewayRef is "+gateway+", or set spec.objectGatewayRef to that user's gateway")
+	}
+}

@@ -33,6 +33,7 @@ const (
 	StorageSubvolume       Kind = "StorageSubvolume"
 	StorageObjectGateway   Kind = "StorageObjectGateway"
 	StorageObjectUser      Kind = "StorageObjectUser"
+	StorageObjectBucket    Kind = "StorageObjectBucket"
 	StorageNFSExport       Kind = "StorageNFSExport"
 	StorageSMBResource     Kind = "StorageSMBResource"
 	StorageExport          Kind = "StorageExport"
@@ -43,7 +44,7 @@ const (
 	Secret                 Kind = "Secret"
 )
 
-var kindOrder = []Kind{Environment, Entitlement, Machine, MachineImage, MachineInstallProfile, NetworkConfig, InfraProvider, Proxy, DNSServer, NTPServer, ArtifactServer, Registry, LoadBalancer, ContainerCluster, StorageCluster, StoragePlacementPolicy, StoragePool, StorageRBDImage, StorageClient, StorageFilesystem, StorageSubvolume, StorageObjectGateway, StorageObjectUser, StorageNFSExport, StorageSMBResource, StorageExport, ClusterAddon, ClusterAddonProfile, ClusterAddonBinding, CustomPlaybook, Secret}
+var kindOrder = []Kind{Environment, Entitlement, Machine, MachineImage, MachineInstallProfile, NetworkConfig, InfraProvider, Proxy, DNSServer, NTPServer, ArtifactServer, Registry, LoadBalancer, ContainerCluster, StorageCluster, StoragePlacementPolicy, StoragePool, StorageRBDImage, StorageClient, StorageFilesystem, StorageSubvolume, StorageObjectGateway, StorageObjectUser, StorageObjectBucket, StorageNFSExport, StorageSMBResource, StorageExport, ClusterAddon, ClusterAddonProfile, ClusterAddonBinding, CustomPlaybook, Secret}
 
 func Kinds() []Kind           { return slices.Clone(kindOrder) }
 func KindIndex(kind Kind) int { return slices.Index(kindOrder, kind) }
