@@ -68,16 +68,6 @@ func (a *admission) distribution(ceph api.Value) {
 		}
 		a.vendorImages(ceph)
 	}
-	packages := ceph.Get("ibm", "packages")
-	if packages.Present() {
-		if textOf(packages, "source") == "subscription" && packages.Get("subscriptionRepos").Len() == 0 {
-			a.invalid("$.spec.ceph.ibm.packages.subscriptionRepos", "subscription package source requires at least one repository")
-		}
-		if textOf(packages, "source") == "vendor" {
-			a.forbid(packages, "$.spec.ceph.ibm.packages", "subscriptionRepos")
-		}
-	}
-	a.entitlement(ceph.Get("osSubscriptionRef"), "$.spec.ceph.osSubscriptionRef", "redhat-rhel")
 }
 
 func (a *admission) packageRepositoryTrust(ceph api.Value) {

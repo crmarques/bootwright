@@ -91,6 +91,12 @@ under `spec.ceph.images`; without them, planning refuses that StorageCluster
 [field record](../storage-resources.md#storagenvmeofsubsystem); no capability
 realizes it yet, so planning refuses every selected one before any effect.
 Other P2 resource additions remain target contracts, not admitted kinds.
+
+IBM packages use the vendor repository selected by `ceph.packageRepository`.
+The optional `ceph.ibm.packages.source` accepts only `vendor`; subscription
+package sources and subscription repository lists are not admitted. Machine
+registration remains the Machine installation profile's responsibility.
+
 Future storage export feature families are refused by current pure
 admission.
 Their historical field tables in [field detail](../deferred/storage-api.md)

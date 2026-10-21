@@ -8050,3 +8050,22 @@ and live proof are still open.
 **Guard tests:** `internal/containercluster/addon_facts_test.go`
 (endpoint sources, node composition, claim parity, determinism and network
 settings), and package pool admission tests.
+
+### X59 — Vendor package source admission
+
+**Item:** B620. **Owner:** Storage and Desired state. Delivered under D169
+as one bounded lane of X59; B493's disconnected delivery remains open.
+
+#### B620
+
+The storage schema accepts only `vendor` for the optional IBM package source.
+Unused subscription entitlement and repository fields refuse as unknown
+fields, and `subscription` refuses as an unsupported source naming `vendor`.
+The example and admission fixture use the implemented vendor source. Machine
+registration remains owned by the installation profile.
+
+**Guard test:** `TestCephPackageSourceRefusesUnusedSubscriptionFields` in
+`internal/desiredstate/compilation/storage_package_source_test.go` exercises
+the production decoder's object, field, code and remediation. The delivering
+commit records exact in-tree checks and their results; this item has no
+operator-run gate.

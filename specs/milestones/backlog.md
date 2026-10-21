@@ -3737,7 +3737,7 @@ Requires cell as `owner decision: <question>`.
 
 - **D169** (2026-10-20, the owner): the owner answered the session's three
   questions for M2c's follow-up program, choosing the recommended option each
-  time. (1) [B620](m2.md#b620) (`ceph.ibm.packages.source: subscription` and
+  time. (1) [B620](delivered.md#b620) (`ceph.ibm.packages.source: subscription` and
   `ceph.osSubscriptionRef` are admitted but never read): "Remove the fields
   (Recommended)". Both fields leave the API (pre-1.x, no compatibility) and may
   be re-added when a subscription package source is implemented; an M2c lane

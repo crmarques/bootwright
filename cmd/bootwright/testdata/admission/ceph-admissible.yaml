@@ -21,9 +21,7 @@ spec:
     ibm:
       callHome: disabled
       packages:
-        source: subscription
-        subscriptionRepos:
-          - example-ceph-9-for-rhel-9-x86_64-rpms
+        source: vendor
 
     entitlementRef: ceph-entitlement
 
