@@ -68,11 +68,43 @@ func declaredClassHosts(cluster api.Object) map[string][]string {
 }
 
 func classHostCount(cluster api.Object, class string) (int64, bool) {
+	if slices.Contains(automaticClasses, class) {
+		return automaticClassCapacity(cluster, class)
+	}
 	hosts, declared := declaredClassHosts(cluster)[class]
-	if !declared || slices.Contains(automaticClasses, class) {
+	if !declared {
 		return osdHostCount(cluster), false
 	}
 	return int64(len(hosts)), true
+}
+
+func automaticClassCapacity(cluster api.Object, class string) (int64, bool) {
+	possible := map[string]bool{}
+	for _, service := range cluster.Spec().Get("ceph", "services").Items() {
+		if textOf(service, "service_type") != "osd" {
+			continue
+		}
+		names, issues := ResolveServicePlacement(cluster, service)
+		if len(issues) != 0 {
+			return osdHostCount(cluster), false
+		}
+		assigned := textOf(service, "spec", "crush_device_class")
+		couldMatch := assigned == class
+		paths := service.Get("spec", "data_devices", "paths").Items()
+		unknown := assigned == "" && len(paths) == 0
+		for _, path := range paths {
+			pathClass := textOf(path, "crush_device_class")
+			couldMatch = couldMatch || pathClass == class
+			unknown = unknown || assigned == "" && pathClass == ""
+		}
+		if couldMatch || unknown {
+			for _, host := range names {
+				possible[host] = true
+			}
+		}
+	}
+	count := int64(len(possible))
+	return count, count < osdHostCount(cluster)
 }
 
 func (a *admission) deviceClass(cluster api.Object, value api.Value, field string) {
@@ -167,11 +199,15 @@ func (a *admission) replication(cluster, policy api.Object) {
 	}
 	if domain == "host" && cluster.Spec().Get("ceph", "topology", "nodes").Len() > 0 {
 		hosts := big.NewInt(osdHostCount(cluster))
-		classHosts, custom := classHostCount(cluster, class)
+		classHosts, bounded := classHostCount(cluster, class)
 		if size.Cmp(hosts) > 0 {
 			a.issue("api.invariant", "$.spec.replicated.size", "host-domain replicas exceed declared OSD-host capacity", "add OSD-bearing hosts, or lower replicated.size to at most the declared OSD-host count")
-		} else if custom && size.Cmp(big.NewInt(classHosts)) > 0 {
-			a.issue("api.invariant", "$.spec.replicated.size", fmt.Sprintf("host-domain replicas exceed the %d OSD hosts whose OSD services declare device class %s", classHosts, class), fmt.Sprintf("declare crush_device_class %s on OSD services of at least %s hosts, or lower replicated.size", class, size))
+		} else if bounded && size.Cmp(big.NewInt(classHosts)) > 0 {
+			if slices.Contains(automaticClasses, class) {
+				a.issue("api.invariant", "$.spec.replicated.size", fmt.Sprintf("declared OSD services allow device class %s on at most %d OSD hosts", class, classHosts), fmt.Sprintf("declare OSD services that permit device class %s on at least %s hosts, or lower replicated.size", class, size))
+			} else {
+				a.issue("api.invariant", "$.spec.replicated.size", fmt.Sprintf("host-domain replicas exceed the %d OSD hosts whose OSD services declare device class %s", classHosts, class), fmt.Sprintf("declare crush_device_class %s on OSD services of at least %s hosts, or lower replicated.size", class, size))
+			}
 		} else if textOf(cluster.Spec(), "ceph", "distribution") == "ibm" && !cluster.Spec().Has("ceph", "topology", "stretch") && size.Cmp(hosts) == 0 {
 			a.issue("api.invariant", "$.spec.replicated.size", "IBM host-domain replication requires an additional OSD-bearing host beyond the effective replica size", "add OSD-bearing hosts, or explicitly select replicated.size: 2 and minSize: 2 for three OSD-bearing hosts; omitted or zero size retains the default of 3")
 		}
@@ -259,9 +295,11 @@ func (a *admission) erasureProfile(cluster api.Object, erasure api.Value) {
 		k, m := numeric(data), numeric(coding)
 		width := new(big.Int).Add(k, m)
 		class := textOf(erasure, "crushDeviceClass")
-		hosts, custom := classHostCount(cluster, class)
+		hosts, bounded := classHostCount(cluster, class)
 		if width.Cmp(big.NewInt(hosts)) > 0 {
-			if custom {
+			if bounded && slices.Contains(automaticClasses, class) {
+				a.issue("api.invariant", "$.spec.erasure", fmt.Sprintf("erasure profile %d+%d needs %d OSD hosts with device class %s, but declared OSD services allow at most %d OSD hosts", k, m, width, class, hosts), fmt.Sprintf("declare OSD services that permit device class %s on at least %d hosts, or lower dataChunks and codingChunks", class, width))
+			} else if bounded {
 				a.issue("api.invariant", "$.spec.erasure", fmt.Sprintf("erasure profile %d+%d needs %d OSD hosts whose OSD services declare device class %s, one per chunk under failure domain host; %d are declared", k, m, width, class, hosts), fmt.Sprintf("declare crush_device_class %s on OSD services of at least %d hosts, or lower dataChunks and codingChunks", class, width))
 			} else {
 				a.issue("api.invariant", "$.spec.erasure", fmt.Sprintf("erasure profile %d+%d needs %d OSD hosts, one per chunk under failure domain host; %d are declared", k, m, width, hosts), fmt.Sprintf("add OSD-bearing hosts until %d carry OSDs, or lower dataChunks and codingChunks", width))

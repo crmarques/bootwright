@@ -180,6 +180,34 @@ func TestDeclaredClassCapacityCountsOnlyDeclaringHosts(t *testing.T) {
 	noIssues(t, admitted(clusterOf(t, 4, false, data, fast("node-1", "node-2", "node-3")), policy))
 }
 
+func TestAutomaticClassCapacityIncludesOnlyPossibleHosts(t *testing.T) {
+	for _, class := range automaticClasses {
+		t.Run(class, func(t *testing.T) {
+			other := "hdd"
+			if class == other {
+				other = "ssd"
+			}
+			data := osdWithClass(m("label", "storage"), m("crush_device_class", other, "data_devices", m("paths", api.StringList("/dev/vdb")))).With("service_id", api.StringValue("data"))
+			fast := osdWithClass(m("hosts", api.StringList("node-1", "node-2")), m("crush_device_class", class, "data_devices", m("paths", api.StringList("/dev/vdc"))))
+			policy := placementPolicy("fast-policy", "ruleName", "fast-rule", "crushDeviceClass", class, "replicated", m("size", 3))
+			catalog := clusterOf(t, 4, false, data, fast)
+			issues := admitted(catalog, policy)
+			if len(issues) != 1 || issues[0].Field != "$.spec.replicated.size" || !strings.Contains(issues[0].Message, "at most 2 OSD hosts") {
+				t.Fatalf("impossible automatic-class replication was admitted: %+v", issues)
+			}
+			pool := ecPool("class-data", chunks(2, 2, "crushDeviceClass", class))
+			issues = admitted(catalog, pool)
+			if len(issues) != 1 || issues[0].Field != "$.spec.erasure" || !strings.Contains(issues[0].Message, "at most 2 OSD hosts") {
+				t.Fatalf("impossible automatic-class erasure coding has no precise refusal: %+v", issues)
+			}
+			unknown := data.With("service_id", api.StringValue("unknown")).With("placement", m("hosts", api.StringList("node-3"))).With("spec", m("data_devices", m("paths", api.StringList("/dev/vdd"))))
+			noIssues(t, admitted(clusterOf(t, 4, false, data, fast, unknown), policy))
+			unknown = unknown.With("placement", m("hosts", api.StringList("node-3", "node-4")))
+			noIssues(t, admitted(clusterOf(t, 4, false, data, fast, unknown), pool))
+		})
+	}
+}
+
 func TestPolicyNameLengthBound(t *testing.T) {
 	onlyIssue(t, admitted(fixtureCatalog(), placementPolicy(strings.Repeat("p", 52), "ruleName", "long-rule")), "$.metadata.name", "a placement policy name longer than 51 characters does not fit its block identity ceph-policy-<name> of at most 63 characters", "shorten metadata.name to at most 51 characters")
 	noIssues(t, admitted(fixtureCatalog(), placementPolicy(strings.Repeat("p", 51), "ruleName", "long-rule")))
