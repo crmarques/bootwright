@@ -63,8 +63,8 @@ var nativeListeners = map[string]listenerSource{
 	"snmp-gateway":  portListener(9464, false),
 	"mgmt-gateway":  portListener(0, false),
 	"oauth2-proxy":  oauth2ProxyListeners,
-	"loki":          portListener(3100, false),
-	"promtail":      portListener(9080, false),
+	"loki":          lokiListeners,
+	"promtail":      promtailListeners,
 	"alloy":         portListener(0, false),
 }
 
@@ -226,6 +226,17 @@ func alertmanagerListeners(cluster api.Object, catalog api.Catalog, service api.
 	return append(out, labelledListener(cluster, service, field, index, 9094, "the Alertmanager cluster listener (9094)"))
 }
 
+func lokiListeners(cluster api.Object, catalog api.Catalog, service api.Value, field string, index int) []listener {
+	out := portListener(3100, false)(cluster, catalog, service, field, index)
+	out = append(out, labelledListener(cluster, service, field, index, 3100, "the loki HTTP listener (3100)"))
+	return append(out, labelledListener(cluster, service, field, index, 8080, "the loki gRPC listener (8080)"))
+}
+
+func promtailListeners(cluster api.Object, catalog api.Catalog, service api.Value, field string, index int) []listener {
+	out := portListener(9080, false)(cluster, catalog, service, field, index)
+	return append(out, labelledListener(cluster, service, field, index, 9080, "the promtail listener (9080)"))
+}
+
 func oauth2ProxyListeners(cluster api.Object, _ api.Catalog, service api.Value, field string, index int) []listener {
 	return []listener{labelledListener(cluster, service, field, index, 4180, "oauth2-proxy (4180)")}
 }
@@ -299,7 +310,7 @@ func (a *admission) listenerConflicts(cluster api.Object) {
 			if at.field == "" || reported[at.field] {
 				continue
 			}
-			if earlier.service >= 0 && earlier.service == later.service && slices.Contains([]string{"ingress", "alertmanager"}, textOf(services[later.service], "service_type")) {
+			if earlier.service >= 0 && earlier.service == later.service && slices.Contains([]string{"ingress", "alertmanager", "loki", "promtail"}, textOf(services[later.service], "service_type")) {
 				continue
 			}
 			if host, ok := listenerClash(earlier, later); ok {

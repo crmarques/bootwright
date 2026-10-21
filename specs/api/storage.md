@@ -497,7 +497,12 @@ checks:
   (3100), promtail (9080), alloy (its authored `port` only) and the
   management gateway (required, no default), the Alertmanager cluster
   listener (9094) and oauth2-proxy (4180, whatever `https_address` names), as
-  IBM's ServiceSpec defaults them; an RGW service's `rgw_frontend_port` (80, or 443
+  IBM's ServiceSpec defaults them; on a loki service's hosts its fixed HTTP
+  (3100) and gRPC (8080) listeners and on a promtail service's hosts its fixed
+  listener (9080), whatever `port` is authored, because cephadm's loki and
+  promtail configuration binds them and uses `port` only for its own port
+  check and firewall opening
+  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/templates/services/loki.yml.j2)); an RGW service's `rgw_frontend_port` (80, or 443
   with `ssl`); an NFS service's `port` (2049), `monitoring_port` (9587) and
   its fixed cluster QoS listener (31311); and an ingress service's
   `frontend_port`, `monitor_port` and HAProxy peer port (1024 for an NFS

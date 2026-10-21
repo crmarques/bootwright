@@ -54,6 +54,37 @@ func TestB479OmittedPortReservesItsDefault(t *testing.T) {
 	}
 }
 
+func TestB479LogCollectionFixedListeners(t *testing.T) {
+	const at = "$.spec.ceph.services"
+	for _, tc := range []struct {
+		name     string
+		services []api.Value
+		later    string
+		label    string
+	}{
+		{"loki authored port keeps HTTP 3100", []api.Value{b479Service("loki", "port", 3200), b479Service("grafana", "port", 3100)}, "[4]", "the loki HTTP listener (3100) of " + at + "[3]"},
+		{"loki gRPC 8080", []api.Value{b479Service("loki"), b479Service("grafana", "port", 8080)}, "[4]", "the loki gRPC listener (8080) of " + at + "[3]"},
+		{"promtail authored port keeps 9080", []api.Value{b479Service("loki"), b479Service("promtail", "port", 9180), b479Service("grafana", "port", 9080)}, "[5]", "the promtail listener (9080) of " + at + "[4]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			field := at + tc.later + ".spec.port"
+			found := issuesAt(graphIssues(t, tc.services), field)
+			want := api.Issue{Code: "api.invariant", Field: field, Message: "this listener port is already bound on host node-1 by " + tc.label, Remediation: "set " + field + " to another port, or place the two services on disjoint hosts"}
+			if len(found) != 1 || found[0] != want {
+				t.Fatalf("issues at %s: %#v", field, found)
+			}
+		})
+	}
+	for _, services := range [][]api.Value{
+		{b479Service("loki"), b479Service("promtail")},
+		{b479Service("loki", "port", 8080), b479Service("promtail", "port", 9080)},
+	} {
+		if found := addedServiceIssues(graphIssues(t, services)); len(found) != 0 {
+			t.Fatalf("log collection collided with its own fixed listeners: %#v", found)
+		}
+	}
+}
+
 func TestB479NetworkBoundListenersCoexistWithAVIP(t *testing.T) {
 	const at = "$.spec.ceph.services[7].spec.port"
 	for _, serviceType := range []string{"grafana", "prometheus"} {
