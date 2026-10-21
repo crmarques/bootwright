@@ -293,8 +293,9 @@ def leaf(value, path):
 def validate(request, hosts):
     """One unit of a known type: 1 to 8 placed documents, each listed in `delegated` with exactly its hosts."""
     unit = request.get("service")
-    require(isinstance(unit, dict) and {"documents", "id", "type"} <= set(unit) <= {"bindings", "documents", "id", "type"})
+    require(isinstance(unit, dict) and {"documents", "id", "type"} <= set(unit) <= {"bindings", "config", "documents", "id", "type"})
     require(isinstance(unit["type"], str) and unit["type"] in UNIT_TYPES)
+    require("config" not in unit or unit["type"] == "monitoring")
     singletons = UNIT_TYPES[unit["type"]].singletons
     require(unit["id"] == "" or isinstance(unit["id"], str) and ceph_native.NAME.fullmatch(unit["id"]) is not None)
     documents = unit["documents"]
@@ -605,8 +606,8 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         for name, value in zip(names, values):
             if self.markers.read("service-" + name + "-complete.json") is None:
                 self.markers.write("service-" + name + "-complete.json", {"scope": scope, "service": value})
-        hooks.settle(self, unit)
-        return {"changed": changed}
+        settled = hooks.settle(self, unit)
+        return {"changed": changed or settled is True}
 
     def ingress_frontend(self):
         return frontend(self.request)

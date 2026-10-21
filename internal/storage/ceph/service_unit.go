@@ -20,10 +20,11 @@ type ServiceBinding struct {
 }
 
 type ServiceUnit struct {
-	Bindings  []ServiceBinding  `json:"bindings,omitempty"`
-	Documents []json.RawMessage `json:"documents"`
-	ID        string            `json:"id"`
-	Type      string            `json:"type"`
+	Bindings  []ServiceBinding             `json:"bindings,omitempty"`
+	Config    map[string]map[string]string `json:"config,omitempty"`
+	Documents []json.RawMessage            `json:"documents"`
+	ID        string                       `json:"id"`
+	Type      string                       `json:"type"`
 }
 
 func (u ServiceUnit) name() string {
@@ -444,6 +445,9 @@ func monitoringUnits(cluster api.Object) ([]ServiceUnit, error) {
 		}
 		unit.Documents = append(unit.Documents, document)
 		names = append(names, storage.NativeServiceName(svc))
+		if slices.Contains([]string{"alloy", "promtail"}, svc.Get("service_type").Text()) {
+			unit.Config = map[string]map[string]string{"global": {"log_to_file": "true", "mon_cluster_log_to_file": "true"}}
+		}
 	}
 	for _, binding := range gatewayBindings(cluster, names...) {
 		svc, _ := storage.NativeService(cluster, binding.ServiceRef)

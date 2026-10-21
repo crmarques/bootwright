@@ -128,6 +128,12 @@
   "registryRef": "registry",
   "release": "9.9.1.2",
   "service": {
+    "config": {
+      "global": {
+        "log_to_file": "true",
+        "mon_cluster_log_to_file": "true"
+      }
+    },
     "documents": [
       {
         "placement": {

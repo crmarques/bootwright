@@ -46,6 +46,7 @@ FOREIGN = "foreign-credential-sentinel-R3t"
 WEBHOOKS = ["https://alerts.example.test/hook", "https://pager.example.test/hook"]
 TWO = ["node-1", "node-2"]
 LOGGING_AUXILIARY = [{"name": name, "image": REGISTRY + name + "@sha256:" + digit * 64} for name, digit in (("alloy", "6"), ("loki", "7"), ("promtail", "8"))]
+LOGGING_WRITES = [("config", "set", "global", name, "true") for name in ("log_to_file", "mon_cluster_log_to_file")]
 
 
 def documents():
@@ -70,6 +71,7 @@ def logging_documents(agent):
 def logging_request(agent):
     request = monitoring_request(logging_documents(agent))
     del request["service"]["bindings"]
+    request["service"]["config"] = {"global": {"log_to_file": "true", "mon_cluster_log_to_file": "true"}}
     request["auxiliary"] = [entry for entry in copy.deepcopy(LOGGING_AUXILIARY) if entry["name"] in (agent, "loki")]
     return request
 
@@ -127,6 +129,7 @@ class Monitor:
         self.unavailable = 0
         self.failures = {}
         self.before_store = self.after_store = None
+        self.after_config = None
         self.log, self.mutations, self.stdin = [], [], []
 
     def exported(self):
@@ -147,6 +150,12 @@ class Monitor:
         if command in answers:
             return 0, json.dumps(answers[command]).encode()
         self.mutations.append(command)
+        if command[:2] == ("config", "set"):
+            section, name, value = command[2:]
+            self.config = [row for row in self.config if row.get("name") != name]
+            self.config.append({"section": section, "mask": "", "name": name, "value": value})
+            if self.after_config is not None:
+                raise self.after_config
         if command == ("orch", "apply", "-i", "-"):
             self.stdin.append(data)
             if self.before_store is not None:
@@ -689,7 +698,7 @@ def test_logging_unit_observes_loki_and_agent_daemons(tmp_path, agent):
     markers = units.markers_for(tmp_path, request)
     monitor = Monitor(request)
     assert applying(monitor, markers, {}).unit() == {"changed": True}
-    assert monitor.mutations == [("orch", "apply", "-i", "-")] and len(monitor.stdin) == 1
+    assert monitor.mutations == [("orch", "apply", "-i", "-")] + LOGGING_WRITES and len(monitor.stdin) == 1
     assert set(stream(monitor.stdin[0])) == {agent, "loki"}
     rows = running(request)
     assert sorted((row["daemon_type"], row["hostname"]) for row in rows) == sorted([(agent, "node-1"), (agent, "node-2"), ("loki", "node-1")])
@@ -705,6 +714,57 @@ def test_logging_unit_observes_loki_and_agent_daemons(tmp_path, agent):
         observing(monitor, markers)
 
 
+@pytest.mark.parametrize("agent", ["alloy", "promtail"])
+def test_logging_options_apply_once_and_read_back(tmp_path, agent):
+    request = logging_request(agent)
+    markers = units.markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    assert applying(monitor, markers, {}).unit() == {"changed": True}
+    assert all(monitor.mutations.count(command) == 1 for command in LOGGING_WRITES)
+    before = list(monitor.mutations)
+    assert applying(monitor, markers, {}).unit() == {"changed": False}
+    assert monitor.mutations == before
+    monitor.running = running(request)
+    assert observing(monitor, markers)[:2] == (True, [])
+    monitor.config = [row for row in monitor.config if row.get("name") != "log_to_file"]
+    with pytest.raises(ceph_native.Refusal, match="^config-drift$"):
+        observing(monitor, markers)
+    with pytest.raises(ceph_native.Refusal, match="^config-drift$"):
+        applying(monitor, markers, {}).unit()
+    assert monitor.mutations == before
+
+
+@pytest.mark.parametrize("row", [
+    {"section": "global", "mask": "", "name": "log_to_file", "value": "true"},
+    {"section": "global", "mask": "", "name": "log_to_file", "value": "false"},
+    {"section": "osd", "mask": "", "name": "mon_cluster_log_to_file", "value": "true"},
+    {"section": "global", "mask": "host:node-1", "name": "log_to_file", "value": "true"},
+])
+def test_foreign_logging_setting_refuses_before_any_write(tmp_path, row):
+    request = logging_request("alloy")
+    markers = units.markers_for(tmp_path, request)
+    before = units.records(markers)
+    monitor = Monitor(request)
+    monitor.config.append(row)
+    with pytest.raises(ceph_native.Refusal, match="^config-drift$"):
+        applying(monitor, markers, {}).unit()
+    assert monitor.mutations == [] and units.records(markers) == before
+
+
+def test_logging_lost_reply_settles_without_repeating_the_write(tmp_path):
+    request = logging_request("promtail")
+    markers = units.markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    monitor.after_config = ceph_native.Refusal("native-timeout")
+    with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):
+        applying(monitor, markers, {}).unit()
+    assert monitor.mutations.count(LOGGING_WRITES[0]) == 1 and LOGGING_WRITES[1] not in monitor.mutations
+    monitor.after_config = None
+    assert applying(monitor, markers, {}).unit() == {"changed": True}
+    assert all(monitor.mutations.count(command) == 1 for command in LOGGING_WRITES)
+    assert applying(monitor, markers, {}).unit() == {"changed": False}
+
+
 def test_logging_unit_verifies_image_keys_only(tmp_path):
     request = logging_request("promtail")
     markers = units.markers_for(tmp_path, request)
@@ -718,7 +778,7 @@ def test_logging_unit_verifies_image_keys_only(tmp_path):
     assert monitor.mutations == [] and monitor.stdin == [] and units.records(markers) == before
     monitor = Monitor(request)
     assert applying(monitor, units.markers_for(tmp_path / "held", request), {}).unit() == {"changed": True}
-    assert monitor.mutations == [("orch", "apply", "-i", "-")]
+    assert monitor.mutations == [("orch", "apply", "-i", "-")] + LOGGING_WRITES
 
 
 def test_unknown_service_type_surfaces_the_native_error(tmp_path, monkeypatch):

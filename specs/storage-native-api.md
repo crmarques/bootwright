@@ -668,9 +668,10 @@ the selected image's own `ServiceSpec`, and an unknown type surfaces as
 `nativeError` before any write. Ceph daemons reach Loki only once they log to
 files (`log_to_file` and `mon_cluster_log_to_file`
 ([upstream](https://docs.ceph.com/en/latest/cephadm/services/monitoring/))).
-Bootwright does not yet set those options, and `spec.ceph.config` does not
-admit them, so a planned log collection runs its daemons but carries no Ceph
-log until the operator enables file logging on the cluster.
+The monitoring unit derives both options as `true` when an agent is declared;
+they are not authored through `spec.ceph.config`. Its
+[configuration ownership](storage.md#resources-readiness-and-access) proves
+each write and readback. A unit without an agent owns neither option.
 
 Some native types refuse by type at `service_type`. `crash` is a derived child of the StorageCluster
 that Bootwright applies on every host through its crash unit (above), so an

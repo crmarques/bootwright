@@ -6,7 +6,8 @@ alloy and promtail service as singleton documents in one `orch apply -i -` strea
 ceph-exporter the Ceph image. The hooks only read the frozen image settings, whose single writer is the cluster's
 settings block. cephadm itself enables the prometheus manager module for a declared prometheus service
 (src/pybind/mgr/cephadm/services/monitoring.py:480-489), so readiness observes it in `ceph mgr services`, which the MON
-answers from the MgrMap (src/mon/MgrMonitor.cc:1085-1094); the hooks never enable a module or write a setting. The grafana
+answers from the MgrMap (src/mon/MgrMonitor.cc:1085-1094); the hooks never enable a module or write an image setting. A log agent
+derives the two global file-logging options, whose own attempt and completion records guard writes and drift. The grafana
 password and SNMP credentials are bound leaves the generic unit worker splices into the apply stream only.
 
 The management gateway unit applies its keepalive-only ingress, when it has a virtual IP, before the singleton mgmt-gateway
@@ -164,6 +165,8 @@ def validate(unit, request, hosts):
     require(unit["id"] == "" and 1 <= len(documents) <= len(MONITORING_TYPES))
     kinds = [document["service_type"] for document in documents]
     require(all(kind in MEMBERS for kind in kinds) and kinds == sorted(set(kinds)))
+    wanted = {"global": {"log_to_file": "true", "mon_cluster_log_to_file": "true"}} if set(kinds) & {"alloy", "promtail"} else None
+    require(unit.get("config") == wanted)
     for document in documents:
         require("service_id" not in document)
         spec = document.get("spec", {})
@@ -189,16 +192,60 @@ def check_images(worker, needed):
 def check(worker, unit):
     """Read-only, before any write: the settings block holds the frozen image setting of every auxiliary image the unit runs."""
     check_images(worker, needed_images(unit))
+    logging_state(worker, unit)
+
+
+def logging_state(worker, unit):
+    """Only this operation's attempt owns the two exact global logging settings; native overrides and drift refuse."""
+    config = unit.get("config")
+    if config is None:
+        return None
+    wanted = config["global"]
+    intent = {"scope": worker.recovery_scope(), "config": config}
+    attempted = worker.markers.read("monitoring-log-config-attempt.json")
+    completed = worker.markers.read("monitoring-log-config-complete.json")
+    require(attempted is None or attempted == intent, "ownership")
+    require(completed is None or completed == intent and attempted == intent, "ownership")
+    rows = worker.ceph("config", "dump")
+    require(isinstance(rows, list) and len(rows) <= 8192 and all(isinstance(row, dict) for row in rows), "native-output")
+    present = {}
+    for row in rows:
+        name = row.get("name")
+        require(isinstance(name, str), "native-output")
+        if name not in wanted:
+            continue
+        require(attempted == intent and row.get("section") == "global" and row.get("mask") == "" and name not in present
+                and not any(field in row for field in ("location_type", "location_value", "device_class")), "config-drift")
+        require(row.get("value") == wanted[name], "config-drift")
+        present[name] = row["value"]
+    require(completed is None or present == wanted, "config-drift")
+    return intent, present, attempted, completed
 
 
 def claim(worker, unit, checked):
-    """The monitoring unit claims nothing before its apply."""
-    del worker, unit, checked
+    """Freeze the logging configuration before any native write, after the unit's other ownership proofs."""
+    del checked
+    state = logging_state(worker, unit)
+    if state is not None and state[2] is None:
+        worker.markers.write("monitoring-log-config-attempt.json", state[0])
 
 
 def settle(worker, unit):
-    """The monitoring unit settles nothing after its apply."""
-    del worker, unit
+    """Set each missing owned option once; settle a lost reply by readback and retain completion only after both match."""
+    state = logging_state(worker, unit)
+    if state is None:
+        return False
+    intent, present, unused, completed = state
+    changed = False
+    for name, wanted in unit["config"]["global"].items():
+        if name not in present:
+            worker.tunnel_effect("config", "set", "global", name, wanted, json_result=False)
+            changed = True
+            present = logging_state(worker, unit)[1]
+            require(present.get(name) == wanted, "config-drift")
+    if completed is None:
+        worker.markers.write("monitoring-log-config-complete.json", intent)
+    return changed
 
 
 def expected(unit):
@@ -209,6 +256,9 @@ def expected(unit):
 
 def readiness(worker, unit, blocking):
     """Read-only: with prometheus, an available manager whose map lists the prometheus module's endpoint; nothing enters evidence."""
+    state = logging_state(worker, unit)
+    if state is not None and state[3] is None:
+        return False
     if not any(document["service_type"] == "prometheus" for document in unit["documents"]):
         return True
     manager = worker.ceph("mgr", "dump")

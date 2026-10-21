@@ -2,6 +2,7 @@ package ceph
 
 import (
 	"bytes"
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -10,6 +11,35 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/storage"
 )
+
+func TestLogAgentPlansOwnedFileLogging(t *testing.T) {
+	for _, agent := range []string{"alloy", "promtail", ""} {
+		t.Run(agent, func(t *testing.T) {
+			services := []api.Value{auxiliaryService("loki", "", api.Value{})}
+			if agent != "" {
+				services = append(services, auxiliaryService(agent, "", api.Value{}))
+			}
+			unit := monitoringUnit(t, services, nil)
+			data, err := json.Marshal(unit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var frozen struct {
+				Config map[string]map[string]string `json:"config"`
+			}
+			if err := json.Unmarshal(data, &frozen); err != nil {
+				t.Fatal(err)
+			}
+			if agent == "" {
+				if frozen.Config != nil {
+					t.Fatalf("a unit without a log agent owns config: %+v", frozen.Config)
+				}
+			} else if len(frozen.Config) != 1 || len(frozen.Config["global"]) != 2 || frozen.Config["global"]["log_to_file"] != "true" || frozen.Config["global"]["mon_cluster_log_to_file"] != "true" {
+				t.Fatalf("a declared log agent has no frozen file logging: %+v", frozen.Config)
+			}
+		})
+	}
+}
 
 func loggingRequest(t *testing.T) Request {
 	t.Helper()

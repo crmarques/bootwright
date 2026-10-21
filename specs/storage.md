@@ -881,6 +881,22 @@ Observation never writes, and no credential or stored specification reaches
 evidence, which lists only each daemon's host, name and service. The block's
 deadline is fixed for its type (apply 2280 s, observe 720 s, destroy 1380 s).
 
+When `alloy` or `promtail` is declared, the monitoring unit's frozen `config`
+contains exactly `global.log_to_file: "true"` and
+`global.mon_cluster_log_to_file: "true"`. No agent means no derived config.
+These options have one owner: authored values in `ceph.config` refuse. Before
+any unit write, an existing native entry without this operation's configuration
+attempt refuses `config-drift`, even when its value agrees. The attempt freezes
+the configuration and recovery scope before native writes. Each absent option
+is set once and read back; a lost reply continues from the same attempt without
+repeating a proved write. Completion is retained only after both options agree.
+Another section, mask, location, value, duplicate entry or completed option
+that disappeared refuses without a repair write. Observation checks those
+records and values without mutation. The options retire with the owned cluster;
+removing an agent changes frozen intent and requires whole-cluster retirement
+under the existing lifecycle contract, rather than an online configuration
+transition.
+
 A managed [StorageExport](storage-resources.md#storageexport) is realized by
 its export block, which mints the consumer's own principals and produces its
 external-cluster details in custody; it installs nothing on the consuming

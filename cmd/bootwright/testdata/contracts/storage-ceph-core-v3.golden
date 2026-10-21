@@ -211,6 +211,7 @@ request-schema:
   service.bindings[].path string
   service.bindings[].secretRef string
   service.bindings[].serviceRef string
+  service.config map[string]map[string]string omitempty
   service.documents []opaque
   service.id string
   service.type string
