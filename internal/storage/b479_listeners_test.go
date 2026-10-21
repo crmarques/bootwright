@@ -27,6 +27,8 @@ func TestB479DefaultPortCollision(t *testing.T) {
 	requireBound(t, graphIssues(t, proxy, secrets), s5+".spec.port", "node-1", "oauth2-proxy (4180) of "+s3)
 	requireBound(t, graphIssues(t, []api.Value{b479Service("alertmanager"), b479Service("grafana", "port", 9094)}), s4+".spec.port", "node-1", "the Alertmanager cluster listener (9094) of "+s3)
 	requireOnly(t, graphIssues(t, []api.Value{b479Service("alertmanager", "port", 9094)}), s3+".spec.port", "api.invariant", "cephadm reserves port 9094 for the Alertmanager cluster listener", "choose another spec.port")
+	requireBound(t, graphIssues(t, []api.Value{b479Service("loki"), b479Service("prometheus"), b479Service("alloy", "port", 9095)}), s5+".spec.port", "node-1", s4+".spec.port")
+	requireNoIssueAt(t, graphIssues(t, []api.Value{b479Service("loki"), b479Service("alloy"), b479Service("grafana", "port", 12345)}), s5+".spec.port")
 }
 
 func TestB479OmittedPortReservesItsDefault(t *testing.T) {
@@ -42,6 +44,8 @@ func TestB479OmittedPortReservesItsDefault(t *testing.T) {
 		{"ceph-exporter 9926", []api.Value{b479Service("ceph-exporter"), b479Service("grafana", "port", 9926)}, "[4]", "[3]"},
 		{"snmp-gateway 9464", []api.Value{snmp, b479Service("alertmanager"), b479Service("grafana", "port", 9464)}, "[5]", "[3]"},
 		{"alertmanager 9093", []api.Value{b479Service("alertmanager"), b479Service("grafana", "port", 9093)}, "[4]", "[3]"},
+		{"loki 3100", []api.Value{b479Service("loki"), b479Service("grafana", "port", 3100)}, "[4]", "[3]"},
+		{"promtail 9080", []api.Value{b479Service("loki"), b479Service("promtail"), b479Service("grafana", "port", 9080)}, "[5]", "[4]"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			const at = "$.spec.ceph.services"

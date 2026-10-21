@@ -174,6 +174,9 @@ var unitSpecMembers = map[string][]string{
 	"alertmanager":         {"only_bind_port_on_networks", "port", "user_data"},
 	"grafana":              {"anonymous_access", "only_bind_port_on_networks", "port", "protocol"},
 	"node-exporter":        {"port"},
+	"loki":                 {"port"},
+	"alloy":                {"port"},
+	"promtail":             {"port"},
 	"ceph-exporter":        {"port", "prio_limit", "stats_period"},
 	"snmp-gateway":         {"auth_protocol", "engine_id", "port", "privacy_protocol", "snmp_destination", "snmp_version"},
 	"mgmt-gateway":         {"enable_auth", "enable_health_check_endpoint", "port", "ssl", "ssl_ciphers", "ssl_protocols", "virtual_ip"},
@@ -241,7 +244,7 @@ func nfsUnits(cluster api.Object) ([]ServiceUnit, error) {
 	return units, nil
 }
 
-var MonitoringTypes = []string{"alertmanager", "ceph-exporter", "grafana", "node-exporter", "prometheus", "snmp-gateway"}
+var MonitoringTypes = []string{"alertmanager", "alloy", "ceph-exporter", "grafana", "loki", "node-exporter", "prometheus", "promtail", "snmp-gateway"}
 
 type prometheusSpec struct {
 	OnlyBindPortOnNetworks bool   `json:"only_bind_port_on_networks,omitempty"`
@@ -342,8 +345,9 @@ func snmpGatewaySpecOf(spec api.Value) any {
 	return s
 }
 
-var monitoringSpecs = map[string]func(api.Value) any{"alertmanager": alertmanagerSpecOf, "ceph-exporter": cephExporterSpecOf, "grafana": grafanaSpecOf,
-	"node-exporter": portSpecOf, "prometheus": prometheusSpecOf, "snmp-gateway": snmpGatewaySpecOf}
+var monitoringSpecs = map[string]func(api.Value) any{"alertmanager": alertmanagerSpecOf, "alloy": portSpecOf, "ceph-exporter": cephExporterSpecOf,
+	"grafana": grafanaSpecOf, "loki": portSpecOf, "node-exporter": portSpecOf, "prometheus": prometheusSpecOf, "promtail": portSpecOf,
+	"snmp-gateway": snmpGatewaySpecOf}
 
 type monitoringLeaf struct {
 	Part     secrets.Part

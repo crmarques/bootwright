@@ -62,7 +62,6 @@ var observabilityRefusedMembers = map[string][]refusedMember{
 var unnetworkedServiceTypes = []string{"ceph-exporter", "snmp-gateway"}
 
 var unrealizedServiceTypes = []refusedMember{
-	{names: []string{"loki", "alloy", "promtail"}, message: "Bootwright does not realize log collection yet", remedy: "remove this service from spec.ceph.services; B479 tracks log collection"},
 	{names: []string{"crash"}, message: "Bootwright applies the crash service on every host as a derived child of the StorageCluster, so a declared crash service would be its second owner", remedy: "remove the crash service from spec.ceph.services; the cluster keeps its derived crash service"},
 	{names: []string{"jaeger-agent", "jaeger-collector", "jaeger-query", "jaeger-tracing", "elasticsearch"}, message: "Bootwright does not realize tracing services", remedy: "remove this service from spec.ceph.services"},
 	{names: []string{"node-proxy", "agent", "container"}, message: "Bootwright does not realize this native service type", remedy: "remove this service from spec.ceph.services"},
@@ -242,6 +241,15 @@ func allowlistDomain(text string) bool {
 	return at < 0 || text[at+1:] == "*" || validPort(text[at+1:])
 }
 
+func (a *admission) logAgent(agent, field string, declared map[string]bool) {
+	if !declared["loki"] {
+		a.issue("api.invariant", field+".service_type", "the "+agent+" log agent ships logs only to a Loki service of this cluster", "declare a loki service in spec.ceph.services or remove the "+agent+" service")
+	}
+	if agent == "promtail" && declared["alloy"] {
+		a.issue("api.invariant", field+".service_type", "alloy and promtail would both ship the same Ceph logs to Loki", "keep one log agent: remove the alloy or the promtail service from spec.ceph.services")
+	}
+}
+
 func (a *admission) observabilityGraph(ceph api.Value) {
 	services := ceph.Get("services").Items()
 	declared := map[string]bool{}
@@ -263,6 +271,8 @@ func (a *admission) observabilityGraph(ceph api.Value) {
 			if !authenticating {
 				a.issue("api.invariant", field+".service_type", "oauth2-proxy authenticates only through a management gateway with enable_auth: true", "declare a mgmt-gateway service with spec.enable_auth: true, or remove the oauth2-proxy service")
 			}
+		case "alloy", "promtail":
+			a.logAgent(textOf(service, "service_type"), field, declared)
 		case "mgmt-gateway":
 			if service.Get("spec", "enable_auth").Bool() && !declared["oauth2-proxy"] {
 				a.issue("api.invariant", field+".spec.enable_auth", "enable_auth needs an oauth2-proxy service as the management gateway's authentication backend", "declare an oauth2-proxy service or set spec.enable_auth: false")

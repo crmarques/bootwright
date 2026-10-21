@@ -319,6 +319,9 @@ var nativeServiceTypes = []nativeServiceType{
 	{name: "snmp-gateway", label: "SNMP gateway", serviceID: serviceIDForbidden},
 	{name: "mgmt-gateway", label: "management gateway", serviceID: serviceIDForbidden},
 	{name: "oauth2-proxy", label: "oauth2-proxy", serviceID: serviceIDForbidden},
+	{name: "loki", label: "Loki", serviceID: serviceIDForbidden},
+	{name: "alloy", label: "Alloy", serviceID: serviceIDForbidden},
+	{name: "promtail", label: "Promtail", serviceID: serviceIDForbidden},
 	{name: "rbd-mirror", label: "RBD mirror", serviceID: serviceIDForbidden},
 }
 
@@ -518,7 +521,7 @@ func (a *admission) nativeFamily(service api.Value, typeName, field string, plac
 		a.ingressRecord(service, field, placed, partial)
 	case "nfs":
 		a.nfsRecord(service, field)
-	case "prometheus", "alertmanager", "grafana", "node-exporter", "ceph-exporter", "snmp-gateway", "mgmt-gateway", "oauth2-proxy":
+	case "prometheus", "alertmanager", "grafana", "node-exporter", "ceph-exporter", "snmp-gateway", "mgmt-gateway", "oauth2-proxy", "loki", "alloy", "promtail":
 		a.observabilityRecord(service, typeName, field, partial)
 	}
 }

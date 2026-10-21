@@ -11,7 +11,9 @@ The scripted monitor answers the upstream v20.2.1 shapes the worker reads, besid
   (src/mon/MgrMonitor.cc:1085-1094); cephadm enables the prometheus module itself for a prometheus service
   (src/pybind/mgr/cephadm/services/monitoring.py:480-489), after which the MON respawns the active manager;
 - a monitoring daemon's directory is 0700 and owned by its image's user, while cephadm writes `unit.meta` as root
-  (src/cephadm/cephadm.py:483-494, :601-660, :1338-1341).
+  (src/cephadm/cephadm.py:483-494, :601-660, :1338-1341);
+- MonitoringSpec admits `port` and `networks` for loki and promtail (src/python-common/ceph/deployment/service_spec.py), and
+  the image's own ServiceSpec refuses a service type it does not know, which the worker reports as the native command's error.
 """
 
 from __future__ import annotations
@@ -43,6 +45,7 @@ SECRETS = tuple(MATERIAL.values())
 FOREIGN = "foreign-credential-sentinel-R3t"
 WEBHOOKS = ["https://alerts.example.test/hook", "https://pager.example.test/hook"]
 TWO = ["node-1", "node-2"]
+LOGGING_AUXILIARY = [{"name": name, "image": REGISTRY + name + "@sha256:" + digit * 64} for name, digit in (("alloy", "6"), ("loki", "7"), ("promtail", "8"))]
 
 
 def documents():
@@ -56,6 +59,19 @@ def documents():
          "spec": {"auth_protocol": "SHA", "engine_id": "8000c53f00000000", "privacy_protocol": "AES", "snmp_destination": "192.0.2.80:162",
                   "snmp_version": "V3"}},
     ]
+
+
+def logging_documents(agent):
+    agent_document = {"placement": {"hosts": list(TWO)}, "service_type": agent}
+    loki = {"placement": {"count": 1, "hosts": list(TWO)}, "service_type": "loki", "spec": {"port": 3100}}
+    return sorted([agent_document, loki], key=lambda document: document["service_type"])
+
+
+def logging_request(agent):
+    request = monitoring_request(logging_documents(agent))
+    del request["service"]["bindings"]
+    request["auxiliary"] = [entry for entry in copy.deepcopy(LOGGING_AUXILIARY) if entry["name"] in (agent, "loki")]
+    return request
 
 
 def bindings():
@@ -255,7 +271,7 @@ def test_monitoring_apply_continuation_reuses_material(tmp_path, stored):
     monitor.after_store = monitor.before_store = None
     assert applying(monitor, markers).unit() == {"changed": not stored}
     assert len(monitor.stdin) == (1 if stored else 2) and monitor.stdin[-1] == monitor.stdin[0]
-    names = [observability.MONITORING_TYPES[index] for index in range(6)]
+    names = [document["service_type"] for document in documents()]
     assert all(markers.read("service-" + name + "-complete.json") == markers.read("service-" + name + "-attempt.json") for name in names)
     assert applying(monitor, markers).unit() == {"changed": False} and len(monitor.stdin) == (1 if stored else 2)
 
@@ -371,7 +387,7 @@ def test_unit_waits_for_available_mgr_after_module_respawn(tmp_path, monkeypatch
     transport = Transport()
     observed = ceph_core.wait_unit(request, "d" * 64, request["hosts"][0], transport, lambda: next(clock), lambda seconds: None)
     assert observed["ready"] is True and transport.calls == 7
-    assert {item["service"] for item in observed["daemons"]} == set(observability.MONITORING_TYPES)
+    assert {item["service"] for item in observed["daemons"]} == {document["service_type"] for document in documents()}
 
 
 def test_observe_refuses_foreign_monitoring_daemon():
@@ -385,7 +401,11 @@ def test_observe_refuses_foreign_monitoring_daemon():
     for bad in (dict(row, hostname="node-3"), dict(row, service_name="prometheus"), dict(row, daemon_type="node-exporter")):
         with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
             ceph_native.delegated_daemon(bad, listed)
-    assert "loki" not in ceph_native.DAEMON_TYPES and "oauth2-proxy" not in ceph_native.DAEMON_TYPES
+    assert "loki" in ceph_native.DAEMON_TYPES and "oauth2-proxy" not in ceph_native.DAEMON_TYPES
+    loki = {"daemon_type": "loki", "daemon_id": "node-1", "hostname": "node-1", "service_name": "loki"}
+    with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
+        ceph_native.delegated_daemon(loki, listed)
+    ceph_native.delegated_daemon(loki, logging_request("alloy"))
 
 
 def test_observe_refuses_wrong_aux_digest(tmp_path):
@@ -527,7 +547,7 @@ def test_monitoring_tables_agree():
     assert all(ceph_native.DAEMON_TYPES[kind] == ("delegated", "delegated", False, "none") for kind in observe.SINGLETONS)
     assert ceph_native.DAEMON_TYPES["ceph-exporter"] == ("cluster", "request", True, "ceph") and "ceph-exporter" in observe.CLUSTER_TYPES
     assert all(ceph_native.DELEGATED_SERVICE.fullmatch(kind) for kind in types)
-    assert not any(ceph_native.DELEGATED_SERVICE.fullmatch(name) for name in ("grafana.main", "mgmt-gateway.main", "oauth2-proxy", "loki", "prometheus.x"))
+    assert not any(ceph_native.DELEGATED_SERVICE.fullmatch(name) for name in ("grafana.main", "mgmt-gateway.main", "oauth2-proxy", "loki.x", "prometheus.x"))
     assert {AUXILIARY_NAME for AUXILIARY_NAME in observability.IMAGES.values() if AUXILIARY_NAME} <= set(ceph_native.AUXILIARY_NAMES)
     monitoring = ceph_native_units.UNIT_TYPES["monitoring"]
     assert monitoring.singletons == types and monitoring.endpoint is None
@@ -535,7 +555,7 @@ def test_monitoring_tables_agree():
     leaves = observability.MONITORING_LEAVES + observability.GATEWAY_LEAVES
     assert ceph_native_units.MATERIAL_VARIABLES == {variable for unused, unused_path, variable in leaves}
     assert all(ceph_native_units.PENDING.fullmatch(entry) for entry in ("module@prometheus", "grafana@grafana", "nfs@nfs.files", "vip@ingress.nfs.files"))
-    assert not any(ceph_native_units.PENDING.fullmatch(entry) for entry in ("module@grafana.main", "grafana@loki", "module@nfs"))
+    assert not any(ceph_native_units.PENDING.fullmatch(entry) for entry in ("module@grafana.main", "grafana@loki.x", "module@nfs"))
     assert ceph_native_units.UNIT_TYPES["nfs"].singletons == frozenset() and ceph_native_units.UNIT_TYPES["nfs"].leaves == {}
     assert "service-credential-foreign" in ceph_core.CLUSTER_REASONS
 
@@ -660,3 +680,82 @@ def test_dispatch_lends_the_bound_material_to_the_unit_phase_only(monkeypatch):
     for phase, private in (("unit", {}), ("observe", dict(MATERIAL)), ("prerequisites", {"grafanaAdminPassword": GRAFANA_PASSWORD})):
         with pytest.raises(ceph_native.Refusal, match="^material$"):
             ceph_native.dispatch({"request": request, "host": "node-1", "phase": phase, "private": private})
+
+
+@pytest.mark.parametrize("agent", ["alloy", "promtail"])
+def test_logging_unit_observes_loki_and_agent_daemons(tmp_path, agent):
+    request = logging_request(agent)
+    markers = units.markers_for(tmp_path, request)
+    monitor = Monitor(request)
+    assert applying(monitor, markers, {}).unit() == {"changed": True}
+    assert monitor.mutations == [("orch", "apply", "-i", "-")] and len(monitor.stdin) == 1
+    assert set(stream(monitor.stdin[0])) == {agent, "loki"}
+    rows = running(request)
+    assert sorted((row["daemon_type"], row["hostname"]) for row in rows) == sorted([(agent, "node-1"), (agent, "node-2"), ("loki", "node-1")])
+    monitor.running = rows
+    assert observing(monitor, markers)[:2] == (True, [])
+    monitor.running = [row for row in rows if not (row["daemon_type"] == agent and row["hostname"] == "node-2")]
+    ready, blocking, unused = observing(monitor, markers)
+    assert ready is False and blocking == [agent + "@" + agent]
+    monitor.running = rows + [daemon(request, "loki", "node-2")]
+    assert observing(monitor, markers)[:2] == (False, ["loki@loki"])
+    monitor.running = [dict(row, container_image_digests=[frozen(request, agent)]) if row["daemon_type"] == "loki" else row for row in rows]
+    with pytest.raises(ceph_native.Refusal, match="^artifact$"):
+        observing(monitor, markers)
+
+
+def test_logging_unit_verifies_image_keys_only(tmp_path):
+    request = logging_request("promtail")
+    markers = units.markers_for(tmp_path, request)
+    before = units.records(markers)
+    monitor = Monitor(request)
+    key = "mgr/cephadm/container_image_loki"
+    monitor.config = [entry for entry in monitor.config if entry["name"] != key]
+    with pytest.raises(ceph_native.NativeFailure, match="^foreign-image$") as caught:
+        applying(monitor, markers, {}).unit()
+    assert caught.value.native_error["cause"] == key
+    assert monitor.mutations == [] and monitor.stdin == [] and units.records(markers) == before
+    monitor = Monitor(request)
+    assert applying(monitor, units.markers_for(tmp_path / "held", request), {}).unit() == {"changed": True}
+    assert monitor.mutations == [("orch", "apply", "-i", "-")]
+
+
+def test_unknown_service_type_surfaces_the_native_error(tmp_path, monkeypatch):
+    request = logging_request("alloy")
+    markers = units.markers_for(tmp_path, request)
+
+    def unknown(self, image, user, script, arguments=(), **options):
+        del self, image, user, script, arguments, options
+        raise ceph_native.NativeFailure("native-command", request["image"], b'Spec for service type "alloy" is unknown.')
+
+    monkeypatch.setattr(ceph_host_runtime.HostRuntime, "contained", unknown)
+    monitor = Monitor(request)
+    with pytest.raises(ceph_native.NativeFailure, match="^native-command$") as caught:
+        applying(monitor, markers, {}).unit()
+    assert "alloy" in caught.value.native_error["cause"] and caught.value.native_error["coordinate"] == request["image"]
+    assert monitor.mutations == [] and not any(name.endswith("-attempt.json") for name in os.listdir(markers.path))
+
+
+LOGGING_INVALID = {
+    "member outside the record": lambda request: request["service"]["documents"][0]["spec"].update(retention_period="7d"),
+    "service_id on loki": lambda request: request["service"]["documents"][0].update(service_id="main"),
+    "port": lambda request: request["service"]["documents"][0]["spec"].update(port=70000),
+    "unselected loki auxiliary": lambda request: request.update(auxiliary=LOGGING_AUXILIARY[2:]),
+}
+
+
+@pytest.mark.parametrize("case", sorted(LOGGING_INVALID))
+def test_logging_request_validation(case):
+    request = logging_request("promtail")
+    assert request["service"]["documents"][0]["service_type"] == "loki"
+    assert ceph_native.validate(copy.deepcopy(request)) is not None
+    LOGGING_INVALID[case](request)
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate(request)
+
+
+def test_logging_service_networks_validate_where_cephadm_has_the_field():
+    request = logging_request("alloy")
+    for document in request["service"]["documents"]:
+        document["networks"] = ["192.0.2.0/24"]
+    assert ceph_native.validate(request) is not None

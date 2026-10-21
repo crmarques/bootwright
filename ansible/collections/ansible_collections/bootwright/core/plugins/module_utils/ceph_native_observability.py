@@ -1,7 +1,7 @@
 """Fixed Ceph monitoring service-unit hooks, shipped beside the core worker as source.
 
-A monitoring unit deploys every declared prometheus, alertmanager, grafana, node-exporter, ceph-exporter and snmp-gateway
-service as singleton documents in one `orch apply -i -` stream. cephadm names each such service by its type and each daemon
+A monitoring unit deploys every declared prometheus, alertmanager, grafana, node-exporter, ceph-exporter, snmp-gateway, loki,
+alloy and promtail service as singleton documents in one `orch apply -i -` stream. cephadm names each such service by its type and each daemon
 `<type>.<host short name>` (src/pybind/mgr/cephadm/module.py:922-966); every daemon runs its frozen auxiliary image, and
 ceph-exporter the Ceph image. The hooks only read the frozen image settings, whose single writer is the cluster's
 settings block. cephadm itself enables the prometheus manager module for a declared prometheus service
@@ -34,10 +34,13 @@ from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import
 
 MONITORING_TYPES = (
     "alertmanager",
+    "alloy",
     "ceph-exporter",
     "grafana",
+    "loki",
     "node-exporter",
     "prometheus",
+    "promtail",
     "snmp-gateway",
 )
 DAEMON_TYPES = MONITORING_TYPES
@@ -50,15 +53,18 @@ MONITORING_LEAVES = (
     ("snmp-gateway", "/spec/credentials/snmp_v3_priv_password", "snmpPrivPassword"),
 )
 # Each daemon type's auxiliary image name; None runs the frozen Ceph image.
-IMAGES = {"alertmanager": "alertmanager", "ceph-exporter": None, "grafana": "grafana", "node-exporter": "node_exporter", "prometheus": "prometheus",
-          "snmp-gateway": "snmp_gateway"}
+IMAGES = {"alertmanager": "alertmanager", "alloy": "alloy", "ceph-exporter": None, "grafana": "grafana", "loki": "loki", "node-exporter": "node_exporter",
+          "prometheus": "prometheus", "promtail": "promtail", "snmp-gateway": "snmp_gateway"}
 # The spec members each type realizes, as the Go planner's unitSpecMembers rows.
 MEMBERS = {
     "alertmanager": frozenset(("only_bind_port_on_networks", "port", "user_data")),
+    "alloy": frozenset(("port",)),
     "ceph-exporter": frozenset(("port", "prio_limit", "stats_period")),
     "grafana": frozenset(("anonymous_access", "only_bind_port_on_networks", "port", "protocol")),
+    "loki": frozenset(("port",)),
     "node-exporter": frozenset(("port",)),
     "prometheus": frozenset(("only_bind_port_on_networks", "port", "retention_size", "retention_time")),
+    "promtail": frozenset(("port",)),
     "snmp-gateway": frozenset(("auth_protocol", "engine_id", "port", "privacy_protocol", "snmp_destination", "snmp_version")),
 }
 # The types whose cephadm ServiceSpec has no networks field, as admission refuses them.

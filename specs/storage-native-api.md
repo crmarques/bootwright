@@ -233,7 +233,7 @@ Do not impose global uniqueness on the bare `service_id`. Any authored native
 `service_id` follows one table keyed by service type, with three states.
 Forbidden: `mon`, `mgr`, `prometheus`, `alertmanager`, `grafana`,
 `node-exporter`, `ceph-exporter`, `snmp-gateway`, `mgmt-gateway`,
-`oauth2-proxy` and `rbd-mirror`, the native singletons that cephadm refuses with an ID because
+`oauth2-proxy`, `loki`, `alloy`, `promtail` and `rbd-mirror`, the native singletons that cephadm refuses with an ID because
 they are not in `REQUIRES_SERVICE_ID` (IBM's python3-ceph-common 20.2.1-405
 `ServiceSpec.validate`). Native-required: `mds`, `rgw`, `ingress` and `nfs`; every row in this state is a type in cephadm's
 `REQUIRES_SERVICE_ID` (container, ingress, iscsi, mds, nfs, nvmeof, rgw, smb,
@@ -285,12 +285,14 @@ none or more than one such service refuses.
 
 The monitoring services run in one service-unit block. The core request lists
 each declared `prometheus`, `alertmanager`, `grafana`, `node-exporter`,
-`ceph-exporter` and `snmp-gateway` service in `delegated` by its type name, the
-singleton's service name, with its eligible hosts. cephadm names their daemons
+`ceph-exporter`, `snmp-gateway`, `loki`, `alloy` and `promtail` service in
+`delegated` by its type name, the singleton's service name, with its eligible
+hosts. cephadm names their daemons
 `<type>.<host short name>` without a random suffix
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/module.py#L922-L966)).
 In the daemon-type table, `prometheus`, `alertmanager`, `grafana`,
-`node-exporter` and `snmp-gateway` daemons are admitted only when their
+`node-exporter`, `snmp-gateway`, `loki`, `alloy` and `promtail` daemons are
+admitted only when their
 `service_name` equals their type, that service is listed and their host is
 among its hosts; like the other delegated daemons they are never counted
 toward readiness or compared with the Ceph image. `ceph-exporter` keeps its
@@ -499,7 +501,13 @@ Admission accepts `prometheus`, `alertmanager`, `grafana`, `node-exporter`,
 `ceph-exporter`, `snmp-gateway`, `mgmt-gateway` and `oauth2-proxy` documents
 under closed records whose members and spelling follow IBM's
 python3-ceph-common 20.2.1-405 ServiceSpec schema (the source read for these
-records, not a pinned build). Each is a singleton whose `service_id` is
+records, not a pinned build). It accepts the log collection types `loki`,
+`alloy` and `promtail` under a `port`-only record: cephadm's `MonitoringSpec`
+takes `port` and `networks` for loki and promtail
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py)),
+and alloy gets the same record because its build's signature was not read; a
+build whose alloy specification differs refuses the document natively. Each
+is a singleton whose `service_id` is
 forbidden ([service identity](#service-identity-and-references)). Each that
 needs an auxiliary image plans once it is authored under `spec.ceph.images`
 and refuses at planning without it
@@ -517,6 +525,9 @@ image, and it and the other monitoring services realize through the
 | `snmp-gateway` | required `snmp_version` (`V2c` or `V3`) and `snmp_destination`; `port` (1-65535), `engine_id`, `auth_protocol` (`MD5` or `SHA`), `privacy_protocol` (`DES` or `AES`) |
 | `mgmt-gateway` | required `port` (1-65535); `ssl`, `enable_auth`, `ssl_protocols` (`TLSv1.2`, `TLSv1.3`), `ssl_ciphers`, `virtual_ip`, `enable_health_check_endpoint` |
 | `oauth2-proxy` | required `provider_display_name`, `client_id` and `oidc_issuer_url`; `https_address`, `redirect_url`, `scope`, `email_domains`, `allowlist_domains` |
+| `loki` | `port` (1-65535) |
+| `alloy` | `port` (1-65535) |
+| `promtail` | `port` (1-65535) |
 
 The management gateway's default port differs between builds, so `port` is
 required and the endpoint never depends on a release default. Every other
@@ -566,7 +577,11 @@ URLs without user information; and each `allowlist_domains` entry is
 
 Across services, an snmp-gateway needs an alertmanager service, an
 oauth2-proxy needs a mgmt-gateway with `enable_auth: true`, and a
-mgmt-gateway with `enable_auth: true` needs an oauth2-proxy. The management
+mgmt-gateway with `enable_auth: true` needs an oauth2-proxy. An `alloy` or
+`promtail` log agent ships logs only to a `loki` service of its cluster, so
+either without a declared `loki` refuses at its `service_type`; `alloy` and
+`promtail` together refuse at the `promtail` entry, because both would ship
+the same Ceph logs. A `loki` alone is admitted. The management
 gateway is a singleton, so a second one refuses as a duplicate identity.
 A grafana with `anonymous_access: false` needs the
 `/spec/initial_admin_password` binding, as IBM's `GrafanaSpec.validate`
@@ -583,9 +598,13 @@ a different address. That ingress runs keepalived only, so it refuses
 until single sign-on is realized, so a planned management gateway carries no
 `enable_auth: true`.
 
-Some native types refuse by type at `service_type`. Log collection (`loki`,
-`alloy`, `promtail`) is not realized yet; only the gated log-collection lane
-admits it (D161, OD6 (d1)). `crash` is a derived child of the StorageCluster
+Log collection runs `loki` with one agent, `alloy` or `promtail`, in the
+monitoring unit, each on its image authored under `spec.ceph.images`. The
+selected build's cephadm judges whether it knows each type: normalization runs
+the selected image's own `ServiceSpec`, and an unknown type surfaces as
+`nativeError` before any write.
+
+Some native types refuse by type at `service_type`. `crash` is a derived child of the StorageCluster
 that Bootwright applies on every host through its crash unit (above), so an
 authored one would be its second owner (D160, OD25). Tracing (`jaeger-*`, `elasticsearch`),
 `node-proxy`, `agent` and `container` are not realized.

@@ -349,6 +349,9 @@ func TestB479ServiceSchemasAreClosed(t *testing.T) {
 		"snmp-gateway":  {"credentials"},
 		"mgmt-gateway":  {"ssl_cert", "ssl_key", "custom_sans", "certificate_source", "ssl_prefer_server_ciphers", "ssl_session_tickets", "ssl_session_timeout", "ssl_session_cache", "server_tokens", "ssl_stapling", "ssl_stapling_verify"},
 		"oauth2-proxy":  {"ssl", "certificate_source", "ssl_cert", "ssl_key", "custom_sans", "client_secret", "cookie_secret", "ssl_insecure_skip_verify"},
+		"loki":          {"retention_time", "targets", "only_bind_port_on_networks"},
+		"alloy":         {"retention_time", "targets", "only_bind_port_on_networks"},
+		"promtail":      {"retention_time", "targets", "only_bind_port_on_networks"},
 	}
 	required := map[string][]string{"mgmt-gateway": {"port"}, "snmp-gateway": {"snmp_version", "snmp_destination"}, "oauth2-proxy": {"provider_display_name", "client_id", "oidc_issuer_url"}}
 	var closed func(*Shape) bool

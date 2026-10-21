@@ -63,6 +63,9 @@ var nativeListeners = map[string]listenerSource{
 	"snmp-gateway":  portListener(9464, false),
 	"mgmt-gateway":  portListener(0, false),
 	"oauth2-proxy":  oauth2ProxyListeners,
+	"loki":          portListener(3100, false),
+	"promtail":      portListener(9080, false),
+	"alloy":         portListener(0, false),
 }
 
 func declaredServices(cluster api.Object, serviceType string) []api.Value {

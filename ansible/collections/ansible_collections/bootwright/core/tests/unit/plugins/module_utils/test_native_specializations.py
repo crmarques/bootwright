@@ -203,7 +203,7 @@ def test_each_signed_build_list_gives_its_recorded_facts(build):
 
 @pytest.mark.parametrize("build", sorted(build for build, current in BUILDS.items() if current))
 def test_todays_bootstrap_options_are_declared_by_each_twenty_two_build(build):
-    request = {"version": "ceph-core-v25", "clusterSSHTransport": "verified-tunnel", "owner": "apply-example",
+    request = {"version": "ceph-core-v26", "clusterSSHTransport": "verified-tunnel", "owner": "apply-example",
                "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
                "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": build}, "bootstrap": "node-1.example.test",
                "monIP": "192.0.2.1", "clusterNetworks": ["198.51.100.0/24"], "callHome": "enabled",

@@ -493,7 +493,8 @@ checks:
   on the management gateway's hosts its internal listener (29443)
   ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/mgmt_gateway.py#L21));
   the `port` of prometheus (9095), alertmanager (9093), grafana (3000),
-  node-exporter (9100), ceph-exporter (9926), snmp-gateway (9464) and the
+  node-exporter (9100), ceph-exporter (9926), snmp-gateway (9464), loki
+  (3100), promtail (9080), alloy (its authored `port` only) and the
   management gateway (required, no default), the Alertmanager cluster
   listener (9094) and oauth2-proxy (4180, whatever `https_address` names), as
   IBM's ServiceSpec defaults them; an RGW service's `rgw_frontend_port` (80, or 443

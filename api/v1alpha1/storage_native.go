@@ -44,7 +44,7 @@ func StorageNativeServiceSpecSchema(serviceType string) *Shape {
 		return record(field("port", integer("1", "65535")), field("only_bind_port_on_networks", boolean()), field("user_data", record(field("default_webhook_urls", set(nonempty())))))
 	case "grafana":
 		return record(field("port", integer("1", "65535")), field("protocol", enumeration("http", "https")), field("anonymous_access", boolean()), field("only_bind_port_on_networks", boolean()))
-	case "node-exporter":
+	case "node-exporter", "loki", "alloy", "promtail":
 		return record(field("port", integer("1", "65535")))
 	case "ceph-exporter":
 		return record(field("port", integer("1", "65535")), field("prio_limit", integer("0", "")), field("stats_period", integer("1", "")))

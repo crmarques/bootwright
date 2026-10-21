@@ -36,6 +36,9 @@ func b479Minimal() map[string]api.Value {
 		"snmp-gateway":  b479Service("snmp-gateway", "snmp_version", "V2c", "snmp_destination", "192.0.2.9:162"),
 		"mgmt-gateway":  b479Service("mgmt-gateway", "port", 9443),
 		"oauth2-proxy":  oauth2Proxy(),
+		"loki":          b479Service("loki"),
+		"alloy":         b479Service("alloy"),
+		"promtail":      b479Service("promtail"),
 	}
 }
 
@@ -126,7 +129,9 @@ func TestB479RefusalsNameTheirRemedy(t *testing.T) {
 		{"R12", "api.invariant", s3 + ".spec.ssl", "a plaintext management gateway would carry dashboard credentials unencrypted", "omit spec.ssl or set it to true", added(b479Service("mgmt-gateway", "port", 9443, "ssl", false))},
 		{"R12a port", "api.invariant", s3 + ".spec.https_address", "cephadm reserves port 4180 for oauth2-proxy whatever https_address names", "use port 4180 in spec.https_address or omit it", added(oauth2Proxy("https_address", "0.0.0.0:4181"), authGateway())},
 		{"R12a malformed", "api.invariant", s3 + ".spec.https_address", "https_address is host:port", "write spec.https_address as host:4180 or omit it", added(oauth2Proxy("https_address", "4180"), authGateway())},
-		{"R14", "api.invariant", s3 + ".service_type", "Bootwright does not realize log collection yet", "remove this service from spec.ceph.services; B479 tracks log collection", added(b479Service("loki"))},
+		{"R14a alloy", "api.invariant", s3 + ".service_type", "the alloy log agent ships logs only to a Loki service of this cluster", "declare a loki service in spec.ceph.services or remove the alloy service", added(b479Service("alloy"))},
+		{"R14a promtail", "api.invariant", s3 + ".service_type", "the promtail log agent ships logs only to a Loki service of this cluster", "declare a loki service in spec.ceph.services or remove the promtail service", added(b479Service("promtail"))},
+		{"R14b", "api.invariant", "$.spec.ceph.services[5].service_type", "alloy and promtail would both ship the same Ceph logs to Loki", "keep one log agent: remove the alloy or the promtail service from spec.ceph.services", added(b479Service("loki"), b479Service("alloy"), b479Service("promtail"))},
 		{"R15a", "api.invariant", s3 + ".service_type", "Bootwright applies the crash service on every host as a derived child of the StorageCluster, so a declared crash service would be its second owner", "remove the crash service from spec.ceph.services; the cluster keeps its derived crash service", added(b479Service("crash"))},
 		{"R15b tracing", "api.invariant", s3 + ".service_type", "Bootwright does not realize tracing services", "remove this service from spec.ceph.services", added(b479Service("jaeger-agent"))},
 		{"R15b node-proxy", "api.invariant", s3 + ".service_type", "Bootwright does not realize this native service type", "remove this service from spec.ceph.services", added(b479Service("node-proxy"))},
@@ -343,6 +348,35 @@ func TestB479ValueRulesFollowTheNativeGrammar(t *testing.T) {
 		found := issuesAt(Validate(cluster, catalog), field)
 		if row.admitted != (len(found) == 0) || len(found) > 1 {
 			t.Fatalf("%s admitted=%v: %#v", field, row.admitted, found)
+		}
+	}
+}
+
+func TestLokiAlloyAndPromtailAdmittedAsNativeServiceTypes(t *testing.T) {
+	for _, agent := range []string{"alloy", "promtail"} {
+		cluster, catalog := withServices(t, fixtureCatalog(), b479Service("loki", "port", 3100), b479Service(agent))
+		for _, issues := range [][]api.Issue{Validate(cluster, catalog), ValidatePartial(cluster, catalog)} {
+			if found := addedServiceIssues(issues); len(found) != 0 {
+				t.Fatalf("loki with %s refused: %#v", agent, found)
+			}
+		}
+	}
+	cluster, catalog := withServices(t, fixtureCatalog(), b479Service("loki", "retention_period", "7d"))
+	if found := issuesAt(Validate(cluster, catalog), "$.spec.ceph.services[3].spec"); len(found) != 1 || found[0].Code != "api.field" {
+		t.Fatalf("an unrealized loki member was admitted: %#v", Validate(cluster, catalog))
+	}
+}
+
+func TestR14NoLongerRefusesLoki(t *testing.T) {
+	for _, name := range []string{"loki", "alloy", "promtail"} {
+		if refusal, refused := serviceTypeRefusal(name); refused {
+			t.Fatalf("%s still refused by type: %#v", name, refusal)
+		}
+		cluster, catalog := withServices(t, fixtureCatalog(), b479Service(name))
+		for _, issue := range Validate(cluster, catalog) {
+			if strings.Contains(issue.Message, "Bootwright does not realize log collection yet") {
+				t.Fatalf("%s refused as unrealized: %#v", name, issue)
+			}
 		}
 	}
 }

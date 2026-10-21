@@ -128,6 +128,7 @@ page that owns its reasoning.
 | Output-shape unions (`config-key get` newline, `orch ls` sentinel, Podman inspect shapes) | [Tool output shapes](ibm-ceph-live-host-facts.md#tool-output-shapes) |
 | MGR restarts, readiness budgets and health ceilings | [Timing and health](ibm-ceph-live-host-facts.md#timing-and-health) |
 | Dashboard endpoint and port publication | [Dashboard ports](ceph-dashboard-port-publication.md) |
+| Whether a build's cephadm knows the `loki`, `alloy` or `promtail` service type: normalization runs the selected image's own `ServiceSpec`, and an unknown type surfaces as `nativeError` before any write | [Resources, readiness and access](../../specs/storage.md#resources-readiness-and-access) |
 | Auxiliary image selection is not a version specialization; its contract belongs to B479 | [B479](../../specs/milestones/m2.md#b479) |
 | The default package repository `rhel9`, a source default | [Storage API](../../specs/api/storage.md) |
 | The selected image's OpenSSH default host-key list and its crypto policy's `+`, `^` and `-` `HostKeyAlgorithms` forms, evaluated generally by the tunnel's per-host intersection | [Network, remote systems, and privilege](../../specs/security.md#network-remote-systems-and-privilege) |

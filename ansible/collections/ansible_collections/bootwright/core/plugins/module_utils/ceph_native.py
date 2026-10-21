@@ -114,18 +114,22 @@ DAEMON_TYPES = {
     "keepalived": ("delegated", "delegated", False, "none"),
     "nfs": ("delegated", "delegated", False, "none"),
     "alertmanager": ("delegated", "delegated", False, "none"),
+    "alloy": ("delegated", "delegated", False, "none"),
     "grafana": ("delegated", "delegated", False, "none"),
+    "loki": ("delegated", "delegated", False, "none"),
     "node-exporter": ("delegated", "delegated", False, "none"),
     "prometheus": ("delegated", "delegated", False, "none"),
+    "promtail": ("delegated", "delegated", False, "none"),
     "snmp-gateway": ("delegated", "delegated", False, "none"),
     "mgmt-gateway": ("delegated", "delegated", False, "none"),
     "smb": ("delegated", "delegated", False, "none"),
     "rbd-mirror": ("delegated", "delegated", False, "none"),
 }
 # A service another block executes, listed by its cephadm service_name: rgw.<id>, ingress.<id>, nfs.<id>, smb.<id> or a singleton's type,
-# crash and rbd-mirror among them.
+# crash, rbd-mirror and the log collection services loki, alloy and promtail among them.
 DELEGATED_SERVICE = re.compile(r"(?:(?:rgw|ingress|nfs|smb)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}"
-                               r"|alertmanager|ceph-exporter|crash|grafana|mgmt-gateway|node-exporter|prometheus|rbd-mirror|snmp-gateway)\Z")
+                               r"|alertmanager|alloy|ceph-exporter|crash|grafana|loki|mgmt-gateway|node-exporter|prometheus|promtail|rbd-mirror"
+                               r"|snmp-gateway)\Z")
 
 
 def supported_transport(request):
@@ -534,7 +538,7 @@ def host_scope(request):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v25")
+    require(request["version"] == "ceph-core-v26")
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])

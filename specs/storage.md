@@ -217,8 +217,8 @@ them:
   and depends on the cluster, image and settings blocks by ID plus any blocks
   its type names; its deadline is fixed per type and does not grow with the
   host count. For monitoring, every declared `prometheus`, `alertmanager`,
-  `grafana`, `node-exporter`, `ceph-exporter` and `snmp-gateway` service
-  forms one `ceph-service-<cluster>-monitoring` block, whose deadline is apply
+  `grafana`, `node-exporter`, `ceph-exporter`, `snmp-gateway`, `loki`,
+  `alloy` and `promtail` service forms one `ceph-service-<cluster>-monitoring` block, whose deadline is apply
   2280 s, observe 720 s, destroy 1380 s; its singleton documents carry no
   `service_id`. The unit request carries each grafana and snmp-gateway
   credential binding only as a Secret reference (`service.bindings`), lent as
@@ -791,7 +791,8 @@ evidence, which lists only each daemon's host, name and service. The block's
 deadline is fixed for its type (apply 2940 s, observe 720 s, destroy 1380 s).
 
 The declared `prometheus`, `alertmanager`, `grafana`, `node-exporter`,
-`ceph-exporter` and `snmp-gateway` services are realized by the one
+`ceph-exporter`, `snmp-gateway`, `loki`, `alloy` and `promtail` services are
+realized by the one
 service-unit block `ceph-service-<cluster>-monitoring`, whose apply phase runs
 only on the bootstrap host. Before any write it proves the cluster's ownership
 record and FSID and reads, never writes, the frozen `container_image_*`
