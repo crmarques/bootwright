@@ -122,6 +122,16 @@ spec:
           count: 1
           label: ceph-core
 
+      - service_type: nvmeof
+        service_id: block
+        placement:
+          hosts:
+            - node-01.ceph-multidc-01.clusters.example.com
+            - node-02.ceph-multidc-01.clusters.example.com
+        spec:
+          pool: odf-hub-multidc-01-rbd
+          group: block
+
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: StoragePlacementPolicy

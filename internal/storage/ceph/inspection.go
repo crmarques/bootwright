@@ -498,6 +498,7 @@ var scopeRows = map[api.Kind]func(api.Catalog, string, []reconciliation.Block) s
 	api.StorageObjectBucket:    frozenScope(api.StorageObjectBucket, "object-bucket", objectBucketScopeText),
 	api.StorageNFSExport:       frozenScope(api.StorageNFSExport, "nfs-export", nfsExportScopeText),
 	api.StorageSMBResource:     smbFrozenScope,
+	api.StorageNVMeoFSubsystem: declaredScope(api.StorageNVMeoFSubsystem, nvmeofSubsystemScopeText),
 	api.StorageExport:          declaredScope(api.StorageExport, exportScopeText),
 }
 
@@ -670,6 +671,10 @@ func subvolumeScopeText(r Request) string {
 		group = "_nogroup"
 	}
 	return "subvolume " + r.Subvolume.Filesystem + "/" + group + "/" + r.Subvolume.Name
+}
+
+func nvmeofSubsystemScopeText(spec api.Value) string {
+	return "subsystem on " + spec.Get("serviceRef").Text()
 }
 
 func exportScopeText(spec api.Value) string {

@@ -2813,6 +2813,15 @@ spec:
         placement:
           label: ceph-core
           count: 1
+      - service_type: nvmeof
+        service_id: block
+        placement:
+          hosts:
+            - node-01.ceph-multidc-01.clusters.example.com
+            - node-02.ceph-multidc-01.clusters.example.com
+        spec:
+          group: block
+          pool: odf-hub-multidc-01-rbd
     topology:
       nodes:
         - name: node-01
@@ -3046,6 +3055,23 @@ spec:
       groups: []
       users:
         - name: smbuser
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageNVMeoFSubsystem
+metadata:
+  name: acceptance-nvmeof
+spec:
+  clusterRef: ceph-multidc-01
+  serviceRef: nvmeof.block
+  nqn: nqn.2016-06.io.example:acceptance
+  listeners:
+    - host: node-01
+    - host: node-02
+  hosts:
+    - nqn.2014-08.org.nvmexpress:uuid:00000000-0000-4000-8000-000000000001
+  namespaces:
+    - nsid: 1
+      imageRef: acceptance-rbd-image
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddon

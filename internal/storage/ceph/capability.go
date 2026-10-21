@@ -249,6 +249,8 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
 		} else if reason, remedy, gap := unneededAuxiliary(state.Effective(), cluster); gap {
 			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
+		} else if reason, remedy, gap := undeployedNVMeoF(cluster); gap {
+			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
 		}
 	}
 	return out

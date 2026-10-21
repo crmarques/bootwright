@@ -79,6 +79,8 @@ func (a *admission) intrinsic() {
 		a.clientIntrinsic()
 	case api.StorageSMBResource:
 		a.smbIntrinsic()
+	case api.StorageNVMeoFSubsystem:
+		a.nvmeofSubsystemIntrinsic()
 	case api.StorageExport:
 		if spec.Has("dataFoundation") && spec.Has("externalDetails") {
 			a.invalid("$.spec", "storage export ownership modes are mutually exclusive")

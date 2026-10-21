@@ -339,11 +339,13 @@ func referenceRefusals() []diagnosticTuple {
 }
 
 // expandedRefusals adds what the acceptance extras contribute to the
-// reference's: one more refused storage family, and the warning every
-// CustomPlaybook raises because it cannot execute.
+// reference's: one more refused storage family, the NVMe-oF subsystem whose
+// gateway service only the admissible projection declares, and the warning
+// every CustomPlaybook raises because it cannot execute.
 func expandedRefusals() []diagnosticTuple {
 	return append(referenceRefusals(),
 		diagnosticTuple{"api.invariant", "StorageExport", "acceptance-external-export", laterServiceRefusal},
+		diagnosticTuple{"api.invariant", "StorageNVMeoFSubsystem", "acceptance-nvmeof", "$.spec.serviceRef"},
 		diagnosticTuple{"api.deferred", "CustomPlaybook", "acceptance-playbook", laterServiceRefusal},
 	)
 }
@@ -399,7 +401,7 @@ func TestActualCompilerRefusesFutureKindsAndAdditionalVariants(t *testing.T) {
 		t.Fatal("future reference unexpectedly compiled")
 	}
 	requireReferenceRefusals(t, diagnostics.Of(err), true)
-	if len(api.Kinds()) != 32 {
+	if len(api.Kinds()) != 33 {
 		t.Fatalf("kind catalog changed: %d", len(api.Kinds()))
 	}
 }
@@ -412,7 +414,7 @@ func TestActualCompilerRefusesFutureKindsAndAdditionalVariants(t *testing.T) {
 func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testing.T) {
 	state, report := compileAcceptance(t, admissibleExampleSources(t, true))
 	kinds := api.Kinds()
-	if len(kinds) != 32 {
+	if len(kinds) != 33 {
 		t.Fatalf("kind catalog changed: %d; cover the new kind in the reference or the extras", len(kinds))
 	}
 	for _, kind := range kinds {
@@ -424,7 +426,7 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 			t.Errorf("kind %s has no full-wiring positive admission coverage", kind)
 		}
 	}
-	if report.Counts != (compilation.Counts{FilesSeen: 92, ObjectsDecoded: 126}) {
+	if report.Counts != (compilation.Counts{FilesSeen: 92, ObjectsDecoded: 127}) {
 		t.Errorf("projection counts: %#v", report.Counts)
 	}
 	if len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "api.deferred" || report.Diagnostics[0].Object == nil || report.Diagnostics[0].Object.Name != "acceptance-playbook" {

@@ -356,6 +356,28 @@ spec:
 
 ---
 apiVersion: bootwright.io/v1alpha1
+kind: StorageNVMeoFSubsystem
+metadata:
+  name: acceptance-nvmeof
+
+spec:
+  clusterRef: ceph-multidc-01
+  serviceRef: nvmeof.block
+  nqn: nqn.2016-06.io.example:acceptance
+
+  listeners:
+    - host: node-01
+    - host: node-02
+
+  hosts:
+    - nqn.2014-08.org.nvmexpress:uuid:00000000-0000-4000-8000-000000000001
+
+  namespaces:
+    - nsid: 1
+      imageRef: acceptance-rbd-image
+
+---
+apiVersion: bootwright.io/v1alpha1
 kind: StorageSubvolume
 metadata:
   name: acceptance-subvolume

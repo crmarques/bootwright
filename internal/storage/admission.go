@@ -17,7 +17,7 @@ type admission struct {
 }
 
 func isStorage(kind api.Kind) bool {
-	return slices.Contains([]api.Kind{api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageFilesystem, api.StorageObjectGateway, api.StorageObjectUser, api.StorageObjectBucket, api.StorageNFSExport, api.StorageSMBResource, api.StorageExport, api.StorageClient, api.StorageRBDImage, api.StorageSubvolume}, kind)
+	return slices.Contains([]api.Kind{api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageFilesystem, api.StorageObjectGateway, api.StorageObjectUser, api.StorageObjectBucket, api.StorageNFSExport, api.StorageSMBResource, api.StorageNVMeoFSubsystem, api.StorageExport, api.StorageClient, api.StorageRBDImage, api.StorageSubvolume}, kind)
 }
 
 func (a *admission) issue(code, field, message, remediation string) {
@@ -166,6 +166,8 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 		a.nfsExport(owner)
 	case api.StorageSMBResource:
 		a.smbResource(owner)
+	case api.StorageNVMeoFSubsystem:
+		a.nvmeofSubsystem(owner)
 	case api.StorageExport:
 		a.export(owner, managed)
 	case api.StorageRBDImage:

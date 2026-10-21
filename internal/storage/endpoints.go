@@ -54,6 +54,7 @@ var reservedListeners = []reservedListener{
 var nativeListeners = map[string]listenerSource{
 	"rgw":           rgwListeners,
 	"nfs":           nfsListeners,
+	"nvmeof":        nvmeofListeners,
 	"ingress":       ingressListeners,
 	"prometheus":    portListener(9095, true),
 	"alertmanager":  alertmanagerListeners,

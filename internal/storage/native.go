@@ -311,6 +311,7 @@ var nativeServiceTypes = []nativeServiceType{
 	{name: "rgw", label: "RGW", serviceID: serviceIDNative},
 	{name: "ingress", label: "ingress", serviceID: serviceIDNative},
 	{name: "nfs", label: "NFS", serviceID: serviceIDNative},
+	{name: "nvmeof", label: "NVMe-oF", serviceID: serviceIDNative},
 	{name: "prometheus", label: "Prometheus", serviceID: serviceIDForbidden},
 	{name: "alertmanager", label: "Alertmanager", serviceID: serviceIDForbidden},
 	{name: "grafana", label: "Grafana", serviceID: serviceIDForbidden},
@@ -484,6 +485,7 @@ func (a *admission) nativeServices(ceph api.Value, partial bool) {
 		a.nativeAllocationConflicts(ceph)
 		a.nativeServiceGraph(ceph)
 		a.observabilityGraph(ceph)
+		a.nvmeofGraph(ceph)
 	}
 	a.nativeBindings(ceph, partial)
 }
@@ -496,7 +498,7 @@ type refusedMember struct {
 func (a *admission) withoutRefusedMembers(spec api.Value, typeName, field string) api.Value {
 	table, ok := observabilityRefusedMembers[typeName]
 	if !ok {
-		table = map[string][]refusedMember{"rgw": rgwRefusedMembers, "ingress": ingressRefusedMembers, "nfs": nfsRefusedMembers}[typeName]
+		table = map[string][]refusedMember{"rgw": rgwRefusedMembers, "ingress": ingressRefusedMembers, "nfs": nfsRefusedMembers, "nvmeof": nvmeofRefusedMembers}[typeName]
 	}
 	if spec.Type() != api.Mapping {
 		return spec
@@ -523,6 +525,8 @@ func (a *admission) nativeFamily(service api.Value, typeName, field string, plac
 		a.ingressRecord(service, field, placed, partial)
 	case "nfs":
 		a.nfsRecord(service, field)
+	case "nvmeof":
+		a.nvmeofRecord(service, field, placed, partial)
 	case "prometheus", "alertmanager", "grafana", "node-exporter", "ceph-exporter", "snmp-gateway", "mgmt-gateway", "oauth2-proxy", "loki", "alloy", "promtail":
 		a.observabilityRecord(service, typeName, field, partial)
 	}

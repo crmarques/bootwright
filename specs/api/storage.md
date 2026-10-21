@@ -12,6 +12,10 @@ OSD documents are admitted, and so are MDS documents that a StorageFilesystem
 of the same cluster binds by name. StorageFilesystem is admitted under
 [CephFS filesystems](#cephfs-filesystems). RGW, ingress and NFS documents are admitted under their
 [native records](../storage-native-api.md#rgw-ingress-and-nfs-records).
+NVMe-oF gateway documents (`service_type: nvmeof`) are admitted under their
+[native record](../storage-native-api.md#nvme-of-gateway-record); Bootwright
+does not deploy them yet, so planning refuses a StorageCluster that declares
+one ([refusal table](../storage.md#refusal-table)).
 Prometheus, Alertmanager, Grafana, node-exporter, ceph-exporter, snmp-gateway,
 mgmt-gateway and oauth2-proxy documents are admitted under their
 [native records](../storage-native-api.md#observability-and-management-gateway-records);
@@ -83,6 +87,9 @@ export block.
 plans it once the samba images of the StorageCluster it names are authored
 under `spec.ceph.images`; without them, planning refuses that StorageCluster
 (see the [refusal table](../storage.md#refusal-table)).
+`StorageNVMeoFSubsystem` is admitted under its
+[field record](../storage-resources.md#storagenvmeofsubsystem); no capability
+realizes it yet, so planning refuses every selected one before any effect.
 Other P2 resource additions remain target contracts, not admitted kinds.
 Future storage export feature families are refused by current pure
 admission.
@@ -246,6 +253,7 @@ provider sizing and measured resource acceptance remain separate.
 | `StorageObjectBucket` | One S3 bucket, whose native name is `metadata.name`, owned by the StorageObjectUser `ownerRef` of the same StorageObjectGateway `objectGatewayRef`, with an optional native bucket policy under `policy`. |
 | `StorageNFSExport` | One NFS export of one declared nfs service, backed by a same-cluster StorageFilesystem, StorageSubvolume or StorageObjectUser, with its native export under `native`. Daemon placement, ports and ingress belong to the native services. |
 | `StorageSMBResource` | One native SMB manager resource (`ceph.smb.cluster`, `ceph.smb.share`, `ceph.smb.join.auth` or `ceph.smb.usersgroups`) under `native`, with its share backing, auth references and password bindings. |
+| `StorageNVMeoFSubsystem` | One NVMe-oF subsystem of one declared nvmeof gateway service: its NQN, a listener on every gateway of the group, the host NQNs allowed to connect and its namespaces, each backed by a same-cluster StorageRBDImage. |
 | `StorageExport` | One downstream storage surface: the `dataFoundation` arm for a managed cluster, `externalDetails` for an external one. |
 
 ## References
@@ -261,7 +269,8 @@ on the already selected Machine.
 | pool refs | `StoragePool` |
 | `filesystemRef` | `StorageFilesystem` |
 | `mdsServiceRef` | native service registry, exactly `mds.<filesystem>` |
-| `serviceRef` | native service registry, exactly one rgw service |
+| `serviceRef` (StorageObjectGateway) | native service registry, exactly one rgw service |
+| `serviceRef` (StorageNVMeoFSubsystem) | native service registry, exactly one nvmeof service |
 | `serviceID` (StorageNFSExport) | native service registry, exactly `nfs.<serviceID>` |
 | `subvolumeRef` | `StorageSubvolume` |
 | `smbClusterRef` | `StorageSMBResource` whose native type is `ceph.smb.cluster` |
@@ -269,6 +278,7 @@ on the already selected Machine.
 | `objectGatewayRef` | `StorageObjectGateway` |
 | `ownerRef` (StorageObjectBucket) | `StorageObjectUser` |
 | `objectUserRef` (StorageNFSExport) | `StorageObjectUser` |
+| `imageRef` (StorageNVMeoFSubsystem) | `StorageRBDImage` |
 | `machineRef` | `Machine` |
 | entitlement refs | `Entitlement` |
 | key, certificate, password, client-secret, cookie-secret, and external-detail refs | `Secret` |

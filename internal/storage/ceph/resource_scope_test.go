@@ -67,6 +67,7 @@ func TestResourceScopeRendersEachKindFromItsFrozenRequest(t *testing.T) {
 		declaredScopeObject(api.StorageExport, "foundation", api.FieldValue{Name: "dataFoundation", Value: api.MapValue(
 			scopeText("rbdPoolRef", "rbd-meta"), scopeText("filesystemRef", "files"), scopeText("objectGatewayRef", "objects"))}),
 		declaredScopeObject(api.StorageExport, "bare"),
+		declaredScopeObject(api.StorageNVMeoFSubsystem, "block-a", scopeText("serviceRef", "nvmeof.block")),
 	})
 	gateway := frozenScopeBlock(t, api.StorageObjectGateway, "objects", Request{Version: Version, Action: "gateway", Gateway: &Gateway{
 		Name: "objects", Realm: "r1", ZoneGroup: "zg1", Zone: "z1"}})
@@ -101,6 +102,8 @@ func TestResourceScopeRendersEachKindFromItsFrozenRequest(t *testing.T) {
 		{api.StorageExport, "foundation", nil, "export of pool rbd-meta, filesystem files, object gateway objects"},
 		{api.StorageExport, "bare", nil, "export"},
 		{api.StorageExport, "missing", nil, ""},
+		{api.StorageNVMeoFSubsystem, "block-a", nil, "subsystem on nvmeof.block"},
+		{api.StorageNVMeoFSubsystem, "missing", nil, ""},
 		{api.StorageCluster, "ceph", frozen, ""},
 	} {
 		if got := ResourceScope(declared, tt.kind, tt.name, tt.frozen); got != tt.want {

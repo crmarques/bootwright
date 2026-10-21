@@ -52,6 +52,8 @@ func StorageNativeServiceSpecSchema(serviceType string) *Shape {
 		return record(required("snmp_version", enumeration("V2c", "V3")), required("snmp_destination", nonempty()), field("port", integer("1", "65535")), field("engine_id", nonempty()), field("auth_protocol", enumeration("MD5", "SHA")), field("privacy_protocol", enumeration("DES", "AES")))
 	case "mgmt-gateway":
 		return record(required("port", integer("1", "65535")), field("ssl", boolean()), field("enable_auth", boolean()), field("ssl_protocols", set(enumeration("TLSv1.2", "TLSv1.3"))), field("ssl_ciphers", array(nonempty())), field("virtual_ip", nonempty()), field("enable_health_check_endpoint", boolean()))
+	case "nvmeof":
+		return storageNVMeoFServiceSpec()
 	case "oauth2-proxy":
 		return record(field("https_address", nonempty()), required("provider_display_name", nonempty()), required("client_id", nonempty()), required("oidc_issuer_url", nonempty()), field("redirect_url", nonempty()), field("scope", nonempty()), field("email_domains", set(nonempty())), field("allowlist_domains", set(nonempty())))
 	default:

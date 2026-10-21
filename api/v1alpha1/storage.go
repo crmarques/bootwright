@@ -12,6 +12,7 @@ func init() {
 	register(StorageObjectBucket, storageObjectBucketSchema)
 	register(StorageNFSExport, storageNFSExportSchema)
 	register(StorageSMBResource, storageSMBResourceSchema)
+	register(StorageNVMeoFSubsystem, storageNVMeoFSubsystemSchema)
 	register(StorageExport, storageExportSchema)
 	register(StorageClient, storageClientSchema)
 }

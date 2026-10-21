@@ -235,7 +235,7 @@ Forbidden: `mon`, `mgr`, `prometheus`, `alertmanager`, `grafana`,
 `node-exporter`, `ceph-exporter`, `snmp-gateway`, `mgmt-gateway`,
 `oauth2-proxy`, `loki`, `alloy`, `promtail` and `rbd-mirror`, the native singletons that cephadm refuses with an ID because
 they are not in `REQUIRES_SERVICE_ID` (IBM's python3-ceph-common 20.2.1-405
-`ServiceSpec.validate`). Native-required: `mds`, `rgw`, `ingress` and `nfs`; every row in this state is a type in cephadm's
+`ServiceSpec.validate`). Native-required: `mds`, `rgw`, `ingress`, `nfs` and `nvmeof`; every row in this state is a type in cephadm's
 `REQUIRES_SERVICE_ID` (container, ingress, iscsi, mds, nfs, nvmeof, rgw, smb,
 [upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py#L804-L813)),
 and later family slices add their rows. Bootwright-required: `osd`, which
@@ -494,6 +494,52 @@ service. `mirroring` in `spec.ceph.mgrModules` refuses at its entry because it
 serves CephFS snapshot mirroring, which Bootwright does not realize.
 `ceph.cephadm.workarounds` is retired (D160, OD25): no workaround had
 a recorded effect, and the strict decoder refuses the field with that reason.
+
+### NVMe-oF gateway record
+
+Admission accepts an `nvmeof` document, one NVMe-oF gateway group, under a
+closed record spelled as cephadm's `NvmeofServiceSpec`
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py#L1375-L1811)).
+Bootwright does not deploy it yet: planning refuses a StorageCluster that
+declares one ([refusal table](storage.md#refusal-table)), and its
+[subsystems](storage-resources.md#storagenvmeofsubsystem) are admitted
+alongside it.
+
+| Member | Rule |
+| --- | --- |
+| `pool` | Required: the `metadata.name` of a same-cluster replicated StoragePool with role `rbd`. cephadm refuses to deploy a gateway whose pool is absent and does not retry ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/nvmeof.py#L28-L39)); the gateway keeps its state in omap there, which an erasure-coded pool does not support. |
+| `group` | Required, `[A-Za-z0-9][A-Za-z0-9_.-]*`. `(pool, group)` is unique among the cluster's nvmeof services. |
+| `port`, `discovery_port` | Optional, 1-65535; omitted, the gateway uses 5500 and 8009. |
+| `transports` | Optional; only `tcp`, the one value the native validation admits. |
+| `enable_auth` | Optional; `true` refuses: gateway mTLS is not supported by Bootwright yet. |
+
+`server_key`, `server_cert`, `client_key`, `client_cert`, `root_ca_cert` and
+`encryption_key` refuse, naming the member, because native documents never
+carry key or certificate material inline; `addr`, `addr_map`,
+`discovery_addr` and `discovery_addr_map` refuse because the gateway binds its
+host's registered address, which its subsystem listeners also use;
+`enable_prometheus_exporter` and `prometheus_port` refuse with no qualified
+effect contract. Every other `NvmeofServiceSpec` member refuses as a field
+outside the supported schema.
+
+The placement selects at least two hosts, because a group with one gateway
+raises `NVMEOF_SINGLE_GATEWAY`
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/mon/NVMeofGwMap.cc#L1010-L1016))
+and the cluster would never report `HEALTH_OK`. A `count` below the eligible
+host count and a `count_per_host` above 1 refuse: every eligible host runs one
+gateway, which serves that host's subsystem listeners. The eligible hosts of
+two nvmeof services are disjoint, because cephadm places no gateway on a host
+that runs a gateway of another nvmeof service
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/nvmeof.py#L281-L295)).
+Each gateway host reserves, in the shared listener registry, `port`, the
+NVMe/TCP listener port 4420, `discovery_port` and the exporter port 10008:
+cephadm reserves exactly these daemon ports, checks them free and opens them
+in the host firewall
+([`get_port_start`](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py#L1672-L1673),
+[cephadm](https://github.com/ceph/ceph/blob/v20.2.1/src/cephadm/cephadm.py#L888-L899), [firewall](https://github.com/ceph/ceph/blob/v20.2.1/src/cephadm/cephadm.py#L978-L983)).
+On a cluster that declares `topology.stretch`, an nvmeof service refuses at
+its entry until [B487](milestones/m2.md#b487) delivers the stretch capacity
+gate, independently of the stretch deferral itself.
 
 ### Observability and management gateway records
 

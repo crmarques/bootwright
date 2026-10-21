@@ -70,6 +70,14 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 				return spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/haproxy", "version", "synthetic-1"), "ceph", "images", "haproxy")
 			},
 		}, values: map[string]string{"<name>": "haproxy", "<cluster>": "example"}},
+		"An NVMe-oF gateway service": {edits: map[string]func(api.Value) api.Value{
+			"nvmeof service with its image": func(spec api.Value) api.Value {
+				services := append(spec.Get("ceph", "services").Items(), requestMap("service_type", "nvmeof", "service_id", "block",
+					"placement", requestMap("label", "mon", "count", 2), "spec", requestMap("pool", "volumes", "group", "block")))
+				spec = spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/nvmeof", "version", "synthetic-1"), "ceph", "images", "nvmeof")
+				return spec.WithPath(api.ListValue(services...), "ceph", "services")
+			},
+		}, values: map[string]string{"<service>": "nvmeof.block", "<cluster>": "example"}},
 	}
 	refused := map[api.Kind]string{api.StorageCluster: "example", api.StoragePool: "volumes", api.StorageClient: "consumer"}
 	for _, row := range refusalTable(t) {

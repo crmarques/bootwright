@@ -135,6 +135,21 @@ func undeployedDelegated(cluster api.Object) (string, string, bool) {
 	return "", "", false
 }
 
+func undeployedNVMeoF(cluster api.Object) (string, string, bool) {
+	services := cluster.Spec().Get("ceph", "services").Items()
+	slices.SortStableFunc(services, func(a, b api.Value) int {
+		return strings.Compare(storage.NativeServiceName(a), storage.NativeServiceName(b))
+	})
+	for _, svc := range services {
+		if svc.Get("service_type").Text() == "nvmeof" {
+			name := storage.NativeServiceName(svc)
+			return "Bootwright does not deploy the NVMe-oF gateway service " + name + " yet",
+				"remove " + name + " from spec.ceph.services of StorageCluster " + cluster.Name() + ", together with every StorageNVMeoFSubsystem whose spec.serviceRef names it", true
+		}
+	}
+	return "", "", false
+}
+
 func unselectedAuxiliary(cluster api.Object) (string, string, bool) {
 	services := cluster.Spec().Get("ceph", "services").Items()
 	slices.SortStableFunc(services, func(a, b api.Value) int {

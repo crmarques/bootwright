@@ -14,7 +14,9 @@ and `StorageNFSExport`, under its [field record](#storagenfsexport), are
 admitted and realized. `StorageSMBResource` is admitted under its
 [field record](#storagesmbresource) and realized by its SMB block once its
 samba images are authored under `spec.ceph.images` of its StorageCluster
-([refusal table](storage.md#refusal-table)). Native effects
+([refusal table](storage.md#refusal-table)). `StorageNVMeoFSubsystem` is
+admitted under its [field record](#storagenvmeofsubsystem) and not yet
+realized. Native effects
 remain artifact-gated. **Not yet met:** later P2
 kinds and their qualified lifecycles. [Storage admission](api/storage.md)
 states current refusals.
@@ -1007,6 +1009,55 @@ StorageSMBResource is admitted and realized by its SMB block once the samba
 images of its StorageCluster are authored under `spec.ceph.images`; until then
 planning refuses it as the [refusal table](storage.md#refusal-table) states.
 
+## StorageNVMeoFSubsystem
+
+One object owns one NVMe-oF subsystem of one gateway group, with its
+listeners, allowed hosts and namespaces ([B480](milestones/m2.md#b480)). The
+gateway group is the native `nvmeof` service of its StorageCluster
+([NVMe-oF gateway record](storage-native-api.md#nvme-of-gateway-record)); no
+native declarative document exists for a subsystem, so the fields are typed
+camel-case Bootwright fields named after the gateway's `ceph nvmeof`
+parameters. The kind is admitted; no capability realizes it yet, so planning
+refuses every selected subsystem before any effect.
+
+| Field | Contract |
+| --- | --- |
+| `clusterRef` | Required managed StorageCluster. |
+| `serviceRef` | Required qualified native name `nvmeof.<service_id>` of a declared nvmeof service of that cluster; an absent or other-type target is a field error. It fixes the gateway pool and group. |
+| `nqn` | Required subsystem NQN: `nqn.yyyy-mm.<reverse domain>:<name>` or `nqn.2014-08.org.nvmexpress:uuid:<UUID>`, 11 to 223 printable ASCII characters, never the discovery NQN; unique among the cluster's subsystems. |
+| `listeners` | Required set keyed by `host`, a topology node name, with optional `trsvcid`. The hosts are exactly the hosts the service places gateways on: a gateway serves only the namespaces of the load-balancing groups it owns, so a namespace is reachable only through a listener on its owning gateway ([upstream](https://github.com/ceph/ceph-nvmeof/blob/tentacle_9.0_base/control/grpc.py#L5040-L5080)). `trsvcid` is 4420 when given, the one listener port cephadm reserves and opens on a gateway host. |
+| `hosts` | Required nonempty set of initiator host NQNs, in the `nqn` grammar; `*`, which would let any host connect, refuses. |
+| `namespaces` | Required nonempty set keyed by `nsid` (an NVMe namespace ID, 1 to 4294967294), each with a required `imageRef` naming a StorageRBDImage of the same cluster. An image backs at most one namespace across every subsystem. |
+
+The subsystem never creates an image, never allows any host and passes no
+`force`. Maximum namespace, serial number, HA, load-balancing group,
+read-only, visibility, DH-HMAC-CHAP key and PSK fields are absent: the
+gateway's own defaults and limits apply and its errors are reported. No
+diagnostic echoes an authored NQN.
+
+```yaml
+apiVersion: bootwright.io/v1alpha1
+kind: StorageNVMeoFSubsystem
+metadata:
+  name: block-a
+
+spec:
+  clusterRef: ceph-example
+  serviceRef: nvmeof.block
+  nqn: nqn.2016-06.io.example:block-a
+
+  listeners:
+    - host: ceph-node-1
+    - host: ceph-node-2
+
+  hosts:
+    - nqn.2014-08.org.nvmexpress:uuid:00000000-0000-4000-8000-000000000001
+
+  namespaces:
+    - nsid: 1
+      imageRef: application-disk
+```
+
 ## StorageExport
 
 A `StorageExport` is the Ceph side of one Data Foundation consumer. Its
@@ -1271,7 +1322,7 @@ provisioning rows remain required by the coverage matrix.
 | Object accounts/users, B477 | Native account/user identity scoped by gateway/realm and tenant where supported; explicit account relationship and principal purpose. Users without tenant or account are current as `StorageObjectUser` ([field record](#storageobjectuser-field-record)); accounts and tenants are not. | No implicit administrator or account adoption. Bound or generated keys enter custody once; retries do not rotate them. |
 | Object buckets/policies, B477 | Gateway scope, explicit owning principal/account, native bucket name and recorded native identity; policy principal/resource references resolve declared owners. Buckets of a `StorageObjectUser` with a native bucket policy are current as `StorageObjectBucket` ([field record](#storageobjectbucket-field-record)), whose policy is the native document with principals RGW resolves, not Bootwright; account-owned buckets and tenants are not. | Supported native policy documents retain their format. No ambient owner, untracked generated user or guessed tenant. Bucket deletion needs data-loss authorization and proved child ownership; foreign objects/dependents prevent unqualified cascade. |
 | CephX/client access, B80/B489 | `StorageClient` owns one principal with exactly one scope: an RBD pool with its derived data pools, a StorageFilesystem or a StorageSubvolume; B489 extends references to gateway resources and explicit access scope. | No default full administrator caps. Qualified caps derive from requested resource access or validated native capability syntax; unrestricted caps need an explicit privileged purpose. Manager-generated NFS/SMB principals are derived children, not duplicate resources. |
-| NVMe-oF gateway resources, B480 | Native service/group, subsystem NQN, listener address/transport, namespace ID and `StorageRBDImage` reference; initiator NQN/host authorization links to the subsystem. | No automatic unowned image creation or wildcard host access. Defaults and generated IDs are frozen/captured. Listener reachability, ANA/HA and release-supported security are qualified together. |
+| NVMe-oF gateway resources, B480 ([field record](#storagenvmeofsubsystem)) | Native service/group, subsystem NQN, listener address/transport, namespace ID and `StorageRBDImage` reference; initiator NQN/host authorization links to the subsystem. | No automatic unowned image creation or wildcard host access. Defaults and generated IDs are frozen/captured. Listener reachability, ANA/HA and release-supported security are qualified together. |
 | iSCSI resources, B481 | Not realized: no iSCSI kind exists, and admission refuses `service_type: iscsi` at that field. | Refused before any effect; block access over the network uses NVMe-oF (B480). No NVMe field substitutes for an iSCSI one. |
 | Replication peers, B483 | Explicit source and destination cluster/resource references, protocol/replication mode, peer identity, endpoint trust and credential ownership. | Both endpoints are declared managed resources. One relationship owner coordinates bootstrap and removal; no ambient peer lookup, context crossing or foreign adoption. |
 | Access material/handoff, B489 | Declared principal/resource set, selected trust/endpoints and produced-material identity; managed `StorageExport` material (its produced schema, principals and custody) belongs to [B86](milestones/m4.md#b86), which reuses this boundary; `StorageExport` retains its own consumer shape. | Material is scoped, privately captured and withdrawn through custody. A StorageClient's keyring is revealed only through the [client keyring export](cli.md#client-keyring-export); no other reveal command exists. |
