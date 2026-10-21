@@ -2212,8 +2212,14 @@ required field `ceph.packageRepositoryKey` whenever `ceph.packageRepository` is
 authored, using that repository's scheme, host and port and its trust bundle,
 with the key's fingerprint matching the code pin. Lane x59-d4-host-pull-route
 adds it and stays the item's carrier; the item keeps its state until that lane
-lands. **Requires:** none; D166 and D169 answered the owner decision. **Definition:**
-`Needs definition`. **Exit evidence:** a package-source test with an authored
+lands. **Implementation:** B493's x59-d4 consumes the authored key at the
+repository origin and TLS anchor, preserves the pinned IBM fingerprint, and
+freezes the key URL in core and host requests. Host-independent tests cover
+foreign origins, missing/untrusted keys, no public fallback and mismatched
+publisher fingerprints. The `el10cp` signer observation remains pending a
+separate inspected package; this change qualifies no new package signer.
+**Requires:** none; D166 and D169 answered the owner decision. **Definition:**
+`Specified`. **Exit evidence:** a package-source test with an authored
 key location whose fingerprint differs from the pin and refuses.
 
 ### B665

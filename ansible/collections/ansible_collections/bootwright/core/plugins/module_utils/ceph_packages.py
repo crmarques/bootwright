@@ -242,7 +242,8 @@ def prepare(request, host, certificate, *, trust=None, acquisition=None, journal
     host_admission(request)
     binding = native_resolution.digest({"request": request, "host": host, "source": source,
                                         "certificateSHA256": hashlib.sha256(certificate.encode()).hexdigest()})
-    acquire = acquisition or ceph_package_sources.Acquisition(source, certificate, repository=request["packageRepository"], trust=trust, trust_ref=trust_ref)
+    acquire = acquisition or ceph_package_sources.Acquisition(source, certificate, repository=request["packageRepository"],
+                                                              repository_key=request["packageRepositoryKey"], trust=trust, trust_ref=trust_ref)
     with (journal or Journal(request)) as durable, tempfile.TemporaryDirectory(prefix="bootwright-ceph-packages-") as scratch:
         grant = transaction_request(request)
         record = durable.read("decision.json")

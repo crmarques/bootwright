@@ -19,7 +19,7 @@ func TestAuthoredVersionsReachFrozenNativeRequestsWithoutCompatibilitySelection(
 				for _, path := range [][]string{{"release"}, {"packageVersion"}, {"cephadm", "ansible", "packageVersion"}, {"nfsGanesha", "packageVersion"}, {"image", "version"}} {
 					spec = spec.WithPath(api.StringValue(selection), append([]string{"ceph"}, path...)...)
 				}
-				return spec.WithPath(api.StringValue("https://packages.example.test/native"), "ceph", "packageRepository").WithPath(api.StringValue("cp.icr.io/other/selected-image"), "ceph", "image", "base")
+				return spec.WithPath(api.StringValue("https://packages.example.test/native"), "ceph", "packageRepository").WithPath(api.StringValue("https://packages.example.test/keys/ibm.asc"), "ceph", "packageRepositoryKey").WithPath(api.StringValue("cp.icr.io/other/selected-image"), "ceph", "image", "base")
 			})
 			state := compilation.NewState(catalog, catalog, nil)
 			for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool, api.StorageClient} {

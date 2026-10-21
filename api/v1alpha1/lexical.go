@@ -115,6 +115,9 @@ func ValidLexical(rule, value string) bool {
 	case "package-repository":
 		u, err := neturl.Parse(value)
 		return len(value) <= 2048 && len(strings.TrimRight(value, "/")) <= packageRepositoryBase && validHTTPURL(value, true) && err == nil && u.Fragment == "" && u.RawQuery == "" && plainURLPath(u.Path)
+	case "package-repository-key":
+		u, err := neturl.Parse(value)
+		return len(value) <= 2048 && validHTTPURL(value, true) && err == nil && u.Fragment == "" && u.RawQuery == "" && plainURLPath(u.Path)
 	case "native-version":
 		return len(value) > 0 && len(value) <= 1024 && utf8.ValidString(value) && strings.IndexFunc(value, func(r rune) bool { return unicode.IsControl(r) || r == 0x2028 || r == 0x2029 }) < 0
 	case "image-version":

@@ -17,7 +17,7 @@ func TestPackageRepositoryTrustBundleRequiresAnAuthoredRepository(t *testing.T) 
 			issues[0].Remediation != "set spec.ceph.packageRepository to the HTTPS repository this bundle verifies, or remove spec.ceph.packageRepositoryTrustBundleRef" {
 			t.Fatalf("%s: %+v", name, issues)
 		}
-		authored := bundled.WithSpec(bundled.Spec().WithPath(api.StringValue("https://packages.example.test/ceph"), "ceph", "packageRepository"))
+		authored := bundled.WithSpec(bundled.Spec().WithPath(api.StringValue("https://packages.example.test/ceph"), "ceph", "packageRepository").WithPath(api.StringValue("https://packages.example.test/keys/ibm.asc"), "ceph", "packageRepositoryKey"))
 		if issues := issuesAt(Validate(authored, replace(catalog, authored)), field); len(issues) != 0 {
 			t.Fatalf("%s with an authored repository: %+v", name, issues)
 		}
@@ -26,4 +26,39 @@ func TestPackageRepositoryTrustBundleRequiresAnAuthoredRepository(t *testing.T) 
 	refuses("ibm", ibm, catalog)
 	oss := fixtureCatalog()
 	refuses("oss", find(t, oss, api.StorageCluster, "storage"), oss)
+}
+
+func TestPackageRepositoryKeyIsRequiredAndSharesRepositoryOrigin(t *testing.T) {
+	cluster, catalog := vendorCluster(t)
+	for _, tc := range []struct {
+		name, key string
+		refused   bool
+	}{
+		{"missing", "", true},
+		{"mirror", "https://packages.example.test/keys/ibm.asc", false},
+		{"explicit default port", "https://packages.example.test:443/ibm.asc", false},
+		{"foreign host", "https://public.example.test/ibm.asc", true},
+		{"foreign port", "https://packages.example.test:444/ibm.asc", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := cluster.Spec().WithPath(api.StringValue("https://packages.example.test/ceph"), "ceph", "packageRepository")
+			if tc.key != "" {
+				spec = spec.WithPath(api.StringValue(tc.key), "ceph", "packageRepositoryKey")
+			}
+			authored := cluster.WithSpec(spec)
+			issues := issuesAt(Validate(authored, replace(catalog, authored)), "$.spec.ceph.packageRepositoryKey")
+			if (len(issues) > 0) != tc.refused {
+				t.Fatalf("issues: %+v", issues)
+			}
+		})
+	}
+}
+
+func TestPackageRepositoryKeyWithoutRepositoryRefuses(t *testing.T) {
+	cluster, catalog := vendorCluster(t)
+	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.StringValue("https://packages.example.test/keys/ibm.asc"), "ceph", "packageRepositoryKey"))
+	issues := issuesAt(Validate(cluster, replace(catalog, cluster)), "$.spec.ceph.packageRepositoryKey")
+	if len(issues) != 1 || issues[0].Code != "api.invariant" {
+		t.Fatalf("issues: %+v", issues)
+	}
 }

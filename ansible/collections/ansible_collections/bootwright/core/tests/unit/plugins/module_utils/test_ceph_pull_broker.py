@@ -1042,3 +1042,29 @@ def test_bundle_context_refuses_a_bundle_without_a_ca_anchor(tmp_path, kind):
     bundle = leaf_certificate(tmp_path) if kind == "leaf-only" else bundles[kind]
     with pytest.raises(broker.BrokerError, match="^registry (trust bundle|credential boundary)$"):
         broker.bundle_context(bundle)
+
+
+def test_disconnected_monitoring_and_ingress_pull_set_has_no_public_egress(tmp_path):
+    """The transport refuses every connection outside the mirror, including authentication."""
+    names = ("core", "alertmanager", "grafana", "haproxy", "keepalived", "node_exporter", "prometheus")
+    references = [REGISTRY + "/vendor/" + name + "@sha256:" + str(index + 1) * 64 for index, name in enumerate(names)]
+    frozen = {"registry": REGISTRY, "image": references[0], "registryTrustBundleRef": "mirror-ca",
+              "auxiliary": [{"name": name, "image": reference} for name, reference in zip(names[1:], references[1:])]}
+    for index, reference in enumerate(references):
+        directory = tmp_path / str(index)
+        directory.mkdir(mode=0o700)
+        connections = Connections([Response(body=b"manifest")])
+        context = broker.bundle_context(SYNTHETIC_CA)
+        up = broker.Upstream(REGISTRY, reference.split("@")[0], MATERIAL, time.monotonic() + 60, connection=connections, context=context)
+        value = broker.Broker(str(directory), frozen, json.dumps(MATERIAL), time.monotonic() + 60,
+                              lambda *args: pytest.fail("native effect"), upstream=up, tls=object(),
+                              image=None if index == 0 else reference, trust=SYNTHETIC_CA)
+        path = manifest_path(reference)
+        limit = value.path("GET", path)
+        output = io.BytesIO()
+        up.fetch("GET", path, lambda response: value.response(output, response, "GET", limit, "manifest"))
+        assert len(connections.calls) == 1 and connections.calls[0][0] == REGISTRY
+        with pytest.raises(broker.BrokerError):
+            value.path("GET", "/v2/public/foreign/manifests/sha256:" + "f" * 64)
+        assert len(connections.calls) == 1
+        assert PASSWORD.encode() not in output.getvalue() and TOKEN.encode() not in output.getvalue()

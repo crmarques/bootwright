@@ -59,7 +59,7 @@ WORKER_DEADLINE = None
 
 SCOPE_MEMBERS = frozenset(("controller", "version", "cluster", "owner", "fsid", "image", "cephadm", "bootstrap", "hosts", "services", "clusterSSHUser",
                            "clusterSSHTransport", "monIP", "publicNetworks", "clusterNetworks", "callHome", "release", "ansiblePackageVersion",
-                           "packageRepository", "clusterKeyRef", "registryRef", "registry"))
+                           "packageRepository", "packageRepositoryKey", "clusterKeyRef", "registryRef", "registry"))
 SCOPE_OPTIONAL = frozenset(("security", "auxiliary", "config", "packages", "nfsGaneshaPackageVersion", "registryTrustBundleRef"))
 # cephadm's container_image_<name> settings an auxiliary image may fill, in name order.
 AUXILIARY_NAMES = (
@@ -576,6 +576,23 @@ def host_scope(request):
     return validate_scope(request)
 
 
+def package_url(value):
+    """A frozen package/key URL with no credentials, redirects or traversal authority."""
+    import urllib.parse
+    require(isinstance(value, str) and len(value) <= 2048 and not any(ord(c) <= 32 for c in value), "packages")
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        raise Refusal("packages") from None
+    require(port is None or 0 < port <= 65535, "packages")
+    require(parsed.scheme == "https" and parsed.hostname and parsed.username is None and parsed.password is None and not parsed.query
+            and not parsed.fragment, "packages")
+    decoded = urllib.parse.unquote(parsed.path)
+    require("\\" not in decoded and all(part not in (".", "..") for part in decoded.split("/")), "packages")
+    return value
+
+
 def scope_checks(request):
     require(request["version"] == "ceph-core-v30")
     if "security" in request:
@@ -598,10 +615,9 @@ def scope_checks(request):
         coordinate = request["nfsGaneshaPackageVersion"]
         require(isinstance(coordinate, str) and 0 < len(coordinate.encode()) <= 1024 and not any(ord(char) < 32 or ord(char) == 127 for char in coordinate))
     from urllib.parse import urlsplit
-    require(isinstance(request["packageRepository"], str) and 0 < len(request["packageRepository"].encode()) <= 4096)
-    repository = urlsplit(request["packageRepository"])
-    require(repository.scheme == "https" and repository.hostname and repository.username is None and repository.password is None
-            and not repository.fragment, "artifact")
+    repository = urlsplit(package_url(request["packageRepository"]))
+    key = urlsplit(package_url(request["packageRepositoryKey"]))
+    require((repository.scheme, repository.hostname, repository.port or 443) == (key.scheme, key.hostname, key.port or 443), "artifact")
     require(named(request["clusterSSHUser"]))
     require(request["clusterSSHTransport"] in ("native", "verified-tunnel"))
     require(named(request["clusterKeyRef"]) and named(request["registryRef"]))

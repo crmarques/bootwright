@@ -34,7 +34,7 @@ CORE = {
     "ansiblePackageVersion": "synthetic-tool",
     "auxiliary": [{"image": "cp.icr.io/cp/ibm-ceph/haproxy-synthetic@sha256:" + "d" * 64, "name": "haproxy"}],
     "nfsGaneshaPackageVersion": "synthetic-nfs",
-    "packageRepository": "https://packages.example.test/selected",
+    "packageRepository": "https://packages.example.test/selected", "packageRepositoryKey": "https://packages.example.test/keys/ibm.asc",
     "cephadm": {"packageVersion": "20.2.1-405.el9cp", "path": "/usr/sbin/cephadm"},
     "client": {"access": "rw", "dataPools": [], "name": "app", "pool": "data"},
     "cluster": "example",

@@ -15,6 +15,7 @@ import gzip
 import hashlib
 import http.server
 import ipaddress
+from pathlib import Path
 import threading
 from types import SimpleNamespace
 import urllib.error
@@ -126,7 +127,7 @@ def served_fixture(tmp_path, monkeypatch):
 
 @pytest.fixture(name="served_tree")
 def served_tree_fixture(served):
-    acquisition = sources.Acquisition(served.source, served.chain, repository=served.base + "/ibm/ceph/9/rhel9/x86_64")
+    acquisition = sources.Acquisition(served.source, served.chain, repository=served.base + "/ibm/ceph/9/rhel9/x86_64", repository_key=sources.IBM_KEY)
     # The served IBM stand-in shares the loopback anchor; production trusts the system store.
     acquisition.public = acquisition.repository_opener = acquisition.local
     return acquisition, served.base
@@ -148,6 +149,7 @@ def mirror_fixture(tmp_path):
         .sign(key, hashes.SHA256()))
     root = tmp_path / "mirror"
     repodata(root / "ceph", COMMON)
+    (root / "ceph" / "ibm.asc").write_bytes(b"synthetic publisher key")
     chain, private = serving_identity(tmp_path, (authority, key), "mirror")
     seen = []
     server, thread, base = serve(root, chain, private, seen)
@@ -173,15 +175,19 @@ def test_a_real_shaped_dvd_tree_and_ibm_repository_are_acquired_with_their_comps
 
 
 def test_acquisition_trusts_only_the_bound_bundle(served, mirror, tmp_path):
-    acquisition = sources.Acquisition(served.source, served.chain, repository=mirror.base, trust=mirror.authority, trust_ref="repository-ca")
+    acquisition = sources.Acquisition(served.source, served.chain, repository=mirror.base,
+                                      repository_key=mirror.base + "/ibm.asc", trust=mirror.authority, trust_ref="repository-ca")
     scratch = tmp_path / "stage"
     scratch.mkdir()
     repositories = acquisition.repositories(str(scratch))
     assert len(repositories) == 3
+    keys = acquisition.publisher_key(str(scratch))
+    assert Path(keys[native_signatures.IBM_CEPH_SIGNER]).read_bytes() == b"synthetic publisher key"
     ceph = repositories[2]
     assert (ceph["id"], ceph["baseURL"], ceph["signer"]) == ("ibm-storage-ceph", mirror.base, native_signatures.IBM_CEPH_SIGNER)
     assert mirror.seen and not [path for path in served.seen if path.startswith("/ibm/")]
-    untrusted = sources.Acquisition(served.source, served.chain, repository=mirror.base, trust=served.chain, trust_ref="repository-ca")
+    untrusted = sources.Acquisition(served.source, served.chain, repository=mirror.base,
+                                    repository_key=mirror.base + "/ibm.asc", trust=served.chain, trust_ref="repository-ca")
     other = tmp_path / "other"
     other.mkdir()
     with pytest.raises(sources.RepositoryTrustFailure) as failure:
@@ -192,7 +198,8 @@ def test_acquisition_trusts_only_the_bound_bundle(served, mirror, tmp_path):
 
 def test_acquisition_never_falls_back_to_the_default_repository(served, tmp_path):
     mirror = served.base + "/mirror/ceph"
-    acquisition = sources.Acquisition(served.source, served.chain, repository=mirror, trust=served.chain, trust_ref="repository-ca")
+    acquisition = sources.Acquisition(served.source, served.chain, repository=mirror,
+                                      repository_key=mirror + "/ibm.asc", trust=served.chain, trust_ref="repository-ca")
     scratch = tmp_path / "stage"
     scratch.mkdir()
     with pytest.raises(urllib.error.HTTPError):
@@ -206,3 +213,14 @@ def test_acquisition_never_falls_back_to_the_default_repository(served, tmp_path
     assert len(served.seen) == requested
     with pytest.raises(TypeError):
         sources.Acquisition(served.source, served.chain)  # pylint: disable=missing-kwoa
+
+
+def test_mirror_key_requires_its_bound_anchor_without_host_fallback(served, mirror, tmp_path):
+    for trust, ref in ((None, None), (served.chain, "wrong-ca")):
+        acquisition = sources.Acquisition(served.source, served.chain, repository=mirror.base,
+                                          repository_key=mirror.base + "/ibm.asc", trust=trust, trust_ref=ref)
+        scratch = tmp_path / (ref or "host-store")
+        scratch.mkdir()
+        with pytest.raises(sources.RepositoryTrustFailure, match="publisher key"):
+            acquisition.publisher_key(str(scratch))
+    assert mirror.seen == []

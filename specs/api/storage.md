@@ -153,8 +153,21 @@ omitted; it never falls back to another repository. It is admitted only with
 an authored `ceph.packageRepository`, so the source default never takes a
 private bundle; a missing Secret or a Secret of another type refuses at
 admission. The bundle authenticates the connection only: each selected RPM
-still needs its publisher signature, and the IBM publisher key is still read
-from its fixed public location ([B664](../milestones/backlog.md#b664)).
+still needs its publisher signature.
+
+`ceph.packageRepositoryKey` is required when `ceph.packageRepository` is
+authored and forbidden otherwise. It names the unchanged IBM publisher key
+at an HTTPS URL of at most 2048 bytes, without userinfo, query, fragment or
+traversal. Its scheme, host (case-insensitive) and effective port must match
+the repository; omitted HTTPS ports mean 443. The key may be outside the
+repository's path. The repository's trust bundle alone verifies the key
+connection when bound, otherwise the host trust store does. Neither acquisition
+falls back to a public origin. When both fields are omitted, the default
+repository uses IBM's public `RPM-GPG-KEY-IBM-CEPH` under
+`https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/`.
+The frozen core and host requests retain the exact selected key URL. Serving
+a key from a mirror never changes the code-pinned IBM fingerprint: a mismatched
+key or unsigned RPM refuses before package installation.
 
 `ceph.ibm.callHome` is `enabled` or `disabled`. `enabled` keeps the
 provider's Call Home reporting active after bootstrap; `disabled` leaves it

@@ -12,6 +12,7 @@ spec:
     release: 9.9.1.2
     packageVersion: 20.2.1-405.el9cp
     packageRepository: https://packages.example.test/ibm-ceph/9/rhel9/x86_64
+    packageRepositoryKey: https://packages.example.test/keys/ibm.asc
     packageRepositoryTrustBundleRef: custom-ca-bundle
 
     image:

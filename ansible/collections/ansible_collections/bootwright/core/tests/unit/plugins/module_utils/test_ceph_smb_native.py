@@ -51,6 +51,7 @@ def scope(transport="native"):
             "image": "registry.example.test/example/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "synthetic-package"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible", "packageRepository": "https://publisher.example.test/ceph",
+            "packageRepositoryKey": "https://publisher.example.test/keys/ibm.asc",
             "bootstrap": "node-1", "monIP": "192.0.2.1", "clusterSSHUser": "operator", "clusterSSHTransport": transport,
             "clusterKeyRef": "cluster-key", "registryRef": "registry-key", "registry": "registry.example.test", "callHome": "disabled",
             "publicNetworks": ["192.0.2.0/24"], "clusterNetworks": [], "hosts": hosts, "auxiliary": copy.deepcopy(IMAGES),

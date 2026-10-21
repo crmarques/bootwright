@@ -180,6 +180,8 @@ type nativeService struct {
 
 const DefaultPackageRepository = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64"
 
+const DefaultPackageRepositoryKey = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH"
+
 type DelegatedService struct {
 	Hosts []string `json:"hosts"`
 	Name  string   `json:"name"`
@@ -223,6 +225,7 @@ type Request struct {
 	ObjectUser               *ObjectUser                  `json:"objectUser,omitempty"`
 	Owner                    string                       `json:"owner,omitempty"`
 	PackageRepository        string                       `json:"packageRepository"`
+	PackageRepositoryKey     string                       `json:"packageRepositoryKey"`
 	Packages                 *PackageRequest              `json:"packages,omitempty"`
 	Policy                   *Policy                      `json:"policy,omitempty"`
 	Pool                     *Pool                        `json:"pool,omitempty"`
@@ -249,7 +252,7 @@ func scopeOf(r Request) ClusterScope {
 	return ClusterScope{AnsiblePackageVersion: r.AnsiblePackageVersion, Auxiliary: r.Auxiliary, Bootstrap: r.Bootstrap, CallHome: r.CallHome, Cephadm: r.Cephadm, Cluster: r.Cluster,
 		ClusterKeyRef: r.ClusterKeyRef, ClusterNetworks: r.ClusterNetworks, ClusterSSHTransport: r.ClusterSSHTransport, ClusterSSHUser: r.ClusterSSHUser,
 		Security: r.Security, Config: r.Config, Controller: r.Controller, FSID: r.FSID, Hosts: r.Hosts, Image: r.Image, MonIP: r.MonIP,
-		NFSGaneshaPackageVersion: r.NFSGaneshaPackageVersion, Owner: r.Owner, PackageRepository: r.PackageRepository, Packages: r.Packages,
+		NFSGaneshaPackageVersion: r.NFSGaneshaPackageVersion, Owner: r.Owner, PackageRepository: r.PackageRepository, PackageRepositoryKey: r.PackageRepositoryKey, Packages: r.Packages,
 		PublicNetworks: r.PublicNetworks, Registry: r.Registry, RegistryRef: r.RegistryRef, RegistryTrustBundleRef: r.RegistryTrustBundleRef, Release: r.Release, Services: r.Services, Version: r.Version}
 }
 
@@ -295,8 +298,10 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 		r.Auxiliary = append(r.Auxiliary, AuxiliaryReference{Name: a.Name, Image: a.Image})
 	}
 	r.PackageRepository = spec.Get("packageRepository").Text()
+	r.PackageRepositoryKey = spec.Get("packageRepositoryKey").Text()
 	if r.PackageRepository == "" {
 		r.PackageRepository = DefaultPackageRepository
+		r.PackageRepositoryKey = DefaultPackageRepositoryKey
 	}
 	r.ClusterSSHTransport = spec.Get("cephadm", "clusterSSH", "transport").Text()
 	if r.ClusterSSHTransport == "" {

@@ -334,7 +334,7 @@ func TestDeclaredRegistryTrustBundlePlansOnceConsumed(t *testing.T) {
 
 func TestDeclaredPackageRepositoryTrustBundlePlansOnceConsumed(t *testing.T) {
 	catalog := pinnedCatalog(t, func(spec api.Value) api.Value {
-		return spec.WithPath(api.StringValue("https://packages.example.test/ceph"), "ceph", "packageRepository").WithPath(api.StringValue("repository-ca"), "ceph", "packageRepositoryTrustBundleRef")
+		return spec.WithPath(api.StringValue("https://packages.example.test/ceph"), "ceph", "packageRepository").WithPath(api.StringValue("https://packages.example.test/keys/ibm.asc"), "ceph", "packageRepositoryKey").WithPath(api.StringValue("repository-ca"), "ceph", "packageRepositoryTrustBundleRef")
 	})
 	if _, err := baseRequest(catalog, catalog.OfKind(api.StorageCluster)[0], "synthetic"); err != nil {
 		t.Fatalf("base request: %v", diagnostics.Of(err))

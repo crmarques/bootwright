@@ -171,7 +171,12 @@ against `ceph.packageRepositoryTrustBundleRef` alone when it is set and
 against the host trust store otherwise, and a connection the anchor does not
 verify fails the package phase with a native error that names the repository
 and the anchor, never a credential; a publisher key connection that does not
-verify names the key location and the host trust store, never the repository. Continuation uses that decision and
+verify names the key location and its selected anchor, never credential bytes.
+An authored repository requires `ceph.packageRepositoryKey` at the same HTTPS
+origin (host and effective port); that key uses the repository's sole TLS
+anchor and the unchanged IBM publisher fingerprint. Omitted repository and
+key select the public source defaults together. Neither metadata, RPM payloads
+nor keys fall back to public sources. Continuation uses that decision and
 refuses an unrelated inventory or changed installed payload. An explicitly
 accepted IBM license authorizes only the provider's required `ACCEPT_EULA=yes`
 transaction environment; missing acceptance refuses before package effects.

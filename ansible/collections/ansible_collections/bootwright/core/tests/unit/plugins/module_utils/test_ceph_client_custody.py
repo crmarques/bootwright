@@ -80,6 +80,7 @@ def client(tmp_path, monkeypatch, request):
                "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
                "release": "9.1", "ansiblePackageVersion": "3.2.0",
                "packageRepository": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64",
+               "packageRepositoryKey": "https://public.dhe.ibm.com/keys/ibm.asc",
                "bootstrap": "node-1", "monIP": "192.0.2.1", "clusterSSHUser": "operator",
                "clusterSSHTransport": "verified-tunnel", "clusterKeyRef": "cluster-key", "registryRef": "registry-key",
                "registry": "registry.example.test", "callHome": "enabled", "publicNetworks": ["192.0.2.0/24"], "clusterNetworks": [], "hosts": hosts,

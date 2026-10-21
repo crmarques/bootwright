@@ -71,6 +71,7 @@ def request_value():
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": IMAGE,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "5.0.3-1", "packageRepository": "https://publisher.example.test/ceph",
+            "packageRepositoryKey": "https://publisher.example.test/keys/ibm.asc",
             "bootstrap": "node-1", "monIP": "192.0.2.1", "clusterSSHUser": "operator", "clusterSSHTransport": "verified-tunnel",
             "clusterKeyRef": "cluster-key", "registryRef": "registry-key", "registry": "cp.icr.io", "callHome": "enabled",
             "publicNetworks": ["192.0.2.0/24"], "clusterNetworks": [], "hosts": hosts,

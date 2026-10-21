@@ -2741,6 +2741,7 @@ spec:
     packageVersion: 20.2.1-405.el9cp
     packageRepository: https://packages.example.test/ibm-ceph/9/rhel9/x86_64
     packageRepositoryTrustBundleRef: custom-ca-bundle
+    packageRepositoryKey: https://packages.example.test/keys/ibm.asc
     image:
       base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
       version: sha256:1111111111111111111111111111111111111111111111111111111111111111

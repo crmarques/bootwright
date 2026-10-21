@@ -41,6 +41,7 @@ request-schema:
   cluster.nfsGaneshaPackageVersion string omitempty
   cluster.owner string omitempty
   cluster.packageRepository string
+  cluster.packageRepositoryKey string
   cluster.packages *struct ceph.PackageRequest omitempty
   cluster.packages.licenseAccepted bool
   cluster.packages.packageRepositoryTrustBundleRef string omitempty

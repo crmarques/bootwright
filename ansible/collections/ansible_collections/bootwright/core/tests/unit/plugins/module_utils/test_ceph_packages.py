@@ -48,6 +48,7 @@ def package_request():
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "5.0.3-1", "packageRepository": "https://publisher.example.test/ceph",
+            "packageRepositoryKey": "https://publisher.example.test/keys/ibm.asc",
             "bootstrap": "node-1",
             "monIP": "192.0.2.1", "clusterSSHUser": "operator", "clusterSSHTransport": "native", "clusterKeyRef": "cluster-key", "registryRef": "registry-key",
             "registry": "registry.example.test", "callHome": "enabled", "publicNetworks": ["192.0.2.0/24"], "clusterNetworks": [], "hosts": hosts,
@@ -341,7 +342,7 @@ def test_acquisition_never_uses_proxy_redirect_or_unverified_tls(package_request
 
     monkeypatch.setattr(sources.ssl, "create_default_context", context)
     monkeypatch.setattr(sources.urllib.request, "build_opener", lambda *handlers: openers.append(handlers) or SimpleNamespace())
-    sources.Acquisition(package_request["packages"]["sources"][0], "public-certificate", repository=sources.IBM_BASE)
+    sources.Acquisition(package_request["packages"]["sources"][0], "public-certificate", repository=sources.IBM_BASE, repository_key=sources.IBM_KEY)
     assert contexts == [{"cadata": "public-certificate"}, {}]
     assert all(handlers[0].proxies == {} for handlers in openers)
     with pytest.raises(ceph_native.Refusal):
@@ -363,12 +364,14 @@ def recording_openers(monkeypatch):
 def test_acquisition_without_a_bundle_keeps_the_host_trust_store(package_request, monkeypatch):
     source = package_request["packages"]["sources"][0]
     contexts, openers = recording_openers(monkeypatch)
-    acquisition = sources.Acquisition(source, "public-certificate", repository="https://mirror.example.test/ceph")
+    acquisition = sources.Acquisition(source, "public-certificate", repository="https://mirror.example.test/ceph",
+                                      repository_key="https://mirror.example.test/keys/ibm.asc")
     assert contexts == [{"cadata": "public-certificate"}, {}] and len(openers) == 2
     assert acquisition.repository_opener is acquisition.public and acquisition.anchor == "the host trust store"
     contexts.clear()
     openers.clear()
-    acquisition = sources.Acquisition(source, "public-certificate", repository="https://mirror.example.test/ceph", trust="bundle", trust_ref="repository-ca")
+    acquisition = sources.Acquisition(source, "public-certificate", repository="https://mirror.example.test/ceph",
+                                      repository_key="https://mirror.example.test/keys/ibm.asc", trust="bundle", trust_ref="repository-ca")
     assert contexts == [{"cadata": "public-certificate"}, {}, {"cadata": "bundle"}] and len(openers) == 3
     assert acquisition.repository_opener is not acquisition.public and acquisition.repository_opener is not acquisition.local
     assert acquisition.anchor == "trust bundle Secret repository-ca"
@@ -378,7 +381,8 @@ def test_acquisition_without_a_bundle_keeps_the_host_trust_store(package_request
     assert bundle.minimum_version == sources.ssl.TLSVersion.TLSv1_2
     for trust, trust_ref in (("bundle", None), (None, "repository-ca"), ("bundle", "Bad Name"), ("", "repository-ca"), (b"bundle", "repository-ca")):
         with pytest.raises(ceph_native.Refusal, match="^material$"):
-            sources.Acquisition(source, "public-certificate", repository="https://mirror.example.test/ceph", trust=trust, trust_ref=trust_ref)
+            sources.Acquisition(source, "public-certificate", repository="https://mirror.example.test/ceph",
+                                repository_key="https://mirror.example.test/keys/ibm.asc", trust=trust, trust_ref=trust_ref)
 
     def rejecting(**kwargs):
         if "bundle" in kwargs.get("cadata", ""):
@@ -387,7 +391,8 @@ def test_acquisition_without_a_bundle_keeps_the_host_trust_store(package_request
 
     monkeypatch.setattr(sources.ssl, "create_default_context", rejecting)
     with pytest.raises(ceph_native.Refusal, match="^material$"):
-        sources.Acquisition(source, "public-certificate", repository="https://mirror.example.test/ceph", trust="bundle", trust_ref="repository-ca")
+        sources.Acquisition(source, "public-certificate", repository="https://mirror.example.test/ceph",
+                            repository_key="https://mirror.example.test/keys/ibm.asc", trust="bundle", trust_ref="repository-ca")
 
 
 class Recorder:
@@ -405,7 +410,7 @@ def test_vendor_mode_unchanged(package_request, monkeypatch):
     seen = []
     recording_openers(monkeypatch)
     source = package_request["packages"]["sources"][0]
-    acquisition = sources.Acquisition(source, "public-certificate", repository=sources.IBM_BASE)
+    acquisition = sources.Acquisition(source, "public-certificate", repository=sources.IBM_BASE, repository_key=sources.IBM_KEY)
     assert acquisition.repository_opener is acquisition.public
     acquisition.local, acquisition.public = Recorder("local", seen), Recorder("public", seen)
     acquisition.repository_opener = acquisition.public
@@ -414,7 +419,8 @@ def test_vendor_mode_unchanged(package_request, monkeypatch):
     assert [entry[0] for entry in seen] == ["public", "public", "local"]
     called = []
     monkeypatch.setattr(packages, "prepare", lambda *args, **kwargs: called.append(kwargs) or {})
-    payload = {"request": dict(package_request, packageRepository=sources.IBM_BASE), "host": "node-1", "private": {"certificate": "public-certificate"}}
+    payload = {"request": dict(package_request, packageRepository=sources.IBM_BASE, packageRepositoryKey=sources.IBM_KEY), "host": "node-1",
+               "private": {"certificate": "public-certificate"}}
     packages.entrypoint(payload)
     assert called == [{"trust": None}]
     with pytest.raises(ceph_native.Refusal, match="^material$"):
@@ -431,7 +437,7 @@ def test_signer_rule_unchanged_for_a_mirror(package_request, monkeypatch, tmp_pa
     seen = []
     recording_openers(monkeypatch)
     mirror = "https://mirror.example.test/ceph"
-    acquisition = sources.Acquisition(package_request["packages"]["sources"][0], "public-certificate", repository=mirror,
+    acquisition = sources.Acquisition(package_request["packages"]["sources"][0], "public-certificate", repository=mirror, repository_key=mirror + "/ibm.asc",
                                       trust="bundle", trust_ref="repository-ca")
     acquisition.local, acquisition.public, acquisition.repository_opener = Recorder("local", seen), Recorder("public", seen), Recorder("repository", seen)
     plan = plan_fixture()
@@ -446,28 +452,26 @@ def test_signer_rule_unchanged_for_a_mirror(package_request, monkeypatch, tmp_pa
     assert len(seen) == 1
     seen.clear()
     dvd = package_request["packages"]["sources"][0]["url"] + "/BaseOS/repodata/repomd.xml"
-    for url in (mirror + "/repodata/repomd.xml", sources.IBM_KEY, dvd):
+    for url in (mirror + "/repodata/repomd.xml", mirror + "/ibm.asc", dvd):
         acquisition.stream(url, io.BytesIO(), 7)
-    assert seen == [("repository", mirror + "/repodata/repomd.xml"), ("public", sources.IBM_KEY), ("local", dvd)]
+    assert seen == [("repository", mirror + "/repodata/repomd.xml"), ("repository", mirror + "/ibm.asc"), ("local", dvd)]
 
 
 @pytest.mark.parametrize("trust, trust_ref, anchor", [(None, None, "the host trust store"), ("bundle", "repository-ca", "trust bundle Secret repository-ca")])
 def test_a_failed_key_connection_names_the_key_location_never_the_repository(package_request, monkeypatch, trust, trust_ref, anchor):
     recording_openers(monkeypatch)
     mirror = "https://mirror.example.test/ceph"
-    acquisition = sources.Acquisition(package_request["packages"]["sources"][0], "public-certificate", repository=mirror, trust=trust, trust_ref=trust_ref)
+    acquisition = sources.Acquisition(package_request["packages"]["sources"][0], "public-certificate", repository=mirror,
+                                      repository_key=mirror + "/ibm.asc", trust=trust, trust_ref=trust_ref)
 
     def unverified(request, timeout):
         raise urllib.error.URLError(ssl.SSLCertVerificationError("unknown authority"))
 
     failing = SimpleNamespace(open=unverified)
-    acquisition.public = failing
-    if trust is None:
-        acquisition.repository_opener = failing
+    acquisition.repository_opener = failing
     with pytest.raises(sources.RepositoryTrustFailure) as failure:
-        acquisition.stream(sources.IBM_KEY, io.BytesIO(), 7)
-    assert str(failure.value) == "TLS verification of the publisher key " + sources.IBM_KEY + " failed against the host trust store"
-    assert mirror not in str(failure.value)
+        acquisition.stream(mirror + "/ibm.asc", io.BytesIO(), 7)
+    assert str(failure.value) == "TLS verification of the publisher key " + mirror + "/ibm.asc" + " failed against " + anchor
     acquisition.repository_opener = failing
     with pytest.raises(sources.RepositoryTrustFailure) as failure:
         acquisition.stream(mirror + "/repodata/repomd.xml", io.BytesIO(), 7)
@@ -495,7 +499,8 @@ def test_prepare_builds_the_acquisition_with_the_bound_repository_bundle(package
     with pytest.raises(Constructed):
         packages.prepare(package_request, "node-1", "public-certificate", trust=trust, journal=boundary.journal)
     assert received == [((sources.source_for(package_request, "node-1"), "public-certificate"),
-                         {"repository": package_request["packageRepository"], "trust": trust, "trust_ref": trust_ref})]
+                         {"repository": package_request["packageRepository"], "repository_key": package_request["packageRepositoryKey"],
+                          "trust": trust, "trust_ref": trust_ref})]
     assert boundary.journal.writes == []
 
 
@@ -519,6 +524,7 @@ def test_stream_download_enforces_hash_size_budget_and_origin(package_request):
     source = package_request["packages"]["sources"][0]
     acquisition = object.__new__(sources.Acquisition)
     acquisition.repository_base = sources.IBM_BASE
+    acquisition.repository_key = sources.IBM_KEY
     acquisition.repository_opener = None
     acquisition.source, acquisition.total, acquisition.deadline = source, 0, sources.time.monotonic() + 10
 
@@ -544,6 +550,7 @@ def test_stream_download_enforces_hash_size_budget_and_origin(package_request):
 def test_root_payload_uses_acquired_hash_without_release_allowlist(tmp_path):
     acquisition = object.__new__(sources.Acquisition)
     acquisition.repository_base = sources.IBM_BASE
+    acquisition.repository_key = sources.IBM_KEY
     plan = plan_fixture()
     plan["packages"][0]["source"]["sha256"] = "f" * 64
     seen = []
@@ -585,6 +592,7 @@ repository = AppStream
 def test_repository_selection_proves_actual_publication_pin_and_tree_layout(package_request):
     acquisition = object.__new__(sources.Acquisition)
     acquisition.repository_base = sources.IBM_BASE
+    acquisition.repository_key = sources.IBM_KEY
     acquisition.source = package_request["packages"]["sources"][0]
     base = acquisition.source["url"]
     documents = {base + "/.bootwright-tree-identity": ("c" * 64 + "\n").encode(), base + "/.treeinfo": TREEINFO}
@@ -622,6 +630,7 @@ def test_metadata_decompression_proves_open_checksum_and_bounds_expansion(tmp_pa
 
     acquisition = object.__new__(sources.Acquisition)
     acquisition.repository_base = sources.IBM_BASE
+    acquisition.repository_key = sources.IBM_KEY
     acquisition.expanded, acquisition.deadline = 0, sources.time.monotonic() + 10
     payload = b"<metadata>bounded native input</metadata>"
     compressed = gzip.compress(payload)
@@ -644,6 +653,7 @@ def test_metadata_decompression_proves_open_checksum_and_bounds_expansion(tmp_pa
 def test_xz_metadata_is_rejected_before_loading_an_unbounded_dictionary(tmp_path):
     acquisition = object.__new__(sources.Acquisition)
     acquisition.repository_base = sources.IBM_BASE
+    acquisition.repository_key = sources.IBM_KEY
     acquisition.expanded, acquisition.deadline = 0, sources.time.monotonic() + 10
     path = tmp_path / "primary.xml.xz"
     # No decoder receives an untrusted XZ stream, including its dictionary header.
@@ -987,3 +997,88 @@ def test_package_source_refuses_a_request_carrying_an_action(package_request):
     assert sources.source_for(package_request, "node-1")["host"] == "node-1"
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         sources.source_for(dict(package_request, action="cluster"), "node-1")
+
+
+@pytest.mark.parametrize("key", [sources.IBM_KEY, "http://mirror.example.test/key", "https://mirror.example.test:444/key",
+                                 "https://user:secret@mirror.example.test/key", "https://mirror.example.test/key?token=secret",
+                                 "https://mirror.example.test/key#fragment", "https://mirror.example.test/%2e%2e/key",
+                                 "https://mirror.example.test:invalid/key"])
+def test_mirror_key_origin_refuses_before_any_connection(package_request, monkeypatch, key):
+    calls = []
+    monkeypatch.setattr(sources.ssl, "create_default_context", lambda **kwargs: calls.append(kwargs))
+    with pytest.raises(ceph_native.Refusal):
+        sources.Acquisition(package_request["packages"]["sources"][0], "public-certificate",
+                            repository="https://mirror.example.test/ceph", repository_key=key)
+    assert calls == []
+
+
+def test_disconnected_acquisition_closes_key_metadata_and_payload_egress(package_request, monkeypatch, tmp_path):
+    recording_openers(monkeypatch)
+    source = package_request["packages"]["sources"][0]
+    mirror, key = "https://mirror.example.test/ceph", "https://mirror.example.test/keys/ibm.asc"
+    acquisition = sources.Acquisition(source, "public-certificate", repository=mirror, repository_key=key,
+                                      trust="mirror-ca", trust_ref="mirror-ca")
+    seen = []
+
+    class MirrorOnly(Recorder):
+        def open(self, request, timeout):
+            assert request.full_url.startswith("https://mirror.example.test/")
+            return super().open(request, timeout)
+
+    class DeniedPublic:
+        def open(self, *args, **kwargs):
+            pytest.fail("disconnected acquisition attempted public egress")
+
+    acquisition.public = DeniedPublic()
+    acquisition.repository_opener = MirrorOnly("mirror", seen)
+    acquisition.local = Recorder("artifact", seen)
+    grant = acquisition.publisher_key(str(tmp_path))
+    assert set(grant) == {native_signatures.IBM_CEPH_SIGNER}
+    assert Path(grant[native_signatures.IBM_CEPH_SIGNER]).read_bytes() == b"payload"
+    for url in (mirror + "/repodata/repomd.xml", mirror + "/cephadm.rpm", source["url"] + "/BaseOS/Packages/dependency.rpm"):
+        acquisition.stream(url, io.BytesIO(), 7)
+    before = list(seen)
+    for url in (sources.IBM_KEY, sources.IBM_BASE + "/cephadm.rpm", "https://mirror.example.test/other/key"):
+        with pytest.raises(ceph_native.Refusal, match="^packages$"):
+            acquisition.stream(url, io.BytesIO(), 7)
+    assert seen == before and [row[0] for row in seen] == ["mirror", "mirror", "mirror", "artifact"]
+
+
+def test_authored_mirror_key_with_a_different_fingerprint_refuses_before_install(package_request, monkeypatch, tmp_path):
+    recording_openers(monkeypatch)
+    acquisition = sources.Acquisition(package_request["packages"]["sources"][0], "public-certificate",
+                                      repository="https://mirror.example.test/ceph", repository_key="https://mirror.example.test/keys/ibm.asc")
+    seen = []
+    acquisition.repository_opener = Recorder("mirror", seen)
+    grant = live_key_grant(inherited_policy=False)
+    grant["publisherKeys"] = acquisition.publisher_key(str(tmp_path))
+    events = []
+    live_key_doubles(monkeypatch, events)
+    monkeypatch.setattr(native_signatures, "read_key", lambda path: Path(path).read_bytes())
+    monkeypatch.setattr(sys.modules["dnf.crypto"], "rawkey2infos", lambda stream: [RawKey("f" * 40)])
+    with pytest.raises(ValueError, match="native publisher fingerprint"):
+        native_signatures.verify(grant, str(tmp_path), {})
+    assert seen == [("mirror", "https://mirror.example.test/keys/ibm.asc")]
+    assert not events
+
+
+@pytest.mark.parametrize("key", [None, "https://foreign.example.test/key", "https://publisher.example.test:444/key"])
+def test_package_worker_refuses_an_absent_or_foreign_frozen_key_before_effect(package_request, monkeypatch, key):
+    if key is None:
+        del package_request["packageRepositoryKey"]
+    else:
+        package_request["packageRepositoryKey"] = key
+    monkeypatch.setattr(sources, "Acquisition", lambda *args, **kwargs: pytest.fail("acquisition before frozen-key admission"))
+    with pytest.raises(ceph_native.Refusal):
+        packages.entrypoint({"request": package_request, "host": "node-1", "private": {"certificate": "public-certificate"}})
+
+
+def test_key_always_uses_repository_anchor_even_with_overlapping_artifact_path(package_request, monkeypatch, tmp_path):
+    recording_openers(monkeypatch)
+    source = dict(package_request["packages"]["sources"][0], url="https://mirror.example.test/keys")
+    acquisition = sources.Acquisition(source, "artifact-ca", repository="https://mirror.example.test/ceph",
+                                      repository_key=source["url"] + "/ibm.asc", trust="repository-ca", trust_ref="repository-ca")
+    seen = []
+    acquisition.repository_opener, acquisition.local = Recorder("repository", seen), Recorder("artifact", seen)
+    acquisition.publisher_key(str(tmp_path))
+    assert seen == [("repository", source["url"] + "/ibm.asc")]

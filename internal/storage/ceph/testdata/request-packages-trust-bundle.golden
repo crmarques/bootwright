@@ -88,6 +88,7 @@
   "image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
   "monIP": "192.0.2.1",
   "packageRepository": "https://packages.example.test/ceph",
+  "packageRepositoryKey": "https://packages.example.test/keys/ibm.asc",
   "packages": {
     "licenseAccepted": true,
     "packageRepositoryTrustBundleRef": "repository-ca",

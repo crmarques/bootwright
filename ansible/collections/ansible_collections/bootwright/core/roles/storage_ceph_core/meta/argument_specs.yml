@@ -29,6 +29,9 @@ argument_specs:
           packageRepository:
             type: str
             required: true
+          packageRepositoryKey:
+            type: str
+            required: true
           cephadm:
             type: dict
             required: true

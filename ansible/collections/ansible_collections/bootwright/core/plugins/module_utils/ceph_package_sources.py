@@ -67,13 +67,7 @@ def source_for(request, host):
 
 
 def safe_url(value):
-    ceph_native.require(isinstance(value, str) and len(value) <= 2048 and not any(ord(c) <= 32 for c in value), "packages")
-    parsed = urllib.parse.urlsplit(value)
-    ceph_native.require(parsed.scheme == "https" and parsed.hostname and parsed.username is None and parsed.password is None and not parsed.query
-                        and not parsed.fragment, "packages")
-    decoded = urllib.parse.unquote(parsed.path)
-    ceph_native.require("\\" not in decoded and all(part not in (".", "..") for part in decoded.split("/")), "packages")
-    return value
+    return ceph_native.package_url(value)
 
 
 def child_url(base, relative):
@@ -95,9 +89,16 @@ class RepositoryTrustFailure(Exception):
 class Acquisition:
     """Never use ambient proxies, redirect credentials or unverified HTTPS."""
 
-    def __init__(self, source, certificate, budget=1800, *, repository, trust=None, trust_ref=None):
+    def __init__(self, source, certificate, budget=1800, *, repository, repository_key, trust=None, trust_ref=None):
         ceph_native.require(isinstance(certificate, str) and 0 < len(certificate.encode()) <= 1 << 20, "material")
         self.repository_base = safe_url(repository).rstrip("/")
+        self.repository_key = safe_url(repository_key)
+
+        def origin(value):
+            parsed = urllib.parse.urlsplit(value)
+            return parsed.scheme, parsed.hostname, parsed.port or 443
+
+        ceph_native.require(origin(self.repository_base) == origin(self.repository_key), "packages")
         self.source = source
         self.deadline = time.monotonic() + budget
         self.total = 0
@@ -125,13 +126,13 @@ class Acquisition:
     def stream(self, url, output, limit, expected=None, size=None):
         safe_url(url)
         prefix = self.source["url"].rstrip("/") + "/"
-        ceph_native.require(url.startswith(prefix) or url.startswith(self.repository_base + "/") or url == IBM_KEY, "packages")
+        ceph_native.require(url.startswith(prefix) or url.startswith(self.repository_base + "/") or url == self.repository_key, "packages")
         remaining = self.deadline - time.monotonic()
         ceph_native.require(remaining > 0, "package-timeout")
-        if url.startswith(prefix):
+        if url == self.repository_key:
+            opener, origin = self.repository_opener, ("the publisher key " + self.repository_key, self.anchor)
+        elif url.startswith(prefix):
             opener, origin = self.local, None
-        elif url == IBM_KEY:
-            opener, origin = self.public, ("the publisher key " + IBM_KEY, "the host trust store")
         else:
             opener, origin = self.repository_opener, ("the package repository " + self.repository_base, self.anchor)
         request = urllib.request.Request(url, headers={"Accept-Encoding": "identity"})
@@ -282,5 +283,5 @@ class Acquisition:
 
     def publisher_key(self, scratch):
         path = str(Path(scratch, "ibm-ceph-publisher.asc"))
-        self.file(IBM_KEY, path, 1 << 20)
+        self.file(self.repository_key, path, 1 << 20)
         return {native_signatures.IBM_CEPH_SIGNER: path}

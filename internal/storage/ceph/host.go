@@ -42,6 +42,7 @@ type ClusterScope struct {
 	NFSGaneshaPackageVersion string                       `json:"nfsGaneshaPackageVersion,omitempty"`
 	Owner                    string                       `json:"owner,omitempty"`
 	PackageRepository        string                       `json:"packageRepository"`
+	PackageRepositoryKey     string                       `json:"packageRepositoryKey"`
 	Packages                 *PackageRequest              `json:"packages,omitempty"`
 	PublicNetworks           []string                     `json:"publicNetworks"`
 	Registry                 string                       `json:"registry"`

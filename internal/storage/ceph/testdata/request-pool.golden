@@ -93,6 +93,7 @@
   "nfsGaneshaPackageVersion": "synthetic-native-ganesha",
   "owner": "apply-original",
   "packageRepository": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64",
+  "packageRepositoryKey": "",
   "pool": {
     "application": "rbd",
     "autoscale": {

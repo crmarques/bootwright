@@ -134,6 +134,7 @@ request-schema:
   objectUser.zoneGroup string
   owner string omitempty
   packageRepository string
+  packageRepositoryKey string
   packages *struct ceph.PackageRequest omitempty
   packages.licenseAccepted bool
   packages.packageRepositoryTrustBundleRef string omitempty

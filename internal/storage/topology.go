@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"net/url"
 	"slices"
 	"strings"
 
@@ -71,6 +72,14 @@ func (a *admission) distribution(ceph api.Value) {
 }
 
 func (a *admission) packageRepositoryTrust(ceph api.Value) {
+	if ceph.Has("packageRepository") {
+		a.required(ceph, "packageRepositoryKey", "$.spec.ceph")
+		if ceph.Has("packageRepositoryKey") && !samePackageOrigin(textOf(ceph, "packageRepository"), textOf(ceph, "packageRepositoryKey")) {
+			a.issue("api.invariant", "$.spec.ceph.packageRepositoryKey", "the package publisher key must share the repository HTTPS scheme, host and port", "serve the unchanged IBM publisher key from the authored package repository origin")
+		}
+	} else if ceph.Has("packageRepositoryKey") {
+		a.issue("api.invariant", "$.spec.ceph.packageRepositoryKey", "an authored package publisher key requires an authored package repository", "set spec.ceph.packageRepository or remove spec.ceph.packageRepositoryKey")
+	}
 	if ceph.Has("packageRepositoryTrustBundleRef") && !ceph.Has("packageRepository") {
 		a.issue("api.invariant", "$.spec.ceph.packageRepositoryTrustBundleRef",
 			"spec.ceph.packageRepositoryTrustBundleRef verifies only an authored spec.ceph.packageRepository, and this StorageCluster sets none",
@@ -269,4 +278,20 @@ func (a *admission) stretch(ceph api.Value) {
 	if textOf(tie, "site") == "" || textOf(node, "site") != textOf(tie, "site") || slices.Contains(sites, textOf(tie, "site")) {
 		a.invalid("$.spec.ceph.topology.stretch.tiebreaker.site", "tiebreaker must occupy its node's distinct third site")
 	}
+}
+
+func samePackageOrigin(repository, key string) bool {
+	origin := func(value string) string {
+		u, err := url.Parse(value)
+		if err != nil || u.Scheme != "https" || u.Hostname() == "" {
+			return ""
+		}
+		port := u.Port()
+		if port == "" {
+			port = "443"
+		}
+		return strings.ToLower(u.Hostname()) + ":" + port
+	}
+	a, b := origin(repository), origin(key)
+	return a != "" && a == b
 }
