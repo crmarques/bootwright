@@ -57,6 +57,7 @@ class Cluster(users.Cluster):
         super().__init__(request)
         self.default_realm, self.default_zones = "", {}
         self.exports, self.stdin, self.update_error = {}, [], None
+        self.list_stderr = {}
 
     def run(self, argv, data=b"", timeout=60):
         command = tuple(argv[argv.index("--format") + 2:])
@@ -101,9 +102,11 @@ class Cluster(users.Cluster):
     def radosgw(self, command):
         found, values, unused = gateway.words(command)
         if found == ("realm", "list"):
-            return 0, json.dumps({"default_info": self.default_realm, "realms": sorted(self.realms)}).encode()
+            body = json.dumps({"default_info": self.default_realm, "realms": sorted(self.realms)}).encode()
+            return 0, ceph_native.NativeOutput(body, self.list_stderr.get("realm", b""))
         if found == ("zone", "list"):
-            return 0, json.dumps({"default_info": self.default_zones.get(self.default_realm, ""), "zones": sorted(self.zones)}).encode()
+            body = json.dumps({"default_info": self.default_zones.get(self.default_realm, ""), "zones": sorted(self.zones)}).encode()
+            return 0, ceph_native.NativeOutput(body, self.list_stderr.get("zone", b""))
         if found == ("realm", "default"):
             self.mutations.append(("radosgw-admin", command))
             self.default_realm = self.realms[values["--rgw-realm"]]["id"]
@@ -186,6 +189,26 @@ def test_a_default_realm_of_another_realm_refuses_before_any_write(ready):
     assert caught.value.native_error["cause"] == ("the default realm has ID " + cluster.default_realm
                                                   + ", not realm objects of StorageObjectGateway objects")
     assert cluster.mutations == [] and markers.records == before
+
+
+@pytest.mark.parametrize("kind", ["realm", "zone"])
+def test_a_default_read_that_wrote_to_stderr_refuses_before_any_write(ready, kind):
+    """radosgw-admin reports a read error other than ENOENT on stderr, exits 0 and prints an empty default_info (radosgw-admin.cc:5299-5304)."""
+    cluster, markers = ready
+    realm, zone = ids(cluster)
+    cluster.default_realm, cluster.default_zones[realm] = realm, zone
+    cluster.list_stderr[kind] = b"failed to read " + kind.encode() + b" info: (5) Input/output error"
+    before = dict(markers.records)
+    with pytest.raises(ceph_native.Refusal, match="^native-output$"):
+        export_worker(cluster, markers).nfs_export()
+    assert cluster.mutations == [] and markers.records == before
+    stderr = cluster.list_stderr.pop(kind)
+    assert export_worker(cluster, markers).nfs_export() == {"changed": True}
+    cluster.list_stderr[kind] = stderr
+    cluster.mutations.clear()
+    with pytest.raises(ceph_native.Refusal, match="^native-output$"):
+        observe(cluster, markers)
+    assert cluster.mutations == []
 
 
 def test_with_its_realm_already_default_only_the_zone_pointer_is_set(ready):

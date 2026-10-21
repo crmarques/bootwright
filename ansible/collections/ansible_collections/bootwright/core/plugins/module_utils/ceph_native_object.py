@@ -1301,8 +1301,14 @@ class ExportGateway(UserWorker):
 
     def default_id(self, kind):
         """`realm list` and `zone list` name the default realm, and that realm's default zone, as `default_info`, empty when none is set
-        (src/rgw/radosgw-admin/radosgw-admin.cc:5297-5325, :6447-6475, src/rgw/driver/rados/rgw_zone.cc:981-1004)."""
-        value = self.radosgw(kind, "list")
+        (src/rgw/radosgw-admin/radosgw-admin.cc:5297-5325, :6447-6475, src/rgw/driver/rados/rgw_zone.cc:981-1004). A read error other than
+        ENOENT writes to stderr only, exits 0 and prints an empty `default_info` (:5299-5304), so any stderr refuses before a default is moved."""
+        output = self.radosgw(kind, "list", json_result=False)
+        require(not getattr(output, "stderr", b""), "native-output")
+        try:
+            value = json.loads(output)
+        except (ValueError, UnicodeError):
+            raise Refusal("native-output") from None
         current = value.get("default_info") if isinstance(value, dict) else None
         require(isinstance(current, str) and (current == "" or ZONE_ID.fullmatch(current) is not None), "native-output")
         return current
