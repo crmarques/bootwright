@@ -4,6 +4,7 @@ import copy
 import json
 
 import pytest
+import yaml
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as fixtures
@@ -34,12 +35,12 @@ def world(core_request):
     def effect(*args, **kwargs):
         effects.append(args)
         if args == ("orch", "apply", "-i", "-"):
-            value = json.loads(kwargs["data"])
-            if value["service_type"] == "host":
-                hosts[value["hostname"]] = {"hostname": value["hostname"], "addr": value["addr"], "labels": value["labels"]}
-            else:
-                key = value["service_type"] + ("." + value["service_id"] if value.get("service_id") else "")
-                services[key] = value
+            for value in yaml.safe_load_all(kwargs["data"]):
+                if value["service_type"] == "host":
+                    hosts[value["hostname"]] = {"hostname": value["hostname"], "addr": value["addr"], "labels": value["labels"]}
+                else:
+                    key = value["service_type"] + ("." + value["service_id"] if value.get("service_id") else "")
+                    services[key] = value
         else:
             raise AssertionError(args)
 
@@ -63,11 +64,10 @@ def test_lost_native_success_is_observed_without_repeating_effect(world, phase):
     first = list(effects)
     native.tunnel_effect = original
     getattr(native, phase)()
-    expected = len(native.request["hosts"]) if phase == "enroll" else sum(len(native.service_spec(value)) for value in native.request["services"])
-    assert len(effects) == expected
+    assert len(effects) == 1
     assert effects[:1] == first
     assert getattr(native, phase)() == {"changed": False}
-    assert len(effects) == expected
+    assert len(effects) == 1
 
 
 @pytest.mark.parametrize("phase,prefix", [("enroll", "enrollment-"), ("services", "service-")])

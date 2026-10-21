@@ -438,3 +438,10 @@ print(json.dumps({'result': result, 'received': received}))
     assert observed["received"] == [transmitted]
     expected = transmitted if native_diagnostics.valid(malformed) else {"ok": False, "reason": "native-unknown"}
     assert observed["result"] == expected
+
+
+def test_work_supplies_the_same_deadline_to_native_batch_admission():
+    sources = source_bundle()
+    sources["ceph_native"] = ("import time\nclass Refusal(ValueError): pass\ndef dispatch(value):\n"
+                              "    return {'bounded': time.monotonic() < WORKER_DEADLINE <= time.monotonic() + 1}\n")
+    assert run_work({"sources": sources, "payload": {}, "budget": 1}) == {"ok": True, "result": {"bounded": True}}

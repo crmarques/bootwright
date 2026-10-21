@@ -5,6 +5,7 @@ from __future__ import annotations
 # Exact type identity is the validation here: a bool is not an int and a capability object is never a subclass.
 # pylint: disable=unidiomatic-typecheck
 
+import concurrent.futures
 import hashlib
 import inspect
 import ipaddress
@@ -15,6 +16,7 @@ import shlex
 import socket
 import ssl
 import tempfile
+import threading
 import time
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
@@ -55,7 +57,8 @@ HOST_REASONS = (
     "unknown", "transport", "remote-refusal", "adapter-exception", "ssh-policy-host-excluded", "ssh-policy-unavailable",
 )
 CLUSTER_REASONS = (
-    "unsupported-release", "runtime-profile", "device-identity", "cache-unproved", "dashboard-identity", "dashboard-drift", "dashboard-policy",
+    "unsupported-release", "runtime-profile", "device-identity", "cache-unproved", "enrollment-budget",
+    "dashboard-identity", "dashboard-drift", "dashboard-policy",
     "dashboard-verify", "pool-identity", "pool-drift", "client-quiescence-unqualified", "native-option-undeclared", "call-home-unqualified",
     "dashboard-manager",
     "request", "artifact", "ownership", "evidence", "material", "packages", "package-artifact", "package-drift", "package-journal", "package-license",
@@ -403,6 +406,7 @@ class Transport:
         self.policy = policy
         self.preflighted = False
         self.applied = set()
+        self.applied_lock = threading.Lock()
 
     def ssh_policy(self):
         """The controller's SSH crypto policy, evaluated once on first use; a block that opens no session never evaluates it."""
@@ -418,6 +422,11 @@ class Transport:
             if ceph_ssh_policy.pinned(known, host):
                 ceph_ssh_policy.host_key_algorithms(self.ssh_policy(), known, host)
         self.preflighted = True
+
+    def prepare_round(self):
+        ceph_native.require(isinstance(self.material, dict) and "knownHosts" in self.material, "material")
+        self.ssh_policy()
+        self.preflight(ceph_native.read_regular(self.material["knownHosts"], private=True))
 
     def _call(self, host, source, payload, timeout, worker_budget=None, *, worker_ceiling=640, failures=NATIVE_FAILURES):
         ceph_native.require(isinstance(self.material, dict), "material")
@@ -469,7 +478,8 @@ class Transport:
         ceph_native.require(set(result) in ({"ok", "result"}, {"ok", "result", "specializations"}) and isinstance(result["result"], dict), "transport")
         if "specializations" in result:
             ceph_native.require(specialization_ids(result["specializations"]), "transport")
-            self.applied.update(result["specializations"])
+            with self.applied_lock:
+                self.applied.update(result["specializations"])
         return result["result"]
 
     @staticmethod
@@ -713,6 +723,31 @@ def recovery_preparations(request, values):
     return stages
 
 
+def host_round(transport, hosts, phase, private=None):
+    """Join the whole bounded round before returning the first refusal in host order."""
+    if not hosts:
+        return []
+    prepare = getattr(transport, "prepare_round", None)
+    if prepare is not None:
+        prepare()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(hosts)) as executor:
+        calls = [executor.submit(transport.call, host, phase, private) for host in hosts]
+        concurrent.futures.wait(calls)
+        return [call.result() for call in calls]
+
+
+def enroll_hosts(request, bootstrap, transport):
+    changed = False
+    for unused in request["hosts"]:
+        result = transport.call(bootstrap, "enroll")
+        ceph_native.require(isinstance(result, dict) and {"changed"} <= set(result) <= {"changed", "remaining"}
+                            and type(result["changed"]) is bool and type(result.get("remaining", False)) is bool, "evidence")
+        changed = result["changed"] or changed
+        if not result.get("remaining", False):
+            return changed
+    raise ceph_native.Refusal("enrollment-budget")
+
+
 def apply_tunnel_cluster(request, bootstrap, transport, state, preparations):
     """Resume only exact owned native transitions with their retained intents."""
     stage = ceph_tunnel_staging.prove_recovery_record(request, bootstrap["name"], state, evidence=True)
@@ -724,21 +759,18 @@ def apply_tunnel_cluster(request, bootstrap, transport, state, preparations):
     else:
         ceph_native.require(stages[bootstrap["name"]] == "complete"
                             and all(stages[host["name"]] == "prepared" for host in request["hosts"] if host != bootstrap), "partial-cluster")
-    for host in request["hosts"]:
-        transport.call(host, "devices")
+    host_round(transport, request["hosts"], "devices")
     changed = False
     private = transport.bootstrap_material()
     managers = next(service["placement"]["hosts"] for service in request["services"] if service["service_type"] == "mgr")
-    for host in request["hosts"]:
-        if host["name"] in managers and stages[host["name"]] in ("unclaimed", "claimed"):
-            transport.call(host, "tunnel_preflight", {"knownHosts": private["knownHosts"]})
-    for host in request["hosts"]:
-        if stages[host["name"]] == "unclaimed":
-            changed = transport.call(host, "claim")["changed"] or changed
-    for host in request["hosts"]:
-        if stages[host["name"]] in ("unclaimed", "claimed"):
-            authorization = {name: private[name] for name in ("clusterPublicKey", "registryJSON", "clusterPrivateKey", "knownHosts")}
-            changed = transport.call(host, "authorize", authorization)["changed"] or changed
+    host_round(transport, [host for host in request["hosts"] if host["name"] in managers
+                           and stages[host["name"]] in ("unclaimed", "claimed")], "tunnel_preflight", {"knownHosts": private["knownHosts"]})
+    claimed = host_round(transport, [host for host in request["hosts"] if stages[host["name"]] == "unclaimed"], "claim")
+    changed = any(value["changed"] for value in claimed) or changed
+    authorization = {name: private[name] for name in ("clusterPublicKey", "registryJSON", "clusterPrivateKey", "knownHosts")}
+    authorized = host_round(transport, [host for host in request["hosts"] if stages[host["name"]] in ("unclaimed", "claimed")],
+                            "authorize", authorization)
+    changed = any(value["changed"] for value in authorized) or changed
     ssh = {name: private[name] for name in ("clusterPrivateKey", "clusterPublicKey", "knownHosts")}
     if fresh:
         changed = transport.call(bootstrap, "bootstrap", ssh)["changed"] or changed
@@ -746,27 +778,27 @@ def apply_tunnel_cluster(request, bootstrap, transport, state, preparations):
         changed = transport.call(bootstrap, "tunnel_configure", ssh)["changed"] or changed
     if stage not in ("mounted", "enrolling"):
         changed = transport.call(bootstrap, "tunnel_mount")["changed"] or changed
-    for host in [bootstrap] + [host for host in request["hosts"] if host != bootstrap]:
-        changed = transport.call(host, "cache")["changed"] or changed
-    changed = transport.call(bootstrap, "enroll")["changed"] or changed
-    for host in request["hosts"]:
-        transport.call(host, "devices")
-    devices = device_identities(request, transport)
+    changed = transport.call(bootstrap, "cache")["changed"] or changed
+    cached = host_round(transport, [host for host in request["hosts"] if host != bootstrap], "cache")
+    changed = any(value["changed"] for value in cached) or changed
+    changed = enroll_hosts(request, bootstrap, transport) or changed
+    changed = transport.call(bootstrap, "license")["changed"] or changed
+    host_round(transport, request["hosts"], "devices")
+    devices = device_identities(request, transport, concurrent=True)
+    names = {name for service in request["services"] if service["service_type"] == "osd" for name in service["placement"]["hosts"]}
+    prepared = host_round(transport, [host for host in request["hosts"] if host["name"] in names], "osd_prepare")
+    changed = any(value["changed"] for value in prepared) or changed
     for index, service in enumerate(request["services"]):
-        if service["service_type"] == "osd":
-            names = set(service["placement"]["hosts"])
-            for host in request["hosts"]:
-                if host["name"] in names:
-                    changed = transport.call(host, "osd_prepare")["changed"] or changed
         changed = transport.call(bootstrap, "services", devices=devices, service=index)["changed"] or changed
     return changed
 
 
-def device_identities(request, transport):
+def device_identities(request, transport, *, concurrent=False):
     """Every host's retained SDK identities, in declared host and device order."""
     result = []
-    for host in request["hosts"]:
-        value = transport.call(host, "host_devices")
+    values = (host_round(transport, request["hosts"], "host_devices") if concurrent
+              else [transport.call(host, "host_devices") for host in request["hosts"]])
+    for host, value in zip(request["hosts"], values):
         ceph_native.require(isinstance(value, dict) and set(value) == {"devices"}, "device-identity")
         result.extend(ceph_host_runtime.rows(request, host["name"], value["devices"]))
     return result
@@ -815,7 +847,8 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         return execute_bucket(request, operation, request_digest, transport, bootstrap, now=now, pause=pause)
     changed = False
     if operation == "apply":
-        preparations = [transport.call(host, "prerequisites") for host in request["hosts"]]
+        preparations = (host_round(transport, request["hosts"], "prerequisites") if request["action"] == "cluster"
+                        else [transport.call(host, "prerequisites") for host in request["hosts"]])
         tunnel = request["action"] == "cluster" and request["clusterSSHTransport"] == "verified-tunnel"
         state = transport.call(bootstrap, "bootstrap_state") if tunnel else None
         if tunnel:
@@ -850,6 +883,7 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
                     ssh_material = {name: private[name] for name in ("clusterPrivateKey", "clusterPublicKey", "knownHosts")}
                     changed = transport.call(bootstrap, "bootstrap", ssh_material)["changed"] or changed
                     changed = transport.call(bootstrap, "enroll")["changed"] or changed
+                    changed = transport.call(bootstrap, "license")["changed"] or changed
                     for host in request["hosts"]:
                         transport.call(host, "devices")
                     changed = transport.call(bootstrap, "services")["changed"] or changed

@@ -37,6 +37,10 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 		return func(spec api.Value) api.Value { return spec.WithPath(api.StringValue(value), path...) }
 	}
 	cases := map[string]refusalCase{
+		"More than six Ceph hosts": {edits: map[string]func(api.Value) api.Value{"seven hosts": func(spec api.Value) api.Value {
+			nodes := spec.Get("ceph", "topology", "nodes").Items()
+			return spec.WithPath(api.ListValue(slices.Repeat(nodes[:1], 7)...), "ceph", "topology", "nodes")
+		}}, values: map[string]string{"<cluster>": "example", "<hosts>": "7"}},
 		"Incomplete or unsafe Ceph coordinates or transport": {edits: map[string]func(api.Value) api.Value{
 			"native transport": set("native", "ceph", "cephadm", "clusterSSH", "transport"),
 			"omitted transport": func(spec api.Value) api.Value {

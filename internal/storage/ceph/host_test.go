@@ -146,7 +146,7 @@ func TestDeadlinesFitTheRunCeilingForThreeAndTheLargestAdmittedCluster(t *testin
 	r := packageRequest(t)
 	r.ClusterSSHTransport = PinnedTransport
 	three, err := cephDeadline(r, "apply")
-	if err != nil || three > lifecycle.MaxDeadline || three != time.Duration((7*3+6)*660+1860+2*900+60)*time.Second {
+	if err != nil || three > lifecycle.MaxDeadline || three != time.Duration((15+3+len(r.Services))*660+1860+2*900+60)*time.Second {
 		t.Fatalf("three-host cluster deadline %s: %v", three, err)
 	}
 	largest := len(r.Hosts)
@@ -160,7 +160,7 @@ func TestDeadlinesFitTheRunCeilingForThreeAndTheLargestAdmittedCluster(t *testin
 	}
 	maximum := r
 	maximum.Hosts = slices.Repeat(r.Hosts[:1], largest)
-	if deadline, err := cephDeadline(maximum, "apply"); err != nil || deadline > lifecycle.MaxDeadline || largest != 3 {
+	if deadline, err := cephDeadline(maximum, "apply"); err != nil || deadline > lifecycle.MaxDeadline || largest != 6 {
 		t.Fatalf("the largest admitted cluster (%d hosts) takes %s: %v", largest, deadline, err)
 	}
 	for _, operation := range []string{"observe", "destroy"} {

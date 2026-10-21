@@ -234,6 +234,10 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 			cluster, _ = state.Effective().Find(api.StorageCluster, object.Spec().Get("clusterRef").Text())
 		}
 		ceph := cluster.Spec().Get("ceph")
+		if hosts := len(ceph.Get("topology", "nodes").Items()); hosts > 6 {
+			reason, remedy := clusterHostBudget(cluster.Name(), hosts)
+			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
+		}
 		if !Supported(ceph.Get("release").Text(), ceph.Get("packageVersion").Text(), ceph.Get("cephadm", "ansible", "packageVersion").Text(),
 			ceph.Get("image", "base").Text(), ceph.Get("image", "version").Text(), ceph.Get("cephadm", "clusterSSH", "transport").Text()) {
 			out = append(out, lifecycle.RefusalOf(object, unsupportedReason, unsupportedRemedy))

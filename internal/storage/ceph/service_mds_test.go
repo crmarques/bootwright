@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"slices"
 	"testing"
+	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -71,7 +72,7 @@ func TestMDSProjectionRefusesSpecAndMissingID(t *testing.T) {
 	}
 }
 
-func TestClusterDeadlineUnchangedByMDSService(t *testing.T) {
+func TestClusterDeadlineCountsMDSService(t *testing.T) {
 	plain, err := clusterRequestWith(t, func(services []api.Value) []api.Value { return services })
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
@@ -82,7 +83,7 @@ func TestClusterDeadlineUnchangedByMDSService(t *testing.T) {
 	}
 	before, beforeErr := cephDeadline(plain, "apply")
 	after, afterErr := cephDeadline(withMDS, "apply")
-	if beforeErr != nil || afterErr != nil || before != after || len(withMDS.Services) != len(plain.Services)+1 {
-		t.Fatalf("cluster deadline moved with an MDS service: %v (%v) -> %v (%v)", before, beforeErr, after, afterErr)
+	if beforeErr != nil || afterErr != nil || after != before+660*time.Second || len(withMDS.Services) != len(plain.Services)+1 {
+		t.Fatalf("cluster deadline did not count an MDS service: %v (%v) -> %v (%v)", before, beforeErr, after, afterErr)
 	}
 }

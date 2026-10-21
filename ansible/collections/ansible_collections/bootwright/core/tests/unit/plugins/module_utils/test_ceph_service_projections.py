@@ -1,9 +1,9 @@
 """Native daemon projections are not stored service specifications."""
 
 import copy
-import json
 
 import pytest
+import yaml
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_tunnel_staging as staging
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as fixtures
@@ -61,18 +61,18 @@ def projection_world(native, private):
 
     def effect(*args, **kwargs):
         assert args == ("orch", "apply", "-i", "-")
-        value = json.loads(kwargs["data"])
-        if value["service_type"] == "host":
-            hosts[value["hostname"]] = {"hostname": value["hostname"], "addr": value["addr"], "labels": value["labels"]}
-            return
-        key = value["service_type"] + ("." + value["service_id"] if value.get("service_id") else "")
-        effects.append(key)
-        # Independently frozen native results, not an echo of submitted input.
-        expected = next(item for group in groups for item in group
-                        if item["service_type"] + ("." + item["service_id"] if item.get("service_id") else "") == key)
-        assert value == expected
-        stored[key] = copy.deepcopy(expected)
-        descriptors[key] = dict(copy.deepcopy(expected), status={"created": "2025-01-01T00:00:00Z", "size": 3, "running": 1})
+        for value in yaml.safe_load_all(kwargs["data"]):
+            if value["service_type"] == "host":
+                hosts[value["hostname"]] = {"hostname": value["hostname"], "addr": value["addr"], "labels": value["labels"]}
+                continue
+            key = value["service_type"] + ("." + value["service_id"] if value.get("service_id") else "")
+            effects.append(key)
+            # Independently frozen native results, not an echo of submitted input.
+            expected = next(item for group in groups for item in group
+                            if item["service_type"] + ("." + item["service_id"] if item.get("service_id") else "") == key)
+            assert value == expected
+            stored[key] = copy.deepcopy(expected)
+            descriptors[key] = dict(copy.deepcopy(expected), status={"created": "2025-01-01T00:00:00Z", "size": 3, "running": 1})
 
     native.ceph = ceph
     native.tunnel_effect = effect

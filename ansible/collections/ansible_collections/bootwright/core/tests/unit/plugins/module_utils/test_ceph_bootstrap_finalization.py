@@ -409,11 +409,17 @@ def enrollment(native):
     return state, inventory, events
 
 
+def finish_enrollment(native):
+    enrolled = native.enroll()
+    licensed = native.license()
+    return {"changed": enrolled["changed"] or licensed["changed"]}
+
+
 def test_enrollment_accepts_license_only_after_all_owned_hosts_and_replay_reads(native):
     state, inventory, events = enrollment(native)
-    assert native.enroll() == {"changed": True} and state["accepted"]
+    assert finish_enrollment(native) == {"changed": True} and state["accepted"]
     assert len(inventory) == 3 and events[-1] == "accept-license"
-    assert native.enroll() == {"changed": False} and events.count("accept-license") == 1
+    assert finish_enrollment(native) == {"changed": False} and events.count("accept-license") == 1
 
 
 @pytest.mark.parametrize("proof", ["transport", "configuration", "mounts"])
@@ -426,7 +432,7 @@ def test_enrollment_never_accepts_license_when_tunnel_proof_refuses(native, proo
 
     setattr(native, {"transport": "verify_transport_bundle", "configuration": "verify_tunnel_configuration", "mounts": "verify_manager_mounts"}[proof], refuse)
     with pytest.raises(ceph_native.Refusal, match="^native-tunnel-unproved$"):
-        native.enroll()
+        finish_enrollment(native)
     assert "accept-license" not in events and native.markers.read("bootstrap-enrollment.json") is None
 
 
@@ -440,8 +446,8 @@ def test_transient_license_failure_repeats_until_the_license_record_reads_back(n
 
     native.pause = recover
     state["fail"] = True
-    assert native.enroll() == {"changed": True} and state["accepted"] and events.count("accept-license") == 2
-    assert native.enroll() == {"changed": False} and events.count("accept-license") == 2
+    assert finish_enrollment(native) == {"changed": True} and state["accepted"] and events.count("accept-license") == 2
+    assert finish_enrollment(native) == {"changed": False} and events.count("accept-license") == 2
 
 
 def test_late_license_native_failure_propagates_and_readback_is_required(native):
@@ -450,20 +456,20 @@ def test_late_license_native_failure_propagates_and_readback_is_required(native)
     state["fail"] = True
     native.horizon = native.clock()
     with pytest.raises(ceph_native.NativeFailure) as caught:
-        native.enroll()
+        finish_enrollment(native)
     assert caught.value is failure and events.count("accept-license") == 1
     state.update(fail=False, publish=False)
     with pytest.raises(ceph_native.Refusal, match="^not-ready$"):
-        native.enroll()
+        finish_enrollment(native)
     assert not state["accepted"] and events.count("accept-license") == 2
 
 
 def test_a_manager_without_the_license_contract_enrolls_without_accepting_a_license(native):
     state, inventory, events = enrollment(native)
     native.selection = fixtures.built(fixtures.OLD)
-    assert native.enroll() == {"changed": True} and not state["accepted"]
+    assert finish_enrollment(native) == {"changed": True} and not state["accepted"]
     assert len(inventory) == 3 and "accept-license" not in events
-    assert native.enroll() == {"changed": False} and "accept-license" not in events
+    assert finish_enrollment(native) == {"changed": False} and "accept-license" not in events
     assert native.selection.applied == {"ceph-mgr-without-license-contract"}
 
 
@@ -471,7 +477,7 @@ def test_a_manager_without_the_license_contract_enrolls_without_accepting_a_lice
 def test_an_ibm_or_unknown_manager_still_accepts_its_license_at_enrollment(native, image):
     state, unused, events = enrollment(native)
     native.selection = fixtures.built(fixtures.OLD, fixtures.specs.zipapp(fixtures.specs.ANCHOR[:-1]) if image == "unanchored" else image)
-    assert native.enroll() == {"changed": True} and state["accepted"] and events.count("accept-license") == 1
+    assert finish_enrollment(native) == {"changed": True} and state["accepted"] and events.count("accept-license") == 1
     assert native.selection.applied == set()
 
 

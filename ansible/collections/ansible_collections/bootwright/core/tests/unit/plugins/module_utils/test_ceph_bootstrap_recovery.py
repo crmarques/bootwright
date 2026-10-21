@@ -10,6 +10,7 @@ import json
 import os
 
 import pytest
+import yaml
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, ceph_native, ceph_tunnel_custody as custody, ceph_tunnel_staging as staging
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_tunnel_native as fixtures, test_ceph_core as core_fixtures
@@ -352,7 +353,7 @@ def test_coordinator_runs_only_missing_proved_transitions(core_request, monkeypa
     assert max(index for index, phase in enumerate(phases) if phase == "cache") < phases.index("enroll")
     assert phases.count("tunnel_preflight") == (3 if stage in ("unclaimed", "claimed") else 0)
     preconvergence = phases[:phases.index("services") + 1]
-    assert len(preconvergence) <= 27 + phases.count("tunnel_preflight")
+    assert len(preconvergence) <= 34
 
 
 def test_partial_enrollment_fence_resumes_without_erasing_ownership(native):
@@ -477,9 +478,9 @@ def test_lost_mount_reply_is_finalized_by_coordinator_before_enrollment_without_
         if args == ("orch", "status"):
             return {"available": True, "backend": "cephadm"}
         assert args == ("orch", "apply", "-i", "-")
-        spec = json.loads(kwargs["data"])
         assert native.markers.read("bootstrap-enrollment.json") == staging.recovery_scope(native.request)
-        inventory.append({name: spec[name] for name in ("hostname", "addr", "labels")})
+        for spec in yaml.safe_load_all(kwargs["data"]):
+            inventory.append({name: spec[name] for name in ("hostname", "addr", "labels")})
         return b""
 
     native.ceph = ceph
@@ -520,7 +521,7 @@ def test_lost_mount_reply_is_finalized_by_coordinator_before_enrollment_without_
             if phase == "enroll":
                 assert native.markers.read("tunnel-mounted.json") is not None
                 return native.enroll()
-            assert phase in ("devices", "services", "osd_prepare")
+            assert phase in ("devices", "license", "services", "osd_prepare")
             return {"changed": False}
 
     ceph_core.apply_tunnel_cluster(native.request, native.host, Transport(), state, preparations)
@@ -680,9 +681,9 @@ def enrollment_fixture(native, failures):
                 raise ceph_native.Refusal("native-command")
             return copy.deepcopy(inventory)
         assert args == ("orch", "apply", "-i", "-") and native.markers.read("bootstrap-enrollment.json") is not None
-        spec = json.loads(kwargs["data"])
-        events.append(spec["hostname"])
-        inventory.append({"hostname": spec["hostname"], "addr": spec["addr"], "labels": []})
+        for spec in yaml.safe_load_all(kwargs["data"]):
+            events.append(spec["hostname"])
+            inventory.append({"hostname": spec["hostname"], "addr": spec["addr"], "labels": spec["labels"]})
         return b""
 
     native.verify_tunnel_configuration = configuration
@@ -697,7 +698,7 @@ def test_enrollment_waits_out_the_restarted_orchestrator_before_its_fence(native
     clock = manual_clock(native)
     inventory, events = enrollment_fixture(native, {"config": 1, "inventory": 2})
     assert native.enroll() == {"changed": True}
-    assert events[:6] == ["config", "config", "inventory", "inventory", "inventory", "inventory"]
+    assert events[:5] == ["config", "config", "inventory", "inventory", "inventory"]
     assert [value for value in events if value.startswith("node-")] == ["node-1", "node-2", "node-3"]
     assert events[-1] == "inventory"
     assert [host["hostname"] for host in inventory] == ["node-1", "node-2", "node-3"]

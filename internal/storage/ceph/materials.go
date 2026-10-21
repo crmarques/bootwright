@@ -3,6 +3,7 @@ package ceph
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"strings"
 	"time"
@@ -210,6 +211,10 @@ func cephDeadline(r Request, operation string) (time.Duration, error) {
 	if r.Action == "object-bucket" {
 		return objectBucketDeadline(operation), nil
 	}
+	if len(r.Hosts) > 6 {
+		reason, remedy := clusterHostBudget(r.Cluster, len(r.Hosts))
+		return 0, failure("lifecycle.unsupported", reason, remedy)
+	}
 	nativeCalls, waits := len(r.Hosts)+2, 0
 	if operation == "observe" && r.Action == "cluster" {
 		nativeCalls++
@@ -217,7 +222,7 @@ func cephDeadline(r Request, operation string) (time.Duration, error) {
 	if operation == "apply" {
 		nativeCalls = 2*len(r.Hosts) + 3
 		if r.Action == "cluster" {
-			nativeCalls, waits = 7*len(r.Hosts)+6, bootstrapCall+2*readinessWait
+			nativeCalls, waits = 15+len(r.Hosts)+len(r.Services), bootstrapCall+2*readinessWait
 		}
 		if r.Action == "filesystem" && r.Filesystem != nil {
 			nativeCalls, waits = 2*len(r.Hosts)+3+len(r.Filesystem.DataPools)+len(r.Filesystem.Groups), readinessWait
@@ -228,7 +233,7 @@ func cephDeadline(r Request, operation string) (time.Duration, error) {
 	}
 	deadline := time.Duration(nativeCalls*nativeCall+waits+60) * time.Second
 	if deadline > lifecycle.MaxDeadline {
-		return 0, failure("lifecycle.unsupported", "the serial Ceph adapter's bounded work exceeds its six-hour run ceiling", "use the three-node core lab; larger clusters need a qualified execution budget")
+		return 0, failure("lifecycle.unsupported", fmt.Sprintf("StorageCluster %s needs a cluster run deadline of %s, past the 6h0m0s every adapter run is held to", r.Cluster, deadline), fmt.Sprintf("declare fewer hosts in spec.ceph.topology.nodes or fewer mon, mgr, osd and mds services in spec.ceph.services of StorageCluster %s", r.Cluster))
 	}
 	return deadline, nil
 }
@@ -251,7 +256,7 @@ func sshPolicyRefusals() map[string]error {
 }
 
 func adapterRefusals() map[string]error {
-	out := map[string]error{"unsupported-release": unsupportedFailure(), "runtime-profile": failure("lifecycle.unknown", "the Ceph host runtime profile is missing or contradicts the frozen image", "apply again so each ceph-host block re-proves its runtime profile before the cluster block continues"), "device-identity": failure("lifecycle.unknown", "the OSD device identities are missing or contradict the host preparation", "apply again so each ceph-host block re-derives its device identities"), "cache-unproved": failure("lifecycle.unknown", "the published cephadm cache is not the exact authenticated payload", "inspect the host's /var/lib/ceph cache before continuing; a foreign cephadm binary is never executed"), "dashboard-identity": failure("lifecycle.unknown", "the Ceph dashboard user admin or its retained password is not the one this operation created", "inspect the dashboard's users; an admin user without this operation's attempt record is never adopted, and a lost retained password is never regenerated"), "dashboard-manager": failure("lifecycle.unknown", "a Ceph MGR's container or dashboard port no longer matches the deployment this operation recorded", "inspect `ceph orch ps --daemon_type mgr`; Bootwright never adopts or repairs an MGR container it did not record, so take back what it owns with `bootwright destroy --context <context>` before applying again"), "dashboard-drift": failure("lifecycle.unknown", "the Ceph dashboard user admin no longer matches the password this context's custody holds", "log in with the custodied password that bootwright cluster info --secrets --name <cluster> reveals, or set the admin password back to it; Bootwright never resets it"), "dashboard-policy": failure("lifecycle.unknown", "the Ceph dashboard refused the generated administrator password under its password policy", "inspect the dashboard's password policy settings; Bootwright never retries with a new password"), "dashboard-verify": failure("lifecycle.unsupported", "the bootstrap host cannot verify the dashboard password hash", "use the pinned managed OS, whose Python reads bcrypt hashes; the check is never skipped"), "pool-identity": failure("lifecycle.unknown", "the Ceph pool's identity is not the one this operation created", "inspect the pool; a same-name pool without this operation's creation record is never adopted"), "client-quiescence-unqualified": failure("lifecycle.unsupported", "Ceph client quiescence has not been qualified", "prove all consumers stopped before qualifying online removal"), "native-option-undeclared": failure("lifecycle.unsupported", "the selected host cephadm package does not declare a bootstrap option Bootwright passes", "the apply froze this input, so take back what it owns with bootwright destroy --context <context>, select a cephadm package version whose release qualification covers this bootstrap with bootwright context update, then apply; the native error names the missing option and the selected package version"), "call-home-unqualified": failure("lifecycle.unsupported", "IBM Call Home intent has no qualified path on the selected Ceph build", "the apply froze this input, so take back what it owns with bootwright destroy --context <context>, correct ceph.ibm.callHome for the selected build with bootwright context update, then apply; see .agents/knowledge/version-specializations.md")}
+	out := map[string]error{"enrollment-budget": failure("lifecycle.unknown", "the Ceph enrollment worker has insufficient remaining budget to admit a host", "apply again to continue the prepared cluster enrollment"), "unsupported-release": unsupportedFailure(), "runtime-profile": failure("lifecycle.unknown", "the Ceph host runtime profile is missing or contradicts the frozen image", "apply again so each ceph-host block re-proves its runtime profile before the cluster block continues"), "device-identity": failure("lifecycle.unknown", "the OSD device identities are missing or contradict the host preparation", "apply again so each ceph-host block re-derives its device identities"), "cache-unproved": failure("lifecycle.unknown", "the published cephadm cache is not the exact authenticated payload", "inspect the host's /var/lib/ceph cache before continuing; a foreign cephadm binary is never executed"), "dashboard-identity": failure("lifecycle.unknown", "the Ceph dashboard user admin or its retained password is not the one this operation created", "inspect the dashboard's users; an admin user without this operation's attempt record is never adopted, and a lost retained password is never regenerated"), "dashboard-manager": failure("lifecycle.unknown", "a Ceph MGR's container or dashboard port no longer matches the deployment this operation recorded", "inspect `ceph orch ps --daemon_type mgr`; Bootwright never adopts or repairs an MGR container it did not record, so take back what it owns with `bootwright destroy --context <context>` before applying again"), "dashboard-drift": failure("lifecycle.unknown", "the Ceph dashboard user admin no longer matches the password this context's custody holds", "log in with the custodied password that bootwright cluster info --secrets --name <cluster> reveals, or set the admin password back to it; Bootwright never resets it"), "dashboard-policy": failure("lifecycle.unknown", "the Ceph dashboard refused the generated administrator password under its password policy", "inspect the dashboard's password policy settings; Bootwright never retries with a new password"), "dashboard-verify": failure("lifecycle.unsupported", "the bootstrap host cannot verify the dashboard password hash", "use the pinned managed OS, whose Python reads bcrypt hashes; the check is never skipped"), "pool-identity": failure("lifecycle.unknown", "the Ceph pool's identity is not the one this operation created", "inspect the pool; a same-name pool without this operation's creation record is never adopted"), "client-quiescence-unqualified": failure("lifecycle.unsupported", "Ceph client quiescence has not been qualified", "prove all consumers stopped before qualifying online removal"), "native-option-undeclared": failure("lifecycle.unsupported", "the selected host cephadm package does not declare a bootstrap option Bootwright passes", "the apply froze this input, so take back what it owns with bootwright destroy --context <context>, select a cephadm package version whose release qualification covers this bootstrap with bootwright context update, then apply; the native error names the missing option and the selected package version"), "call-home-unqualified": failure("lifecycle.unsupported", "IBM Call Home intent has no qualified path on the selected Ceph build", "the apply froze this input, so take back what it owns with bootwright destroy --context <context>, correct ceph.ibm.callHome for the selected build with bootwright context update, then apply; see .agents/knowledge/version-specializations.md")}
 	out["service-credential-foreign"] = failure("lifecycle.unknown", "a Ceph service a service-unit block applied stores a credential other than the one its bound Secret holds", "find the service and leaf the native error names with ceph orch ls --export; Bootwright never replaces a credential of a deployed service: store the deployed value again in the Secret that the service's spec.ceph.serviceBindings entry binds to that leaf with bootwright secret set, or take back what this context owns with bootwright destroy --context <context>, then apply")
 	out["foreign-pool"] = failure("lifecycle.unknown", "a Ceph pool of the StoragePool's name, or of a zone pool a StorageObjectGateway derives, exists that this operation did not create", "rename the StoragePool or the StorageObjectGateway's spec.zone, or remove the foreign pool outside Bootwright; a pool without this operation's creation record is never adopted")
 	out["foreign-profile"] = failure("lifecycle.unknown", "an erasure-code profile named after the StoragePool exists that this operation did not create", "rename the StoragePool, or remove the foreign profile outside Bootwright; Bootwright never overrides a profile with --force")
@@ -291,4 +296,8 @@ func adapterRefusals() map[string]error {
 		out[reason] = failure("lifecycle.unknown", "the Ceph adapter could not prove its "+reason+" boundary", "inspect the retained operation evidence before continuing")
 	}
 	return out
+}
+
+func clusterHostBudget(cluster string, hosts int) (string, string) {
+	return fmt.Sprintf("StorageCluster %s declares %d Ceph hosts, and Bootwright's cluster execution budget covers at most six hosts per cluster", cluster, hosts), fmt.Sprintf("declare at most six entries in spec.ceph.topology.nodes of StorageCluster %s; B79 tracks larger clusters", cluster)
 }

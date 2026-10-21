@@ -162,7 +162,7 @@ func TestPGBudgetCountsWidthAndMetadataMinimum(t *testing.T) {
 func TestPGBudgetIsPerCrushRule(t *testing.T) {
 	policy := childOf(api.StoragePlacementPolicy, "fast", "ruleName", "fast-hosts", "crushDeviceClass", "ssd", "replicated", requestMap("size", 2, "minSize", 2))
 	bulk := replicatedPool("bulk", "autoscale", requestMap("pgNumMin", 300))
-	catalog := planCatalog(9, 9, withCorePair, policy, bulk,
+	catalog := planCatalog(6, 6, withCorePair, policy, bulk,
 		replicatedPool("first", "placementPolicyRef", "fast", "autoscale", requestMap("pgNumMin", 200)),
 		replicatedPool("second", "placementPolicyRef", "fast", "autoscale", requestMap("pgNumMin", 200)))
 	_, err := planned(t, catalog, api.StoragePool, "first")

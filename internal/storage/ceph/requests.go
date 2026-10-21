@@ -421,6 +421,10 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 			}
 		}
 	}
+	if len(r.Hosts) > 6 {
+		reason, remedy := clusterHostBudget(r.Cluster, len(r.Hosts))
+		return failure("lifecycle.unsupported", reason, remedy)
+	}
 	slices.SortFunc(r.Hosts, func(a, b Host) int { return strings.Compare(a.Name, b.Name) })
 	if len(r.Hosts) < 3 || r.Bootstrap == "" {
 		return failure("lifecycle.unsupported", "the core IBM profile requires at least three owned hosts and a bootstrap host", "declare a provider-supported topology with at least three hosts")

@@ -227,6 +227,7 @@ def work(started=None, ceiling=REMOTE_LIMIT, loader=load):
         os.dup2(quiet, 1)
         os.dup2(quiet, 2)
         native = loader(payload["sources"])
+        native.WORKER_DEADLINE = started + budget
         try:
             answer = {"ok": True, "result": native.dispatch(payload["payload"])}
             applied = list(getattr(native, "APPLIED", ()))

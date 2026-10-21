@@ -55,6 +55,8 @@ MAX_REGISTRY = 65536
 DEVICE_IDENTITIES = "device-identities.json"
 DEVICE_IDENTITIES_VERSION = "ceph-cluster-device-identities-v1"
 HOST_PHASES = frozenset(("profile", "route", "device_identity", "host_devices", "host_observe"))
+WORKER_DEADLINE = None
+
 SCOPE_MEMBERS = frozenset(("controller", "version", "cluster", "owner", "fsid", "image", "cephadm", "bootstrap", "hosts", "services", "clusterSSHUser",
                            "clusterSSHTransport", "monIP", "publicNetworks", "clusterNetworks", "callHome", "release", "ansiblePackageVersion",
                            "packageRepository", "clusterKeyRef", "registryRef", "registry"))
@@ -72,7 +74,7 @@ SUBVOLUME_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0
 SUBVOLUME_PATH = re.compile(r"/volumes/(?:_nogroup|[A-Za-z0-9][A-Za-z0-9_.-]{0,127})/[a-z0-9](?:[-a-z0-9]{0,46}[a-z0-9])?/"
                             r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\Z")
 CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "tunnel_preflight", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount",
-                         "cache", "enroll", "services", "dashboard", "dashboard_read", "observe", "bootstrap_state", "host_state", "destroy"))
+                         "cache", "enroll", "license", "services", "dashboard", "dashboard_read", "observe", "bootstrap_state", "host_state", "destroy"))
 CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "tunnel_preflight", "observe", "bootstrap_state", "host_state", "dashboard_read"))
 EVIDENCE_VERSION = "ceph-core-evidence-v11"
 # The specialization ids the last dispatched phase's worker applied; the remote wrapper reads it once per process.
@@ -1134,6 +1136,7 @@ class Worker:
         self.clock = time.monotonic
         self.pause = time.sleep
         self.horizon = None
+        self.execution_deadline = None
         self.blocking = []
         from ansible_collections.bootwright.core.plugins.module_utils import native_specializations
         self.selection = native_specializations.Selection({"host-cephadm": self.verified_tool, "image-cephadm": self.image_payload})
@@ -1195,14 +1198,14 @@ class Worker:
     def manager_label(self):
         return self.runtime_profile()["label"]
 
-    def ceph(self, *args, data=b"", json_result=True, secrets=()):
+    def ceph(self, *args, data=b"", json_result=True, secrets=(), timeout=60):
         proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verified-tunnel" else contextlib.nullcontext()
         with proof:
             return self.command([
                 "/usr/bin/ceph", "--conf", os.path.join(self.markers.path, "ceph.conf"),
                 "--keyring", os.path.join(self.markers.path, "ceph.client.admin.keyring"),
                 "--format", "json", *args,
-            ], data=data, json_result=json_result, secrets=secrets)
+            ], data=data, json_result=json_result, secrets=secrets, timeout=timeout)
 
     def recovery_enabled(self):
         return self.request["clusterSSHTransport"] == "verified-tunnel" and self.markers.read("bootstrap-scope.json") is not None
@@ -2789,8 +2792,8 @@ class Worker:
         self.markers.write(name, record)
         return True
 
-    def enrollment_hosts(self):
-        hosts = self.manager_retry(self.ceph, "orch", "host", "ls")
+    def enrollment_hosts(self, *, retry=True):
+        hosts = self.manager_retry(self.ceph, "orch", "host", "ls") if retry else self.ceph("orch", "host", "ls")
         require(isinstance(hosts, list) and len(hosts) <= len(self.request["hosts"]), "foreign-host")
         wanted = {host["name"]: host for host in self.request["hosts"]}
         result = {}
@@ -2836,7 +2839,7 @@ class Worker:
             accepted = accepted or value["image_id"] == image_id
         return accepted
 
-    def enroll(self):
+    def enrollment_state(self):
         require(self.markers.owned(), "ownership")
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
         self.prove_registry()
@@ -2850,14 +2853,9 @@ class Worker:
         scope = self.recovery_scope()
         enrolled = self.markers.read("bootstrap-enrollment.json")
         require(enrolled is None or enrolled == scope, "ownership")
-        if enrolled is None:
-            require(not self.enrollment_hosts(), "foreign-host")
-            self.markers.write("bootstrap-enrollment.json", scope)
-        for name in self.enrollment_hosts():
-            host = next(value for value in self.request["hosts"] if value["name"] == name)
-            spec = {"service_type": "host", "hostname": name, "addr": host["address"], "labels": host["labels"] or []}
-            require(self.markers.read("enrollment-" + name + "-attempt.json") == {"scope": scope, "host": spec}, "foreign-host")
-        changed = False
+        inventory = self.enrollment_hosts()
+        require(enrolled is not None or not inventory, "foreign-host")
+        pending, completed = [], []
         for host in self.request["hosts"]:
             name = host["name"]
             spec = {"service_type": "host", "hostname": name, "addr": host["address"], "labels": host["labels"] or []}
@@ -2866,30 +2864,48 @@ class Worker:
             attempt, complete = self.markers.read(prefix + "-attempt.json"), self.markers.read(prefix + "-complete.json")
             require(attempt is None or attempt == intent, "ownership")
             require(complete is None or complete == intent and attempt == intent, "ownership")
-            current = self.enrollment_hosts().get(name)
+            current = inventory.get(name)
             require(current is None or attempt == intent, "foreign-host")
-            require(complete is None or current is not None and set(current.get("labels", [])) == set(spec["labels"]), "host-label-drift")
-            if current is None:
-                require(complete is None, "foreign-host")
-                if attempt is None:
-                    self.markers.write(prefix + "-attempt.json", intent)
-                self.tunnel_effect("orch", "apply", "-i", "-", data=canonical(spec), json_result=False)
-                changed = True
-                current = self.enrollment_hosts().get(name)
-                require(current is not None, "not-ready")
-            for label in spec["labels"]:
-                if label not in current.get("labels", []):
-                    label_intent = {"host": intent, "label": label}
-                    marker = prefix + "-label-" + hashlib.sha256(label.encode()).hexdigest() + ".json"
-                    prior = self.markers.read(marker)
-                    require(prior is None or prior == label_intent, "ownership")
-                    self.markers.write(marker, label_intent)
-                    self.tunnel_effect("orch", "host", "label", "add", name, label, json_result=False)
-                    changed = True
-            current = self.enrollment_hosts().get(name)
-            require(current is not None and set(current.get("labels", [])) == set(spec["labels"]), "not-ready")
-            if complete is None:
+            exact = current is not None and set(current.get("labels", [])) == set(spec["labels"])
+            require(complete is None or exact, "host-label-drift")
+            (completed if exact else pending).append((prefix, intent))
+        return scope, enrolled, inventory, pending, completed
+
+    def enroll(self):
+        scope, enrolled, inventory, pending, completed = self.enrollment_state()
+        remaining = float("inf") if self.execution_deadline is None else self.execution_deadline - self.clock()
+        # Every admitted document has its full native command allowance, plus one inventory readback.
+        count = 0
+        for size in range(1, len(pending) + 1):
+            if size * 60 + 60 <= remaining:
+                count = size
+        if enrolled is None:
+            self.markers.write("bootstrap-enrollment.json", scope)
+        require(not pending or count > 0, "enrollment-budget")
+        batch = pending[:count]
+        for prefix, intent in batch:
+            if self.markers.read(prefix + "-attempt.json") is None:
+                self.markers.write(prefix + "-attempt.json", intent)
+        if batch:
+            documents = b"\n---\n".join(canonical(intent["host"]) for unused, intent in batch) + b"\n"
+            self.tunnel_effect("orch", "apply", "-i", "-", data=documents, json_result=False, timeout=60 * len(batch))
+            inventory = self.enrollment_hosts(retry=False)
+        for prefix, intent in completed + batch:
+            current = inventory.get(intent["host"]["hostname"])
+            require(current is not None and set(current.get("labels", [])) == set(intent["host"]["labels"]), "not-ready")
+            if self.markers.read(prefix + "-complete.json") is None:
                 self.markers.write(prefix + "-complete.json", intent)
+        changed = bool(batch)
+        if count < len(pending):
+            return {"changed": changed, "remaining": True}
+        return {"changed": changed}
+
+    def license(self):
+        scope, enrolled, unused, pending, completed = self.enrollment_state()
+        require(enrolled == scope and not pending, "not-ready")
+        for prefix, intent in completed:
+            require(self.markers.read(prefix + "-complete.json") == intent, "not-ready")
+        changed = False
         if not self.license_accepted() and self.selection.variant("ceph.mgr.license-contract") == "ibm":
             self.manager_retry(self.tunnel_effect, "orch", "accept-license", "--image", self.request["image"], json_result=False)
             require(self.license_accepted(), "not-ready")
@@ -3091,7 +3107,8 @@ class Worker:
         require(service is None or type(service) is int and 0 <= service < len(groups), "request")
         selected = wanted if service is None else groups[service]
         scope = self.recovery_scope()
-        changed = False
+        observed = self.owned_service_specs(dict(zip(keys, wanted)), scope)
+        pending, completions = [], []
         for value in selected:
             key = value["service_type"] + ("." + value["service_id"] if value.get("service_id") else "")
             prefix = "service-" + key
@@ -3099,19 +3116,24 @@ class Worker:
             attempt, complete = self.markers.read(prefix + "-attempt.json"), self.markers.read(prefix + "-complete.json")
             require(attempt is None or attempt == intent, "ownership")
             require(complete is None or complete == intent and attempt == intent, "ownership")
-            observed = self.owned_service_specs(dict(zip(keys, wanted)), scope)
             present = observed.get(key)
             require(present is None or attempt == intent and present == value, "foreign-service")
             require(complete is None or present == value, "foreign-service")
             if present is None:
-                require(complete is None, "foreign-service")
-                if attempt is None:
-                    self.markers.write(prefix + "-attempt.json", intent)
-                self.tunnel_effect("orch", "apply", "-i", "-", data=canonical(value) + b"\n", json_result=False)
-                changed = True
-                require(self.service_specs().get(key) == value, "not-ready")
+                pending.append((prefix, intent))
             if complete is None:
-                self.markers.write(prefix + "-complete.json", intent)
+                completions.append((prefix, intent))
+        for prefix, intent in pending:
+            if self.markers.read(prefix + "-attempt.json") is None:
+                self.markers.write(prefix + "-attempt.json", intent)
+        changed = bool(pending)
+        if pending:
+            documents = b"\n---\n".join(canonical(intent["service"]) for unused, intent in pending) + b"\n"
+            self.tunnel_effect("orch", "apply", "-i", "-", data=documents, json_result=False)
+            observed = self.service_specs()
+        for prefix, intent in completions:
+            require(observed.get(prefix[len("service-"):]) == intent["service"], "not-ready")
+            self.markers.write(prefix + "-complete.json", intent)
         return {"changed": changed}
 
     def dashboard_scope(self):
@@ -3679,6 +3701,7 @@ def dispatch(envelope):
             else ceph_native_resources.ResourceWorker if resource else Worker)
     worker = kind(request, envelope["host"])
     worker.horizon = worker.clock() + MANAGER_HORIZON
+    worker.execution_deadline = WORKER_DEADLINE
     require(phase in CORE_PHASES or (resource and phase in ceph_native_resources.PHASES) or (unit and phase in ceph_native_units.PHASES)
             or (gateway and phase in ceph_native_object.PHASES) or (export and phase in ceph_native_nfs.EXPORT_PHASES)
             or (user and phase in ceph_native_object.USER_PHASES) or (bucket and phase in ceph_native_object.BUCKET_PHASES))

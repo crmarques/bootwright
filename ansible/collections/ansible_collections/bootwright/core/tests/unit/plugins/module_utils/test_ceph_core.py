@@ -1157,8 +1157,8 @@ def test_config_database_is_reproved_immediately_before_services(core_request):
 
     def effect(*args, **kwargs):
         native.ceph(*args, **kwargs)
-        value = json.loads(kwargs["data"])
-        records[value["service_type"] + ("." + value["service_id"] if value.get("service_id") else "")] = value
+        for value in yaml.safe_load_all(kwargs["data"]):
+            records[value["service_type"] + ("." + value["service_id"] if value.get("service_id") else "")] = value
 
     native.tunnel_effect = effect
     assert native.services() == {"changed": True}
@@ -1182,9 +1182,9 @@ def test_services_preserve_native_mappings_as_separate_yaml_documents(core_reque
             return 0, json.dumps(list(observed.values())).encode()
         assert command == ["orch", "apply", "-i", "-"]
         documents = list(yaml.safe_load_all(data))
-        assert len(documents) == 1 and isinstance(documents[0], dict)
-        value = documents[0]
-        observed[value["service_type"] + ("." + value["service_id"] if value.get("service_id") else "")] = value
+        assert documents and all(isinstance(value, dict) for value in documents)
+        for value in documents:
+            observed[value["service_type"] + ("." + value["service_id"] if value.get("service_id") else "")] = value
         received.append(data)
         return 0, b"Scheduled service update\n"
 
@@ -1194,9 +1194,9 @@ def test_services_preserve_native_mappings_as_separate_yaml_documents(core_reque
     native.recovery_scope = lambda: {"cluster": copy.deepcopy(core_request)}
     native.normalized_services = lambda groups: groups
     assert native.services() == {"changed": True}
-    assert len(received) == 5 and all(value.endswith(b"\n") for value in received)
+    assert len(received) == 1 and all(value.endswith(b"\n") for value in received)
     assert core_request == original
-    documents = [yaml.safe_load(value) for value in received]
+    documents = [document for value in received for document in yaml.safe_load_all(value)]
     sent = [value for value in documents if value["service_type"] != "osd"]
     assert sorted(sent, key=lambda value: value["service_type"]) == sorted(
         [value for value in original["services"] if value["service_type"] != "osd"], key=lambda value: value["service_type"])
@@ -1754,7 +1754,8 @@ class ReadinessTransport:
             return {"name": host["name"], "owned": True, "exists": True}
         if phase == "dashboard":
             return {"changed": True, "private": PASSWORD}
-        assert phase in ("prerequisites", "devices", "tunnel_preflight", "claim", "authorize", "bootstrap", "cache", "enroll", "services", "osd_prepare")
+        assert phase in ("prerequisites", "devices", "tunnel_preflight", "claim", "authorize", "bootstrap", "cache", "enroll", "license",
+                         "services", "osd_prepare")
         return {"changed": phase not in ("prerequisites", "devices", "tunnel_preflight")}
 
 
@@ -1817,12 +1818,12 @@ def test_registry_material_only_reaches_each_hosts_authorization(core_request, m
     if mode == "verified-tunnel":
         calls = [(host, phase) for host, phase, unused in transport.calls]
         enroll = calls.index(("node-1", "enroll"))
-        assert [host for host, phase in calls[:enroll] if phase == "cache"] == ["node-1", "node-2", "node-3"]
+        assert sorted(host for host, phase in calls[:enroll] if phase == "cache") == ["node-1", "node-2", "node-3"]
         assert calls.index(("node-1", "tunnel_mount")) < calls.index(("node-1", "cache"))
         assert transport.devices == identities(core_request)["devices"]
-        assert [host for host, phase in calls if phase == "host_devices"] == ["node-1", "node-2", "node-3"]
+        assert sorted(host for host, phase in calls if phase == "host_devices") == ["node-1", "node-2", "node-3"]
     authorized = [(host, material) for host, phase, material in private_calls if phase == "authorize"]
-    assert [host for host, unused in authorized] == [host["name"] for host in core_request["hosts"]]
+    assert sorted(host for host, unused in authorized) == [host["name"] for host in core_request["hosts"]]
     for unused, material in authorized:
         assert material["registryJSON"] == "protected-registry-material"
         expected = {"clusterPublicKey", "registryJSON"}

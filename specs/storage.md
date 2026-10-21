@@ -367,6 +367,7 @@ links each matrix combination that this table refuses.
 | StorageSMBResource objects whose samba images are not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, that a StorageSMBResource of any resource type names in its `clusterRef` while `ceph.images` does not set both `samba` and `samba_metrics`, and that neither of the two previous rows refuses; `<smb>` is the first such StorageSMBResource in name order, `<name>` is `samba` unless `ceph.images` sets it, else `samba_metrics`, and `<cluster>` the StorageCluster | `StorageSMBResource <smb> needs cephadm's container_image_<name>, and spec.ceph.images.<name> is not set; Bootwright keeps no default` | `set spec.ceph.images.<name> of StorageCluster <cluster> to an image beneath its Entitlement registry, or remove every StorageSMBResource whose spec.clusterRef is <cluster> from the selected Environment` |
 | An auxiliary image that no declared service needs | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, setting `ceph.images.<name>` for an image that no service in `ceph.services` and no StorageSMBResource naming it needs (per the auxiliary image table, with `samba` and `samba_metrics` for a StorageSMBResource) and that none of the three previous rows refuses; `<name>` is the first such name in name order and `<cluster>` the StorageCluster | `spec.ceph.images.<name> is set, but no declared service or StorageSMBResource of StorageCluster <cluster> needs cephadm's container_image_<name>` | `remove spec.ceph.images.<name> from StorageCluster <cluster>` |
 | An NVMe-oF gateway service | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring an `nvmeof` service in `ceph.services`, and that none of the four previous rows refuses; `<service>` is the first such service's qualified name in name order and `<cluster>` the StorageCluster | `Bootwright does not deploy the NVMe-oF gateway service <service> yet` | `remove <service> from spec.ceph.services of StorageCluster <cluster>, together with every StorageNVMeoFSubsystem whose spec.serviceRef names it` |
+| More than six Ceph hosts | a StorageCluster or a StoragePlacementPolicy, StoragePool or StorageClient naming it, whose topology declares more than six nodes | `StorageCluster <cluster> declares <hosts> Ceph hosts, and Bootwright's cluster execution budget covers at most six hosts per cluster` | `declare at most six entries in spec.ceph.topology.nodes of StorageCluster <cluster>; B79 tracks larger clusters` |
 
 ## Bootstrap identity and continuation
 
@@ -592,31 +593,38 @@ its fixed proofs include a manager wait that may run to its 480 s horizon,
 leaving 160 s of the 640 s worker budget, less than one 60 s command per host
 document at six hosts plus a readback. Each enrollment call therefore admits
 hosts in host order only while its remaining worker budget covers 60 s per
-admitted host document plus the batch's readback and, on the batch that
-completes the last host, the license step. It writes the admitted hosts'
+admitted host document plus the batch's readback. It writes the admitted hosts'
 attempt records, submits their documents in one multi-document
 `ceph orch apply -i` whose ceiling is 60 s per document, reads them back once
-and writes their completion records. The controller calls enrollment again
+and writes their completion records. This post-apply readback makes one 60 s
+command; a failed readback continues through the next apply, without repeating
+a proved enrollment. The controller calls enrollment again
 while hosts remain, at most once per host. A call that finds at least one
 request host not yet enrolled, and whose remaining worker budget admits none of
-them, refuses before any effect with a named token coded `lifecycle.unknown`;
+them, refuses before any host attempt or native effect with the named token
+`enrollment-budget`, coded `lifecycle.unknown`;
 the bootstrap host stays `enrolling` and every other host `prepared`, which the
 next apply continues. A call that finds every request host enrolled admits
-none, runs the remaining license step and readback, and completes; on a
+none and completes after readback; on a
 continuing apply that call is its first enrollment call, so it does not raise
-the fresh apply's count of n enrollment calls. The services phase never stops between its first daemon-deploying
+the fresh apply's count of n enrollment calls. A separate license call then
+re-proves every host's enrollment completion before checking or accepting the
+provider license. Its native records and manager retries have their own 640 s
+worker budget and 660 s transport bound: their variable command count cannot
+be reserved as a fixed tail of a host enrollment batch. The services phase
+never stops between its first daemon-deploying
 apply and readiness except on a native failure.
 
 The cluster block's apply deadline is
-(10 rounds + 4 single calls + n enrollment calls + S services calls) × 660 s +
+(10 rounds + 5 single calls + n enrollment calls + S services calls) × 660 s +
 1860 s + 2 × 900 s + 60 s, where n is the host count and S the number of mon,
 mgr, osd and mds services. The ten rounds are the nine above with the bootstrap
-host's cache round; the four single calls are the bootstrap state, tunnel
-configuration, tunnel mount and dashboard calls. Three hosts with mon, mgr and
-one osd service need 20 calls and 16920 s; six hosts with mon, mgr and two osd
-services need 24 calls and 19560 s. Within the 6h0m0s every adapter run is held
-to, six hosts admit at most seven such services (27 calls, 21540 s) and three
-hosts at most ten. A request whose deadline exceeds the ceiling refuses at
+host's cache round; the five single calls are the bootstrap state, tunnel
+configuration, tunnel mount, license and dashboard calls. Three hosts with mon, mgr and
+one osd service need 21 calls and 17580 s; six hosts with mon, mgr and two osd
+services need 25 calls and 20220 s. Within the 6h0m0s every adapter run is held
+to, six hosts admit at most six such services (27 calls, 21540 s) and three
+hosts at most nine. A request whose deadline exceeds the ceiling refuses at
 planning, coded `lifecycle.unsupported`, with reason
 `StorageCluster <cluster> needs a cluster run deadline of <deadline>, past the 6h0m0s every adapter run is held to`
 and remedy
@@ -641,8 +649,8 @@ child blocks, host blocks and service units keep their deadlines; at six hosts
 the ones that grow with the hosts count 9 calls to observe the cluster, 8 to
 destroy it and 15 to apply a block other than the cluster.
 
-Not yet met: clusters of four to six hosts and the per-host rounds; tracked as
-[B688](milestones/m2.md#b688).
+The host bound and concurrent rounds are implemented under
+[B688](milestones/m2.md#b688); its live qualification remains outstanding.
 
 ## Devices and destructive ownership
 

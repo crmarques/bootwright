@@ -16,6 +16,7 @@ import os
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime, ceph_native, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_resources
@@ -808,9 +809,9 @@ def test_enrollment_has_no_host_effect_until_all_current_tunnel_proofs_pass(nati
             assert events[:3] == ["bundle", "config", "mount"]
             return copy.deepcopy(inventory)
         assert args == ("orch", "apply", "-i", "-")
-        value = json.loads(kwargs["data"])
-        events.append(value["hostname"])
-        inventory.append({"hostname": value["hostname"], "addr": value["addr"], "labels": value["labels"]})
+        for value in yaml.safe_load_all(kwargs["data"]):
+            events.append(value["hostname"])
+            inventory.append({"hostname": value["hostname"], "addr": value["addr"], "labels": value["labels"]})
 
     native.ceph = ceph
     native.markers.records["cache-ready.json"] = {"fixture": True}
@@ -854,13 +855,13 @@ def test_service_documents_add_owned_manager_mount_without_mutating_frozen_input
         if args == ("orch", "ls", "--export"):
             return copy.deepcopy(inventory)
         calls.append((args, kwargs))
-        inventory.append(json.loads(kwargs["data"]))
+        inventory.extend(yaml.safe_load_all(kwargs["data"]))
 
     native.ceph = ceph
     native.services(device_rows(native.request))
     assert native.markers.read(ceph_native.DEVICE_IDENTITIES)["devices"] == device_rows(native.request)
     assert calls[0][0] == ("orch", "apply", "-i", "-")
-    documents = [json.loads(kwargs["data"]) for args, kwargs in calls]
+    documents = [value for args, kwargs in calls for value in yaml.safe_load_all(kwargs["data"])]
     manager = next(service for service in documents if service["service_type"] == "mgr")
     assert manager["extra_container_args"] == ["--volume=" + native.markers.path + "/transport:/run/bootwright-ceph-ssh:ro,z"]
     assert native.request["services"] == original

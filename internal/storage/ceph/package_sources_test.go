@@ -222,13 +222,7 @@ func TestEveryCapabilityDeadlineCoversItsFrozenBudgets(t *testing.T) {
 			if operation == "apply" {
 				minimum = time.Duration(hosts+2)*native + convergence + margin
 				if action == "cluster" {
-					minimum += time.Duration(4*hosts+2)*native + time.Duration(2*hosts)*native
-					verified := r
-					verified.ClusterSSHTransport = "verified-tunnel"
-					verifiedDeadline, err := cephDeadline(verified, operation)
-					if err != nil || verifiedDeadline < minimum+2*native || verifiedDeadline > lifecycle.MaxDeadline {
-						t.Fatalf("verified tunnel deadline %s does not cover %s: %v", verifiedDeadline, minimum+2*native, err)
-					}
+					minimum = time.Duration(15+hosts+len(r.Services))*native + 1860*time.Second + 2*convergence + margin
 				}
 			}
 			deadline, err := cephDeadline(r, operation)
@@ -238,6 +232,7 @@ func TestEveryCapabilityDeadlineCoversItsFrozenBudgets(t *testing.T) {
 		}
 	}
 	r.Action = "cluster"
+	r.Hosts = append(r.Hosts, r.Hosts...)
 	r.Hosts = append(r.Hosts, r.Hosts[0])
 	if _, err := cephDeadline(r, "apply"); err == nil {
 		t.Fatal("silently clamped a budget beyond the run ceiling")
