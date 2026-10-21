@@ -269,6 +269,7 @@ Alias cell.
 | [B793](#b793) | new, 2026-10-20 (D173) | product | Add-ons, with Secrets | GitLab backups to object storage and a declared Rails secret, so external data survives a cluster rebuild | Chart keys unverified; backup content is day-2 data custody |
 | [B794](#b794) | new, 2026-10-20 (D173) | product | Add-ons | A program check arm that probes an HTTP endpoint, such as GitLab's readiness path through its Route | A new check arm moves the program version; no M4 package needs it to exit |
 | [B795](#b795) | new, 2026-10-20 (D173) | product | Add-ons, with Secrets | GitLab trusts a declared CA bundle toward its object storage, PostgreSQL and Redis | The chart's custom-CA and TLS keys are unverified; the profile reaches its services without a private CA |
+| [B797](#b797) | new, 2026-10-21 (X56) | product | Storage | A StorageObjectBucket's declared policy changes after completion | A completed bucket refuses `object-bucket-identity` on a changed policy; a day-2 update is a state-contract change no milestone needs |
 
 ### B82
 
@@ -2913,6 +2914,20 @@ authorities, and TLS settings toward PostgreSQL (`global.psql.ssl`) and Redis
 unverified). Parked on 2026-10-20 (D173): the profile reaches its services
 without a private CA. **Revive when** an operator's PostgreSQL, Redis or
 object storage sits behind a private CA.
+
+### B797
+
+A StorageObjectBucket whose declared `policy` changes after its block
+completed refuses `object-bucket-identity` today, and the operator puts the
+new policy by hand outside Bootwright. Outcome: a day-2 policy update applied
+through PutBucketPolicy with the same pinning and custody as the first put, the
+owner's key pair read into the worker's memory only and a daemon sent nothing
+unless it serves the bound leaf. The same treatment is considered for a
+StorageObjectUser display-name change, which refuses `object-user-identity`
+today. Parked on 2026-10-21 (X56): a day-2 change to a completed resource is a
+state-contract change, and no milestone needs one. **Revive when** an operator
+asks to change a bucket policy or a user display name without retiring the
+context.
 
 ## Retired
 
