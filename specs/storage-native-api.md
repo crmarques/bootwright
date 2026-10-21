@@ -508,7 +508,7 @@ alongside it.
 | Member | Rule |
 | --- | --- |
 | `pool` | Required: the `metadata.name` of a same-cluster replicated StoragePool with role `rbd`. cephadm refuses to deploy a gateway whose pool is absent and does not retry ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/nvmeof.py#L28-L39)); the gateway keeps its state in omap there, which an erasure-coded pool does not support. |
-| `group` | Required, `[A-Za-z0-9][A-Za-z0-9_.-]*`. `(pool, group)` is unique among the cluster's nvmeof services. |
+| `group` | Required, `[A-Za-z0-9][A-Za-z0-9_.-]*`: cephadm accepts an empty group, but Bootwright requires a named one. `(pool, group)` is unique among the cluster's nvmeof services. |
 | `port`, `discovery_port` | Optional, 1-65535; omitted, the gateway uses 5500 and 8009. |
 | `transports` | Optional; only `tcp`, the one value the native validation admits. |
 | `enable_auth` | Optional; `true` refuses: gateway mTLS is not supported by Bootwright yet. |

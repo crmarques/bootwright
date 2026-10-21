@@ -110,7 +110,7 @@ func TestServiceIDTableMatchesCephadmRequiresServiceID(t *testing.T) {
 func TestUnimplementedServiceRemedyNamesImplementedTypes(t *testing.T) {
 	cluster, catalog := withMDSService(t, fixtureCatalog(), m("service_type", "example-family", "placement", m("label", "mgr")))
 	found := issuesAt(Validate(cluster, catalog), "$.spec.ceph.services[3].service_type")
-	if len(found) != 1 || found[0].Remediation != "select an implemented MON, MGR, OSD, MDS, RGW, ingress, NFS, NVMe-oF, Prometheus, Alertmanager, Grafana, node-exporter, ceph-exporter, SNMP gateway, management gateway, oauth2-proxy, Loki, Alloy, Promtail or RBD mirror service, or wait for its owning service slice" {
+	if len(found) != 1 || found[0].Remediation != "select an implemented MON, MGR, OSD, MDS, RGW, ingress, NFS, Prometheus, Alertmanager, Grafana, node-exporter, ceph-exporter, SNMP gateway, management gateway, oauth2-proxy, Loki, Alloy, Promtail or RBD mirror service, or wait for its owning service slice" {
 		t.Fatalf("unimplemented family remedy: %#v", found)
 	}
 }

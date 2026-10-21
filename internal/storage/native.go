@@ -301,6 +301,7 @@ type nativeServiceType struct {
 	serviceID      serviceIDRule
 	noLeadingDigit bool
 	core           bool
+	unplanned      bool
 }
 
 var nativeServiceTypes = []nativeServiceType{
@@ -311,7 +312,7 @@ var nativeServiceTypes = []nativeServiceType{
 	{name: "rgw", label: "RGW", serviceID: serviceIDNative},
 	{name: "ingress", label: "ingress", serviceID: serviceIDNative},
 	{name: "nfs", label: "NFS", serviceID: serviceIDNative},
-	{name: "nvmeof", label: "NVMe-oF", serviceID: serviceIDNative},
+	{name: "nvmeof", label: "NVMe-oF", serviceID: serviceIDNative, unplanned: true},
 	{name: "prometheus", label: "Prometheus", serviceID: serviceIDForbidden},
 	{name: "alertmanager", label: "Alertmanager", serviceID: serviceIDForbidden},
 	{name: "grafana", label: "Grafana", serviceID: serviceIDForbidden},
@@ -353,7 +354,9 @@ func nativeServiceTypeOf(name string) (nativeServiceType, bool) {
 func implementedServiceRemedy() string {
 	labels := make([]string, 0, len(nativeServiceTypes))
 	for _, row := range nativeServiceTypes {
-		labels = append(labels, row.label)
+		if !row.unplanned {
+			labels = append(labels, row.label)
+		}
 	}
 	last := len(labels) - 1
 	return "select an implemented " + strings.Join(labels[:last], ", ") + " or " + labels[last] + " service, or wait for its owning service slice"

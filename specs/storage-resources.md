@@ -1024,7 +1024,7 @@ refuses every selected subsystem before any effect.
 | --- | --- |
 | `clusterRef` | Required managed StorageCluster. |
 | `serviceRef` | Required qualified native name `nvmeof.<service_id>` of a declared nvmeof service of that cluster; an absent or other-type target is a field error. It fixes the gateway pool and group. |
-| `nqn` | Required subsystem NQN: `nqn.yyyy-mm.<reverse domain>:<name>` or `nqn.2014-08.org.nvmexpress:uuid:<UUID>`, 11 to 223 printable ASCII characters, never the discovery NQN; unique among the cluster's subsystems. |
+| `nqn` | Required subsystem NQN: `nqn.yyyy-mm.<reverse domain>:<name>` or `nqn.2014-08.org.nvmexpress:uuid:<UUID>`, 11 to 223 printable ASCII characters, never the discovery NQN; unique among the cluster's subsystems, which is stricter than the gateway's per-group scope because an initiator identifies a subsystem by its NQN alone. |
 | `listeners` | Required set keyed by `host`, a topology node name, with optional `trsvcid`. The hosts are exactly the hosts the service places gateways on: a gateway serves only the namespaces of the load-balancing groups it owns, so a namespace is reachable only through a listener on its owning gateway ([upstream](https://github.com/ceph/ceph-nvmeof/blob/tentacle_9.0_base/control/grpc.py#L5040-L5080)). `trsvcid` is 4420 when given, the one listener port cephadm reserves and opens on a gateway host. |
 | `hosts` | Required nonempty set of initiator host NQNs, in the `nqn` grammar; `*`, which would let any host connect, refuses. |
 | `namespaces` | Required nonempty set keyed by `nsid` (an NVMe namespace ID, 1 to 4294967294), each with a required `imageRef` naming a StorageRBDImage of the same cluster. An image backs at most one namespace across every subsystem. |
