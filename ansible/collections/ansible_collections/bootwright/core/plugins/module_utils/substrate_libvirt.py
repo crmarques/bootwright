@@ -413,8 +413,8 @@ def domain_metadata(runner, uri, name, context="", machine="", uuid="", disks=No
         "owned": owned,
         "uuid": observed,
     }
-    if disks and any(d.get("media") == "ssd" for d in disks):
-        result["diskMedia"] = {disk["name"]: disk_media(root, disk) for disk in disks if disk.get("media") == "ssd"}
+    if disks and any(d.get("media") in ("ssd", "hdd") for d in disks):
+        result["diskMedia"] = {disk["name"]: disk_media(root, disk) for disk in disks if disk.get("media") in ("ssd", "hdd")}
     return result
 
 
@@ -435,7 +435,7 @@ def domain_disk_bindings(root, disks):
     observed = root.findall("./devices/disk[@device='disk']")
     if len(observed) != len(disks):
         return False
-    if any(disk.get("media") == "ssd" for disk in disks):
+    if any(disk.get("media") in ("ssd", "hdd") for disk in disks):
         addresses = []
         for item in root.findall("./devices/disk"):
             target, address = item.find("target"), item.find("address")
@@ -455,8 +455,9 @@ def domain_disk_bindings(root, disks):
             return False
         if (item.findtext("serial") or "") != disk.get("serial", ""):
             return False
-        if disk.get("media") == "ssd":
-            if disk.get("bus") != "scsi" or disk.get("rotationRate") != 1 or target.get("rotation_rate") != "1":
+        if disk.get("media") in ("ssd", "hdd"):
+            rate = 1 if disk["media"] == "ssd" else 7200
+            if disk.get("bus") != "scsi" or disk.get("rotationRate") != rate or target.get("rotation_rate") != str(rate):
                 return False
             controllers = root.findall("./devices/controller[@type='scsi'][@index='0']")
             address = item.find("address")
@@ -681,7 +682,7 @@ def observe_machine(runner, request, read=None):
             "present": os.path.lexists(disk["path"]),
             "sizeGiB": disk_size_gib(runner, disk["path"]),
         }
-        if disk.get("media") == "ssd" and disk["name"] in metadata.get("diskMedia", {}):
+        if disk.get("media") in ("ssd", "hdd") and disk["name"] in metadata.get("diskMedia", {}):
             entry.update(metadata["diskMedia"][disk["name"]])
         disks.append(entry)
     return {

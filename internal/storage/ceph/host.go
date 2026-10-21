@@ -17,7 +17,7 @@ import (
 )
 
 const HostImplementation = "storage-ceph-host-v1"
-const HostVersion = "ceph-host-v5"
+const HostVersion = "ceph-host-v6"
 const HostEvidenceVersion = "ceph-host-evidence-v2"
 const SharedLabel = "system_u:object_r:container_file_t:s0"
 const maxHostEvidence = 16384

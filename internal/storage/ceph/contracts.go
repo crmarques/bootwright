@@ -63,7 +63,7 @@ func Supported(release, packageVersion, ansibleVersion, base, version, transport
 }
 
 type DependencyProofs interface {
-	DataDisk(reconciliation.Block, []byte, string, string, int64) bool
+	DataDisk(reconciliation.Block, []byte, string, string, int64, bool) bool
 	HostKey([]lifecycle.BlockEvidence, string, string) (trust.HostKey, error)
 	PackageTree([]lifecycle.BlockEvidence, string) (PackageTree, error)
 }

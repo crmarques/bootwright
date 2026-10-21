@@ -34,7 +34,7 @@ func TestProvedDataDiskRequiresFrozenOwnedVolume(t *testing.T) {
 	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Kind: MachineKind, Object: request.Identity.Object, Implementation: MachineImplementation, Request: canonical}, RequestDigest: digest}
 	data := request.Disks[len(request.Disks)-1]
 	evidence := machineEvidence(request, digest)
-	if !ProvedDataDisk(block, evidence, "/dev/vdb", data.Serial, 80<<30) {
+	if !ProvedDataDisk(block, evidence, "/dev/vdb", data.Serial, 80<<30, false) {
 		t.Fatal("original frozen owned data volume was refused")
 	}
 	for name, damage := range map[string]func(*reconciliation.Block, *[]byte, *string, *string, *int64){
@@ -70,7 +70,7 @@ func TestProvedDataDiskRequiresFrozenOwnedVolume(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			b, e, path, serial, size := block, []byte(evidence), "/dev/vdb", data.Serial, int64(80<<30)
 			damage(&b, &e, &path, &serial, &size)
-			if ProvedDataDisk(b, e, path, serial, size) {
+			if ProvedDataDisk(b, e, path, serial, size, false) {
 				t.Fatal("missing or mismatched original volume proof was accepted")
 			}
 		})
@@ -84,7 +84,7 @@ func TestProvedDataDiskRequiresFrozenOwnedVolume(t *testing.T) {
 	}
 	hash = sha256.Sum256(block.Request)
 	block.RequestDigest = hex.EncodeToString(hash[:])
-	if ProvedDataDisk(block, machineEvidence(root, block.RequestDigest), "/dev/vda", "root-serial", 60<<30) {
+	if ProvedDataDisk(block, machineEvidence(root, block.RequestDigest), "/dev/vda", "root-serial", 60<<30, false) {
 		t.Fatal("root volume was accepted as an OSD data volume")
 	}
 }

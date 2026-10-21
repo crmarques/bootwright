@@ -35,8 +35,8 @@
     <disk type="file" device="disk">
       <driver name="qemu" type="qcow2" discard="unmap"/>
       <source file="{{ disk.path }}"/>
-{% if disk.media | default('') == 'ssd' %}
-      <target dev="{{ disk.target }}" bus="scsi" rotation_rate="1"/>
+{% if disk.media | default('') in ['ssd', 'hdd'] %}
+      <target dev="{{ disk.target }}" bus="scsi" rotation_rate="{{ disk.rotationRate }}"/>
       <address type="drive" controller="0" bus="0" target="0" unit="{{ scsi.unit }}"/>
 {% set scsi.unit = scsi.unit + 1 %}
 {% else %}

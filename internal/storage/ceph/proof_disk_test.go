@@ -16,13 +16,16 @@ func originalDiskProof(t *testing.T, host Host) lifecycle.BlockEvidence {
 	t.Helper()
 	disk := host.Devices[0]
 	request := libvirt.MachineRequest{
-		Version: "machine-libvirt-v6", Identity: libvirt.Identity{Context: "original", Object: host.Machine},
+		Version: "machine-libvirt-v7", Identity: libvirt.Identity{Context: "original", Object: host.Machine},
 		Domain: "owned-" + host.Machine, UUID: "12345678-1234-5678-1234-123456789abc",
 		Controller: libvirt.Controller{Image: "registry.example.test/emulator@sha256:" + strings.Repeat("a", 64)},
 		Disks:      []libvirt.Disk{{Name: "root", Target: "vda", SizeGiB: 60}, {Name: "data", Target: "vdb", Serial: disk.Serial, SizeGiB: int(disk.SizeBytes >> 30)}},
 	}
 	if disk.Path == "/dev/sda" {
 		request.Disks[1].Bus, request.Disks[1].Media, request.Disks[1].RotationRate, request.Disks[1].Target = "scsi", "ssd", 1, "sda"
+	}
+	if disk.Rotational {
+		request.Disks[1].Media, request.Disks[1].RotationRate = "hdd", 7200
 	}
 	canonical, err := request.Canonical()
 	if err != nil {
@@ -33,6 +36,9 @@ func originalDiskProof(t *testing.T, host Host) lifecycle.BlockEvidence {
 	diskEvidence := libvirt.DiskEvidence{Name: "data", Present: true, SizeGiB: int(disk.SizeBytes >> 30)}
 	if disk.Path == "/dev/sda" {
 		diskEvidence.Bus, diskEvidence.Target, diskEvidence.RotationRate = "scsi", "sda", 1
+	}
+	if disk.Rotational {
+		diskEvidence.RotationRate = 7200
 	}
 	evidence, err := json.Marshal(libvirt.MachineEvidence{
 		Request: digest, Domain: request.Domain, Owned: true, Postcondition: true,
@@ -113,5 +119,21 @@ func TestMissingDependencyProofReadersRefuse(t *testing.T) {
 	host.HostKeyRef = ""
 	if _, err := provedHostKey(host, lifecycle.Execution{}, nil); err == nil {
 		t.Fatal("missing host-key reader accepted")
+	}
+}
+
+func TestOSDDiskCustodyBindsRotationalIdentity(t *testing.T) {
+	r := coreRequest()
+	for i := range r.Hosts {
+		r.Hosts[i].Devices[0].Path = "/dev/sda"
+		r.Hosts[i].Devices[0].Rotational = true
+	}
+	e := diskProofExecution(t, r)
+	if err := proveDisks(e, r, dependencyProofs{}); err != nil {
+		t.Fatal(err)
+	}
+	r.Hosts[0].Devices[0].Rotational = false
+	if proveDisks(e, r, dependencyProofs{}) == nil {
+		t.Fatal("rotational identity changed after original apply")
 	}
 }

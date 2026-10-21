@@ -22,6 +22,7 @@ func projectServices(r *Request, cluster api.Object) error {
 	slices.SortStableFunc(services, func(left, right api.Value) int {
 		return cmp.Or(cmp.Compare(rank(left), rank(right)), strings.Compare(storage.NativeServiceName(left), storage.NativeServiceName(right)))
 	})
+	allocated := map[string]bool{}
 	for _, svc := range services {
 		t := svc.Get("service_type").Text()
 		if slices.Contains(delegatedFamilies, t) || slices.Contains(MonitoringTypes, t) || slices.Contains(GatewayTypes, t) || slices.Contains(MirrorTypes, t) {
@@ -71,7 +72,22 @@ func projectServices(r *Request, cluster api.Object) error {
 			if err := checkDevices(*r, names, cluster, svc); err != nil {
 				return err
 			}
-			projected.Spec = &nativeOSD{DataDevices: nativeDevices{Paths: svc.Get("spec", "data_devices", "paths").Strings()}}
+			projected.Spec = &nativeOSD{DataDevices: nativeDevices{Paths: svc.Get("spec", "data_devices", "paths").Strings()}, Encrypted: svc.Get("spec", "encrypted").Bool(), TPM2: svc.Get("spec", "tpm2").Bool()}
+			if svc.Get("spec").Has("db_devices") {
+				projected.Spec.DBDevices = &nativeDevices{Paths: svc.Get("spec", "db_devices", "paths").Strings()}
+			}
+			if svc.Get("spec").Has("wal_devices") {
+				projected.Spec.WALDevices = &nativeDevices{Paths: svc.Get("spec", "wal_devices", "paths").Strings()}
+			}
+			for _, host := range hosts {
+				for _, path := range osdPaths(projected.Spec, false) {
+					key := host + "\x00" + path
+					if allocated[key] {
+						return failure("api.invariant", "OSD services select overlapping data, DB or WAL devices", "select distinct explicit devices for each service on a host")
+					}
+					allocated[key] = true
+				}
+			}
 		case "mds":
 			if svc.Get("spec").Len() != 0 || !svc.Get("service_id").Present() {
 				return failure("lifecycle.unsupported", "core MDS services carry only service_id and placement", "declare the MDS service with its service_id and placement and no spec")

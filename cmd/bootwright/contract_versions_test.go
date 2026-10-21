@@ -154,7 +154,7 @@ func automationFormats() map[string]automationFormat {
 		// The guest package transaction policy ceph_packages.transaction_request builds and the shared resolver reads within one run.
 		"ceph-packages-v2": {class: formatTransient},
 
-		"ceph-host-v5":                {class: formatMirrored},
+		"ceph-host-v6":                {class: formatMirrored},
 		"ceph-host-evidence-v2":       {class: formatMirrored},
 		"ceph-core-v30":               {class: formatMirrored},
 		"ceph-core-evidence-v11":      {class: formatMirrored},
@@ -165,7 +165,7 @@ func automationFormats() map[string]automationFormat {
 		"os-package-tree-evidence-v1": {class: formatMirrored},
 		// The request versions each role refuses unless its request names.
 		"substrate-host-libvirt-v5": {class: formatMirrored},
-		"machine-libvirt-v6":        {class: formatMirrored},
+		"machine-libvirt-v7":        {class: formatMirrored},
 		"machine-baremetal-v2":      {class: formatMirrored},
 		"os-package-tree-v1":        {class: formatMirrored},
 		"os-install-anaconda-v15":   {class: formatMirrored},

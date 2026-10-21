@@ -143,7 +143,7 @@ IMAGE = {
 }
 
 HOST = {"cluster": {key: value for key, value in CORE.items() if key not in ("action", "delegated", "gateway", "service", "settings")},
-        "host": "node-1", "version": "ceph-host-v5"}
+        "host": "node-1", "version": "ceph-host-v6"}
 
 SMB = {
     "bindings": [],

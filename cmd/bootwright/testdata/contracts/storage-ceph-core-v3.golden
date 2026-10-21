@@ -67,6 +67,7 @@ request-schema:
   hosts[].address string
   hosts[].devices []struct ceph.Device
   hosts[].devices[].path string
+  hosts[].devices[].rotational bool omitempty
   hosts[].devices[].serial string
   hosts[].devices[].sizeBytes int64
   hosts[].hostKeyRef string omitempty

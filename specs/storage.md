@@ -662,6 +662,20 @@ them to the same authorization. The capability re-proves identity and ownership
 immediately before use, including data, DB and WAL devices and every intended
 shared-device allocation.
 
+The bounded core profile accepts explicit `data_devices.paths`, optional
+`db_devices.paths` and `wal_devices.paths`, `encrypted` and `tpm2`, with one
+OSD per data device. All selected paths are distinct within a drive group and
+across services on a host; dynamic selectors, slots and sizes remain
+unsupported. TPM2 requires encryption and a declared TPM profile. Omitted
+options retain native BlueStore defaults. Any nonempty or partial DB/WAL
+device refuses before submission; [B662](milestones/backlog.md#b662) owns recovery. Encryption keys remain
+in Ceph's store and are never read or exported by Bootwright.
+
+P1's HDD-data/SSD-DB prerequisite is bounded to declared libvirt `media: hdd`
+and `media: ssd` disks. The frozen request binds rotational identity as well
+as path, serial and size; the original Machine proof and host runtime must
+agree. This proves virtual presentation, with no physical qualification claim.
+
 Live checks exclude the OS root device and its backing devices, boot media,
 mounted filesystems, swap, foreign signatures, foreign OSDs and devices owned by
 another operation. Path spelling and native “available” status alone are

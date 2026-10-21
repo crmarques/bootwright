@@ -19,9 +19,10 @@ const Version = "ceph-core-v30"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
-	Path      string `json:"path"`
-	Serial    string `json:"serial"`
-	SizeBytes int64  `json:"sizeBytes"`
+	Path       string `json:"path"`
+	Rotational bool   `json:"rotational,omitempty"`
+	Serial     string `json:"serial"`
+	SizeBytes  int64  `json:"sizeBytes"`
 }
 
 type Host struct {
@@ -164,7 +165,11 @@ type nativeDevices struct {
 	Paths []string `json:"paths"`
 }
 type nativeOSD struct {
-	DataDevices nativeDevices `json:"data_devices"`
+	DataDevices nativeDevices  `json:"data_devices"`
+	DBDevices   *nativeDevices `json:"db_devices,omitempty"`
+	Encrypted   bool           `json:"encrypted,omitempty"`
+	TPM2        bool           `json:"tpm2,omitempty"`
+	WALDevices  *nativeDevices `json:"wal_devices,omitempty"`
 }
 type nativeService struct {
 	Placement   nativePlacement `json:"placement"`
@@ -391,7 +396,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 		}
 		for i, disk := range dataDisks {
 			size, _ := disk.Get("sizeGiB").Int64()
-			h.Devices = append(h.Devices, Device{Path: "/dev/" + presentations[i].Target, Serial: substrate.DataDiskSerial(contextName, m.Name(), disk.Get("name").Text()), SizeBytes: size << 30})
+			h.Devices = append(h.Devices, Device{Path: "/dev/" + presentations[i].Target, Serial: substrate.DataDiskSerial(contextName, m.Name(), disk.Get("name").Text()), SizeBytes: size << 30, Rotational: presentations[i].Media == "hdd"})
 		}
 		r.Hosts = append(r.Hosts, h)
 		addressRef := spec.Get("cephadm", "addressRef").Text()
@@ -477,7 +482,7 @@ func selectDevices(r *Request) {
 			if selected[host] == nil {
 				selected[host] = map[string]bool{}
 			}
-			for _, path := range svc.Spec.DataDevices.Paths {
+			for _, path := range osdPaths(svc.Spec, false) {
 				selected[host][path] = true
 			}
 		}
@@ -495,13 +500,33 @@ func selectDevices(r *Request) {
 
 func checkDevices(r Request, names []string, cluster api.Object, service api.Value) error {
 	for _, field := range service.Get("spec").Fields() {
-		if field.Name != "data_devices" {
-			return failure("lifecycle.unsupported", "an OSD allocation option is not modeled by the core adapter", "use only explicit data paths; the core profile uses native bluestore defaults")
+		if !slices.Contains([]string{"data_devices", "db_devices", "wal_devices", "encrypted", "tpm2", "osds_per_device"}, field.Name) {
+			return failure("lifecycle.unsupported", "an OSD allocation option is not modeled by the core adapter", "use explicit data, DB and WAL paths and one OSD per data disk")
 		}
 	}
-	selector := service.Get("spec", "data_devices")
-	if !selector.Has("paths") || selector.Len() != 1 || service.Get("spec").Has("db_devices") || service.Get("spec").Has("wal_devices") || service.Get("spec", "encrypted").Bool() || service.Get("spec", "osds_per_device").Present() && service.Get("spec", "osds_per_device").Text() != "1" {
-		return failure("lifecycle.unsupported", "core OSDs require explicit owned virtual data paths without additional allocation options", "use data_devices.paths and one unencrypted OSD per dedicated data disk")
+	if service.Get("spec", "osds_per_device").Present() && service.Get("spec", "osds_per_device").Text() != "1" {
+		return failure("lifecycle.unsupported", "core OSDs require one OSD per data device", "omit osds_per_device or set it to 1")
+	}
+	if service.Get("spec", "tpm2").Bool() && !service.Get("spec", "encrypted").Bool() {
+		return failure("api.invariant", "TPM2 OSDs require encryption", "set encrypted: true")
+	}
+	paths := []api.Value{}
+	for _, field := range []string{"data_devices", "db_devices", "wal_devices"} {
+		selector := service.Get("spec", field)
+		if field != "data_devices" && !selector.Present() {
+			continue
+		}
+		if !selector.Has("paths") || selector.Len() != 1 || len(selector.Get("paths").Items()) == 0 {
+			return failure("lifecycle.unsupported", "core OSDs require explicit device paths", "use nonempty data_devices.paths, db_devices.paths and wal_devices.paths without filters")
+		}
+		paths = append(paths, selector.Get("paths").Items()...)
+	}
+	seenPaths := map[string]bool{}
+	for _, path := range paths {
+		if seenPaths[path.Text()] {
+			return failure("api.invariant", "OSD data, DB and WAL paths overlap", "select distinct explicit devices for every OSD allocation")
+		}
+		seenPaths[path.Text()] = true
 	}
 	count, hasCount := service.Get("placement", "count").Int64()
 	if hasCount && count != int64(len(names)) {
@@ -514,9 +539,9 @@ func checkDevices(r Request, names []string, cluster api.Object, service api.Val
 				native = storage.NativeHostname(node)
 			}
 		}
-		for _, path := range selector.Get("paths").Items() {
+		for _, path := range paths {
 			if path.Type() != api.String {
-				return failure("lifecycle.unsupported", "core OSD paths must be plain device strings", "use plain owned data-disk paths: /dev/sd* for SSD-media disks, /dev/vd* otherwise")
+				return failure("lifecycle.unsupported", "core OSD paths must be plain device strings", "use plain owned data-disk paths: /dev/sd* for explicit-media disks, /dev/vd* otherwise")
 			}
 			p := path.Text()
 			found := false
@@ -539,4 +564,32 @@ func checkDevices(r Request, names []string, cluster api.Object, service api.Val
 
 func hostRequirement(host Host) reconciliation.ObjectRef {
 	return reconciliation.ObjectRef{Kind: string(api.Machine), Object: host.Machine}
+}
+
+func osdPaths(spec *nativeOSD, dataOnly bool) []string {
+	paths := append([]string(nil), spec.DataDevices.Paths...)
+	if !dataOnly {
+		for _, devices := range []*nativeDevices{spec.DBDevices, spec.WALDevices} {
+			if devices != nil {
+				paths = append(paths, devices.Paths...)
+			}
+		}
+	}
+	return paths
+}
+
+func dataDeviceSet(r Request) map[string]bool {
+	selected := map[string]bool{}
+	for _, raw := range r.Services {
+		service, err := reconciliation.DecodeEvidence[nativeService](raw, 60*1024, "Ceph native service")
+		if err != nil || service.ServiceType != "osd" || service.Spec == nil {
+			continue
+		}
+		for _, host := range service.Placement.Hosts {
+			for _, path := range osdPaths(service.Spec, true) {
+				selected[host+"\x00"+path] = true
+			}
+		}
+	}
+	return selected
 }

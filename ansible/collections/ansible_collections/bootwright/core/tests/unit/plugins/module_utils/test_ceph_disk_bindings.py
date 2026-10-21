@@ -73,3 +73,11 @@ def test_optical_media_uses_separate_scsi_unit_and_cannot_redirect_data():
     root = ElementTree.fromstring(xml.replace('</devices>', media + '</devices>'))
     assert domain_disk_bindings(root, disks)
     assert not domain_disk_bindings(ElementTree.fromstring(xml.replace('</devices>', media.replace('unit="1"', 'unit="0"') + '</devices>')), disks)
+
+
+@pytest.mark.parametrize("rate", [1, 0, 7201, 7200])
+def test_hdd_presentation_requires_its_frozen_rotation(rate):
+    xml, disks = ssd_domain()
+    disks[1].update(media="hdd", rotationRate=7200)
+    root = ElementTree.fromstring(xml.replace('rotation_rate="1"', 'rotation_rate="%s"' % rate))
+    assert domain_disk_bindings(root, disks) is (rate == 7200)

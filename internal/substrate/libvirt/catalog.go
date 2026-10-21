@@ -56,7 +56,7 @@ const domainOff = "shut off"
 
 const (
 	hostRequestVersion    = "substrate-host-libvirt-v5"
-	machineRequestVersion = "machine-libvirt-v6"
+	machineRequestVersion = "machine-libvirt-v7"
 )
 
 // HostBlockID and MachineBlockID name the blocks each capability contributes.

@@ -1,0 +1,197 @@
+{
+  "action": "cluster",
+  "ansiblePackageVersion": "",
+  "bootstrap": "node-1",
+  "callHome": "",
+  "cephadm": {
+    "packageVersion": "",
+    "path": ""
+  },
+  "cluster": "example",
+  "clusterKeyRef": "cluster-key",
+  "clusterNetworks": null,
+  "clusterSSHTransport": "native",
+  "clusterSSHUser": "",
+  "controller": "controller",
+  "hosts": [
+    {
+      "address": "192.0.2.1",
+      "devices": [
+        {
+          "path": "/dev/sda",
+          "rotational": true,
+          "serial": "node-1",
+          "sizeBytes": 1073741824
+        },
+        {
+          "path": "/dev/sdb",
+          "serial": "node-1-db",
+          "sizeBytes": 1073741824
+        },
+        {
+          "path": "/dev/sdc",
+          "serial": "node-1-wal",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "hostKeyRef": "node-1-host-key",
+      "labels": null,
+      "location": null,
+      "machine": "node-1",
+      "name": "node-1",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    },
+    {
+      "address": "192.0.2.2",
+      "devices": [
+        {
+          "path": "/dev/sda",
+          "rotational": true,
+          "serial": "node-2",
+          "sizeBytes": 1073741824
+        },
+        {
+          "path": "/dev/sdb",
+          "serial": "node-2-db",
+          "sizeBytes": 1073741824
+        },
+        {
+          "path": "/dev/sdc",
+          "serial": "node-2-wal",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "hostKeyRef": "node-2-host-key",
+      "labels": null,
+      "location": null,
+      "machine": "node-2",
+      "name": "node-2",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    },
+    {
+      "address": "192.0.2.3",
+      "devices": [
+        {
+          "path": "/dev/sda",
+          "rotational": true,
+          "serial": "node-3",
+          "sizeBytes": 1073741824
+        },
+        {
+          "path": "/dev/sdb",
+          "serial": "node-3-db",
+          "sizeBytes": 1073741824
+        },
+        {
+          "path": "/dev/sdc",
+          "serial": "node-3-wal",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "hostKeyRef": "node-3-host-key",
+      "labels": null,
+      "location": null,
+      "machine": "node-3",
+      "name": "node-3",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    }
+  ],
+  "image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
+  "monIP": "",
+  "packageRepository": "",
+  "packages": {
+    "licenseAccepted": true,
+    "sources": [
+      {
+        "certificateRef": "serving-tls",
+        "host": "node-1",
+        "media": "rhel-dvd.iso",
+        "profile": "rhel",
+        "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+        "url": "https://192.0.2.10:8443/os/rhel/tree"
+      },
+      {
+        "certificateRef": "serving-tls",
+        "host": "node-2",
+        "media": "rhel-dvd.iso",
+        "profile": "rhel",
+        "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+        "url": "https://192.0.2.10:8443/os/rhel/tree"
+      },
+      {
+        "certificateRef": "serving-tls",
+        "host": "node-3",
+        "media": "rhel-dvd.iso",
+        "profile": "rhel",
+        "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+        "url": "https://192.0.2.10:8443/os/rhel/tree"
+      }
+    ],
+    "version": "ceph-packages-v3"
+  },
+  "publicNetworks": null,
+  "registry": "cp.icr.io",
+  "registryRef": "registry",
+  "release": "",
+  "services": [
+    {
+      "placement": {
+        "count": 3,
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_type": "mon"
+    },
+    {
+      "placement": {
+        "count": 2,
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_type": "mgr"
+    },
+    {
+      "placement": {
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_id": "data",
+      "service_type": "osd",
+      "spec": {
+        "data_devices": {
+          "paths": [
+            "/dev/sda"
+          ]
+        },
+        "db_devices": {
+          "paths": [
+            "/dev/sdb"
+          ]
+        },
+        "encrypted": true,
+        "tpm2": true,
+        "wal_devices": {
+          "paths": [
+            "/dev/sdc"
+          ]
+        }
+      }
+    }
+  ],
+  "version": "ceph-core-v28"
+}

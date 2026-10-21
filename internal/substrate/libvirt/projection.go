@@ -121,6 +121,8 @@ func dataDiskItem(disk DiskEvidence) api.Value {
 	}
 	if disk.RotationRate == 1 {
 		fields = append(fields, api.FieldValue{Name: "media", Value: api.StringValue("ssd")})
+	} else if disk.RotationRate == 7200 {
+		fields = append(fields, api.FieldValue{Name: "media", Value: api.StringValue("hdd")})
 	}
 	return api.MapValue(fields...)
 }

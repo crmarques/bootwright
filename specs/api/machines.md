@@ -135,7 +135,7 @@ shape; the vSphere-only `template` and `failureDomainRef` fields belong to the
 | `memoryMiB` | integer | no | `0` | `0..16777216` (16 TiB); greater than zero for libvirt and vSphere. |
 | `diskGiB` | integer | no | `0` | `0..65536` (64 TiB); greater than zero for libvirt and vSphere. |
 | `dataDisks` | array | no | `[]` | Libvirt/vSphere only; set keyed by a required `name`, a DNS label, with `sizeGiB` `1..65536`. A libvirt profile declares at most 7 data disks and none named `root`, which names the root disk. |
-| `dataDisks[].media` | string | no | omitted | Libvirt only: the sole admitted value is `ssd`. Explicit SSD disks use virtio-SCSI, nonrotational `rotation_rate=1` and successive `sda` through `sdg` targets. Omission preserves virtio-blk, with successive `vdb` through `vdh` targets among unmarked disks. Empty, null and other values refuse. The root remains `vda`. |
+| `dataDisks[].media` | string | no | omitted | Libvirt only: admitted values are `ssd` and `hdd`. Explicit media disks use virtio-SCSI and successive `sda` through `sdg` targets; SSD uses nonrotational `rotation_rate=1`, HDD uses `rotation_rate=7200`. Omission preserves virtio-blk, with successive `vdb` through `vdh` targets among unmarked disks. Empty, null and other values refuse. The root remains `vda`. |
 | `tpm` | object | no | — | Libvirt/KubeVirt only; its presence requests TPM 2.0. |
 | `tpm.persistent` | boolean | KubeVirt only | `true` | Forbidden for libvirt, whose emulated TPM state is already persistent. |
 

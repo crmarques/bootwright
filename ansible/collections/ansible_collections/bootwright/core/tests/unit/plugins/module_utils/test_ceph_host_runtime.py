@@ -1407,3 +1407,16 @@ def test_profile_passes_the_bound_bundle_to_every_broker(request_value, tmp_path
     assert [argv[-1] for argv in images.calls if argv[:2] == ["/usr/bin/podman", "pull"]] == [IMAGE, HAPROXY, KEEPALIVED]
     assert [(broker.image, broker.trust) for broker in auxiliary_brokers] == [(None, BUNDLE), (HAPROXY, BUNDLE), (KEEPALIVED, BUNDLE)]
     assert all(BUNDLE not in str(argv) for argv in images.calls) and all(BUNDLE not in str(value) for value in images.environments)
+
+
+@pytest.mark.parametrize("observed", [True, False, None, "1", 2])
+def test_rotational_media_identity_is_frozen(request_value, tmp_path, monkeypatch, observed):
+    monkeypatch.setattr(runtime.os.path, "realpath", lambda path: path)
+    request_value["hosts"][0]["devices"][0]["rotational"] = True
+    worker, unused, unused_clock = host_runtime(request_value, tmp_path, lambda argv, timeout, limit: (0, lsblk(rota=observed)))
+    device = request_value["hosts"][0]["devices"][0]
+    if observed is True:
+        assert worker.block_device(device)["rotational"] == 1
+    else:
+        with pytest.raises(ceph_native.Refusal, match="^device-identity$"):
+            worker.block_device(device)

@@ -1,0 +1,59 @@
+{
+  "controller": {
+    "address": "192.0.2.1",
+    "certificateRef": "lab-bmc-tls",
+    "credentialsRef": "lab-bmc-credentials",
+    "endpoint": "https://192.0.2.1:8000/redfish/v1/Systems/7b9ec716-85d4-8e28-84d3-f0d571d55f15",
+    "image": "quay.io/metal3-io/sushy-tools@sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e",
+    "port": 8000,
+    "unit": "bootwright-lab-bmc-rhel-01"
+  },
+  "directory": "/var/lib/libvirt/images/bootwright/lab/machines/rhel-01",
+  "disks": [
+    {
+      "name": "root",
+      "path": "/var/lib/libvirt/images/bootwright/lab/machines/rhel-01/root.qcow2",
+      "sizeGiB": 60,
+      "target": "vda"
+    },
+    {
+      "bus": "scsi",
+      "media": "hdd",
+      "name": "hdd",
+      "path": "/var/lib/libvirt/images/bootwright/lab/machines/rhel-01/hdd.qcow2",
+      "rotationRate": 7200,
+      "serial": "bw88bcbcf9cf76e48525",
+      "sizeGiB": 20,
+      "target": "sda"
+    }
+  ],
+  "domain": "bootwright-lab-rhel-01",
+  "egress": {
+    "noProxy": []
+  },
+  "identity": {
+    "block": "machine-rhel-01",
+    "context": "lab",
+    "object": "rhel-01"
+  },
+  "interfaces": [
+    {
+      "bridge": "virbr-lab",
+      "macAddress": "52:54:00:83:2c:63",
+      "name": "enp1s0",
+      "network": "bootwright-lab-lab-guests"
+    }
+  ],
+  "memoryMiB": 8192,
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "poolName": "bootwright-lab-lab-libvirt-vmedia",
+  "poolPath": "/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia",
+  "tpm": false,
+  "uri": "qemu:///system",
+  "uuid": "7b9ec716-85d4-8e28-84d3-f0d571d55f15",
+  "vcpu": 4,
+  "version": "machine-libvirt-v7"
+}

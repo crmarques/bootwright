@@ -285,8 +285,8 @@ func TestProvedHostKeyRequiresConvergedNetwork(t *testing.T) {
 
 type dependencyProofs struct{}
 
-func (dependencyProofs) DataDisk(block reconciliation.Block, evidence []byte, path, serial string, size int64) bool {
-	return libvirt.ProvedDataDisk(block, evidence, path, serial, size)
+func (dependencyProofs) DataDisk(block reconciliation.Block, evidence []byte, path, serial string, size int64, rotational bool) bool {
+	return libvirt.ProvedDataDisk(block, evidence, path, serial, size, rotational)
 }
 func (dependencyProofs) HostKey(proofs []lifecycle.BlockEvidence, machine, address string) (trust.HostKey, error) {
 	return installation.ProvedHostKey(proofs, machine, address)

@@ -232,7 +232,7 @@ func disksFor(profile api.Value, identity, contextName, machine string) ([]Disk,
 	dataDisks := profile.Get("dataDisks").Items()
 	presentations, valid := substrate.DataDiskPresentations(dataDisks)
 	if !valid {
-		return nil, refusal("api.value", "a libvirt profile declares unsupported data disk media or targets", "use at most seven dataDisks, omit media or set media: ssd, and keep root reserved on the profile of "+identity)
+		return nil, refusal("api.value", "a libvirt profile declares unsupported data disk media or targets", "use at most seven dataDisks, omit media or set media: ssd or hdd, and keep root reserved on the profile of "+identity)
 	}
 	for index, data := range dataDisks {
 		name := data.Get("name").Text()

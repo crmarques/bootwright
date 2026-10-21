@@ -35,7 +35,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 
 ROOT = "/var/lib/bootwright/ceph-host"
 PACKAGE_ROOT = "/var/lib/bootwright/ceph-packages"
-VERSION = "ceph-host-v5"
+VERSION = "ceph-host-v6"
 PROFILE_VERSION = "ceph-runtime-profile-v3"
 ROUTE_VERSION = "ceph-host-route-v2"
 DEVICES_VERSION = "ceph-device-identities-v1"
@@ -759,7 +759,7 @@ class HostRuntime:
             return {"changed": True}
 
     def block_device(self, device):
-        """Bind the declared path to one nonrotational disk, its device number, serial and size."""
+        """Bind the declared path to one disk with its frozen media identity, its device number, serial and size."""
         actual = os.path.realpath(device["path"])
         output = self.command(["/usr/bin/lsblk", "--json", "--bytes", "--paths", "--nodeps", "--output", "PATH,TYPE,SERIAL,SIZE,ROTA,MAJ:MIN", actual],
                               30, 65536, "device-identity")
@@ -773,11 +773,12 @@ class HostRuntime:
         pair = item.get("maj:min")
         require(isinstance(pair, str) and re.fullmatch(r"[0-9]+:[0-9]+", pair) is not None, "device-identity")
         rotational = item.get("rota")
-        require(type(rotational) in (bool, int) and rotational in (False, 0), "device-identity")
+        require(type(rotational) in (bool, int) and rotational in (0, 1) and bool(rotational) == device.get("rotational", False), "device-identity")
         require(item.get("serial") == device["serial"] and type(item.get("size")) is int and item["size"] == device["sizeBytes"], "device-identity")
         major, minor = (int(value) for value in pair.split(":"))
         require(major > 0 and minor >= 0, "device-identity")
-        return {"path": device["path"], "serial": device["serial"], "sizeBytes": device["sizeBytes"], "rotational": 0, "major": major, "minor": minor}
+        return {"path": device["path"], "serial": device["serial"], "sizeBytes": device["sizeBytes"],
+                "rotational": int(rotational), "major": major, "minor": minor}
 
     def udev(self, observed):
         raw = self.command(["/usr/bin/udevadm", "info", "--query=property", "--name=" + observed["path"]], 30, 128 << 10, "device-identity")

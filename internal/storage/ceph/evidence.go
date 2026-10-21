@@ -279,12 +279,7 @@ func servicePlacement(r Request, kind string) ([]string, int) {
 }
 
 func validOSDs(e Evidence, r Request, complete bool) bool {
-	expected := map[string]bool{}
-	for _, h := range r.Hosts {
-		for _, d := range h.Devices {
-			expected[h.Name+"\x00"+d.Path] = true
-		}
-	}
+	expected := dataDeviceSet(r)
 	ids := map[int]bool{}
 	uuids := map[string]bool{}
 	seen := map[string]bool{}

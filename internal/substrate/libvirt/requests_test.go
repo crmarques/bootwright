@@ -29,7 +29,7 @@ func TestAFrozenHostRequestOfAnyOtherVersionRefuses(t *testing.T) {
 // escalation Secret or which carried no egress, refuses by its version, and so
 // does any other.
 func TestAFrozenMachineRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"machine-libvirt-v1", "machine-libvirt-v2", "machine-libvirt-v3", "machine-libvirt-v4", "machine-libvirt-v5", "machine-libvirt-v7", ""} {
+	for _, version := range []string{"machine-libvirt-v1", "machine-libvirt-v2", "machine-libvirt-v3", "machine-libvirt-v4", "machine-libvirt-v5", "machine-libvirt-v6", ""} {
 		_, err := DecodeMachineRequest([]byte(`{"version":"` + version + `"}`))
 		if reported := diagnostics.Of(err); err == nil || len(reported) == 0 || !strings.Contains(reported[0].Message, "unsupported version") {
 			t.Fatalf("version %q was not refused by its version: %v", version, err)

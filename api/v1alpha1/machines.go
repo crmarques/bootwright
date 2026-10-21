@@ -62,7 +62,7 @@ func machineProfileSchema(variant string) *Shape {
 	if variant != "kubevirt" {
 		disk := record(required("name", name()), required("sizeGiB", integer("1", "65536")))
 		if variant == "libvirt" {
-			disk.Fields = append(disk.Fields, field("media", enumeration("ssd")))
+			disk.Fields = append(disk.Fields, field("media", enumeration("ssd", "hdd")))
 		}
 		fields = append(fields, field("dataDisks", named(disk)))
 	}

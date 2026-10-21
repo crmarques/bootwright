@@ -1,5 +1,5 @@
 implementation: machine-libvirt-v1
-content-digest: 1b5f81d8ba52fe4bd670b4b3ff9afacb15fd523e32f9a07d607bd2647ebc3ef0
+content-digest: 277527efdc1a2631169bf78895ad03c7f8b93c5dbc4bd4fd1415392432893398
 automation-formats: https://bootwright.io/substrate/v1
 request-schema:
   controller struct libvirt.Controller

@@ -15,12 +15,20 @@ func TestDataDiskPresentationsUseIndependentBoundedMediaSequences(t *testing.T) 
 	if !valid || !reflect.DeepEqual(got, want) {
 		t.Fatalf("presentations=%+v valid=%v", got, valid)
 	}
-	for _, disk := range []api.Value{ordinary.With("name", api.StringValue("root")), ordinary.With("media", api.StringValue("")), ordinary.With("media", api.BoolValue(true)), ordinary.With("media", api.StringValue("hdd"))} {
+	for _, disk := range []api.Value{ordinary.With("name", api.StringValue("root")), ordinary.With("media", api.StringValue("")), ordinary.With("media", api.BoolValue(true)), ordinary.With("media", api.StringValue("nvme"))} {
 		if _, valid := DataDiskPresentations([]api.Value{disk}); valid {
 			t.Fatal("unsupported data-disk media or root switch admitted")
 		}
 	}
 	if _, valid := DataDiskPresentations(make([]api.Value, MaxDataDisks+1)); valid {
 		t.Fatal("data-disk presentation exceeded original total bound")
+	}
+}
+
+func TestHDDDataDiskHasKnownRotationalPresentation(t *testing.T) {
+	disk := api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("data")}, api.FieldValue{Name: "media", Value: api.StringValue("hdd")})
+	got, valid := DataDiskPresentations([]api.Value{disk})
+	if !valid || len(got) != 1 || got[0] != (DataDiskPresentation{Target: "sda", Bus: "scsi", Media: "hdd", RotationRate: 7200}) {
+		t.Fatalf("HDD presentation = %+v, valid %v", got, valid)
 	}
 }

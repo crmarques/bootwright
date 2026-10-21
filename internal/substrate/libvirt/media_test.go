@@ -70,7 +70,7 @@ func TestAllSSDAndMixedProfilesKeepTheExistingTotalDiskBound(t *testing.T) {
 }
 
 func TestMediaSelectionAndFrozenRequestsRefuseUnsupportedOrRootChanges(t *testing.T) {
-	for _, disk := range []api.Value{mediaDisk("root", true), mediaDisk("data", true).With("media", api.StringValue("hdd")), mediaDisk("data", true).With("media", api.StringValue("")), mediaDisk("data", true).With("media", api.BoolValue(true))} {
+	for _, disk := range []api.Value{mediaDisk("root", true), mediaDisk("data", true).With("media", api.StringValue("nvme")), mediaDisk("data", true).With("media", api.StringValue("")), mediaDisk("data", true).With("media", api.BoolValue(true))} {
 		profile := api.MapValue(number("diskGiB", "60"), field("dataDisks", api.ListValue(disk)))
 		if _, err := disksFor(profile, "Machine/synthetic", testContext, "synthetic"); err == nil {
 			t.Fatal("unsupported media or root switch reached a request")
@@ -161,5 +161,27 @@ func TestSSDRequestAndPresenceGolden(t *testing.T) {
 		if strings.Contains(string(data), `"`+key+`"`) {
 			t.Fatal("omitted media changed legacy request bytes")
 		}
+	}
+}
+
+func TestHDDRequestAndPresenceGolden(t *testing.T) {
+	request := mediaRequest(t, mediaDisk("hdd", false).With("media", api.StringValue("hdd")))
+	data, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	matchesGolden(t, "request-machine-hdd", data)
+	if _, err := DecodeMachineRequest(data); err != nil {
+		t.Fatal(err)
+	}
+	var evidence MachineEvidence
+	_ = json.Unmarshal(machineEvidence(request, "digest"), &evidence)
+	evidence.Disks[1].Bus, evidence.Disks[1].Target, evidence.Disks[1].RotationRate = "scsi", "sda", 7200
+	if err := ValidateMachinePresence(encode(t, evidence), request, "digest"); err != nil {
+		t.Fatal(err)
+	}
+	evidence.Disks[1].RotationRate = 1
+	if ValidateMachinePresence(encode(t, evidence), request, "digest") == nil {
+		t.Fatal("HDD accepted SSD proof")
 	}
 }

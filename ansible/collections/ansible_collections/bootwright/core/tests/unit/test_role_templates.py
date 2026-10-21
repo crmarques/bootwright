@@ -113,7 +113,7 @@ MACHINE = {
     "uri": "qemu:///system",
     "uuid": "7b9ec716-85d4-8e28-84d3-f0d571d55f15",
     "vcpu": 4,
-    "version": "machine-libvirt-v6",
+    "version": "machine-libvirt-v7",
 }
 
 # Each rendered template with the variables its task sees beside the role's
@@ -221,9 +221,10 @@ def test_a_template_writes_the_same_bytes_twice_and_its_goldens_bytes(role, temp
         golden.relative_to(GOLDENS).as_posix())
 
 
-def test_ssd_domain_uses_distinct_scsi_units_and_preserves_root_and_unmarked_data():
+@pytest.mark.parametrize("media,rate", [("ssd", 1), ("hdd", 7200)])
+def test_ssd_domain_uses_distinct_scsi_units_and_preserves_root_and_unmarked_data(media, rate):
     request = copy.deepcopy(MACHINE)
-    request["disks"][1].update(bus="scsi", media="ssd", rotationRate=1, target="sda", serial="bwfirst")
+    request["disks"][1].update(bus="scsi", media=media, rotationRate=rate, target="sda", serial="bwfirst")
     request["disks"].extend([
         dict(request["disks"][0], name="ordinary", target="vdb", path=request["directory"] + "/ordinary.qcow2", serial="bwordinary"),
         dict(request["disks"][1], name="second-ssd", target="sdb", path=request["directory"] + "/second.qcow2", serial="bwsecond"),
@@ -234,7 +235,7 @@ def test_ssd_domain_uses_distinct_scsi_units_and_preserves_root_and_unmarked_dat
     root = ElementTree.fromstring(first)
     assert domain_disk_bindings(root, request["disks"])
     assert [(item.get("dev"), item.get("bus"), item.get("rotation_rate")) for item in root.findall('./devices/disk/target')] == [
-        ("vda", "virtio", None), ("sda", "scsi", "1"), ("vdb", "virtio", None), ("sdb", "scsi", "1")]
+        ("vda", "virtio", None), ("sda", "scsi", str(rate)), ("vdb", "virtio", None), ("sdb", "scsi", str(rate))]
     assert [item.get("unit") for item in root.findall('./devices/disk/address')] == ["0", "1"]
 
 

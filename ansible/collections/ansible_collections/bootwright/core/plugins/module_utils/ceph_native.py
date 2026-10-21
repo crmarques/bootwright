@@ -675,12 +675,14 @@ def validate_hosts(request):
         paths = set()
         serials = set()
         for device in host["devices"]:
-            require(isinstance(device, dict) and set(device) == {"path", "serial", "sizeBytes"})
+            require(isinstance(device, dict) and set(device) >= {"path", "serial", "sizeBytes"}
+                    and not set(device) - {"path", "serial", "sizeBytes", "rotational"})
             require(isinstance(device["path"], str) and DEVICE.fullmatch(device["path"]) is not None)
             require(named(device["serial"]) and device["path"] not in paths and device["serial"] not in serials)
             paths.add(device["path"])
             serials.add(device["serial"])
             require(type(device["sizeBytes"]) is int and device["sizeBytes"] > 0)
+            require(type(device.get("rotational", False)) is bool)
     require(len({host["name"].split(".", 1)[0] for host in hosts}) == len(hosts), "host-identity")
     require(request["bootstrap"] in seen)
     require(request["monIP"] == next(h["address"] for h in hosts if h["name"] == request["bootstrap"]))
@@ -721,16 +723,22 @@ def validate_services(request, hosts, seen):
         require(named(service.get("service_id")))
         require(placement.get("count", len(placement["hosts"])) == len(placement["hosts"]), "device-unproved")
         spec = service.get("spec")
-        require(isinstance(spec, dict) and set(spec) == {"data_devices"}, "osd-unqualified")
-        selection = spec["data_devices"]
-        require(isinstance(selection, dict) and set(selection) == {"paths"}, "osd-unqualified")
-        require(isinstance(selection["paths"], list) and bool(selection["paths"]))
-        for name in placement["hosts"]:
-            host = next(h for h in hosts if h["name"] == name)
-            for path in selection["paths"]:
-                selected = selected_device(host, path)
-                require((name, selected["path"]) not in selected_devices, "device-overlap")
-                selected_devices.add((name, selected["path"]))
+        require(isinstance(spec, dict) and "data_devices" in spec
+                and not set(spec) - {"data_devices", "db_devices", "wal_devices", "encrypted", "tpm2"}, "osd-unqualified")
+        require(all(type(spec.get(field, False)) is bool for field in ("encrypted", "tpm2")), "osd-unqualified")
+        require(not spec.get("tpm2") or spec.get("encrypted"), "osd-unqualified")
+        for field in ("data_devices", "db_devices", "wal_devices"):
+            if field not in spec:
+                continue
+            selection = spec[field]
+            require(isinstance(selection, dict) and set(selection) == {"paths"}, "osd-unqualified")
+            require(isinstance(selection["paths"], list) and bool(selection["paths"]))
+            for name in placement["hosts"]:
+                host = next(h for h in hosts if h["name"] == name)
+                for path in selection["paths"]:
+                    selected = selected_device(host, path)
+                    require((name, selected["path"]) not in selected_devices, "device-overlap")
+                    selected_devices.add((name, selected["path"]))
     require(kinds >= {"mon", "mgr"})
     require(request["bootstrap"] in next(s["placement"]["hosts"] for s in services if s["service_type"] == "mon"))
     if request["clusterSSHTransport"] == "verified-tunnel":
@@ -738,6 +746,25 @@ def validate_services(request, hosts, seen):
         helper.targets(request)
         require(request["bootstrap"] in next(s["placement"]["hosts"] for s in services if s["service_type"] == "mgr"), "native-tunnel-unproved")
     require(selected_devices == {(h["name"], d["path"]) for h in hosts for d in h["devices"]}, "device-unproved")
+
+
+def auxiliary_device_paths(request, host_name):
+    host = next(h for h in request["hosts"] if h["name"] == host_name)
+    return {selected_device(host, path)["path"] for service in request["services"]
+            if service["service_type"] == "osd" and host_name in service["placement"]["hosts"]
+            for field in ("db_devices", "wal_devices") for path in service["spec"].get(field, {}).get("paths", [])}
+
+
+def osd_device_group(request, host, data_path):
+    for service in request["services"]:
+        if service["service_type"] != "osd" or host["name"] not in service["placement"]["hosts"]:
+            continue
+        spec = service["spec"]
+        if data_path not in [selected_device(host, path)["path"] for path in spec["data_devices"]["paths"]]:
+            continue
+        return {field: [selected_device(host, path) for path in ([data_path] if field == "data_devices" else spec[field]["paths"])]
+                for field in ("data_devices", "db_devices", "wal_devices") if field in spec}
+    raise Refusal("device-unproved")
 
 
 def device_path(value):
@@ -1870,6 +1897,7 @@ class Worker:
             signatures = self.command(["/usr/sbin/wipefs", "--no-act", "--json", actual])
             require(isinstance(signatures, dict) and isinstance(signatures.get("signatures"), list), "device-not-empty")
             if item.get("children") or item.get("fstype") or any(item.get("mountpoints") or []) or signatures["signatures"]:
+                require(device["path"] not in auxiliary_device_paths(self.request, self.host["name"]), "device-not-empty")
                 self.observed_device_ids.append(self.owned_osd_device(actual, item, signatures["signatures"]))
             else:
                 require(self.markers.read(self.osd_identity_marker(actual)) is None, "foreign-osd")
@@ -2969,10 +2997,12 @@ class Worker:
             projected = json.loads(canonical(value))
             projected["placement"] = {"hosts": [host["name"]]}
             projected["service_id"] = value["service_id"][:46] + "-" + hashlib.sha256(canonical([value["service_id"], host["name"]])).hexdigest()[:16]
-            projected["spec"]["data_devices"]["paths"] = [
-                self.stable_device_path(host, selected_device(host, path), submission=True)
-                for path in value["spec"]["data_devices"]["paths"]
-            ]
+            for field in ("data_devices", "db_devices", "wal_devices"):
+                if field in value["spec"]:
+                    projected["spec"][field]["paths"] = [
+                        self.stable_device_path(host, selected_device(host, path), submission=True)
+                        for path in value["spec"][field]["paths"]
+                    ]
             result.append(projected)
         return result
 
@@ -3006,7 +3036,9 @@ class Worker:
                 if original["service_type"] == "osd":
                     spec = value.get("spec")
                     require(isinstance(spec, dict) and spec.get("data_devices") == original["spec"]["data_devices"]
-                            and not any(spec.get(field) for field in ("db_devices", "wal_devices", "journal_devices", "data_directories", "encrypted", "tpm2"))
+                            and all(spec.get(field) == original["spec"].get(field) for field in ("db_devices", "wal_devices"))
+                            and all(spec.get(field, False) == original["spec"].get(field, False) for field in ("encrypted", "tpm2"))
+                            and not any(spec.get(field) for field in ("journal_devices", "data_directories"))
                             and spec.get("osds_per_device", 1) == 1, "osd-unqualified")
         if retained is None:
             self.markers.write(record, {"version": "ceph-service-inputs-v1", "scope": scope, "services": result})
@@ -3615,7 +3647,7 @@ class Worker:
     def observe_osds(self, evidence, running, ready):
         running_osds = {daemon.get("daemon_id"): daemon for daemon in running if daemon["daemon_type"] == "osd"}
         require(len(running_osds) == sum(daemon["daemon_type"] == "osd" for daemon in running), "native-output")
-        devices = [(h, d) for h in self.request["hosts"] for d in h["devices"]]
+        devices = [(h, d) for h in self.request["hosts"] for d in h["devices"] if d["path"] not in auxiliary_device_paths(self.request, h["name"])]
         metadata = self.ceph("osd", "metadata")
         osdmap = self.ceph("osd", "dump")
         # An OSD the map holds but that has not booted yet reports no metadata beyond its ID; it is starting, not malformed.
@@ -3630,7 +3662,18 @@ class Worker:
             return False
         for host, device in devices:
             device_id = os.path.basename(device["path"]) + "=" + self.expected_device_id(host, device)
-            candidates = [m for m in metadata if m.get("hostname") == host["name"] and m.get("device_ids") == device_id]
+            groups = osd_device_group(self.request, host, device["path"])
+            group_ids = [{os.path.basename(d["path"]) + "=" + self.expected_device_id(host, d) for d in group}
+                         for group in groups.values()]
+            allowed_ids = set().union(*group_ids)
+            candidates = []
+            for candidate in metadata:
+                identifiers = candidate.get("device_ids", "").split(",")
+                if (candidate.get("hostname") == host["name"] and device_id in identifiers
+                        and len(identifiers) == len(set(identifiers)) == len(group_ids)
+                        and set(identifiers) <= allowed_ids
+                        and all(len(set(identifiers) & group) == 1 for group in group_ids)):
+                    candidates.append(candidate)
             require(len(candidates) <= 1, "foreign-osd")
             if not candidates:
                 ready = False

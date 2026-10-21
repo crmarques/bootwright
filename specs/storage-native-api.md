@@ -221,6 +221,14 @@ Every selected host in this OSD example must prove that path's distinct,
 eligible device identity. The label is not permission to discover new hosts
 or disks after the authorization is frozen.
 
+The core OSD projection preserves explicit `db_devices.paths`,
+`wal_devices.paths`, `encrypted` and `tpm2` under the
+[bounded device contract](storage.md#devices-and-destructive-ownership).
+`osds_per_device: 1` is the fixed native default; larger values refuse.
+Every selected data, DB and WAL path receives the same independent identity
+proof before its per-host stable alias enters the native service document.
+Only data devices count as OSDs in readiness evidence.
+
 ### Service identity and references
 
 The service registry keys each entry by its qualified native canonical service

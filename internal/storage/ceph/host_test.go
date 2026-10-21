@@ -200,7 +200,9 @@ type hostProofs struct {
 	disk bool
 }
 
-func (p hostProofs) DataDisk(reconciliation.Block, []byte, string, string, int64) bool { return p.disk }
+func (p hostProofs) DataDisk(reconciliation.Block, []byte, string, string, int64, bool) bool {
+	return p.disk
+}
 func (hostProofs) HostKey([]lifecycle.BlockEvidence, string, string) (trust.HostKey, error) {
 	return trust.HostKey{}, failure("lifecycle.state", "no installation proof in this test", "")
 }

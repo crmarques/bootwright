@@ -338,18 +338,20 @@ ownership metadata naming the context and Machine. Provider media and machine
 disks occupy separate `providers` and `machines` subtrees, including when a
 provider and Machine share a name. X48 retires the former name-collision
 refusal with tests proving disjoint ownership and cleanup. Host requests use
-`substrate-host-libvirt-v4` and Machine requests use `machine-libvirt-v6`.
+`substrate-host-libvirt-v4` and Machine requests use `machine-libvirt-v7`.
 The root disk remains virtio-blk `vda`; unmarked data disks preserve successive
-virtio-blk targets `vdb` through `vdh`. Explicit `media: ssd` data disks instead
-use a virtio-SCSI controller, successive `sda` through `sdg` targets, target
-`rotation_rate="1"`, and distinct controller-0 drive units in the same order.
+virtio-blk targets `vdb` through `vdh`. Explicit `media: ssd` or `media: hdd`
+data disks instead use a virtio-SCSI controller, successive `sda` through `sdg`
+targets, target `rotation_rate="1"` for SSD or `rotation_rate="7200"` for HDD,
+and distinct controller-0 drive units in the same order.
 Each sequence is independent in a mixed profile. The domain inspection proves
 the frozen volume, target, bus, rotation rate, drive address and derived data
-disk serial before accepting ownership; positive SSD disk evidence carries
-the actual bus, target and rotation rate. The pinned sushy emulator places
+disk serial before accepting ownership; positive explicit-media disk evidence
+carries the actual bus, target and rotation rate. The pinned sushy emulator places
 optical media on `sdx` and a free SCSI unit, avoiding the data units.
 Virtual media type proves guest presentation rather than physical storage
-performance. The SSD semantic change is included in the automation digest;
+performance. The explicit-media semantic change is included in the automation
+digest;
 old applied requests are never reinterpreted. The root carries no WWN or serial
 for a [root-device hint](api/machines.md#bmc-and-root-device-shape) to match.
 Each interface carries the

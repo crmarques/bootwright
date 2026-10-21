@@ -239,11 +239,7 @@ func pgBudget(c api.Catalog, cluster api.Object, r Request, rule string) error {
 	}
 	denominator := int64(3)
 	if class == "" {
-		devices := int64(0)
-		for _, host := range r.Hosts {
-			devices += int64(len(host.Devices))
-		}
-		denominator = max(devices, 3)
+		denominator = max(int64(len(dataDeviceSet(r))), 3)
 	}
 	if total > maxPGsPerOSD*denominator {
 		return failure("api.invariant", fmt.Sprintf("pool placement groups for CRUSH rule %s exceed the per-OSD bound (%d > 250 × %d)", rule, total, denominator), "add OSDs, lower pgNumMin, or declare fewer pools on that rule")

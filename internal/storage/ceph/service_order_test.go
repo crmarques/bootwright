@@ -65,7 +65,7 @@ func TestNonStringOSDPathRemedyNamesOwnedDataDiskPaths(t *testing.T) {
 	}
 	_, err := New(api.StorageCluster, nil).request(api.NewCatalog(objects), changed, "synthetic")
 	d := diagnostics.Of(err)
-	if len(d) != 1 || d[0].Message != "core OSD paths must be plain device strings" || d[0].Remediation != "use plain owned data-disk paths: /dev/sd* for SSD-media disks, /dev/vd* otherwise" {
+	if len(d) != 1 || d[0].Message != "core OSD paths must be plain device strings" || d[0].Remediation != "use plain owned data-disk paths: /dev/sd* for explicit-media disks, /dev/vd* otherwise" {
 		t.Fatalf("OSD path refusal: %+v", d)
 	}
 }

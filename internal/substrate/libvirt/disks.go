@@ -4,7 +4,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-func ProvedDataDisk(block reconciliation.Block, evidence []byte, guestPath, serial string, sizeBytes int64) bool {
+func ProvedDataDisk(block reconciliation.Block, evidence []byte, guestPath, serial string, sizeBytes int64, rotational bool) bool {
 	if block.Kind != MachineKind || block.Implementation != MachineImplementation {
 		return false
 	}
@@ -13,7 +13,7 @@ func ProvedDataDisk(block reconciliation.Block, evidence []byte, guestPath, seri
 		return false
 	}
 	for _, disk := range request.Disks {
-		if disk.Name != "root" && disk.Serial != "" && "/dev/"+disk.Target == guestPath && disk.Serial == serial && int64(disk.SizeGiB)<<30 == sizeBytes {
+		if disk.Name != "root" && (disk.Media == "hdd") == rotational && disk.Serial != "" && "/dev/"+disk.Target == guestPath && disk.Serial == serial && int64(disk.SizeGiB)<<30 == sizeBytes {
 			return true
 		}
 	}

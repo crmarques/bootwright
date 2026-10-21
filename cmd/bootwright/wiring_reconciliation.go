@@ -312,8 +312,8 @@ func currentSelection(store contexts.SelectionStore) func(context.Context) (stri
 
 type cephDependencyProofs struct{}
 
-func (cephDependencyProofs) DataDisk(block reconciliation.Block, evidence []byte, path, serial string, size int64) bool {
-	return libvirt.ProvedDataDisk(block, evidence, path, serial, size)
+func (cephDependencyProofs) DataDisk(block reconciliation.Block, evidence []byte, path, serial string, size int64, rotational bool) bool {
+	return libvirt.ProvedDataDisk(block, evidence, path, serial, size, rotational)
 }
 
 func (cephDependencyProofs) HostKey(proofs []lifecycle.BlockEvidence, machine, address string) (trust.HostKey, error) {

@@ -16,7 +16,7 @@ func TestDiskMediaIsOptionalAndSpecificToLibvirtDataDisks(t *testing.T) {
 			continue
 		}
 		media, found := disks.Shape.Element.Field("media")
-		if found != (variant == "libvirt") || found && (media.Required || media.Default.Present() || !slices.Equal(media.Shape.Enums, []string{"ssd"})) {
+		if found != (variant == "libvirt") || found && (media.Required || media.Default.Present() || !slices.Equal(media.Shape.Enums, []string{"ssd", "hdd"})) {
 			t.Fatal("disk media expanded another substrate or changed omitted defaults")
 		}
 		if _, found := shape.Field("media"); found {

@@ -483,8 +483,8 @@ func matchDisks(observed []DiskEvidence, frozen []Disk) error {
 		if sorted[index].SizeGiB != disk.SizeGiB {
 			return refusal("lifecycle.state", "a machine disk is not the size the profile froze", "")
 		}
-		if disk.Media == "ssd" && (sorted[index].Bus != disk.Bus || sorted[index].Target != disk.Target || sorted[index].RotationRate != disk.RotationRate) {
-			return refusal("lifecycle.state", "a machine SSD disk does not carry its frozen SCSI target and nonrotational presentation", "")
+		if disk.Media != "" && (sorted[index].Bus != disk.Bus || sorted[index].Target != disk.Target || sorted[index].RotationRate != disk.RotationRate) {
+			return refusal("lifecycle.state", "a machine data disk does not carry its frozen SCSI target and media presentation", "")
 		}
 	}
 	return nil

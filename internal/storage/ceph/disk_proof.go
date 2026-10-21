@@ -22,7 +22,7 @@ func proveDisks(e lifecycle.Execution, r Request, readers DependencyProofs) erro
 				if proof.Kind != "Machine" || proof.Object != host.Machine || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone || proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != proof.Implementation {
 					continue
 				}
-				if readers.DataDisk(proof.Block, proof.Evidence, disk.Path, disk.Serial, disk.SizeBytes) {
+				if readers.DataDisk(proof.Block, proof.Evidence, disk.Path, disk.Serial, disk.SizeBytes, disk.Rotational) {
 					if matched {
 						return failure("lifecycle.state", "Ceph data disk has ambiguous original ownership proof", "")
 					}
