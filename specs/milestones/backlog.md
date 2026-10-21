@@ -3308,6 +3308,23 @@ Requires cell as `owner decision: <question>`.
   delivered; [B484](m2.md#b484) stays in progress for the acceptance matrix
   lanes X61-L2 to X61-L9 and the lanes D166 released, x61-ceph-fips,
   x61-host-variants-example and X61-L6 (none implemented).
+  Finally, by the owner's order of 2026-10-20 to merge everything already
+  implemented and ready, it merged the remaining checkpoint-passed lanes of
+  X57 and the definition of X61's cluster execution budget (the int-ready-v4a
+  checkpoint) together with D169 to D171: [B686](m2.md#b686) (crash collection
+  as a derived Ceph service unit) awaits operator acceptance;
+  [B627](delivered.md#x57--applied-specializations-in-ceph-evidence) is
+  delivered; [B479](m2.md#b479) (log collection) and [B489](m2.md#b489) (a
+  StorageClient scoped to a CephFS filesystem or subvolume, the `cluster
+  keyring` export, and managed StorageExport material named as
+  [B86](m4.md#b86)'s) stay in progress; and [B688](m2.md#b688), split from B79
+  and B475, is Specified by the owner's acceptance (D170) with no code. It
+  records [B689](m2.md#b689) (Ceph file logging for a declared log agent) and
+  [B690](m1.md#b690) (the Go toolchain's move to go1.26.10, which clears
+  GO-2026-6809 in `make vulncheck`). Under that order M2c is paused: X57's SSO,
+  all X56b and X58 lanes, X59's host pull route, disconnected profile,
+  replication and multisite lanes, B620's field removal and X61's other lanes
+  are not implemented, and no M2c item has operator evidence.
 
 - **D169** (2026-10-20, the owner): the owner answered the session's three
   questions for M2c's follow-up program, choosing the recommended option each
@@ -3315,7 +3332,7 @@ Requires cell as `owner decision: <question>`.
   `ceph.osSubscriptionRef` are admitted but never read): "Remove the fields
   (Recommended)". Both fields leave the API (pre-1.x, no compatibility) and may
   be re-added when a subscription package source is implemented; an M2c lane
-  removes them with admission, spec and example updates. (2) [B627](m2.md#b627)
+  removes them with admission, spec and example updates. (2) [B627](delivered.md#x57--applied-specializations-in-ceph-evidence)
   (the core and host evidence `specializations` member and its `cluster info`
   line): "Carry it in M2c (Recommended)". The next M2c lane that moves the Ceph
   core contract adds the member and the line with B627's exit evidence, so no

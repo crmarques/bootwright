@@ -6784,7 +6784,7 @@ continues after a rebuild and an apply, as
 [a fix to a failed step](../../.agents/knowledge/continuation-after-a-fix.md)
 states; a step that already wrote an attempt record and failed natively still
 refuses `partial-cluster`. The specializations evidence member and its `cluster
-info` line ride the next coordinated Ceph contract move ([B627](m2.md#b627)).
+info` line ride the next coordinated Ceph contract move ([B627](#x57--applied-specializations-in-ceph-evidence)).
 
 **Review:** the nine lane items were each reviewed by two lenses, spec and
 design conformance with test adequacy, and durability, continuation, digest
@@ -6821,7 +6821,7 @@ watch items are the image holding the `20.1.0-221` MGR facts, which come from
 the signed source archive and not an entitled image; the observation of a
 configured seed now reading the image payload for the `set-user` seam; and the
 image tags of the runbook, taken from the design and not confirmed against an
-authenticated registry. Follow-ups: [B627](m2.md#b627) the evidence member,
+authenticated registry. Follow-ups: [B627](#x57--applied-specializations-in-ceph-evidence) the evidence member,
 [B628](m2.md#b628) the CephX key type, [B629](m2.md#b629) the provider bootstrap
 tail on a continued seed, [B630](backlog.md#b630) narrowing `partial-cluster`
 for a proved-absent rejection, [B631](backlog.md#b631) an earlier Call Home
@@ -7329,3 +7329,69 @@ this work; there is no older-version reader, so an incomplete operation or
 context holding a `ceph-core-v22` block or a `ceph-tunnel-v2` bundle from an
 earlier build is finished or destroyed with that build. No other behavior
 changed.
+
+### X57 — Applied specializations in Ceph evidence
+
+**Owner:** Storage, with CLI. A product slice of [M2c](m2.md#m2c) whose other
+items are still open: this record covers B627, the one item of X57 that
+completed, and X57's [B479](m2.md#b479), [B489](m2.md#b489) and
+[B686](m2.md#b686) stay on the M2 page with what each has delivered in-tree.
+B627 was a follow-up of [X101](#x101--version-specializations-and-ibm-storage-ceph-990x-readiness):
+the registry, the seams and the refusal coordinate carried the applied
+specialization ids, but the Ceph block evidence did not, so an operator could
+read them only from a refusal. **Items:** B627, delivered by the lane X57-L7b
+(its sub-items a and b and the review rounds that guard them) and merged to main
+with X57's other in-tree lanes under [D168](backlog.md#decisions), carried in
+M2c by [D169](backlog.md#decisions), riding the core move of the CephFS client
+lane; only `ceph-host-evidence-v2` moved for the member, and it strands nothing
+the same commit's core move did not.
+
+**Outcome:** the Ceph core evidence and the ceph-host evidence carry an optional
+`specializations` member: 1 to 32 ascending, unique lower-case ids of at most
+64 bytes, the ids the native phases of the writing execution applied. A malformed
+member refuses; nothing that decides an effect, ownership, identity, readiness,
+drift or a digest reads it, and it is not cumulative across executions. The
+collection's native dispatch records the ids the worker's selection applied,
+the transport refuses an unknown, empty, unsorted or duplicated list, and the
+member is absent when none applied, on the cluster, service-unit, gateway and
+host blocks alike (a destroy's released host record and the SMB block record
+none). `bootwright cluster info` shows them: the JSON gains `specializations`
+after `image`, omitted when none, and the full text gains a `Specializations`
+line after `Platform`, `none` when empty; the compact and unavailable entries
+show nothing. The line is the sorted union of the cluster apply proof's ids and
+those of every decodable ceph-host apply proof of the cluster.
+[Storage](../storage.md#bootstrap-identity-and-continuation) and the
+[output contract](../cli/output.md) own the behavior.
+
+**Guard tests:** the Go `TestEvidenceSpecializationsMemberIsOptionalAndClosed`,
+`TestHostEvidenceSpecializationsMemberIsOptionalAndClosed`,
+`TestInspectNamesTheAppliedSpecializations`,
+`TestClusterInfoShowsNoneWithoutSpecializations` and
+`TestCephInspectionReportsAReasonWithoutProofsAndTheFSIDWithThem` (the wiring
+guard), the cluster info goldens `cli-cluster-info-full`,
+`cli-cluster-info-json` and `cli-cluster-info-secrets-json`, and the
+collection's `test_core_and_host_evidence_name_the_applied_specializations`,
+`test_unit_and_gateway_evidence_name_the_applied_specializations`,
+`test_evidence_without_specializations_still_reads` (the older record without
+the member, which is the continuation test),
+`test_dispatch_records_the_ids_its_worker_applied`,
+`test_transport_collects_applied_specializations_and_refuses_unknown_ids` and
+`test_work_returns_applied_specializations_beside_the_result`, each with a
+mutation check recorded in its commit body. The gates were `make quick`,
+`make focus`, `make docs-check`, the storage, inspection, CLI,
+`cmd/bootwright` and architecture packages, the collection unit, lint and
+sanity suites, the regenerated contract goldens `storage-ceph-core-v3` and
+`storage-ceph-host-v1`, and the int-ready-v4a checkpoint's full gates (all but
+`make vulncheck`, which fails for GO-2026-6809 on main as well,
+[B690](m1.md#b690)) and adversarial review. They are offline, as B627's exit evidence required; no live row is part
+of it.
+
+**Digest and version effects:** the member rode the core contract move that the
+CephFS client scope of [B489](m2.md#b489) made (`ceph-core-v24` to
+`ceph-core-v25`), and `ceph-host-evidence-v1` moved to `ceph-host-evidence-v2`
+because the host content digest hashes only its version constants;
+`ceph-core-evidence-v8` stays, and a record without the member still reads. The
+later move to `ceph-core-v26` is B479's. There is no older-version reader, so an
+incomplete operation or context planned by an earlier build is finished or
+destroyed with that build. The collection change moves the Ceph automation
+digest, which alone needs a rebuild and an apply to continue.
