@@ -154,7 +154,7 @@ func visibleKey(key string) bool {
 		return false
 	}
 	for i := 0; i < len(key); i++ {
-		if key[i] < 0x21 || key[i] > 0x7e {
+		if key[i] < 0x21 || key[i] > 0x7e || key[i] == '&' || key[i] == '<' || key[i] == '>' {
 			return false
 		}
 	}

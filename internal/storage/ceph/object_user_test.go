@@ -181,6 +181,9 @@ func TestProducedObjectUserIsExactlyItsKeyPair(t *testing.T) {
 		"an empty key":       userProduced(`{"accessKey":"","secretKey":"x","uid":"app-writer"}`),
 		"a key with a space": userProduced(`{"accessKey":"Q7ZK 2M9X","secretKey":"x","uid":"app-writer"}`),
 		"a long key":         userProduced(`{"accessKey":"` + strings.Repeat("A", 129) + `","secretKey":"x","uid":"app-writer"}`),
+		"an ampersand":       userProduced(`{"accessKey":"Q7ZK&M9X","secretKey":"x","uid":"app-writer"}`),
+		"a less-than sign":   userProduced(`{"accessKey":"Q7ZK<M9X","secretKey":"x","uid":"app-writer"}`),
+		"a greater-than":     userProduced(`{"accessKey":"Q7ZK2M9X","secretKey":"x>","uid":"app-writer"}`),
 		"not canonical":      userProduced(`{"secretKey":"u8Rj2Lq5Zx1Vb7Nc4Hk9Tg3Ws6Fd0Ym2Pa8Ee5Oi","accessKey":"Q7ZK2M9X4B1R8T5W3N6P","uid":"app-writer"}`),
 		"another output":     {{Name: ClientOutput, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(userMaterial)})}},
 	}
@@ -197,6 +200,15 @@ func TestProducedObjectUserIsExactlyItsKeyPair(t *testing.T) {
 	cluster.Action = "pool"
 	if err := validateProduced(userProduced(userMaterial), cluster, true); err == nil {
 		t.Fatal("another action accepted produced user material")
+	}
+}
+
+func TestAKeyIsRetainedOnlyWhenTheCanonicalJSONKeepsItVerbatim(t *testing.T) {
+	for key, want := range map[string]bool{"Q7ZK2M9X4B1R8T5W3N6P": true, "a-b_c/d+e=f.g": true, `a"b\c`: true, "a&b": false, "a<b": false, "a>b": false, "": false, "a b": false,
+		"a\x7f": false, "é": false, strings.Repeat("A", 128): true, strings.Repeat("A", 129): false} {
+		if got := visibleKey(key); got != want {
+			t.Errorf("visibleKey(%q) = %v, want %v", key, got, want)
+		}
 	}
 }
 

@@ -67,7 +67,7 @@ USER_APPLY_PHASES = ("object_user",)
 USER_READ_ONLY_PHASES = frozenset(("object_user_read",))
 USER_PHASES = frozenset(USER_APPLY_PHASES) | USER_READ_ONLY_PHASES
 USER_MEMBERS = frozenset(("displayName", "gateway", "name", "realm", "zone", "zoneGroup"))
-# cephadm's dashboard integration creates a system user of this ID in each realm; a StorageObjectUser never takes it.
+# the mgr dashboard module creates a system user of this ID in each realm (src/pybind/mgr/dashboard/services/rgw_client.py); a StorageObjectUser never takes it.
 RESERVED_USERS = ("dashboard",)
 MAX_USERS = 65536
 MAX_DISPLAY = 256
@@ -188,15 +188,17 @@ def validate(request, hosts):
 
 
 def display_name(value):
-    """Text of at most 256 bytes without control characters, as admission admits."""
-    return (isinstance(value, str) and 0 < len(value.encode("utf-8")) <= MAX_DISPLAY
+    """Text of at most 256 bytes without control characters, as admission admits, and not beginning with `-`, which radosgw-admin's
+    argument parsing would take for an option."""
+    return (isinstance(value, str) and 0 < len(value.encode("utf-8")) <= MAX_DISPLAY and not value.startswith("-")
             and not any(unicodedata.category(c) == "Cc" or c in "  " for c in value))
 
 
 def visible(key):
-    """An S3 key as Bootwright retains it: 1 to 128 visible ASCII characters. radosgw-admin generates 20 of 0-9A-Z and 40 of A-Za-z0-9
-    (src/rgw/driver/rados/rgw_user.h:22-23, src/common/random_string.cc); Bootwright never pins that format."""
-    return isinstance(key, str) and 0 < len(key) <= KEY_LIMIT and all("!" <= c <= "~" for c in key)
+    """An S3 key as Bootwright retains it: 1 to 128 visible ASCII characters other than `&`, `<` and `>`, which the controller's canonical
+    JSON escapes. radosgw-admin generates 20 of 0-9A-Z and 40 of A-Za-z0-9 (src/rgw/driver/rados/rgw_user.h:22-23,
+    src/common/random_string.cc); Bootwright never pins that format."""
+    return isinstance(key, str) and 0 < len(key) <= KEY_LIMIT and all("!" <= c <= "~" and c not in "&<>" for c in key)
 
 
 def validate_user(request, hosts):
@@ -767,10 +769,11 @@ class UserWorker(ObjectWorker):
         return value
 
     def native_pair(self, info):
-        """The one S3 key the user holds, as retained material; a user with another key set is not this operation's."""
+        """The one active S3 key the user holds, as retained material; a user with another key set, or whose key an operator deactivated
+        (`user info` always dumps `active`, src/rgw/rgw_common.cc:3036-3050), is not this operation's."""
         keys = info.get("keys")
-        require(isinstance(keys, list) and len(keys) == 1 and isinstance(keys[0], dict) and keys[0].get("user") == self.user()["name"],
-                "object-user-identity")
+        require(isinstance(keys, list) and len(keys) == 1 and isinstance(keys[0], dict) and keys[0].get("user") == self.user()["name"]
+                and keys[0].get("active") is True, "object-user-identity")
         pair = {"accessKey": keys[0].get("access_key"), "secretKey": keys[0].get("secret_key"), "uid": self.user()["name"]}
         require(visible(pair["accessKey"]) and visible(pair["secretKey"]), "object-user-identity")
         return canonical(pair)

@@ -941,7 +941,7 @@ the attempt record from `user info`, and a retained pair is never read again
 from Ceph, regenerated or rotated. Readiness and every later phase prove with
 `user info` that the user has the frozen display name, is not suspended, has
 no subuser, Swift key, capability, system, admin or account role, and holds
-exactly one S3 key equal to the retained pair; anything else refuses
+exactly one active S3 key equal to the retained pair; anything else refuses
 `object-user-identity`. The phase answers the retained pair as the block's
 produced material `object-user`, and an observation that proves the user
 ready recaptures it read-only with `object_user_read`. Evidence carries the

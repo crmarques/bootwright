@@ -175,7 +175,7 @@ The gateway owns derived children it never declares as objects: the zone pools
 `<zone>.rgw.meta`, `.control`, `.log`, `.otp` and `.dedup` and every omitted
 placement pool, the shared `.rgw.root`, which the first gateway that proves it
 absent claims and its sibling gateways share, the per-realm `dashboard` system user
-that cephadm's dashboard integration creates (never read for keys) and the
+that the mgr dashboard module creates (never read for keys) and the
 ingress passwords cephadm generates. No declared StoragePool can carry a
 derived pool name, because a StoragePool name is a DNS label without `.`.
 Derived pools take the cluster's default replica size: the
@@ -1133,9 +1133,10 @@ spec:
 | `metadata.name` | The native user ID, a DNS label of at most 46 characters (its block identity is `ceph-object-user-<name>`), never `dashboard`. | `radosgw-admin user create --uid`; no tenant. |
 | `clusterRef` | Required managed StorageCluster. | None. |
 | `objectGatewayRef` | Required StorageObjectGateway of the same cluster. | The user is created in that gateway's realm, zone group and zone with `--rgw-realm`, `--rgw-zonegroup` and `--rgw-zone`. |
-| `displayName` | Optional text of at most 256 bytes without control characters; omitted, it is `metadata.name`. | `--display-name`. |
+| `displayName` | Optional text of at most 256 bytes without control characters and not beginning with `-`, which `radosgw-admin` would read as an option; omitted, it is `metadata.name`. | `--display-name`. |
 
-The user ID `dashboard` is reserved because cephadm's dashboard integration
+The user ID `dashboard` is reserved because the mgr dashboard module
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/dashboard/services/rgw_client.py))
 creates a system user of that ID in every realm, which the gateway owns as a
 derived child. Bootwright passes no key argument: `radosgw-admin user create`
 generates one S3 key pair when none is given
@@ -1146,12 +1147,13 @@ worker, is retained in the bootstrap host's protected custody area before the
 block reports, and becomes the block's produced material `object-user`, the
 canonical JSON `{"accessKey", "secretKey", "uid"}`; a retry reads it back and
 never rotates it. Bootwright retains any key of 1 to 128 visible ASCII
-characters and pins no build's key format. No command reveals the pair yet;
+characters other than `&`, `<` and `>`, which the canonical JSON escapes, and
+pins no build's key format. No command reveals the pair yet;
 [B489](milestones/m2.md#b489) owns access handoff.
 
 Admission refuses, before any effect: a gateway of another cluster, the user ID
-`dashboard`, a name longer than 46 characters and a display name over 256 bytes
-or with control characters. Planning propagates the bound gateway's planning
+`dashboard`, a name longer than 46 characters and a display name over 256 bytes,
+with control characters or beginning with `-`. Planning propagates the bound gateway's planning
 refusals.
 
 ## Remaining resource families and consuming gates

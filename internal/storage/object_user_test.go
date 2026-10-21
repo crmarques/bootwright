@@ -33,7 +33,7 @@ func TestObjectUserAdmitsAGatewayOfItsCluster(t *testing.T) {
 
 func TestObjectUserReservesDashboard(t *testing.T) {
 	exactlyOne(t, userIssues(t, objectUser("dashboard"), gatewayCatalog(t)), "$.metadata.name",
-		"the RGW user ID dashboard is reserved: cephadm's dashboard integration creates a user of that ID in every realm",
+		"the RGW user ID dashboard is reserved: the mgr dashboard module creates a user of that ID in every realm",
 		"rename the StorageObjectUser; its metadata.name is its native RGW user ID")
 }
 
@@ -41,6 +41,17 @@ func TestObjectUserNameFitsItsBlockIdentity(t *testing.T) {
 	exactlyOne(t, userIssues(t, objectUser(strings.Repeat("u", 47)), gatewayCatalog(t)), "$.metadata.name",
 		"an object user name longer than 46 characters does not fit its block identity ceph-object-user-<name> of at most 63 characters",
 		"shorten metadata.name to at most 46 characters")
+}
+
+func TestObjectUserDisplayNameNeverLooksLikeAnOption(t *testing.T) {
+	for _, display := range []string{"-v", "--rgw_zone=x", "-"} {
+		exactlyOne(t, userIssues(t, objectUser("app-writer", "displayName", display), gatewayCatalog(t)), "$.spec.displayName",
+			"StorageObjectUser app-writer has a display name that begins with -, which radosgw-admin reads as an option instead of the display name",
+			"start spec.displayName with another character, or omit it to use metadata.name")
+	}
+	if found := issuesAt(userIssues(t, objectUser("app-writer", "displayName", "a-v"), gatewayCatalog(t)), "$.spec.displayName"); len(found) != 0 {
+		t.Fatalf("a display name with an inner hyphen refused: %#v", found)
+	}
 }
 
 func TestObjectUserRefusesAGatewayOfAnotherCluster(t *testing.T) {

@@ -178,7 +178,7 @@ func (a *admission) rgwBinding(field string, service api.Value) {
 func (a *admission) objectUser(cluster api.Object) {
 	spec, name := a.object.Spec(), a.object.Name()
 	if name == "dashboard" {
-		a.issue("api.invariant", "$.metadata.name", "the RGW user ID dashboard is reserved: cephadm's dashboard integration creates a user of that ID in every realm", "rename the StorageObjectUser; its metadata.name is its native RGW user ID")
+		a.issue("api.invariant", "$.metadata.name", "the RGW user ID dashboard is reserved: the mgr dashboard module creates a user of that ID in every realm", "rename the StorageObjectUser; its metadata.name is its native RGW user ID")
 	}
 	if len(name) > 46 {
 		a.issue("api.invariant", "$.metadata.name", "an object user name longer than 46 characters does not fit its block identity ceph-object-user-<name> of at most 63 characters", "shorten metadata.name to at most 46 characters")
@@ -188,5 +188,7 @@ func (a *admission) objectUser(cluster api.Object) {
 	}
 	if display := spec.Get("displayName"); display.Present() && (len(display.Text()) > 256 || !NativeVersion(display.Text())) {
 		a.issue("api.invariant", "$.spec.displayName", "an RGW display name is at most 256 bytes of text without control characters", "shorten spec.displayName and remove its control characters, or omit it to use metadata.name")
+	} else if display.Present() && strings.HasPrefix(display.Text(), "-") {
+		a.issue("api.invariant", "$.spec.displayName", "StorageObjectUser "+name+" has a display name that begins with -, which radosgw-admin reads as an option instead of the display name", "start spec.displayName with another character, or omit it to use metadata.name")
 	}
 }

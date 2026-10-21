@@ -226,6 +226,8 @@ def test_created_user_that_is_gone_refuses_and_is_never_recreated(ready):
     {"display_name": "Renamed"}, {"suspended": 1}, {"caps": [{"type": "users", "perm": "*"}]}, {"subusers": [{"id": "app-writer:swift"}]},
     {"swift_keys": [{"user": "app-writer:swift", "secret_key": "x"}]}, {"system": True}, {"admin": True}, {"account_id": "RGW00000000000000001"},
     {"keys": []}, {"keys": [{"user": "app-writer", "access_key": OTHER_ACCESS, "secret_key": OTHER_SECRET}]},
+    {"keys": [{"user": "app-writer", "access_key": ACCESS, "secret_key": SECRET, "active": False}]},
+    {"keys": [{"user": "app-writer", "access_key": ACCESS, "secret_key": SECRET}]},
     {"keys": [{"user": "app-writer", "access_key": ACCESS, "secret_key": OTHER_SECRET}]},
     {"keys": [{"user": "app-writer", "access_key": ACCESS, "secret_key": SECRET},
               {"user": "app-writer", "access_key": OTHER_ACCESS, "secret_key": OTHER_SECRET}]},
@@ -297,6 +299,7 @@ def test_recovery_scope_is_the_clusters_bootstrap_scope(ready):
 
 @pytest.mark.parametrize("change", [
     {"name": "dashboard"}, {"name": "App"}, {"displayName": ""}, {"displayName": "line\nbreak"}, {"displayName": "x" * 257},
+    {"displayName": "-v"}, {"displayName": "--rgw_zone=x"},
     {"realm": "Objects"}, {"gateway": ""},
 ])
 def test_request_admits_only_its_closed_user(change):
@@ -307,6 +310,25 @@ def test_request_admits_only_its_closed_user(change):
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         ceph_native.validate(dict(user_request(), gateway=gateway.gateway_request()["gateway"]))
     assert ceph_native.validate(user_request(displayName="x" * 256))
+    assert ceph_native.validate(user_request(displayName="a-v"))
+
+
+@pytest.mark.parametrize("key", ["a&b", "a<b", "a>b", "&", "", "a b", "a\x7f", "é", "x" * 129])
+def test_a_key_the_canonical_json_would_escape_is_never_retained(ready, key):
+    assert not ceph_native_object.visible(key)
+    cluster, markers = ready
+    cluster.pair = (key, SECRET)
+    with pytest.raises(ceph_native.Refusal, match="^object-user-identity$"):
+        user_worker(cluster, markers).object_user()
+    with pytest.raises(ceph_native.Refusal, match="^object-user-identity$"):
+        ceph_native_object.user_material(material(key).encode(), "app-writer")
+
+
+def test_every_other_visible_ascii_character_is_a_key_character():
+    allowed = "".join(chr(code) for code in range(0x21, 0x7F) if chr(code) not in "&<>")
+    assert ceph_native_object.visible(allowed) and ceph_native_object.visible("x" * 128)
+    assert all(ceph_native_object.visible(char) for char in allowed)
+    assert ceph_native_object.user_material(material(allowed[:60], allowed[60:]).encode(), "app-writer")
 
 
 def test_dispatch_routes_object_user_phases_to_the_user_worker_without_material(ready, monkeypatch):

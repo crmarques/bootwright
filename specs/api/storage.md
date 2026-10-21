@@ -544,7 +544,7 @@ checks:
   ([field record](../storage-resources.md#storageobjectgateway-field-record));
 - each object user binds a same-cluster StorageObjectGateway, never takes the
   user ID `dashboard`, and has a display name of at most 256 bytes without
-  control characters
+  control characters that does not begin with `-`
   ([field record](../storage-resources.md#storageobjectuser-field-record));
 - each NFS export binds exactly one same-cluster filesystem or subvolume and
   one declared nfs service, its pseudo path is unique among the exports of
