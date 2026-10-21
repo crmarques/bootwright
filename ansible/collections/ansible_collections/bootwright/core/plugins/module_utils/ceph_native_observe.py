@@ -30,10 +30,11 @@ CLUSTER_TYPES = frozenset(("mon", "mgr", "osd", "ceph-exporter", "mds"))
 # Each daemon type another block executes, mapped to its cephadm service type (orchestrator daemon_type_to_service).
 DELEGATED_TYPES = {"alertmanager": "alertmanager", "alloy": "alloy", "crash": "crash", "grafana": "grafana", "haproxy": "ingress",
                    "keepalived": "ingress", "loki": "loki", "mgmt-gateway": "mgmt-gateway", "nfs": "nfs", "node-exporter": "node-exporter",
-                   "prometheus": "prometheus", "promtail": "promtail", "rgw": "rgw", "rbd-mirror": "rbd-mirror", "smb": "smb",
+                   "oauth2-proxy": "oauth2-proxy", "prometheus": "prometheus", "promtail": "promtail", "rgw": "rgw", "rbd-mirror": "rbd-mirror", "smb": "smb",
                    "snmp-gateway": "snmp-gateway"}
 # Singletons on an auxiliary image: cephadm names the service by its type, and each daemon directory may belong to the image's own user.
-SINGLETONS = frozenset(("alertmanager", "alloy", "grafana", "loki", "mgmt-gateway", "node-exporter", "prometheus", "promtail", "snmp-gateway"))
+SINGLETONS = frozenset(("alertmanager", "alloy", "grafana", "loki", "mgmt-gateway", "node-exporter", "oauth2-proxy", "prometheus", "promtail",
+                        "snmp-gateway"))
 # Services listed by their type alone: the auxiliary singletons and the Ceph-image ceph-exporter, crash and rbd-mirror.
 LISTED_SINGLETONS = SINGLETONS | {"ceph-exporter", "crash", "rbd-mirror"}
 TYPES = CLUSTER_TYPES | frozenset(DELEGATED_TYPES)

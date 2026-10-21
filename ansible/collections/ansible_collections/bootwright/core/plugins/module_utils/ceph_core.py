@@ -31,6 +31,11 @@ READINESS_INTERVAL = 5
 # Each ingress host's read-only firewall check, all within one native call of the block's Go deadline.
 FIREWALL_CALL = 120
 FIREWALL_WINDOW = 600
+# The rendered-configuration proof of a management gateway's oauth2-proxy: one call per host per round, rounds within one native call
+# of the block's Go deadline.
+SSO_CALL = 120
+SSO_WINDOW = 600
+SSO_PAUSE = 10
 WORKER_CEILINGS = (640, 1920, 4285)
 # The bootstrap call's own launcher ceiling and worker budget; the cluster block's Go deadline (cephDeadline) adds the call.
 BOOTSTRAP_CEILING = 1920
@@ -59,6 +64,7 @@ CLUSTER_REASONS = (
     "mds-coverage", "foreign-subvolume", "subvolume-identity", "foreign-image", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign",
     "object-zone-pools", "object-endpoint-certificate", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape",
     "ingress-firewall", "service-credential-foreign", "ssh-policy-host-excluded", "ssh-policy-unavailable", "tunnel-host-key-excluded",
+    "sso-unverified",
 )
 SMB_REASONS = (
     "request", "artifact", "ownership", "evidence", "material", "transport", "remote-refusal", "adapter-exception", "native-command",
@@ -176,13 +182,14 @@ def evidence(value, request_digest, request=None):
     if isinstance(value, dict) and value.get("version") == ceph_host_runtime.EVIDENCE_VERSION:
         return host_evidence(value, request_digest, request)
     fields = {"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs",
-              "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons"}
+              "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons", "sso"}
     ceph_native.require(isinstance(value, dict) and set(value) in (fields, fields | {"specializations"}), "evidence")
     ceph_native.require("specializations" not in value or specialization_ids(value["specializations"]), "evidence")
     ceph_native.require(value["version"] == ceph_native.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
                         "evidence")
     dashboard_evidence(value)
     endpoint_evidence(value, request)
+    sso_evidence(value, request)
     actions = ("cluster", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway", "nfs-export")
     ceph_native.require(value["action"] in actions, "evidence")
     daemon_evidence(value, request)
@@ -286,6 +293,19 @@ def endpoint_evidence(value, request=None):
         tls = bool(request["gateway"]["bindings"])
         ceph_native.require(tls or endpoint["certificateSHA256"] == "", "evidence")
         ceph_native.require(not (endpoint["reachable"] and tls) or endpoint["certificateSHA256"] != "", "evidence")
+
+
+def proxied(request):
+    """Whether a request is a management gateway unit with an oauth2-proxy document."""
+    return (request["action"] == "service" and request["service"]["type"] == "mgmt-gateway"
+            and ceph_native_observability.gateway_documents(request["service"])[2] is not None)
+
+
+def sso_evidence(value, request=None):
+    """Whether the dashboard's OAuth2 single sign-on is enabled: only a management gateway unit with an oauth2-proxy reports it."""
+    ceph_native.require(value["sso"] in ("", "oauth2"), "evidence")
+    if value["sso"] == "oauth2":
+        ceph_native.require(value.get("action") == "service" and (request is None or proxied(request)), "evidence")
 
 
 def tls_certificate(address, port, timeout=10):
@@ -880,9 +900,41 @@ def ingress_firewall(request, transport, found, now):
         ceph_native.require(result == {"changed": False}, "evidence")
 
 
+def sso_round(proxy, hosts, held, transport, deadline, now):
+    """One read-only proof round over the proxy's hosts: the running proxy containers counted, and whether each one proved."""
+    daemons, proved = 0, True
+    for name in proxy["placement"]["hosts"]:
+        remaining = deadline - now()
+        ceph_native.require(remaining > 0, "not-ready")
+        result = transport.call(hosts[name], "sso_config", held, timeout=min(SSO_CALL, remaining))
+        ceph_native.require(isinstance(result, dict) and set(result) == {"changed", "daemons", "proved"} and result["changed"] is False
+                            and type(result["daemons"]) is int and result["daemons"] >= 0 and type(result["proved"]) is bool, "evidence")
+        daemons += result["daemons"]
+        proved = proved and result["proved"]
+    return daemons, proved
+
+
+def sso_proof(request, transport, now, pause):
+    """After the unit's apply, before the dashboard's single sign-on is enabled: every proxy host proves, read-only, that each running
+    oauth2-proxy container of this cluster verifies its identity provider's certificate and mounts the bound CA bundle. Rounds repeat
+    until the placed count runs proved; one native call of the block's Go deadline covers the window."""
+    proxy = ceph_native_observability.gateway_documents(request["service"])[2]
+    hosts = {host["name"]: host for host in request["hosts"]}
+    held = transport.unit_material("sso_config")
+    deadline = now() + SSO_WINDOW
+    while True:
+        daemons, proved = sso_round(proxy, hosts, held, transport, deadline, now)
+        if proved and daemons == ceph_native_observability.placed_count(proxy):
+            return
+        remaining = deadline - now()
+        ceph_native.require(remaining > 0, "not-ready")
+        pause(min(SSO_PAUSE, remaining))
+
+
 def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause, phases=("unit",)):
     """A service unit runs its apply phases only on the bootstrap host: its preparation proof, with an ingress the firewall check on each
-    ingress host, its apply phases in order, then its own readiness wait. Its apply phase holds every bound leaf; each observation and
+    ingress host, its apply phases in order, with an oauth2-proxy the rendered-configuration proof on each proxy host and then the one
+    single sign-on write, then its own readiness wait. Its apply phase holds every bound leaf; each observation and
     removal holds the observed ones, and a management gateway's served leaf must be the bound certificate's."""
     changed = False
     bound_unit = request["action"] == "service" and bool(request["service"].get("bindings"))
@@ -894,6 +946,11 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
         bound = transport.unit_material("unit") if bound_unit else {}
         for phase in phases:
             produced = transport.call(bootstrap, phase, bound) if bound and phase == "unit" else transport.call(bootstrap, phase)
+            ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
+            changed = produced["changed"] or changed
+        if request["action"] == "service" and proxied(request):
+            sso_proof(request, transport, now, pause)
+            produced = transport.call(bootstrap, "sso")
             ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
             changed = produced["changed"] or changed
         observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen)

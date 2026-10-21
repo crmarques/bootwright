@@ -433,7 +433,9 @@ func (a *admission) nativeServices(ceph api.Value, partial bool) {
 			}
 		}
 		for _, key := range []string{"extra_container_args", "extra_entrypoint_args", "custom_configs"} {
-			if service.Get(key).Len() != 0 {
+			if key == "custom_configs" && typeName == "oauth2-proxy" {
+				a.oauth2ProxyCAMount(service, field)
+			} else if service.Get(key).Len() != 0 {
 				a.issue("api.invariant", field+"."+key, "native effect-bearing options are not qualified by this core consumer", "omit "+field+"."+key+" until its effect contract is qualified")
 			}
 		}

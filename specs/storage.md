@@ -233,16 +233,32 @@ them:
   `backend_service` is `mgmt-gateway` form one
   `ceph-service-<cluster>-mgmt-gateway` block: the ingress document comes
   first in native-name order, the singleton `mgmt-gateway` document carries no
-  `service_id`, and both write `virtual_ip` in its canonical address form. The
-  block also depends on `ceph-service-<cluster>-monitoring` when that block
-  exists, and its deadline is apply 2940 s, observe 720 s, destroy 1380 s. Its
-  TLS binding is a Secret reference (`service.bindings`) lent as protected
-  files, the certificate to every operation and the private key to apply only.
-  Without a binding the block lists the impact "cephadm signs the management
-  gateway's TLS certificate; the readiness proof reports its SHA-256". Its
+  `service_id`, and both write `virtual_ip` in its canonical address form. A
+  declared `oauth2-proxy` joins the block as a singleton document after
+  `mgmt-gateway`; its spec carries only `allowlist_domains`, `client_id`,
+  `https_address`, `oidc_issuer_url`, `provider_display_name` and
+  `redirect_url`, so an authored `scope` or `email_domains` refuses at
+  planning ("the native service oauth2-proxy carries spec.<member>, which
+  Bootwright does not realize for this service"), and its one admitted
+  `custom_configs` entry carries only its `mount_path`. The block also depends
+  on `ceph-service-<cluster>-monitoring` when that block exists, and its
+  deadline is apply 2940 s (4260 s with an oauth2-proxy, whose rendered
+  configuration proof and single sign-on write each add one native call),
+  observe 720 s, destroy 1380 s. Its bindings are Secret references
+  (`service.bindings`) lent as protected files: the gateway's certificate to
+  every operation and its private key to apply only, and the oauth2-proxy's
+  client and cookie secrets, TLS pair and identity provider CA bundle to apply
+  only. Without the gateway's TLS binding the block lists the impact "cephadm
+  signs the management gateway's TLS certificate; the readiness proof reports
+  its SHA-256". With an oauth2-proxy it also lists "the management gateway
+  signs users in through oauth2-proxy and its identity provider, and
+  Bootwright enables the Ceph dashboard's OAuth2 single sign-on", and without
+  the proxy's TLS pair "cephadm signs oauth2-proxy's TLS certificate". Its
   evidence may carry an `endpoint` member whose lowercase SHA-256 is present
   exactly when the endpoint answered, and readiness needs that answer; every
-  other unit's evidence carries no endpoint. A cluster name longer than 37
+  other unit's evidence carries no endpoint. Every ceph-core evidence carries
+  an `sso` member, `""` or `"oauth2"`; only a management gateway unit with an
+  oauth2-proxy may report `"oauth2"`, and its readiness needs it. A cluster name longer than 37
   characters refuses. Before a fresh apply registers, the bound certificate
   must name the gateway's `virtual_ip` (an IP address entry) or, without one,
   every host of its placement (a DNS name or a matching wildcard), or the
@@ -261,15 +277,6 @@ them:
   name longer than 44 characters refuses. It is ready when every placed host
   runs one crash daemon on the frozen Ceph image. It retires with its cluster;
   removing it alone is [B491](milestones/m2.md#b491)'s.
-- A StorageCluster that declares an `oauth2-proxy` service, and each child
-  planned through it, refuses at planning with `lifecycle.unsupported`
-  "StorageCluster <cluster> declares an oauth2-proxy service, and Bootwright
-  does not realize single sign-on through oauth2-proxy yet", remedy "remove
-  the oauth2-proxy service and its spec.ceph.serviceBindings entries from
-  StorageCluster <cluster>, and omit spec.enable_auth on its mgmt-gateway
-  service or set it to false; B479 tracks single sign-on". The refusal comes
-  before the binding check, because admission requires the oauth2-proxy
-  secret bindings.
 - A gateway block `ceph-gateway-<gateway>` (Kind StorageObjectGateway,
   exclusive `ceph/<cluster>`) executes its gateway's realm, zone group, zone,
   zone placement and rgw service on the bootstrap host. It depends on the
@@ -857,9 +864,45 @@ a binding the SHA-256 of the cephadm-signed leaf the first endpoint served, and
 the coordinator refuses `evidence` for any other digest of a bound unit. A
 readiness timeout names `mgmt-gateway@mgmt-gateway`, `keepalived@ingress.<id>`,
 `tls@mgmt-gateway` and `http@mgmt-gateway` beside the blocking health checks.
-Bootwright writes no dashboard setting and runs no `dashboard` or `mgr module`
-command for the gateway; cephadm sets the dashboard's standby behaviour itself,
-and the cluster's dashboard phase keeps its own publication and readback.
+Without an oauth2-proxy, Bootwright writes no dashboard setting and runs no
+`dashboard` or `mgr module` command for the gateway; cephadm sets the
+dashboard's standby behaviour itself, and the cluster's dashboard phase keeps
+its own publication and readback.
+
+With an oauth2-proxy, the unit also reads `container_image_oauth2_proxy`, and
+the proxy's five bound leaves (`client_secret`, `cookie_secret`, `ssl_cert`,
+`ssl_key` and `/custom_configs/0/content`) are lent to its apply phase only
+and spliced, like the gateway's, into the one apply stream after the
+`mgmt-gateway` document. The identity provider's CA bundle reaches the
+container only through that document's `custom_configs` entry, which cephadm
+mounts at `/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem`; no plan, record,
+argument, evidence or diagnostic carries a bundle or secret byte or a hash of
+one. After the apply, and before any dashboard write, each host of the proxy's
+placement proves read-only, within one native call of the block's deadline
+(calls of at most 120 s, rounds 10 s apart, a 600 s window), that every
+running oauth2-proxy container of this cluster there skips no identity
+provider certificate verification: neither its arguments
+(`--ssl-insecure-skip-verify`) nor its environment
+(`OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY`) nor the configuration file its
+`--config` argument names, read through its mount beneath
+`/var/lib/ceph/<fsid>/` without following a link, sets the skip, and, with a
+bound bundle, its CA mount holds exactly that bundle. The deployed
+container's rendered configuration is the postcondition, never one release's
+template. A skip refuses `sso-unverified`, naming the host, the daemon and
+whether the argument, environment or configuration skips; this is the unit's
+one refusal after its apply's effect, and the dashboard's single sign-on is
+never enabled through an unproved proxy. Until the placed daemon count runs
+proved, the window's exhaustion refuses `not-ready`. Then the bootstrap host
+runs the unit's one dashboard write, `ceph dashboard sso enable oauth2`, only
+when the dashboard module option `mgr/dashboard/sso_oauth2` is not already
+true, and reads it back. No cephadm code writes dashboard single sign-on.
+Readiness also needs the `oauth2-proxy` daemon count on its frozen image and
+that option true, which it reads and never writes (`dashboard sso status` is
+never run, because it answers EPERM without python3-saml); evidence's `sso`
+is then `"oauth2"`. A readiness timeout also names `oauth2-proxy@oauth2-proxy`
+and `sso@oauth2-proxy`. Destroy leaves the dashboard's single sign-on setting
+to whole-cluster retirement; per-resource removal is
+[B491](milestones/m2.md#b491)'s.
 
 A StorageNFSExport is realized by its export block `ceph-nfs-export-<export>`
 on the bootstrap host. A subvolume binding binds the path the subvolume's
@@ -1116,9 +1159,10 @@ custody and never regenerates. A user with no attempt marker, or a password
 changed outside Bootwright, refuses as drift naming the custodied password and
 is never reset. The proof is a controller-side TLS connect to the active MGR
 URL, comparing the certificate SHA-256 with the stored certificate; an
-unreachable port reports the dashboard unproved. Certificates, roles and SSO
-remain [B479](milestones/m2.md#b479); the monitoring stack is realized by its
-service-unit block above.
+unreachable port reports the dashboard unproved. The dashboard's direct
+certificate and roles remain [B479](milestones/m2.md#b479); its OAuth2 single
+sign-on is enabled by the management gateway unit above, and the monitoring
+stack is realized by its service-unit block above.
 
 The client-data test is operator-run through `cluster exec` with the
 bootstrap node's administrator keyring. It writes, flushes, reads and compares

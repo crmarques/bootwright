@@ -401,7 +401,7 @@ def test_observe_refuses_foreign_monitoring_daemon():
     for bad in (dict(row, hostname="node-3"), dict(row, service_name="prometheus"), dict(row, daemon_type="node-exporter")):
         with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
             ceph_native.delegated_daemon(bad, listed)
-    assert "loki" in ceph_native.DAEMON_TYPES and "oauth2-proxy" not in ceph_native.DAEMON_TYPES
+    assert "loki" in ceph_native.DAEMON_TYPES and "oauth2-proxy" in ceph_native.DAEMON_TYPES
     loki = {"daemon_type": "loki", "daemon_id": "node-1", "hostname": "node-1", "service_name": "loki"}
     with pytest.raises(ceph_native.Refusal, match="^foreign-service$"):
         ceph_native.delegated_daemon(loki, listed)
@@ -547,7 +547,8 @@ def test_monitoring_tables_agree():
     assert all(ceph_native.DAEMON_TYPES[kind] == ("delegated", "delegated", False, "none") for kind in observe.SINGLETONS)
     assert ceph_native.DAEMON_TYPES["ceph-exporter"] == ("cluster", "request", True, "ceph") and "ceph-exporter" in observe.CLUSTER_TYPES
     assert all(ceph_native.DELEGATED_SERVICE.fullmatch(kind) for kind in types)
-    assert not any(ceph_native.DELEGATED_SERVICE.fullmatch(name) for name in ("grafana.main", "mgmt-gateway.main", "oauth2-proxy", "loki.x", "prometheus.x"))
+    unlisted = ("grafana.main", "mgmt-gateway.main", "oauth2-proxy.main", "loki.x", "prometheus.x")
+    assert not any(ceph_native.DELEGATED_SERVICE.fullmatch(name) for name in unlisted)
     assert {AUXILIARY_NAME for AUXILIARY_NAME in observability.IMAGES.values() if AUXILIARY_NAME} <= set(ceph_native.AUXILIARY_NAMES)
     monitoring = ceph_native_units.UNIT_TYPES["monitoring"]
     assert monitoring.singletons == types and monitoring.endpoint is None

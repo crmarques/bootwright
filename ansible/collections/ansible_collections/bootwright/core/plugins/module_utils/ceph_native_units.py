@@ -121,7 +121,7 @@ UNIT_TYPES = {
     "rbd-mirror": UnitType(mirror_validate, mirror_check, mirror_claim, mirror_settle, mirror_expected, mirror_readiness, MIRROR_TYPES, mirror_frontend,
                            {"rbd-mirror": None}, {}, frozenset(MIRROR_TYPES), None),
 }
-PHASES = frozenset(("unit", "ingress_firewall"))
+PHASES = frozenset(("unit", "ingress_firewall", "sso_config", "sso"))
 # The ingress firewall check reads only these host tools, never with a write, reload or query form.
 SYSTEMCTL = "/usr/bin/systemctl"
 FIREWALL_CMD = "/usr/bin/firewall-cmd"
@@ -141,9 +141,11 @@ PORT_TOKEN = re.compile(r"([0-9]{1,5})(?:-([0-9]{1,5}))?/tcp\Z")
 RICH_VRRP = re.compile(r'rule (?:family="(ipv4|ipv6)" )?protocol value="(?:vrrp|112)" accept\Z')
 RICH_PORT = re.compile(r'rule (?:family="(ipv4|ipv6)" )?port port="([0-9]{1,5})(?:-([0-9]{1,5}))?" protocol="tcp" accept\Z')
 DOCUMENT_MEMBERS = frozenset(("networks", "placement", "service_id", "service_type", "spec"))
+# The management gateway's oauth2-proxy document alone also carries its one custom_configs entry, the identity provider's CA bundle mount.
+PROXY_MEMBERS = DOCUMENT_MEMBERS | {"custom_configs"}
 INPUTS_VERSION = "ceph-service-inputs-v1"
 MAX_DAEMONS = 256
-PENDING = re.compile(r"(?:(?:" + "|".join(sorted({name for unit in UNIT_TYPES.values() for name in unit.daemon_types} | {"vip", "module"}))
+PENDING = re.compile(r"(?:(?:" + "|".join(sorted({name for unit in UNIT_TYPES.values() for name in unit.daemon_types} | {"vip", "module", "sso"}))
                      + r")@(?:(?:nfs|ingress)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}|"
                      + "|".join(ceph_native_observability.MONITORING_TYPES + ceph_native_observability.GATEWAY_TYPES + MIRROR_TYPES + CRASH_TYPES)
                      + r")|(?:tls|http)@(?:" + "|".join(ceph_native_observability.GATEWAY_TYPES) + r"))\Z")
@@ -152,7 +154,17 @@ BINDING_MEMBERS = frozenset(("path", "secretRef", "serviceRef"))
 BOUND = "bootwright-bound:"
 MATERIAL_VARIABLES = frozenset(variable for unit in UNIT_TYPES.values() for variable in unit.leaves.values())
 MAX_MATERIAL = 4096
-MATERIAL_LIMITS = {"mgmtGatewayCertificate": ceph_native_observability.MAX_CERTIFICATE, "mgmtGatewayKey": ceph_native_observability.MAX_KEY}
+MATERIAL_LIMITS = {"mgmtGatewayCertificate": ceph_native_observability.MAX_CERTIFICATE, "mgmtGatewayKey": ceph_native_observability.MAX_KEY,
+                   "oauth2ProxyCABundle": ceph_native_observability.MAX_CERTIFICATE, "oauth2ProxyCertificate": ceph_native_observability.MAX_CERTIFICATE,
+                   "oauth2ProxyKey": ceph_native_observability.MAX_KEY}
+CERTIFICATE_VARIABLES = frozenset(("mgmtGatewayCertificate", "oauth2ProxyCABundle", "oauth2ProxyCertificate"))
+KEY_VARIABLES = frozenset(("mgmtGatewayKey", "oauth2ProxyKey"))
+# The rendered-configuration proof reads only this cluster's oauth2-proxy containers, through these host tools, never with a write form.
+PODMAN = "/usr/bin/podman"
+SSO_TIMEOUT = 30
+MAX_PROXY_CONTAINERS = 16
+CONTAINER_ID = re.compile(r"[0-9a-f]{12,64}\Z")
+INDEX = re.compile(r"(?:0|[1-9][0-9]{0,3})\Z")
 
 
 def service_name(document):
@@ -185,6 +197,8 @@ def material_names(request, phase="unit"):
     names = frozenset(leaves[(types[binding["serviceRef"]], binding["path"])] for binding in unit.get("bindings", []))
     if phase == "unit":
         return names
+    if phase == "sso_config":
+        return names & {"oauth2ProxyCABundle"}
     return names & ceph_native_observability.OBSERVED_LEAVES if phase in ("observe", "destroy") else frozenset()
 
 
@@ -197,9 +211,9 @@ def material_value(variable, value):
         size = 0
     if not 0 < size <= limit or "\x00" in value:
         return False
-    if variable == "mgmtGatewayCertificate":
+    if variable in CERTIFICATE_VARIABLES:
         return bool(ceph_native_observability.leaf(value))
-    return variable != "mgmtGatewayKey" or ceph_native_observability.PRIVATE_KEY.search(value) is not None
+    return variable not in KEY_VARIABLES or ceph_native_observability.PRIVATE_KEY.search(value) is not None
 
 
 def material(request, phase, private):
@@ -210,8 +224,19 @@ def material(request, phase, private):
     return dict(private)
 
 
+def step(container, part):
+    """(present, child) of one JSON pointer step: an object's member, or a list's item at a decimal index within its length."""
+    if isinstance(container, list):
+        if INDEX.fullmatch(part) is not None and int(part) < len(container):
+            return True, container[int(part)]
+        return False, None
+    if isinstance(container, dict) and part in container:
+        return True, container[part]
+    return False, None
+
+
 def placed(document, paths):
-    """A copy of the document with each bound leaf's placeholder at its pointer."""
+    """A copy of the document with each bound leaf's placeholder at its pointer; a missing object member is created, a list item never."""
     if not paths:
         return document
     value = json.loads(canonical(document))
@@ -219,19 +244,23 @@ def placed(document, paths):
         parts = path.split("/")[1:]
         target = value
         for part in parts[:-1]:
-            target = target.setdefault(part, {})
+            if isinstance(target, dict):
+                target.setdefault(part, {})
+            present, target = step(target, part)
+            require(present)
+        require(isinstance(target, dict))
         target[parts[-1]] = BOUND + path
     return value
 
 
 def leaf(value, path):
-    """(present, leaf) at a JSON pointer; an ancestor that is not an object is present and holds no leaf."""
+    """(present, leaf) at a JSON pointer; an ancestor that is neither an object nor a list is present and holds no leaf."""
     for part in path.split("/")[1:]:
-        if not isinstance(value, dict):
+        if not isinstance(value, (dict, list)):
             return True, None
-        if part not in value:
+        present, value = step(value, part)
+        if not present:
             return False, None
-        value = value[part]
     return True, value
 
 
@@ -248,7 +277,8 @@ def validate(request, hosts):
     delegated = {entry["name"]: entry["hosts"] for entry in request.get("delegated", [])}
     seen = set()
     for document in documents:
-        require(isinstance(document, dict) and {"placement", "service_type"} <= set(document) <= DOCUMENT_MEMBERS)
+        proxy = unit["type"] == "mgmt-gateway" and isinstance(document, dict) and document.get("service_type") == "oauth2-proxy"
+        require(isinstance(document, dict) and {"placement", "service_type"} <= set(document) <= (PROXY_MEMBERS if proxy else DOCUMENT_MEMBERS))
         singleton = document["service_type"] in singletons
         require(named(document["service_type"]) and ("service_id" not in document if singleton else named(document.get("service_id"))))
         placement = document["placement"]
@@ -422,6 +452,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
 
     bound = None
     unit_rows = ()
+    sso_protocol = ""
 
     @staticmethod
     def image_key(name):
@@ -460,7 +491,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
             require(isinstance(self.bound, dict) and variable in self.bound, "material")
             target = value
             for part in parts[:-1]:
-                target = target[part]
+                unused, target = step(target, part)
             target[parts[-1]] = self.bound[variable]
         return value
 
@@ -562,6 +593,57 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         firewall_check(self, found[0]["spec"], found[1])
         return {"changed": False}
 
+    def sso_proxy(self):
+        """The unit's oauth2-proxy document: only a management gateway unit with single sign-on has one."""
+        unit = self.request["service"]
+        proxy = ceph_native_observability.gateway_documents(unit)[2] if unit["type"] == "mgmt-gateway" else None
+        require(proxy is not None)
+        return proxy
+
+    def sso_config(self):
+        """Read-only, after the unit's apply and on one oauth2-proxy host: each running oauth2-proxy container of this cluster here neither
+        skips the identity provider's certificate verification in its arguments, environment or mounted configuration nor, with a bound
+        CA bundle, mounts another bundle. A skip refuses; anything not yet proved is reported unproved. No path, byte, argument or
+        environment value is returned."""
+        proxy = self.sso_proxy()
+        require(self.host["name"] in proxy["placement"]["hosts"])
+        fsid = self.request["fsid"]
+        prefix = "ceph-" + fsid + "-oauth2-proxy"
+        rows = self.command([PODMAN, "ps", "--all", "--format", "json", "--filter", "name=^" + prefix + "[.-]"], timeout=SSO_TIMEOUT)
+        require(isinstance(rows, list) and len(rows) <= MAX_PROXY_CONTAINERS and all(isinstance(row, dict) for row in rows), "native-output")
+        bundle = self.bound.get("oauth2ProxyCABundle") if isinstance(self.bound, dict) else None
+        daemons, proved = 0, True
+        for row in rows:
+            names = row.get("Names")
+            require(isinstance(names, list) and len(names) == 1 and isinstance(names[0], str)
+                    and re.fullmatch(re.escape(prefix) + r"[.-][A-Za-z0-9][A-Za-z0-9_.-]{0,127}", names[0]) is not None, "native-output")
+            if row.get("State") != "running":
+                continue
+            identifier = row.get("Id")
+            require(isinstance(identifier, str) and CONTAINER_ID.fullmatch(identifier) is not None, "native-output")
+            inspected = self.command([PODMAN, "inspect", "--type", "container", identifier], timeout=SSO_TIMEOUT)
+            require(isinstance(inspected, list) and len(inspected) == 1 and isinstance(inspected[0], dict), "native-output")
+            verdict, where = ceph_native_observability.proxy_verdict(fsid, inspected[0], bundle)
+            if verdict == "insecure":
+                raise NativeFailure("sso-unverified", self.native_coordinate(), "host " + self.host["name"] + " daemon " + names[0]
+                                    + ": oauth2-proxy skips identity provider certificate verification in its " + where)
+            daemons += 1
+            proved = proved and verdict == "verified"
+        return {"changed": False, "daemons": daemons, "proved": proved}
+
+    def sso(self):
+        """The unit's one dashboard write, on the bootstrap host after every proxy host proved its rendered configuration: enable the
+        dashboard's OAuth2 single sign-on unless it already is, then read it back."""
+        require(self.markers.owned(), "ownership")
+        require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
+        self.sso_proxy()
+        require(all(self.markers.read("service-" + name + "-complete.json") is not None for name in self.unit_names()), "not-ready")
+        if ceph_native_observability.sso_enabled(self):
+            return {"changed": False}
+        self.tunnel_effect("dashboard", "sso", "enable", "oauth2", json_result=False)
+        require(ceph_native_observability.sso_enabled(self), "not-ready")
+        return {"changed": True}
+
     def unfinished(self, evidence):
         if self.request["action"] != "service":
             return super().unfinished(evidence)
@@ -598,6 +680,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         evidence["daemons"] = sorted(({"host": row["hostname"], "name": row["daemon_type"] + "." + row["daemon_id"], "service": row["service_name"]}
                                       for row in running), key=lambda item: item["name"])[:MAX_DAEMONS]
         unit_ready = owned and hooks.readiness(self, unit, self.blocking)
+        evidence["sso"] = self.sso_protocol
         if hooks.endpoint is not None and owned:
             evidence["endpoint"] = hooks.endpoint(self, unit, running)
             unit_ready = unit_ready and evidence["endpoint"]["reachable"]

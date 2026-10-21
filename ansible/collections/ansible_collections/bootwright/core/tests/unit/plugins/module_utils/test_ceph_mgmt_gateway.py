@@ -407,18 +407,25 @@ def test_gateway_unit_never_writes_a_dashboard_setting(tmp_path, monkeypatch):
 
 
 def test_gateway_tables_agree():
-    assert observability.GATEWAY_TYPES == ("mgmt-gateway",) and set(observability.GATEWAY_TYPES) <= observe.SINGLETONS <= observe.LISTED_SINGLETONS
+    assert observability.GATEWAY_TYPES == ("mgmt-gateway", "oauth2-proxy")
+    assert set(observability.GATEWAY_TYPES) <= observe.SINGLETONS <= observe.LISTED_SINGLETONS
     assert observe.DELEGATED_TYPES["mgmt-gateway"] == "mgmt-gateway" and observe.DELEGATED_TYPES["keepalived"] == "ingress"
+    assert observe.DELEGATED_TYPES["oauth2-proxy"] == "oauth2-proxy" and ceph_native.DELEGATED_SERVICE.fullmatch("oauth2-proxy")
     assert all(ceph_native.DAEMON_TYPES[kind] == ("delegated", "delegated", False, "none") for kind in observability.GATEWAY_DAEMON_TYPES)
     assert ceph_native.DELEGATED_SERVICE.fullmatch("mgmt-gateway") and ceph_native.DELEGATED_SERVICE.fullmatch("ingress.mgmt")
-    assert not any(ceph_native.DELEGATED_SERVICE.fullmatch(name) for name in ("mgmt-gateway.main", "oauth2-proxy"))
+    assert not any(ceph_native.DELEGATED_SERVICE.fullmatch(name) for name in ("mgmt-gateway.main", "oauth2-proxy.main"))
     gateway = ceph_native_units.UNIT_TYPES["mgmt-gateway"]
-    assert gateway.singletons == frozenset(("mgmt-gateway",)) and gateway.endpoint is observability.gateway_endpoint
+    assert gateway.singletons == frozenset(("mgmt-gateway", "oauth2-proxy")) and gateway.endpoint is observability.gateway_endpoint
     assert gateway.daemon_types == observability.GATEWAY_DAEMON_TYPES and gateway.images == observability.GATEWAY_IMAGES
     assert set(gateway.images) == set(gateway.daemon_types) and set(gateway.images.values()) <= set(ceph_native.AUXILIARY_NAMES)
-    assert gateway.leaves == {("mgmt-gateway", "/spec/ssl_cert"): "mgmtGatewayCertificate", ("mgmt-gateway", "/spec/ssl_key"): "mgmtGatewayKey"}
+    assert gateway.leaves == {("mgmt-gateway", "/spec/ssl_cert"): "mgmtGatewayCertificate", ("mgmt-gateway", "/spec/ssl_key"): "mgmtGatewayKey",
+                              ("oauth2-proxy", "/custom_configs/0/content"): "oauth2ProxyCABundle",
+                              ("oauth2-proxy", "/spec/client_secret"): "oauth2ProxyClientSecret",
+                              ("oauth2-proxy", "/spec/cookie_secret"): "oauth2ProxyCookieSecret",
+                              ("oauth2-proxy", "/spec/ssl_cert"): "oauth2ProxyCertificate", ("oauth2-proxy", "/spec/ssl_key"): "oauth2ProxyKey"}
+    assert observability.OAUTH2_PROXY_CA_PATH == "/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem"
     assert observability.OBSERVED_LEAVES < set(gateway.leaves.values()) <= ceph_native_units.MATERIAL_VARIABLES
-    entries = ("mgmt-gateway@mgmt-gateway", "keepalived@ingress.mgmt", "tls@mgmt-gateway", "http@mgmt-gateway")
+    entries = ("mgmt-gateway@mgmt-gateway", "keepalived@ingress.mgmt", "tls@mgmt-gateway", "http@mgmt-gateway", "oauth2-proxy@oauth2-proxy", "sso@oauth2-proxy")
     assert all(ceph_native_units.PENDING.fullmatch(entry) and ceph_core.blocking_entry(entry) for entry in entries)
     assert not any(ceph_native_units.PENDING.fullmatch(entry) for entry in ("tls@ingress.mgmt", "http@grafana", "haproxy@mgmt-gateway.x"))
     request = gateway_request()

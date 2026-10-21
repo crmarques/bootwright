@@ -20,9 +20,8 @@ each that needs an auxiliary image plans once that image is authored under
 ceph-exporter runs the Ceph image, and it and the other monitoring services
 realize through the
 [monitoring unit](../storage.md#resources-readiness-and-access); mgmt-gateway
-realizes through the
-[management gateway unit](../storage.md#resources-readiness-and-access), and
-oauth2-proxy refuses at planning until single sign-on is realized. The
+and oauth2-proxy realize through the
+[management gateway unit](../storage.md#resources-readiness-and-access). The
 core request lists each of them only by its qualified name and eligible hosts,
 outside the host request, so that core observation
 [tolerates its daemons](../storage-native-api.md#service-identity-and-references);

@@ -380,3 +380,16 @@ func TestR14NoLongerRefusesLoki(t *testing.T) {
 		}
 	}
 }
+
+func TestOAuth2ProxyInsecureSkipVerifyAlwaysRefuses(t *testing.T) {
+	const field = "$.spec.ceph.services[3].spec.ssl_insecure_skip_verify"
+	for _, value := range []bool{true, false} {
+		cluster, catalog := withServices(t, fixtureCatalog(), oauth2Proxy("ssl_insecure_skip_verify", value), authGateway())
+		for _, issues := range [][]api.Issue{Validate(cluster, catalog), ValidatePartial(cluster, catalog)} {
+			found := issuesAt(issues, field)
+			if len(found) != 1 || found[0] != (api.Issue{Code: "api.invariant", Field: field, Message: "oauth2-proxy must verify the identity provider's certificate", Remediation: "omit spec.ssl_insecure_skip_verify"}) {
+				t.Fatalf("ssl_insecure_skip_verify %v: %#v", value, found)
+			}
+		}
+	}
+}

@@ -332,8 +332,6 @@ func TestNoBoundMaterialInPlanRequestEvidence(t *testing.T) {
 }
 
 func TestUnrealizedMonitoringServicesKeepTheCoreRefusal(t *testing.T) {
-	_, err := planned(t, delegatedCatalog([]api.Value{auxiliaryService("oauth2-proxy", "", api.Value{})}, nil), api.StorageCluster, "example")
-	refusedWith(t, err, "lifecycle.unsupported", oauth2ProxyReason, oauth2ProxyRemedy)
 	r, err := planned(t, delegatedCatalog([]api.Value{auxiliaryService("prometheus", "", api.Value{})}, nil), api.StorageCluster, "example")
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))

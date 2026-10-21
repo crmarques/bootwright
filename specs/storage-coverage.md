@@ -502,6 +502,13 @@ authored under a second owner.
 [Dashboard OAuth2](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=dashboard-enabling-oauth2-single-sign)
 requires the management gateway, OAuth2 proxy, a qualified identity provider
 and user-role mapping; configuring a redirect alone is not SSO acceptance.
+Bootwright realizes SSO through the management gateway unit for an identity
+provider whose certificate chains to the selected image's trust store or to a
+CA bundle bound through the oauth2-proxy's one `custom_configs` entry, and
+enables the dashboard's OAuth2 single sign-on only after each deployed proxy's
+rendered configuration proves that it verifies the identity provider's
+certificate. Local dashboard roles and users stay parked
+([B683](milestones/backlog.md#b683)).
 
 Monitoring and the management gateway ([B479](milestones/m2.md#b479)) follow the
 [native records](storage-native-api.md#observability-and-management-gateway-records).

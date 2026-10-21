@@ -101,15 +101,23 @@ func unitDeadline(r Request, operation string) (time.Duration, error) {
 		return 0, failure("lifecycle.state", "the Ceph service unit type is not known to this build", "")
 	}
 	budget := map[string]unitBudget{"apply": t.apply, "observe": t.observe, "destroy": t.destroy}[operation]
+	if operation == "apply" && unitProxied(*r.Service) {
+		budget.calls += 2
+	}
 	return time.Duration(budget.calls*nativeCall+budget.waits*readinessWait+60) * time.Second, nil
 }
 
+type customConfig struct {
+	MountPath string `json:"mount_path"`
+}
+
 type unitDocument struct {
-	Networks    []string        `json:"networks,omitempty"`
-	Placement   nativePlacement `json:"placement"`
-	ServiceID   string          `json:"service_id,omitempty"`
-	ServiceType string          `json:"service_type"`
-	Spec        any             `json:"spec,omitempty"`
+	CustomConfigs []customConfig  `json:"custom_configs,omitempty"`
+	Networks      []string        `json:"networks,omitempty"`
+	Placement     nativePlacement `json:"placement"`
+	ServiceID     string          `json:"service_id,omitempty"`
+	ServiceType   string          `json:"service_type"`
+	Spec          any             `json:"spec,omitempty"`
 }
 
 func documentName(d unitDocument) string {
@@ -180,6 +188,7 @@ var unitSpecMembers = map[string][]string{
 	"ceph-exporter":        {"port", "prio_limit", "stats_period"},
 	"snmp-gateway":         {"auth_protocol", "engine_id", "port", "privacy_protocol", "snmp_destination", "snmp_version"},
 	"mgmt-gateway":         {"enable_auth", "enable_health_check_endpoint", "port", "ssl", "ssl_ciphers", "ssl_protocols", "virtual_ip"},
+	"oauth2-proxy":         {"allowlist_domains", "client_id", "https_address", "oidc_issuer_url", "provider_display_name", "redirect_url"},
 	"ingress-mgmt-gateway": {"backend_service", "first_virtual_router_id", "health_check_interval", "keepalive_only", "virtual_interface_networks", "virtual_ip"},
 }
 
@@ -189,7 +198,10 @@ func unitDocumentOf(cluster api.Object, svc api.Value, spec func(api.Value) any)
 		return nil, failure("lifecycle.unsupported", "the native service "+name+" places more than one daemon of a type per host, which Bootwright does not realize",
 			"omit placement.count_per_host on "+name+" in spec.ceph.services")
 	}
-	carried := func(option string) bool { return svc.Get(option).Len() != 0 }
+	mounts := proxyCAMount(svc)
+	carried := func(option string) bool {
+		return svc.Get(option).Len() != 0 && (option != "custom_configs" || mounts == nil)
+	}
 	if slices.ContainsFunc([]string{"config", "extra_container_args", "extra_entrypoint_args", "custom_configs"}, carried) || svc.Get("unmanaged").Bool() || svc.Get("preview_only").Bool() {
 		return nil, failure("lifecycle.unsupported", "the native service "+name+" carries config, extra container or entrypoint arguments or custom configs, which Bootwright does not realize",
 			"remove those options from "+name+" in spec.ceph.services")
@@ -209,9 +221,17 @@ func unitDocumentOf(cluster api.Object, svc api.Value, spec func(api.Value) any)
 	if err != nil {
 		return nil, err
 	}
-	document := unitDocument{Networks: svc.Get("networks").Strings(), Placement: nativePlacement{Count: integerOf(svc.Get("placement", "count")), Hosts: hosts},
+	document := unitDocument{CustomConfigs: mounts, Networks: svc.Get("networks").Strings(), Placement: nativePlacement{Count: integerOf(svc.Get("placement", "count")), Hosts: hosts},
 		ServiceID: svc.Get("service_id").Text(), ServiceType: t, Spec: spec(svc.Get("spec"))}
 	return json.Marshal(document)
+}
+
+func proxyCAMount(svc api.Value) []customConfig {
+	entries := svc.Get("custom_configs").Items()
+	if svc.Get("service_type").Text() != "oauth2-proxy" || len(entries) != 1 || entries[0].Get("mount_path").Text() != storage.OAuth2ProxyCABundlePath || entries[0].Has("content") {
+		return nil
+	}
+	return []customConfig{{MountPath: storage.OAuth2ProxyCABundlePath}}
 }
 
 func nfsUnits(cluster api.Object) ([]ServiceUnit, error) {
@@ -365,8 +385,13 @@ var monitoringLeaves = map[string]monitoringLeaf{
 }
 
 var gatewayLeaves = map[string]monitoringLeaf{
-	"mgmt-gateway /spec/ssl_cert": {Part: secrets.CertificatePart, Variable: "mgmtGatewayCertificate", File: "mgmt-gateway-certificate", Observed: true},
-	"mgmt-gateway /spec/ssl_key":  {Part: secrets.PrivateKeyPart, Variable: "mgmtGatewayKey", File: "mgmt-gateway-key"},
+	"mgmt-gateway /spec/ssl_cert":            {Part: secrets.CertificatePart, Variable: "mgmtGatewayCertificate", File: "mgmt-gateway-certificate", Observed: true},
+	"mgmt-gateway /spec/ssl_key":             {Part: secrets.PrivateKeyPart, Variable: "mgmtGatewayKey", File: "mgmt-gateway-key"},
+	"oauth2-proxy /spec/client_secret":       {Part: secrets.ValuePart, Variable: "oauth2ProxyClientSecret", File: "oauth2-proxy-client-secret"},
+	"oauth2-proxy /spec/cookie_secret":       {Part: secrets.ValuePart, Variable: "oauth2ProxyCookieSecret", File: "oauth2-proxy-cookie-secret"},
+	"oauth2-proxy /spec/ssl_cert":            {Part: secrets.CertificatePart, Variable: "oauth2ProxyCertificate", File: "oauth2-proxy-certificate"},
+	"oauth2-proxy /spec/ssl_key":             {Part: secrets.PrivateKeyPart, Variable: "oauth2ProxyKey", File: "oauth2-proxy-key"},
+	"oauth2-proxy /custom_configs/0/content": {Part: secrets.CertificatePart, Variable: "oauth2ProxyCABundle", File: "oauth2-proxy-ca-bundle"},
 }
 
 func unitLeaf(serviceType, path string) (monitoringLeaf, bool) {
@@ -380,7 +405,7 @@ func unitLeaf(serviceType, path string) (monitoringLeaf, bool) {
 func unitBinding(cluster api.Object, binding api.Value) bool {
 	svc, found := storage.NativeService(cluster, binding.Get("serviceRef").Text())
 	t := svc.Get("service_type").Text()
-	if !found || !slices.Contains([]string{"grafana", "snmp-gateway", "mgmt-gateway"}, t) || binding.Get("secrets").Len() == 0 {
+	if !found || !slices.Contains([]string{"grafana", "snmp-gateway", "mgmt-gateway", "oauth2-proxy"}, t) || binding.Get("secrets").Len() == 0 {
 		return false
 	}
 	for _, secret := range binding.Get("secrets").Items() {
@@ -392,7 +417,7 @@ func unitBinding(cluster api.Object, binding api.Value) bool {
 }
 
 func unrealizedBinding(ref string) error {
-	return failure("lifecycle.unsupported", "Bootwright does not realize the service binding of "+ref+"; it realizes only the TLS bindings of an rgw service that a StorageObjectGateway binds and of the ingress that fronts it, the TLS binding of the management gateway, and the credential bindings of the grafana and snmp-gateway services",
+	return failure("lifecycle.unsupported", "Bootwright does not realize the service binding of "+ref+"; it realizes only the TLS bindings of an rgw service that a StorageObjectGateway binds and of the ingress that fronts it, the TLS binding of the management gateway, the credential, TLS and CA bundle bindings of its oauth2-proxy, and the credential bindings of the grafana and snmp-gateway services",
 		"remove the spec.ceph.serviceBindings entry for "+ref)
 }
 
@@ -498,7 +523,7 @@ func monitoringImpacts(cluster api.Object, unit ServiceUnit) []string {
 	return impacts
 }
 
-var GatewayTypes = []string{"mgmt-gateway"}
+var GatewayTypes = []string{"mgmt-gateway", "oauth2-proxy"}
 
 type mgmtGatewaySpec struct {
 	EnableAuth                bool     `json:"enable_auth,omitempty"`
@@ -508,6 +533,20 @@ type mgmtGatewaySpec struct {
 	SSLCiphers                []string `json:"ssl_ciphers,omitempty"`
 	SSLProtocols              []string `json:"ssl_protocols,omitempty"`
 	VirtualIP                 string   `json:"virtual_ip,omitempty"`
+}
+
+type oauth2ProxySpec struct {
+	AllowlistDomains    []string `json:"allowlist_domains,omitempty"`
+	ClientID            string   `json:"client_id"`
+	HTTPSAddress        string   `json:"https_address,omitempty"`
+	OIDCIssuerURL       string   `json:"oidc_issuer_url"`
+	ProviderDisplayName string   `json:"provider_display_name"`
+	RedirectURL         string   `json:"redirect_url,omitempty"`
+}
+
+func oauth2ProxySpecOf(spec api.Value) any {
+	return oauth2ProxySpec{AllowlistDomains: spec.Get("allowlist_domains").Strings(), ClientID: spec.Get("client_id").Text(), HTTPSAddress: spec.Get("https_address").Text(),
+		OIDCIssuerURL: spec.Get("oidc_issuer_url").Text(), ProviderDisplayName: spec.Get("provider_display_name").Text(), RedirectURL: spec.Get("redirect_url").Text()}
 }
 
 type gatewayIngressSpec struct {
@@ -546,7 +585,7 @@ func gatewayIngressSpecOf(spec api.Value) any {
 
 func gatewayUnits(cluster api.Object) ([]ServiceUnit, error) {
 	services := slices.DeleteFunc(cluster.Spec().Get("ceph", "services").Items(), func(svc api.Value) bool {
-		return svc.Get("service_type").Text() != "mgmt-gateway" && (svc.Get("service_type").Text() != "ingress" || svc.Get("spec", "backend_service").Text() != "mgmt-gateway")
+		return !slices.Contains(GatewayTypes, svc.Get("service_type").Text()) && (svc.Get("service_type").Text() != "ingress" || svc.Get("spec", "backend_service").Text() != "mgmt-gateway")
 	})
 	if !slices.ContainsFunc(services, func(svc api.Value) bool { return svc.Get("service_type").Text() == "mgmt-gateway" }) {
 		return []ServiceUnit{}, nil
@@ -561,9 +600,9 @@ func gatewayUnits(cluster api.Object) ([]ServiceUnit, error) {
 	})
 	names := []string{}
 	for _, svc := range services {
-		spec := gatewayIngressSpecOf
-		if svc.Get("service_type").Text() == "mgmt-gateway" {
-			spec = mgmtGatewaySpecOf
+		spec := map[string]func(api.Value) any{"mgmt-gateway": mgmtGatewaySpecOf, "oauth2-proxy": oauth2ProxySpecOf}[svc.Get("service_type").Text()]
+		if spec == nil {
+			spec = gatewayIngressSpecOf
 		}
 		document, err := unitDocumentOf(cluster, svc, spec)
 		if err != nil {
@@ -590,8 +629,26 @@ func gatewayDependencies(cluster api.Object, _ ServiceUnit) []string {
 }
 
 func gatewayImpacts(_ api.Object, unit ServiceUnit) []string {
-	if len(unit.Bindings) == 0 {
-		return []string{"cephadm signs the management gateway's TLS certificate; the readiness proof reports its SHA-256"}
+	impacts := []string{}
+	if !unitBinds(unit, "mgmt-gateway", "/spec/ssl_cert") {
+		impacts = append(impacts, "cephadm signs the management gateway's TLS certificate; the readiness proof reports its SHA-256")
 	}
-	return nil
+	if unitProxied(unit) {
+		impacts = append(impacts, "the management gateway signs users in through oauth2-proxy and its identity provider, and Bootwright enables the Ceph dashboard's OAuth2 single sign-on")
+		if !unitBinds(unit, "oauth2-proxy", "/spec/ssl_cert") {
+			impacts = append(impacts, "cephadm signs oauth2-proxy's TLS certificate")
+		}
+	}
+	if len(impacts) == 0 {
+		return nil
+	}
+	return impacts
+}
+
+func unitBinds(unit ServiceUnit, ref, path string) bool {
+	return slices.ContainsFunc(unit.Bindings, func(b ServiceBinding) bool { return b.ServiceRef == ref && b.Path == path })
+}
+
+func unitProxied(unit ServiceUnit) bool {
+	return unit.Type == "mgmt-gateway" && slices.ContainsFunc(unitDocuments(Request{Service: &unit}), func(d unitDocument) bool { return d.ServiceType == "oauth2-proxy" })
 }

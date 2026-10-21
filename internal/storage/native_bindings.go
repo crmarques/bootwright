@@ -9,10 +9,11 @@ import (
 )
 
 type BindingRule struct {
-	Holds   func(spec api.Value) bool
-	Field   string
-	Message string
-	Remedy  string
+	Holds     func(spec api.Value) bool
+	OnService func(service api.Value) bool
+	Field     string
+	Message   string
+	Remedy    string
 }
 
 type BindingSlot struct {
@@ -43,6 +44,9 @@ var bindingSlots = []BindingSlot{
 	{ServiceType: "oauth2-proxy", Path: "/spec/cookie_secret", SecretTypes: valueSecretTypes, Part: secrets.ValuePart, Required: &BindingRule{Holds: always, Message: "oauth2-proxy needs the /spec/cookie_secret binding, so continuation never depends on a secret cephadm generated"}},
 	{ServiceType: "oauth2-proxy", Path: "/spec/ssl_cert", SecretTypes: []string{"tlsCertificate"}, Part: secrets.CertificatePart, Pair: "/spec/ssl_key"},
 	{ServiceType: "oauth2-proxy", Path: "/spec/ssl_key", SecretTypes: []string{"tlsCertificate"}, Part: secrets.PrivateKeyPart, Pair: "/spec/ssl_cert"},
+	{ServiceType: "oauth2-proxy", Path: "/custom_configs/0/content", SecretTypes: []string{"caBundle"}, Part: secrets.CertificatePart,
+		Required: &BindingRule{OnService: oauth2ProxyCAMounted, Field: "custom_configs", Message: "an oauth2-proxy custom_configs entry needs its identity provider's CA bundle bound at /custom_configs/0/content"},
+		Allowed:  &BindingRule{OnService: oauth2ProxyCAMounted, Message: "/custom_configs/0/content is read only with the oauth2-proxy custom_configs entry for the identity provider's CA bundle", Remedy: "declare custom_configs with mount_path /etc/pki/tls/certs/oauth2-proxy-idp-ca.pem on this oauth2-proxy service, or remove this binding"}},
 }
 
 const snmpV2cRemedy = "remove this binding; SNMP V2c binds /spec/credentials/snmp_community"
@@ -53,6 +57,13 @@ var (
 )
 
 func always(api.Value) bool { return true }
+
+func (rule *BindingRule) holds(service api.Value) bool {
+	if rule.OnService != nil {
+		return rule.OnService(service)
+	}
+	return rule.Holds(service.Get("spec"))
+}
 
 func anonymousAccessOff(spec api.Value) bool {
 	access := spec.Get("anonymous_access")
@@ -114,7 +125,7 @@ func (a *admission) bindingLeaves(binding, service api.Value, field string, part
 			if slot.Requires != "" && !service.Get("spec", slot.Requires).Bool() {
 				a.issue("api.invariant", leaf+".path", "this TLS binding takes effect only when its service sets "+slot.Requires+": true", "set spec."+slot.Requires+": true on the bound service or remove this binding")
 			}
-			if slot.Allowed != nil && !slot.Allowed.Holds(service.Get("spec")) {
+			if slot.Allowed != nil && !slot.Allowed.holds(service) {
 				a.issue("api.invariant", leaf+".path", slot.Allowed.Message, slot.Allowed.Remedy)
 			}
 		}
@@ -175,7 +186,7 @@ func partWords(part secrets.Part) string { return strings.ReplaceAll(string(part
 
 func (a *admission) requiredBindings(service api.Value, field string) {
 	for _, slot := range bindingSlots {
-		if slot.ServiceType != textOf(service, "service_type") || slot.Required == nil || pairFollower(slot) || !slot.Required.Holds(service.Get("spec")) {
+		if slot.ServiceType != textOf(service, "service_type") || slot.Required == nil || pairFollower(slot) || !slot.Required.holds(service) {
 			continue
 		}
 		at := field

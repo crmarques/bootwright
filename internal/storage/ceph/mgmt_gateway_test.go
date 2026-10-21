@@ -14,6 +14,7 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -24,10 +25,6 @@ import (
 const gatewaySentinel = "mgmt-gateway-sentinel-never-frozen"
 
 const gatewaySet = "bootwright secret set --context example --name mgmt-tls --certificate-file <path> --private-key-file <path>"
-
-const oauth2ProxyReason = "StorageCluster example declares an oauth2-proxy service, and Bootwright does not realize single sign-on through oauth2-proxy yet"
-
-const oauth2ProxyRemedy = "remove the oauth2-proxy service and its spec.ceph.serviceBindings entries from StorageCluster example, and omit spec.enable_auth on its mgmt-gateway service or set it to false; B479 tracks single sign-on"
 
 const gatewayUnbound = "cephadm signs the management gateway's TLS certificate; the readiness proof reports its SHA-256"
 
@@ -184,19 +181,206 @@ func TestGatewayUnitDependsOnMonitoringUnit(t *testing.T) {
 	}
 }
 
-func TestOAuth2ProxyRefusedAtPlanUntilDecided(t *testing.T) {
-	services := []api.Value{mgmtGateway(requestMap("port", 9443, "enable_auth", true)), auxiliaryService("oauth2-proxy", "", requestMap("provider_display_name", "SSO"))}
-	bindings := []api.Value{requestMap("serviceRef", "oauth2-proxy", "secrets", api.ListValue(requestMap("path", "/spec/client_secret", "secretRef", "sso-client"),
-		requestMap("path", "/spec/cookie_secret", "secretRef", "sso-cookie")))}
-	catalog := delegatedCatalog(services, bindings, replicatedPool("volumes"))
+func TestOAuth2ProxyNoLongerRefusesR16(t *testing.T) {
+	catalog := withAuthoredImages(delegatedCatalog(ssoServices(), ssoBindings(), replicatedPool("volumes")), "keepalived", "nginx", "oauth2_proxy")
 	for _, kind := range []api.Kind{api.StorageCluster, api.StoragePool} {
 		name := map[api.Kind]string{api.StorageCluster: "example", api.StoragePool: "volumes"}[kind]
-		_, err := planned(t, catalog, kind, name)
-		refusedWith(t, err, "lifecycle.unsupported", oauth2ProxyReason, oauth2ProxyRemedy)
+		if _, err := planned(t, catalog, kind, name); err != nil {
+			t.Fatalf("%s %s refuses %+v", kind, name, diagnostics.Of(err))
+		}
 	}
-	if regexp.MustCompile(`\bO?D[0-9]+\b`).MatchString(oauth2ProxyReason + oauth2ProxyRemedy) {
-		t.Fatal("the refusal names a decision or question")
+	unit := gatewayUnitOf(t, catalog)
+	documents := documentsOf(unit)
+	if len(documents) != 3 || !strings.Contains(documents[0], `"service_type":"ingress"`) || !strings.Contains(documents[1], `"service_type":"mgmt-gateway"`) ||
+		!strings.HasPrefix(documents[2], `{"custom_configs":[{"mount_path":"/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem"}],`) || !strings.Contains(documents[2], `"service_type":"oauth2-proxy"`) {
+		t.Fatalf("the SSO gateway unit renders:\n%s", strings.Join(documents, "\n"))
 	}
+	for _, document := range documents {
+		if regexp.MustCompile(`client_secret|cookie_secret|ssl_cert|ssl_key|"content"`).MatchString(document) {
+			t.Fatalf("an SSO document carries a bound leaf: %s", document)
+		}
+	}
+	const sso = "the management gateway signs users in through oauth2-proxy and its identity provider, and Bootwright enables the Ceph dashboard's OAuth2 single sign-on"
+	if impacts := gatewayImpacts(api.Object{}, unit); !slices.Equal(impacts, []string{gatewayUnbound, sso}) {
+		t.Fatalf("the SSO gateway impacts are %q", impacts)
+	}
+	unsigned := unit
+	unsigned.Bindings = slices.DeleteFunc(slices.Clone(unit.Bindings), func(b ServiceBinding) bool { return strings.HasPrefix(b.Path, "/spec/ssl_") })
+	if impacts := gatewayImpacts(api.Object{}, unsigned); !slices.Equal(impacts, []string{gatewayUnbound, sso, "cephadm signs oauth2-proxy's TLS certificate"}) {
+		t.Fatalf("the SSO gateway without its proxy's TLS pair impacts %q", impacts)
+	}
+}
+
+func ssoProxy(extra ...any) api.Value {
+	spec := requestMap(append([]any{"client_id", "ceph", "oidc_issuer_url", "https://idp.example.test/realms/ceph", "provider_display_name", "SSO"}, extra...)...)
+	return requestMap("service_type", "oauth2-proxy", "placement", requestMap("label", "mon", "count", 1), "spec", spec,
+		"custom_configs", api.ListValue(requestMap("mount_path", storage.OAuth2ProxyCABundlePath)))
+}
+
+func ssoServices(extra ...any) []api.Value {
+	return []api.Value{mgmtGateway(requestMap("port", 9443, "enable_auth", true, "virtual_ip", "192.0.2.60")), mgmtIngress("192.0.2.60"), ssoProxy(extra...)}
+}
+
+func ssoBindings() []api.Value {
+	return []api.Value{requestMap("serviceRef", "oauth2-proxy", "secrets", api.ListValue(requestMap("path", "/custom_configs/0/content", "secretRef", "sso-ca"),
+		requestMap("path", "/spec/client_secret", "secretRef", "sso-client"), requestMap("path", "/spec/cookie_secret", "secretRef", "sso-cookie"),
+		requestMap("path", "/spec/ssl_cert", "secretRef", "sso-tls"), requestMap("path", "/spec/ssl_key", "secretRef", "sso-tls")))}
+}
+
+func withAuthoredImages(catalog api.Catalog, images ...string) api.Catalog {
+	objects := catalog.Objects()
+	for i, object := range objects {
+		if object.Kind() != api.StorageCluster {
+			continue
+		}
+		spec := object.Spec()
+		for _, name := range images {
+			spec = spec.WithPath(requestMap("base", PinnedRegistry+"/synthetic/"+name, "version", "synthetic-1"), "ceph", "images", name)
+		}
+		objects[i] = object.WithSpec(spec)
+	}
+	return api.NewCatalog(objects)
+}
+
+func ssoRequest(t *testing.T) Request {
+	t.Helper()
+	r := frozenGoldenRequest()
+	unit := gatewayUnitOf(t, delegatedCatalog(ssoServices(), ssoBindings()))
+	r.Action, r.Service = "service", &unit
+	for _, document := range unitDocuments(r) {
+		r.Delegated = append(r.Delegated, DelegatedService{Name: documentName(document), Hosts: document.Placement.Hosts})
+	}
+	for i, name := range []string{"keepalived", "nginx", "oauth2_proxy"} {
+		r.Auxiliary = append(r.Auxiliary, AuxiliaryReference{Name: name, Image: PinnedRegistry + "/synthetic/" + name + "@sha256:" + strings.Repeat(string("abc"[i]), 64)})
+	}
+	return r
+}
+
+func TestOAuth2ProxyPlansWithItsSelectedImage(t *testing.T) {
+	catalog := settingsCatalog(t, ssoServices())
+	state := withImages(t, compilation.NewState(catalog, catalog, nil), "keepalived", "nginx", "oauth2_proxy")
+	notRefused(t, state, "an SSO gateway with its images")
+	plan := plannedAuxiliary(t, state)
+	core, err := DecodeRequest(plan[ClusterBlockID("example")].Request)
+	if err != nil || !slices.ContainsFunc(core.Auxiliary, func(a AuxiliaryReference) bool {
+		return a.Name == "oauth2_proxy" && strings.HasPrefix(a.Image, PinnedRegistry+"/synthetic/oauth2_proxy")
+	}) {
+		t.Fatalf("the core request freezes %+v (%v)", core.Auxiliary, err)
+	}
+	if at := slices.IndexFunc(core.Delegated, func(d DelegatedService) bool { return d.Name == "oauth2-proxy" }); at < 0 || len(core.Delegated[at].Hosts) == 0 {
+		t.Fatalf("the core request delegates %+v", core.Delegated)
+	}
+	r := ssoRequest(t)
+	data, err := r.Canonical()
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	matchesGolden(t, "request-cluster-sso", data, false)
+	decoded, err := DecodeRequest(data)
+	if roundtrip, rerr := decoded.Canonical(); err != nil || rerr != nil || !bytes.Equal(data, roundtrip) {
+		t.Fatal("the SSO request did not round-trip")
+	}
+	plain := mgmtGatewayRequest(t)
+	for request, want := range map[*Request]time.Duration{&r: 4260 * time.Second, &plain: 2940 * time.Second} {
+		if got, err := cephDeadline(*request, "apply"); err != nil || got != want {
+			t.Fatalf("the gateway apply deadline is %v (%v), want %v", got, err, want)
+		}
+		for operation, want := range map[string]time.Duration{"observe": 720 * time.Second, "destroy": 1380 * time.Second} {
+			if got, err := cephDeadline(*request, operation); err != nil || got != want {
+				t.Fatalf("the gateway %s deadline is %v (%v), want %v", operation, got, err, want)
+			}
+		}
+	}
+}
+
+func TestSSOGatewayWithoutTheOAuth2ProxyImageRefusesNamingTheField(t *testing.T) {
+	catalog := settingsCatalog(t, ssoServices())
+	state := withImages(t, compilation.NewState(catalog, catalog, nil), "keepalived", "nginx")
+	unauthoredRefusal(t, state, "oauth2-proxy", "oauth2-proxy", "oauth2_proxy")
+}
+
+func TestSSOUnitRealizesOnlyItsRecordMembers(t *testing.T) {
+	for _, member := range []string{"scope", "email_domains"} {
+		cluster, _ := delegatedCatalog(ssoServices(member, api.StringList("x")), ssoBindings()).Find(api.StorageCluster, "example")
+		_, err := gatewayUnits(cluster)
+		refusedWith(t, err, "lifecycle.unsupported", "the native service oauth2-proxy carries spec."+member+", which Bootwright does not realize for this service",
+			"remove spec."+member+" from oauth2-proxy in spec.ceph.services")
+	}
+	cluster, _ := delegatedCatalog(append(ssoServices()[:2], ssoProxy().With("custom_configs", api.ListValue(requestMap("mount_path", "/etc/other.pem")))), nil).Find(api.StorageCluster, "example")
+	_, err := gatewayUnits(cluster)
+	refusedWith(t, err, "lifecycle.unsupported", "the native service oauth2-proxy carries config, extra container or entrypoint arguments or custom configs, which Bootwright does not realize",
+		"remove those options from oauth2-proxy in spec.ceph.services")
+}
+
+func ssoReadyEvidence(r Request) Evidence {
+	e := readyEvidence(r)
+	e.Daemons = []UnitDaemon{{Host: "node-1", Name: "keepalived.mgmt.node-1.abcdef", Service: "ingress.mgmt"}, {Host: "node-1", Name: "mgmt-gateway.node-1", Service: "mgmt-gateway"},
+		{Host: "node-2", Name: "oauth2-proxy.node-2.ghijkl", Service: "oauth2-proxy"}}
+	e.Endpoint = EndpointEvidence{CertificateSHA256: strings.Repeat("a", 64), Reachable: true}
+	e.SSO = "oauth2"
+	return e
+}
+
+func TestSSOEvidence(t *testing.T) {
+	r := runtimeRequest()
+	unit := gatewayUnitOf(t, delegatedCatalog(ssoServices(), ssoBindings()))
+	r.Action, r.Service = "service", &unit
+	ready := ssoReadyEvidence(r)
+	if effect, err := EvaluateEvidence(evidenceBytes(t, ready), r, "digest", false); err != nil || effect != reconciliation.EffectCompleted {
+		t.Fatalf("ready SSO evidence is %s (%+v)", effect, diagnostics.Of(err))
+	}
+	for name, sso := range map[string]string{"single sign-on not enabled": "", "another protocol": "saml2"} {
+		e := ready
+		e.SSO = sso
+		if effect, err := EvaluateEvidence(evidenceBytes(t, e), r, "digest", false); err == nil || effect != reconciliation.EffectUnknown {
+			t.Fatalf("%s is %s", name, effect)
+		}
+	}
+	plain := runtimeRequest()
+	gateway := gatewayUnitOf(t, delegatedCatalog(vipGateway("192.0.2.60"), nil))
+	plain.Action, plain.Service = "service", &gateway
+	e := ssoReadyEvidence(plain)
+	e.Daemons = e.Daemons[:2]
+	if effect, err := EvaluateEvidence(evidenceBytes(t, e), plain, "digest", false); err == nil || effect != reconciliation.EffectUnknown {
+		t.Fatalf("SSO evidence for a gateway without oauth2-proxy is %s", effect)
+	}
+	e.SSO = ""
+	if effect, err := EvaluateEvidence(evidenceBytes(t, e), plain, "digest", false); err != nil || effect != reconciliation.EffectCompleted {
+		t.Fatalf("a gateway without oauth2-proxy is %s (%+v)", effect, diagnostics.Of(err))
+	}
+	members := map[string]json.RawMessage{}
+	if err := json.Unmarshal(evidenceBytes(t, ready), &members); err != nil || len(members) != 23 {
+		t.Fatalf("ready SSO evidence has %d members (%v)", len(members), err)
+	}
+	members["specializations"] = json.RawMessage(`["synthetic-seam"]`)
+	if effect, err := EvaluateEvidence(canonicalMembers(t, members), r, "digest", false); err != nil || effect != reconciliation.EffectCompleted {
+		t.Fatalf("24 members with specializations are %s (%+v)", effect, diagnostics.Of(err))
+	}
+	delete(members, "specializations")
+	delete(members, "sso")
+	if effect, err := EvaluateEvidence(canonicalMembers(t, members), r, "digest", false); err == nil || effect != reconciliation.EffectUnknown {
+		t.Fatalf("22 members without sso are %s", effect)
+	}
+}
+
+func canonicalMembers(t *testing.T, members map[string]json.RawMessage) []byte {
+	t.Helper()
+	data, err := json.Marshal(members)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func TestGatewayProofIgnoresTheOAuth2ProxyBindings(t *testing.T) {
+	ctx, capability := context.Background(), New(api.StorageCluster, nil)
+	block := gatewayUnitBlock(t, gatewayCatalog(t, ssoServices(), ssoBindings()))
+	ca := map[string]secrets.Material{"sso-ca": secrets.NewMaterial(map[secrets.Part][]byte{secrets.CertificatePart: leafPEM(t, []string{"idp.example.test"})})}
+	if err := capability.ProveBinding(ctx, "example", block, ca); err != nil {
+		t.Fatalf("a gateway whose own certificate cephadm signs reads the oauth2-proxy bindings: %+v", diagnostics.Of(err))
+	}
+	bound := gatewayUnitBlock(t, gatewayCatalog(t, ssoServices(), append(ssoBindings(), tlsBinding("mgmt-gateway", "mgmt-tls"))))
+	refusedWith(t, capability.ProveBinding(ctx, "example", bound, ca), "lifecycle.state", "the TLS Secret the management gateway of a StorageCluster binds is not bound to this apply", "")
 }
 
 func mgmtGatewayRequest(t *testing.T) Request {
@@ -388,7 +572,7 @@ func TestGatewayUnitEndpointEvidence(t *testing.T) {
 }
 
 func TestGatewayLeavesFollowTheBindingRegistry(t *testing.T) {
-	cluster, _ := delegatedCatalog(vipGateway("192.0.2.60"), nil).Find(api.StorageCluster, "example")
+	cluster, _ := delegatedCatalog(ssoServices(), nil).Find(api.StorageCluster, "example")
 	for key, leaf := range gatewayLeaves {
 		serviceType, path, _ := strings.Cut(key, " ")
 		slot, found := storage.NativeBindingSlot(cluster, serviceType, path)

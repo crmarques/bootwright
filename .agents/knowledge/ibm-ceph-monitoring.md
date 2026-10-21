@@ -119,8 +119,18 @@ An identity provider's roles map only onto system roles
 ([`map_to_system_roles`](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/dashboard/services/access_control.py)),
 so a custom role needs local users, and `ac-user-create` reads the password
 from `-i`. Local roles and users are parked
-([B683](../../specs/milestones/backlog.md#b683)). SSO itself refuses at
-planning until it is realized (`TestOAuth2ProxyRefusedAtPlanUntilDecided`).
+([B683](../../specs/milestones/backlog.md#b683)). SSO itself is realized
+through the management gateway unit (`TestOAuth2ProxyNoLongerRefusesR16`).
+
+No cephadm code writes dashboard SSO:
+[`config_dashboard`](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/mgmt_gateway.py)
+sets only the standby options, and the proxy's `post_remove` removes only its
+certificate and key. In
+[sso.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/dashboard/services/sso.py)
+`dashboard sso enable oauth2` sets the module option `sso_oauth2` (read as
+`mgr/dashboard/sso_oauth2`), while `dashboard sso status` and `disable` answer
+`EPERM` without `python3-saml`. So the unit enables SSO itself and observes
+the option, never `sso status`.
 
 ## Certificate manager
 

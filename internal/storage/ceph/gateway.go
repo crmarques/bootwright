@@ -173,10 +173,14 @@ func proveGatewayUnit(contextName string, block reconciliation.Block, material m
 	if err != nil {
 		return err
 	}
-	if r.Action != "service" || r.Service == nil || r.Service.Type != "mgmt-gateway" || len(r.Service.Bindings) == 0 {
+	if r.Action != "service" || r.Service == nil || r.Service.Type != "mgmt-gateway" {
 		return nil
 	}
-	secret := r.Service.Bindings[0].SecretRef
+	at := slices.IndexFunc(r.Service.Bindings, func(b ServiceBinding) bool { return b.ServiceRef == "mgmt-gateway" && b.Path == "/spec/ssl_cert" })
+	if at < 0 {
+		return nil
+	}
+	secret := r.Service.Bindings[at].SecretRef
 	value, found := material[secret]
 	if !found {
 		return failure("lifecycle.state", "the TLS Secret the management gateway of a StorageCluster binds is not bound to this apply", "")

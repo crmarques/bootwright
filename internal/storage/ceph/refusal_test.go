@@ -350,11 +350,20 @@ func TestEachSMBBlockNamesExactlyTheRefusalsItsModuleMayPublish(t *testing.T) {
 func TestResourceRefusalsNameTheirNextStep(t *testing.T) {
 	refusals := adapterRefusals()
 	generic := diagnostics.Of(refusals["native-output"])[0].Remediation
-	for _, reason := range []string{"foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget", "foreign-rbd-image", "rbd-image-identity", "foreign-subvolume", "subvolume-identity", "pool-drift", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign", "object-zone-pools", "object-endpoint-certificate", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape", "ingress-firewall"} {
+	for _, reason := range []string{"foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget", "foreign-rbd-image", "rbd-image-identity", "foreign-subvolume", "subvolume-identity", "pool-drift", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign", "object-zone-pools", "object-endpoint-certificate", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape", "ingress-firewall", "sso-unverified"} {
 		d := diagnostics.Of(refusals[reason])
 		if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Remediation == generic || strings.Contains(d[0].Message, "could not prove its") {
 			t.Fatalf("%s reaches the operator as %+v", reason, d)
 		}
+	}
+}
+
+func TestAnUnverifiedSSORefusalNamesTheSkipAndItsRemedies(t *testing.T) {
+	d := diagnostics.Of(adapterRefusals()["sso-unverified"])
+	const message = "an oauth2-proxy daemon of a Ceph management gateway runs with a configuration that skips the identity provider's certificate verification, so Bootwright did not enable the dashboard's single sign-on"
+	const remedy = "the native error names the host, the daemon and where the skip was found; take back what this context owns with bootwright destroy --context <context>, then select a Ceph image whose cephadm renders oauth2-proxy without that skip with bootwright context update, or remove the oauth2-proxy service, its spec.ceph.serviceBindings entry and spec.enable_auth on the mgmt-gateway, then apply"
+	if len(d) != 1 || d[0].Code != "lifecycle.unknown" || d[0].Message != message || d[0].Remediation != remedy {
+		t.Fatalf("an sso-unverified refusal reached the operator as %+v", d)
 	}
 }
 

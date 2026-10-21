@@ -14,6 +14,7 @@ import (
 const (
 	inlineCredentialMessage = "native documents never carry credentials inline"
 	tlsNotQualifiedMessage  = "TLS options of this service are not supported by Bootwright yet; the selected release's native default applies"
+	OAuth2ProxyCABundlePath = "/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem"
 	dnsLabels               = `[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*`
 )
 
@@ -231,6 +232,24 @@ func (a *admission) oauth2ProxyRecord(spec api.Value, at string) {
 			a.issue("api.invariant", indexed(at+"allowlist_domains", j), "allowlist_domains entries are [.|*.]host[:port|:*]", "write the entry as a domain or IPv4 address with an optional leading . or *. and an optional :port or :*")
 		}
 	}
+}
+
+func (a *admission) oauth2ProxyCAMount(service api.Value, field string) {
+	entries := service.Get("custom_configs").Items()
+	if len(entries) == 0 {
+		return
+	}
+	if len(entries) != 1 || textOf(entries[0], "mount_path") != OAuth2ProxyCABundlePath {
+		a.issue("api.invariant", field+".custom_configs", "oauth2-proxy takes custom_configs only for its identity provider's CA bundle at "+OAuth2ProxyCABundlePath, "declare one custom_configs entry with mount_path "+OAuth2ProxyCABundlePath+" and bind /custom_configs/0/content to a caBundle Secret in spec.ceph.serviceBindings, or omit custom_configs")
+		return
+	}
+	if entries[0].Has("content") {
+		a.issue("api.invariant", field+".custom_configs[0].content", "native documents never carry the identity provider's CA bundle inline", "remove content; bind /custom_configs/0/content to a caBundle Secret in spec.ceph.serviceBindings")
+	}
+}
+
+func oauth2ProxyCAMounted(service api.Value) bool {
+	return slices.ContainsFunc(service.Get("custom_configs").Items(), func(entry api.Value) bool { return textOf(entry, "mount_path") == OAuth2ProxyCABundlePath })
 }
 
 func allowlistDomain(text string) bool {

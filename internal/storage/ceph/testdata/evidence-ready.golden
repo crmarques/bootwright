@@ -72,5 +72,6 @@
     "id": "",
     "path": ""
   },
-  "version": "ceph-core-evidence-v8"
+  "sso": "",
+  "version": "ceph-core-evidence-v9"
 }

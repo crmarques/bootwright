@@ -554,6 +554,13 @@ member of the schema refuses at its own field with an owner:
   before it is stored; the monitoring unit's worker refuses the same request.
 - oauth2-proxy `ssl_insecure_skip_verify` always refuses (D161): the proxy
   verifies its identity provider's certificate.
+- oauth2-proxy takes `custom_configs` only as exactly one entry whose
+  `mount_path` is `/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem`, without
+  `content`: the identity provider's CA bundle, mounted into a directory the
+  proxy's system trust store reads, arrives through its
+  [binding row](#secret-bindings). Another entry or `mount_path` refuses at
+  `custom_configs`, and inline `content` refuses at that entry's `content`.
+  Every other service still refuses `custom_configs`.
 - An alertmanager `user_data` key other than `default_webhook_urls` refuses
   at that key, because cephadm reads only that one
   ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L314-L324)).
@@ -594,9 +601,11 @@ after parsing, because "the `virtual_ip` parameter must be identical in both"
 the gateway's `virtual_ip` without such an ingress refuses at that field, and
 the ingress refuses at its own `virtual_ip` when the gateway declares none or
 a different address. That ingress runs keepalived only, so it refuses
-`frontend_port` and `monitor_port`. Planning refuses a declared oauth2-proxy
-until single sign-on is realized, so a planned management gateway carries no
-`enable_auth: true`.
+`frontend_port` and `monitor_port`. A declared oauth2-proxy joins the
+management gateway's unit after the `mgmt-gateway` document, and that
+gateway carries `enable_auth: true`. Planning refuses an authored oauth2-proxy
+`scope` or `email_domains`, because no oauth2-proxy spec Bootwright realizes
+has them.
 
 Log collection runs `loki` with one agent, `alloy` or `promtail`, in the
 monitoring unit, each on its image authored under `spec.ceph.images`. The
@@ -760,6 +769,7 @@ or `token` Secret.
 | `oauth2-proxy` | `/spec/cookie_secret` | value | | always, at the service | |
 | `oauth2-proxy` | `/spec/ssl_cert` | `tlsCertificate` certificate | `/spec/ssl_key` | no | |
 | `oauth2-proxy` | `/spec/ssl_key` | `tlsCertificate` private key | `/spec/ssl_cert` | with its pair | |
+| `oauth2-proxy` | `/custom_configs/0/content` | `caBundle` certificate | | with the `custom_configs` entry, at `custom_configs` | without it |
 
 cephadm reads these credential keys per SNMP version: V2c needs
 `snmp_community`, V3 needs the two auth keys and, with a `privacy_protocol`,

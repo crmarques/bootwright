@@ -74,7 +74,7 @@ SUBVOLUME_PATH = re.compile(r"/volumes/(?:_nogroup|[A-Za-z0-9][A-Za-z0-9_.-]{0,1
 CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "tunnel_preflight", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount",
                          "cache", "enroll", "services", "dashboard", "dashboard_read", "observe", "bootstrap_state", "host_state", "destroy"))
 CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "tunnel_preflight", "observe", "bootstrap_state", "host_state", "dashboard_read"))
-EVIDENCE_VERSION = "ceph-core-evidence-v8"
+EVIDENCE_VERSION = "ceph-core-evidence-v9"
 # The specialization ids the last dispatched phase's worker applied; the remote wrapper reads it once per process.
 APPLIED = []
 DASHBOARD_USER = "admin"
@@ -122,14 +122,15 @@ DAEMON_TYPES = {
     "promtail": ("delegated", "delegated", False, "none"),
     "snmp-gateway": ("delegated", "delegated", False, "none"),
     "mgmt-gateway": ("delegated", "delegated", False, "none"),
+    "oauth2-proxy": ("delegated", "delegated", False, "none"),
     "smb": ("delegated", "delegated", False, "none"),
     "rbd-mirror": ("delegated", "delegated", False, "none"),
 }
 # A service another block executes, listed by its cephadm service_name: rgw.<id>, ingress.<id>, nfs.<id>, smb.<id> or a singleton's type,
-# crash, rbd-mirror and the log collection services loki, alloy and promtail among them.
+# crash, rbd-mirror, the log collection services loki, alloy and promtail, and the management gateway's oauth2-proxy among them.
 DELEGATED_SERVICE = re.compile(r"(?:(?:rgw|ingress|nfs|smb)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}"
-                               r"|alertmanager|alloy|ceph-exporter|crash|grafana|loki|mgmt-gateway|node-exporter|prometheus|promtail|rbd-mirror"
-                               r"|snmp-gateway)\Z")
+                               r"|alertmanager|alloy|ceph-exporter|crash|grafana|loki|mgmt-gateway|node-exporter|oauth2-proxy|prometheus|promtail"
+                               r"|rbd-mirror|snmp-gateway)\Z")
 
 
 def supported_transport(request):
@@ -538,7 +539,7 @@ def host_scope(request):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v26")
+    require(request["version"] == "ceph-core-v27")
     require(named(request["controller"]) and named(request["cluster"]) and named(request["owner"]))
     try:
         require(str(uuid.UUID(request["fsid"])) == request["fsid"])
@@ -3431,7 +3432,7 @@ class Worker:
                 "owner": self.request["owner"], "owned": self.markers.owned(), "exists": False, "ready": False, "removed": False, "partial": False,
                 "health": "", "hosts": [], "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [], "osds": [],
                 "resource": {"id": "", "path": ""}, "client": "", "dashboard": {"url": "", "certificateSHA256": "", "reachable": False},
-                "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": []}
+                "endpoint": {"certificateSHA256": "", "reachable": False}, "daemons": [], "sso": ""}
 
     def observe(self):
         if self.recovery_enabled() and self.request["action"] == "cluster" and self.markers.read("bootstrap-enrollment.json") is None:
