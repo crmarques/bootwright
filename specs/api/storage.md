@@ -552,8 +552,9 @@ checks:
   control characters that does not begin with `-`
   ([field record](../storage-resources.md#storageobjectuser-field-record));
 - each object bucket binds a same-cluster StorageObjectGateway and a
-  same-cluster StorageObjectUser of that gateway, and its name has 3 to 44
-  characters
+  same-cluster StorageObjectUser of that gateway, its name has 3 to 44
+  characters, and its policy, when declared, has a `Version` string and a
+  non-empty `Statement`
   ([field record](../storage-resources.md#storageobjectbucket-field-record));
 - each NFS export binds exactly one same-cluster filesystem or subvolume and
   one declared nfs service, its pseudo path is unique among the exports of

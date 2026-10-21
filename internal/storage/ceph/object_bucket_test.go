@@ -139,6 +139,15 @@ func TestObjectBucketPlanRefusals(t *testing.T) {
 	_, err = planned(t, bucketCatalog(withPairAndHTTPRGW, objectGateway("objects"), objectBucketObject("app-data", "policy", float)), api.StorageObjectBucket, "app-data")
 	refusedWith(t, err, "api.invariant", "StorageObjectBucket app-data declares a policy holding a value that is not a JSON string, integer, boolean, list or mapping",
 		"write spec.policy as the native S3 bucket policy document with only strings, integers, booleans, lists and mappings")
+	const typeMessage = "StorageObjectBucket app-data declares a policy holding a value that is not a JSON string, integer, boolean, list or mapping"
+	const typeRemedy = "write spec.policy as the native S3 bucket policy document with only strings, integers, booleans, lists and mappings"
+	for name, value := range map[string]api.Value{"a null": {}, "an integer beyond int64": api.IntegerValue("9223372036854775808"), "an exponent": api.NumberValue("1e3")} {
+		bad := requestMap("Version", "2012-10-17", "Statement", api.ListValue(requestMap("Sid", value)))
+		_, err = planned(t, bucketCatalog(withPairAndHTTPRGW, objectGateway("objects"), objectBucketObject("app-data", "policy", bad)), api.StorageObjectBucket, "app-data")
+		if d := diagnostics.Of(err); len(d) != 1 || d[0].Message != typeMessage || d[0].Remediation != typeRemedy {
+			t.Fatalf("%s: %+v", name, d)
+		}
+	}
 	large := requestMap("Version", "2012-10-17", "Statement", api.ListValue(requestMap("Sid", strings.Repeat("s", 65536))))
 	_, err = planned(t, bucketCatalog(withPairAndHTTPRGW, objectGateway("objects"), objectBucketObject("app-data", "policy", large)), api.StorageObjectBucket, "app-data")
 	refusedWith(t, err, "api.invariant", "StorageObjectBucket app-data declares a policy larger than 65536 bytes of JSON", "shorten spec.policy to at most 65536 bytes of JSON")
@@ -231,5 +240,14 @@ func TestObjectBucketRunsWithoutOutputsOrProducedMaterial(t *testing.T) {
 	mismatched.Block.Kind = string(api.StorageObjectUser)
 	if _, err := New(api.StorageObjectBucket, runner).Observe(context.Background(), mismatched); err == nil {
 		t.Fatal("a bucket request under another kind was accepted")
+	}
+}
+
+func TestObjectBucketPolicyFreezesAsTheTextTheWorkerAdmits(t *testing.T) {
+	statement := requestMap("Z", "z", "Sid", "<>& \u00e9\u2028\u2029\t\"\\\x01\x7f\b\f\n\r\u20ac", "N", api.IntegerValue("-9223372036854775808"), "K\u00e9", true)
+	policy := requestMap("Version", "2012-10-17", "Statement", api.ListValue(statement))
+	const want = "{\"Statement\":[{\"K\u00e9\":true,\"N\":-9223372036854775808,\"Sid\":\"\\u003c\\u003e\\u0026 \u00e9\\u2028\\u2029\\t\\\"\\\\\\u0001\x7f\\b\\f\\n\\r\u20ac\",\"Z\":\"z\"}],\"Version\":\"2012-10-17\"}"
+	if got := plannedBucket(t, bucketCatalog(withPairAndHTTPRGW, objectGateway("objects"), objectBucketObject("app-data", "policy", policy))).Policy; got != want {
+		t.Fatalf("the policy froze as %s, want %s", got, want)
 	}
 }

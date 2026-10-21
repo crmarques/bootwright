@@ -285,13 +285,55 @@ def test_the_attempt_record_precedes_the_create(ready):
     assert "object-bucket-attempt.app-data.json" in seen[0] and "object-bucket-id.app-data.json" not in seen[0]
 
 
-def test_a_lost_reply_is_recovered_under_the_attempt_record_without_a_second_create(ready):
+def test_a_lost_reply_refuses_and_is_recovered_under_the_attempt_record_without_a_second_create(ready):
     cluster, markers, rgw = ready
     rgw.drop = True
-    with pytest.raises(ceph_native.Refusal, match="^not-ready$"):
+    with pytest.raises(ceph_native.NativeFailure, match="^object-bucket-s3$") as caught:
         bucket_worker(cluster, markers).object_bucket()
+    assert caught.value.native_error["cause"] == "PUT /app-data: no complete answer from the daemon at 127.0.0.1 after the request was sent"
     assert "app-data" in cluster.buckets and markers.read("object-bucket-attempt.app-data.json") == intent()
     rgw.drop = False
+    assert bucket_worker(cluster, markers).object_bucket() == {"changed": True}
+    assert len(creates(rgw)) == 1
+
+
+def stalled(cluster, release):
+    """A daemon that takes the request, creates the bucket and then never answers."""
+    daemon = Gateway(cluster, ("127.0.0.2", cluster.request["objectBucket"]["port"]))
+
+    def answer(handler, body):
+        daemon.requests.append((handler.command, handler.path, "", body))
+        cluster.buckets.setdefault("app-data", cluster.bucket("app-data", "app-writer"))
+        release.wait(10)
+
+    daemon.answer = answer
+    return daemon
+
+
+def test_a_request_the_first_daemon_took_is_never_sent_to_a_second_daemon(ready, monkeypatch):
+    cluster, markers, rgw = ready
+    monkeypatch.setattr(ceph_native_object, "S3_TIMEOUT", 0.5)
+    release = threading.Event()
+    first = stalled(cluster, release)
+    try:
+        cluster.running = [gateway.daemon(cluster.request, "node-1", ip="127.0.0.2", ports=[rgw.port], daemon_id="objects.node-1.aaaaaa"),
+                           gateway.daemon(cluster.request, "node-2", ip="127.0.0.1", ports=[rgw.port], daemon_id="objects.node-2.bbbbbb")]
+        with pytest.raises(ceph_native.NativeFailure, match="^object-bucket-s3$") as caught:
+            bucket_worker(cluster, markers).object_bucket()
+        assert caught.value.native_error["cause"] == "PUT /app-data: no complete answer from the daemon at 127.0.0.2 after the request was sent"
+        assert len(first.requests) == 1 and rgw.requests == [] and markers.read("object-bucket-attempt.app-data.json") == intent()
+        cluster.running = cluster.running[1:]
+        assert bucket_worker(cluster, markers).object_bucket() == {"changed": True}
+        assert creates(rgw) == []
+    finally:
+        release.set()
+        first.close()
+
+
+def test_a_daemon_that_cannot_be_connected_to_is_passed_over(ready):
+    cluster, markers, rgw = ready
+    cluster.running = [gateway.daemon(cluster.request, "node-1", ip="127.0.0.2", ports=[rgw.port], daemon_id="objects.node-1.aaaaaa"),
+                       gateway.daemon(cluster.request, "node-2", ip="127.0.0.1", ports=[rgw.port], daemon_id="objects.node-2.bbbbbb")]
     assert bucket_worker(cluster, markers).object_bucket() == {"changed": True}
     assert len(creates(rgw)) == 1
 
@@ -374,7 +416,6 @@ def test_a_policy_the_bucket_does_not_declare_refuses_and_is_never_removed(ready
 
 def test_rgw_refusals_name_the_request_and_its_error_without_a_key(ready):
     cluster, markers, rgw = ready
-    cluster.request = bucket_request(port=rgw.port, policy='{"Version":"2012-10-17"}')
     original = rgw.answer
     rgw.answer = lambda handler, body: (rgw.reply(handler, 400, "MalformedPolicy", "Policy has invalid principal")
                                         if handler.path.endswith("?policy") and handler.command == "PUT" else original(handler, body))
@@ -436,20 +477,20 @@ def test_no_running_daemon_leaves_the_bucket_unready_and_names_its_backend(ready
     rgw.__init__(cluster)
 
 
-def test_a_daemon_answering_a_server_error_is_passed_over(ready):
+def test_a_daemon_answering_a_server_error_refuses_and_the_request_goes_to_no_second_daemon(ready):
     cluster, markers, rgw = ready
     failing = Gateway(cluster, ("127.0.0.2", rgw.port))
     failing.answer = lambda handler, body: failing.requests.append(handler.command) or failing.reply(handler, 503, "ServiceUnavailable")
     first = gateway.daemon(cluster.request, "node-1", ip="127.0.0.2", ports=[rgw.port], daemon_id="objects.node-1.aaaaaa")
     try:
-        cluster.running = [first]
-        native = bucket_worker(cluster, markers)
-        with pytest.raises(ceph_native.Refusal, match="^not-ready$"):
-            native.object_bucket()
-        assert native.blocking == ["http@rgw.objects"] and len(failing.requests) == 1 and rgw.requests == [] and "app-data" not in cluster.buckets
-        cluster.running = [gateway.daemon(cluster.request, "node-2", ip="127.0.0.1", ports=[rgw.port], daemon_id="objects.node-2.bbbbbb"), first]
+        cluster.running = [first, gateway.daemon(cluster.request, "node-2", ip="127.0.0.1", ports=[rgw.port], daemon_id="objects.node-2.bbbbbb")]
+        with pytest.raises(ceph_native.NativeFailure, match="^object-bucket-s3$") as caught:
+            bucket_worker(cluster, markers).object_bucket()
+        assert caught.value.native_error["cause"] == "PUT /app-data: HTTP 503 ServiceUnavailable"
+        assert failing.requests == ["PUT"] and rgw.requests == [] and "app-data" not in cluster.buckets
+        cluster.running = cluster.running[1:]
         assert bucket_worker(cluster, markers).object_bucket() == {"changed": True}
-        assert len(failing.requests) == 5 and len(creates(rgw)) == 1
+        assert len(creates(rgw)) == 1
     finally:
         failing.close()
 
@@ -485,6 +526,43 @@ def test_request_admits_only_its_closed_bucket(change):
         ceph_native.validate(dict(bucket_request(), objectUser=dict(users.USER)))
     assert ceph_native.validate(bucket_request(policy=""))
     assert ceph_native.validate(bucket_request(certificateRef="gateway-tls", endpoint="s3.example.test", port=443))
+
+
+def policy_of(statement='[{"Effect":"Allow"}]', version='"2012-10-17"'):
+    return '{"Statement":' + statement + ',"Version":' + version + "}"
+
+
+@pytest.mark.parametrize("policy", [
+    "{}", '{"Version":"2012-10-17"}', '{"Statement":[{"Effect":"Allow"}]}', policy_of("[]"), policy_of("{}"), policy_of('"Allow"'), policy_of("1"),
+    policy_of(version="2012"), policy_of(version='""'), policy_of(version="null"),
+    policy_of('[{"Sid":null}]'), policy_of('[{"Condition":{"NumericLessThan":{"s3:max-keys":1.5}}}]'), policy_of('[{"Sid":1e3}]'),
+    policy_of('[{"Sid":9223372036854775808}]'), policy_of('[{"Sid":NaN}]'), policy_of('[{"Sid":-0}]'), policy_of('[{"Sid":[[null]]}]'),
+    '{"Statement":[{"Effect":"Allow"}], "Version":"2012-10-17"}', '{"Version":"2012-10-17","Statement":[{"Effect":"Allow"}]}',
+    '{"Statement":[{"Effect":"Allow"}],"Version":"2012-10-17","Version":"2012-10-17"}', policy_of('[{"Sid":"<"}]'), policy_of('[{"Sid":"\\u00e9"}]'),
+    policy_of('[{"Sid":"\\u0041"}]'), policy_of('[{"Sid":"\\/"}]'), policy_of('[{"Effect":"Allow"}]') + "\n", "[" + policy_of() + "]", '"x"', "null",
+    policy_of("[" * 5000 + "]" * 5000),
+])
+def test_request_refuses_a_policy_the_planner_never_freezes(policy):
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate(bucket_request(policy=policy))
+
+
+GO_TEXT = ('{"Statement":[{"K\u00e9":true,"N":-9223372036854775808,"Sid":"\\u003c\\u003e\\u0026 \u00e9\\u2028\\u2029\\t\\"\\\\\\u0001\x7f\\b\\f\\n\\r\u20ac",'
+           '"Z":"z"}],"Version":"2012-10-17"}')
+
+
+@pytest.mark.parametrize("policy", [
+    POLICY, policy_of('{"Effect":"Allow"}'), GO_TEXT,
+    policy_of('[{"Condition":{"NumericLessThan":{"s3:max-keys":9223372036854775807}},"NotBefore":-9223372036854775808,"Sid":true}]'),
+])
+def test_request_admits_the_policy_text_the_planner_freezes(policy):
+    assert ceph_native.validate(bucket_request(policy=policy))
+
+
+def test_request_admits_a_bucket_name_of_at_most_44_characters():
+    assert ceph_native.validate(bucket_request(name="b" * 44))
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        ceph_native.validate(bucket_request(name="b" * 45))
 
 
 def test_dispatch_lends_a_tls_bucket_only_its_certificate(ready, monkeypatch):

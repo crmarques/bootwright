@@ -1197,7 +1197,7 @@ spec:
 | `clusterRef` | Required managed StorageCluster. | None. |
 | `objectGatewayRef` | Required StorageObjectGateway of the same cluster. | The bucket is created through a running daemon of the gateway's rgw service, in its zone group. |
 | `ownerRef` | Required StorageObjectUser of the same cluster whose `objectGatewayRef` is this one. | The bucket's owner: every S3 request is signed with that user's key pair. |
-| `policy` | Optional mapping: the native S3 bucket policy document, of strings, integers, booleans, lists and mappings, at most 65536 bytes of JSON. | The body of S3 PutBucketPolicy, its canonical JSON (sorted keys). |
+| `policy` | Optional mapping: the native S3 bucket policy document, with a `Version` string and a `Statement` of one mapping or a list that is not empty, of strings, integers, booleans, lists and mappings, at most 65536 bytes of JSON. | The body of S3 PutBucketPolicy, its canonical JSON (sorted keys). |
 
 `radosgw-admin` has no command that creates a bucket or puts a bucket policy
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/rgw/radosgw-admin/radosgw-admin.cc#L946-L977)),
@@ -1209,11 +1209,20 @@ and GetBucketPolicy answers them
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/rgw/rgw_op.cc#L8803-L8905)),
 so the frozen canonical JSON is also what readiness compares. RGW parses and
 judges the policy; Bootwright validates only its shape and bound, and a policy
-RGW rejects refuses `object-bucket-s3` with RGW's error code and message.
+RGW rejects refuses `object-bucket-s3` with RGW's error code and message. RGW's
+parser ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/rgw/rgw_iam_policy.cc#L1865-L1873))
+reads `Version`, `Id` and `Statement` at the top of the document, takes only
+`2008-10-17` or `2012-10-17` as `Version`
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/rgw/rgw_iam_policy.cc#L612-L620)),
+refuses an unknown key, and requires neither `Version` nor a statement, so an
+empty document is stored and grants nothing. Bootwright requires both as the
+native IAM policy grammar does, so a policy that grants nothing is refused
+before any effect.
 
 Admission refuses, before any effect: a gateway or owner of another cluster, an
-owner of another gateway, and a name shorter than 3 or longer than 44
-characters. Planning refuses a policy value that is not a string, integer,
+owner of another gateway, a name shorter than 3 or longer than 44 characters,
+and a policy without a `Version` string or without a `Statement` that is a
+mapping or a list holding at least one entry. Planning refuses a policy value that is not a string, integer,
 boolean, list or mapping, a policy over 65536 bytes of JSON, and propagates
 the bound gateway's planning refusals.
 

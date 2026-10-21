@@ -967,16 +967,29 @@ this operation's attempt record, or one this operation created that is gone,
 refuses `object-bucket-foreign` before the bucket's record is written. The
 phase then records the bucket's intent and attempt and sends S3 CreateBucket,
 signed with AWS Signature Version 4 under the owner's pair, to the first
-running daemon of the gateway's rgw service, in daemon name order, that
-answers at its frozen frontend port with a status below 500. When that service terminates TLS, the block holds
+running daemon of the gateway's rgw service, in daemon name order, whose
+connection succeeds at its frozen frontend port. A request moves to the next
+daemon only when the connection itself fails (the connect, the TLS handshake or
+the certificate pin) before any byte of it is sent; once any byte was sent, a
+read timeout, a closed connection or a status of 500 or more refuses
+`object-bucket-s3`, the request goes to no other daemon, and the next apply
+recovers from `bucket stats`. When that service terminates TLS, the block holds
 the bound certificate only (never its key) and sends a request only to a daemon
 whose served leaf has the bound leaf's SHA-256, with SNI set to the endpoint
-FQDN; every other daemon is sent nothing. `bucket stats` then proves the bucket
+FQDN; every other daemon is sent nothing. A plain-HTTP rgw backend sits behind
+an ingress that terminates TLS, so its signed requests cross the cluster
+network in clear: the access key ID and the signed, idempotent CreateBucket and
+PutBucketPolicy are visible and replayable within RGW's clock-skew window,
+and the secret key never crosses the wire. `bucket stats` then proves the bucket
 under its name with no tenant, owned by its owner and in the gateway's zone
 group: a bucket owned by anyone else that this operation never proved refuses
 `object-bucket-foreign`, and the bucket ID is recorded. A lost reply is
 recovered under the attempt record from `bucket stats`, never by a second
-create. With a declared policy, the phase reads the stored one with
+create. A declared policy is admitted only as a mapping with a `Version` string
+and a non-empty `Statement` ([field rule](storage-resources.md#storageobjectbucket-field-record)),
+and the worker's request validator refuses any other text, a null or a
+non-integer number, and a text that is not the planner's canonical JSON.
+With a declared policy, the phase reads the stored one with
 GetBucketPolicy and, before the bucket's completion record, puts the declared
 canonical JSON with PutBucketPolicy when they differ. RGW's error answer to any
 S3 request refuses `object-bucket-s3`, naming the request, HTTP status, error

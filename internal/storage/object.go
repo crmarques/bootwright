@@ -205,10 +205,23 @@ func (a *admission) objectBucket(cluster api.Object) {
 	if spec.Has("objectGatewayRef") {
 		a.sameOwner(api.StorageObjectGateway, gateway, "$.spec.objectGatewayRef", cluster)
 	}
+	a.bucketPolicyShape(name)
 	if !spec.Has("ownerRef") {
 		return
 	}
 	if owner, ok := a.sameOwner(api.StorageObjectUser, textOf(spec, "ownerRef"), "$.spec.ownerRef", cluster); ok && textOf(owner.Spec(), "objectGatewayRef") != gateway {
 		a.issue("api.invariant", "$.spec.ownerRef", "StorageObjectBucket "+name+" is owned by StorageObjectUser "+owner.Name()+" of another StorageObjectGateway, whose zone cannot hold this bucket", "set spec.ownerRef to a StorageObjectUser whose spec.objectGatewayRef is "+gateway+", or set spec.objectGatewayRef to that user's gateway")
 	}
+}
+
+func (a *admission) bucketPolicyShape(name string) {
+	policy := a.object.Spec().Get("policy")
+	if policy.Present() && !policyDocument(policy) {
+		a.issue("api.invariant", "$.spec.policy", "StorageObjectBucket "+name+" declares a policy without a Version string or without a Statement holding at least one statement, which the native IAM policy grammar requires and which RGW would store as a policy that grants nothing", "write spec.policy as a mapping with a Version string, such as 2012-10-17, and a Statement holding one mapping or a list of at least one")
+	}
+}
+
+func policyDocument(policy api.Value) bool {
+	statement := policy.Get("Statement")
+	return policy.Get("Version").Type() == api.String && policy.Get("Version").Text() != "" && statement.Len() > 0
 }

@@ -90,3 +90,21 @@ def test_a_backend_serving_another_leaf_is_sent_nothing(backend):
     assert other != digest
     assert ceph_native_object.s3_exchange("127.0.0.1", port, "PUT", "/app-data", "", b"", PAIR, "objects", pinned=("s3.example.test", other)) is None
     assert handled.wait(5) and received == [b""]
+
+
+def test_a_failed_handshake_sends_nothing_and_leaves_the_next_daemon_to_try():
+    listener = socket.create_server(("127.0.0.1", 0))
+    listener.settimeout(5)
+
+    def close():
+        raw, unused = listener.accept()
+        raw.close()
+
+    thread = threading.Thread(target=close, daemon=True)
+    thread.start()
+    try:
+        pinned = ("s3.example.test", hashlib.sha256(b"leaf").hexdigest())
+        assert ceph_native_object.s3_exchange("127.0.0.1", listener.getsockname()[1], "PUT", "/app-data", "", b"", PAIR, "objects", pinned=pinned) is None
+    finally:
+        thread.join(5)
+        listener.close()

@@ -88,6 +88,9 @@ BUCKET_PHASES = frozenset(BUCKET_APPLY_PHASES)
 BUCKET_MEMBERS = frozenset(("backend", "certificateRef", "endpoint", "gateway", "name", "owner", "policy", "port", "realm", "zone", "zoneGroup"))
 MAX_BUCKETS = 65536
 MAX_POLICY = 65536
+MAX_BUCKET_NAME = 44
+# encoding/json escapes these beyond the quote, backslash and control characters that json.dumps escapes too.
+GO_ESCAPES = {"<": "\\u003c", ">": "\\u003e", "&": "\\u0026", "\u2028": "\\u2028", "\u2029": "\\u2029"}
 MAX_RESPONSE = MAX_POLICY + 1
 S3_SERVICE = "s3"
 S3_TIMEOUT = 30
@@ -252,7 +255,7 @@ def validate_bucket(request, hosts):
     del hosts
     bucket = request.get("objectBucket")
     require(isinstance(bucket, dict) and set(bucket) == BUCKET_MEMBERS)
-    require(named(bucket["name"]) and label(bucket["name"]) and len(bucket["name"]) >= 3)
+    require(named(bucket["name"]) and label(bucket["name"]) and 3 <= len(bucket["name"]) <= MAX_BUCKET_NAME)
     require(named(bucket["owner"]) and label(bucket["owner"]) and bucket["owner"] not in RESERVED_USERS)
     require(named(bucket["gateway"]) and label(bucket["gateway"]) and all(label(bucket[key]) for key in ("realm", "zoneGroup", "zone")))
     require(isinstance(bucket["backend"], str) and bucket["backend"].startswith("rgw.") and named(bucket["backend"][4:]))
@@ -261,13 +264,50 @@ def validate_bucket(request, hosts):
     require(isinstance(certificate, str) and (certificate == "" or named(certificate)))
     require(isinstance(endpoint, str) and (endpoint == "") == (certificate == ""))
     require(endpoint == "" or len(endpoint) <= 253 and all(label(part) for part in endpoint.split(".")))
-    policy = bucket["policy"]
-    require(isinstance(policy, str) and len(policy.encode("utf-8")) <= MAX_POLICY)
-    if policy:
-        try:
-            require(isinstance(json.loads(policy, object_pairs_hook=unique_object), dict))
-        except ValueError:
-            raise Refusal("request") from None
+    policy_text(bucket["policy"])
+
+
+def refuse_number(unused):
+    raise ValueError("a number that is not an integer")
+
+
+def policy_value(value):
+    """The values the declared policy may hold, as the planner freezes them: strings, int64 integers, booleans, lists and mappings."""
+    kind = type(value)
+    if kind is dict:
+        for item in value.values():
+            policy_value(item)
+    elif kind is list:
+        for item in value:
+            policy_value(item)
+    else:
+        require(kind in (str, bool) or kind is int and -(2 ** 63) <= value < 2 ** 63)
+
+
+def policy_shape(value):
+    """A native IAM policy document: a mapping with a Version and a Statement, one mapping or a list, that is not empty."""
+    statement = value.get("Statement")
+    require(isinstance(value.get("Version"), str) and value["Version"] != "" and isinstance(statement, (dict, list)) and len(statement) > 0)
+
+
+def policy_text(policy):
+    """The bucket's policy: empty, or the exact encoding/json text of one policy document, no longer than MAX_POLICY bytes and holding no
+    null or non-integer number."""
+    require(isinstance(policy, str))
+    if policy == "":
+        return
+    try:
+        require(len(policy.encode("utf-8")) <= MAX_POLICY)
+        value = json.loads(policy, parse_float=refuse_number, parse_constant=refuse_number)
+        require(isinstance(value, dict))
+        policy_value(value)
+        policy_shape(value)
+        text = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        for character, escape in GO_ESCAPES.items():
+            text = text.replace(character, escape)
+        require(text == policy)
+    except (ValueError, RecursionError):
+        raise Refusal("request") from None
 
 
 def bucket_material(request, phase, private):
@@ -315,9 +355,14 @@ def sigv4(method, path, query, headers, payload_hash, pair, region, service, sta
     return SIGNING + " Credential=" + pair["accessKey"] + "/" + scope + ", SignedHeaders=" + signed + ", Signature=" + signature
 
 
+class Unanswered(Exception):
+    """A request was sent, in whole or in part, and no complete answer came back: the daemon may have acted on it."""
+
+
 def s3_exchange(address, number, method, path, query, body, pair, region, *, pinned=None, clock=time.time):
-    """One signed S3 request to one daemon and its (status, code, message, body), or None when the daemon was not reached or, with pinned
-    (SNI name, leaf SHA-256), served another leaf, which is checked before the request is sent."""
+    """One signed S3 request to one daemon and its (status, code, message, body), or None when nothing of the request was sent: the connection
+    failed or, with pinned (SNI name, leaf SHA-256), the TLS handshake failed or the daemon served another leaf, which is checked before any
+    byte is sent. Unanswered is raised once any byte of the request may have left."""
     host = ("[" + address + "]" if ":" in address else address) + ":" + str(number)
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(clock()))
     digest = hashlib.sha256(body).hexdigest()
@@ -326,6 +371,7 @@ def s3_exchange(address, number, method, path, query, body, pair, region, *, pin
     target = path + ("?" + query if query else "")
     lines = [method + " " + target + " HTTP/1.1"] + [name + ": " + value for name, value in sorted(headers.items())]
     data = ("\r\n".join(lines + ["content-length: " + str(len(body)), "connection: close", "", ""])).encode("ascii") + body
+    sent = False
     try:
         with contextlib.ExitStack() as stack:
             channel = stack.enter_context(socket.create_connection((address, number), timeout=S3_TIMEOUT))
@@ -338,12 +384,15 @@ def s3_exchange(address, number, method, path, query, body, pair, region, *, pin
                 presented = channel.getpeercert(binary_form=True)
                 if not isinstance(presented, bytes) or not hmac.compare_digest(hashlib.sha256(presented).hexdigest(), pinned[1]):
                     return None
+            sent = True
             channel.sendall(data)
             response = http.client.HTTPResponse(channel, method=method)
             stack.callback(response.close)
             response.begin()
             answer = response.read(MAX_RESPONSE + 1)
     except (OSError, ValueError, http.client.HTTPException):
+        if sent:
+            raise Unanswered(address) from None
         return None
     if len(answer) > MAX_RESPONSE:
         return response.status, "", "", None
@@ -1100,8 +1149,9 @@ class BucketWorker(UserWorker):
         return [address for unused, address in sorted(found)]
 
     def s3(self, method, query, body=b""):
-        """The answer of the first backend daemon that answers below 500, or None; over TLS only a daemon that serves the bound leaf is sent a
-        request."""
+        """The answer of the first running backend daemon whose connection succeeds, or None when none does; over TLS only a daemon that serves
+        the bound leaf is sent a request. The request is never sent to a second daemon once any byte of it was sent: no complete answer, or a
+        status of 500 or more, refuses object-bucket-s3."""
         bucket = self.bucket()
         pinned = None
         if bucket["certificateRef"]:
@@ -1109,9 +1159,16 @@ class BucketWorker(UserWorker):
             pinned = (bucket["endpoint"], hashlib.sha256(leaf(self.tls["gatewayCertificate"])).hexdigest())
         pair = self.owner_pair()
         for address in self.targets():
-            answer = s3_exchange(address, bucket["port"], method, "/" + bucket["name"], query, body, pair, bucket["zoneGroup"], pinned=pinned, clock=self.wall)
-            if answer is not None and answer[0] < 500:
-                return answer
+            try:
+                answer = s3_exchange(address, bucket["port"], method, "/" + bucket["name"], query, body, pair, bucket["zoneGroup"], pinned=pinned,
+                                     clock=self.wall)
+            except Unanswered:
+                raise self.s3_unanswered(method, query, address) from None
+            if answer is None:
+                continue
+            if answer[0] >= 500:
+                raise self.s3_refusal(method, query, answer)
+            return answer
         self.pending(("tls@" if pinned else "http@") + bucket["backend"])
         return None
 
@@ -1120,6 +1177,11 @@ class BucketWorker(UserWorker):
         target = method + " /" + self.bucket()["name"] + ("?" + query if query else "")
         return NativeFailure("object-bucket-s3", self.native_coordinate(), target + ": HTTP " + str(status) + " " + code + " " + message,
                              secrets=(self.pair["accessKey"], self.pair["secretKey"]))
+
+    def s3_unanswered(self, method, query, address):
+        target = method + " /" + self.bucket()["name"] + ("?" + query if query else "")
+        return NativeFailure("object-bucket-s3", self.native_coordinate(), target + ": no complete answer from the daemon at " + address
+                             + " after the request was sent", secrets=(self.pair["accessKey"], self.pair["secretKey"]))
 
     def policy_state(self):
         """The policy the owner reads (src/rgw/rgw_op.cc:8869-8905): the stored bytes, b"" for none, or None when no daemon answered. A
