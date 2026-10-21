@@ -232,6 +232,12 @@ def vendor_tree(tmp_path, monkeypatch):
     return directory, defaults
 
 
+def written(path):
+    # Reading a file may move its access time, so only write-side metadata proves it untouched.
+    status = path.stat()
+    return path.read_bytes(), status.st_ino, status.st_mode, status.st_uid, status.st_gid, status.st_size, status.st_mtime_ns, status.st_ctime_ns
+
+
 @pytest.mark.parametrize("names", [("10-common.conf",), ("10-common.conf", "20-second.conf"), ("10-common defaults.conf",)])
 def test_vendor_defaults_allow_completion_replay_and_owned_removal_without_global_writes(tmp_path, vendor_tree, names):
     _root, defaults = vendor_tree
@@ -239,7 +245,7 @@ def test_vendor_defaults_allow_completion_replay_and_owned_removal_without_globa
     for name in names:
         path = defaults / name
         path.write_text("[Service]\nNice=1\n")
-        before[name] = (path.read_bytes(), path.stat())
+        before[name] = written(path)
     host = Host(tmp_path)
     # systemctl's string array is space-separated, quoting elements as needed.
     host.dropins = " ".join(shlex.quote(VENDOR + name) for name in names)
@@ -252,7 +258,7 @@ def test_vendor_defaults_allow_completion_replay_and_owned_removal_without_globa
     assert absent["answered"] and not absent["present"] and not absent["owned"] and absent["state"] == ""
     assert not host.manage("absent")
     for name in names:
-        assert ((defaults / name).read_bytes(), (defaults / name).stat()) == before[name]
+        assert written(defaults / name) == before[name]
 
 
 @pytest.mark.parametrize("value", [
