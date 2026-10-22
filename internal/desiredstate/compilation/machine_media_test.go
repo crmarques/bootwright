@@ -8,9 +8,9 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-func TestMachineMediaSchemaParsesSSDAndRefusesOtherValuesOrSubstrates(t *testing.T) {
+func TestMachineMediaSchemaParsesDeclaredMediaAndRefusesOtherValuesOrSubstrates(t *testing.T) {
 	for _, test := range []struct{ variant, media, code, suffix string }{
-		{"libvirt", "ssd", "", "media"}, {"libvirt", "SSD", "api.value", "media"}, {"libvirt", "hdd", "api.value", "media"},
+		{"libvirt", "ssd", "", "media"}, {"libvirt", "SSD", "api.value", "media"}, {"libvirt", "hdd", "", "media"}, {"libvirt", "tape", "api.value", "media"},
 		{"libvirt", "''", "api.value", "media"}, {"libvirt", "null", "api.type", "media"}, {"libvirt", "true", "api.type", "media"},
 		{"vsphere", "ssd", "api.field", "media"}, {"kubevirt", "ssd", "api.field", "dataDisks"},
 	} {
@@ -19,7 +19,7 @@ func TestMachineMediaSchemaParsesSSDAndRefusesOtherValuesOrSubstrates(t *testing
 			_, _, err := compiler().Compile(context.Background(), sources(body))
 			if test.code == "" {
 				if err != nil {
-					t.Fatal("valid optional SSD media refused", err)
+					t.Fatal("valid declared media refused", err)
 				}
 				return
 			}

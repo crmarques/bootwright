@@ -21,7 +21,9 @@ import ipaddress
 import json
 import re
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_nfs, ceph_native_observability, ceph_native_resources
+from ansible_collections.bootwright.core.plugins.module_utils import (
+    ceph_native, ceph_native_nfs, ceph_native_nvmeof, ceph_native_observability, ceph_native_resources,
+)
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, canonical, named, require
 
 # Each unit type's hooks, its daemon types' frozen image names (None runs the Ceph image), its bound credential leaves keyed by
@@ -104,6 +106,9 @@ def crash_readiness(worker, unit, blocking):
 
 
 UNIT_TYPES = {
+    "nvmeof": UnitType(ceph_native_nvmeof.validate_unit, ceph_native_nvmeof.check_unit, mirror_claim, mirror_settle,
+                       ceph_native_nvmeof.expected_unit, ceph_native_nvmeof.readiness_unit, ("nvmeof",), mirror_frontend,
+                       {"nvmeof": "nvmeof"}, {("nvmeof", "/spec/" + field): "nvmeof_" + field for field in ceph_native_nvmeof.TLS_FIELDS}, frozenset(), None),
     "crash": UnitType(crash_validate, mirror_check, mirror_claim, mirror_settle, crash_expected, crash_readiness, CRASH_TYPES, mirror_frontend,
                       {"crash": None}, {}, frozenset(CRASH_TYPES), None),
     "monitoring": UnitType(ceph_native_observability.validate, ceph_native_observability.check, ceph_native_observability.claim,
@@ -123,7 +128,8 @@ UNIT_TYPES = {
     "rbd-mirror": UnitType(mirror_validate, mirror_check, mirror_claim, mirror_settle, mirror_expected, mirror_readiness, MIRROR_TYPES, mirror_frontend,
                            {"rbd-mirror": None}, {}, frozenset(MIRROR_TYPES), None),
 }
-PHASES = frozenset(("unit", "ingress_firewall", "sso_config", "sso"))
+PHASES = frozenset(("unit", "ingress_firewall", "sso_config", "sso", "nvmeof_unit_observe"))
+READ_ONLY_PHASES = frozenset(("nvmeof_unit_observe",))
 # The ingress firewall check reads only these host tools, never with a write, reload or query form.
 SYSTEMCTL = "/usr/bin/systemctl"
 FIREWALL_CMD = "/usr/bin/firewall-cmd"
@@ -172,6 +178,10 @@ SSO_TIMEOUT = 30
 MAX_PROXY_CONTAINERS = 16
 CONTAINER_ID = re.compile(r"[0-9a-f]{12,64}\Z")
 INDEX = re.compile(r"(?:0|[1-9][0-9]{0,3})\Z")
+
+
+CERTIFICATE_VARIABLES = CERTIFICATE_VARIABLES | {"nvmeof_root_ca_cert", "nvmeof_server_cert", "nvmeof_client_cert"}
+KEY_VARIABLES = KEY_VARIABLES | {"nvmeof_server_key", "nvmeof_client_key"}
 
 
 def service_name(document):
@@ -683,6 +693,11 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         evidence["exists"] = evidence["owned"]
         evidence["partial"] = evidence["owned"]
         return evidence
+
+    def nvmeof_unit_observe(self):
+        require(self.request["service"]["type"] == "nvmeof")
+        result = self.observe()
+        return dict(result, blocking=list(self.blocking))
 
     def observe_resource(self, evidence, ready):
         if self.request["action"] != "service":

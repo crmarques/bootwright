@@ -1,0 +1,71 @@
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-9-8
+
+spec:
+  os:
+    family: rhel
+    version: '9.8'
+    architecture: x86_64
+
+  installer:
+    anaconda:
+      imageRef: rhel-9-8-boot
+
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+
+      packageSource:
+        hostedTree:
+          fromMedia: local-media:rhel-9.8-x86_64-dvd.iso
+
+          artifactServerEndpoint:
+            serverRef: lab-artifacts
+            endpointRef: ip-http
+
+  ntp:
+    - serverRef: lab-ntp
+      endpointRef: ip
+
+  customizations:
+    localization:
+      language: en_US.UTF-8
+      formats: en_US.UTF-8
+      keyboard: us
+      timezone: Etc/UTC
+
+    ssh:
+      passwordAuthentication: false
+
+    packages:
+      installWeakDeps: false
+      excludeDocs: true
+
+      install:
+        - chrony
+        - qemu-guest-agent
+        - podman
+        - lvm2
+        - python3
+        - nfs-utils
+
+    services:
+      enabled:
+        - chronyd
+        - qemu-guest-agent
+        - sshd
+
+    security:
+      selinux:
+        mode: enforcing
+
+    repositories:
+      configure:
+        - id: ibm-storage-ceph-9
+          displayName: IBM Storage Ceph 9 packages
+          baseURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/
+          gpgCheck: true
+          gpgKeyURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH

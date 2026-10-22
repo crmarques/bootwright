@@ -21,6 +21,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/desiredstate/yamlstream"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -427,9 +428,30 @@ func catalogInteger(t *testing.T, profile linkedProfile, column string) int {
 
 type profileBudget struct{ guests, cpu, memoryMiB, root, data int64 }
 
-func exampleBudget(t *testing.T, state *compilation.State) profileBudget {
+// profileDeclarations includes separately managed client allocations that the
+// compiler intentionally removes from the storage Environment's root closure.
+func profileDeclarations(t *testing.T, sources desiredstate.Sources) api.Catalog {
 	t.Helper()
-	catalog := state.Effective()
+	documents, issues, err := (yamlstream.Parser{}).Parse(context.Background(), sources.Files)
+	if err != nil || len(issues) != 0 {
+		t.Fatal(err, issues)
+	}
+	var objects []api.Object
+	for _, document := range documents {
+		if len(document.Root.Content) != 1 {
+			t.Fatal("invalid profile declaration")
+		}
+		value := syntaxValue(t, document.Root.Content[0])
+		kind := api.Kind(value.Get("kind").Text())
+		if kind == api.Machine || kind == api.InfraProvider {
+			objects = append(objects, api.NewObject(kind, value.Get("metadata", "name").Text(), value.Get("metadata", "labels"), value.Get("spec")))
+		}
+	}
+	return api.NewCatalog(objects)
+}
+
+func exampleBudget(t *testing.T, catalog api.Catalog) profileBudget {
+	t.Helper()
 	var budget profileBudget
 	for _, machine := range catalog.OfKind(api.Machine) {
 		profileName := machine.Spec().Get("substrate", "profileRef").Text()
@@ -465,8 +487,9 @@ func exampleBudget(t *testing.T, state *compilation.State) profileBudget {
 func TestCephProfileBudgetsMatchExamples(t *testing.T) {
 	for _, profile := range linkedProfiles(t) {
 		t.Run(profile.id, func(t *testing.T) {
-			state, _ := compileAcceptance(t, exampleDirectory(t, profile.dir))
-			budget := exampleBudget(t, state)
+			sources := exampleDirectory(t, profile.dir)
+			compileAcceptance(t, sources)
+			budget := exampleBudget(t, profileDeclarations(t, sources))
 			if got := catalogInteger(t, profile, "Guests"); int64(got) != budget.guests {
 				t.Errorf("%s declares %d guests, its example %d", profile.id, got, budget.guests)
 			}

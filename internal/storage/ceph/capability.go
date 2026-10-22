@@ -40,6 +40,8 @@ func (c Capability) request(catalog api.Catalog, object api.Object, contextName 
 		return filesystemRequest(catalog, object, contextName)
 	case api.StorageSubvolume:
 		return subvolumeRequest(catalog, object, contextName)
+	case api.StorageNVMeoFSubsystem:
+		return nvmeofRequest(catalog, object, contextName)
 	case api.StorageNFSExport:
 		return nfsExportRequest(catalog, object, contextName)
 	case api.StorageObjectUser:
@@ -193,6 +195,11 @@ func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, 
 		}
 	case "subvolume":
 		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageFilesystem), Object: request.Subvolume.Filesystem})
+	case "nvmeof":
+		dependencies = append(dependencies, ServiceUnitBlockID(request.Cluster, ServiceUnit{Type: "nvmeof", ID: request.NVMeOF.Service}))
+		for _, namespace := range request.NVMeOF.Namespaces {
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.StorageRBDImage), Object: namespace.Image.Name})
+		}
 	case "nfs-export":
 		dependencies = append(dependencies, ServiceUnitBlockID(request.Cluster, ServiceUnit{Type: "nfs", ID: request.NFSExport.Service}))
 		backing := reconciliation.ObjectRef{Kind: string(api.StorageFilesystem), Object: request.NFSExport.Filesystem}
@@ -253,8 +260,6 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
 		} else if reason, remedy, gap := unneededAuxiliary(state.Effective(), cluster); gap {
 			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
-		} else if reason, remedy, gap := undeployedNVMeoF(cluster); gap {
-			out = append(out, lifecycle.RefusalOf(object, reason, remedy))
 		}
 	}
 	return out
@@ -278,6 +283,9 @@ func subjectOf(r Request, object string) string {
 	}
 	if r.Gateway != nil {
 		return "object gateway " + object
+	}
+	if r.NVMeOF != nil {
+		return "NVMe-oF subsystem " + object
 	}
 	if r.NFSExport != nil {
 		return "NFS export " + object
@@ -303,7 +311,7 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if err != nil {
 		return Request{}, err
 	}
-	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePlacementPolicy: "policy", api.StoragePool: "pool", api.StorageClient: "client", api.StorageRBDImage: "rbd", api.StorageFilesystem: "filesystem", api.StorageSubvolume: "subvolume", api.StorageObjectGateway: "pool", api.StorageNFSExport: "nfs-export", api.StorageObjectUser: "object-user", api.StorageObjectBucket: "object-bucket"}[c.kind]
+	action := map[api.Kind]string{api.StorageCluster: "cluster", api.StoragePlacementPolicy: "policy", api.StoragePool: "pool", api.StorageClient: "client", api.StorageRBDImage: "rbd", api.StorageFilesystem: "filesystem", api.StorageSubvolume: "subvolume", api.StorageObjectGateway: "pool", api.StorageNFSExport: "nfs-export", api.StorageObjectUser: "object-user", api.StorageObjectBucket: "object-bucket", api.StorageNVMeoFSubsystem: "nvmeof"}[c.kind]
 	object := r.Cluster
 	if r.Action == "policy" && r.Policy != nil {
 		object = r.Policy.Name
@@ -322,6 +330,9 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	}
 	if r.Action == "subvolume" && r.Subvolume != nil {
 		object = r.Subvolume.Name
+	}
+	if r.Action == "nvmeof" && r.NVMeOF != nil {
+		object = r.NVMeOF.Name
 	}
 	if r.Action == "nfs-export" && r.NFSExport != nil {
 		object = r.NFSExport.Name
@@ -342,7 +353,7 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 		action = r.Action
 	}
 	if action == "" || r.Action != action || (r.Action == "settings") != (r.Settings != nil) || (r.Action == "service") != (r.Service != nil) || (r.Action == "gateway") != (r.Gateway != nil) ||
-		(r.Action == "nfs-export") != (r.NFSExport != nil) || (r.Action == "object-user") != (r.ObjectUser != nil) || (r.Action == "object-bucket") != (r.ObjectBucket != nil) || r.NFSExport != nil && r.NFSExport.SubvolumePath != "" || r.Client != nil && r.Client.SubvolumePath != "" || e.Block.Kind != string(c.kind) || e.Block.Object != object {
+		(r.Action == "nvmeof") != (r.NVMeOF != nil) || (r.Action == "nfs-export") != (r.NFSExport != nil) || (r.Action == "object-user") != (r.ObjectUser != nil) || (r.Action == "object-bucket") != (r.ObjectBucket != nil) || r.NFSExport != nil && r.NFSExport.SubvolumePath != "" || r.Client != nil && r.Client.SubvolumePath != "" || e.Block.Kind != string(c.kind) || e.Block.Object != object {
 		return Request{}, failure("lifecycle.state", "Ceph request does not match its frozen resource identity", "")
 	}
 	if r.Owner != "" || r.FSID != "" || e.ApplyOperation == "" {

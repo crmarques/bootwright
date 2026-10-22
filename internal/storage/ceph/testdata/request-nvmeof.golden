@@ -1,0 +1,207 @@
+{
+  "action": "nvmeof",
+  "ansiblePackageVersion": "5.0.3-1",
+  "auxiliary": [
+    {
+      "image": "cp.icr.io/cp/ibm-ceph/nvmeof-synthetic:synthetic",
+      "name": "nvmeof"
+    }
+  ],
+  "bootstrap": "node-1",
+  "callHome": "enabled",
+  "cephadm": {
+    "packageVersion": "20.2.1-405.el9cp",
+    "path": "/usr/sbin/cephadm"
+  },
+  "cluster": "example",
+  "clusterKeyRef": "cluster-key",
+  "clusterNetworks": [],
+  "clusterSSHTransport": "native",
+  "clusterSSHUser": "operator",
+  "controller": "",
+  "delegated": [
+    {
+      "hosts": [
+        "node-1",
+        "node-2",
+        "node-3"
+      ],
+      "name": "crash"
+    },
+    {
+      "hosts": [
+        "node-1",
+        "node-2"
+      ],
+      "name": "nvmeof.config.primary"
+    }
+  ],
+  "hosts": [
+    {
+      "address": "192.0.2.1",
+      "devices": [
+        {
+          "path": "/dev/vdb",
+          "serial": "bwdfe74888b831437e0a",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "labels": [
+        "mon",
+        "storage"
+      ],
+      "location": {},
+      "machine": "node-1",
+      "name": "node-1",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    },
+    {
+      "address": "192.0.2.2",
+      "devices": [
+        {
+          "path": "/dev/vdb",
+          "serial": "bwb915b15101775327fa",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "labels": [
+        "mon",
+        "storage"
+      ],
+      "location": {},
+      "machine": "node-2",
+      "name": "node-2",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    },
+    {
+      "address": "192.0.2.3",
+      "devices": [
+        {
+          "path": "/dev/vdb",
+          "serial": "bwc3fb2249231be58313",
+          "sizeBytes": 1073741824
+        }
+      ],
+      "labels": [
+        "mon",
+        "storage"
+      ],
+      "location": {},
+      "machine": "node-3",
+      "name": "node-3",
+      "port": 22,
+      "sshKeyRef": "fleet-key",
+      "user": "operator"
+    }
+  ],
+  "image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
+  "monIP": "192.0.2.1",
+  "nvmeof": {
+    "gateways": [
+      {
+        "address": "192.0.2.1",
+        "host": "node-1",
+        "port": 5500
+      },
+      {
+        "address": "192.0.2.2",
+        "host": "node-2",
+        "port": 5500
+      }
+    ],
+    "group": "primary",
+    "hosts": [
+      "nqn.2026-01.test.example:initiator"
+    ],
+    "listeners": [
+      {
+        "address": "192.0.2.1",
+        "host": "node-1",
+        "port": 4420
+      },
+      {
+        "address": "192.0.2.2",
+        "host": "node-2",
+        "port": 4420
+      }
+    ],
+    "mtls": "enable_mtls",
+    "name": "subsystem",
+    "namespaces": [
+      {
+        "id": 1,
+        "image": {
+          "dataPool": "",
+          "features": [
+            "layering",
+            "exclusive-lock",
+            "object-map",
+            "fast-diff",
+            "deep-flatten"
+          ],
+          "name": "disk",
+          "pool": "volumes",
+          "sizeBytes": 10737418240
+        }
+      }
+    ],
+    "nqn": "nqn.2026-01.test.example:subsystem",
+    "pool": "config",
+    "service": "config.primary"
+  },
+  "packageRepository": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64",
+  "packageRepositoryKey": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH",
+  "publicNetworks": [
+    "192.0.2.0/24"
+  ],
+  "registry": "cp.icr.io",
+  "registryRef": "registry",
+  "release": "9.9.1.2",
+  "services": [
+    {
+      "placement": {
+        "count": 3,
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_type": "mon"
+    },
+    {
+      "placement": {
+        "count": 2,
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_type": "mgr"
+    },
+    {
+      "placement": {
+        "hosts": [
+          "node-1",
+          "node-2",
+          "node-3"
+        ]
+      },
+      "service_id": "data",
+      "service_type": "osd",
+      "spec": {
+        "data_devices": {
+          "paths": [
+            "/dev/vdb"
+          ]
+        }
+      }
+    }
+  ],
+  "version": "ceph-core-v31"
+}

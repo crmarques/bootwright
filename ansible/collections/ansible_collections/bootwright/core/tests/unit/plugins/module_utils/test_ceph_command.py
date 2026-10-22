@@ -110,7 +110,8 @@ def test_actual_shipped_command_works_inside_supervised_remote_group(tmp_path):
                "ceph_tunnel": '"""Fixed fixture."""\n', "ceph_tunnel_staging": '"""Fixed fixture."""\n', "ceph_tunnel_custody": '"""Fixed fixture."""\n',
                "ceph_native_observe": '"""Fixed fixture."""\n', "ceph_host_route_probe": '"""Fixed fixture."""\n',
                "ceph_host_runtime": '"""Fixed fixture."""\n', "native_specializations": '"""Fixed fixture."""\n',
-               "ceph_native_resources": '"""Fixed fixture."""\n', "ceph_native_nfs": '"""Fixed fixture."""\n',
+               "ceph_native_resources": '"""Fixed fixture."""\n',
+               "ceph_native_nvmeof": '"""Fixed fixture."""\n', "ceph_native_nfs": '"""Fixed fixture."""\n',
                "ceph_native_observability": '"""Fixed fixture."""\n', "ceph_native_units": '"""Fixed fixture."""\n',
                "ceph_native_object": '"""Fixed fixture."""\n', "ceph_smb_native": '"""Fixed fixture."""\n',
                "ceph_native": inspect.getsource(ceph_native) +

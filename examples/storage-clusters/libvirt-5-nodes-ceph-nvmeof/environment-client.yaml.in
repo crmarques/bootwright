@@ -1,0 +1,19 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: nvmeof-initiator
+spec:
+  domains:
+    base: lab.example.test
+  controller:
+    machineRef: controller
+  remoteMachinesAccessKey:
+    keyRef: bootwright-machine-key
+  resources:
+    - infra/machines/controller.yaml
+    - infra/machines/initiator.yaml
+    - infra/providers
+    - infra/os
+    - infra/networkconfigs
+    - infra/components
+    - secret-descriptors

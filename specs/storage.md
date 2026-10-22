@@ -379,7 +379,6 @@ links each matrix combination that this table refuses.
 | A native service whose auxiliary image is not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring in `ceph.services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that `ceph.images` does not set, and that the previous row does not refuse; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type`, `<name>` the first image it needs in name order that `ceph.images` does not set (only `keepalived` for an `ingress` with `spec.keepalive_only`) and `<cluster>` the StorageCluster | `the <family> service <service> needs cephadm's container_image_<name>, and spec.ceph.images.<name> is not set; Bootwright keeps no default` | `set spec.ceph.images.<name> of StorageCluster <cluster> to an image beneath its Entitlement registry, or remove <service> from its spec.ceph.services, together with its spec.ceph.serviceBindings entries` |
 | StorageSMBResource objects whose samba images are not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, that a StorageSMBResource of any resource type names in its `clusterRef` while `ceph.images` does not set both `samba` and `samba_metrics`, and that neither of the two previous rows refuses; `<smb>` is the first such StorageSMBResource in name order, `<name>` is `samba` unless `ceph.images` sets it, else `samba_metrics`, and `<cluster>` the StorageCluster | `StorageSMBResource <smb> needs cephadm's container_image_<name>, and spec.ceph.images.<name> is not set; Bootwright keeps no default` | `set spec.ceph.images.<name> of StorageCluster <cluster> to an image beneath its Entitlement registry, or remove every StorageSMBResource whose spec.clusterRef is <cluster> from the selected Environment` |
 | An auxiliary image that no declared service needs | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, setting `ceph.images.<name>` for an image that no service in `ceph.services` and no StorageSMBResource naming it needs (per the auxiliary image table, with `samba` and `samba_metrics` for a StorageSMBResource) and that none of the three previous rows refuses; `<name>` is the first such name in name order and `<cluster>` the StorageCluster | `spec.ceph.images.<name> is set, but no declared service or StorageSMBResource of StorageCluster <cluster> needs cephadm's container_image_<name>` | `remove spec.ceph.images.<name> from StorageCluster <cluster>` |
-| An NVMe-oF gateway service | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, declaring an `nvmeof` service in `ceph.services`, and that none of the four previous rows refuses; `<service>` is the first such service's qualified name in name order and `<cluster>` the StorageCluster | `Bootwright does not deploy the NVMe-oF gateway service <service> yet` | `remove <service> from spec.ceph.services of StorageCluster <cluster>, together with every StorageNVMeoFSubsystem whose spec.serviceRef names it` |
 | More than six Ceph hosts | a StorageCluster or a StoragePlacementPolicy, StoragePool or StorageClient naming it, whose topology declares more than six nodes | `StorageCluster <cluster> declares <hosts> Ceph hosts, and Bootwright's cluster execution budget covers at most six hosts per cluster` | `declare at most six entries in spec.ceph.topology.nodes of StorageCluster <cluster>; B79 tracks larger clusters` |
 
 ## Bootstrap identity and continuation
@@ -1441,3 +1440,46 @@ Per-invocation scratch is private. Reservations prevent conflicting local
 contexts from claiming the same target; a native name, process-local mutex or
 context lease alone cannot coordinate another controller. B79 qualifies the
 supported coordination scope and refuses unproved exclusivity before effects.
+
+## NVMe-oF subsystems
+
+A `ceph-service-<cluster>-nvmeof-<service-token>` unit realizes one gateway group,
+after its explicitly declared configuration pool and image/settings proofs.
+The service token is the first sixteen hexadecimal characters of SHA-256 of
+the native service ID, preserving dotted native IDs within safe block names.
+Its daemon count and pinned auxiliary image, native host/group and completed
+gateway initialization are readiness requirements. A
+`ceph-nvmeof-<subsystem>` block (Kind StorageNVMeoFSubsystem, exclusive
+`ceph/<cluster>`) waits on that unit and every declared RBD image provider.
+The request freezes group, pool, mTLS mode, gateway/listener endpoints,
+authorized NQNs and each backing image's full identity and shape.
+
+Before the first resource effect the bounded native worker proves the cluster
+FSID and original owner, completed owned gateway service, exact dashboard
+gateway registry and native gateway identities, configuration pool, and each
+RBD creation attempt, image ID and shape. It refuses a pre-existing subsystem
+without this attempt's intent. It records the exact request and stable serial
+and namespace UUIDs before creation, then creates subsystem, namespaces,
+listeners and authorized hosts. Exact readback is required before completion.
+A lost reply resumes only an exact subset of the same original attempt; extra
+hosts, listeners, namespaces, a foreign serial or UUID, or a changed group,
+image, pool or owner refuses. Completed allocations are never silently
+recreated. No provider key values are returned in evidence or refusals.
+
+Observation is read-only and repeats identity, explicit authorization and HA
+proofs. Every declared listener must be active and reachable by TCP from the
+bootstrap host. Each namespace load-balancing group must have an optimized
+path and only optimized/non-optimized advertised paths across its gateways.
+Evidence carries the stable subsystem serial and no key material. Native
+readiness is not an initiator login, I/O, failover or physical qualification
+claim. The bounded resource action uses two apply transport calls with one
+readiness wait, one observation call and two whole-cluster retirement calls,
+matching the existing resource budget. B491 continues to refuse online
+individual removal; whole-owned-cluster retirement remains supported.
+
+`nvmeof-native` names unavailable/refused qualified native commands;
+`nvmeof-identity` names a changed backing, gateway, authorization or native
+identity; `nvmeof-foreign` names a subsystem without this attempt's intent.
+These are fixed, non-secret refusals with recovery guidance. Request formats
+move to `ceph-core-v31` and `ceph-host-v6`; old incomplete operations
+must be finished or destroyed with their original build.

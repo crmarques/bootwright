@@ -361,6 +361,9 @@ func validateScope(e Evidence, r Request) bool {
 	if r.Action == "gateway" {
 		return e.Client == "" && r.Gateway != nil && (e.Resource == ResourceEvidence{} || zoneID.MatchString(e.Resource.ID) && e.Resource.Path == r.Gateway.Endpoint)
 	}
+	if r.Action == "nvmeof" {
+		return e.Client == "" && r.NVMeOF != nil && (e.Resource == ResourceEvidence{} || nvmeofResource(e, r))
+	}
 	if r.Action == "nfs-export" {
 		return e.Client == "" && r.NFSExport != nil && (e.Resource == ResourceEvidence{} || exportID.MatchString(e.Resource.ID) && e.Resource.Path == r.NFSExport.Native.Pseudo)
 	}
@@ -419,6 +422,8 @@ func validateReady(e Evidence, r Request) bool {
 		return r.Filesystem != nil && resourceID.MatchString(e.Resource.ID)
 	case "subvolume":
 		return subvolumeResource(e, r)
+	case "nvmeof":
+		return nvmeofResource(e, r)
 	case "nfs-export":
 		return r.NFSExport != nil && exportID.MatchString(e.Resource.ID) && e.Resource.Path == r.NFSExport.Native.Pseudo
 	case "object-user":
@@ -481,4 +486,8 @@ func EvaluateEvidence(data []byte, r Request, digest string, removal bool) (reco
 		return reconciliation.EffectPartial, nil
 	}
 	return reconciliation.EffectUnknown, evidenceFailure()
+}
+
+func nvmeofResource(e Evidence, r Request) bool {
+	return r.NVMeOF != nil && e.Resource.ID == nvmeofSerial(r) && e.Resource.Path == ""
 }

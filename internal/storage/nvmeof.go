@@ -23,7 +23,7 @@ var (
 )
 
 var nvmeofRefusedMembers = []refusedMember{
-	{names: []string{"server_key", "server_cert", "client_key", "client_cert", "root_ca_cert"}, message: "native documents never carry TLS material inline", remedy: "remove spec.<member>; NVMe-oF gateway mTLS is not supported by Bootwright yet"},
+	{names: []string{"server_key", "server_cert", "client_key", "client_cert", "root_ca_cert"}, message: "native documents never carry TLS material inline", remedy: "remove spec.<member>; bind gateway mTLS through spec.ceph.serviceBindings"},
 	{names: []string{"encryption_key"}, message: "native documents never carry key material inline", remedy: "remove spec.encryption_key; NVMe-oF in-band authentication is not supported by Bootwright yet"},
 	{names: []string{"addr", "addr_map", "discovery_addr", "discovery_addr_map"}, message: "an NVMe-oF gateway binds its host's registered address, which its subsystem listeners also use", remedy: "omit spec.<member>"},
 	{names: []string{"enable_prometheus_exporter", "prometheus_port"}, message: "this NVMe-oF option has no qualified effect contract; the gateway exporter keeps its native default", remedy: "omit spec.<member>"},
@@ -41,9 +41,7 @@ func validNQN(nqn string) bool {
 
 func (a *admission) nvmeofRecord(service api.Value, field string, placed []api.Value, partial bool) {
 	spec := service.Get("spec")
-	if spec.Get("enable_auth").Bool() {
-		a.issue("api.invariant", field+".spec.enable_auth", "NVMe-oF gateway mTLS is not supported by Bootwright yet", "omit spec.enable_auth or set it to false")
-	}
+
 	if group := spec.Get("group"); group.Type() == api.String && !nativeID.MatchString(group.Text()) {
 		a.issue("api.invariant", field+".spec.group", "an NVMe-oF gateway group name uses the qualified name grammar [A-Za-z0-9][A-Za-z0-9_.-]*", "rename spec.group to a name that starts with a letter or digit and holds only letters, digits, '_', '.' and '-'")
 	}
@@ -81,8 +79,8 @@ func (a *admission) nvmeofPool(name, field string) {
 }
 
 type nvmeofGateway struct {
-	field, pool, group string
-	hosts              []string
+	field, group string
+	hosts        []string
 }
 
 func (a *admission) nvmeofGraph(ceph api.Value) {
@@ -92,10 +90,10 @@ func (a *admission) nvmeofGraph(ceph api.Value) {
 			continue
 		}
 		hosts, _ := ResolveServicePlacement(a.object, service)
-		gateway := nvmeofGateway{field: indexed("$.spec.ceph.services", i), pool: textOf(service, "spec", "pool"), group: textOf(service, "spec", "group"), hosts: hosts}
+		gateway := nvmeofGateway{field: indexed("$.spec.ceph.services", i), group: textOf(service, "spec", "group"), hosts: hosts}
 		for _, earlier := range gateways {
-			if gateway.pool != "" && gateway.pool == earlier.pool && gateway.group == earlier.group {
-				a.issue("api.invariant", gateway.field+".spec.group", "the nvmeof service "+earlier.field+" already serves this gateway group in this pool", "give each nvmeof service its own spec.group or spec.pool")
+			if gateway.group != "" && gateway.group == earlier.group {
+				a.issue("api.invariant", gateway.field+".spec.group", "the nvmeof service "+earlier.field+" already serves this gateway group", "give each nvmeof service its own spec.group")
 			}
 			if at := slices.IndexFunc(gateway.hosts, func(host string) bool { return slices.Contains(earlier.hosts, host) }); at >= 0 {
 				a.issue("api.invariant", gateway.field+".placement", "cephadm places no gateway on a host that runs a gateway of another nvmeof service, and host "+gateway.hosts[at]+" is eligible for both this service and "+earlier.field, "select disjoint hosts for the two nvmeof services")
@@ -117,6 +115,11 @@ func nvmeofListeners(cluster api.Object, catalog api.Catalog, service api.Value,
 
 func (a *admission) nvmeofSubsystemIntrinsic() {
 	spec := a.object.Spec()
+	for _, key := range []string{"hosts", "namespaces"} {
+		if a.object.Spec().Get(key).Len() > 128 {
+			a.invalid("$.spec."+key, "the bounded NVMe-oF resource limit is 128 entries")
+		}
+	}
 	if nqn := spec.Get("nqn"); nqn.Type() == api.String && !validNQN(nqn.Text()) {
 		a.issue("api.invariant", "$.spec.nqn", nvmeofNQNMessage, "write spec.nqn as the subsystem's NQN in one of those forms")
 	}

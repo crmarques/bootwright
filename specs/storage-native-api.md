@@ -508,18 +508,17 @@ a recorded effect, and the strict decoder refuses the field with that reason.
 Admission accepts an `nvmeof` document, one NVMe-oF gateway group, under a
 closed record spelled as cephadm's `NvmeofServiceSpec`
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py#L1375-L1811)).
-Bootwright does not deploy it yet: planning refuses a StorageCluster that
-declares one ([refusal table](storage.md#refusal-table)), and its
-[subsystems](storage-resources.md#storagenvmeofsubsystem) are admitted
-alongside it.
+The native worker realizes this gateway and its
+[subsystems](storage-resources.md#storagenvmeofsubsystem) after qualifying the
+selected runtime commands and verified management TLS.
 
 | Member | Rule |
 | --- | --- |
 | `pool` | Required: the `metadata.name` of a same-cluster replicated StoragePool with role `rbd`. cephadm refuses to deploy a gateway whose pool is absent and does not retry ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/nvmeof.py#L28-L39)); the gateway keeps its state in omap there, which an erasure-coded pool does not support. |
-| `group` | Required, `[A-Za-z0-9][A-Za-z0-9_.-]*`: cephadm accepts an empty group, but Bootwright requires a named one. `(pool, group)` is unique among the cluster's nvmeof services. |
+| `group` | Required, `[A-Za-z0-9][A-Za-z0-9_.-]*`: cephadm accepts an empty group, but Bootwright requires a named one. `group` is unique among the cluster's nvmeof services. |
 | `port`, `discovery_port` | Optional, 1-65535; omitted, the gateway uses 5500 and 8009. |
 | `transports` | Optional; only `tcp`, the one value the native validation admits. |
-| `enable_auth` | Optional; `true` refuses: gateway mTLS is not supported by Bootwright yet. |
+| `enable_auth` | Optional; true requires the five protected gateway mTLS service bindings below. Omitted or false selects native managed certificates through derived `enable_mtls: true`; no plaintext fallback is allowed. |
 
 `server_key`, `server_cert`, `client_key`, `client_cert`, `root_ca_cert` and
 `encryption_key` refuse, naming the member, because native documents never
@@ -539,6 +538,9 @@ gateway, which serves that host's subsystem listeners. The eligible hosts of
 two nvmeof services are disjoint, because cephadm places no gateway on a host
 that runs a gateway of another nvmeof service
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/nvmeof.py#L281-L295)).
+NVMe-oF service observation adds a bounded native gateway read for each placed
+host to the shared cluster observation budget; its readiness retry window and
+adapter deadline include that complete observation.
 Each gateway host reserves, in the shared listener registry, `port`, the
 NVMe/TCP listener port 4420, `discovery_port` and the exporter port 10008:
 cephadm reserves exactly these daemon ports, checks them free and opens them
@@ -946,3 +948,37 @@ references, inline-secret refusal, field collision and no-effect tests.
 OSD tests additionally prove finite device authorization; HA acceptance proves
 rescheduling inside the owned candidate set. Operator qualification follows
 the existing M2b to M2e profiles.
+
+## NVMe-oF gateway service
+
+The implemented `nvmeof` service requires `service_id`, explicit placement,
+and the [closed record above](#nvme-of-gateway-record). Its frozen native
+document selects exactly one verified management TLS mode. The configuration pool must be declared in the same cluster.
+One gateway runs per selected host; a placement count must match the selected
+hosts, and a `count_per_host` greater than one refuses. The authored
+`ceph.images.nvmeof` artifact is required and frozen by digest (OD28).
+
+For `enable_auth`, all five native leaves are mandatory service bindings:
+`/spec/root_ca_cert` from a `caBundle`; `/spec/server_cert` and
+`/spec/server_key` from one `tlsCertificate`; `/spec/client_cert` and
+`/spec/client_key` from one `tlsCertificate`. Only apply borrows these values;
+observation uses the retained native service and its verified manager client.
+Inline values and verification bypasses are forbidden. `enable_mtls` selects
+the native build's managed certificates and takes none of these bindings.
+The selected SDK must accept the exact mode before applying the service.
+Unsupported build capabilities refuse rather than silently using plaintext.
+
+The registered manager CLI, not an invented command transport, owns the
+resource API: `ceph nvmeof gateway info`, `gateway listener_info`,
+`subsystem list/add`, `namespace list/add`, `listener list/add` and
+`host list/add`. Source registration is `NvmeofCLICommand(DBCLICommand)` in
+Ceph's `src/pybind/mgr/dashboard/services/nvmeof_cli.py`, with decorators in
+`src/pybind/mgr/dashboard/controllers/nvmeof.py`; JSON models are in
+`src/pybind/mgr/dashboard/model/nvmeof.py`. Before effects the worker checks
+the actual selected runtime's help for every required command prefix. It
+always specifies the frozen group and uses only fixed admitted arguments.
+Boolean command arguments use `--flag=true` or `--flag=false`. Namespace
+creation explicitly disables image creation, trashing and force; listeners
+require native host verification. Per-gateway routing is proved unambiguous
+against the native dashboard gateway registry before the client's address
+selector runs. No arbitrary CLI, SDK or gRPC invocation is public.

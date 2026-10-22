@@ -105,6 +105,7 @@
     "image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074",
     "monIP": "",
     "packageRepository": "",
+    "packageRepositoryKey": "",
     "packages": {
       "licenseAccepted": true,
       "sources": [
@@ -193,7 +194,7 @@
         }
       }
     ],
-    "version": "ceph-core-v28"
+    "version": "ceph-core-v31"
   },
   "host": "node-1",
   "version": "ceph-host-v6"

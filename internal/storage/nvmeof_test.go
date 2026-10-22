@@ -113,7 +113,12 @@ func TestNVMeoFServiceRequiresDeclaredRBDPoolAndGroup(t *testing.T) {
 
 func TestNVMeoFPoolGroupPairIsUnique(t *testing.T) {
 	issues := nvmeofClusterIssues(t, nvmeofService("block", nvmeofHosts("node-1", "node-2")), nvmeofService("other", nvmeofHosts("node-3"), "group", "block"))
-	requireNVMeoFIssue(t, issues, "$.spec.ceph.services[5].spec.group", "already serves this gateway group in this pool", "give each nvmeof service its own spec.group or spec.pool")
+	requireNVMeoFIssue(t, issues, "$.spec.ceph.services[5].spec.group", "already serves this gateway group", "give each nvmeof service its own spec.group")
+}
+
+func TestNVMeoFGroupIsUniqueAcrossPools(t *testing.T) {
+	issues := nvmeofClusterIssues(t, nvmeofService("block", nvmeofHosts("node-1", "node-2")), nvmeofService("other", nvmeofHosts("node-3"), "pool", "other-pool", "group", "block"))
+	requireNVMeoFIssue(t, issues, "$.spec.ceph.services[5].spec.group", "already serves this gateway group", "give each nvmeof service its own spec.group")
 }
 
 func TestNVMeoFPlacementNeedsTwoGatewaysOnEveryEligibleHost(t *testing.T) {
@@ -134,11 +139,11 @@ func TestNVMeoFServicesNeverShareAHost(t *testing.T) {
 
 func TestNVMeoFAuthFieldsRefuse(t *testing.T) {
 	for member, remedy := range map[string]string{
-		"server_key":     "remove spec.server_key; NVMe-oF gateway mTLS is not supported by Bootwright yet",
-		"server_cert":    "remove spec.server_cert; NVMe-oF gateway mTLS is not supported by Bootwright yet",
-		"client_key":     "remove spec.client_key; NVMe-oF gateway mTLS is not supported by Bootwright yet",
-		"client_cert":    "remove spec.client_cert; NVMe-oF gateway mTLS is not supported by Bootwright yet",
-		"root_ca_cert":   "remove spec.root_ca_cert; NVMe-oF gateway mTLS is not supported by Bootwright yet",
+		"server_key":     "remove spec.server_key; bind gateway mTLS through spec.ceph.serviceBindings",
+		"server_cert":    "remove spec.server_cert; bind gateway mTLS through spec.ceph.serviceBindings",
+		"client_key":     "remove spec.client_key; bind gateway mTLS through spec.ceph.serviceBindings",
+		"client_cert":    "remove spec.client_cert; bind gateway mTLS through spec.ceph.serviceBindings",
+		"root_ca_cert":   "remove spec.root_ca_cert; bind gateway mTLS through spec.ceph.serviceBindings",
 		"encryption_key": "remove spec.encryption_key; NVMe-oF in-band authentication is not supported by Bootwright yet",
 	} {
 		issues := nvmeofClusterIssues(t, nvmeofService("block", nvmeofHosts("node-1", "node-2"), member, "inline"))
@@ -147,7 +152,7 @@ func TestNVMeoFAuthFieldsRefuse(t *testing.T) {
 			t.Fatalf("%s raised more than its refusal: %#v", member, issues)
 		}
 	}
-	requireNVMeoFIssue(t, nvmeofClusterIssues(t, nvmeofService("block", nvmeofHosts("node-1", "node-2"), "enable_auth", true)), nvmeofField+".spec.enable_auth", "mTLS is not supported by Bootwright yet", "omit spec.enable_auth or set it to false")
+	requireIssue(t, nvmeofClusterIssues(t, nvmeofService("block", nvmeofHosts("node-1", "node-2"), "enable_auth", true)), nvmeofField)
 }
 
 func TestNVMeoFAddressAndExporterOverridesRefuse(t *testing.T) {
@@ -280,7 +285,7 @@ func TestNVMeoFPartialAndCompleteValidationAgree(t *testing.T) {
 	service := nvmeofService("block", nvmeofHosts("node-1", "node-2"), "enable_auth", true, "group", "-g", "encryption_key", "inline")
 	fragment := partialMDS(service)
 	cluster, catalog := nvmeofCatalog(t, service)
-	serviceFields := []string{"$.spec.ceph.services[3].spec.enable_auth", "$.spec.ceph.services[3].spec.group", "$.spec.ceph.services[3].spec.encryption_key"}
+	serviceFields := []string{"$.spec.ceph.services[3].spec.group", "$.spec.ceph.services[3].spec.encryption_key"}
 	for i, field := range serviceFields {
 		if len(issuesAt(ValidatePartial(fragment, api.NewCatalog(nil)), field)) != 1 || len(issuesAt(Validate(cluster, catalog), strings.Replace(field, "[3]", "[4]", 1))) != 1 {
 			t.Errorf("service rule %d at %s differs between partial and complete validation", i, field)

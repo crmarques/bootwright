@@ -38,7 +38,7 @@ def core_request():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v30", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v31", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -600,7 +600,7 @@ def test_private_input_is_opened_without_links_and_not_in_argv(core_request, tmp
         assert envelope["payload"]["private"] == {"registryJSON": "REGISTRY-SECRET-SENTINEL"}
         assert set(envelope["sources"]) == {"ceph_native", "ceph_native_observe", "ceph_native_resources", "ceph_tunnel", "ceph_tunnel_staging",
                                             "ceph_tunnel_custody", "ceph_host_route_probe", "ceph_host_runtime", "native_diagnostics",
-                                            "native_specializations", "ceph_pull_broker", "ceph_native_nfs", "ceph_native_observability",
+                                            "native_specializations", "ceph_pull_broker", "ceph_native_nfs", "ceph_native_nvmeof", "ceph_native_observability",
                                             "ceph_native_units", "ceph_native_object", "ceph_smb_native"}
         assert 0 < envelope["budget"] <= min(640, timeout - 1)
         return 0, b'{"ok":true,"result":{"changed":false}}'
@@ -2191,7 +2191,8 @@ def test_resource_phases_ship_in_their_own_module():
     modules = ceph_native_worker.MODULES
     assert modules[modules.index("ceph_native") + 1] == "ceph_native_resources"
     assert modules[modules.index("ceph_native_resources") + 1] == "ceph_native_nfs"
-    assert modules[modules.index("ceph_native_nfs") + 1] == "ceph_native_observability"
+    assert modules[modules.index("ceph_native_nfs") + 1] == "ceph_native_nvmeof"
+    assert modules[modules.index("ceph_native_nvmeof") + 1] == "ceph_native_observability"
     assert modules[modules.index("ceph_native_observability") + 1] == "ceph_native_units"
     assert modules[modules.index("ceph_native_units") + 1] == "ceph_native_object"
     assert modules[modules.index("ceph_native_object") + 1] == "ceph_smb_native"

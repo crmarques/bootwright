@@ -102,7 +102,7 @@ func TestResourceScopeRendersEachKindFromItsFrozenRequest(t *testing.T) {
 		{api.StorageExport, "foundation", nil, "export of pool rbd-meta, filesystem files, object gateway objects"},
 		{api.StorageExport, "bare", nil, "export"},
 		{api.StorageExport, "missing", nil, ""},
-		{api.StorageNVMeoFSubsystem, "block-a", nil, "subsystem on nvmeof.block"},
+		{api.StorageNVMeoFSubsystem, "block-a", nil, ""},
 		{api.StorageNVMeoFSubsystem, "missing", nil, ""},
 		{api.StorageCluster, "ceph", frozen, ""},
 	} {

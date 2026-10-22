@@ -1,0 +1,191 @@
+package ceph
+
+import (
+	"bytes"
+	"context"
+	"slices"
+	"testing"
+	"time"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+)
+
+func nvmeCatalog() api.Catalog {
+	return planCatalog(3, 3, func(spec api.Value) api.Value {
+		service := requestMap("service_type", "nvmeof", "service_id", "config.primary", "placement", requestMap("hosts", api.StringList("node-1", "node-2")), "spec", requestMap("pool", "config", "group", "primary", "enable_auth", false))
+		spec = spec.WithPath(api.ListValue(append(spec.Get("ceph", "services").Items(), service)...), "ceph", "services")
+		return spec.WithPath(requestMap("base", PinnedRegistry+"/cp/ibm-ceph/nvmeof-synthetic", "version", "synthetic"), "ceph", "images", "nvmeof")
+	}, replicatedPool("config"), replicatedPool("volumes"), imageOf("disk", "volumes"), childOf(api.StorageNVMeoFSubsystem, "subsystem",
+		"serviceRef", "nvmeof.config.primary", "nqn", "nqn.2026-01.test.example:subsystem",
+		"hosts", api.StringList("nqn.2026-01.test.example:initiator"),
+		"listeners", api.ListValue(requestMap("host", "node-2"), requestMap("host", "node-1")),
+		"namespaces", api.ListValue(requestMap("nsid", 1, "imageRef", "disk"))))
+}
+
+func TestNVMeOFRequestAndDependencies(t *testing.T) {
+	catalog := nvmeCatalog()
+	r, err := planned(t, catalog, api.StorageNVMeoFSubsystem, "subsystem")
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	if r.NVMeOF == nil || r.Action != "nvmeof" || r.NVMeOF.MTLS != "enable_mtls" || r.NVMeOF.Gateways[0].Port != 5500 || r.NVMeOF.Listeners[0].Port != 4420 || r.NVMeOF.Namespaces[0].Image.Name != "disk" {
+		t.Fatalf("request %+v", r.NVMeOF)
+	}
+	data, err := r.Canonical()
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	matchesGolden(t, "request-nvmeof", data, false)
+	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+	plan, err := New(api.StorageNVMeoFSubsystem, nil).Plan(context.Background(), input)
+	if err != nil || len(plan.Definitions) != 1 {
+		t.Fatalf("plan %+v %v", plan, err)
+	}
+	block := plan.Definitions[0]
+	if !slices.Contains(block.Dependencies, ServiceUnitBlockID("example", ServiceUnit{Type: "nvmeof", ID: "config.primary"})) || !slices.Equal(block.Requires, []reconciliation.ObjectRef{{Kind: string(api.StorageRBDImage), Object: "disk"}}) {
+		t.Fatalf("dependencies %+v", block)
+	}
+	r.Owner = "attempt"
+	r.FSID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	identity := nvmeofSerial(r)
+	if identity == "" || identity != nvmeofSerial(r) {
+		t.Fatal("unstable identity")
+	}
+	r.Owner = "other"
+	if identity == nvmeofSerial(r) {
+		t.Fatal("identity crossed original attempt")
+	}
+}
+
+func TestNVMeOFEvidenceRequiresOriginalSubsystemIdentity(t *testing.T) {
+	r := runtimeRequest()
+	r.Action = "nvmeof"
+	r.NVMeOF = &NVMeOFSubsystem{Name: "subsystem", NQN: "nqn.2026-01.test.example:subsystem"}
+	ready := readyEvidence(r)
+	ready.Resource = ResourceEvidence{ID: nvmeofSerial(r)}
+	if effect, err := EvaluateEvidence(evidenceBytes(t, ready), r, "digest", false); err != nil || effect != reconciliation.EffectCompleted {
+		t.Fatalf("ready %s %v", effect, err)
+	}
+	for _, resource := range []ResourceEvidence{{}, {ID: "bw000000000000000000"}, {ID: ready.Resource.ID, Path: "foreign"}} {
+		altered := ready
+		altered.Resource = resource
+		if effect, err := EvaluateEvidence(evidenceBytes(t, altered), r, "digest", false); err == nil || effect != reconciliation.EffectUnknown {
+			t.Fatalf("foreign evidence %s %v", effect, err)
+		}
+	}
+	r.Owner = "another-attempt"
+	if effect, err := EvaluateEvidence(evidenceBytes(t, ready), r, "digest", false); err == nil || effect != reconciliation.EffectUnknown {
+		t.Fatalf("cross-attempt evidence %s %v", effect, err)
+	}
+}
+
+func TestNVMeOFExplicitSingleDaemonPerHost(t *testing.T) {
+	cluster, _ := nvmeCatalog().Find(api.StorageCluster, "example")
+	for _, svc := range cluster.Spec().Get("ceph", "services").Items() {
+		if svc.Get("service_type").Text() != "nvmeof" {
+			continue
+		}
+		implicit, err := unitDocumentOf(cluster, svc, nvmeofSpecOf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		explicit, err := unitDocumentOf(cluster, svc.WithPath(api.IntegerValue("1"), "placement", "count_per_host"), nvmeofSpecOf)
+		if err != nil || !bytes.Equal(implicit, explicit) {
+			t.Fatalf("explicit single daemon changed document: %s %v", explicit, err)
+		}
+	}
+}
+
+func TestNVMeOFExecutionBoundRefusesOversizedRequest(t *testing.T) {
+	r, err := planned(t, nvmeCatalog(), api.StorageNVMeoFSubsystem, "subsystem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for len(r.NVMeOF.Namespaces) < 128 {
+		r.NVMeOF.Namespaces = append(r.NVMeOF.Namespaces, r.NVMeOF.Namespaces[0])
+	}
+	if _, err := cephDeadline(r, "apply"); err == nil {
+		t.Fatal("accepted a request exceeding the six-hour execution ceiling")
+	}
+}
+
+func TestNVMeOFExecutionBound(t *testing.T) {
+	r, err := planned(t, nvmeCatalog(), api.StorageNVMeoFSubsystem, "subsystem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := cephDeadline(r, "apply"); err != nil || got != 5024*time.Second {
+		t.Fatalf("apply %s %v", got, err)
+	}
+	if got, err := cephDeadline(r, "observe"); err != nil || got != 1764*time.Second {
+		t.Fatalf("observe %s %v", got, err)
+	}
+	// Each namespace adds four identity/snapshot/write commands on apply,
+	// three on observe, and one held cache probe; a data pool adds two reads.
+	baseline, _ := cephDeadline(r, "apply")
+	n := r.NVMeOF.Namespaces[0]
+	n.Image.DataPool = "data"
+	r.NVMeOF.Namespaces = append(r.NVMeOF.Namespaces, n)
+	grown, _ := cephDeadline(r, "apply")
+	if grown-baseline != 570*time.Second {
+		t.Fatalf("namespace increment %s", grown-baseline)
+	}
+}
+
+func TestNVMeOFExecutionCeilingBoundary(t *testing.T) {
+	r, err := planned(t, nvmeCatalog(), api.StorageNVMeoFSubsystem, "subsystem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for len(r.NVMeOF.Namespaces) < 37 {
+		r.NVMeOF.Namespaces = append(r.NVMeOF.Namespaces, r.NVMeOF.Namespaces[0])
+	}
+	if got, err := cephDeadline(r, "apply"); err != nil || got != 21224*time.Second {
+		t.Fatalf("largest shape %s %v", got, err)
+	}
+	r.NVMeOF.Namespaces = append(r.NVMeOF.Namespaces, r.NVMeOF.Namespaces[0])
+	for _, operation := range []string{"apply", "observe", "destroy"} {
+		if _, err := cephDeadline(r, operation); err == nil {
+			t.Fatalf("oversized %s accepted", operation)
+		}
+	}
+}
+
+func TestNVMeOFRetirementNeverContactsDestroyedHosts(t *testing.T) {
+	r, err := planned(t, nvmeCatalog(), api.StorageNVMeoFSubsystem, "subsystem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := executionFor(t, r)
+	e.Block.ID, e.Block.Kind, e.Block.Object = "ceph-nvmeof-subsystem", string(api.StorageNVMeoFSubsystem), "subsystem"
+	e.Operation, e.RetiredWithHosts, e.ApplyProved = "destroy-later", true, nil
+	runner := &recordingRunner{}
+	capability := New(api.StorageNVMeoFSubsystem, runner)
+	if _, err := capability.Destroy(context.Background(), e); err != nil {
+		t.Fatal(err)
+	}
+	if observation, err := capability.ObserveRemoval(context.Background(), e); err != nil || observation.Effect != reconciliation.EffectCompleted {
+		t.Fatalf("retirement %+v %v", observation, err)
+	}
+	if runner.calls != 0 {
+		t.Fatalf("contacted retired hosts %d times", runner.calls)
+	}
+}
+
+func TestNVMeOFServiceObservationBudget(t *testing.T) {
+	cluster, _ := nvmeCatalog().Find(api.StorageCluster, "example")
+	units, err := nvmeofUnits(cluster)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := Request{Action: "service", Service: &units[0]}
+	for operation, want := range map[string]time.Duration{"apply": 3120 * time.Second, "observe": 900 * time.Second, "destroy": 900 * time.Second} {
+		if got, err := cephDeadline(r, operation); err != nil || got != want {
+			t.Fatalf("%s got %s want %s: %v", operation, got, want, err)
+		}
+	}
+}

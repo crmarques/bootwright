@@ -20,7 +20,8 @@ import threading
 import time
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    adapter_protocol, ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_nfs, ceph_native_observability,
+    adapter_protocol, ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_nfs, ceph_native_nvmeof,
+    ceph_native_observability,
     ceph_native_resources, ceph_native_observe, ceph_native_units, ceph_native_object, ceph_native_worker, ceph_package_sources, ceph_package_worker,
     ceph_packages, ceph_registry_discovery, ceph_smb_native, ceph_ssh_policy, ceph_tunnel,
     ceph_tunnel_staging, ceph_tunnel_custody, native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
@@ -38,7 +39,7 @@ FIREWALL_WINDOW = 600
 SSO_CALL = 120
 SSO_WINDOW = 600
 SSO_PAUSE = 10
-WORKER_CEILINGS = (640, 1920, 4285)
+WORKER_CEILINGS = (640, 1920, 4285, 21600)
 # The bootstrap call's own launcher ceiling and worker budget; the cluster block's Go deadline (cephDeadline) adds the call.
 BOOTSTRAP_CEILING = 1920
 BOOTSTRAP_BUDGET = 1800
@@ -71,6 +72,7 @@ CLUSTER_REASONS = (
     "mds-coverage", "foreign-subvolume", "subvolume-identity", "foreign-image", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign",
     "object-zone-pools", "object-endpoint-certificate", "object-user-foreign", "object-user-identity", "object-bucket-foreign",
     "object-bucket-identity", "object-bucket-s3", "nfs-export-foreign", "nfs-export-apply", "nfs-export-path-escape", "nfs-export-realm-default",
+    "nvmeof-native", "nvmeof-identity", "nvmeof-foreign", "nvmeof-budget",
     "ingress-firewall", "service-credential-foreign", "ssh-policy-host-excluded", "ssh-policy-unavailable", "tunnel-host-key-excluded",
     "sso-unverified",
 )
@@ -223,7 +225,7 @@ def evidence(value, request_digest, request=None):
     endpoint_evidence(value, request)
     sso_evidence(value, request)
     actions = ("cluster", "pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway", "nfs-export", "object-user",
-               "object-bucket")
+               "object-bucket", "nvmeof")
     ceph_native.require(value["action"] in actions, "evidence")
     daemon_evidence(value, request)
     ceph_native.require(all(type(value[k]) is bool for k in ("owned", "exists", "ready", "removed", "partial")), "evidence")
@@ -254,6 +256,7 @@ def evidence(value, request_digest, request=None):
         ceph_native.require(resource["path"] == "", "evidence")
     ceph_native.require(resource["id"] == "" or value["action"] in ("subvolume", "gateway", "nfs-export", "object-user", "object-bucket")
                         or value["action"] in ("pool", "policy", "filesystem") and ceph_native.RESOURCE_ID.fullmatch(resource["id"]) is not None
+                        or value["action"] == "nvmeof" and re.fullmatch(r"bw[0-9a-f]{18}", resource["id"]) is not None
                         or value["action"] == "rbd" and ceph_native.RBD_IMAGE_ID.fullmatch(resource["id"]) is not None, "evidence")
     ceph_native.require(isinstance(value["osds"], list) and len(value["osds"]) <= 8192, "evidence")
     for osd in value["osds"]:
@@ -487,17 +490,21 @@ class Transport:
     @staticmethod
     def native_sources():
         modules = (native_diagnostics, native_specializations, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
-                   ceph_native_resources, ceph_native_nfs, ceph_native_observability, ceph_native_units, ceph_native_object, ceph_smb_native,
+                   ceph_native_resources, ceph_native_nfs, ceph_native_nvmeof, ceph_native_observability,
+                   ceph_native_units, ceph_native_object, ceph_smb_native,
                    ceph_host_route_probe, ceph_pull_broker, ceph_host_runtime)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
         ceph_native.require(tuple(sources) == ceph_native_worker.MODULES, "transport")
         return sources
 
     def call(self, host, phase, private=None, *, timeout=660, devices=None, service=None):
-        ceph_native.require(type(timeout) in (int, float) and 0 < timeout <= 660, "transport")
+        nvme_long = (self.request.get("action") == "nvmeof" and phase in ("nvmeof", "nvmeof_observe")
+                     or nvmeof_unit(self.request) and phase == "nvmeof_unit_observe")
+        ceiling = ceph_native_nvmeof.phase_budget(self.request, phase) if nvme_long else 640
+        ceph_native.require(type(timeout) in (int, float) and 0 < timeout <= ceiling + 20 and ceiling <= 21600, "transport")
         ceph_native.require(phase != "profile" and (devices is None or phase == "services"), "transport")
         ceph_native.require(service is None or phase == "services" and type(service) is int and 0 <= service < len(self.request["services"]), "transport")
-        budget = min(640, timeout - 2) if timeout > 2 else timeout / 2
+        budget = min(ceiling, timeout - 2) if timeout > 2 else timeout / 2
         payload = {"request": self.request, "host": host["name"], "phase": phase, "private": private or {}}
         if devices is not None:
             payload["devices"] = devices
@@ -508,6 +515,13 @@ class Transport:
             source = bootstrap_launcher(inspect.getsource(ceph_native_worker), inspect.getsource(ceph_host_worker))
             return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": BOOTSTRAP_BUDGET}, BOOTSTRAP_CALL,
                               worker_budget=BOOTSTRAP_BUDGET, worker_ceiling=BOOTSTRAP_CEILING)
+        if nvme_long:
+            source = (ceph_native_worker.launcher(inspect.getsource(ceph_native_worker))
+                      + "f={'__name__':'fixed_ceph_nvmeof'};exec(compile(" + repr(inspect.getsource(ceph_host_worker))
+                      + ",'<fixed-ceph-nvmeof>','exec'),f);f.update(REMOTE_LIMIT=21600"
+                      + ",PHASE=" + repr(phase) + ");f['main'](s)")
+            return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": budget}, timeout,
+                              worker_budget=budget, worker_ceiling=21600)
         source = ceph_native_worker.launcher(inspect.getsource(ceph_native_worker)) + "s['main']()"
         return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": budget}, timeout,
                           worker_budget=budget)
@@ -839,6 +853,8 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         ceph_native.require(not outputs, "material")
     if request["action"] == "service":
         return execute_unit(request, operation, request_digest, transport, bootstrap, now=now, pause=pause)
+    if request["action"] == "nvmeof":
+        return execute_nvmeof(request, operation, request_digest, transport, bootstrap, now=now, pause=pause)
     if request["action"] == "nfs-export":
         return execute_unit(request, operation, request_digest, transport, bootstrap, now=now, pause=pause, phases=ceph_native_nfs.EXPORT_APPLY_PHASES)
     if request["action"] == "gateway":
@@ -920,12 +936,22 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
     return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
 
 
+def nvmeof_unit(request):
+    return request.get("action") == "service" and request.get("service", {}).get("type") == "nvmeof"
+
+
+def unit_observation_timeout(request):
+    return ceph_native_nvmeof.phase_budget(request, "nvmeof_unit_observe") + 20 if nvmeof_unit(request) else 660
+
+
 def observe_unit(request, request_digest, bootstrap, transport, timeout=None, blocking=None, *, private=None):
     """One read-only observation of a service unit on the bootstrap host; no other host is called."""
+    if timeout is None and nvmeof_unit(request):
+        timeout = unit_observation_timeout(request)
     options = {} if timeout is None else {"timeout": timeout}
     if private:
         options["private"] = private
-    observed = transport.call(bootstrap, "observe", **options)
+    observed = transport.call(bootstrap, "nvmeof_unit_observe" if nvmeof_unit(request) else "observe", **options)
     ceph_native.require(isinstance(observed, dict), "evidence")
     observed = dict(observed)
     checks = observed.pop("blocking", [])
@@ -938,14 +964,15 @@ def observe_unit(request, request_digest, bootstrap, transport, timeout=None, bl
 
 def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, private=None):
     """Poll the unit's own observation until ready; a timeout names the daemons, endpoint or health checks still blocking."""
-    deadline = now() + READINESS_TIMEOUT
+    call_timeout = unit_observation_timeout(request)
+    deadline = now() + READINESS_TIMEOUT + (call_timeout if nvmeof_unit(request) else 0)
     blocking = []
     while True:
         remaining = deadline - now()
         if remaining <= 0:
             raise ReadinessRefusal(blocking)
         try:
-            observed = observe_unit(request, request_digest, bootstrap, transport, min(660, remaining), blocking, private=private)
+            observed = observe_unit(request, request_digest, bootstrap, transport, min(call_timeout, remaining), blocking, private=private)
         except ceph_native.RemoteRefusal as error:
             if not unsettled(error):
                 raise
@@ -1020,6 +1047,60 @@ def sso_enable(bootstrap, transport, deadline, now, pause):
         pause(min(SSO_PAUSE, remaining))
 
 
+def observe_nvmeof(request, request_digest, bootstrap, transport, timeout, now, blocking):
+    deadline = now() + timeout
+    observed = transport.call(bootstrap, "nvmeof_cluster", timeout=min(660, timeout))
+    ceph_native.require(isinstance(observed, dict), "evidence")
+    observed = dict(observed)
+    checks = observed.pop("blocking", [])
+    ceph_native.require(isinstance(checks, list) and len(checks) <= 16 and all(blocking_entry(check) for check in checks), "evidence")
+    blocking[:] = checks
+    remaining = deadline - now()
+    ceph_native.require(remaining > 0, "not-ready")
+    resource = transport.call(bootstrap, "nvmeof_observe", timeout=min(ceph_native_nvmeof.phase_budget(request, "nvmeof_observe") + 20, remaining))
+    ceph_native.require(isinstance(resource, dict) and set(resource) == {"owned", "exists", "ready", "partial", "removed", "resource"}, "evidence")
+    cluster_ready = observed["ready"]
+    observed.update(resource)
+    observed["ready"] = cluster_ready and resource["ready"]
+    observed["partial"] = observed["exists"] and not observed["ready"]
+    observed["request"] = request_digest
+    return evidence(observed, request_digest, request)
+
+
+def execute_nvmeof(request, operation, request_digest, transport, bootstrap, *, now, pause):
+    ceph_native.require(ceph_native_nvmeof.execution_budget(request, "apply") <= 21600, "nvmeof-budget")
+    changed = False
+    if operation == "apply":
+        transport.call(bootstrap, "prerequisites")
+        produced = transport.call(bootstrap, "nvmeof", timeout=ceph_native_nvmeof.phase_budget(request, "nvmeof") + 20)
+        ceph_native.require(isinstance(produced, dict) and set(produced) == {"changed"} and type(produced["changed"]) is bool, "evidence")
+        changed = produced["changed"]
+    observation_budget = 660 + ceph_native_nvmeof.phase_budget(request, "nvmeof_observe") + 20
+    deadline = now() + observation_budget + (READINESS_TIMEOUT if operation == "apply" else 0)
+    blocking = []
+    while True:
+        remaining = deadline - now()
+        if remaining <= 0:
+            raise ReadinessRefusal(blocking)
+        try:
+            observation = observe_nvmeof(request, request_digest, bootstrap, transport, min(observation_budget, remaining), now, blocking)
+        except ceph_native.RemoteRefusal as error:
+            if operation != "apply" or not unsettled(error):
+                raise
+            observation = None
+            blocking[:] = ["unsettled@" + bootstrap["name"]]
+        if operation != "apply" or observation is not None and observation["ready"]:
+            break
+        ceph_native.require(observation is None or observation["owned"] and observation["exists"] and observation["partial"], "not-ready")
+        remaining = deadline - now()
+        if remaining <= 0:
+            raise ReadinessRefusal(blocking)
+        pause(min(READINESS_INTERVAL, remaining))
+    if operation == "destroy":
+        ceph_native.require(observation["removed"], "client-quiescence-unqualified")
+    return {"changed": changed, "evidence": recorded(observation, transport, request_digest, request)}
+
+
 def execute_unit(request, operation, request_digest, transport, bootstrap, *, now, pause, phases=("unit",)):
     """A service unit runs its apply phases only on the bootstrap host: its preparation proof, with an ingress the firewall check on each
     ingress host, its apply phases in order, with an oauth2-proxy the rendered-configuration proof on each proxy host and then the one
@@ -1042,6 +1123,9 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
             changed = sso_enable(bootstrap, transport, deadline, now, pause) or changed
         observation = wait_unit(request, request_digest, bootstrap, transport, now, pause, private=seen)
         ceph_native.require(observation["ready"], "not-ready")
+    elif operation == "destroy" and nvmeof_unit(request):
+        observation = observe_unit(request, request_digest, bootstrap, transport)
+        ceph_native.require(observation["removed"], "client-quiescence-unqualified")
     elif operation == "destroy":
         changed = (transport.call(bootstrap, "destroy", seen) if seen else transport.call(bootstrap, "destroy"))["changed"]
         observation = observe_unit(request, request_digest, bootstrap, transport, private=seen)

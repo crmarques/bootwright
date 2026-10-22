@@ -1,6 +1,8 @@
 package ceph
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"maps"
 	"slices"
@@ -44,6 +46,7 @@ type unitType struct {
 }
 
 var unitTypes = map[string]unitType{
+	"nvmeof":       {units: nvmeofUnits, dependencies: nvmeofDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 	"crash":        {units: crashUnits, dependencies: noUnitDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 	"mgmt-gateway": {units: gatewayUnits, dependencies: gatewayDependencies, impacts: gatewayImpacts, apply: unitBudget{calls: 3, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 	"monitoring":   {units: monitoringUnits, dependencies: noUnitDependencies, impacts: monitoringImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
@@ -58,7 +61,12 @@ func noUnitImpacts(api.Object, ServiceUnit) []string { return nil }
 func ServiceUnitBlockID(cluster string, u ServiceUnit) string {
 	id := "ceph-service-" + cluster + "-" + u.Type
 	if u.ID != "" {
-		id += "-" + u.ID
+		suffix := u.ID
+		if u.Type == "nvmeof" {
+			sum := sha256.Sum256([]byte(u.ID))
+			suffix = hex.EncodeToString(sum[:])[:16]
+		}
+		id += "-" + suffix
 	}
 	return id
 }
@@ -100,6 +108,18 @@ func unitDeadline(r Request, operation string) (time.Duration, error) {
 	t, known := unitTypes[r.Service.Type]
 	if !known {
 		return 0, failure("lifecycle.state", "the Ceph service unit type is not known to this build", "")
+	}
+	if r.Service.Type == "nvmeof" {
+		documents := unitDocuments(r)
+		if len(documents) != 1 {
+			return 0, failure("lifecycle.state", "the NVMe-oF service has no frozen placement", "")
+		}
+		observation := 640 + 60*len(documents[0].Placement.Hosts) + 60 + 20
+		seconds := observation + 60
+		if operation == "apply" {
+			seconds += 2*nativeCall + readinessWait
+		}
+		return time.Duration(seconds) * time.Second, nil
 	}
 	budget := map[string]unitBudget{"apply": t.apply, "observe": t.observe, "destroy": t.destroy}[operation]
 	if operation == "apply" && unitProxied(*r.Service) {
@@ -173,8 +193,9 @@ func nfsIngressSpecOf(spec api.Value) any {
 }
 
 var unitSpecMembers = map[string][]string{
-	"nfs": {"enable_haproxy_protocol", "monitoring_port", "port", "virtual_ip"},
-	"rgw": {"certificate_source", "only_bind_port_on_networks", "rgw_exit_timeout_secs", "rgw_frontend_port", "rgw_frontend_type", "rgw_realm", "rgw_zone", "rgw_zonegroup", "ssl"},
+	"nvmeof": {"pool", "group", "port", "discovery_port", "transports", "enable_auth", "enable_mtls"},
+	"nfs":    {"enable_haproxy_protocol", "monitoring_port", "port", "virtual_ip"},
+	"rgw":    {"certificate_source", "only_bind_port_on_networks", "rgw_exit_timeout_secs", "rgw_frontend_port", "rgw_frontend_type", "rgw_realm", "rgw_zone", "rgw_zonegroup", "ssl"},
 	"ingress": {"backend_service", "enable_haproxy_protocol", "first_virtual_router_id", "frontend_port", "haproxy_peer_communication_port",
 		"health_check_interval", "keepalive_only", "monitor_port", "virtual_ip", "virtual_interface_networks"},
 	"ingress-rgw": {"backend_service", "certificate_source", "first_virtual_router_id", "frontend_port", "health_check_interval", "monitor_port", "ssl",
@@ -195,7 +216,7 @@ var unitSpecMembers = map[string][]string{
 
 func unitDocumentOf(cluster api.Object, svc api.Value, spec func(api.Value) any) (json.RawMessage, error) {
 	name := storage.NativeServiceName(svc)
-	if svc.Has("placement", "count_per_host") {
+	if svc.Has("placement", "count_per_host") && !(svc.Get("service_type").Text() == "nvmeof" && svc.Get("placement", "count_per_host").Equal(api.IntegerValue("1"))) {
 		return nil, failure("lifecycle.unsupported", "the native service "+name+" places more than one daemon of a type per host, which Bootwright does not realize",
 			"omit placement.count_per_host on "+name+" in spec.ceph.services")
 	}
@@ -395,7 +416,18 @@ var gatewayLeaves = map[string]monitoringLeaf{
 	"oauth2-proxy /custom_configs/0/content": {Part: secrets.CertificatePart, Variable: "oauth2ProxyCABundle", File: "oauth2-proxy-ca-bundle"},
 }
 
+var nvmeofLeaves = map[string]monitoringLeaf{
+	"nvmeof /spec/root_ca_cert": {File: "nvmeof-ca", Variable: "nvmeof_root_ca_cert", Part: secrets.CertificatePart},
+	"nvmeof /spec/server_cert":  {File: "nvmeof-server-cert", Variable: "nvmeof_server_cert", Part: secrets.CertificatePart},
+	"nvmeof /spec/server_key":   {File: "nvmeof-server-key", Variable: "nvmeof_server_key", Part: secrets.PrivateKeyPart},
+	"nvmeof /spec/client_cert":  {File: "nvmeof-client-cert", Variable: "nvmeof_client_cert", Part: secrets.CertificatePart},
+	"nvmeof /spec/client_key":   {File: "nvmeof-client-key", Variable: "nvmeof_client_key", Part: secrets.PrivateKeyPart},
+}
+
 func unitLeaf(serviceType, path string) (monitoringLeaf, bool) {
+	if leaf, known := nvmeofLeaves[serviceType+" "+path]; known {
+		return leaf, true
+	}
 	if leaf, known := monitoringLeaves[serviceType+" "+path]; known {
 		return leaf, true
 	}

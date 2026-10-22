@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v30"
+const Version = "ceph-core-v31"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -223,6 +223,7 @@ type Request struct {
 	NFSGaneshaPackageVersion string                       `json:"nfsGaneshaPackageVersion,omitempty"`
 	ObjectBucket             *ObjectBucket                `json:"objectBucket,omitempty"`
 	ObjectUser               *ObjectUser                  `json:"objectUser,omitempty"`
+	NVMeOF                   *NVMeOFSubsystem             `json:"nvmeof,omitempty"`
 	Owner                    string                       `json:"owner,omitempty"`
 	PackageRepository        string                       `json:"packageRepository"`
 	PackageRepositoryKey     string                       `json:"packageRepositoryKey"`

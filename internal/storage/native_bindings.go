@@ -29,6 +29,11 @@ type BindingSlot struct {
 }
 
 var bindingSlots = []BindingSlot{
+	{ServiceType: "nvmeof", Path: "/spec/root_ca_cert", SecretTypes: []string{"caBundle"}, Part: secrets.CertificatePart, Requires: "enable_auth", Required: &BindingRule{Holds: nvmeAuth, Message: "NVMe-oF native enable_auth requires every gateway mTLS certificate binding"}},
+	{ServiceType: "nvmeof", Path: "/spec/server_cert", SecretTypes: []string{"tlsCertificate"}, Part: secrets.CertificatePart, Requires: "enable_auth", Required: &BindingRule{Holds: nvmeAuth, Message: "NVMe-oF native enable_auth requires every gateway mTLS certificate binding"}, Pair: "/spec/server_key"},
+	{ServiceType: "nvmeof", Path: "/spec/server_key", SecretTypes: []string{"tlsCertificate"}, Part: secrets.PrivateKeyPart, Requires: "enable_auth", Required: &BindingRule{Holds: nvmeAuth, Message: "NVMe-oF native enable_auth requires every gateway mTLS certificate binding"}, Pair: "/spec/server_cert"},
+	{ServiceType: "nvmeof", Path: "/spec/client_cert", SecretTypes: []string{"tlsCertificate"}, Part: secrets.CertificatePart, Requires: "enable_auth", Required: &BindingRule{Holds: nvmeAuth, Message: "NVMe-oF native enable_auth requires every gateway mTLS certificate binding"}, Pair: "/spec/client_key"},
+	{ServiceType: "nvmeof", Path: "/spec/client_key", SecretTypes: []string{"tlsCertificate"}, Part: secrets.PrivateKeyPart, Requires: "enable_auth", Required: &BindingRule{Holds: nvmeAuth, Message: "NVMe-oF native enable_auth requires every gateway mTLS certificate binding"}, Pair: "/spec/client_cert"},
 	{ServiceType: "rgw", Path: "/spec/ssl_cert", SecretTypes: []string{"tlsCertificate"}, Part: secrets.CertificatePart, Pair: "/spec/ssl_key", Requires: "ssl"},
 	{ServiceType: "rgw", Path: "/spec/ssl_key", SecretTypes: []string{"tlsCertificate"}, Part: secrets.PrivateKeyPart, Pair: "/spec/ssl_cert", Requires: "ssl"},
 	{ServiceType: "ingress", Backend: "rgw", Path: "/spec/ssl_cert", SecretTypes: []string{"tlsCertificate"}, Part: secrets.CertificatePart, Pair: "/spec/ssl_key", Requires: "ssl"},
@@ -212,3 +217,5 @@ func article(word string) string {
 	}
 	return "a "
 }
+
+func nvmeAuth(spec api.Value) bool { return spec.Get("enable_auth").Bool() }

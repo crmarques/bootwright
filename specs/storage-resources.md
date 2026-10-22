@@ -15,8 +15,7 @@ admitted and realized. `StorageSMBResource` is admitted under its
 [field record](#storagesmbresource) and realized by its SMB block once its
 samba images are authored under `spec.ceph.images` of its StorageCluster
 ([refusal table](storage.md#refusal-table)). `StorageNVMeoFSubsystem` is
-admitted under its [field record](#storagenvmeofsubsystem) and not yet
-realized. Native effects
+realized under its [field record](#storagenvmeofsubsystem). Native effects
 remain artifact-gated. **Not yet met:** later P2
 kinds and their qualified lifecycles. [Storage admission](api/storage.md)
 states current refusals.
@@ -1017,8 +1016,8 @@ gateway group is the native `nvmeof` service of its StorageCluster
 ([NVMe-oF gateway record](storage-native-api.md#nvme-of-gateway-record)); no
 native declarative document exists for a subsystem, so the fields are typed
 camel-case Bootwright fields named after the gateway's `ceph nvmeof`
-parameters. The kind is admitted; no capability realizes it yet, so planning
-refuses every selected subsystem before any effect.
+parameters. The capability freezes the service, listener addresses and backing
+images before effects; native identity and readiness proofs guard completion.
 
 | Field | Contract |
 | --- | --- |
@@ -1026,13 +1025,24 @@ refuses every selected subsystem before any effect.
 | `serviceRef` | Required qualified native name `nvmeof.<service_id>` of a declared nvmeof service of that cluster; an absent or other-type target is a field error. It fixes the gateway pool and group. |
 | `nqn` | Required subsystem NQN: `nqn.yyyy-mm.<reverse domain>:<name>` or `nqn.2014-08.org.nvmexpress:uuid:<UUID>`, 11 to 223 printable ASCII characters, never the discovery NQN; unique among the cluster's subsystems, which is stricter than the gateway's per-group scope because an initiator identifies a subsystem by its NQN alone. |
 | `listeners` | Required set keyed by `host`, a topology node name, with optional `trsvcid`. The hosts are exactly the hosts the service places gateways on: a gateway serves only the namespaces of the load-balancing groups it owns, so a namespace is reachable only through a listener on its owning gateway ([upstream](https://github.com/ceph/ceph-nvmeof/blob/tentacle_9.0_base/control/grpc.py#L5040-L5080)). `trsvcid` is 4420 when given, the one listener port cephadm reserves and opens on a gateway host. |
-| `hosts` | Required nonempty set of initiator host NQNs, in the `nqn` grammar; `*`, which would let any host connect, refuses. |
-| `namespaces` | Required nonempty set keyed by `nsid` (an NVMe namespace ID, 1 to 4294967294), each with a required `imageRef` naming a StorageRBDImage of the same cluster. An image backs at most one namespace across every subsystem. |
+| `hosts` | Required nonempty set of at most 128 initiator host NQNs, in the `nqn` grammar; `*`, which would let any host connect, refuses. |
+| `namespaces` | Required nonempty set of at most 128 entries keyed by `nsid` (an NVMe namespace ID, 1 to 4294967294), each with a required `imageRef` naming a StorageRBDImage of the same cluster. An image backs at most one namespace across every subsystem. |
+
+Planning refuses a subsystem whose request-derived apply bound exceeds six
+hours, before any effect. This execution bound can be stricter than the
+128-entry shape limits; it is not a vendor capacity limit. The bound counts
+native identity reads, all first-apply writes and snapshots, held image probes,
+ANA and listener checks, a separate bounded cluster observation (including
+manager retries), and the readiness retry window. Original-attempt replay
+requires no more work than first apply. The implementation owns the formula in
+`internal/storage/ceph/nvmeof.go` and `ceph_native_nvmeof.py`.
 
 The subsystem never creates an image, never allows any host and passes no
 `force`. Maximum namespace, serial number, HA, load-balancing group,
 read-only, visibility, DH-HMAC-CHAP key and PSK fields are absent: the
-gateway's own defaults and limits apply and its errors are reported. No
+worker freezes stable original-attempt serial and namespace UUIDs, enables
+HA, assigns load-balancing groups, and requires 512-byte blocks and automatic
+visibility. Native calls use explicit safe defaults and opaque errors. No
 diagnostic echoes an authored NQN.
 
 ```yaml

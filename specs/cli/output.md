@@ -512,6 +512,7 @@ A managed Ceph StorageCluster entry adds these fields, in this order, after its
 | StorageFilesystem | `filesystem <name>, metadata <metadataPool>, data <dataPools separated by spaces>` |
 | StorageSubvolume | `subvolume <filesystem>/<group>/<name>`, with `_nogroup`, cephadm's default group, when no group is set |
 | StorageObjectGateway | `zone <realm>/<zoneGroup>/<zone>` |
+| StorageNVMeoFSubsystem | `subsystem <nqn> on nvmeof.<serviceID>` |
 | StorageNFSExport | `export <native.pseudo> on nfs.<serviceID>`, cephadm's service name |
 | StorageSMBResource | `smb cluster <cluster_id>, <auth_mode>`, `share <share_id> on smb cluster <cluster_id>`, `join auth <auth_id>` or `users and groups <users_groups_id>`, by `native.resource_type` |
 | StorageExport | `export of pool <rbdPoolRef>, filesystem <filesystemRef>`, then `, object gateway <objectGatewayRef>` when set; `export` without `dataFoundation` |

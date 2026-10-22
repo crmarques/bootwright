@@ -563,7 +563,8 @@ def test_monitoring_tables_agree():
     assert monitoring.singletons == types and monitoring.endpoint is None
     assert monitoring.daemon_types == observability.MONITORING_TYPES and monitoring.images == observability.IMAGES
     leaves = observability.MONITORING_LEAVES + observability.GATEWAY_LEAVES
-    assert ceph_native_units.MATERIAL_VARIABLES == {variable for unused, unused_path, variable in leaves}
+    assert ceph_native_units.MATERIAL_VARIABLES == ({variable for unused, unused_path, variable in leaves}
+                                                    | set(ceph_native_units.UNIT_TYPES["nvmeof"].leaves.values()))
     assert all(ceph_native_units.PENDING.fullmatch(entry) for entry in ("module@prometheus", "grafana@grafana", "nfs@nfs.files", "vip@ingress.nfs.files"))
     assert not any(ceph_native_units.PENDING.fullmatch(entry) for entry in ("module@grafana.main", "grafana@loki.x", "module@nfs"))
     assert ceph_native_units.UNIT_TYPES["nfs"].singletons == frozenset() and ceph_native_units.UNIT_TYPES["nfs"].leaves == {}

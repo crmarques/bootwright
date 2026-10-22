@@ -115,6 +115,7 @@ DAEMON_TYPES = {
     "haproxy": ("delegated", "delegated", False, "none"),
     "keepalived": ("delegated", "delegated", False, "none"),
     "nfs": ("delegated", "delegated", False, "none"),
+    "nvmeof": ("delegated", "delegated", False, "none"),
     "alertmanager": ("delegated", "delegated", False, "none"),
     "alloy": ("delegated", "delegated", False, "none"),
     "grafana": ("delegated", "delegated", False, "none"),
@@ -130,7 +131,7 @@ DAEMON_TYPES = {
 }
 # A service another block executes, listed by its cephadm service_name: rgw.<id>, ingress.<id>, nfs.<id>, smb.<id> or a singleton's type,
 # crash, rbd-mirror, the log collection services loki, alloy and promtail, and the management gateway's oauth2-proxy among them.
-DELEGATED_SERVICE = re.compile(r"(?:(?:rgw|ingress|nfs|smb)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}"
+DELEGATED_SERVICE = re.compile(r"(?:(?:rgw|ingress|nfs|smb|nvmeof)\.[A-Za-z0-9][A-Za-z0-9_.-]{0,127}"
                                r"|alertmanager|alloy|ceph-exporter|crash|grafana|loki|mgmt-gateway|node-exporter|oauth2-proxy|prometheus|promtail"
                                r"|rbd-mirror|snmp-gateway)\Z")
 
@@ -469,7 +470,8 @@ def validate(request):
     """Admit only the implemented core envelope, including concrete devices."""
     require(isinstance(request, dict))
     required = SCOPE_MEMBERS | {"action"}
-    resources = {"pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway", "nfsExport", "objectUser", "objectBucket"}
+    resources = {"pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway",
+                 "nfsExport", "objectUser", "objectBucket", "nvmeof"}
     require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"delegated"} - resources)
     hosts = scope_checks(request)
     validate_delegated(request, hosts)
@@ -499,6 +501,12 @@ def validate(request):
         require(not (resources - {"objectBucket"}) & set(request))
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_object
         ceph_native_object.validate_bucket(request, hosts)
+        return request
+    require(request["action"] == "nvmeof" or "nvmeof" not in request)
+    if request["action"] == "nvmeof":
+        require(not (resources - {"nvmeof"}) & set(request))
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_nvmeof
+        ceph_native_nvmeof.validate(request, hosts)
         return request
     require(request["action"] == "nfs-export" or "nfsExport" not in request)
     if request["action"] == "nfs-export":
@@ -594,7 +602,7 @@ def package_url(value):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v30")
+    require(request["version"] == "ceph-core-v31")
     if "security" in request:
         security = request["security"]
         require(isinstance(security, dict) and set(security) == {"fips", "cephxKeyType"})
@@ -3870,16 +3878,20 @@ def dispatch(envelope):
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_smb_native
     if phase in ceph_smb_native.PHASES:
         return ceph_smb_native.dispatch(envelope)
-    from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_nfs, ceph_native_object, ceph_native_resources, ceph_native_units
+    from ansible_collections.bootwright.core.plugins.module_utils import (
+        ceph_native_nfs, ceph_native_nvmeof, ceph_native_object, ceph_native_resources, ceph_native_units,
+    )
     request = envelope["request"]
     resource = isinstance(request, dict) and request.get("action") in ceph_native_resources.ACTIONS
     unit = isinstance(request, dict) and request.get("action") == "service"
     gateway = isinstance(request, dict) and request.get("action") == "gateway"
     export = isinstance(request, dict) and request.get("action") == "nfs-export"
+    nvmeof = isinstance(request, dict) and request.get("action") == "nvmeof"
     user = isinstance(request, dict) and request.get("action") == "object-user"
     bucket = isinstance(request, dict) and request.get("action") == "object-bucket"
     rgw = export and isinstance(request.get("nfsExport"), dict) and "objectUser" in request["nfsExport"]
-    kind = (ceph_native_object.ObjectWorker if gateway else ceph_native_object.UserWorker if user else ceph_native_object.BucketWorker if bucket
+    kind = (ceph_native_nvmeof.NVMeOFWorker if nvmeof else ceph_native_object.ObjectWorker if gateway
+            else ceph_native_object.UserWorker if user else ceph_native_object.BucketWorker if bucket
             else ceph_native_units.UnitWorker if unit else ceph_native_object.ExportUserWorker if rgw else ceph_native_nfs.ExportWorker if export
             else ceph_native_resources.ResourceWorker if resource else Worker)
     worker = kind(request, envelope["host"])
@@ -3887,8 +3899,11 @@ def dispatch(envelope):
     worker.execution_deadline = WORKER_DEADLINE
     require(phase in CORE_PHASES or (resource and phase in ceph_native_resources.PHASES) or (unit and phase in ceph_native_units.PHASES)
             or (gateway and phase in ceph_native_object.PHASES) or (export and phase in ceph_native_nfs.EXPORT_PHASES)
-            or (user and phase in ceph_native_object.USER_PHASES) or (bucket and phase in ceph_native_object.BUCKET_PHASES))
-    if phase not in CORE_READ_ONLY_PHASES and phase not in ceph_native_resources.READ_ONLY_PHASES and phase not in ceph_native_object.USER_READ_ONLY_PHASES:
+            or (user and phase in ceph_native_object.USER_PHASES) or (bucket and phase in ceph_native_object.BUCKET_PHASES)
+            or (nvmeof and phase in ceph_native_nvmeof.PHASES))
+    if (phase not in CORE_READ_ONLY_PHASES and phase not in ceph_native_resources.READ_ONLY_PHASES
+            and phase not in ceph_native_object.USER_READ_ONLY_PHASES and phase not in ceph_native_nvmeof.READ_ONLY_PHASES
+            and phase not in ceph_native_units.READ_ONLY_PHASES):
         require(supported_transport(worker.request), "unsupported-release")
     if gateway:
         worker.tls = ceph_native_object.material(worker.request, phase, envelope["private"])

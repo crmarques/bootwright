@@ -1,0 +1,16 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-tls
+
+spec:
+  type: tlsCertificate
+
+  source:
+    generated:
+      commonName: lab-bmc.example.test
+
+      ipAddresses:
+        - 127.0.0.1
+
+      validityDays: 365

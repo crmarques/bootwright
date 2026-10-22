@@ -29,7 +29,7 @@ MAX_METADATA = 4096
 CLUSTER_TYPES = frozenset(("mon", "mgr", "osd", "ceph-exporter", "mds"))
 # Each daemon type another block executes, mapped to its cephadm service type (orchestrator daemon_type_to_service).
 DELEGATED_TYPES = {"alertmanager": "alertmanager", "alloy": "alloy", "crash": "crash", "grafana": "grafana", "haproxy": "ingress",
-                   "keepalived": "ingress", "loki": "loki", "mgmt-gateway": "mgmt-gateway", "nfs": "nfs", "node-exporter": "node-exporter",
+                   "keepalived": "ingress", "loki": "loki", "mgmt-gateway": "mgmt-gateway", "nfs": "nfs", "nvmeof": "nvmeof", "node-exporter": "node-exporter",
                    "oauth2-proxy": "oauth2-proxy", "prometheus": "prometheus", "promtail": "promtail", "rgw": "rgw", "rbd-mirror": "rbd-mirror", "smb": "smb",
                    "snmp-gateway": "snmp-gateway"}
 # Singletons on an auxiliary image: cephadm names the service by its type, and each daemon directory may belong to the image's own user.

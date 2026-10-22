@@ -106,7 +106,7 @@ func projectServices(r *Request, cluster api.Object) error {
 	return nil
 }
 
-var delegatedFamilies = []string{"rgw", "ingress", "nfs"}
+var delegatedFamilies = []string{"rgw", "ingress", "nfs", "nvmeof"}
 
 func serviceHosts(cluster api.Object, svc api.Value) ([]string, error) {
 	names, issues := storage.ResolveServicePlacement(cluster, svc)
@@ -146,21 +146,6 @@ func undeployedDelegated(cluster api.Object) (string, string, bool) {
 		if svc.Get("service_type").Text() == "ingress" && serviceFamily(cluster, svc) == "" {
 			return "Bootwright does not deploy the native service " + name + " yet",
 				"remove " + name + " from spec.ceph.services, together with its spec.ceph.serviceBindings entries", true
-		}
-	}
-	return "", "", false
-}
-
-func undeployedNVMeoF(cluster api.Object) (string, string, bool) {
-	services := cluster.Spec().Get("ceph", "services").Items()
-	slices.SortStableFunc(services, func(a, b api.Value) int {
-		return strings.Compare(storage.NativeServiceName(a), storage.NativeServiceName(b))
-	})
-	for _, svc := range services {
-		if svc.Get("service_type").Text() == "nvmeof" {
-			name := storage.NativeServiceName(svc)
-			return "Bootwright does not deploy the NVMe-oF gateway service " + name + " yet",
-				"remove " + name + " from spec.ceph.services of StorageCluster " + cluster.Name() + ", together with every StorageNVMeoFSubsystem whose spec.serviceRef names it", true
 		}
 	}
 	return "", "", false

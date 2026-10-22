@@ -114,6 +114,7 @@
     "zoneGroup": "objects"
   },
   "packageRepository": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64",
+  "packageRepositoryKey": "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH",
   "publicNetworks": [
     "192.0.2.0/24"
   ],
@@ -162,5 +163,5 @@
       }
     }
   ],
-  "version": "ceph-core-v30"
+  "version": "ceph-core-v31"
 }
