@@ -70,16 +70,21 @@ func privateInstallation(catalog api.Catalog, machine api.Object, channel string
 	return ok && diskEncryption(profile).Present()
 }
 
-// refusedFIPS says why a FIPS-mode installation of a Machine cannot proceed:
-// a physical target, or a fleet key generated as Ed25519, the generated
-// default, which a FIPS-mode machine refuses.
+// refusedFIPS refuses generated fleet or delivered host keys that the installed
+// FIPS policy cannot use, before publishing an installer or booting a target.
 func refusedFIPS(catalog api.Catalog, machine, profile api.Object, derived substrate.Target, derivedOK bool) (reason, remediation string) {
 	if !fipsEnabled(profile) {
 		return "", ""
 	}
 	if derivedOK && derived.Identity.Channel == substrate.ChannelDeliveredKey {
-		return "the FIPS profile arm is qualified only on virtual Machines, and " + machine.Identity() + " is physical; physical qualification is B78",
-			"install " + machine.Identity() + " with a profile that does not enable spec.customizations.security.fips, or disable spec.customizations.security.fips on " + profile.Identity()
+		host, found := catalog.Find(api.Secret, derived.Identity.HostKeyRef)
+		if found && host.Spec().Has("source", "generated") {
+			keyType := host.Spec().Get("source", "generated", "keyType").Text()
+			if keyType == "" || keyType == "ed25519" {
+				return "a FIPS-mode installation refuses Ed25519 keys, and the delivered host key " + host.Identity() + " generates one",
+					"declare spec.source.generated.keyType as ecdsa-p256, ecdsa-p384, ecdsa-p521 or rsa on " + host.Identity()
+			}
+		}
 	}
 	fleet, found := catalog.Find(api.Secret, fleetKeyRef(catalog))
 	if !found || !fleet.Spec().Has("source", "generated") {

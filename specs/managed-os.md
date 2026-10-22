@@ -140,13 +140,12 @@ through it. A profile selecting
 `initialPassword`, `mirror` or `templateClone` refuses before
 registration. These shapes carry secret bytes or effects this contract does not
 prove. A profile selecting `subscription` with a `managed` `redhat-rhel`
-Entitlement is admitted on a virtual Machine, as
+Entitlement is admitted on virtual and physical Machines, as
 [Registration](#registration) states. A profile selecting `fromSubscription` refuses too, because it
 registers inside the installer, where a failed registration cannot be retried
-without installing again. A profile enabling `fips` is admitted on a virtual Machine and refused
-on a physical one, as [FIPS mode](#fips-mode) states. A profile selecting
-`diskEncryption` is admitted on a virtual Machine and refused on a physical
-one, as [Root-disk encryption](#root-disk-encryption) states. A profile enabling `ssh.passwordAuthentication` refuses too, because no
+without installing again. FIPS and root-disk encryption are admitted on virtual
+and physical Machines under the key and disk boundaries in
+[FIPS mode](#fips-mode) and [Root-disk encryption](#root-disk-encryption). A profile enabling `ssh.passwordAuthentication` refuses too, because no
 password can be set while `initialPassword` is refused. A Machine whose
 profile configures a repository refuses while its effective proxy names a
 Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, because
@@ -862,9 +861,11 @@ lists. A continued apply reads the Secret version its context bound, so the
 apply refusal's remedy takes the context back with destroy before replacing the
 Secret.
 
-**Physical Machines.** A profile enabling `fips` refuses on a physical
-Machine before registration; its qualification is
-[B78](milestones/m1.md#b78).
+**Physical Machines.** A FIPS installation uses the same private delivered-key
+path and physical target proofs. Admission refuses a generated Ed25519 host
+key as well as an Ed25519 fleet key; execution checks both bound public keys
+before publication or boot, requiring ECDSA or RSA of at least 2048 bits.
+Real-hardware qualification remains [B78](milestones/m1.md#b78).
 
 **Proof.** After the installed system's network converged, an apply reads
 `/proc/sys/crypto/fips_enabled` and `/etc/crypto-policies/state/current` over
@@ -965,9 +966,15 @@ server endpoint the installer image is published through must be an IP
 literal, and a profile selecting a hostname endpoint refuses before
 registration.
 
-**Physical Machines.** A profile selecting `diskEncryption` refuses on a
-physical Machine before registration; its qualification is
-[B78](milestones/m1.md#b78).
+**Physical Machines.** The explicit whole root disk and MAC proofs still run
+before storage effects. Before fetching the recovery value or binding any
+slot, `%post` resolves the declared disk, proves the installed root belongs
+only to that disk, enumerates only its LUKS descendants, and proves each has
+that disk as its sole physical parent. Missing, foreign or ambiguous ancestry
+refuses before the first bind; other disks are never scanned for binding.
+The TPM must already be available to the installer; Bootwright never clears
+a physical TPM. Firmware readiness, reboot unlock and console recovery remain
+[B78](milestones/m1.md#b78) operator qualification, not an offline-test claim.
 
 **Proof.** After the installed system's network converged, an apply reads,
 over the pinned fleet connection with root from the Kickstart's sudoers entry,
@@ -999,14 +1006,15 @@ Entitlement registers the installed system with the hosted subscription
 service inside its `os-install-<machine>` block.
 
 **Admission.** A profile selecting `spec.subscription` is admitted on a
-virtual Machine, and the contract below is what its installation performs. An
+virtual or physical Machine, and the contract below is what its installation
+performs. Physical registration uses the delivered host key and original
+installation marker, never an independently discovered identity. An
 Entitlement whose `spec.rhsm.management` is `external`
 registers nothing and freezes nothing. Only the hosted subscription service is
 registered with: an Entitlement selecting `spec.rhsm.satellite` or setting
 `spec.rhsm.connectToInsights` refuses, and so does a Machine whose effective
-proxy names a Proxy, because the registration has no route but a direct one; a
-physical Machine refuses, its qualification being
-[B78](milestones/m1.md#b78); and subscription repositories on an `external`
+proxy names a Proxy, because the registration has no route but a direct one;
+subscription repositories on an `external`
 Entitlement refuse, because this executable applies them only to a
 registration it performs. Each of these refusals names the field that selects
 it and the change that admits the profile, as the subscription rows of the
@@ -1346,12 +1354,10 @@ the length of that many bytes in base64url without padding.
 | Packages from a subscription | a profile's `spec.installer.anaconda.packageSource.fromSubscription` | `the install profile selects spec.installer.anaconda.packageSource.fromSubscription, which registers inside the installer, where a failed registration cannot be retried without installing again` | `remove spec.installer.anaconda.packageSource.fromSubscription from <profile>, to install from its boot media or from spec.installer.anaconda.packageSource.hostedTree` |
 | An initial password | a profile's `spec.customizations.ssh.initialPassword` | `the install profile selects spec.customizations.ssh.initialPassword, which carries secret bytes or effects this executable does not prove` | `remove spec.customizations.ssh.initialPassword from <profile>` |
 | Password authentication | a profile's `spec.customizations.ssh.passwordAuthentication: true` | `the install profile enables spec.customizations.ssh.passwordAuthentication, but no password can be set while spec.customizations.ssh.initialPassword is refused` | `set spec.customizations.ssh.passwordAuthentication to false on <profile>` |
-| FIPS on a physical Machine | a profile's `spec.customizations.security.fips.enabled: true` selected by a Machine on a `baremetal` provider, whose installation is proved by a delivered key | `the FIPS profile arm is qualified only on virtual Machines, and <machine> is physical; physical qualification is B78` | `install <machine> with a profile that does not enable spec.customizations.security.fips, or disable spec.customizations.security.fips on <profile>` |
+| An Ed25519 delivered host key under FIPS | a FIPS profile on a delivered-key Machine whose host-key Secret generates Ed25519, the default included | `a FIPS-mode installation refuses Ed25519 keys, and the delivered host key <secret> generates one` | `declare spec.source.generated.keyType as ecdsa-p256, ecdsa-p384, ecdsa-p521 or rsa on <secret>` |
 | An Ed25519 fleet key under FIPS | a profile's `spec.customizations.security.fips.enabled: true` while the Environment's `spec.remoteMachinesAccessKey.keyRef` names a Secret whose `spec.source.generated.keyType` is `ed25519`, the default included | `a FIPS-mode installation refuses Ed25519 keys, and the fleet key <secret> generates one` | `declare spec.source.generated.keyType as ecdsa-p256, ecdsa-p384, ecdsa-p521 or rsa on <secret>` |
-| Disk encryption on a physical Machine | a profile's `spec.customizations.security.diskEncryption` selected by a Machine on a `baremetal` provider, whose installation is proved by a delivered key | `the disk-encryption profile arm is qualified only on virtual Machines, and <machine> is physical; physical qualification is B78` | `install <machine> with a profile that does not select spec.customizations.security.diskEncryption, or remove spec.customizations.security.diskEncryption from <profile>` |
 | A hostname artifact endpoint under disk encryption | a profile selecting `spec.customizations.security.diskEncryption` whose `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` resolves to a URL whose host is not an IP literal | `the installer fetches the recovery passphrase before it configures name resolution, so the artifact server endpoint of <profile> must be addressed by IP` | `select an artifact server endpoint whose address is an IP literal in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
 | A generated recovery passphrase too long | a profile selecting `spec.customizations.security.diskEncryption` whose `recoveryPassphraseRef` names a `token` Secret generating more than 192 bytes | `the recovery passphrase is limited to 256 characters, and <recovery secret> generates <bytes> bytes, which encode to <length> characters` | `set spec.source.generated.bytes to at most 192 on <recovery secret>` |
-| A subscription on a physical Machine | a profile's `spec.subscription` selected by a Machine on a `baremetal` provider, whose installation is proved by a delivered key | `the registration profile arm is qualified only on virtual Machines, and <machine> is physical; physical qualification is B78` | `install <machine> with a profile that does not select spec.subscription, or remove spec.subscription from <profile>` |
 | Subscription repositories with external registration | a profile's `spec.customizations.repositories.subscription` with a `spec.subscription` Entitlement whose `spec.rhsm.management` is `external` | `subscription repositories are enabled on a registration this executable performs, and <entitlement> sets spec.rhsm.management to external` | `remove spec.customizations.repositories.subscription from <profile>, or set spec.rhsm.management to managed on <entitlement>` |
 | A Satellite registration | a `spec.subscription` Entitlement with `spec.rhsm.satellite` | `this executable registers only with the hosted subscription service, and <entitlement> selects a Satellite in spec.rhsm.satellite` | `remove spec.rhsm.satellite from <entitlement>, or remove spec.subscription from <profile>` |
 | Insights enrollment | a `spec.subscription` Entitlement with `spec.rhsm.connectToInsights: true` | `this executable does not enroll a Machine in Insights, a second remote identity it neither proves nor removes, and <entitlement> sets spec.rhsm.connectToInsights to true` | `set spec.rhsm.connectToInsights to false on <entitlement>, or remove spec.subscription from <profile>` |

@@ -74,10 +74,7 @@ func refusedRegistration(catalog api.Catalog, machine, profile api.Object, deriv
 		return "", ""
 	}
 	withoutSubscription := "remove " + subscriptionField + " from " + profile.Identity()
-	if derivedOK && derived.Identity.Channel == substrate.ChannelDeliveredKey {
-		return "the registration profile arm is qualified only on virtual Machines, and " + machine.Identity() + " is physical; physical qualification is B78",
-			"install " + machine.Identity() + " with a profile that does not select " + subscriptionField + ", or " + withoutSubscription
-	}
+
 	if !found {
 		return "", ""
 	}

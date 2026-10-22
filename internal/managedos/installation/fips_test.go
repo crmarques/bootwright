@@ -176,18 +176,6 @@ func TestFIPSRefusesAnEd25519FleetKeyBeforeRegistration(t *testing.T) {
 	}
 }
 
-func TestPhysicalMachineRefusesTheFIPSArmNamingB78(t *testing.T) {
-	catalog := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))),
-		sshKeySecret(api.MapValue(field("generated", api.MapValue()))), fipsProfile())
-	refused := Refusals(catalog)
-	if identities := lifecycle.Identities(refused); !slices.Equal(identities, []string{"Machine/metal-01"}) {
-		t.Fatalf("refused = %+v", refused)
-	}
-	if !strings.Contains(refused[0].Reason, "B78") || !strings.Contains(refused[0].Reason, "Machine/metal-01 is physical") {
-		t.Fatalf("reason = %q", refused[0].Reason)
-	}
-}
-
 func TestFIPSApplyRefusesABoundEd25519OrShortRSAFleetKey(t *testing.T) {
 	short := rsaPublicLine(1024)
 	blob := strings.Fields(short)[1]

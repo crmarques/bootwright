@@ -1,11 +1,10 @@
 package main
 
 import (
-	"slices"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 func TestTheReferenceExamplesInstallUnderTheNewRules(t *testing.T) {
@@ -20,16 +19,21 @@ func TestTheReferenceExamplesInstallUnderTheNewRules(t *testing.T) {
 			}
 		})
 	}
-	t.Run("multidc-platform meets the FIPS on a physical Machine row", func(t *testing.T) {
+	t.Run("multidc-platform refuses incompatible delivered FIPS host keys", func(t *testing.T) {
 		state, _ := compileAcceptance(t, admissibleExampleSources(t, false))
-		var want []lifecycle.Refusal
-		for _, name := range []string{"storage-a-01", "storage-a-02", "storage-a-03", "storage-b-01", "storage-b-02", "storage-b-03"} {
-			want = append(want, lifecycle.Refusal{Kind: "Machine", Name: name,
-				Reason:      "the FIPS profile arm is qualified only on virtual Machines, and Machine/" + name + " is physical; physical qualification is B78",
-				Remediation: "install Machine/" + name + " with a profile that does not enable spec.customizations.security.fips, or disable spec.customizations.security.fips on MachineInstallProfile/rhel-ceph-node"})
+		refused := installation.Refusals(state.Effective())
+		for _, row := range refused {
+			machine, found := state.Effective().Find(api.Machine, row.Name)
+			if !found {
+				t.Fatal("unknown refused machine")
+			}
+			reference := machine.Spec().Get("os", "install", "hostKeyRef").Text()
+			if row.Reason != "a FIPS-mode installation refuses Ed25519 keys, and the delivered host key Secret/"+reference+" generates one" {
+				t.Fatalf("unexpected refusal: %+v", row)
+			}
 		}
-		if refused := installation.Refusals(state.Effective()); !slices.Equal(refused, want) {
-			t.Fatalf("refusals = %+v, want %+v", refused, want)
+		if len(refused) != 6 {
+			t.Fatalf("expected six incompatible generated keys, got %d", len(refused))
 		}
 	})
 }

@@ -47,8 +47,12 @@ func generatedHostKeyType(contextName string, request Request) (string, error) {
 // fipsFleetKey refuses a bound fleet key a FIPS-mode machine would reject, read
 // from its public line alone, before anything is published or booted.
 func fipsFleetKey(contextName string, request Request, publicLine string) error {
+	return fipsKey(contextName, request, publicLine, request.FleetKeyRef, "fleet key")
+}
+
+func fipsKey(contextName string, request Request, publicLine, reference, purpose string) error {
 	fields := strings.Fields(publicLine)
-	machine, secret := "Machine/"+request.Identity.Object, "Secret/"+request.FleetKeyRef
+	machine, secret := "Machine/"+request.Identity.Object, "Secret/"+reference
 	remedy := "take this context back with bootwright destroy --context " + contextName + ", then replace " + secret +
 		" with an ECDSA key or an RSA key of at least 2048 bits, for example a generated keyType ecdsa-p256 or rsa, or disable spec.customizations.security.fips on MachineInstallProfile/" +
 		request.Identity.Profile + ", and run bootwright apply --context " + contextName + "; an apply that continues reads the key version this context bound"
@@ -57,17 +61,17 @@ func fipsFleetKey(contextName string, request Request, publicLine string) error 
 		return nil
 	case "ssh-rsa":
 	default:
-		return refusal("api.value", secret+" holds a fleet key of type "+fields[0]+", which a FIPS-mode installation of "+machine+" refuses; nothing was published or booted", remedy)
+		return refusal("api.value", secret+" holds a "+purpose+" of type "+fields[0]+", which a FIPS-mode installation of "+machine+" refuses; nothing was published or booted", remedy)
 	}
 	bits, ok := 0, len(fields) > 1
 	if ok {
 		bits, ok = rsaModulusBits(fields[1])
 	}
 	if !ok {
-		return refusal("api.value", secret+" holds an ssh-rsa fleet key whose size cannot be read, so a FIPS-mode installation of "+machine+" cannot admit it; nothing was published or booted", remedy)
+		return refusal("api.value", secret+" holds an ssh-rsa "+purpose+" whose size cannot be read, so a FIPS-mode installation of "+machine+" cannot admit it; nothing was published or booted", remedy)
 	}
 	if bits < 2048 {
-		return refusal("api.value", secret+" holds an ssh-rsa fleet key of "+strconv.Itoa(bits)+" bits, and a FIPS-mode installation of "+machine+" needs at least 2048; nothing was published or booted", remedy)
+		return refusal("api.value", secret+" holds an ssh-rsa "+purpose+" of "+strconv.Itoa(bits)+" bits, and a FIPS-mode installation of "+machine+" needs at least 2048; nothing was published or booted", remedy)
 	}
 	return nil
 }

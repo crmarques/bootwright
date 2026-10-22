@@ -92,9 +92,7 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 			field("initialPassword", api.MapValue(text("secretRef", "root-password")))))))), "Machine/rhel-01", onProfile},
 		"Password authentication": {labCatalog(installProfile(field("customizations", customizations.With("ssh", api.MapValue(
 			field("passwordAuthentication", api.BoolValue(true))))))), "Machine/rhel-01", onProfile},
-		"A subscription on a physical Machine": {labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))),
-			sshKeySecret(api.MapValue(field("generated", api.MapValue()))), registeringProfile(), rhelEntitlement()), "Machine/metal-01",
-			map[string]string{"<machine>": "Machine/metal-01", "<profile>": "MachineInstallProfile/rhel-9-8"}},
+
 		"Subscription repositories with external registration": {labCatalog(registeringProfile(), externalEntitlement()), "Machine/rhel-01", map[string]string{"<entitlement>": "Entitlement/rhel", "<profile>": "MachineInstallProfile/rhel-9-8"}},
 		"A Satellite registration": {labCatalog(registeringProfile(), rhelEntitlement(field("satellite", api.MapValue(text("hostname", "satellite.example.test"))))),
 			"Machine/rhel-01", map[string]string{"<entitlement>": "Entitlement/rhel", "<profile>": "MachineInstallProfile/rhel-9-8"}},
@@ -104,14 +102,12 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 		"A credentialed proxy": {labCatalog(externalProxy("corporate", text("httpsProxy", "http://proxy.example.test:3128"),
 			text("trustBundleRef", "corporate-ca")), proxiedGuest(), repositoryProfile("https://mirror.example.test/a")), "Machine/rhel-01",
 			map[string]string{"<machine>": "Machine/rhel-01", "<profile>": "MachineInstallProfile/rhel-9-8", "<proxy>": "Proxy/corporate"}},
-		"FIPS on a physical Machine": {labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))),
+		"An Ed25519 delivered host key under FIPS": {labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))),
 			sshKeySecret(api.MapValue(field("generated", api.MapValue()))), fipsProfile()), "Machine/metal-01",
-			map[string]string{"<machine>": "Machine/metal-01", "<profile>": "MachineInstallProfile/rhel-9-8"}},
+			map[string]string{"<secret>": "Secret/metal-01-host-key"}},
 		"An Ed25519 fleet key under FIPS": {labCatalog(fipsProfile(), normalizedFleetSecret(t, api.MapValue(field("generated", api.MapValue())))),
 			"Machine/rhel-01", map[string]string{"<machine>": "Machine/rhel-01", "<secret>": "Secret/bootwright-machine-key"}},
-		"Disk encryption on a physical Machine": {labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))),
-			sshKeySecret(api.MapValue(field("generated", api.MapValue()))), encryptingProfile()), "Machine/metal-01",
-			map[string]string{"<machine>": "Machine/metal-01", "<profile>": "MachineInstallProfile/rhel-9-8"}},
+
 		"A hostname artifact endpoint under disk encryption": {labCatalog(hostnameEndpointServer(), encryptingProfileOn("fqdn-https")),
 			"Machine/rhel-01", onProfile},
 		"A generated recovery passphrase too long": {labCatalog(encryptingProfile(), recoverySecret(api.MapValue(field("generated", api.MapValue(number("bytes", "193")))))),

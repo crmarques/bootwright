@@ -84,6 +84,57 @@ installed Machine. Use the
 [network exposure guidance](../../../docs/operator-guide.md#network-exposure);
 controller-local readiness does not prove either remote fetcher can reach it.
 
+## Physical host variants
+
+FIPS, managed RHSM and TPM2-bound root LUKS use this same private installation
+path. These implementation paths have offline tests; physical firmware, reboot,
+recovery and registration acceptance remain unrun. In the operator-owned copy,
+select the existing profile fields described in the
+[host contract](../../../specs/managed-os.md#physical-installation):
+
+```yaml
+customizations:
+  security:
+    fips:
+      enabled: true
+
+    diskEncryption:
+      unlock:
+        tpm2: {}
+      recoveryPassphraseRef: luks-recovery
+
+subscription:
+  entitlementRef: rhel-rhsm
+```
+
+Merge these fields into the existing install profile, preserving its packages,
+services, networking and installer source. Declare `luks-recovery` as an opaque
+or token Secret, and `rhel-rhsm` as a managed `redhat-rhel` Entitlement with
+organization and activation-key Secret references. Supply those values through
+protected files or standard input before the first apply freezes them. Keep the
+recovery value unchanged for the lifetime of the disk. Select `ecdsa-p256` or
+`rsa` in both the fleet and delivered host-key descriptors: FIPS refuses an
+Ed25519 key before publishing the installer. OSPP is not selected.
+
+Keep an explicit whole-disk `rootDeviceHints.deviceName`, declared physical
+MAC inventory, verified BMC TLS and the delivered host key. Check the TPM 2.0
+is enabled and available to the installer and arrange console recovery before
+installation. Bootwright never clears a physical TPM; any TPM reset is a
+separate operator decision affecting other TPM consumers. The empty TPM policy
+selects no PCRs and protects a copied disk without its TPM, not a tampered boot.
+A chosen PCR policy must be qualified across the installer and installed boot.
+
+Use the normal staged installation below. Its physical apply requires the
+existing data-loss authorization and proves target identity before insertion
+and inside the installer. TPM binding is limited to LUKS descendants of the
+selected root disk; a foreign installed root or ambiguous disk ancestry fails
+before binding any slot. Retain only redacted proof results: FIPS kernel flag 1
+and policy FIPS, root LUKS/TPM binding, owned RHSM registration, pinned SSH
+access after network convergence and reboot, and a console recovery exercise.
+Never collect key bytes, recovery values or RHSM credentials. Record each
+operator check as unrun until executed. Removal retains the installed system;
+this feature does not add physical erase.
+
 ## Run it
 
 Keep the input variable in this shell. Replace ISO/CA paths and the BMC account

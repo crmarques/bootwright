@@ -133,10 +133,7 @@ func TestRegistrationRefusalsNameTheEntitlementField(t *testing.T) {
 		target  substrate.Target
 		want    [2]string
 	}{
-		"physical": {labCatalog(registeringProfile(), rhelEntitlement()), metal, delivered, [2]string{
-			"the registration profile arm is qualified only on virtual Machines, and Machine/metal-01 is physical; physical qualification is B78",
-			"install Machine/metal-01 with a profile that does not select spec.subscription, or remove spec.subscription from MachineInstallProfile/rhel-9-8",
-		}},
+		"physical": {labCatalog(registeringProfile(), rhelEntitlement()), metal, delivered, [2]string{}},
 		"satellite": {labCatalog(registeringProfile(), rhelEntitlement(field("satellite", api.MapValue(text("hostname", "satellite.example.test"))))), guest(), agent, [2]string{
 			"this executable registers only with the hosted subscription service, and Entitlement/rhel selects a Satellite in spec.rhsm.satellite",
 			"remove spec.rhsm.satellite from Entitlement/rhel, or remove spec.subscription from MachineInstallProfile/rhel-9-8",

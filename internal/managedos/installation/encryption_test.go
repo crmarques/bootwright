@@ -421,24 +421,6 @@ func onEndpoint(profile api.Object, endpoint string) api.Object {
 		"installer", "anaconda", "redfishVirtualMedia", "artifactServerEndpoint", "endpointRef"))
 }
 
-func TestPhysicalMachineRefusesDiskEncryptionNamingB78(t *testing.T) {
-	catalog := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))),
-		sshKeySecret(api.MapValue(field("generated", api.MapValue()))), encryptingProfile())
-	want := []lifecycle.Refusal{{Kind: "Machine", Name: "metal-01",
-		Reason:      "the disk-encryption profile arm is qualified only on virtual Machines, and Machine/metal-01 is physical; physical qualification is B78",
-		Remediation: "install Machine/metal-01 with a profile that does not select spec.customizations.security.diskEncryption, or remove spec.customizations.security.diskEncryption from MachineInstallProfile/rhel-9-8",
-	}}
-	refused := Refusals(catalog)
-	if !slices.Equal(refused, want) {
-		t.Fatalf("refusals = %+v", refused)
-	}
-	for _, named := range []string{"M1", "M5", "X6", "X10", "milestone", "slice"} {
-		if strings.Contains(refused[0].Reason, named) {
-			t.Fatalf("the reason names %q: %q", named, refused[0].Reason)
-		}
-	}
-}
-
 func TestDiskEncryptionRefusesAHostnameArtifactEndpoint(t *testing.T) {
 	want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01",
 		Reason:      "the installer fetches the recovery passphrase before it configures name resolution, so the artifact server endpoint of MachineInstallProfile/rhel-9-8 must be addressed by IP",

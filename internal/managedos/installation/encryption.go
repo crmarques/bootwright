@@ -57,10 +57,7 @@ func refusedEncryption(catalog api.Catalog, machine, profile api.Object, derived
 	if !selected.Present() {
 		return "", ""
 	}
-	if derivedOK && derived.Identity.Channel == substrate.ChannelDeliveredKey {
-		return "the disk-encryption profile arm is qualified only on virtual Machines, and " + machine.Identity() + " is physical; physical qualification is B78",
-			"install " + machine.Identity() + " with a profile that does not select " + encryptionField + ", or remove " + encryptionField + " from " + profile.Identity()
-	}
+
 	if !imageEndpointIsIPLiteral(catalog, profile) {
 		return "the installer fetches the recovery passphrase before it configures name resolution, so the artifact server endpoint of " + profile.Identity() + " must be addressed by IP",
 			"select an artifact server endpoint whose address is an IP literal in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on " + profile.Identity()
@@ -159,10 +156,15 @@ func encryptionPostLines(input Installation) []string {
 		return nil
 	}
 	lines := []string{"%post --erroronfail --interpreter=/bin/bash", "set -euo pipefail", "umask 077", "export LC_ALL=C"}
+	devices := `$(lsblk -rpno NAME,FSTYPE | awk '$2 == "crypto_LUKS" {print $1}')`
+	if input.Physical {
+		lines = append(lines, physicalEncryptionScope(input.RootDevice)...)
+		devices = `"${bootwright_devices[@]}"`
+	}
 	lines = append(lines, recoveryFetchLines()...)
 	lines = append(lines,
 		"bootwright_bound=0",
-		`for bootwright_device in $(lsblk -rpno NAME,FSTYPE | awk '$2 == "crypto_LUKS" {print $1}'); do`,
+		`for bootwright_device in `+devices+`; do`,
 		`printf '%s' "${bootwright_recovery}" | clevis luks bind -y -d "${bootwright_device}" -k - tpm2 '`+clevisTPM2Config(*input.DiskEncryption)+`'`,
 		`bootwright_slot=$(clevis luks list -d "${bootwright_device}" | awk -F': ' '$2 ~ /^tpm2 / && !found {print $1; found=1}')`,
 		`test -n "${bootwright_slot}"`,
@@ -255,4 +257,25 @@ func rootEncryptionUnproved(contextName string, request Request) error {
 		Remediation: "take this context back with bootwright destroy --context " + contextName + ", then run bootwright apply --context " + contextName + "; the root disk is encrypted only at installation",
 		Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: request.Identity.Object},
 	}}}
+}
+
+// physicalEncryptionScope proves root and all bindings belong only to the authorized disk.
+func physicalEncryptionScope(root string) []string {
+	return []string{
+		`bootwright_root=$(readlink -f -- '` + root + `')`,
+		`test -n "${bootwright_root}"`,
+		`test "$(lsblk -dnro TYPE -- "${bootwright_root}")" = disk`,
+		`bootwright_root_source=$(findmnt -nvo SOURCE /)`,
+		`test -n "${bootwright_root_source}"`,
+		`bootwright_parents=$(lsblk -srpn -o NAME,TYPE -- "${bootwright_root_source}" | awk '$2 == "disk" {print $1}' | sort -u)`,
+		`test "${bootwright_parents}" = "${bootwright_root}"`,
+		`bootwright_tree=$(lsblk -rpn -o NAME,TYPE,FSTYPE -- "${bootwright_root}")`,
+		`bootwright_luks=$(printf '%s\n' "${bootwright_tree}" | awk '$3 == "crypto_LUKS" {print $1}' | sort -u)`,
+		`test -n "${bootwright_luks}"`,
+		`mapfile -t bootwright_devices <<< "${bootwright_luks}"`,
+		`for bootwright_device in "${bootwright_devices[@]}"; do`,
+		`bootwright_parents=$(lsblk -srpn -o NAME,TYPE -- "${bootwright_device}" | awk '$2 == "disk" {print $1}' | sort -u)`,
+		`test "${bootwright_parents}" = "${bootwright_root}"`,
+		`done`,
+	}
 }

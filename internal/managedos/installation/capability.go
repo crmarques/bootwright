@@ -508,6 +508,11 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 			if err := deliveredKeyMatches(request, key); err != nil {
 				return lifecycle.RunResult{}, err
 			}
+			if request.fips() {
+				if err := fipsKey(execution.Context, request, key, request.Target.HostKeyRef, "host key"); err != nil {
+					return lifecycle.RunResult{}, err
+				}
+			}
 		}
 	}
 	materials := []lifecycle.MaterialFile{
