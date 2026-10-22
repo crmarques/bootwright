@@ -97,6 +97,7 @@ type Pool struct {
 	Filesystem  string          `json:"filesystem"`
 	MinSize     int             `json:"minSize"`
 	Name        string          `json:"name"`
+	Object      string          `json:"object,omitempty"`
 	Overwrites  bool            `json:"overwrites"`
 	PGNum       int             `json:"pgNum"`
 	Quota       PoolQuota       `json:"quota"`

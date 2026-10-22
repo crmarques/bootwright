@@ -1,0 +1,10 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageRBDImage
+metadata:
+  name: ec42-disk
+
+spec:
+  clusterRef: ceph-lab
+  poolRef: rbd-headers
+  dataPoolRef: ec42-data
+  sizeBytes: 1073741824

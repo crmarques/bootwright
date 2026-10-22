@@ -1,0 +1,37 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: secondary-01
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: core
+
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+
+  network:
+    configRef: secondary
+    attachmentRef: secondary
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: secondary-01.lab.example.test
+
+      - name: ip
+        address: 192.0.2.11/24
+        interface: enp1s0
+
+  capabilities:
+    - ceph-node

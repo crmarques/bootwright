@@ -227,7 +227,8 @@ def validate_policy(policy, osd_hosts):
 def validate_pool(pool, osd_hosts):
     require(isinstance(pool, dict) and pool.get("type") in ("replicated", "erasure"))
     erasure = pool["type"] == "erasure"
-    require(set(pool) == POOL_MEMBERS | ({"erasure"} if erasure else set()))
+    require(set(pool) == POOL_MEMBERS | ({"erasure"} if erasure else set()) | ({"object"} if "object" in pool else set()))
+    require("object" not in pool or named(pool["object"]) and pool["object"] != pool["name"])
     require(named(pool["name"]) and named(pool["crushRule"]) and isinstance(pool["role"], str) and pool["role"] in APPLICATIONS)
     require(pool["application"] == APPLICATIONS[pool["role"]])
     require(pool["filesystem"] == "" or pool["role"] in ("cephfs-metadata", "cephfs-data") and named(pool["filesystem"]))

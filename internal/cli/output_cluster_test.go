@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -216,5 +217,67 @@ func TestClusterInfoShowsNoneWithoutSpecializations(t *testing.T) {
 	}
 	if structured := render(PresentationOptions{Format: "json"}); strings.Contains(structured, "specializations") {
 		t.Fatalf("json names absent specializations:\n%s", structured)
+	}
+}
+
+func TestExplicitObjectUserOutputIsStructuredAndClearsCustody(t *testing.T) {
+	for _, format := range []string{"text", "json"} {
+		ceph := revealedCeph(false)
+		material := secrets.NewMaterial(map[secrets.Part][]byte{secrets.UsernamePart: []byte("ACCESS"), secrets.PasswordPart: []byte("PRIVATE")})
+		ceph.ObjectUsers = []inspection.ObjectUserAccess{{Name: "documents", Gateway: "objects", Credentials: material}}
+		var out bytes.Buffer
+		options := PresentationOptions{Format: format, Width: 220, Detail: "full"}
+		if handled, err := writeClusterResult(WithPresentation(&out, options), io.Discard, "cluster info", commandResult{clusterInfo: storageOnly(ceph)}, format == "json"); err != nil || !handled {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out.String(), "ACCESS") || !strings.Contains(out.String(), "PRIVATE") {
+			t.Fatal("explicit S3 output missing")
+		}
+		if format == "json" && (!strings.Contains(out.String(), `"objectUsers"`) || !strings.Contains(out.String(), `"secretKey"`)) {
+			t.Fatal("S3 JSON shape missing")
+		}
+		value, _ := material.Part(secrets.PasswordPart)
+		for _, b := range value {
+			if b != 0 {
+				t.Fatal("renderer retained secret")
+			}
+		}
+	}
+}
+
+func TestObjectUserOutputFailureClearsAllBorrowedMaterial(t *testing.T) {
+	for _, format := range []string{"text", "json"} {
+		for _, invalid := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/invalid=%t", format, invalid), func(t *testing.T) {
+				ceph := revealedCeph(false)
+				material := secrets.NewMaterial(map[secrets.Part][]byte{secrets.UsernamePart: []byte("ACCESS"), secrets.PasswordPart: []byte("PRIVATE")})
+				ceph.ObjectUsers = []inspection.ObjectUserAccess{{Name: "documents", Gateway: "objects", Credentials: material}}
+				if invalid {
+					ceph.ObjectUsers[0].Gateway = ""
+				}
+				var stderr bytes.Buffer
+				handled, err := writeClusterResult(failingWriter{}, &stderr, "cluster info", commandResult{clusterInfo: storageOnly(ceph)}, format == "json")
+				if invalid {
+					if handled || err != nil {
+						t.Fatal("invalid result was rendered", handled, err)
+					}
+				} else if !handled || err == nil {
+					t.Fatal("writer failure was lost", handled, err)
+				}
+				if strings.Contains(stderr.String(), "PRIVATE") || strings.Contains(stderr.String(), "ACCESS") {
+					t.Fatal("private material reached standard error")
+				}
+				for _, borrowed := range []secrets.Material{material, ceph.Dashboard.Password} {
+					for _, part := range borrowed.Parts() {
+						value, _ := borrowed.Part(part)
+						for _, b := range value {
+							if b != 0 {
+								t.Fatal("failed renderer retained borrowed material")
+							}
+						}
+					}
+				}
+			})
+		}
 	}
 }

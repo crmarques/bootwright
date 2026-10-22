@@ -1,0 +1,10 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: files-smb-user
+
+spec:
+  type: opaque
+
+  source:
+    contextStore: {}

@@ -103,7 +103,7 @@ func TestRBDImageOnErasurePoolRefusesAtPlan(t *testing.T) {
 func TestRBDImagePoolRefusalsPropagate(t *testing.T) {
 	catalog := planCatalog(6, 6, nil, replicatedPool("volumes"), replicatedPool("archive", "mirroring", requestMap("mode", "image")), imageOf("disk", "volumes", "dataPoolRef", "archive"))
 	_, err := planned(t, catalog, api.StorageRBDImage, "disk")
-	refusedWith(t, err, "lifecycle.unsupported", "StoragePool archive declares mirroring, which B483 delivers", "remove spec.mirroring; B483 delivers mirroring")
+	refusedWith(t, err, "lifecycle.unsupported", "StoragePool archive declares mirroring without a StorageReplication owner", "declare a StorageReplication that names this pool, or remove spec.mirroring")
 	r := plannedImage(t, replicatedPool("volumes"), ecData(), imageOf("disk", "volumes", "dataPoolRef", "ec-data"))
 	if r.RBD.DataPool != "ec-data" {
 		t.Fatalf("an erasure-coded data pool froze as %q", r.RBD.DataPool)

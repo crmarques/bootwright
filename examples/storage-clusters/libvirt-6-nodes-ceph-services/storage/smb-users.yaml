@@ -1,0 +1,21 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageSMBResource
+metadata:
+  name: files-users
+
+spec:
+  clusterRef: ceph-lab
+
+  native:
+    resource_type: ceph.smb.usersgroups
+    users_groups_id: files
+
+    values:
+      users:
+        - name: smbuser
+
+      groups: []
+
+  secrets:
+    - path: /values/users/0/password
+      secretRef: files-smb-user

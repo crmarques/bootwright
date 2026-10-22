@@ -5,6 +5,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 const ObjectUserOutput = "object-user"
@@ -19,6 +20,34 @@ type ObjectUser struct {
 }
 
 func ObjectUserBlockID(name string) string { return "ceph-object-user-" + name }
+
+func ObjectUserProved(catalog api.Catalog, user api.Object, proofs []lifecycle.BlockEvidence) bool {
+	gateway, exists := catalog.Find(api.StorageObjectGateway, user.Spec().Get("objectGatewayRef").Text())
+	cluster := user.Spec().Get("clusterRef").Text()
+	if !exists || gateway.Spec().Get("clusterRef").Text() != cluster {
+		return false
+	}
+	matched := 0
+	for _, proof := range proofs {
+		if proof.Kind != string(api.StorageObjectUser) || proof.Object != user.Name() || proof.Implementation != Implementation || proof.Verb != reconciliation.Apply || proof.State != reconciliation.BlockDone || proof.Block.ID != ObjectUserBlockID(user.Name()) || proof.Block.Kind != proof.Kind || proof.Block.Object != proof.Object || proof.Block.Implementation != Implementation {
+			return false
+		}
+		r, err := DecodeRequest(proof.Block.Request)
+		if err != nil || r.Action != "object-user" || r.Cluster != cluster || r.ObjectUser == nil || r.ObjectUser.Name != user.Name() || r.ObjectUser.Gateway != gateway.Name() || r.ObjectUser.Realm != gateway.Spec().Get("realm").Text() || r.ObjectUser.ZoneGroup != gateway.Spec().Get("zoneGroup").Text() || r.ObjectUser.Zone != gateway.Spec().Get("zone").Text() {
+			return false
+		}
+		e, err := decodeEvidence(proof.Evidence)
+		if err != nil || e.Owner == "" {
+			return false
+		}
+		r.Owner, r.FSID = e.Owner, FSIDFor(e.Owner, cluster)
+		if effect, err := EvaluateEvidence(proof.Evidence, r, proof.Block.RequestDigest, false); err != nil || effect != reconciliation.EffectCompleted {
+			return false
+		}
+		matched++
+	}
+	return matched == 1
+}
 
 func objectUserRequest(c api.Catalog, user api.Object, contextName string) (Request, error) {
 	name, spec := user.Name(), user.Spec()

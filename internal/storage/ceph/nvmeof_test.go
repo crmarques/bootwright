@@ -189,3 +189,55 @@ func TestNVMeOFServiceObservationBudget(t *testing.T) {
 		}
 	}
 }
+
+func TestNVMeOFNativePoolNamesKeepLogicalDependencies(t *testing.T) {
+	objects := nvmeCatalog().Objects()
+	for i, object := range objects {
+		if object.Kind() == api.StoragePool {
+			objects[i] = object.WithSpec(object.Spec().With("nativeName", api.StringValue("native-"+object.Name())))
+		}
+	}
+	catalog := api.NewCatalog(objects)
+	input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+	found := map[string]bool{}
+	for _, kind := range []api.Kind{api.StorageCluster, api.StorageRBDImage, api.StorageNVMeoFSubsystem} {
+		plan, err := New(kind, nil).Plan(context.Background(), input)
+		if err != nil {
+			t.Fatal(diagnostics.Of(err))
+		}
+		for _, block := range plan.Definitions {
+			request, err := DecodeRequest(block.Request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch {
+			case request.Service != nil && request.Service.Type == "nvmeof":
+				found["service"] = true
+				documents := unitDocuments(request)
+				spec, _ := documents[0].Spec.(map[string]any)
+				if spec["pool"] != "native-config" {
+					t.Errorf("gateway config pool = %v", spec["pool"])
+				}
+				if !slices.Contains(block.Dependencies, "ceph-pool-config") || slices.Contains(block.Dependencies, "ceph-pool-native-config") {
+					t.Errorf("gateway dependencies %v", block.Dependencies)
+				}
+			case request.NVMeOF != nil:
+				found["subsystem"] = true
+				if request.NVMeOF.Pool != "native-config" || request.NVMeOF.Namespaces[0].Image.Pool != "native-volumes" {
+					t.Errorf("native subsystem pools %+v", request.NVMeOF)
+				}
+				if !slices.Equal(block.Requires, []reconciliation.ObjectRef{{Kind: string(api.StorageRBDImage), Object: "disk"}}) {
+					t.Errorf("subsystem references %v", block.Requires)
+				}
+			case request.RBD != nil:
+				found["image"] = true
+				if request.RBD.Pool != "native-volumes" || !slices.Contains(block.Requires, reconciliation.ObjectRef{Kind: string(api.StoragePool), Object: "volumes"}) {
+					t.Errorf("image pool/reference %+v %v", request.RBD, block.Requires)
+				}
+			}
+		}
+	}
+	if len(found) != 3 {
+		t.Fatalf("missing native consumers: %v", found)
+	}
+}

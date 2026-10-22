@@ -1,0 +1,1104 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: libvirt-2x4-nodes-ceph-multisite
+spec:
+  domains:
+    base: lab.example.test
+    machines: lab.example.test
+    clusters: lab.example.test
+    containerClusters: lab.example.test
+    storageClusters: lab.example.test
+  storageClusters:
+    - primary
+    - secondary
+  remoteMachinesAccessKey:
+    keyRef: bootwright-machine-key
+  controller:
+    machineRef: controller
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Entitlement
+metadata:
+  name: ibm-ceph
+spec:
+  type: ibm-storage-ceph
+  registry:
+    url: cp.icr.io
+    credentialsRef: ibm-registry
+  license:
+    accept: true
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: controller
+spec:
+  capabilities:
+    - container-runtime
+    - libvirt
+  os:
+    provided: true
+  proxy:
+    direct: {}
+  network:
+    addresses:
+      - name: fqdn
+        address: controller.lab.example.test
+      - name: ip
+        address: 192.0.2.1
+  access:
+    local: true
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: primary-01
+spec:
+  capabilities:
+    - ceph-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: core
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+      rootDeviceHints:
+        deviceName: /dev/vda
+  proxy:
+    direct: {}
+  network:
+    configRef: primary
+    attachmentRef: primary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: primary-01.lab.example.test
+      - name: ip
+        address: 198.51.100.11/24
+        interface: enp1s0
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: primary-02
+spec:
+  capabilities:
+    - ceph-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: core
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+      rootDeviceHints:
+        deviceName: /dev/vda
+  proxy:
+    direct: {}
+  network:
+    configRef: primary
+    attachmentRef: primary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: primary-02.lab.example.test
+      - name: ip
+        address: 198.51.100.12/24
+        interface: enp1s0
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: primary-03
+spec:
+  capabilities:
+    - ceph-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: gateway
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+      rootDeviceHints:
+        deviceName: /dev/vda
+  proxy:
+    direct: {}
+  network:
+    configRef: primary
+    attachmentRef: primary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: primary-03.lab.example.test
+      - name: ip
+        address: 198.51.100.13/24
+        interface: enp1s0
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: primary-04
+spec:
+  capabilities:
+    - ceph-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: mirror
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+      rootDeviceHints:
+        deviceName: /dev/vda
+  proxy:
+    direct: {}
+  network:
+    configRef: primary
+    attachmentRef: primary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: primary-04.lab.example.test
+      - name: ip
+        address: 198.51.100.14/24
+        interface: enp1s0
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: secondary-01
+spec:
+  capabilities:
+    - ceph-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: core
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+      rootDeviceHints:
+        deviceName: /dev/vda
+  proxy:
+    direct: {}
+  network:
+    configRef: secondary
+    attachmentRef: secondary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: secondary-01.lab.example.test
+      - name: ip
+        address: 192.0.2.11/24
+        interface: enp1s0
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: secondary-02
+spec:
+  capabilities:
+    - ceph-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: core
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+      rootDeviceHints:
+        deviceName: /dev/vda
+  proxy:
+    direct: {}
+  network:
+    configRef: secondary
+    attachmentRef: secondary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: secondary-02.lab.example.test
+      - name: ip
+        address: 192.0.2.12/24
+        interface: enp1s0
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: secondary-03
+spec:
+  capabilities:
+    - ceph-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: gateway
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+      rootDeviceHints:
+        deviceName: /dev/vda
+  proxy:
+    direct: {}
+  network:
+    configRef: secondary
+    attachmentRef: secondary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: secondary-03.lab.example.test
+      - name: ip
+        address: 192.0.2.13/24
+        interface: enp1s0
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: secondary-04
+spec:
+  capabilities:
+    - ceph-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: mirror
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+      rootDeviceHints:
+        deviceName: /dev/vda
+  proxy:
+    direct: {}
+  network:
+    configRef: secondary
+    attachmentRef: secondary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: secondary-04.lab.example.test
+      - name: ip
+        address: 192.0.2.14/24
+        interface: enp1s0
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata:
+  name: rhel-9-8-boot
+spec:
+  bootMedia: local-media:rhel-9.8-x86_64-boot.iso
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-9-8
+spec:
+  os:
+    family: rhel
+    version: "9.8"
+    architecture: x86_64
+  installer:
+    anaconda:
+      imageRef: rhel-9-8-boot
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+      packageSource:
+        hostedTree:
+          fromMedia: local-media:rhel-9.8-x86_64-dvd.iso
+          artifactServerEndpoint:
+            serverRef: lab-artifacts
+            endpointRef: ip-http
+  customizations:
+    localization:
+      language: en_US.UTF-8
+      formats: en_US.UTF-8
+      keyboard: us
+      timezone: Etc/UTC
+    ssh:
+      passwordAuthentication: false
+    packages:
+      install:
+        - chrony
+        - qemu-guest-agent
+        - podman
+        - lvm2
+        - python3
+      excludeDocs: true
+      installWeakDeps: false
+    repositories:
+      configure:
+        - id: ibm-storage-ceph-9
+          baseURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/
+          displayName: IBM Storage Ceph 9 packages
+          enabled: true
+          gpgCheck: true
+          gpgKeyURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH
+    services:
+      enabled:
+        - chronyd
+        - qemu-guest-agent
+        - sshd
+    security:
+      selinux:
+        mode: enforcing
+  proxy:
+    direct: {}
+  ntp:
+    - serverRef: lab-ntp
+      endpointRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: primary
+spec:
+  machineNetwork:
+    - cidr: 198.51.100.0/24
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+  nmstate:
+    dns-resolver:
+      config:
+        search:
+          - lab.example.test
+    interfaces:
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: enp1s0
+        state: up
+        type: ethernet
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          metric: 100
+          next-hop-address: 198.51.100.1
+          next-hop-interface: enp1s0
+          table-id: 254
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: secondary
+spec:
+  machineNetwork:
+    - cidr: 192.0.2.0/24
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+  nmstate:
+    dns-resolver:
+      config:
+        search:
+          - lab.example.test
+    interfaces:
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: enp1s0
+        state: up
+        type: ethernet
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          metric: 100
+          next-hop-address: 192.0.2.1
+          next-hop-interface: enp1s0
+          table-id: 254
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt
+spec:
+  libvirt:
+    machineRef: controller
+    uri: qemu:///system
+    capacityReserve:
+      cpu: 1
+      memoryMiB: 4096
+      diskGiB: 10
+    bmcEmulationDefaults:
+      enabled: true
+      protocol: redfish
+      emulator: sushy-tools
+      bindAddress: 127.0.0.1
+      certificateRef: lab-bmc-tls
+      port: 8000
+      auth:
+        credentialsRef: lab-bmc-credentials
+    machineProfiles:
+      - name: core
+        cpu: 4
+        memoryMiB: 16384
+        diskGiB: 60
+        dataDisks:
+          - name: ceph-data
+            sizeGiB: 60
+            media: ssd
+        tpm: {}
+      - name: gateway
+        cpu: 4
+        memoryMiB: 11264
+        diskGiB: 60
+        dataDisks:
+          - name: ceph-data
+            sizeGiB: 60
+            media: ssd
+        tpm: {}
+      - name: mirror
+        cpu: 4
+        memoryMiB: 8192
+        diskGiB: 60
+        dataDisks:
+          - name: ceph-data
+            sizeGiB: 60
+            media: ssd
+        tpm: {}
+      - name: client
+        cpu: 2
+        memoryMiB: 4096
+        diskGiB: 40
+        tpm: {}
+  networkAttachments:
+    - name: primary
+      libvirt:
+        bridge: virbr-primary
+        management: managed
+        address: 198.51.100.1/24
+        forward: nat
+    - name: secondary
+      libvirt:
+        bridge: virbr-secondary
+        management: managed
+        address: 192.0.2.1/24
+        forward: nat
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Proxy
+metadata:
+  name: lab-proxy
+spec:
+  management: managed
+  machineRef: controller
+  implementation: squid
+  bindAddress: 192.0.2.1
+  port: 3128
+  endpoints:
+    - name: ip
+      addressRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: lab-dns
+spec:
+  management: managed
+  machineRef: controller
+  implementation: dnsmasq
+  bindAddress: 192.0.2.1
+  port: 53
+  endpoints:
+    - name: ip
+      addressRef: ip
+  forwarders:
+    - 192.0.2.53
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NTPServer
+metadata:
+  name: lab-ntp
+spec:
+  management: managed
+  machineRef: controller
+  implementation: chrony
+  bindAddress: 192.0.2.1
+  port: 123
+  endpoints:
+    - name: ip
+      addressRef: ip
+  upstreamSources:
+    - 192.0.2.123
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ArtifactServer
+metadata:
+  name: lab-artifacts
+spec:
+  management: managed
+  machineRef: controller
+  bindAddress: 192.0.2.1
+  retention: persistent
+  tls:
+    secretRef: artifact-server-tls
+    minVersion: TLSv1.2
+  listeners:
+    - name: https
+      protocol: https
+      port: 8443
+    - name: http
+      protocol: http
+      port: 8080
+  endpoints:
+    - name: ip-https
+      listenerRef: https
+      addressRef: ip
+    - name: ip-http
+      listenerRef: http
+      addressRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: primary
+spec:
+  type: ceph
+  management: managed
+  ceph:
+    distribution: ibm
+    release: 9.9.2.0
+    packageVersion: 20.2.2-349.el9cp
+    image:
+      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+      version: v9.9.2-26947
+    ibm:
+      callHome: enabled
+      packages:
+        source: vendor
+    entitlementRef: ibm-ceph
+    cephadm:
+      addressRef: ip
+      ansible:
+        packageVersion: 5.0.3-1.el9cp
+      clusterSSH:
+        user: bootwright
+        keyRef: primary-cluster-key
+        transport: verified-tunnel
+      bootstrap:
+        node: primary-01
+        addressRef: ip
+    networks:
+      publicCIDRs:
+        - 198.51.100.0/24
+    config:
+      global:
+        osd_pool_default_min_size: "2"
+        osd_pool_default_size: "2"
+      osd:
+        osd_memory_target: "4294967296"
+        osd_memory_target_autotune: "false"
+    services:
+      - service_type: mon
+        placement:
+          label: mon
+          count: 3
+      - service_type: mgr
+        placement:
+          label: core
+          count: 2
+      - service_type: osd
+        service_id: data
+        placement:
+          label: osd
+        spec:
+          data_devices:
+            paths:
+              - /dev/sda
+      - service_type: mds
+        service_id: primary-files
+        placement:
+          label: core
+          count: 2
+      - service_type: rgw
+        service_id: primary-objects
+        placement:
+          label: gateway
+          count: 1
+        spec:
+          rgw_frontend_port: 80
+          rgw_realm: primary
+          rgw_zone: primary
+          rgw_zonegroup: primary
+      - service_type: rbd-mirror
+        placement:
+          label: mirror
+          count: 1
+    topology:
+      nodes:
+        - name: primary-01
+          fqdn: primary-01.lab.example.test
+          machineRef: primary-01
+          labels:
+            - osd
+            - mon
+            - core
+        - name: primary-02
+          fqdn: primary-02.lab.example.test
+          machineRef: primary-02
+          labels:
+            - osd
+            - mon
+            - core
+        - name: primary-03
+          fqdn: primary-03.lab.example.test
+          machineRef: primary-03
+          labels:
+            - osd
+            - mon
+            - gateway
+        - name: primary-04
+          fqdn: primary-04.lab.example.test
+          machineRef: primary-04
+          labels:
+            - osd
+            - mirror
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: secondary
+spec:
+  type: ceph
+  management: managed
+  ceph:
+    distribution: ibm
+    release: 9.9.2.0
+    packageVersion: 20.2.2-349.el9cp
+    image:
+      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+      version: v9.9.2-26947
+    ibm:
+      callHome: enabled
+      packages:
+        source: vendor
+    entitlementRef: ibm-ceph
+    cephadm:
+      addressRef: ip
+      ansible:
+        packageVersion: 5.0.3-1.el9cp
+      clusterSSH:
+        user: bootwright
+        keyRef: secondary-cluster-key
+        transport: verified-tunnel
+      bootstrap:
+        node: secondary-01
+        addressRef: ip
+    networks:
+      publicCIDRs:
+        - 192.0.2.0/24
+    config:
+      global:
+        osd_pool_default_min_size: "2"
+        osd_pool_default_size: "2"
+      osd:
+        osd_memory_target: "4294967296"
+        osd_memory_target_autotune: "false"
+    services:
+      - service_type: mon
+        placement:
+          label: mon
+          count: 3
+      - service_type: mgr
+        placement:
+          label: core
+          count: 2
+      - service_type: osd
+        service_id: data
+        placement:
+          label: osd
+        spec:
+          data_devices:
+            paths:
+              - /dev/sda
+      - service_type: mds
+        service_id: secondary-files
+        placement:
+          label: core
+          count: 2
+      - service_type: rgw
+        service_id: secondary-objects
+        placement:
+          label: gateway
+          count: 1
+        spec:
+          rgw_frontend_port: 80
+          rgw_realm: secondary
+          rgw_zone: secondary
+          rgw_zonegroup: secondary
+      - service_type: rbd-mirror
+        placement:
+          label: mirror
+          count: 1
+    topology:
+      nodes:
+        - name: secondary-01
+          fqdn: secondary-01.lab.example.test
+          machineRef: secondary-01
+          labels:
+            - osd
+            - mon
+            - core
+        - name: secondary-02
+          fqdn: secondary-02.lab.example.test
+          machineRef: secondary-02
+          labels:
+            - osd
+            - mon
+            - core
+        - name: secondary-03
+          fqdn: secondary-03.lab.example.test
+          machineRef: secondary-03
+          labels:
+            - osd
+            - mon
+            - gateway
+        - name: secondary-04
+          fqdn: secondary-04.lab.example.test
+          machineRef: secondary-04
+          labels:
+            - osd
+            - mirror
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: primary-data
+spec:
+  clusterRef: primary
+  type: replicated
+  role: cephfs-data
+  replicated:
+    size: 3
+    minSize: 2
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: primary-metadata
+spec:
+  clusterRef: primary
+  type: replicated
+  role: cephfs-metadata
+  replicated:
+    size: 3
+    minSize: 2
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: primary-volumes
+spec:
+  clusterRef: primary
+  nativeName: volumes
+  type: replicated
+  role: rbd
+  replicated:
+    size: 3
+    minSize: 2
+  mirroring:
+    mode: image
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: secondary-data
+spec:
+  clusterRef: secondary
+  type: replicated
+  role: cephfs-data
+  replicated:
+    size: 3
+    minSize: 2
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: secondary-metadata
+spec:
+  clusterRef: secondary
+  type: replicated
+  role: cephfs-metadata
+  replicated:
+    size: 3
+    minSize: 2
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: secondary-volumes
+spec:
+  clusterRef: secondary
+  nativeName: volumes
+  type: replicated
+  role: rbd
+  replicated:
+    size: 3
+    minSize: 2
+  mirroring:
+    mode: image
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageRBDImage
+metadata:
+  name: replicated-disk
+spec:
+  clusterRef: primary
+  poolRef: primary-volumes
+  sizeBytes: 1073741824
+  features:
+    - layering
+    - exclusive-lock
+    - object-map
+    - fast-diff
+    - deep-flatten
+    - journaling
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageFilesystem
+metadata:
+  name: primary-files
+spec:
+  clusterRef: primary
+  mdsServiceRef: mds.primary-files
+  metadataPoolRef: primary-metadata
+  dataPoolRefs:
+    - name: primary-data
+      default: true
+  mds:
+    activeCount: 1
+    standbyReplay: false
+    standbyCountWanted: 1
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageFilesystem
+metadata:
+  name: secondary-files
+spec:
+  clusterRef: secondary
+  mdsServiceRef: mds.secondary-files
+  metadataPoolRef: secondary-metadata
+  dataPoolRefs:
+    - name: secondary-data
+      default: true
+  mds:
+    activeCount: 1
+    standbyReplay: false
+    standbyCountWanted: 1
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectGateway
+metadata:
+  name: primary-objects
+spec:
+  clusterRef: primary
+  serviceRef: rgw.primary-objects
+  realm: primary
+  zoneGroup: primary
+  zone: primary
+  endpoint:
+    fqdn: primary-s3.lab.example.test
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectGateway
+metadata:
+  name: secondary-objects
+spec:
+  clusterRef: secondary
+  serviceRef: rgw.secondary-objects
+  realm: secondary
+  zoneGroup: secondary
+  zone: secondary
+  endpoint:
+    fqdn: secondary-s3.lab.example.test
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageReplication
+metadata:
+  name: volumes-to-secondary
+spec:
+  clusterRef: primary
+  type: rbd
+  poolRef: primary-volumes
+  peerClusterRef: secondary
+  peerPoolRef: secondary-volumes
+  imageRefs:
+    - replicated-disk
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: artifact-server-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: controller.lab.example.test
+      dnsNames:
+        - controller.lab.example.test
+      ipAddresses:
+        - 192.0.2.1
+      validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: bootwright-machine-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: bootwright-machine-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ibm-registry
+spec:
+  type: usernamePassword
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-credentials
+spec:
+  type: usernamePassword
+  source:
+    generated:
+      username: admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: lab-bmc.example.test
+      ipAddresses:
+        - 127.0.0.1
+      validityDays: 365
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: primary-cluster-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: ceph-cluster-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: secondary-cluster-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: ceph-cluster-key

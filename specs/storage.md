@@ -1472,10 +1472,10 @@ bootstrap host. Each namespace load-balancing group must have an optimized
 path and only optimized/non-optimized advertised paths across its gateways.
 Evidence carries the stable subsystem serial and no key material. Native
 readiness is not an initiator login, I/O, failover or physical qualification
-claim. The bounded resource action uses two apply transport calls with one
-readiness wait, one observation call and two whole-cluster retirement calls,
-matching the existing resource budget. B491 continues to refuse online
-individual removal; whole-owned-cluster retirement remains supported.
+claim. The request-derived deadline includes preparation, bounded resource
+creation, separate cluster and resource observation, and the readiness retry
+window. B491 continues to refuse online individual removal; whole-owned-cluster
+retirement remains supported.
 
 `nvmeof-native` names unavailable/refused qualified native commands;
 `nvmeof-identity` names a changed backing, gateway, authorization or native
@@ -1483,3 +1483,85 @@ identity; `nvmeof-foreign` names a subsystem without this attempt's intent.
 These are fixed, non-secret refusals with recovery guidance. Request formats
 move to `ceph-core-v31` and `ceph-host-v6`; old incomplete operations
 must be finished or destroyed with their original build.
+
+## RBD replication
+
+[StorageReplication](storage-resources.md#storagereplication) has its own
+`storage-ceph-replication-v2` implementation, `ceph-replication-v1` frozen
+request and `ceph-replication-evidence-v1` observation. Its two runtime scopes
+come only from both clusters' original apply proofs. Scoped SSH keys and
+proved host keys reach the controller worker as private files; no ambient SSH
+configuration or context is consulted. Each endpoint selects the SSH key of
+its proved bootstrap host, independent of the host list order. The existing
+bounded ResourceWorker, registered native worker and private per-cluster
+custody directory own effects.
+
+The fixed native interface is `rbd mirror pool enable`, `mirror pool info`,
+`mirror pool peer bootstrap create`, `mirror pool peer bootstrap import
+--direction rx-only <pool> -`, `mirror image enable <pool>/<image> journal`,
+`info`, `ls` and `mirror image status`. Ordinary owned-pool and cluster proof
+reads precede these commands. Import consumes the token on stdin. Pool info
+never uses `--all`, which exposes peer credentials. The source permits no
+peer; the receiver permits exactly its recorded source UUID, site FSID,
+client and `rx-only` direction. Custom site names and preexisting bootstrap
+credentials refuse. Each effect is preceded by a durable original-attempt
+marker; immutable pool/image/peer IDs and constant-time comparison with the
+retained original token detect replacement. Tokens are capped at 1023 bytes,
+matching the native importer's fixed input buffer. The source retains the
+ASCII token in descriptor-bound root-only 0600 custody. The
+`ceph-replication-custody-v1` reservation and identity records contain only
+scope, a random custody ID and file metadata, never material or its digest.
+Continuation re-proves native output against the retained token and never
+replaces completed custody. Raw tokens and CephX keys otherwise stay in
+worker/controller memory and stdin, never observations, diagnostics, argv or
+public produced files.
+
+Native bootstrap internals have debug logging of decoded tokens, so every RBD
+invocation explicitly disables `debug-rbd`, `debug-rados`, and `debug-ms`
+(`0/0`) and native log sinks. Bootstrap/import failures are opaque named
+refusals, never native stdout/stderr. This boundary follows Ceph's
+[bootstrap implementation](https://github.com/ceph/ceph/blob/v20.2.2/src/librbd/api/Mirror.cc)
+and [stdin token import](https://github.com/ceph/ceph/blob/v20.2.2/src/tools/rbd/action/MirrorPool.cc).
+Journal readiness follows native
+[image mirroring status](https://github.com/ceph/ceph/blob/v20.2.2/src/tools/rbd/action/MirrorImage.cc).
+Live qualification of the selected IBM build remains unrun.
+
+For `i` images (1–3), apply makes `8+3*i` bounded calls: prepare both pools,
+create/import token, enable each source image, observe both pools and each
+image on both sides, then commit both endpoints. Each call reserves 660
+seconds around a 640-second worker with 60-second native commands. The
+three-image commit reads at most nine commands (540 seconds). Initial sync
+adds one 1800-second retry window, a 60-second interruption allowance and
+60 seconds of local margin: `(8+3*i)*660+1860+60` seconds (13,140 at three).
+Observe makes `2+2*i` calls and reserves `(2+2*i)*660+60` seconds. No calls run
+concurrently; retry polling clips its call timeout to the remaining window.
+The ceiling is independent of core cluster enrollment's budget.
+
+Closed refusal names are `request`, `artifact`, `ownership`, `evidence`,
+`material`, `transport`, `remote-refusal`, `adapter-exception`,
+`native-command`, `native-timeout`, `native-output`, `unknown`,
+`foreign-cluster`, `foreign-pool`, `pool-identity`, `foreign-image`,
+`image-identity`, `replication-identity`, `replication-unavailable` and
+`replication-token`, plus existing SSH-policy refusals. Each preserves unknown
+or partial effect unless both endpoint proofs establish completion. Evidence
+is bounded to 16 KiB and contains only owner/request identity, both FSIDs,
+owned/existing/ready flags and the ordered image IDs and synchronization flags.
+
+## RGW multisite blocker
+
+B483's required native `ceph rgw zone create` route cannot currently satisfy
+the no-argv/no-log credential boundary. Ceph's
+[RGW manager](https://github.com/ceph/ceph/blob/v20.2.2/src/pybind/mgr/rgw/module.py)
+accepts a token on stdin, but its
+[RGWAM implementation](https://github.com/ceph/ceph/blob/v20.2.2/src/python-common/ceph/rgw/rgwam_core.py)
+passes decoded access and secret keys as `radosgw-admin realm pull` argv and
+logs native invocations, output and failures. The
+[native CLI](https://github.com/ceph/ceph/blob/v20.2.2/src/rgw/radosgw-admin/radosgw-admin.cc)
+assigns those pull credentials from CLI options, with no qualified stdin or
+config credential route. JSON realm/zone imports do not provide a period
+import: realm creation resets current-period identity, so they cannot safely
+bootstrap authenticated pulls from stored zone credentials. Bootwright does
+not clone upstream behavior with internal RADOS writes or accept an input
+that can only refuse at execution. Existing multisite refusals remain;
+B483 and P7 qualification remain open pending a native secret-safe interface
+and empirical initial-sync/failover evidence.

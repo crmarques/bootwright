@@ -6,6 +6,8 @@ plugins/modules/ceph_cluster_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/ceph_host.py validate-modules:missing-gplv3-license
 plugins/modules/ceph_image_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/ceph_image_resolve.py validate-modules:missing-gplv3-license
+plugins/modules/ceph_replication.py validate-modules:missing-gplv3-license
+plugins/modules/ceph_replication_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/ceph_smb.py validate-modules:missing-gplv3-license
 plugins/modules/ceph_smb_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/containercluster_install_inspect.py validate-modules:missing-gplv3-license

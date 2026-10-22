@@ -200,7 +200,7 @@ func TestFilesystemPlanRefusesErasureDefaultAndPropagatesPoolRefusals(t *testing
 	refs = api.ListValue(requestMap("name", "fs-data", "default", true), api.StringValue("fs-extra"))
 	mirrored := cephfsPool("fs-extra", "cephfs-data", "mirroring", requestMap("mode", "image"))
 	_, err = planned(t, filesystemCatalog(withMDS, mirrored, filesystemOf("dataPoolRefs", refs)), api.StorageFilesystem, "files")
-	refusedWith(t, err, "lifecycle.unsupported", "StoragePool fs-extra declares mirroring, which B483 delivers", "remove spec.mirroring; B483 delivers mirroring")
+	refusedWith(t, err, "lifecycle.unsupported", "StoragePool fs-extra declares mirroring without a StorageReplication owner", "declare a StorageReplication that names this pool, or remove spec.mirroring")
 	_, err = planned(t, filesystemCatalog(withCorePair, filesystemOf()), api.StorageFilesystem, "files")
 	refusedWith(t, err, "api.invariant", "StorageCluster example projects no MDS service mds.files for StorageFilesystem files", "declare the mds service entry with service_id files in spec.ceph.services")
 }

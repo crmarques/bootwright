@@ -1,0 +1,51 @@
+---
+- name: Validate the frozen Ceph replication request
+  ansible.builtin.assert:
+    that:
+      - bootwright_ceph_replication_request.version == 'ceph-replication-v1'
+      - bootwright_ceph_replication_digest is match('^[0-9a-f]{64}$')
+      - ansible_connection == 'local'
+    quiet: true
+  no_log: true
+
+- name: Complete the replication execution handoff
+  bootwright.core.ceph_replication_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Execute the fixed Ceph replication observe operation
+  bootwright.core.ceph_replication:
+    request: '{{ bootwright_ceph_replication_request }}'
+    operation: observe
+    digest: '{{ bootwright_ceph_replication_digest }}'
+    material: '{{ bootwright_ceph_replication_material }}'
+  register: storage_ceph_replication_result
+  failed_when: false
+  no_log: true
+  diff: false
+
+- name: Publish the fixed Ceph replication refusal
+  bootwright.core.ceph_replication_protocol:
+    phase: refused
+    reason: '{{ storage_ceph_replication_result.reason | default("adapter-exception") }}'
+    native_error: '{{ storage_ceph_replication_result.nativeError | default(omit) }}'
+    detail: >-
+      {{ storage_ceph_replication_result.detail
+        | default(omit if storage_ceph_replication_result.reason is defined else "module-failure") }}
+  when: storage_ceph_replication_result.evidence is not defined
+  no_log: true
+
+- name: Refuse an unproved Ceph replication operation
+  ansible.builtin.fail:
+    msg: The Ceph replication operation was refused; the run names its reason
+  when: storage_ceph_replication_result.evidence is not defined
+
+- name: Publish bounded Ceph replication evidence
+  bootwright.core.ceph_replication_protocol:
+    phase: completed
+    digest: '{{ bootwright_ceph_replication_digest }}'
+    outcome: '{{ "changed" if storage_ceph_replication_result.changed else "unchanged" }}'
+    observed: true
+    removed: false
+    evidence: '{{ storage_ceph_replication_result.evidence }}'
+  no_log: true

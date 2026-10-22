@@ -77,7 +77,7 @@ func TestAutoscaleWarnRefusesAtPlan(t *testing.T) {
 func TestMirroringRefusesNamingB483(t *testing.T) {
 	catalog := planCatalog(3, 3, nil, replicatedPool("volumes", "mirroring", requestMap("mode", "image")))
 	_, err := planned(t, catalog, api.StoragePool, "volumes")
-	refusedWith(t, err, "lifecycle.unsupported", "StoragePool volumes declares mirroring, which B483 delivers", "remove spec.mirroring; B483 delivers mirroring")
+	refusedWith(t, err, "lifecycle.unsupported", "StoragePool volumes declares mirroring without a StorageReplication owner", "declare a StorageReplication that names this pool, or remove spec.mirroring")
 }
 
 func TestPoolWithoutRoleRefusesAtPlan(t *testing.T) {

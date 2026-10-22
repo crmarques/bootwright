@@ -135,7 +135,7 @@ func TestClientPropagatesDataPoolPlanRefusals(t *testing.T) {
 	catalog := planCatalog(6, 6, nil, replicatedPool("volumes"), replicatedPool("archive", "mirroring", requestMap("mode", "image")), consumerClient(),
 		imageOf("disk", "volumes", "dataPoolRef", "archive"))
 	_, err := planned(t, catalog, api.StorageClient, "consumer")
-	refusedWith(t, err, "lifecycle.unsupported", "StoragePool archive declares mirroring, which B483 delivers", "remove spec.mirroring; B483 delivers mirroring")
+	refusedWith(t, err, "lifecycle.unsupported", "StoragePool archive declares mirroring without a StorageReplication owner", "declare a StorageReplication that names this pool, or remove spec.mirroring")
 }
 
 func TestUnchangedRequestContinuesAfterImpactText(t *testing.T) {

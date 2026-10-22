@@ -25,7 +25,7 @@ PACKAGE = "ansible_collections.bootwright.core.plugins.action."
 # The plugins that hand the runner its protocol records, each run with the
 # loaded record every entry point hands first.
 PROTOCOLS = {
-    "artifact_server_protocol", "ceph_cluster_protocol", "ceph_image_protocol", "ceph_smb_protocol",
+    "artifact_server_protocol", "ceph_cluster_protocol", "ceph_image_protocol", "ceph_smb_protocol", "ceph_replication_protocol",
     "cluster_objects_protocol", "containercluster_install_protocol", "containercluster_media_protocol",
     "controller_protocol", "infra_service_protocol", "machine_power_protocol", "managedos_install_protocol", "managedos_tree_protocol",
     "substrate_host_protocol", "substrate_machine_protocol", "substrate_physical_protocol",

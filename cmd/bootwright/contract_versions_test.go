@@ -60,6 +60,7 @@ func contractVersions() []contractVersion {
 		{ceph.ImageImplementation, ceph.ImageContentDigest(), reflect.TypeFor[ceph.ImageRequest](), reflect.TypeFor[ceph.ImageEvidence]()},
 		{ceph.HostImplementation, ceph.HostContentDigest(), reflect.TypeFor[ceph.HostRequest](), reflect.TypeFor[ceph.HostEvidence]()},
 		{ceph.SMBImplementation, ceph.SMBContentDigest(), reflect.TypeFor[ceph.SMBRequest](), reflect.TypeFor[ceph.SMBEvidence]()},
+		{ceph.ReplicationImplementation, ceph.ReplicationContentDigest(), reflect.TypeFor[ceph.ReplicationRequest](), reflect.TypeFor[ceph.ReplicationEvidence]()},
 	}
 	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
 		versions = append(versions, contractVersion{definition.Implementation, definition.ContentDigest(),
@@ -113,6 +114,7 @@ func automationFormats() map[string]automationFormat {
 
 		"ceph-tunnel-v3":                    core,
 		"ceph-tunnel-custody-v1":            core,
+		"ceph-replication-custody-v1":       persistedBy(ceph.ReplicationImplementation),
 		"ceph-tunnel-relabel-v1":            core,
 		"ceph-tunnel-stage-v1":              core,
 		"ceph-tunnel-redeploy-v1":           core,
@@ -154,15 +156,17 @@ func automationFormats() map[string]automationFormat {
 		// The guest package transaction policy ceph_packages.transaction_request builds and the shared resolver reads within one run.
 		"ceph-packages-v2": {class: formatTransient},
 
-		"ceph-host-v6":                {class: formatMirrored},
-		"ceph-host-evidence-v2":       {class: formatMirrored},
-		"ceph-core-v31":               {class: formatMirrored},
-		"ceph-core-evidence-v11":      {class: formatMirrored},
-		"ceph-packages-v3":            {class: formatMirrored},
-		"ceph-image-v4":               {class: formatMirrored},
-		"ceph-smb-v1":                 {class: formatMirrored},
-		"ceph-smb-evidence-v1":        {class: formatMirrored},
-		"os-package-tree-evidence-v1": {class: formatMirrored},
+		"ceph-host-v6":                 {class: formatMirrored},
+		"ceph-host-evidence-v2":        {class: formatMirrored},
+		"ceph-core-v31":                {class: formatMirrored},
+		"ceph-core-evidence-v11":       {class: formatMirrored},
+		"ceph-packages-v3":             {class: formatMirrored},
+		"ceph-image-v4":                {class: formatMirrored},
+		"ceph-smb-v1":                  {class: formatMirrored},
+		"ceph-smb-evidence-v1":         {class: formatMirrored},
+		"os-package-tree-evidence-v1":  {class: formatMirrored},
+		"ceph-replication-v1":          {class: formatMirrored},
+		"ceph-replication-evidence-v1": {class: formatMirrored},
 		// The request versions each role refuses unless its request names.
 		"substrate-host-libvirt-v5": {class: formatMirrored},
 		"machine-libvirt-v7":        {class: formatMirrored},

@@ -16,7 +16,7 @@ func effectKinds() []api.Kind {
 		api.InfraProvider,
 		api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer,
 		api.ContainerCluster, api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageRBDImage, api.StorageClient,
-		api.StorageFilesystem, api.StorageSubvolume, api.StorageObjectGateway, api.StorageObjectUser, api.StorageObjectBucket, api.StorageNFSExport, api.StorageSMBResource, api.StorageNVMeoFSubsystem, api.StorageExport,
+		api.StorageFilesystem, api.StorageSubvolume, api.StorageObjectGateway, api.StorageObjectUser, api.StorageObjectBucket, api.StorageNFSExport, api.StorageSMBResource, api.StorageNVMeoFSubsystem, api.StorageReplication, api.StorageExport,
 		api.ClusterAddonBinding,
 	}
 }

@@ -2330,6 +2330,12 @@ reproduce cheaply. **Requires:** none. **Definition:** `Needs definition`.
 **Exit evidence:** repeated concurrent gate runs (`make -j check race quick
 docs-check`) with no lease conflict.
 
+**2026-10-21 observation:** the default parallel `make check` and an isolated
+rerun of the unchanged baseline reproduced a different setup-checkpoint lease
+failure. A serial full-package run with `GOMAXPROCS=1` passed. This is evidence
+of recurrence, not a diagnosis or proof that serialization fixes the cause.
+The full integration gate after temporary-directory cleanup remains unrun.
+
 ### B674
 
 Releasing a Ceph host whose cluster block never started retains the owned

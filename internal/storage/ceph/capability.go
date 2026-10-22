@@ -72,6 +72,18 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			if err != nil {
 				return plan, err
 			}
+			if r.Action == "client" || r.Action == "rbd" || r.Action == "filesystem" {
+				for i, ref := range definition.Requires {
+					if ref.Kind != string(api.StoragePool) {
+						continue
+					}
+					for _, pool := range catalog.OfKind(api.StoragePool) {
+						if pool.Spec().Get("clusterRef").Text() == r.Cluster && nativePoolRef(catalog, pool.Name()) == ref.Object {
+							definition.Requires[i].Object = pool.Name()
+						}
+					}
+				}
+			}
 			plan.Definitions = append(plan.Definitions, definition)
 		}
 		if len(requests) == 0 {
@@ -121,6 +133,9 @@ func (c Capability) objectRequests(catalog api.Catalog, object api.Object, conte
 		}
 		units, err := serviceUnitRequests(request, object)
 		if err != nil {
+			return nil, err
+		}
+		if err := projectNVMeOFPools(catalog, object, units); err != nil {
 			return nil, err
 		}
 		requests = append(requests, units...)
@@ -296,7 +311,7 @@ func subjectOf(r Request, object string) string {
 	if r.ObjectBucket != nil {
 		return "object bucket " + object
 	}
-	if r.Pool != nil && r.Pool.Name != object {
+	if r.Pool != nil && r.Pool.Object == "" && r.Pool.Name != object {
 		return "zone pool " + r.Pool.Name + " of object gateway " + object
 	}
 	return r.Action + " " + object
@@ -318,6 +333,9 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	}
 	if r.Action == "pool" && r.Pool != nil {
 		object = r.Pool.Name
+		if r.Pool.Object != "" {
+			object = r.Pool.Object
+		}
 	}
 	if r.Action == "client" && r.Client != nil {
 		object = r.Client.Name

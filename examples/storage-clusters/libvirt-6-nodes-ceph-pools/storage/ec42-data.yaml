@@ -1,0 +1,18 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: ec42-data
+
+spec:
+  clusterRef: ceph-lab
+  type: erasure
+  role: rbd
+  erasure:
+    dataChunks: 4
+    codingChunks: 2
+    plugin: isa
+    crushDeviceClass: hdd
+  autoscale:
+    mode: 'on'
+    pgNumMin: 8
+    pgNumMax: 64

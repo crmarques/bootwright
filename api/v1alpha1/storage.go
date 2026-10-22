@@ -4,6 +4,7 @@ func init() {
 	register(StorageCluster, storageClusterSchema)
 	register(StoragePlacementPolicy, storagePlacementPolicySchema)
 	register(StoragePool, storagePoolSchema)
+	register(StorageReplication, storageReplicationSchema)
 	register(StorageRBDImage, storageRBDImageSchema)
 	register(StorageFilesystem, storageFilesystemSchema)
 	register(StorageSubvolume, storageSubvolumeSchema)
@@ -97,7 +98,7 @@ func storagePlacementPolicySchema() *Shape {
 
 func storagePoolSchema() *Shape {
 	erasure := record(required("dataChunks", integer("1", "")), required("codingChunks", integer("1", "")), field("plugin", enumeration("", "jerasure", "isa", "clay", "lrc", "shec")), field("technique", nonempty()), field("crushDeviceClass", nonempty()), field("crushRoot", nonempty()), field("stripeUnit", integer("1", "")), field("parameters", stringsMap()))
-	s := record(required("clusterRef", ref(StorageCluster)), field("placementPolicyRef", ref(StoragePlacementPolicy)), defaulted("type", enumeration("replicated", "erasure"), StringValue("replicated")), field("role", enumeration("rbd", "cephfs-metadata", "cephfs-data", "rgw")), field("application", nonempty()), field("replicated", storageReplicated()), field("erasure", erasure), field("autoscale", record(field("mode", enumeration("on", "off", "warn")), field("targetSizeRatio", number("0", "")), field("targetSizeBytes", nonempty()), field("pgNumMin", integer("0", "")), field("pgNumMax", integer("0", "")), field("bulk", boolean()))), field("quota", record(field("maxBytes", integer("0", "9223372036854775807")), field("maxObjects", integer("0", "9223372036854775807")))), field("compression", record(field("mode", enumeration("none", "passive", "aggressive", "force")), field("algorithm", enumeration("", "lz4", "snappy", "zlib", "zstd")), field("requiredRatio", number("0", "1")), field("minBlobSize", integer("0", "18446744073709551615")), field("maxBlobSize", integer("0", "18446744073709551615")))), field("mirroring", record(required("mode", enumeration("image", "pool")))))
+	s := record(required("clusterRef", ref(StorageCluster)), field("nativeName", name()), field("placementPolicyRef", ref(StoragePlacementPolicy)), defaulted("type", enumeration("replicated", "erasure"), StringValue("replicated")), field("role", enumeration("rbd", "cephfs-metadata", "cephfs-data", "rgw")), field("application", nonempty()), field("replicated", storageReplicated()), field("erasure", erasure), field("autoscale", record(field("mode", enumeration("on", "off", "warn")), field("targetSizeRatio", number("0", "")), field("targetSizeBytes", nonempty()), field("pgNumMin", integer("0", "")), field("pgNumMax", integer("0", "")), field("bulk", boolean()))), field("quota", record(field("maxBytes", integer("0", "9223372036854775807")), field("maxObjects", integer("0", "9223372036854775807")))), field("compression", record(field("mode", enumeration("none", "passive", "aggressive", "force")), field("algorithm", enumeration("", "lz4", "snappy", "zlib", "zstd")), field("requiredRatio", number("0", "1")), field("minBlobSize", integer("0", "18446744073709551615")), field("maxBlobSize", integer("0", "18446744073709551615")))), field("mirroring", record(required("mode", enumeration("image", "pool")))))
 	s.Discriminator, s.Arms = "type", []string{"replicated", "erasure"}
 	s.ArmValues, s.InertArms = map[string][]string{"replicated": {"replicated"}, "erasure": {"erasure"}}, []string{"replicated"}
 	return s
@@ -142,4 +143,8 @@ func StorageNFSExportNativeSchema() *Shape {
 
 func storageExportSchema() *Shape {
 	return record(field("type", enumeration("dataFoundation")), required("clusterRef", ref(StorageCluster)), field("dataFoundation", record(required("rbdPoolRef", ref(StoragePool)), required("filesystemRef", ref(StorageFilesystem)), field("objectGatewayRef", ref(StorageObjectGateway)))), field("externalDetails", record(required("fromSecretRef", secret("opaque")))))
+}
+
+func storageReplicationSchema() *Shape {
+	return record(required("clusterRef", ref(StorageCluster)), required("type", enumeration("rbd")), required("poolRef", ref(StoragePool)), required("peerClusterRef", ref(StorageCluster)), required("peerPoolRef", ref(StoragePool)), field("imageRefs", set(ref(StorageRBDImage))))
 }

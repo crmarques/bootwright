@@ -23,25 +23,28 @@ func testDashboard() Dashboard {
 }
 
 type fixture struct {
-	t         *testing.T
-	catalog   api.Catalog
-	asked     []string
-	cephCalls int
-	cephFor   map[string]CephProof
-	installed map[string]bool
-	installs  int
-	proved    map[string]bool
-	keyReads  int
-	failure   error
-	passwords map[string]Custodied
-	custody   []string
-	keyrings  map[string]Custodied
-	clients   []string
-	clientErr error
-	readError error
-	rows      map[string][]Resource
-	rowCalls  int
-	rowError  error
+	t              *testing.T
+	catalog        api.Catalog
+	asked          []string
+	cephCalls      int
+	cephFor        map[string]CephProof
+	installed      map[string]bool
+	installs       int
+	proved         map[string]bool
+	keyReads       int
+	failure        error
+	passwords      map[string]Custodied
+	custody        []string
+	keyrings       map[string]Custodied
+	clients        []string
+	clientErr      error
+	readError      error
+	rows           map[string][]Resource
+	rowCalls       int
+	rowError       error
+	objectUsers    map[string]Custodied
+	objectReads    []string
+	objectUnproved bool
 }
 
 func text(value string) api.Value { return api.StringValue(value) }
@@ -132,6 +135,16 @@ func (f *fixture) ClientKeyring(_ context.Context, contextName, client string) (
 	f.clients = append(f.clients, contextName+"/"+client)
 	found, ok := f.keyrings[client]
 	return found, ok, f.clientErr
+}
+
+func (f *fixture) ObjectUserCredentials(_ context.Context, contextName, user string) (Custodied, bool, error) {
+	f.objectReads = append(f.objectReads, contextName+"/"+user)
+	found, ok := f.objectUsers[user]
+	return found, ok, f.readError
+}
+
+func (f *fixture) ObjectUserProved(context.Context, string, api.Catalog, api.Object) (bool, error) {
+	return !f.objectUnproved, nil
 }
 
 func (f *fixture) service(current string) Service {

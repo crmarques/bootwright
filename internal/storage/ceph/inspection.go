@@ -499,6 +499,7 @@ var scopeRows = map[api.Kind]func(api.Catalog, string, []reconciliation.Block) s
 	api.StorageNFSExport:       frozenScope(api.StorageNFSExport, "nfs-export", nfsExportScopeText),
 	api.StorageSMBResource:     smbFrozenScope,
 	api.StorageNVMeoFSubsystem: frozenScope(api.StorageNVMeoFSubsystem, "nvmeof", nvmeofScopeText),
+	api.StorageReplication:     replicationFrozenScope,
 	api.StorageExport:          declaredScope(api.StorageExport, exportScopeText),
 }
 
@@ -694,4 +695,21 @@ func nvmeofScopeText(r Request) string {
 		return ""
 	}
 	return "subsystem " + r.NVMeOF.NQN + " on nvmeof." + r.NVMeOF.Service
+}
+
+func replicationFrozenScope(_ api.Catalog, name string, frozen []reconciliation.Block) string {
+	var matched []ReplicationRequest
+	for _, block := range frozen {
+		if block.Kind != string(api.StorageReplication) || block.Object != name || block.Implementation != ReplicationImplementation {
+			continue
+		}
+		if r, err := DecodeReplicationRequest(block.Request); err == nil {
+			matched = append(matched, r)
+		}
+	}
+	if len(matched) != 1 {
+		return ""
+	}
+	r := matched[0]
+	return "rbd " + r.Mode + " mirroring " + r.Primary.Cluster + "/" + r.Primary.Pool.Name + " to " + r.Secondary.Cluster + "/" + r.Secondary.Pool.Name
 }

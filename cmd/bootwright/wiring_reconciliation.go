@@ -166,6 +166,9 @@ func operationPlaybook() map[string]string {
 		ceph.HostImplementation + "/apply":              "storage/host_prepare.yml",
 		ceph.HostImplementation + "/observe":            "storage/host_observe.yml",
 		ceph.HostImplementation + "/destroy":            "storage/host_destroy.yml",
+		ceph.ReplicationImplementation + "/apply":       "storage/replication_apply.yml",
+		ceph.ReplicationImplementation + "/observe":     "storage/replication_observe.yml",
+		ceph.ReplicationImplementation + "/destroy":     "storage/replication_destroy.yml",
 		ceph.SMBImplementation + "/apply":               "storage/smb_apply.yml",
 		ceph.SMBImplementation + "/observe":             "storage/smb_observe.yml",
 		ceph.SMBImplementation + "/destroy":             "storage/smb_destroy.yml",
@@ -225,6 +228,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	resolver = append(resolver, boundCapability{kind: string(api.StorageCluster), implementation: ceph.ImageImplementation, capability: ceph.NewImage(runner)})
 	resolver = append(resolver, boundCapability{kind: string(api.StorageCluster), implementation: ceph.HostImplementation, capability: ceph.NewHost(runner).WithProofs(cephDependencyProofs{})})
 	resolver = append(resolver, boundCapability{kind: string(api.StorageSMBResource), implementation: ceph.SMBImplementation, capability: ceph.NewSMB(runner).WithProofs(cephDependencyProofs{})})
+	resolver = append(resolver, boundCapability{kind: string(api.StorageReplication), implementation: ceph.ReplicationImplementation, capability: ceph.NewReplication(runner).WithProofs(cephDependencyProofs{})})
 	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
 		resolver = append(resolver, boundCapability{
 			kind: string(definition.Kind), implementation: definition.Implementation,

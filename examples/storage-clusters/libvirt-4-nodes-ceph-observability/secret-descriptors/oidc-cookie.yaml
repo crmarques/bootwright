@@ -1,0 +1,10 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: oidc-cookie
+
+spec:
+  type: token
+
+  source:
+    contextStore: {}

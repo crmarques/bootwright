@@ -274,7 +274,7 @@ func declaredPlacementPools(gateway api.Object) []string {
 	return slices.Compact(out)
 }
 
-func gatewayRequest(cluster, gateway api.Object, base Request) (Request, error) {
+func gatewayRequest(c api.Catalog, cluster, gateway api.Object, base Request) (Request, error) {
 	spec := gateway.Spec()
 	svc, found := storage.NativeService(cluster, spec.Get("serviceRef").Text())
 	if !found {
@@ -300,13 +300,13 @@ func gatewayRequest(cluster, gateway api.Object, base Request) (Request, error) 
 	}
 	zonePools := []string{}
 	for _, suffix := range ZonePoolSuffixes {
-		zonePools = append(zonePools, placementPool(spec, suffix))
+		zonePools = append(zonePools, nativePoolRef(c, placementPool(spec, suffix)))
 	}
 	slices.Sort(zonePools)
 	r := base
 	r.Action = "gateway"
-	r.Gateway = &Gateway{Bindings: bindings, DataExtraPool: placementPool(spec, "buckets.non-ec"), DataPool: placementPool(spec, "buckets.data"), Documents: documents,
-		Endpoint: endpoint, IndexPool: placementPool(spec, "buckets.index"), Name: gateway.Name(), Realm: spec.Get("realm").Text(),
+	r.Gateway = &Gateway{Bindings: bindings, DataExtraPool: nativePoolRef(c, placementPool(spec, "buckets.non-ec")), DataPool: nativePoolRef(c, placementPool(spec, "buckets.data")), Documents: documents,
+		Endpoint: endpoint, IndexPool: nativePoolRef(c, placementPool(spec, "buckets.index")), Name: gateway.Name(), Realm: spec.Get("realm").Text(),
 		Zone: spec.Get("zone").Text(), ZoneGroup: spec.Get("zoneGroup").Text(), ZonePools: slices.Compact(zonePools)}
 	return r, nil
 }
@@ -354,7 +354,7 @@ func gatewayRequests(c api.Catalog, gateway api.Object, contextName string) ([]R
 			Autoscale: PoolAutoscale{Mode: "on"}, PGNum: int(clampPGs(0, 0)), Size: size, MinSize: minSize}
 		requests = append(requests, r)
 	}
-	r, err := gatewayRequest(cluster, gateway, base)
+	r, err := gatewayRequest(c, cluster, gateway, base)
 	if err != nil {
 		return nil, err
 	}

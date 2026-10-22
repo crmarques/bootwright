@@ -1,0 +1,13 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: primary-data
+
+spec:
+  clusterRef: primary
+  type: replicated
+  role: cephfs-data
+
+  replicated:
+    size: 3
+    minSize: 2

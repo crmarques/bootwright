@@ -17,6 +17,13 @@ var (
 	roleApplication  = map[string]string{"rbd": "rbd", "cephfs-metadata": "cephfs", "cephfs-data": "cephfs", "rgw": "rgw"}
 )
 
+func PoolName(pool api.Object) string {
+	if name := pool.Spec().Get("nativeName").Text(); name != "" {
+		return name
+	}
+	return pool.Name()
+}
+
 func TargetSizeBytes(text string) (*big.Int, bool) {
 	match := storageSize.FindStringSubmatch(text)
 	if match == nil {
@@ -139,7 +146,7 @@ func (a *admission) policy(cluster api.Object) {
 		}
 	}
 	for _, pool := range a.catalog.OfKind(api.StoragePool) {
-		if pool.Name() == rule && textOf(pool.Spec(), "clusterRef") == cluster.Name() && fallback(pool.Spec().Get("type"), "replicated") == "erasure" {
+		if PoolName(pool) == rule && textOf(pool.Spec(), "clusterRef") == cluster.Name() && fallback(pool.Spec().Get("type"), "replicated") == "erasure" {
 			a.issue("api.invariant", "$.spec.ruleName", "erasure-coded StoragePool "+pool.Name()+" derives a CRUSH rule named "+rule, "rename spec.ruleName or the StoragePool")
 		}
 	}
@@ -214,6 +221,12 @@ func (a *admission) replication(cluster, policy api.Object) {
 	}
 }
 func (a *admission) pool(cluster api.Object) {
+	for _, other := range a.catalog.OfKind(api.StoragePool) {
+		if other.Name() != a.object.Name() && other.Spec().Get("clusterRef").Text() == cluster.Name() && PoolName(other) == PoolName(a.object) {
+			a.issue("api.invariant", "$.spec.nativeName", "StoragePool "+other.Name()+" already owns native pool "+PoolName(a.object)+" in this cluster", "give each pool in a cluster a distinct native name")
+		}
+	}
+
 	spec := a.object.Spec()
 	policy := api.Object{}
 	policyReady := true
@@ -264,7 +277,7 @@ func (a *admission) erasure(cluster api.Object) {
 		a.issue("api.invariant", "$.spec.placementPolicyRef", "an erasure-coded pool derives its CRUSH rule from its own erasure-code profile, so a placement policy cannot own its placement", "remove spec.placementPolicyRef; set spec.erasure.crushDeviceClass to place the pool on a device class")
 	}
 	for _, policy := range a.catalog.OfKind(api.StoragePlacementPolicy) {
-		if textOf(policy.Spec(), "clusterRef") == cluster.Name() && textOf(policy.Spec(), "ruleName") == a.object.Name() {
+		if textOf(policy.Spec(), "clusterRef") == cluster.Name() && textOf(policy.Spec(), "ruleName") == PoolName(a.object) {
 			a.issue("api.invariant", "$.metadata.name", "placement policy "+policy.Name()+" already owns CRUSH rule "+a.object.Name()+", which this erasure-coded pool would derive", "rename the StoragePool or the policy's spec.ruleName")
 		}
 	}

@@ -1,0 +1,41 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rhel-01
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: mon-mgr
+
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+
+  network:
+    configRef: lab-guests
+    attachmentRef: lab-guests
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: rhel-01.lab.example.test
+
+      - name: ip
+        address: 198.51.100.11/24
+        interface: nic0
+
+      - name: cluster-ip
+        address: 203.0.113.11/24
+        interface: nic1
+
+  capabilities:
+    - ceph-node

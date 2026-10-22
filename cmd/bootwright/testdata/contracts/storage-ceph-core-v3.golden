@@ -209,6 +209,7 @@ request-schema:
   pool.filesystem string
   pool.minSize int
   pool.name string
+  pool.object string omitempty
   pool.overwrites bool
   pool.pgNum int
   pool.quota struct ceph.PoolQuota

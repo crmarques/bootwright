@@ -403,24 +403,25 @@ func TestActualCompilerRefusesFutureKindsAndAdditionalVariants(t *testing.T) {
 		t.Fatal("future reference unexpectedly compiled")
 	}
 	requireReferenceRefusals(t, diagnostics.Of(err), true)
-	if len(api.Kinds()) != 33 {
+	if len(api.Kinds()) != 34 {
 		t.Fatalf("kind catalog changed: %d", len(api.Kinds()))
 	}
 }
 
 // The projection is the full-wiring positive coverage the reference cannot
 // give while it declares refused families: every kind but the refused ones
-// reaches the effective graph from one admitted stream. A kind added to the
+// reaches the effective graph from the reference or replication profile. A kind added to the
 // catalog without coverage, or a family admitted without leaving the
 // allow-list, fails here.
 func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testing.T) {
 	state, report := compileAcceptance(t, admissibleExampleSources(t, true))
+	replication, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-2x4-nodes-ceph-multisite"))
 	kinds := api.Kinds()
-	if len(kinds) != 33 {
+	if len(kinds) != 34 {
 		t.Fatalf("kind catalog changed: %d; cover the new kind in the reference or the extras", len(kinds))
 	}
 	for _, kind := range kinds {
-		covered := len(state.Effective().OfKind(kind)) != 0
+		covered := len(state.Effective().OfKind(kind)) != 0 || kind == api.StorageReplication && len(replication.Effective().OfKind(kind)) != 0
 		switch refused := slices.Contains(refusedKinds, kind); {
 		case refused && covered:
 			t.Errorf("kind %s is admitted now: remove it from refusedKinds and cover it", kind)

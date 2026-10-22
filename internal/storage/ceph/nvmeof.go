@@ -84,6 +84,24 @@ func nvmeofUnits(cluster api.Object) ([]ServiceUnit, error) {
 	return units, nil
 }
 
+func projectNVMeOFPools(catalog api.Catalog, cluster api.Object, requests []Request) error {
+	for i := range requests {
+		unit := requests[i].Service
+		if unit == nil || unit.Type != "nvmeof" {
+			continue
+		}
+		service, _ := storage.NativeService(cluster, "nvmeof."+unit.ID)
+		pool, _ := catalog.Find(api.StoragePool, service.Get("spec", "pool").Text())
+		service = service.WithPath(api.StringValue(storage.PoolName(pool)), "spec", "pool")
+		document, err := unitDocumentOf(cluster, service, nvmeofSpecOf)
+		if err != nil {
+			return err
+		}
+		unit.Documents = []json.RawMessage{document}
+	}
+	return nil
+}
+
 func nvmeofDependencies(cluster api.Object, unit ServiceUnit) []string {
 	service, _ := storage.NativeService(cluster, "nvmeof."+unit.ID)
 	return []string{"ceph-pool-" + service.Get("spec", "pool").Text()}
@@ -104,7 +122,8 @@ func nvmeofRequest(catalog api.Catalog, object api.Object, contextName string) (
 		return Request{}, failure("api.invariant", "NVMe-oF requires a declared gateway service", "set spec.serviceRef to the qualified native service name")
 	}
 	native := service.Get("spec")
-	frozen := &NVMeOFSubsystem{Name: object.Name(), Service: service.Get("service_id").Text(), Group: native.Get("group").Text(), Pool: native.Get("pool").Text(),
+	configPool, _ := catalog.Find(api.StoragePool, native.Get("pool").Text())
+	frozen := &NVMeOFSubsystem{Name: object.Name(), Service: service.Get("service_id").Text(), Group: native.Get("group").Text(), Pool: storage.PoolName(configPool),
 		MTLS: "enable_auth", NQN: spec.Get("nqn").Text(), Hosts: []string{}, Gateways: []NVMeOFEndpoint{}, Listeners: []NVMeOFEndpoint{}, Namespaces: []NVMeOFNamespace{}}
 	if !native.Get("enable_auth").Bool() {
 		frozen.MTLS = "enable_mtls"
@@ -145,7 +164,7 @@ func nvmeofRequest(catalog api.Catalog, object api.Object, contextName string) (
 		}
 		address, parseErr := netip.ParseAddr(addressText)
 		if parseErr != nil {
-			return Request{}, failure("api.invariant", "NVMe-oF listener requires an IP address", "set spec.listeners.address to an IP address")
+			return Request{}, failure("api.invariant", "NVMe-oF listener requires an IP address", "set spec.ceph.topology.nodes[].addr on the StorageCluster to the listener host's registered IP address")
 		}
 		frozen.Listeners = append(frozen.Listeners, NVMeOFEndpoint{Host: host, Address: address.String(), Port: port})
 	}

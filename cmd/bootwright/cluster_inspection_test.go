@@ -256,6 +256,26 @@ func (p *producedFake) ReadProduced(_ context.Context, contextName, block, name 
 	return containeraccess.Custodied{Material: p.material, Unproved: p.unproved}, p.found, p.failed
 }
 
+func TestObjectUserCustodyChecksUIDAndExactProtectedEntry(t *testing.T) {
+	for _, value := range []string{`{"accessKey":"ACCESS","secretKey":"PRIVATE","uid":"documents"}`, `{"accessKey":"ACCESS","secretKey":"PRIVATE","uid":"foreign"}`, `{"accessKey":"ACCESS","secretKey":"PRIVATE","uid":"documents","extra":"PRIVATE"}`} {
+		material := secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(value)})
+		reader := &producedFake{material: material, found: true}
+		got, found, err := (inspectionCustody{reader: reader}).ObjectUserCredentials(context.Background(), "lab", "documents")
+		valid := value == `{"accessKey":"ACCESS","secretKey":"PRIVATE","uid":"documents"}`
+		if !found || (err == nil) != valid || !zeroed(material) || !slices.Equal(reader.reads, []string{"lab/ceph-object-user-documents/object-user"}) {
+			t.Fatal("object custody escaped identity or clearing boundary", err)
+		}
+		if valid {
+			access, _ := got.Material.Part(secrets.UsernamePart)
+			if string(access) != "ACCESS" {
+				t.Fatal("wrong access key")
+			}
+			clear(access)
+		}
+		got.Material.Clear()
+	}
+}
+
 func TestDashboardCustodyReadsTheClusterBlocksDashboardEntry(t *testing.T) {
 	reader := &producedFake{material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("Xq7-Lm2_Rv9.Tk4-Wz8_Hn3.Pb6-Jd5_")}), unproved: true, found: true}
 	got, found, err := (inspectionCustody{reader: reader}).DashboardPassword(context.Background(), "lab", "storage")

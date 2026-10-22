@@ -6,10 +6,12 @@ P4 supplies five storage nodes and a RHEL initiator template. Three nodes host M
 two host MGRs, all five host one SSD OSD, and the final two host one NVMe-oF
 gateway each. The subsystem maps namespace 1 to the declared `rbd-disk` image
 and authorizes only `nqn.2026-01.test.example:initiator`. Its two TCP listeners
-use port 4420. Gateway management requires native mTLS; this example selects
-`enable_mtls`, so the selected Ceph build must support its native certificate
-management. A build with only `enable_auth` requires that mode and all five
-certificate/key bindings described in [the native contract](../../../specs/storage-native-api.md).
+use port 4420. Gateway management requires native mTLS. This example authors
+public `enable_auth: false`; Bootwright derives native `enable_mtls: true`, so
+the selected Ceph build must support its native certificate management. Do not
+add `enable_mtls` to public input. A build with only native `enable_auth` requires
+public `enable_auth: true` and all five certificate/key bindings described in
+[the native contract](../../../specs/storage-native-api.md).
 The worker qualifies the selected build's SDK and registered NVMe commands
 before applying a gateway service. The image tag is authored example input,
 not a Bootwright default or a claim that this combination has been run.
@@ -102,9 +104,11 @@ additional subsystem, namespace or gateway service is created.
 ## Check that changed intent is refused
 
 In a copy of the input, change a namespace image reference, listener or host
-NQN. Validate and inspect the proposed change against the existing context;
-applying changed intent to the surviving cluster must refuse under B491.
-Restore the original input before continuing.
+NQN and validate it. On the completed context, import the copy with
+`context update` and retain its completed-apply warning; the update is allowed.
+Run `apply` and require the B491 changed-intent refusal before any native
+effects. Restore the original input and import it again with `context update`
+before continuing.
 
 ## Measured budget
 

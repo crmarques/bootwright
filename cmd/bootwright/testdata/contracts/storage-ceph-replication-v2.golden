@@ -1,0 +1,118 @@
+implementation: storage-ceph-replication-v2
+content-digest: 11f7b5e91423c6a6b1a063f4ee8a226b79268e55c08afd8b88e8fb3626072165
+automation-formats: ceph-replication-custody-v1
+request-schema:
+  controller string
+  images []struct ceph.RBDImage
+  images[].dataPool string
+  images[].features []string
+  images[].name string
+  images[].pool string
+  images[].sizeBytes int64
+  mode string
+  object string
+  primary struct ceph.ReplicationEndpoint
+  primary.cluster string
+  primary.machines []string
+  primary.pool struct ceph.Pool
+  primary.pool.application string
+  primary.pool.autoscale struct ceph.PoolAutoscale
+  primary.pool.autoscale.bulk bool
+  primary.pool.autoscale.maxPGs int
+  primary.pool.autoscale.minPGs int
+  primary.pool.autoscale.mode string
+  primary.pool.autoscale.targetBytes int64
+  primary.pool.autoscale.targetRatio string
+  primary.pool.compression struct ceph.PoolCompression
+  primary.pool.compression.algorithm string
+  primary.pool.compression.maxBlob int64
+  primary.pool.compression.minBlob int64
+  primary.pool.compression.mode string
+  primary.pool.compression.requiredRatio string
+  primary.pool.crushRule string
+  primary.pool.erasure *struct ceph.PoolErasure omitempty
+  primary.pool.erasure.codingChunks int
+  primary.pool.erasure.dataChunks int
+  primary.pool.erasure.deviceClass string
+  primary.pool.erasure.failureDomain string
+  primary.pool.erasure.plugin string
+  primary.pool.erasure.profile string
+  primary.pool.erasure.profileDefaults map[string]string
+  primary.pool.erasure.root string
+  primary.pool.erasure.stripeUnit int
+  primary.pool.erasure.technique string
+  primary.pool.filesystem string
+  primary.pool.minSize int
+  primary.pool.name string
+  primary.pool.object string omitempty
+  primary.pool.overwrites bool
+  primary.pool.pgNum int
+  primary.pool.quota struct ceph.PoolQuota
+  primary.pool.quota.maxBytes int64
+  primary.pool.quota.maxObjects int64
+  primary.pool.role string
+  primary.pool.size int
+  primary.pool.type string
+  primary.poolObject string
+  primary.scope opaque omitempty
+  secondary struct ceph.ReplicationEndpoint
+  secondary.cluster string
+  secondary.machines []string
+  secondary.pool struct ceph.Pool
+  secondary.pool.application string
+  secondary.pool.autoscale struct ceph.PoolAutoscale
+  secondary.pool.autoscale.bulk bool
+  secondary.pool.autoscale.maxPGs int
+  secondary.pool.autoscale.minPGs int
+  secondary.pool.autoscale.mode string
+  secondary.pool.autoscale.targetBytes int64
+  secondary.pool.autoscale.targetRatio string
+  secondary.pool.compression struct ceph.PoolCompression
+  secondary.pool.compression.algorithm string
+  secondary.pool.compression.maxBlob int64
+  secondary.pool.compression.minBlob int64
+  secondary.pool.compression.mode string
+  secondary.pool.compression.requiredRatio string
+  secondary.pool.crushRule string
+  secondary.pool.erasure *struct ceph.PoolErasure omitempty
+  secondary.pool.erasure.codingChunks int
+  secondary.pool.erasure.dataChunks int
+  secondary.pool.erasure.deviceClass string
+  secondary.pool.erasure.failureDomain string
+  secondary.pool.erasure.plugin string
+  secondary.pool.erasure.profile string
+  secondary.pool.erasure.profileDefaults map[string]string
+  secondary.pool.erasure.root string
+  secondary.pool.erasure.stripeUnit int
+  secondary.pool.erasure.technique string
+  secondary.pool.filesystem string
+  secondary.pool.minSize int
+  secondary.pool.name string
+  secondary.pool.object string omitempty
+  secondary.pool.overwrites bool
+  secondary.pool.pgNum int
+  secondary.pool.quota struct ceph.PoolQuota
+  secondary.pool.quota.maxBytes int64
+  secondary.pool.quota.maxObjects int64
+  secondary.pool.role string
+  secondary.pool.size int
+  secondary.pool.type string
+  secondary.poolObject string
+  secondary.scope opaque omitempty
+  version string
+evidence-schema:
+  version string
+  request string
+  owner string
+  primaryFSID string
+  secondaryFSID string
+  object string
+  owned bool
+  exists bool
+  ready bool
+  images []struct ceph.ReplicatedImageEvidence
+  images[].name string
+  images[].globalID string
+  images[].primaryID string
+  images[].secondaryID string
+  images[].synced bool

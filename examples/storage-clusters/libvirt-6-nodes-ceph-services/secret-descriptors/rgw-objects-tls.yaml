@@ -1,0 +1,16 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: rgw-objects-tls
+
+spec:
+  type: tlsCertificate
+
+  source:
+    generated:
+      commonName: s3.lab.example.test
+
+      dnsNames:
+        - s3.lab.example.test
+
+      validityDays: 3650

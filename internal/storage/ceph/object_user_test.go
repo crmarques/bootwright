@@ -165,6 +165,48 @@ func TestObjectUserEvidenceNamesOnlyItsUserID(t *testing.T) {
 	}
 }
 
+func TestObjectUserHandoffRequiresItsOriginalAppliedScope(t *testing.T) {
+	user := objectUserObject("app-writer")
+	catalog := userCatalog(user)
+	r := userRuntime()
+	r.Owner, r.FSID = "apply-original", FSIDFor("apply-original", r.Cluster)
+	e := readyEvidence(r)
+	e.Request, e.Resource = "digest", ResourceEvidence{ID: user.Name()}
+	frozen := r
+	frozen.Owner, frozen.FSID = "", ""
+	request, err := frozen.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	proof := lifecycle.BlockEvidence{Kind: string(api.StorageObjectUser), Object: user.Name(), Implementation: Implementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone,
+		Block: reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: ObjectUserBlockID(user.Name()), Kind: string(api.StorageObjectUser), Object: user.Name(), Implementation: Implementation, Request: request}, RequestDigest: "digest"}, Evidence: evidenceBytes(t, e)}
+	if !ObjectUserProved(catalog, user, []lifecycle.BlockEvidence{proof}) {
+		t.Fatal("the original applied scope was not proved")
+	}
+	for _, key := range []string{"realm", "zoneGroup", "zone"} {
+		gateway, _ := catalog.Find(api.StorageObjectGateway, "objects")
+		objects := catalog.Objects()
+		for i, object := range objects {
+			if object.Kind() == gateway.Kind() && object.Name() == gateway.Name() {
+				objects[i] = gateway.WithSpec(gateway.Spec().WithPath(api.StringValue("other"), key))
+			}
+		}
+		changed := api.NewCatalog(objects)
+		if ObjectUserProved(changed, user, []lifecycle.BlockEvidence{proof}) {
+			t.Fatal("changed gateway scope accepted", key)
+		}
+	}
+	for _, proofs := range [][]lifecycle.BlockEvidence{nil, {proof, proof}} {
+		if ObjectUserProved(catalog, user, proofs) {
+			t.Fatal("missing or ambiguous proof accepted")
+		}
+	}
+	proof.State = reconciliation.BlockFailed
+	if ObjectUserProved(catalog, user, []lifecycle.BlockEvidence{proof}) {
+		t.Fatal("failed original apply accepted")
+	}
+}
+
 func TestProducedObjectUserIsExactlyItsKeyPair(t *testing.T) {
 	r := userRuntime()
 	good := userProduced(userMaterial)

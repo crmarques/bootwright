@@ -161,6 +161,14 @@ func visibleKey(key string) bool {
 	return true
 }
 
+func ObjectUserCredentials(value []byte, user string) (secrets.Material, bool) {
+	entry, err := reconciliation.DecodeEvidence[objectUserCredential](value, 4096, "Ceph object user material")
+	if err != nil || canonicaljson.Prove(value, entry, canonicaljson.Bare) != nil || entry.UID != user || !visibleKey(entry.AccessKey) || !visibleKey(entry.SecretKey) {
+		return secrets.Material{}, false
+	}
+	return secrets.NewMaterial(map[secrets.Part][]byte{secrets.UsernamePart: []byte(entry.AccessKey), secrets.PasswordPart: []byte(entry.SecretKey)}), true
+}
+
 func validateDashboard(produced []lifecycle.Produced) error {
 	if len(produced) != 1 || produced[0].Name != DashboardOutput || len(produced[0].Material.Parts()) != 1 {
 		return evidenceFailure()

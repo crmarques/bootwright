@@ -105,6 +105,13 @@ type ManagedCeph struct {
 	Dashboard       *Dashboard
 	Resources       []Resource
 	Endpoints       []Endpoint
+	ObjectUsers     []ObjectUserAccess
+}
+
+type ObjectUserAccess struct {
+	Name        string
+	Gateway     string
+	Credentials secrets.Material
 }
 
 type Resource struct {

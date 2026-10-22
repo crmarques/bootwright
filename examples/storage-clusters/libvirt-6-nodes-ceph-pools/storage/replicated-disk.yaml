@@ -1,0 +1,9 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageRBDImage
+metadata:
+  name: replicated-disk
+
+spec:
+  clusterRef: ceph-lab
+  poolRef: rbd-replicated
+  sizeBytes: 1073741824

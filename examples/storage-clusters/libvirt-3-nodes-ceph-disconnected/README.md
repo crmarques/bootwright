@@ -113,7 +113,7 @@ Run `./bin/bootwright apply` on the completed context. It must settle without ef
 
 ## Check that changed intent is refused
 
-In the copied input change one image selection, run `validate`, then attempt `context update` while an operation is paused. It must refuse invalidating that operation. Restore the copied input. A completed context also retains its frozen intent: use `diff`, destroy, then update and start a new operation to adopt another image. Do not clear context state.
+In the copied input change one image selection, run `validate`, then attempt `context update` while an operation is paused. It must refuse invalidating that operation. Restore the copied input. Separately, after apply completes, validate a changed copy and import it with `context update`: expect the completed-apply warning, not refusal. Run `apply` and require changed frozen intent to be refused before any native effects. Restore the original input and import it again with `context update` before continuation or retirement. To adopt another image, use `diff`, destroy, then update and start a new operation. Do not clear context state.
 
 ## Measured budget
 

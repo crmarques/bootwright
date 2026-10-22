@@ -1,0 +1,17 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageFilesystem
+metadata:
+  name: primary-files
+
+spec:
+  clusterRef: primary
+  mdsServiceRef: mds.primary-files
+  metadataPoolRef: primary-metadata
+
+  dataPoolRefs:
+    - primary-data
+
+  mds:
+    activeCount: 1
+    standbyCountWanted: 1
+    standbyReplay: false

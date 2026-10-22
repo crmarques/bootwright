@@ -1170,6 +1170,30 @@ cluster, and its `dashboard.status` is `unproved`. The value occurs only in
 the `passwordValue` field, and is never copied to a diagnostic, log, evidence
 record, plan or second stream.
 
+The same explicit command also reveals the selected cluster's declared
+StorageObjectUsers in `objectUsers`, sorted by name. Each entry contains `name`,
+`gateway`, `accessKey` and `secretKey`; ordinary inspection omits this member
+and reads no object-user custody. The reader checks the original produced
+block/output, completed original cluster/gateway/realm/zone scope, exact
+canonical credential shape and matching user ID before
+export. A missing, corrupt or unproved copy refuses without any partial output,
+and all borrowed material is cleared on failure and after rendering. Credentials
+of a different cluster or gateway are never read. These fields occur only in
+the explicitly sensitive standard output; no native credential retrieval runs.
+
+For a private S3 client handoff, redirect the result into a protected local
+file and transfer only the selected user's entry over an operator-verified
+channel. Keep this file outside logs and acceptance captures:
+
+```sh
+umask 077
+private_access=$(mktemp)
+bootwright cluster info --name ceph-lab --secrets --output json > "$private_access"
+```
+
+The S3 client uses the declared gateway endpoint and its verified TLS trust.
+Use a protected client credential file; never put key values in arguments.
+
 ### Client keyring export
 
 `cluster keyring --name <cluster> --client <client>` reveals the Ceph keyring

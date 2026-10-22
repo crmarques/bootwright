@@ -10,6 +10,7 @@ custody. [Provider coverage](storage-coverage.md) owns release qualification.
 `StorageFilesystem`, `StorageSubvolume`, `StorageClient`,
 `StorageObjectUser`, under its [field record](#storageobjectuser-field-record),
 `StorageObjectBucket`, under its [field record](#storageobjectbucket-field-record),
+`StorageReplication` for one-way journal RBD mirroring,
 and `StorageNFSExport`, under its [field record](#storagenfsexport), are
 admitted and realized. `StorageSMBResource` is admitted under its
 [field record](#storagesmbresource) and realized by its SMB block once its
@@ -234,6 +235,55 @@ gateway's FQDN; and, on the cluster, an rgw service no gateway of the cluster
 binds, because cephadm would deploy it before its realm, zone group and zone
 exist.
 
+## StorageReplication
+
+`StoragePool.spec.nativeName` is an optional DNS label. It defaults to the
+pool's `metadata.name`; object references always retain metadata identity.
+Native names must be unique within a cluster. Every pool consumer projects
+that name, including RBD, clients, CephFS and RGW placement. Native mirroring
+requires the same pool name in both clusters, while their object names remain
+distinct. Changing either identity after apply is changed intent.
+
+The closed `StorageReplication` record realizes one-way journal-based RBD
+replication. Both clusters must be declared managed clusters in the same
+context, on disjoint Machines. There is at most one relationship involving
+each cluster, because native bootstrap credentials have cluster-wide identity.
+
+| Field | Contract |
+| --- | --- |
+| `clusterRef` | Required primary managed StorageCluster. |
+| `type` | Required, exactly `rbd`. |
+| `poolRef` | Required primary StoragePool. |
+| `peerClusterRef` | Required distinct receiving managed StorageCluster. |
+| `peerPoolRef` | Required receiving StoragePool with the same native name. |
+| `imageRefs` | Required nonempty set of source StorageRBDImage references in image mode; forbidden in pool mode. Pool mode derives all declared source images. |
+
+Both pools must explicitly author the same `mirroring.mode`, either `image`
+or `pool`, use replicated protection and have role `rbd`. Mirroring without
+a relationship owner refuses. The receiving cluster declares `rbd-mirror`.
+One to three source images are admitted; each explicitly enables `journaling`
+and has no `dataPoolRef`. The receiving pool has no independent image
+declarations and must initially be empty. In pool mode the source's complete
+native image set must match its declarations before mirroring is enabled.
+Snapshot-based mirroring, forced promotion, automatic failover, context
+crossing, external clusters and foreign peer adoption are not realized.
+
+The relationship depends on both owned pools, all selected source images,
+both original cluster and image proofs, and the receiving mirror service.
+It holds both cluster execution claims in sorted order. Native work is
+sequential across endpoints. Completion requires matching global image IDs,
+owned native IDs, source primary state and receiving `up+replaying` state
+for every image. Native initial synchronization must finish before readiness.
+An unavailable peer retains partial owned state and retry uses the original
+apply identity; no bootstrap credential or peer token is produced material.
+The [lifecycle owner](storage.md#rbd-replication) defines custody and budgets.
+Removal retires only with all Machines of both clusters; removal while either
+cluster survives refuses under [B491](milestones/m2.md#b491).
+
+RGW multisite and its secondary gateway reference remain unimplemented because
+of the [native credential-interface blocker](storage.md#rgw-multisite-blocker).
+This record admits no RGW arm. CephFS snapshot mirroring continues to refuse.
+
 ## StorageRBDImage
 
 One object declares one image. [B81](milestones/m2.md#b81) owns its schema,
@@ -329,8 +379,10 @@ Not admitted, as unknown fields:
   which [B489](milestones/m2.md#b489) owns;
 - striping and object size, parked by D160 (OD26);
 - encryption, parked by D160 (OD26); it also needs a Secrets binding;
-- mirroring image mode, which [B483](milestones/m2.md#b483) owns;
 - QoS.
+
+Image-mode mirroring is declared through an explicit
+[StorageReplication](#storagereplication).
 
 ## StorageClient
 

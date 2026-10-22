@@ -1048,7 +1048,7 @@ class Markers:
 class Custody:
     """Retained private material: a reservation record, one exclusive root-only 0600 file, then its identity record."""
 
-    def __init__(self, worker, kind, suffix, limit, decode):
+    def __init__(self, worker, kind, suffix, limit, decode, version=None):
         self.worker = worker
         self.markers = worker.markers
         self.kind = kind
@@ -1056,6 +1056,7 @@ class Custody:
         self.limit = limit
         self.decode = decode
         self.reason = kind + "-identity"
+        self.version = version or "ceph-" + kind + "-custody-v1"
 
     def name(self, record):
         return self.kind + "-" + record + self.suffix + ".json"
@@ -1102,7 +1103,7 @@ class Custody:
             if record is None:
                 continue
             require(isinstance(record, dict) and set(record) == {"version", "scope", "custodyID", "metadata"}, self.reason)
-            require(record["version"] == "ceph-" + self.kind + "-custody-v1" and canonical(record["scope"]) == canonical(scope), self.reason)
+            require(record["version"] == self.version and canonical(record["scope"]) == canonical(scope), self.reason)
             require(isinstance(record["custodyID"], str) and re.fullmatch(r"[0-9a-f]{32}", record["custodyID"]) is not None, self.reason)
             self.metadata_record(record["metadata"], complete=complete)
         require(ready is None or reserved is not None and ready["custodyID"] == reserved["custodyID"] and
@@ -1144,7 +1145,7 @@ class Custody:
                     os.fchown(fd, 0, 0)
                     os.fsync(fd)
                     os.fsync(directory)
-                    reserved = {"version": "ceph-" + self.kind + "-custody-v1", "scope": scope, "custodyID": uuid.uuid4().hex,
+                    reserved = {"version": self.version, "scope": scope, "custodyID": uuid.uuid4().hex,
                                 "metadata": self.metadata(os.fstat(fd))}
                     self.markers.write(self.name("reserved"), reserved)
                     require(self.markers.read(self.name("reserved")) == reserved, self.reason)
@@ -3859,6 +3860,9 @@ class Worker:
 
 def dispatch(envelope):
     APPLIED.clear()
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_replication_native
+    if isinstance(envelope, dict) and envelope.get("phase") in ceph_replication_native.PHASES:
+        return ceph_replication_native.dispatch(envelope)
     phase = envelope.get("phase") if isinstance(envelope, dict) else None
     if phase == "services" and isinstance(envelope, dict) and "devices" in envelope:
         devices = envelope["devices"]

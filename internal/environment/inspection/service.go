@@ -92,6 +92,10 @@ func (s Service) ClusterInfo(ctx context.Context, request ClusterInfoRequest) (*
 		if err := s.revealDashboard(ctx, selected, result.Storage[0]); err != nil {
 			return nil, err
 		}
+		if err := s.revealObjectUsers(ctx, selected, catalog, &result.Storage[0]); err != nil {
+			ClearSecrets(result)
+			return nil, err
+		}
 	}
 	return result, nil
 }

@@ -50,7 +50,7 @@ func poolRequest(c api.Catalog, pool api.Object, contextName string) (Request, e
 	if err != nil {
 		return Request{}, err
 	}
-	if err := poolScope(pool); err != nil {
+	if err := poolScope(c, pool); err != nil {
 		return Request{}, err
 	}
 	p, err := poolOf(c, pool, r)
@@ -65,13 +65,13 @@ func poolRequest(c api.Catalog, pool api.Object, contextName string) (Request, e
 	return r, nil
 }
 
-func poolScope(pool api.Object) error {
+func poolScope(c api.Catalog, pool api.Object) error {
 	s, name := pool.Spec(), pool.Name()
 	if s.Get("role").Text() == "" {
 		return failure("lifecycle.unsupported", "StoragePool "+name+" has no role, so no consumer enables its application and the cluster would report POOL_APP_NOT_ENABLED", "set spec.role of StoragePool "+name+" to rbd, cephfs-metadata, cephfs-data or rgw")
 	}
-	if s.Has("mirroring") {
-		return failure("lifecycle.unsupported", "StoragePool "+name+" declares mirroring, which B483 delivers", "remove spec.mirroring; B483 delivers mirroring")
+	if s.Has("mirroring") && !storage.ReplicationOwnsPool(c, pool.Name()) {
+		return failure("lifecycle.unsupported", "StoragePool "+name+" declares mirroring without a StorageReplication owner", "declare a StorageReplication that names this pool, or remove spec.mirroring")
 	}
 	if s.Get("autoscale", "mode").Text() == "warn" {
 		return failure("lifecycle.unsupported", "StoragePool "+name+" selects autoscale mode warn, whose placement-group health warnings the core readiness never tolerates", "set spec.autoscale.mode to on or off, or omit it (on); Bootwright does not support warn yet")
@@ -112,12 +112,15 @@ func poolOf(c api.Catalog, pool api.Object, r Request) (*Pool, error) {
 			target = n.Int64()
 		}
 	}
-	p := &Pool{Name: pool.Name(), Type: s.Get("type").Text(), Role: s.Get("role").Text(), Application: storage.RoleApplication(s.Get("role").Text()), CrushRule: defaultRule,
+	p := &Pool{Name: storage.PoolName(pool), Type: s.Get("type").Text(), Role: s.Get("role").Text(), Application: storage.RoleApplication(s.Get("role").Text()), CrushRule: defaultRule,
 		Autoscale: PoolAutoscale{Bulk: s.Get("autoscale", "bulk").Bool(), MaxPGs: int(positiveOr(s.Get("autoscale", "pgNumMax"), 0)), MinPGs: int(positiveOr(s.Get("autoscale", "pgNumMin"), 0)),
 			Mode: s.Get("autoscale", "mode").Text(), TargetBytes: target, TargetRatio: ratio(s.Get("autoscale", "targetSizeRatio"))},
 		Compression: PoolCompression{Algorithm: s.Get("compression", "algorithm").Text(), MaxBlob: positiveOr(s.Get("compression", "maxBlobSize"), 0), MinBlob: positiveOr(s.Get("compression", "minBlobSize"), 0),
 			Mode: s.Get("compression", "mode").Text(), RequiredRatio: ratio(s.Get("compression", "requiredRatio"))},
 		Quota: PoolQuota{MaxBytes: positiveOr(s.Get("quota", "maxBytes"), 0), MaxObjects: positiveOr(s.Get("quota", "maxObjects"), 0)}, Filesystem: filesystemOwner(c, pool)}
+	if p.Name != pool.Name() {
+		p.Object = pool.Name()
+	}
 	if p.Type == "" {
 		p.Type = "replicated"
 	}
@@ -191,7 +194,7 @@ func placementOf(c api.Catalog, pool api.Object) (rule, class string, width, pgs
 		pgs = 16
 	}
 	if s.Get("type").Text() == "erasure" {
-		return pool.Name(), s.Get("erasure", "crushDeviceClass").Text(), positiveOr(s.Get("erasure", "dataChunks"), 0) + positiveOr(s.Get("erasure", "codingChunks"), 0), pgs, true
+		return storage.PoolName(pool), s.Get("erasure", "crushDeviceClass").Text(), positiveOr(s.Get("erasure", "dataChunks"), 0) + positiveOr(s.Get("erasure", "codingChunks"), 0), pgs, true
 	}
 	rule, width = defaultRule, positiveOr(s.Get("replicated", "size"), 0)
 	if ref := s.Get("placementPolicyRef").Text(); ref != "" {
@@ -323,7 +326,7 @@ func poolClientRequest(c api.Catalog, client api.Object, contextName string) (Re
 	}
 	r.Action = "client"
 	r.Pool = nil
-	r.Client = &Client{Access: client.Spec().Get("access").Text(), DataPools: dataPools, Name: client.Name(), Pool: pool.Name()}
+	r.Client = &Client{Access: client.Spec().Get("access").Text(), DataPools: dataPools, Name: client.Name(), Pool: storage.PoolName(pool)}
 	return r, nil
 }
 
@@ -338,12 +341,14 @@ func clientDataPools(c api.Catalog, cluster, pool, contextName string) ([]string
 		pools = append(pools, data)
 	}
 	slices.Sort(pools)
-	for _, name := range pools {
+	for i, name := range pools {
 		data, _ := c.Find(api.StoragePool, name)
 		if _, err := poolRequest(c, data, contextName); err != nil {
 			return nil, err
 		}
+		pools[i] = storage.PoolName(data)
 	}
+	slices.Sort(pools)
 	return pools, nil
 }
 
@@ -367,7 +372,7 @@ func rbdImageRequest(c api.Catalog, image api.Object, contextName string) (Reque
 	size, _ := spec.Get("sizeBytes").Int64()
 	r.Action = "rbd"
 	r.Pool = nil
-	r.RBD = &RBDImage{DataPool: dataPool, Features: storage.RBDImageFeatures(spec), Name: image.Name(), Pool: pool.Name(), SizeBytes: size}
+	r.RBD = &RBDImage{DataPool: nativePoolRef(c, dataPool), Features: storage.RBDImageFeatures(spec), Name: image.Name(), Pool: storage.PoolName(pool), SizeBytes: size}
 	return r, nil
 }
 
@@ -427,15 +432,18 @@ func filesystemRequest(c api.Catalog, fs api.Object, contextName string) (Reques
 	mds := spec.Get("mds")
 	r.Action = "filesystem"
 	r.Pool = nil
-	r.Filesystem = &Filesystem{ActiveCount: int(positiveOr(mds.Get("activeCount"), 1)), DataPools: data, DefaultDataPool: data[0], Groups: filesystemGroups(spec, data[0]), MDSService: "mds." + fs.Name(),
-		MetadataPool: spec.Get("metadataPoolRef").Text(), Name: fs.Name(), StandbyCountWanted: int(positiveOr(mds.Get("standbyCountWanted"), 0)), StandbyReplay: mds.Get("standbyReplay").Bool()}
+	for i, ref := range data {
+		data[i] = nativePoolRef(c, ref)
+	}
+	r.Filesystem = &Filesystem{ActiveCount: int(positiveOr(mds.Get("activeCount"), 1)), DataPools: data, DefaultDataPool: data[0], Groups: filesystemGroups(c, spec, data[0]), MDSService: "mds." + fs.Name(),
+		MetadataPool: nativePoolRef(c, spec.Get("metadataPoolRef").Text()), Name: fs.Name(), StandbyCountWanted: int(positiveOr(mds.Get("standbyCountWanted"), 0)), StandbyReplay: mds.Get("standbyReplay").Bool()}
 	return r, nil
 }
 
-func filesystemGroups(spec api.Value, defaultPool string) []FilesystemGroup {
+func filesystemGroups(c api.Catalog, spec api.Value, defaultPool string) []FilesystemGroup {
 	groups := []FilesystemGroup{}
 	for _, group := range spec.Get("subvolumeGroups").Items() {
-		pool, mode := group.Get("poolLayoutRef").Text(), group.Get("mode").Text()
+		pool, mode := nativePoolRef(c, group.Get("poolLayoutRef").Text()), group.Get("mode").Text()
 		if pool == "" {
 			pool = defaultPool
 		}
@@ -465,7 +473,7 @@ func subvolumeRequest(c api.Catalog, subvolume api.Object, contextName string) (
 		}
 	}
 	if pool := spec.Get("poolLayoutRef").Text(); pool != "" {
-		frozen.Pool = pool
+		frozen.Pool = nativePoolRef(c, pool)
 	}
 	if uid, ok := spec.Get("uid").Int64(); ok && spec.Has("uid") {
 		frozen.UID = int(uid)
@@ -484,4 +492,11 @@ func subvolumeRequest(c api.Catalog, subvolume api.Object, contextName string) (
 	r.Pool = nil
 	r.Subvolume = &frozen
 	return r, nil
+}
+
+func nativePoolRef(c api.Catalog, ref string) string {
+	if pool, found := c.Find(api.StoragePool, ref); found {
+		return storage.PoolName(pool)
+	}
+	return ref
 }

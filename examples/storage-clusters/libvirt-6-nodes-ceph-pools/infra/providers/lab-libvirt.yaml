@@ -1,0 +1,84 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt
+
+spec:
+  libvirt:
+    machineRef: controller
+    uri: qemu:///system
+
+    # Example host headroom; choose reserves for your own allocation budget.
+    capacityReserve:
+      cpu: 1
+      memoryMiB: 4096
+      diskGiB: 10
+
+    bmcEmulationDefaults:
+      enabled: true
+      protocol: redfish
+      emulator: sushy-tools
+      bindAddress: 127.0.0.1
+      port: 8000
+      certificateRef: lab-bmc-tls
+
+      auth:
+        credentialsRef: lab-bmc-credentials
+
+    machineProfiles:
+      - name: mon-mgr
+        cpu: 4
+        memoryMiB: 18432
+        diskGiB: 60
+        tpm: {}
+        dataDisks:
+          - name: ssd-data
+            sizeGiB: 40
+            media: ssd
+          - name: hdd-data
+            sizeGiB: 40
+            media: hdd
+          - name: hdd-db
+            sizeGiB: 10
+            media: ssd
+
+      - name: mon
+        cpu: 4
+        memoryMiB: 15360
+        diskGiB: 60
+        tpm: {}
+        dataDisks:
+          - name: ssd-data
+            sizeGiB: 40
+            media: ssd
+          - name: hdd-data
+            sizeGiB: 40
+            media: hdd
+          - name: hdd-db
+            sizeGiB: 10
+            media: ssd
+
+      - name: osd
+        cpu: 4
+        memoryMiB: 12288
+        diskGiB: 60
+        tpm: {}
+        dataDisks:
+          - name: ssd-data
+            sizeGiB: 40
+            media: ssd
+          - name: hdd-data
+            sizeGiB: 40
+            media: hdd
+          - name: hdd-db
+            sizeGiB: 10
+            media: ssd
+
+  networkAttachments:
+    - name: lab-guests
+
+      libvirt:
+        bridge: virbr-lab
+        management: managed
+        address: 198.51.100.1/24
+        forward: nat

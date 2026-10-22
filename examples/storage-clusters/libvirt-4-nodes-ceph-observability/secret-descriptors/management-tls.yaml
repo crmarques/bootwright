@@ -1,0 +1,18 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: management-tls
+
+spec:
+  type: tlsCertificate
+
+  source:
+    generated:
+      commonName: management.lab.example.test
+
+      dnsNames:
+        - management.lab.example.test
+
+      ipAddresses:
+        - 198.51.100.50
+      validityDays: 365

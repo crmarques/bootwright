@@ -1,0 +1,43 @@
+argument_specs:
+  apply:
+    short_description: Realize one RBD replication relationship across two managed clusters.
+    options: &request
+      bootwright_ceph_replication_request:
+        type: dict
+        required: true
+        options:
+          controller:
+            type: str
+            required: true
+          images:
+            type: list
+            required: true
+            elements: dict
+          mode:
+            type: str
+            required: true
+          object:
+            type: str
+            required: true
+          primary:
+            type: dict
+            required: true
+          secondary:
+            type: dict
+            required: true
+          version:
+            type: str
+            required: true
+            choices: [ceph-replication-v1]
+      bootwright_ceph_replication_digest:
+        type: str
+        required: true
+      bootwright_ceph_replication_material:
+        type: dict
+        required: true
+  observe:
+    short_description: Observe both clusters and the initial image synchronization without mutation.
+    options: *request
+  destroy:
+    short_description: Refuse online removal; lifecycle retires both clusters with their hosts.
+    options: *request

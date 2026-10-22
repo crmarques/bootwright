@@ -1,0 +1,17 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageRBDImage
+metadata:
+  name: replicated-disk
+
+spec:
+  clusterRef: primary
+  poolRef: primary-volumes
+  sizeBytes: 1073741824
+
+  features:
+    - layering
+    - exclusive-lock
+    - object-map
+    - fast-diff
+    - deep-flatten
+    - journaling

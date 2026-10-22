@@ -1,0 +1,297 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: ceph-lab
+
+spec:
+  type: ceph
+  management: managed
+
+  ceph:
+    distribution: ibm
+    release: 9.9.2.0
+    packageVersion: 20.2.2-349.el9cp
+
+    image:
+      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+      version: v9.9.2-26947
+
+    ibm:
+      callHome: enabled
+
+      packages:
+        source: vendor
+    entitlementRef: ibm-ceph
+
+    cephadm:
+      addressRef: ip
+
+      ansible:
+        packageVersion: 5.0.3-1.el9cp
+
+      clusterSSH:
+        user: bootwright
+        keyRef: ceph-cluster-key
+        transport: verified-tunnel
+
+      bootstrap:
+        node: rhel-01
+        addressRef: ip
+
+    networks:
+      publicCIDRs:
+        - 198.51.100.0/24
+
+    config:
+      global:
+        osd_pool_default_size: '2'
+        osd_pool_default_min_size: '2'
+
+      osd:
+        osd_memory_target_autotune: 'false'
+        osd_memory_target: '4294967296'
+
+    services:
+      - service_type: mon
+        placement:
+          hosts:
+            - rhel-01.lab.example.test
+            - rhel-02.lab.example.test
+            - rhel-03.lab.example.test
+
+      - service_type: mgr
+        placement:
+          hosts:
+            - rhel-01.lab.example.test
+            - rhel-02.lab.example.test
+
+      - service_type: osd
+        service_id: data
+
+        placement:
+          label: ceph-core
+
+        spec:
+          data_devices:
+            paths:
+              - /dev/sda
+
+      - service_type: prometheus
+        placement:
+          hosts:
+            - rhel-04.lab.example.test
+
+        spec:
+          retention_time: 15d
+          retention_size: 10GB
+          port: 9095
+
+      - service_type: alertmanager
+        placement:
+          hosts:
+            - rhel-04.lab.example.test
+
+      - service_type: grafana
+        placement:
+          hosts:
+            - rhel-04.lab.example.test
+
+        spec:
+          anonymous_access: false
+          protocol: https
+
+      - service_type: node-exporter
+        placement:
+          hosts:
+            - rhel-01.lab.example.test
+            - rhel-02.lab.example.test
+            - rhel-03.lab.example.test
+            - rhel-04.lab.example.test
+
+        spec:
+          port: 9100
+
+      - service_type: ceph-exporter
+        placement:
+          hosts:
+            - rhel-01.lab.example.test
+            - rhel-02.lab.example.test
+            - rhel-03.lab.example.test
+            - rhel-04.lab.example.test
+
+        spec:
+          prio_limit: 5
+          stats_period: 10
+
+      - service_type: snmp-gateway
+        placement:
+          hosts:
+            - rhel-04.lab.example.test
+
+        spec:
+          snmp_version: V3
+          snmp_destination: 192.0.2.80:162
+          engine_id: 8000c53f00000000
+          auth_protocol: SHA
+          privacy_protocol: AES
+
+      - service_type: mgmt-gateway
+        placement:
+          hosts:
+            - rhel-01.lab.example.test
+            - rhel-02.lab.example.test
+
+        spec:
+          port: 9443
+          virtual_ip: 198.51.100.50
+          enable_auth: true
+
+      - service_type: ingress
+        placement:
+          hosts:
+            - rhel-01.lab.example.test
+            - rhel-02.lab.example.test
+
+        spec:
+          backend_service: mgmt-gateway
+          keepalive_only: true
+          virtual_ip: 198.51.100.50
+        service_id: mgmt
+
+      - service_type: oauth2-proxy
+        placement:
+          hosts:
+            - rhel-01.lab.example.test
+            - rhel-02.lab.example.test
+
+        spec:
+          client_id: ceph
+          oidc_issuer_url: https://idp.example.test/realms/ceph
+          provider_display_name: Qualification IdP
+          redirect_url: https://management.lab.example.test:9443/oauth2/callback
+
+        custom_configs:
+          - mount_path: /etc/pki/tls/certs/oauth2-proxy-idp-ca.pem
+
+      - service_type: loki
+        placement:
+          hosts:
+            - rhel-04.lab.example.test
+
+        spec:
+          port: 3100
+
+      - service_type: alloy
+        placement:
+          hosts:
+            - rhel-01.lab.example.test
+            - rhel-02.lab.example.test
+            - rhel-03.lab.example.test
+            - rhel-04.lab.example.test
+
+    topology:
+      nodes:
+        - name: rhel-01
+          fqdn: rhel-01.lab.example.test
+          machineRef: rhel-01
+
+          labels:
+            - ceph-core
+
+        - name: rhel-02
+          fqdn: rhel-02.lab.example.test
+          machineRef: rhel-02
+
+          labels:
+            - ceph-core
+
+        - name: rhel-03
+          fqdn: rhel-03.lab.example.test
+          machineRef: rhel-03
+
+          labels:
+            - ceph-core
+
+        - name: rhel-04
+          fqdn: rhel-04.lab.example.test
+          machineRef: rhel-04
+
+          labels:
+            - ceph-core
+
+    images:
+      prometheus:
+        base: cp.icr.io/cp/synthetic/prometheus
+        version: sha256:1111111111111111111111111111111111111111111111111111111111111111
+
+      alertmanager:
+        base: cp.icr.io/cp/synthetic/alertmanager
+        version: sha256:2222222222222222222222222222222222222222222222222222222222222222
+
+      grafana:
+        base: cp.icr.io/cp/synthetic/grafana
+        version: sha256:3333333333333333333333333333333333333333333333333333333333333333
+
+      node_exporter:
+        base: cp.icr.io/cp/synthetic/node_exporter
+        version: sha256:4444444444444444444444444444444444444444444444444444444444444444
+
+      snmp_gateway:
+        base: cp.icr.io/cp/synthetic/snmp_gateway
+        version: sha256:5555555555555555555555555555555555555555555555555555555555555555
+
+      nginx:
+        base: cp.icr.io/cp/synthetic/nginx
+        version: sha256:6666666666666666666666666666666666666666666666666666666666666666
+
+      keepalived:
+        base: cp.icr.io/cp/synthetic/keepalived
+        version: sha256:7777777777777777777777777777777777777777777777777777777777777777
+
+      oauth2_proxy:
+        base: cp.icr.io/cp/synthetic/oauth2_proxy
+        version: sha256:8888888888888888888888888888888888888888888888888888888888888888
+
+      loki:
+        base: cp.icr.io/cp/synthetic/loki
+        version: sha256:9999999999999999999999999999999999999999999999999999999999999999
+
+      alloy:
+        base: cp.icr.io/cp/synthetic/alloy
+        version: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+    serviceBindings:
+      - serviceRef: grafana
+        secrets:
+          - path: /spec/initial_admin_password
+            secretRef: grafana-admin
+
+      - serviceRef: snmp-gateway
+        secrets:
+          - path: /spec/credentials/snmp_v3_auth_username
+            secretRef: snmp-auth
+
+          - path: /spec/credentials/snmp_v3_auth_password
+            secretRef: snmp-auth
+
+          - path: /spec/credentials/snmp_v3_priv_password
+            secretRef: snmp-privacy
+
+      - serviceRef: mgmt-gateway
+        secrets:
+          - path: /spec/ssl_cert
+            secretRef: management-tls
+
+          - path: /spec/ssl_key
+            secretRef: management-tls
+
+      - serviceRef: oauth2-proxy
+        secrets:
+          - path: /spec/client_secret
+            secretRef: oidc-client
+
+          - path: /spec/cookie_secret
+            secretRef: oidc-cookie
+
+          - path: /custom_configs/0/content
+            secretRef: oidc-ca

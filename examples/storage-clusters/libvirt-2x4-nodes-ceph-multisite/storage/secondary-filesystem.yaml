@@ -1,0 +1,17 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StorageFilesystem
+metadata:
+  name: secondary-files
+
+spec:
+  clusterRef: secondary
+  mdsServiceRef: mds.secondary-files
+  metadataPoolRef: secondary-metadata
+
+  dataPoolRefs:
+    - secondary-data
+
+  mds:
+    activeCount: 1
+    standbyCountWanted: 1
+    standbyReplay: false

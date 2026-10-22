@@ -74,6 +74,10 @@ func TestEveryCephRoleEntryPointDeclaresExactlyTheRequestItReceives(t *testing.T
 	}
 }
 
+func TestReplicationRoleEntryPointDeclaresExactlyTheRequestItReceives(t *testing.T) {
+	requireRoleRequest(t, "storage_ceph_replication", "bootwright_ceph_replication_request", []string{"apply", "observe", "destroy"}, reflect.TypeFor[ReplicationRequest]())
+}
+
 func TestSMBRoleEntryPointDeclaresExactlyTheRequestItReceives(t *testing.T) {
 	requireRoleRequest(t, "storage_ceph_smb", "bootwright_ceph_smb_request", []string{"apply", "observe", "destroy"}, reflect.TypeFor[SMBRequest]())
 }

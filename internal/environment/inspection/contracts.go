@@ -39,11 +39,13 @@ type ClientCustody interface {
 type Custody interface {
 	DashboardCustody
 	ClientCustody
+	ObjectUserCredentials(ctx context.Context, contextName, user string) (Custodied, bool, error)
 }
 
 type CephEvidence interface {
 	ManagedCeph(ctx context.Context, contextName string, catalog api.Catalog, cluster api.Object) (CephProof, error)
 	Resources(ctx context.Context, contextName string, catalog api.Catalog) (map[string][]Resource, error)
+	ObjectUserProved(ctx context.Context, contextName string, catalog api.Catalog, user api.Object) (bool, error)
 }
 
 type InstallEvidence interface {

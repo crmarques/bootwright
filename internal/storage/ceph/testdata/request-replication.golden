@@ -1,0 +1,104 @@
+{
+  "controller": "controller",
+  "images": [
+    {
+      "dataPool": "",
+      "features": [
+        "layering",
+        "exclusive-lock",
+        "object-map",
+        "fast-diff",
+        "deep-flatten",
+        "journaling"
+      ],
+      "name": "disk",
+      "pool": "volumes",
+      "sizeBytes": 10737418240
+    }
+  ],
+  "mode": "image",
+  "object": "replica",
+  "primary": {
+    "cluster": "example",
+    "machines": [
+      "node-1",
+      "node-2",
+      "node-3"
+    ],
+    "pool": {
+      "application": "rbd",
+      "autoscale": {
+        "bulk": false,
+        "maxPGs": 0,
+        "minPGs": 0,
+        "mode": "on",
+        "targetBytes": 0,
+        "targetRatio": ""
+      },
+      "compression": {
+        "algorithm": "",
+        "maxBlob": 0,
+        "minBlob": 0,
+        "mode": "",
+        "requiredRatio": ""
+      },
+      "crushRule": "replicated_rule",
+      "filesystem": "",
+      "minSize": 2,
+      "name": "volumes",
+      "object": "primary-volumes",
+      "overwrites": false,
+      "pgNum": 32,
+      "quota": {
+        "maxBytes": 0,
+        "maxObjects": 0
+      },
+      "role": "rbd",
+      "size": 2,
+      "type": "replicated"
+    },
+    "poolObject": "primary-volumes"
+  },
+  "secondary": {
+    "cluster": "secondary",
+    "machines": [
+      "peer-node-1",
+      "peer-node-2",
+      "peer-node-3"
+    ],
+    "pool": {
+      "application": "rbd",
+      "autoscale": {
+        "bulk": false,
+        "maxPGs": 0,
+        "minPGs": 0,
+        "mode": "on",
+        "targetBytes": 0,
+        "targetRatio": ""
+      },
+      "compression": {
+        "algorithm": "",
+        "maxBlob": 0,
+        "minBlob": 0,
+        "mode": "",
+        "requiredRatio": ""
+      },
+      "crushRule": "replicated_rule",
+      "filesystem": "",
+      "minSize": 2,
+      "name": "volumes",
+      "object": "secondary-volumes",
+      "overwrites": false,
+      "pgNum": 32,
+      "quota": {
+        "maxBytes": 0,
+        "maxObjects": 0
+      },
+      "role": "rbd",
+      "size": 2,
+      "type": "replicated"
+    },
+    "poolObject": "secondary-volumes"
+  },
+  "version": "ceph-replication-v1"
+}

@@ -42,6 +42,24 @@ type producedEntries interface {
 
 type inspectionCustody struct{ reader producedEntries }
 
+func (d inspectionCustody) ObjectUserCredentials(ctx context.Context, contextName, user string) (inspection.Custodied, bool, error) {
+	read, found, err := d.reader.ReadProduced(ctx, contextName, ceph.ObjectUserBlockID(user), ceph.ObjectUserOutput)
+	if err != nil || !found {
+		return inspection.Custodied{Material: read.Material, Unproved: read.Unproved}, found, err
+	}
+	defer read.Material.Clear()
+	value, ok := read.Material.Part(secrets.ValuePart)
+	defer clear(value)
+	if !ok || !slices.Equal(read.Material.Parts(), []secrets.Part{secrets.ValuePart}) {
+		return inspection.Custodied{}, true, inspection.ErrObjectUserMaterial
+	}
+	material, ok := ceph.ObjectUserCredentials(value, user)
+	if !ok {
+		return inspection.Custodied{}, true, inspection.ErrObjectUserMaterial
+	}
+	return inspection.Custodied{Material: material, Unproved: read.Unproved}, true, nil
+}
+
 func (d inspectionCustody) DashboardPassword(ctx context.Context, contextName, cluster string) (inspection.Custodied, bool, error) {
 	read, found, err := d.reader.ReadProduced(ctx, contextName, ceph.DashboardBlock(cluster), ceph.DashboardOutput)
 	return inspection.Custodied{Material: read.Material, Unproved: read.Unproved}, found, err
@@ -67,6 +85,33 @@ func (d inspectionCustody) ClientKeyring(ctx context.Context, contextName, clien
 }
 
 type cephInspection struct{ reconciler cephReader }
+
+func (c cephInspection) ObjectUserProved(ctx context.Context, contextName string, catalog api.Catalog, user api.Object) (bool, error) {
+	proofs, err := c.reconciler.Evidence(ctx, contextName, string(api.StorageObjectUser), user.Name())
+	if err != nil {
+		return false, err
+	}
+	frozen, err := c.reconciler.StorageResources(ctx, contextName)
+	if err != nil {
+		return false, err
+	}
+	if frozen == nil {
+		return false, nil
+	}
+	for i := range proofs {
+		matches := 0
+		for _, block := range frozen.Frozen {
+			if block.ID == ceph.ObjectUserBlockID(user.Name()) && block.Kind == proofs[i].Kind && block.Object == proofs[i].Object && block.Implementation == proofs[i].Implementation {
+				proofs[i].Block = block
+				matches++
+			}
+		}
+		if matches != 1 {
+			return false, nil
+		}
+	}
+	return ceph.ObjectUserProved(catalog, user, proofs), nil
+}
 
 func (c cephInspection) Resources(ctx context.Context, contextName string, catalog api.Catalog) (map[string][]inspection.Resource, error) {
 	found, err := c.reconciler.StorageResources(ctx, contextName)

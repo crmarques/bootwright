@@ -23,7 +23,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
     adapter_protocol, ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_nfs, ceph_native_nvmeof,
     ceph_native_observability,
     ceph_native_resources, ceph_native_observe, ceph_native_units, ceph_native_object, ceph_native_worker, ceph_package_sources, ceph_package_worker,
-    ceph_packages, ceph_registry_discovery, ceph_smb_native, ceph_ssh_policy, ceph_tunnel,
+    ceph_packages, ceph_registry_discovery, ceph_smb_native, ceph_replication_native, ceph_ssh_policy, ceph_tunnel,
     ceph_tunnel_staging, ceph_tunnel_custody, native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
 )
 
@@ -492,6 +492,7 @@ class Transport:
         modules = (native_diagnostics, native_specializations, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
                    ceph_native_resources, ceph_native_nfs, ceph_native_nvmeof, ceph_native_observability,
                    ceph_native_units, ceph_native_object, ceph_smb_native,
+                   ceph_replication_native,
                    ceph_host_route_probe, ceph_pull_broker, ceph_host_runtime)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
         ceph_native.require(tuple(sources) == ceph_native_worker.MODULES, "transport")
@@ -535,6 +536,14 @@ class Transport:
         source = ceph_native_worker.launcher(inspect.getsource(ceph_native_worker)) + "s['main']()"
         return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": budget}, timeout,
                           worker_budget=budget)
+
+    def replication(self, host, phase, request, side, index=-1, private=None, *, timeout=660):
+        """A fixed replication phase; bootstrap credentials exist only in this bounded worker payload."""
+        ceph_native.require(phase in ceph_replication_native.PHASES and 0 < timeout <= 660, "transport")
+        budget = min(640, timeout - 2) if timeout > 2 else timeout / 2
+        payload = {"request": request, "host": host["name"], "phase": phase, "side": side, "image": index, "private": private or {}}
+        source = ceph_native_worker.launcher(inspect.getsource(ceph_native_worker)) + "s['main']()"
+        return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": budget}, timeout, worker_budget=budget)
 
     def smb_material(self):
         """Every bound SMB password, read from the runner's private files: one line of 1 to 1024 bytes of UTF-8 each."""

@@ -49,20 +49,28 @@ type storagePresentation struct {
 }
 
 type managedCephPresentation struct {
-	Management      string                 `json:"management"`
-	Release         string                 `json:"release"`
-	FSID            string                 `json:"fsid,omitempty"`
-	Image           *imagePresentation     `json:"image,omitempty"`
-	Specializations []string               `json:"specializations,omitempty"`
-	Monitors        []monitorPresentation  `json:"monitors,omitempty"`
-	AdminNode       string                 `json:"adminNode,omitempty"`
-	CephCommand     string                 `json:"cephCommand,omitempty"`
-	Status          string                 `json:"status"`
-	Reason          string                 `json:"reason,omitempty"`
-	Remedy          string                 `json:"remedy,omitempty"`
-	Dashboard       *dashboardPresentation `json:"dashboard,omitempty"`
-	Resources       []resourcePresentation `json:"resources"`
-	Endpoints       []endpointPresentation `json:"endpoints"`
+	Management      string                   `json:"management"`
+	Release         string                   `json:"release"`
+	FSID            string                   `json:"fsid,omitempty"`
+	Image           *imagePresentation       `json:"image,omitempty"`
+	Specializations []string                 `json:"specializations,omitempty"`
+	Monitors        []monitorPresentation    `json:"monitors,omitempty"`
+	AdminNode       string                   `json:"adminNode,omitempty"`
+	CephCommand     string                   `json:"cephCommand,omitempty"`
+	Status          string                   `json:"status"`
+	Reason          string                   `json:"reason,omitempty"`
+	Remedy          string                   `json:"remedy,omitempty"`
+	Dashboard       *dashboardPresentation   `json:"dashboard,omitempty"`
+	Resources       []resourcePresentation   `json:"resources"`
+	Endpoints       []endpointPresentation   `json:"endpoints"`
+	ObjectUsers     []objectUserPresentation `json:"objectUsers,omitempty"`
+}
+
+type objectUserPresentation struct {
+	Name      string `json:"name"`
+	Gateway   string `json:"gateway"`
+	AccessKey string `json:"accessKey"`
+	SecretKey string `json:"secretKey"`
 }
 
 type endpointPresentation struct {
@@ -162,6 +170,11 @@ func validManagedCeph(ceph *inspection.ManagedCeph) bool {
 	if !validResources(ceph.Resources) || !validEndpoints(ceph.Endpoints) {
 		return false
 	}
+	for _, user := range ceph.ObjectUsers {
+		if user.Name == "" || user.Gateway == "" || !slices.Equal(user.Credentials.Parts(), []secrets.Part{secrets.PasswordPart, secrets.UsernamePart}) {
+			return false
+		}
+	}
 	switch ceph.Status {
 	case inspection.StatusReady:
 		return ceph.FSID != "" && ceph.Image != nil && len(ceph.Monitors) != 0 && ceph.AdminNode != "" && ceph.CephCommand != "" && ceph.Reason == "" && ceph.Remedy == "" &&
@@ -244,11 +257,7 @@ func dashboardWarnings(result *inspection.InfoResult) []diagnostic {
 }
 
 func clearDashboards(result *inspection.InfoResult) {
-	for _, cluster := range result.Storage {
-		if cluster.Ceph != nil && cluster.Ceph.Dashboard != nil {
-			cluster.Ceph.Dashboard.Password.Clear()
-		}
-	}
+	inspection.ClearSecrets(result)
 }
 
 func displayDashboard(d *inspection.Dashboard) *dashboardPresentation {
@@ -291,6 +300,13 @@ func displayManagedCeph(ceph *inspection.ManagedCeph) *managedCephPresentation {
 		Status: escapeDisplayLine(ceph.Status), Reason: escapeDisplayLine(ceph.Reason), Remedy: escapeDisplayLine(ceph.Remedy),
 		Dashboard: displayDashboard(ceph.Dashboard), Resources: make([]resourcePresentation, 0, len(ceph.Resources)),
 		Endpoints: make([]endpointPresentation, 0, len(ceph.Endpoints)),
+	}
+	for _, user := range ceph.ObjectUsers {
+		access, _ := user.Credentials.Part(secrets.UsernamePart)
+		secret, _ := user.Credentials.Part(secrets.PasswordPart)
+		shown.ObjectUsers = append(shown.ObjectUsers, objectUserPresentation{Name: user.Name, Gateway: user.Gateway, AccessKey: string(access), SecretKey: string(secret)})
+		clear(access)
+		clear(secret)
 	}
 	for _, e := range ceph.Endpoints {
 		urls := make([]string, 0, len(e.URLs))
@@ -481,6 +497,14 @@ func writeManagedCeph(text *display, contextName, cluster string, ceph *inspecti
 		}
 		text.subsection("Custody")
 		text.mutedFields(field{Label: "User", Value: d.User}, field{Label: "Password", Value: password})
+	}
+	for _, user := range ceph.ObjectUsers {
+		access, _ := user.Credentials.Part(secrets.UsernamePart)
+		secret, _ := user.Credentials.Part(secrets.PasswordPart)
+		text.subsection("S3 credentials")
+		text.mutedFields(field{Label: "User", Value: user.Name}, field{Label: "Gateway", Value: user.Gateway}, field{Label: "Access key", Value: string(access)}, field{Label: "Secret key", Value: string(secret)})
+		clear(access)
+		clear(secret)
 	}
 }
 

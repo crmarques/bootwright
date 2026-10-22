@@ -3284,7 +3284,7 @@ each lies in the physical-installation or the Redfish journey, so four joined
 M4, the emulated controller's TLS ([B446](m1.md#b446)) and the read-back's rule
 with the silent `disable-verification` ([B447](m1.md#b447)), which D120 and
 D121 put on the new slice X47, a key type the controller's policy excludes
-([B448](m1.md#b448)) and the insert bound ([B449](m1.md#b449)); under D48 three
+([B448](#x47--pre-effect-ssh-key-policy)) and the insert bound ([B449](m1.md#b449)); under D48 three
 were parked: the private subtree on plain listeners ([B450](backlog.md#b450)),
 the host observations ([B451](backlog.md#b451)) and the wording and tests
 ([B452](backlog.md#b452)). Already tracked: the physical BMC's privilege refusal, HTTP
@@ -4100,6 +4100,29 @@ automation digest changes. **Operator-visible effects:** a completed
 installation keeps its ownership and evidence, and direct session checks resume
 with the fixed build without setup or another installation. **Constraints left
 behind:** none.
+
+### X47 — pre-effect SSH key policy
+
+**Owner:** Managed OS, with Machine and Trust. **Items:** B448.
+
+**Outcome:** the installation placement host checks actual bound host and
+fleet key types before publication or boot, naming the Secret and excluded
+key type. Generated guest-agent keys use the same policy check. An empty
+pinned host key names the missing identity proof. This reconciles the existing
+implementation with its delivery record; it does not close X47's other items
+or accept B346's FIPS controller journey.
+
+**Guard tests:** `TestKeyPolicyRefusalsNameEachBoundSecretAndType` in
+`internal/managedos/installation/key_policy_test.go` proves the Go diagnostics.
+The collection's `test_ssh_key_policy.py` proves excluded host/fleet types and
+generated-key policy without credentials or installation effects;
+`test_actual_bound_key_policy_is_checked_before_publication_or_boot` proves
+ordering for both identity channels, and
+`test_a_missing_pinned_key_names_the_missing_identity_proof` proves the empty
+key diagnostic. The owning implementation is
+`internal/managedos/installation/key_policy.go`, `ssh_key_policy.py` and the
+managed-OS installation role. Existing Go and 44 focused Python tests pass;
+no live qualification or owner acceptance is claimed.
 
 ### X48 — bounded concurrent execution
 

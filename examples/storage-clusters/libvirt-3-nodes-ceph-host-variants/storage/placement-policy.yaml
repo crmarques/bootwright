@@ -1,0 +1,13 @@
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePlacementPolicy
+metadata:
+  name: ssd-hosts
+
+spec:
+  clusterRef: ceph-lab
+  ruleName: ssd-hosts
+  crushDeviceClass: ssd
+
+  replicated:
+    size: 2
+    minSize: 2
