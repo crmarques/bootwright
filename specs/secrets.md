@@ -214,7 +214,7 @@ root-squashed network home, so that refusal says to copy the file to a local
 directory and name the copy.
 
 Generation uses OS entropy. Tokens use API entropy length; passwords 32 bytes;
-both use unpadded base64url. TLS/CA uses P-256, PKCS#8 PEM, self-signed X.509,
+both use unpadded base64url. TLS/CA uses P-256, PKCS#8 PEM, X.509,
 random nonzero 128-bit serial, injected UTC-second clock and declared validity.
 A generated certificate starts 24 hours before its generation second, so a
 verifier whose clock trails accepts it, and ends `validityDays` after that
@@ -222,6 +222,29 @@ second. A certificate an earlier build generated, starting at its generation
 second and ending `validityDays` later, stays current and is never re-minted;
 the validity window alone cannot tell such a certificate of `validityDays` N+1
 from one of N generated now, which the declaration fingerprint tells apart.
+Without `source.generated.issuerRef`, certificates are self-signed. With it,
+a TLS Secret names a generated `caBundle` (owner decision D175, 2026-10-22).
+Only TLS accepts the field, and a CA cannot have an issuer; cycles and external
+CA signing are refused. Custody generates a missing/stale issuer before its
+leaf in one atomic batch, or validates and reads its current certificate and
+private key under the same store lock. A missing key, expired/not-yet-valid CA,
+mismatched key or unproved declaration refuses before publishing any version.
+The leaf receives a fresh independent key and a leaf-then-root certificate
+chain. Its validity is capped at the issuer's actual expiration and never
+starts before the issuer. Its chain, signature, serving identity and key are
+validated on use. The CA key remains in encrypted custody and is never lent
+to an ordinary CA or TLS consumer.
+
+A named leaf generation may create its issuer dependency, but `--renew` renews
+only the named Secret; an unnamed renewal renews all generated declarations in
+dependency order. Renewing a CA alone leaves issued leaves unchanged. Explicitly
+renew its leaves afterward, then replace consumers through their ordinary
+retirement/recreation flow so both sides bind matching trust. Existing immutable
+bindings retain their original leaf and CA versions. A changed trust pair must
+pass the consumer's existing verified TLS checks; it never disables verification.
+Externally issued certificates continue to use `contextStore` plus `secret set`
+for their complete leaf chain and private key, with a separate CA bundle.
+
 "Generated serving certificates stay P-256" (D113); a serving certificate with
 an RSA key is a contextStore Secret stored with `secret set`.
 CA has signing constraints; TLS server-auth usage. SSH follows API type with

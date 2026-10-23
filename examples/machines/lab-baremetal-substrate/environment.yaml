@@ -1,0 +1,9 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: lab-baremetal-substrate
+spec:
+  domains:
+    base: lab.example.test
+  controller:
+    machineRef: controller

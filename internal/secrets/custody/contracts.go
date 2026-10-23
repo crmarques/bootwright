@@ -21,6 +21,7 @@ type StoreAccess interface {
 type Materializer interface {
 	Acquire(context.Context, secrets.Declaration, secrets.Input) (secrets.Material, error)
 	Generate(context.Context, secrets.Declaration) (secrets.Material, error)
+	GenerateSigned(context.Context, secrets.Declaration, secrets.Declaration, secrets.Material) (secrets.Material, error)
 	Validate(context.Context, secrets.Declaration, secrets.Material) error
 }
 

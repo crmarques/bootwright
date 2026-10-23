@@ -63,7 +63,7 @@ func declarationOf(object api.Object, origin diagnostics.SourceLocation) secrets
 	d := secrets.Declaration{Name: object.Name(), Type: spec.Get("type").Text(), Source: "contextStore"}
 	if g := spec.Get("source", "generated"); g.Present() {
 		d.Source = "generated"
-		d.Generation = secrets.Generation{Username: g.Get("username").Text(), CommonName: g.Get("commonName").Text(), DNSNames: g.Get("dnsNames").Strings(), IPAddresses: g.Get("ipAddresses").Strings(), KeyType: g.Get("keyType").Text(), Comment: g.Get("comment").Text()}
+		d.Generation = secrets.Generation{IssuerRef: g.Get("issuerRef").Text(), Username: g.Get("username").Text(), CommonName: g.Get("commonName").Text(), DNSNames: g.Get("dnsNames").Strings(), IPAddresses: g.Get("ipAddresses").Strings(), KeyType: g.Get("keyType").Text(), Comment: g.Get("comment").Text()}
 		validity, _ := g.Get("validityDays").Int64()
 		d.Generation.ValidityDays = int(validity)
 		entropy, ok := g.Get("bytes").Int64()

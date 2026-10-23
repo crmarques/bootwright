@@ -200,6 +200,7 @@ func (s Service) Generate(ctx context.Context, request GenerateRequest) (*Mutati
 	if err = requireActive(selected); err != nil {
 		return nil, err
 	}
+	allDeclarations := declarations
 	if request.Name != "" {
 		d, err := findDeclaration(selected.Name, declarations, request.Name)
 		if err != nil {
@@ -209,6 +210,10 @@ func (s Service) Generate(ctx context.Context, request GenerateRequest) (*Mutati
 			return nil, secrets.Refusal("source", "Secret "+d.Name+" is a contextStore Secret; secret generate mints only generated Secrets", selected.Name, d.Name, secrets.Remedy(selected.Name, d, false))
 		}
 		declarations = []secrets.Declaration{d}
+	}
+	declarations, err = generationOrder(selected.Name, declarations, allDeclarations)
+	if err != nil {
+		return nil, err
 	}
 	result := &MutationResult{Context: selected, Name: request.Name}
 	err = s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
@@ -231,14 +236,14 @@ func (s Service) Generate(ctx context.Context, request GenerateRequest) (*Mutati
 				continue
 			}
 			previous, exists := currentVersion(snapshot, d.Name)
-			if exists && d.Current(previous.Declaration.Fingerprint) && !request.Renew {
+			if exists && d.Current(previous.Declaration.Fingerprint) && !(request.Renew && (request.Name == "" || request.Name == d.Name)) {
 				result.UnchangedNames = append(result.UnchangedNames, d.Name)
 				continue
 			}
 			if len(writes) >= secrets.MaxVersions {
 				return secretstore.Failure("store.limit", "generated selection exceeds the logical version limit")
 			}
-			material, err := s.material.Generate(ctx, d)
+			material, err := s.generateOne(ctx, session, snapshot, allDeclarations, writes, d)
 			if err != nil {
 				return err
 			}

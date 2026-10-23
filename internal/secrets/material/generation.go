@@ -51,6 +51,9 @@ func (s *Service) Generate(ctx context.Context, declaration secrets.Declaration)
 	if err := validGenerationShape(declaration); err != nil {
 		return secrets.Material{}, err
 	}
+	if declaration.Generation.IssuerRef != "" {
+		return secrets.Material{}, failure("source", "generated TLS issuer must be supplied by custody", "")
+	}
 	parts := map[secrets.Part][]byte{}
 	defer clearParts(parts)
 
@@ -117,7 +120,7 @@ func validGenerationShape(declaration secrets.Declaration) error {
 		wrong = generation.Username != "" || generation.CommonName != "" || len(generation.DNSNames) != 0 ||
 			len(generation.IPAddresses) != 0 || generation.ValidityDays != 0 || generation.Bytes != 0
 	}
-	if wrong {
+	if wrong || (generation.IssuerRef != "" && declaration.Type != "tlsCertificate") {
 		return failure("source", "generation parameters are not accepted by the declared secret type", "")
 	}
 	return nil
@@ -280,7 +283,11 @@ func (s *Service) validateGeneratedCertificate(declaration secrets.Declaration, 
 	if err != nil {
 		return err
 	}
-	if len(certificates) != 1 {
+	expectedCount := 1
+	if configuration.IssuerRef != "" {
+		expectedCount = 2
+	}
+	if len(certificates) != expectedCount {
 		return failure("input", "generated secret material does not conform to its declaration", "")
 	}
 	cert := certificates[0]
@@ -312,11 +319,20 @@ func (s *Service) validateGeneratedCertificate(declaration secrets.Declaration, 
 		return failure("source", "generated certificate parameters are invalid", "")
 	}
 	now := s.now()
+	issuer := cert
+	validity := generatedValidity(cert, days)
+	if configuration.IssuerRef != "" {
+		issuer = certificates[1]
+		validity = validity || (cert.NotAfter.Equal(issuer.NotAfter) && cert.NotAfter.After(cert.NotBefore) && cert.NotAfter.Before(cert.NotBefore.Add(certificateBackdate).AddDate(0, 0, days)))
+		if !validAt(issuer, now) || len(issuer.UnhandledCriticalExtensions) != 0 || issuer.CheckSignatureFrom(issuer) != nil || cert.CheckSignatureFrom(issuer) != nil || cert.NotAfter.After(issuer.NotAfter) || cert.NotBefore.Before(issuer.NotBefore) {
+			return failure("input", "generated TLS issuer chain is invalid", "")
+		}
+	}
 	if cert.Version != 3 || cert.PublicKeyAlgorithm != x509.ECDSA || cert.SignatureAlgorithm != x509.ECDSAWithSHA256 ||
 		cert.SerialNumber == nil || cert.SerialNumber.Sign() <= 0 || cert.SerialNumber.BitLen() > 128 || len(cert.UnhandledCriticalExtensions) != 0 ||
-		!bytes.Equal(cert.RawSubject, expectedSubject) || !bytes.Equal(cert.RawIssuer, expectedSubject) ||
-		!validAt(cert, now) || cert.NotBefore.Nanosecond() != 0 || cert.NotAfter.Nanosecond() != 0 || !generatedValidity(cert, days) ||
-		cert.CheckSignature(cert.SignatureAlgorithm, cert.RawTBSCertificate, cert.Signature) != nil ||
+		!bytes.Equal(cert.RawSubject, expectedSubject) || !bytes.Equal(cert.RawIssuer, issuer.RawSubject) ||
+		!validAt(cert, now) || cert.NotBefore.Nanosecond() != 0 || cert.NotAfter.Nanosecond() != 0 || !validity ||
+		issuer.CheckSignature(cert.SignatureAlgorithm, cert.RawTBSCertificate, cert.Signature) != nil ||
 		!exactGeneratedSANs(cert, configuration.DNSNames, ipAddresses) || !exactGeneratedCertificateUsage(cert, declaration.Type) {
 		return failure("input", "generated secret material does not conform to its declaration", "")
 	}
@@ -433,6 +449,10 @@ func (s *Service) randomBytes(ctx context.Context, count int) ([]byte, error) {
 }
 
 func (s *Service) generateCertificate(ctx context.Context, declaration secrets.Declaration) ([]byte, []byte, error) {
+	return s.generateIssuedCertificate(ctx, declaration, nil, nil)
+}
+
+func (s *Service) generateIssuedCertificate(ctx context.Context, declaration secrets.Declaration, issuer *x509.Certificate, signer crypto.Signer) ([]byte, []byte, error) {
 	configuration := declaration.Generation
 	days := configuration.ValidityDays
 	if days == 0 {
@@ -493,7 +513,18 @@ func (s *Service) generateCertificate(ctx context.Context, declaration secrets.D
 		template.KeyUsage = x509.KeyUsageDigitalSignature
 		template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
 	}
-	certificateDER, err := s.createCertificate(ctx, template, template, &key.PublicKey, key)
+	parent := template
+	var signingKey crypto.Signer = key
+	if issuer != nil {
+		parent, signingKey = issuer, signer
+		if template.NotBefore.Before(issuer.NotBefore) {
+			template.NotBefore = issuer.NotBefore
+		}
+		if template.NotAfter.After(issuer.NotAfter) {
+			template.NotAfter = issuer.NotAfter
+		}
+	}
+	certificateDER, err := s.createCertificate(ctx, template, parent, &key.PublicKey, signingKey)
 	if err != nil {
 		return nil, nil, err
 	}

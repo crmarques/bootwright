@@ -78,6 +78,7 @@ func (m Material) MarshalJSON() ([]byte, error) {
 }
 
 type Generation struct {
+	IssuerRef    string   `json:"issuerRef,omitempty"`
 	Username     string   `json:"username"`
 	CommonName   string   `json:"commonName"`
 	DNSNames     []string `json:"dnsNames"`

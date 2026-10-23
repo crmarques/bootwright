@@ -171,6 +171,9 @@ func (m *serviceMaterial) Generate(context.Context, secrets.Declaration) (secret
 	}
 	return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("synthetic-generated")}), nil
 }
+func (m *serviceMaterial) GenerateSigned(ctx context.Context, d, issuer secrets.Declaration, material secrets.Material) (secrets.Material, error) {
+	return m.Generate(ctx, d)
+}
 func (m *serviceMaterial) Validate(_ context.Context, d secrets.Declaration, _ secrets.Material) error {
 	m.validated++
 	return m.refused[d.Name]

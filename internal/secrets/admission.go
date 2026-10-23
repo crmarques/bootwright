@@ -45,7 +45,14 @@ func ValidatePartial(object api.Object, catalog api.Catalog) []api.Issue {
 	return validate(object, true, true)
 }
 func Validate(object api.Object, catalog api.Catalog) []api.Issue {
-	return validate(object, false, false)
+	issues := validate(object, false, false)
+	if ref := object.Spec().Get("source", "generated", "issuerRef").Text(); object.Kind() == api.Secret && ref != "" {
+		issuer, found := catalog.Find(api.Secret, ref)
+		if !found || issuer.Spec().Get("type").Text() != "caBundle" || !issuer.Spec().Has("source", "generated") || issuer.Spec().Has("source", "generated", "issuerRef") {
+			issues = append(issues, api.Issue{Code: "api.invariant", Field: "$.spec.source.generated.issuerRef", Message: "issuerRef requires a generated caBundle without an issuer"})
+		}
+	}
+	return issues
 }
 
 func validate(object api.Object, partial, kindDefault bool) []api.Issue {
@@ -76,6 +83,9 @@ func validate(object api.Object, partial, kindDefault bool) []api.Issue {
 			allowed = []string{"username"}
 		case "tlsCertificate", "caBundle":
 			allowed = []string{"commonName", "dnsNames", "ipAddresses", "validityDays"}
+			if kind == "tlsCertificate" {
+				allowed = append(allowed, "issuerRef")
+			}
 			if !partial && !generated.Has("commonName") {
 				add("source.generated.commonName", "generated certificates require a common name")
 			}

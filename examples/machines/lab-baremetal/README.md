@@ -263,16 +263,42 @@ the temporary input copy when finished.
 
 ## Rehearsing it without hardware
 
-The emulator implements the Redfish inventory and virtual-media surface used
-by this path, but a stock lab-rhel context is not a runnable physical rehearsal.
-Its generated BMC serving certificate is a non-CA leaf; this provider's
-`caBundle` Secret requires a CA certificate with certificate-signing usage.
-Verified emulator HTTPS alone does not satisfy that physical trust contract.
-A rehearsal needs a CA-issued emulator certificate and matching CA bundle,
-plus an installer-provisioned substrate guest with no OS install profile and
-accurately declared hardware. The shipped examples do not provide that chain.
-The limitation is tracked under
-[B496](../../../specs/milestones/m1.md#b496).
+Use the [rehearsal substrate](../lab-baremetal-substrate/README.md) to create
+one installer-provisioned guest and its CA-issued emulator leaf. This procedure
+is runnable with operator-supplied RHEL media; its installation, reboot and
+continuation acceptance remain unrun ([B496](../../../specs/milestones/m1.md#b496)).
+The physical `caBundle` contract remains unchanged: it trusts the issuing CA,
+not a non-CA serving leaf.
+
+Finish the substrate procedure and keep its protected export directory in the
+same shell. Customize this physical input copy from the guest's actual Redfish
+system URL and complete NIC inventory. Use its actual interface name/MAC,
+`/dev/vda` root disk, the substrate's subnet/gateway and one unused install
+address. Retain `tls.verify: true` (the default) and `trustBundleRef: lab-bmc-ca`.
+The substrate context alone owns the guest, bridge, subnet allocation and BMC
+port; this physical context alone owns installation and DNS/NTP/artifact
+services. Never copy the libvirt provider into this physical context or run
+another context owning those same sockets or bridge.
+
+After this physical context's initialization, replace the two BMC import
+commands in **Run it** with the public CA and password exported by the substrate
+procedure (the generated account is `admin`):
+
+```sh
+./bin/bootwright secret set --context lab-baremetal --name lab-bmc-ca --certificate-file "$rehearsal_secrets/ca.pem"
+./bin/bootwright secret set --context lab-baremetal --name lab-bmc-credentials --username admin --password-file "$rehearsal_secrets/password"
+./bin/bootwright secret check --context lab-baremetal
+./bin/bootwright plan --context lab-baremetal
+```
+
+Continue the staged installation above. Use the existing verified virtual-media
+trust mode supported by the emulator; never disable BMC verification. Keep the
+substrate running during install and all continuations. Retire this physical
+context and prove private publication cleanup before destroying the substrate;
+the latter deletes the virtual disk. Record separate operator results for
+verified BMC TLS, target inventory, installation, pinned SSH completion, reboot,
+interruption/continuation and cleanup. No live acceptance is implied by the
+in-tree tests.
 
 ## What it does not cover
 

@@ -104,14 +104,15 @@ stays in the binding that holds it
 
 ### Generated source
 
-`source.generated` contains fields in this order: `username`, `commonName`,
+`source.generated` contains fields in this order: `issuerRef`, `username`, `commonName`,
 `dnsNames`, `ipAddresses`, `validityDays`, `keyType`, `comment`, then `bytes`.
 Parameters are flat and type-scoped:
 
 | Field | Type | Secret types | Required | Default | Rule |
 | --- | --- | --- | --- | --- | --- |
+| `issuerRef` | string | `tlsCertificate` | no | omitted | Reference to a generated `caBundle` Secret; custody signs the leaf with its private CA key. External/contextStore issuers and CA issuer chains are refused. Omission keeps self-signing. |
 | `username` | string | `usernamePassword` | no | `admin` | UTF-8 within the [part byte limit](../secrets.md#acquisition-and-commands); no whitespace, colon, newline or NUL. The password itself is randomly generated material. |
-| `commonName` | string | `tlsCertificate`, `caBundle` | yes | — | Common name for the self-signed certificate: non-empty UTF-8 within the [part byte limit](../secrets.md#acquisition-and-commands), without NUL. |
+| `commonName` | string | `tlsCertificate`, `caBundle` | yes | — | Common name for the certificate: non-empty UTF-8 within the [part byte limit](../secrets.md#acquisition-and-commands), without NUL. |
 | `dnsNames` | array of strings | `tlsCertificate`, `caBundle` | no | omitted | DNS subject-alternative names. |
 | `ipAddresses` | array of strings | `tlsCertificate`, `caBundle` | no | omitted | IP subject-alternative names. |
 | `validityDays` | integer | `tlsCertificate`, `caBundle` | no | `3650` | Inclusive range `1..36500`, counted from generation; the [generated certificate](../secrets.md#acquisition-and-commands) starts 24 hours before it. |

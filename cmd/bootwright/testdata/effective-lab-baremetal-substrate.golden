@@ -1,0 +1,132 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: lab-baremetal-substrate
+spec:
+  domains:
+    base: lab.example.test
+    machines: lab.example.test
+    clusters: lab.example.test
+    containerClusters: lab.example.test
+    storageClusters: lab.example.test
+  controller:
+    machineRef: controller
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: controller
+spec:
+  capabilities:
+    - container-runtime
+    - libvirt
+  os:
+    provided: true
+  proxy:
+    direct: {}
+  network:
+    addresses:
+      - name: fqdn
+        address: controller.lab.example.test
+      - name: ip
+        address: 192.0.2.1
+  access:
+    local: true
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rehearsal-01
+spec:
+  capabilities: []
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: rhel
+  os:
+    provided: false
+  network:
+    inline:
+      machineNetwork:
+        - cidr: 198.51.100.0/24
+      nmstate:
+        interfaces:
+          - name: enp1s0
+            state: up
+            type: ethernet
+    attachmentRef: lab-guests
+    addresses:
+      - name: fqdn
+        address: rehearsal-01.lab.example.test
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt
+spec:
+  libvirt:
+    machineRef: controller
+    uri: qemu:///system
+    capacityReserve:
+      cpu: 1
+      memoryMiB: 2048
+      diskGiB: 10
+    bmcEmulationDefaults:
+      enabled: true
+      protocol: redfish
+      emulator: sushy-tools
+      bindAddress: 127.0.0.1
+      certificateRef: lab-bmc-tls
+      port: 8000
+      auth:
+        credentialsRef: lab-bmc-credentials
+    machineProfiles:
+      - name: rhel
+        cpu: 4
+        memoryMiB: 8192
+        diskGiB: 60
+        tpm: {}
+  networkAttachments:
+    - name: lab-guests
+      libvirt:
+        bridge: virbr-lab
+        management: managed
+        address: 198.51.100.1/24
+        forward: nat
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-ca
+spec:
+  type: caBundle
+  source:
+    generated:
+      commonName: synthetic rehearsal authority
+      validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-credentials
+spec:
+  type: usernamePassword
+  source:
+    generated:
+      username: admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      issuerRef: lab-bmc-ca
+      commonName: localhost
+      dnsNames:
+        - localhost
+      ipAddresses:
+        - 127.0.0.1
+      validityDays: 3650
