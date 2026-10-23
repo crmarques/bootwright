@@ -90,14 +90,17 @@ options:
       - C(import-certificate) adds the first certificate of I(certificate) to the
         device's certificate collection unless it is there and turns
         VerifyCertificate on, with no fallback to any other trust.
+      - Without that collection, a qualified discovered SecurityService imports
+        the terminal issuer from the full chain into an unused FileTransfer
+        slot and reads it back. Its transfer verification must already be on.
       - C(disable-verification) turns VerifyCertificate off when it reads on.
     type: str
     default: established
     choices: [established, import-certificate, disable-verification]
   certificate:
     description:
-      - The artifact server's certificate as PEM. Only its first certificate is
-        imported or removed.
+      - The artifact server's PEM certificate chain. Device collections use the
+        first certificate; a qualified SecurityService uses the terminal issuer.
       - Required by insert under C(import-certificate) and by eject with
         I(remove_certificate).
     type: str
@@ -147,6 +150,10 @@ media:
     - Always empty for boot and power operations, which never look for media.
   returned: always
   type: str
+certificate_slot:
+  description: The exact SecurityService FileTransfer slot proved before use or removal.
+  returned: when a SecurityService certificate slot was proved
+  type: int
 """
 
 from ansible.module_utils.basic import AnsibleModule
@@ -193,7 +200,10 @@ def main():
     except redfish_control.ControllerError as failure:
         module.fail_json(msg="the management controller did not complete %s: %s" % (operation, failure))
     else:
-        module.exit_json(changed=changed, power=power, media=media)
+        result = {"changed": changed, "power": power, "media": media}
+        if client.last_trust_slot is not None:
+            result["certificate_slot"] = client.last_trust_slot
+        module.exit_json(**result)
 
 
 def drive(client, operation, attempts, image="", target="Cd", trust=redfish_control.TRUST_ESTABLISHED,

@@ -15,6 +15,7 @@ from __future__ import annotations
 import ast
 import base64
 import http.client
+import hashlib
 import io
 import json
 import pathlib
@@ -26,6 +27,7 @@ from urllib.parse import urlsplit
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import redfish_control
+from ansible_collections.bootwright.core.plugins.module_utils import redfish_remote_ca
 from ansible_collections.bootwright.core.plugins.modules import redfish_boot
 from ansible_collections.bootwright.core.plugins.modules import redfish_system_inspect
 from ansible_collections.bootwright.core.plugins.modules import redfish_system_read
@@ -1588,8 +1590,8 @@ def test_a_member_without_a_certificate_collection_refuses_naming_the_exception(
         with pytest.raises(ControllerError) as failure:
             run(monkeypatch, firmware, "insert", image=IMAGE, **IMPORT)
         line = str(failure.value)
-        assert line.endswith(": no Certificates; no fallback: established, or disable-verification on this Machine,"
-                             " which private delivery refuses") and len(line) < 200
+        expected = "certificate-slot inventory" if shape is xfusion else "unambiguous discovered security service"
+        assert expected in line and len(line) < 200
         assert not writes(firmware)
 
 
@@ -1902,3 +1904,180 @@ def test_import_uses_an_authoritative_manager_without_patching_the_device(monkey
     assert run(monkeypatch, firmware, "insert", image=IMAGE, **dict(IMPORT, **PRIVATE))[0] is True
     assert firmware.verify_certificate is False
     assert trust_writes(firmware) == [("POST", CERTIFICATES, {"CertificateString": SERVER, "CertificateType": "PEM"})]
+
+
+def security_ca():
+    """Public text-import protocol, with no hardware or environment identity."""
+    firmware = xfusion()
+    firmware.transfer_verification, firmware.ca_slots = True, {}
+    original = firmware.write
+    actions = {}
+    for action, names in ((redfish_remote_ca.IMPORT, ("Type", "Content", "Usage")),
+                          (redfish_remote_ca.DELETE, ("RootCertId",))):
+        short = action.rsplit(".", maxsplit=1)[-1]
+        target, info = SECURITY_SERVICE + "/Actions/" + short, SECURITY_SERVICE + "/" + short + "Info"
+        actions[action] = {"target": target, "@Redfish.ActionInfo": info}
+        firmware.resources[info] = {"Parameters": [{"Name": name, "Required": True} for name in names]}
+
+    def resource(f):
+        rows = [dict(CertId=slot, Usage=usage, ServerCert={"FingerPrint": fingerprint})
+                for slot, (usage, fingerprint) in sorted(f.ca_slots.items())]
+        return {"HttpsTransferCertVerification": f.transfer_verification, "Actions": actions,
+                redfish_remote_ca.INVENTORY: rows}
+
+    def write(f, method, path, payload, headers):
+        if path == actions[redfish_remote_ca.IMPORT]["target"]:
+            assert method == "POST" and set(payload) == {"Type", "Content", "Usage"}
+            assert payload["Type"] == "text" and payload["Usage"] == "FileTransfer"
+            fingerprint = hashlib.sha256(ssl.PEM_cert_to_DER_cert(payload["Content"])).hexdigest()
+            f.ca_slots[5] = ("FileTransfer", fingerprint)
+            return 200, {"error": {"@Message.ExtendedInfo": [{"MessageId": "Base.1.0.Success"}]}}, {}
+        if path == actions[redfish_remote_ca.DELETE]["target"]:
+            assert method == "POST" and set(payload) == {"RootCertId"}
+            f.ca_slots.pop(payload["RootCertId"], None)
+            return 204, None, {}
+        return original(f, method, path, payload, headers)
+
+    firmware.resources[SECURITY_SERVICE], firmware.write = resource, write
+    return firmware, actions
+
+
+def test_security_service_import_reads_slots_and_uses_only_discovered_text_action(monkeypatch):
+    firmware, actions = security_ca()
+    client = connect(monkeypatch, firmware)
+    assert client.insert(IMAGE, trust="import-certificate", certificate=SERVER + ISSUER, private=True)
+    target = actions[redfish_remote_ca.IMPORT]["target"]
+    post = next(i for i, call in enumerate(firmware.calls) if call[0] == "POST" and urlsplit(call[1]).path == target)
+    assert sum(call[0] == "GET" and urlsplit(call[1]).path == SECURITY_SERVICE for call in firmware.calls[:post]) >= 3
+    assert client.last_trust_slot == 5
+    assert writes(firmware)[0] == ("POST", target, {"Type": "text", "Content": ISSUER, "Usage": "FileTransfer"})
+    before = len(writes(firmware))
+    assert not client._remote_trust(SERVER + ISSUER)
+    assert len(writes(firmware)) == before
+    assert client.eject(remove_certificate=True, certificate=SERVER + ISSUER)
+    assert writes(firmware)[-1] == ("POST", actions[redfish_remote_ca.DELETE]["target"], {"RootCertId": 5})
+    assert not firmware.ca_slots
+
+
+@pytest.mark.parametrize("fault", ["other-authority", "missing-inventory", "duplicate-slot", "unknown-fingerprint",
+                                   "foreign-target", "foreign-metadata", "missing-parameter", "unknown-parameter",
+                                   "verification-off", "leaf-only"])
+def test_security_service_unknown_or_foreign_trust_refuses_before_any_write(monkeypatch, fault):
+    firmware, actions = security_ca()
+    chain = SERVER + ISSUER
+    serve = firmware.resources[SECURITY_SERVICE]
+    if fault == "other-authority":
+        firmware.ca_slots[5] = ("FileTransfer", "a" * 64)
+    elif fault in ("missing-inventory", "duplicate-slot", "unknown-fingerprint"):
+        rows = None if fault == "missing-inventory" else [
+            {"CertId": 5, "Usage": "FileTransfer", "ServerCert": {"FingerPrint": "a" * 64}}] * 2
+        if fault == "unknown-fingerprint":
+            rows = [{"CertId": 5, "Usage": "FileTransfer", "ServerCert": {"FingerPrint": "unknown"}}]
+        firmware.resources[SECURITY_SERVICE] = lambda f: dict(serve(f), **{redfish_remote_ca.INVENTORY: rows})
+    elif fault in ("foreign-target", "foreign-metadata"):
+        actions[redfish_remote_ca.IMPORT]["target" if fault == "foreign-target" else "@Redfish.ActionInfo"] = "https://elsewhere.test/private"
+    elif fault in ("missing-parameter", "unknown-parameter"):
+        info = actions[redfish_remote_ca.IMPORT]["@Redfish.ActionInfo"]
+        firmware.resources[info] = {"Parameters": [{"Name": "Unknown", "Required": fault == "unknown-parameter"}]}
+    elif fault == "verification-off":
+        firmware.transfer_verification = False
+    else:
+        chain = SERVER
+    with pytest.raises(ControllerError):
+        connect(monkeypatch, firmware).insert(IMAGE, trust="import-certificate", certificate=chain, private=True)
+    assert not writes(firmware)
+
+
+@pytest.mark.parametrize("operation", ["import", "remove", "restore"])
+@pytest.mark.parametrize("status", [400, 401, 403])
+def test_security_configuration_privilege_refusal_is_never_read_as_unsupported(monkeypatch, operation, status):
+    body = {"error": {"@Message.ExtendedInfo": [{"MessageId": "Protocol.1.0.PropertyModificationNeedPrivilege"}]}}
+    if operation == "restore":
+        firmware = emulator()
+        firmware.image = IMAGE
+        firmware.script("PATCH", firmware.system + DEVICE, (status, body, {}))
+        with pytest.raises(ControllerError, match="privilege"):
+            connect(monkeypatch, firmware).eject(restore_verification=True)
+        return
+    firmware, actions = security_ca()
+    client = connect(monkeypatch, firmware)
+    client.media_member()
+    action = redfish_remote_ca.DELETE if operation == "remove" else redfish_remote_ca.IMPORT
+    if operation == "remove":
+        firmware.ca_slots[5] = ("FileTransfer", hashlib.sha256(ssl.PEM_cert_to_DER_cert(ISSUER)).hexdigest())
+    firmware.script("POST", actions[action]["target"], (status, body, {}))
+    with pytest.raises(ControllerError, match="security-configuration privilege"):
+        client._remote_trust(SERVER + ISSUER, remove=operation == "remove")
+    assert len(writes(firmware)) == 1 and not firmware.pauses
+
+
+def test_security_service_slot_change_and_lost_response_require_positive_readback(monkeypatch):
+    firmware, actions = security_ca()
+    client = connect(monkeypatch, firmware)
+    client.media_member()
+    initial = firmware.resources[SECURITY_SERVICE](firmware)
+    changed = {"CertId": 6, "Usage": "FileTransfer", "ServerCert": {"FingerPrint": "a" * 64}}
+    firmware.script("GET", SECURITY_SERVICE, (200, initial, {}),
+                    (200, dict(initial, **{redfish_remote_ca.INVENTORY: [changed]}), {}))
+    with pytest.raises(ControllerError, match="changed before the write"):
+        client._remote_trust(SERVER + ISSUER)
+    assert not writes(firmware)
+    firmware.script("POST", actions[redfish_remote_ca.IMPORT]["target"], TimeoutError("private response"))
+    with pytest.raises(ControllerError, match="did not prove"):
+        client._remote_trust(SERVER + ISSUER)
+    assert len(writes(firmware)) == 1
+
+
+@pytest.mark.parametrize("remove", [False, True])
+def test_security_service_never_reports_success_if_an_unrelated_slot_changed(monkeypatch, remove):
+    firmware, actions = security_ca()
+    firmware.ca_slots[1] = ("EventSubscription", "a" * 64)
+    if remove:
+        firmware.ca_slots[5] = ("FileTransfer", hashlib.sha256(ssl.PEM_cert_to_DER_cert(ISSUER)).hexdigest())
+    original = firmware.write
+
+    def write(f, method, path, payload, headers):
+        result = original(f, method, path, payload, headers)
+        f.ca_slots.pop(1, None)
+        return result
+
+    firmware.write = write
+    client = connect(monkeypatch, firmware)
+    client.media_member()
+    with pytest.raises(ControllerError, match="unrelated certificate slots"):
+        client._remote_trust(SERVER + ISSUER, remove=remove)
+    action = redfish_remote_ca.DELETE if remove else redfish_remote_ca.IMPORT
+    assert len(writes(firmware)) == 1 and writes(firmware)[0][1] == actions[action]["target"]
+
+
+def test_security_service_multiple_oem_links_refuse_before_trust_mutation(monkeypatch):
+    firmware, _actions = security_ca()
+    firmware.resources["/redfish/v1/Managers/1"]["Oem"]["Another"] = {
+        "SecurityService": {"@odata.id": "/redfish/v1/Managers/1/OtherSecurityService"}}
+    firmware.resources["/redfish/v1/Managers/1/OtherSecurityService"] = {"HttpsTransferCertVerification": True}
+    with pytest.raises(ControllerError, match="unambiguous discovered security service"):
+        connect(monkeypatch, firmware).insert(IMAGE, trust="import-certificate", certificate=SERVER + ISSUER)
+    assert not writes(firmware)
+
+
+def test_security_service_module_returns_the_proved_slot(monkeypatch):
+    firmware, _actions = security_ca()
+    client = connect(monkeypatch, firmware)
+    monkeypatch.setattr(redfish_control, "Client", lambda *args, **kwargs: client)
+    ending = Module({"endpoint": firmware.endpoint, "user": "operator", "password": PASSWORD, "verify": True,
+                     "ca_data": "", "operation": "insert", "image": IMAGE, "target": "Cd", "attempts": 3,
+                     "trust": "import-certificate", "certificate": SERVER + ISSUER,
+                     "restore_verification": False, "remove_certificate": False, "private_delivery": True})
+    monkeypatch.setattr(redfish_boot, "AnsibleModule", ending.build)
+    redfish_boot.main()
+    assert ending.ended[0] == "exit" and ending.ended[1]["certificate_slot"] == 5
+
+
+def test_restore_preserves_a_privilege_message_after_a_generic_first_message(monkeypatch):
+    firmware = emulator()
+    firmware.image = IMAGE
+    messages = [{"MessageId": "Base.1.0.GeneralError"}, {"MessageId": "Protocol.1.0.PropertyModificationNeedPrivilege"}]
+    body = {"error": {"@Message.ExtendedInfo": messages}}
+    firmware.script("PATCH", firmware.system + DEVICE, (400, body, {}))
+    with pytest.raises(ControllerError, match="privilege"):
+        connect(monkeypatch, firmware).eject(restore_verification=True)

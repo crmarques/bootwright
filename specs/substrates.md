@@ -848,7 +848,9 @@ The BMC-to-artifact-server leg follows `bmc.virtualMedia.tls.trust`, which the
 realized target freezes. `import-certificate`, the default, adds the artifact
 server's certificate to the virtual-media device's certificate collection
 unless that certificate is already there and turns the device's certificate
-verification on, before the consumer's insert. `disable-verification` turns
+verification on, before the consumer's insert. Without that collection, the
+qualified SecurityService path below imports the server chain's terminal
+issuer. `disable-verification` turns
 that verification off before the insert when it reads on. `established` changes
 nothing on the device. A manager the system names that links a security
 service publishing `HttpsTransferCertVerification` publishes the switch that
@@ -864,7 +866,8 @@ does, `established` and `import-certificate` first read, and write nothing,
 that deciding setting, which must read `true`. Anything else refuses the insert
 before any write, naming the setting, an unreadable security service included
 because it never supplies proof, and the operator imports the artifact server's
-CA into the controller and turns its verification on out of band. Private
+CA into the controller out of band when automatic import is unavailable, and
+turns its verification on out of band. Private
 material is never inserted under `disable-verification`. The B447 tests
 `test_private_delivery_accepts_the_manager_switch_with_a_false_readonly_device`,
 `test_private_delivery_refuses_a_manager_that_does_not_verify`,
@@ -888,6 +891,26 @@ means that no per-boot setting is made, not that the fetch is verified: the
 emulator is configured to fetch media without verifying the server
 ([container clusters](container-clusters.md#boot-media) records the one
 exception this allows).
+
+**SecurityService media trust.** A manager-discovered security service can
+provide the qualified remote-HTTPS CA actions. Bootwright requires the full
+serving certificate chain, one unambiguous service, enabled transfer
+verification, a complete readable slot inventory and advertised action
+parameter metadata. The published FileTransfer text-import operation selects
+an unused slot without an authored slot ID; Bootwright never uses its
+replacement operation. An existing different FileTransfer authority, unknown
+inventory, changed slots or unsupported metadata refuses before a trust write.
+After import the exact authority's SHA256 must read back in one FileTransfer
+slot before media insertion. Eject removes only a slot proved to contain that
+authority and verifies its absence; event-subscription slots are untouched.
+The module returns the proved slot identity as bounded evidence. The account
+needs the controller's security-configuration privilege. HTTP 400 responses
+whose registered message identifies a missing privilege remain privilege
+refusals during import, deletion and verification restoration. No trust mode
+falls back to another. The qualified wire contract is the public
+[iBMC API description](https://www.xfusion.com/wp-content/uploads/2025/11/Server-V6-or-Later-iBMC-Redfish-API-Description-.pdf),
+sections 2.2.46, 2.2.49 and 2.2.50; physical behavior remains
+[B305](milestones/m1.md#b305)'s acceptance gate.
 
 The identity operation proves what a machine holds without trusting the
 network, and each substrate supplies the channel it has. Two exist.

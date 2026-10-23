@@ -37,7 +37,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-from ansible_collections.bootwright.core.plugins.module_utils import redfish_discovery
+from ansible_collections.bootwright.core.plugins.module_utils import redfish_discovery, redfish_remote_ca
 
 MAX_BODY = 1 << 20
 REQUEST_TIMEOUT = 30
@@ -188,6 +188,7 @@ class Client:
         self.root = redfish_discovery.service_root(self.endpoint) if self.home else ""
         self.sleep = time.sleep
         self.last_power, self.last_image = "", ""
+        self.last_trust_slot = None
         self._system = self._media = self._member = None
         self._managers = []
 
@@ -659,12 +660,12 @@ class Client:
             raise ControllerError(doing + ": the server certificate given is not PEM")
         collection, present = self._certificates(member, doing)
         if not collection:
-            raise ControllerError("%s %s: no Certificates; %s" % (doing, _shown(member), NO_IMPORT))
+            return self._remote_trust(certificate)
         written = False
         if leaf[1] not in [der for _url, der in present]:
             status, body, _headers = self.fetch(
                 collection, "POST", {"CertificateString": leaf[0], "CertificateType": "PEM"}, doing=doing)
-            if status in PRIVILEGE:
+            if redfish_remote_ca.denied(status, body):
                 raise _privilege(doing, collection, status, body)
             if status != 0 and not 200 <= status < 300 and present:
                 raise ControllerError("%s: HTTP %d; %s" % (doing, status, STALE))
@@ -694,17 +695,25 @@ class Client:
         leaf = _leaf(certificate)
         if leaf is None:
             raise ControllerError(doing + ": the server certificate given is not PEM")
-        _collection, present = self._certificates(member, doing)
+        collection, present = self._certificates(member, doing)
+        if not collection:
+            return self._remote_trust(certificate, remove=True)
         for url, der in present:
             if der != leaf[1]:
                 continue
             status, body, _headers = self.fetch(url, "DELETE", doing=doing)
-            if status in PRIVILEGE:
+            if redfish_remote_ca.denied(status, body):
                 raise _privilege(doing, url, status, body)
             if status != 404 and not 200 <= status < 300:
                 raise _failure(doing, url, status, body)
             return True
         return False
+
+    def _remote_trust(self, certificate, remove=False):
+        try:
+            return redfish_remote_ca.RemoteCA(self).apply(certificate, remove=remove)
+        except redfish_remote_ca.TrustError as error:
+            raise ControllerError(str(error)) from None
 
     def _certificates(self, member, doing):
         """The certificate collection a device links and each member's URL and
@@ -755,7 +764,7 @@ class Client:
             member, "PATCH", payload, headers={"If-Match": tag} if isinstance(tag, str) and tag else {}, doing=doing)
         if status == 412:
             status, body, _headers = self.fetch(member, "PATCH", payload, headers={"If-Match": "*"}, doing=doing)
-        if status in PRIVILEGE:
+        if redfish_remote_ca.denied(status, body):
             raise _privilege(doing, member, status, body)
         if status in READ_ONLY and not remedy:
             return False

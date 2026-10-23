@@ -319,6 +319,17 @@ def _link(value):
     return reference if isinstance(reference, str) and reference else ""
 
 
+def security_services(manager):
+    """Every declared security service, preserving ambiguity before mutation."""
+    if not isinstance(manager, dict):
+        return []
+    links = [_link(manager.get("SecurityService"))]
+    oem = manager.get("Oem")
+    if isinstance(oem, dict):
+        links.extend(_link(value.get("SecurityService")) for value in oem.values() if isinstance(value, dict))
+    return sorted(set(link for link in links if link))
+
+
 def boot_selected(system, target):
     """Whether a system reports the one-time boot device that was selected.
 
