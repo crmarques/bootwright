@@ -1573,12 +1573,14 @@ def test_an_image_payload_bound_to_another_image_refuses_runtime_profile_and_sel
     assert worker.selection.applied == set() and markers.records == {}
 
 
-def test_the_image_source_reads_the_payload_only_after_the_profile_binds_the_held_image(cluster_request, tmp_path):
+def test_the_image_source_reads_the_payload_only_after_the_profile_binds_the_held_image(cluster_request, tmp_path, monkeypatch):
+    monkeypatch.setattr(specs.zipfile.time, "localtime", lambda *unused: (2026, 1, 2, 3, 4, 6, 0, 0, -1))
     worker, proofs = claiming(cluster_request, Unclaimed(tmp_path / cluster_request["fsid"]), tmp_path, OLD, OLD, "disabled")
     durable = worker.host_preparation()
     order = []
     worker.runtime_profile = lambda: order.append("profile")
     worker.host_preparation = lambda: order.append("preparation") or durable
+    monkeypatch.setattr(specs.zipfile.time, "localtime", lambda *unused: (2027, 2, 3, 4, 5, 8, 0, 0, -1))
     assert ceph_native.Worker.image_payload(worker) == specs.synthesized(OLD) and order == ["profile", "preparation"]
     worker.runtime_profile = lambda: ceph_native.require(False, "runtime-profile")
     with pytest.raises(ceph_native.Refusal, match="^runtime-profile$"):

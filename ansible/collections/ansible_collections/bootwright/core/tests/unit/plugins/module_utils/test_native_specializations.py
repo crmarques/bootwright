@@ -52,13 +52,16 @@ def licensed(names):
 
 def zipapp(names=(), override=None, main=None, members=None):
     buffer = io.BytesIO()
+    entries = []
+    if main is not False:
+        entries.append(("__main__.py", parser_source(names) if main is None else main))
+    if override is not None:
+        entries.append((ns.OVERRIDES, override))
+    entries.extend((members or {}).items())
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        if main is not False:
-            archive.writestr("__main__.py", parser_source(names) if main is None else main)
-        if override is not None:
-            archive.writestr(ns.OVERRIDES, override)
-        for name, text in (members or {}).items():
-            archive.writestr(name, text)
+        for name, text in entries:
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            archive.writestr(info, text, compress_type=zipfile.ZIP_DEFLATED)
     return buffer.getvalue()
 
 
@@ -192,6 +195,14 @@ def synthesized(build):
     forms = override["ibmBuild"]
     assert len(forms) == 1, "a new IBM_BUILD form needs its own synthesis and a reviewed detector expectation"
     return zipapp(value["declared"], OVERRIDE_FORMS[forms[0]], main=main)
+
+
+@pytest.mark.parametrize("build", sorted(BUILDS))
+def test_synthesized_artifacts_keep_identical_bytes_across_zip_clock_values(build, monkeypatch):
+    monkeypatch.setattr(zipfile.time, "localtime", lambda *unused: (2026, 1, 2, 3, 4, 6, 0, 0, -1))
+    first = synthesized(build)
+    monkeypatch.setattr(zipfile.time, "localtime", lambda *unused: (2027, 2, 3, 4, 5, 8, 0, 0, -1))
+    assert synthesized(build) == first
 
 
 @pytest.mark.parametrize("build", sorted(BUILDS))
