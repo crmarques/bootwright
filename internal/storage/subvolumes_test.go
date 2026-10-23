@@ -35,7 +35,7 @@ func TestSubvolumeLayoutMustBeAttached(t *testing.T) {
 	if len(role) == 0 || role[0].Message != "referenced pool does not have the consumer's required role" {
 		t.Fatalf("rbd layout pool: %+v", role)
 	}
-	onlyIssue(t, admitted(catalog, subvolumeObject("docs", "poolLayoutRef", "remote-data")), "$.spec.poolLayoutRef", "referenced storage child belongs to a different cluster", "correct $.spec.poolLayoutRef to satisfy this requirement: referenced storage child belongs to a different cluster")
+	onlyIssue(t, admitted(catalog, subvolumeObject("docs", "poolLayoutRef", "remote-data")), "$.spec.poolLayoutRef", "referenced storage child belongs to a different cluster", "select a referenced resource whose spec.clusterRef matches this resource")
 }
 
 func TestSubvolumeNameBound(t *testing.T) {
@@ -50,7 +50,7 @@ func TestSubvolumeNameBound(t *testing.T) {
 func TestSubvolumeFilesystemOfAnotherClusterRefuses(t *testing.T) {
 	catalog := subvolumeCatalog(t)
 	candidate := object(api.StorageSubvolume, "docs", m("clusterRef", "storage", "filesystemRef", "remote", "group", "csi"))
-	onlyIssue(t, admitted(catalog, candidate), "$.spec.filesystemRef", "referenced storage child belongs to a different cluster", "correct $.spec.filesystemRef to satisfy this requirement: referenced storage child belongs to a different cluster")
+	onlyIssue(t, admitted(catalog, candidate), "$.spec.filesystemRef", "referenced storage child belongs to a different cluster", "select a referenced resource whose spec.clusterRef matches this resource")
 }
 
 func TestSubvolumeModeIsLexicallyChecked(t *testing.T) {

@@ -42,7 +42,7 @@ func (a *admission) clusterServices(ceph api.Value) {
 	for _, left := range public {
 		for _, right := range private {
 			if left.Overlaps(right) {
-				a.invalid("$.spec.ceph.networks", "public and replication networks must be disjoint")
+				a.invalid("$.spec.ceph.networks", "public and replication networks must be disjoint", "change spec.ceph.networks so public and replication CIDRs do not overlap")
 			}
 		}
 	}
@@ -61,7 +61,7 @@ func (a *admission) clusterServices(ceph api.Value) {
 		} else if module == "mirroring" {
 			a.issue("api.invariant", indexed("$.spec.ceph.mgrModules", i), "manager module mirroring serves CephFS snapshot mirroring, which Bootwright does not realize", "remove mirroring from spec.ceph.mgrModules")
 		} else if !slices.Contains([]string{"cephadm", "rbd_support"}, module) {
-			a.invalid("$.spec.ceph.mgrModules", "manager module requires its qualified service owner")
+			a.invalid("$.spec.ceph.mgrModules", "manager module requires its qualified service owner", "remove the module from spec.ceph.mgrModules; declare its service through spec.ceph.services when that service is implemented")
 		}
 	}
 	a.nativeServices(ceph, false)
@@ -77,7 +77,7 @@ func (a *admission) prefixes(values api.Value, field string) []netip.Prefix {
 		prefix = prefix.Masked()
 		for _, previous := range prefixes {
 			if previous.Overlaps(prefix) {
-				a.invalid(indexed(field, i), "declared network ranges must not overlap")
+				a.invalid(indexed(field, i), "declared network ranges must not overlap", "remove duplicate ranges or replace overlapping CIDRs with disjoint ranges")
 			}
 		}
 		prefixes = append(prefixes, prefix)
@@ -121,7 +121,7 @@ func (a *admission) serviceNetworks(cluster api.Object, values api.Value, field 
 			}
 		}
 		if len(declared) != 0 && !covered {
-			a.invalid(indexed(field, i), "service network must be reachable through the cluster's declared public networks")
+			a.invalid(indexed(field, i), "service network must be reachable through the cluster's declared public networks", "select service networks within spec.ceph.networks.publicCIDRs or declare the required public network")
 		}
 	}
 }
@@ -131,7 +131,13 @@ func (a *admission) cephEntitlement() {
 	product := textOf(spec, "type")
 	if product == "redhat-ceph" {
 		for _, issue := range managedos.ValidateRHSM(a.object, true) {
-			a.issue(issue.Code, issue.Field, issue.Message, issue.Remediation)
+			remedy := "set " + issue.Field + " for managed RHSM registration"
+			if textOf(spec, "rhsm", "management") == "external" {
+				remedy = "remove " + issue.Field + " when $.spec.rhsm.management is external"
+			} else if issue.Field == "$.spec.rhsm" {
+				remedy = "set $.spec.rhsm.management to external for pre-registered hosts, or set $.spec.rhsm.organizationRef and $.spec.rhsm.activationKeyRef for managed registration"
+			}
+			a.issue(issue.Code, issue.Field, issue.Message, remedy)
 		}
 	}
 	a.required(spec, "registry", "$.spec")

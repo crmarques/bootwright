@@ -264,11 +264,11 @@ func (a *admission) smbSecretLeaves(secrets api.Value, rt string) {
 		leaf := indexed("$.spec.secrets", j) + ".path"
 		valid := validSecretPointer(pointer)
 		if !valid {
-			a.invalid(leaf, "secret binding path must be a non-root exact JSON Pointer")
+			a.invalid(leaf, "secret binding path must be a non-root exact JSON Pointer", "set path to the exact non-root JSON Pointer of a supported credential leaf")
 		}
 		for _, earlier := range paths {
 			if earlier == pointer || strings.HasPrefix(earlier, pointer+"/") || strings.HasPrefix(pointer, earlier+"/") {
-				a.invalid(leaf, "secret binding paths cannot duplicate or overlap")
+				a.invalid(leaf, "secret binding paths cannot duplicate or overlap", "remove duplicate paths and keep only one binding for each overlapping ancestor and descendant pair")
 			}
 		}
 		paths = append(paths, pointer)

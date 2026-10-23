@@ -150,7 +150,7 @@ func (a *admission) nfsExportClients(clients api.Value) {
 			case canonical == "":
 				a.issue("api.value", indexed(field+".addresses", j), "NFS client must be an IP or CIDR", "use a literal IP address or CIDR")
 			case seen[canonical]:
-				a.invalid(field+".addresses", "NFS clients must be unique after canonicalization")
+				a.invalid(field+".addresses", "NFS clients must be unique after canonicalization", "remove duplicate client addresses, including equivalent address and CIDR spellings")
 			}
 			seen[canonical] = canonical != ""
 		}

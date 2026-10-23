@@ -188,10 +188,10 @@ func (a *admission) replication(cluster, policy api.Object) {
 	}
 	size, minimum = effectiveReplicas(spec.Get("replicated"), size, minimum)
 	if minimum.Cmp(size) > 0 && !(positive(spec.Get("replicated", "size")) && positive(spec.Get("replicated", "minSize"))) {
-		a.invalid("$.spec.replicated", "effective minimum replicas must not exceed effective replica size")
+		a.invalid("$.spec.replicated", "effective minimum replicas must not exceed effective replica size", "lower spec.replicated.minSize or raise spec.replicated.size, including inherited placement-policy values")
 	}
 	if cluster.Spec().Has("ceph", "topology", "stretch") && (size.Cmp(big.NewInt(4)) != 0 || minimum.Cmp(big.NewInt(2)) != 0) {
-		a.invalid("$.spec.replicated", "stretch fixes replicated protection at size four and minimum two")
+		a.invalid("$.spec.replicated", "stretch fixes replicated protection at size four and minimum two", "set spec.replicated.size to 4 and spec.replicated.minSize to 2, including inherited policy values")
 	}
 	domain := textOf(spec, "failureDomain")
 	if domain == "" {
@@ -248,7 +248,7 @@ func (a *admission) pool(cluster api.Object) {
 		a.issue("api.invariant", "$.spec.type", "CephFS metadata pools require replicated protection", "set type: replicated for this cephfs-metadata pool")
 	}
 	if spec.Has("mirroring") && role != "rbd" {
-		a.invalid("$.spec.mirroring", "pool mirroring requires the rbd role")
+		a.invalid("$.spec.mirroring", "pool mirroring requires the rbd role", "set spec.role to rbd or remove spec.mirroring")
 	}
 	compression := spec.Get("compression")
 	if compression.Len() > 0 && !compression.Has("mode") {
@@ -268,7 +268,7 @@ func (a *admission) erasure(cluster api.Object) {
 	spec := a.object.Spec()
 	a.required(spec, "erasure", "$.spec")
 	if cluster.Spec().Has("ceph", "topology", "stretch") {
-		a.invalid("$.spec.type", "stretch does not support erasure pools")
+		a.invalid("$.spec.type", "stretch does not support erasure pools", "set spec.type to replicated for a stretch cluster")
 	}
 	if role := textOf(spec, "role"); role != "" && !slices.Contains([]string{"rbd", "cephfs-data", "rgw"}, role) {
 		a.issue("api.invariant", "$.spec.role", "pool role does not permit erasure protection", "use role rbd, cephfs-data or rgw for an erasure-coded pool, or set type: replicated")
@@ -297,7 +297,7 @@ func (a *admission) erasure(cluster api.Object) {
 	a.erasureProfile(cluster, erasure)
 	for _, key := range []string{"dataChunks", "codingChunks", "plugin", "technique", "crushDeviceClass", "crushRoot", "stripeUnit", "failureDomain", "k", "m", "crush-device-class", "crush-root", "crush-failure-domain", "stripe_unit"} {
 		if erasure.Get("parameters").Has(key) {
-			a.invalid("$.spec.erasure.parameters", "erasure parameters cannot repeat typed or derived fields")
+			a.invalid("$.spec.erasure.parameters", "erasure parameters cannot repeat typed or derived fields", "remove typed or derived options from spec.erasure.parameters and use the corresponding typed fields")
 		}
 	}
 }
@@ -335,7 +335,7 @@ func poolRefName(value api.Value) string {
 }
 func (a *admission) poolRole(name, field, role string, cluster api.Object) {
 	if pool, ok := a.sameOwner(api.StoragePool, name, field, cluster); ok && textOf(pool.Spec(), "role") != role {
-		a.invalid(field, "referenced pool does not have the consumer's required role")
+		a.invalid(field, "referenced pool does not have the consumer's required role", "set "+field+" to a StoragePool with spec.role "+role)
 	}
 }
 func (a *admission) export(cluster api.Object, managed bool) {

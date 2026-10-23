@@ -22,13 +22,13 @@ func (a *admission) nativeSelector(selector api.Value, field string, data, parti
 	paths, all := selector.Has("paths"), selector.Get("all").Bool()
 	filters := selector.Has("model") || selector.Has("vendor") || selector.Has("rotational") || selector.Has("size")
 	if (paths && all) || ((paths || all) && filters) {
-		a.invalid(field, "native paths, all-device selection and filters are mutually exclusive")
+		a.invalid(field, "native paths, all-device selection and filters are mutually exclusive", "keep one selector form: paths, all: true, or device filters")
 	}
 	if all && !data {
-		a.invalid(field+".all", "all-device selection is valid only for data devices")
+		a.invalid(field+".all", "all-device selection is valid only for data devices", "remove all: true from DB/WAL selectors and select explicit paths or filters")
 	}
 	if !partial && len(nativeDevicePaths(selector)) == 0 && !all && !filters {
-		a.invalid(field, "native device selector must select paths, all data devices or a filter")
+		a.invalid(field, "native device selector must select paths, all data devices or a filter", "add paths, set all to true for data devices, or add a device filter")
 	}
 	if selector.Has("size") {
 		a.lexical(selector.Get("size"), field+".size", validDeviceRange(textOf(selector, "size")))
@@ -36,10 +36,10 @@ func (a *admission) nativeSelector(selector api.Value, field string, data, parti
 	seen := map[string]bool{}
 	for _, device := range nativeDevicePaths(selector) {
 		if !cleanDevice(device) {
-			a.invalid(field+".paths", "native device paths must be clean absolute descendants of /dev")
+			a.invalid(field+".paths", "native device paths must be clean absolute descendants of /dev", "replace paths with absolute paths beneath /dev without dot or parent components")
 		}
 		if seen[device] {
-			a.invalid(field+".paths", "native device path identities must be unique")
+			a.invalid(field+".paths", "native device path identities must be unique", "remove duplicate paths from this device selector")
 		}
 		seen[device] = true
 	}
@@ -63,7 +63,7 @@ func (a *admission) nativeOSD(spec api.Value, field string, nodes []api.Value, p
 			root := textOf(machine.Spec(), "os", "install", "rootDeviceHints", "deviceName")
 			for _, device := range nativeDevicePaths(selector) {
 				if root != "" && device == root {
-					a.invalid(field+"."+key, "explicit OSD allocation cannot use the Machine root device")
+					a.invalid(field+"."+key, "explicit OSD allocation cannot use the Machine root device", "remove the Machine root device from the OSD selector and select a dedicated data device")
 				}
 			}
 		}
@@ -71,12 +71,12 @@ func (a *admission) nativeOSD(spec api.Value, field string, nodes []api.Value, p
 	for _, key := range []string{"db_devices", "wal_devices"} {
 		for _, device := range nativeDevicePaths(spec.Get(key)) {
 			if slices.Contains(nativeDevicePaths(spec.Get("data_devices")), device) {
-				a.invalid(field+"."+key, "OSD data allocation cannot overlap its DB or WAL devices")
+				a.invalid(field+"."+key, "OSD data allocation cannot overlap its DB or WAL devices", "select disjoint data_devices and db_devices/wal_devices paths")
 			}
 		}
 	}
 	if spec.Get("tpm2").Bool() && (!partial || spec.Has("encrypted")) && !spec.Get("encrypted").Bool() {
-		a.invalid(field+".tpm2", "TPM2 OSD unlock requires encryption")
+		a.invalid(field+".tpm2", "TPM2 OSD unlock requires encryption", "set encrypted to true or remove tpm2")
 	}
 	if spec.Get("tpm2").Bool() && !partial {
 		for _, node := range nodes {
@@ -91,7 +91,7 @@ func (a *admission) nativeOSD(spec api.Value, field string, nodes []api.Value, p
 			for _, variant := range []string{"libvirt", "vsphere", "kubevirt"} {
 				for _, profile := range provider.Spec().Get(variant, "machineProfiles").Items() {
 					if textOf(profile, "name") == textOf(machine.Spec(), "substrate", "profileRef") && !profile.Has("tpm") {
-						a.invalid(field+".tpm2", "every selected virtual Machine profile must declare TPM support")
+						a.invalid(field+".tpm2", "every selected virtual Machine profile must declare TPM support", "enable TPM support in every selected virtual Machine profile or remove tpm2")
 					}
 				}
 			}
@@ -126,7 +126,7 @@ func (a *admission) nativeAllocationConflicts(ceph api.Value) {
 			for _, device := range nativeDevicePaths(service.Get("spec", "data_devices")) {
 				key := name + "\x00" + device
 				if owned[key] {
-					a.invalid(indexed("$.spec.ceph.services", i)+".spec.data_devices", "multiple native OSD services cannot own the same host data device")
+					a.invalid(indexed("$.spec.ceph.services", i)+".spec.data_devices", "multiple native OSD services cannot own the same host data device", "remove the overlapping data device from one OSD service or select disjoint hosts")
 				}
 				owned[key] = true
 			}

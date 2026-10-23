@@ -19,7 +19,7 @@ func ValidatePartial(object api.Object, catalog api.Catalog) []api.Issue {
 
 func (a *admission) orderedPositive(value api.Value, high, low, field string) {
 	if positive(value.Get(high)) && positive(value.Get(low)) && numeric(value.Get(low)).Cmp(numeric(value.Get(high))) > 0 {
-		a.invalid(field, "positive minimum must not exceed maximum")
+		a.invalid(field, "positive minimum must not exceed maximum", "lower "+low+" or raise "+high+" in "+field+" so "+low+" does not exceed "+high)
 	}
 }
 
@@ -29,7 +29,7 @@ func (a *admission) intrinsic() {
 		if textOf(spec, "type") == "ibm-storage-ceph" {
 			a.forbid(spec, "$.spec", "rhsm")
 			if (!a.partial || spec.Get("license", "accept").Type() == api.Boolean) && !spec.Get("license", "accept").Bool() {
-				a.invalid("$.spec.license.accept", "IBM storage entitlement requires explicit license acceptance")
+				a.invalid("$.spec.license.accept", "IBM storage entitlement requires explicit license acceptance", "set $.spec.license.accept to true on this ibm-storage-ceph Entitlement after accepting its license")
 			}
 		} else if textOf(spec, "rhsm", "management") == "external" {
 			a.forbid(spec.Get("rhsm"), "$.spec.rhsm", "organizationRef", "activationKeyRef", "connectToInsights", "satellite")
@@ -40,17 +40,17 @@ func (a *admission) intrinsic() {
 	case api.StoragePlacementPolicy, api.StoragePool:
 		a.orderedPositive(spec.Get("replicated"), "size", "minSize", "$.spec.replicated")
 		if spec.Has("placementPolicyRef") && (positive(spec.Get("replicated", "size")) || positive(spec.Get("replicated", "minSize"))) {
-			a.invalid("$.spec.replicated", "placement policy owns non-zero replicated protection values")
+			a.invalid("$.spec.replicated", "placement policy owns non-zero replicated protection values", "remove non-zero spec.replicated values or remove spec.placementPolicyRef to author protection here")
 		}
 		if textOf(spec, "type") == "erasure" && (positive(spec.Get("replicated", "size")) || positive(spec.Get("replicated", "minSize"))) {
-			a.invalid("$.spec.replicated", "erasure protection forbids non-zero replicated values")
+			a.invalid("$.spec.replicated", "erasure protection forbids non-zero replicated values", "remove non-zero spec.replicated values when spec.type is erasure")
 		}
 		if floatPositive(spec.Get("autoscale", "targetSizeRatio")) && spec.Has("autoscale", "targetSizeBytes") {
-			a.invalid("$.spec.autoscale", "autoscale ratio and byte targets are mutually exclusive")
+			a.invalid("$.spec.autoscale", "autoscale ratio and byte targets are mutually exclusive", "keep either spec.autoscale.targetSizeRatio or spec.autoscale.targetSizeBytes, removing the other")
 		}
 		pg := spec.Get("autoscale")
 		if pg.Get("pgNumMin").Type() == api.Integer && pg.Get("pgNumMax").Type() == api.Integer && numeric(pg.Get("pgNumMin")).Cmp(numeric(pg.Get("pgNumMax"))) > 0 {
-			a.invalid("$.spec.autoscale", "minimum PG count must not exceed maximum PG count")
+			a.invalid("$.spec.autoscale", "minimum PG count must not exceed maximum PG count", "lower spec.autoscale.pgNumMin or raise spec.autoscale.pgNumMax so the minimum does not exceed the maximum")
 		}
 		a.orderedPositive(spec.Get("compression"), "maxBlobSize", "minBlobSize", "$.spec.compression")
 	case api.StorageCluster:
@@ -84,7 +84,7 @@ func (a *admission) intrinsic() {
 		a.nvmeofSubsystemIntrinsic()
 	case api.StorageExport:
 		if spec.Has("dataFoundation") && spec.Has("externalDetails") {
-			a.invalid("$.spec", "storage export ownership modes are mutually exclusive")
+			a.invalid("$.spec", "storage export ownership modes are mutually exclusive", "keep either spec.dataFoundation or spec.externalDetails, removing the other")
 		}
 	}
 }

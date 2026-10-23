@@ -212,11 +212,11 @@ func TestSMBClusterPlacementGrammarRefusesAFragment(t *testing.T) {
 	field := "$.spec.native.placement.host_pattern"
 	message := "native host pattern must be a valid hostname glob"
 	full, partial := smbBoth(t, catalog, "smb-files", smbNative("placement", m("host_pattern", "[", "count", 1)))
-	exactIssue(t, full, "api.invariant", field, message, "correct "+field+" to satisfy this requirement: "+message)
+	exactIssue(t, full, "api.invariant", field, message, "set host_pattern to a valid hostname glob, such as node-*")
 	if len(partial) != 1 {
 		t.Fatalf("partial: %#v", partial)
 	}
-	exactIssue(t, partial, "api.invariant", field, message, "correct "+field+" to satisfy this requirement: "+message)
+	exactIssue(t, partial, "api.invariant", field, message, "set host_pattern to a valid hostname glob, such as node-*")
 	exclusive := "native hosts, label and host_pattern selectors are mutually exclusive"
 	full, partial = smbBoth(t, catalog, "smb-files", smbNative("placement", m("hosts", api.StringList("node-1.storage.example.test"), "label", "storage", "count", 1)))
 	exactIssue(t, full, "api.invariant", "$.spec.native.placement", exclusive, "")

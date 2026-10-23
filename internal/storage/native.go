@@ -72,23 +72,23 @@ func (a *admission) nativePlacement(cluster api.Object, placement api.Value, fie
 		}
 	}
 	if modes > 1 {
-		a.invalid(field, "native hosts, label and host_pattern selectors are mutually exclusive")
+		a.invalid(field, "native hosts, label and host_pattern selectors are mutually exclusive", "keep exactly one of hosts, label or host_pattern in this placement")
 	}
 	if placement.Has("count") && placement.Has("count_per_host") {
-		a.invalid(field, "native count and count_per_host are mutually exclusive")
+		a.invalid(field, "native count and count_per_host are mutually exclusive", "keep either count or count_per_host in this placement, removing the other")
 	}
 	if placement.Has("count_per_host") && len(hosts) == 0 && !label.Present() && !pattern.Present() {
-		a.invalid(field+".count_per_host", "native count_per_host must be combined with label or hosts or host_pattern")
+		a.invalid(field+".count_per_host", "native count_per_host must be combined with label or hosts or host_pattern", "add hosts, label or host_pattern to this placement, or remove count_per_host")
 	}
 	if placement.Has("count_per_host") && slices.ContainsFunc(hosts, func(host api.Value) bool {
 		_, network, daemon := hostToken(host)
 		return network != "" || daemon != ""
 	}) {
-		a.invalid(field+".count_per_host", "native count_per_host cannot be combined with explicit placement names or networks")
+		a.invalid(field+".count_per_host", "native count_per_host cannot be combined with explicit placement names or networks", "remove host-token networks and daemon names, or replace count_per_host with count")
 	}
 	for _, key := range []string{"count", "count_per_host"} {
 		if placement.Has(key) && !positive(placement.Get(key)) {
-			a.invalid(field+"."+key, "native placement counts must be positive integers")
+			a.invalid(field+"."+key, "native placement counts must be positive integers", "set this placement count to an integer of at least 1")
 		}
 	}
 	var match func(string) bool
@@ -100,19 +100,19 @@ func (a *admission) nativePlacement(cluster api.Object, placement api.Value, fie
 		if kind == "regex" {
 			compiled, err := regexp.Compile("^(?:" + value + ")")
 			if err != nil {
-				a.invalid(field+".host_pattern", "native host pattern must be a valid supported regular expression")
+				a.invalid(field+".host_pattern", "native host pattern must be a valid supported regular expression", "set host_pattern.pattern to a valid regular expression supported by Go regexp")
 			} else {
 				match = compiled.MatchString
 			}
 		} else if kind == "fnmatch" {
 			glob := nativeGlob(value)
 			if _, err := path.Match(glob, ""); err != nil {
-				a.invalid(field+".host_pattern", "native host pattern must be a valid hostname glob")
+				a.invalid(field+".host_pattern", "native host pattern must be a valid hostname glob", "set host_pattern to a valid hostname glob, such as node-*")
 			} else {
 				match = func(host string) bool { ok, _ := path.Match(glob, host); return ok }
 			}
 		} else {
-			a.invalid(field+".host_pattern", "native host pattern type is unsupported")
+			a.invalid(field+".host_pattern", "native host pattern type is unsupported", "set host_pattern.pattern_type to fnmatch or regex")
 		}
 	}
 	if partial {
@@ -126,15 +126,15 @@ func (a *admission) nativePlacement(cluster api.Object, placement api.Value, fie
 		name, network, daemon := hostToken(host)
 		node, ok := nativeNode(cluster, name)
 		if !ok {
-			a.invalid(indexed(field+".hosts", i), "native hostname must resolve to a registered storage-node FQDN")
+			a.invalid(indexed(field+".hosts", i), "native hostname must resolve to a registered storage-node FQDN", "replace the host token with the FQDN of a node declared in spec.ceph.topology.nodes")
 			continue
 		}
 		if wanted[name] {
-			a.invalid(field+".hosts", "native placement host identities must be unique")
+			a.invalid(field+".hosts", "native placement host identities must be unique", "remove repeated hosts from this placement")
 		}
 		wanted[name] = true
 		if daemon != "" && !nativeID.MatchString(daemon) {
-			a.invalid(indexed(field+".hosts", i), "native daemon identifier has an unsupported form")
+			a.invalid(indexed(field+".hosts", i), "native daemon identifier has an unsupported form", "remove the explicit daemon identifier or use an alphanumeric first character followed by letters, digits, underscores, dots or hyphens")
 		}
 		if network != "" {
 			a.nativeHostNetwork(node, network, indexed(field+".hosts", i))
@@ -155,10 +155,10 @@ func (a *admission) nativePlacement(cluster api.Object, placement api.Value, fie
 		selected = append(selected, node)
 	}
 	if len(selected) == 0 {
-		a.invalid(field, "native placement must select at least one declared storage host")
+		a.invalid(field, "native placement must select at least one declared storage host", "change hosts, label or host_pattern to select at least one node in spec.ceph.topology.nodes")
 	}
 	if count := placement.Get("count"); count.Present() && numeric(count).Cmp(big.NewInt(int64(len(selected)))) > 0 {
-		a.invalid(field+".count", "native placement count exceeds the eligible declared host set")
+		a.invalid(field+".count", "native placement count exceeds the eligible declared host set", "lower count to the number of selected hosts or expand the placement selector")
 	}
 	return selected
 }
@@ -188,7 +188,7 @@ func (a *admission) nativeHostNetwork(node api.Value, network, field string) {
 	ip, ipErr := netip.ParseAddr(network)
 	prefix, prefixErr := netip.ParsePrefix(network)
 	if ipErr != nil && prefixErr != nil {
-		a.invalid(field, "native host network must be a proved IP address or CIDR")
+		a.invalid(field, "native host network must be a proved IP address or CIDR", "set the host token network to an IP address or CIDR proved by the bound Machine")
 		return
 	}
 	if len(a.catalog.Objects()) == 0 {
@@ -204,7 +204,7 @@ func (a *admission) nativeHostNetwork(node api.Value, network, field string) {
 			return
 		}
 	}
-	a.invalid(field, "native host network must agree with the bound Machine address")
+	a.invalid(field, "native host network must agree with the bound Machine address", "replace the host token network with the bound Machine address or a CIDR containing it")
 }
 
 func (a *admission) nativeShape(value api.Value, shape *api.Shape, field string, partial bool) {
@@ -256,7 +256,7 @@ func (a *admission) nativeShape(value api.Value, shape *api.Shape, field string,
 			if shape.Unique {
 				for _, earlier := range value.Items()[:i] {
 					if earlier.Equal(item) {
-						a.invalid(field, "native set members must be unique")
+						a.invalid(field, "native set members must be unique", "remove duplicate entries from this native set")
 					}
 				}
 			}
@@ -272,18 +272,22 @@ func (a *admission) nativeShape(value api.Value, shape *api.Shape, field string,
 			n, ok := new(big.Rat).SetString(value.Text())
 			limit, valid := new(big.Rat).SetString(bound.text)
 			if !ok || !valid || (bound.minimum && n.Cmp(limit) < 0) || (!bound.minimum && n.Cmp(limit) > 0) {
-				a.invalid(field, "native numeric value is outside its supported bounds")
+				relation := "at most "
+				if bound.minimum {
+					relation = "at least "
+				}
+				a.invalid(field, "native numeric value is outside its supported bounds", "set "+field+" to a number "+relation+bound.text)
 			}
 		}
 	case api.String:
 		if shape.MinLength > 0 && value.Text() == "" {
-			a.invalid(field, "native string must not be empty")
+			a.invalid(field, "native string must not be empty", "supply a nonempty string for this native field")
 		}
 		if len(shape.Enums) != 0 && !slices.Contains(shape.Enums, value.Text()) {
-			a.invalid(field, "native value is not a supported option")
+			a.invalid(field, "native value is not a supported option", "set "+field+" to one of: "+strings.Join(shape.Enums, ", "))
 		}
 		if shape.Rule == "device-path" && !cleanDevice(value.Text()) {
-			a.invalid(field, "native device path must be a clean absolute descendant of /dev")
+			a.invalid(field, "native device path must be a clean absolute descendant of /dev", "set this device path to an absolute path beneath /dev without dot or parent components")
 		}
 	}
 }
@@ -378,9 +382,9 @@ func (a *admission) nativeServiceID(service api.Value, row nativeServiceType, fi
 	id := textOf(service, "service_id")
 	switch {
 	case service.Has("service_id") && (row.serviceID == serviceIDForbidden || !nativeID.MatchString(id)):
-		a.invalid(field+".service_id", "native singleton services omit service_id; other IDs use the qualified name grammar")
+		a.invalid(field+".service_id", "native singleton services omit service_id; other IDs use the qualified name grammar", "omit service_id for a singleton service; otherwise start it with a letter or digit and use only letters, digits, underscores, dots or hyphens")
 	case service.Has("service_id") && row.noLeadingDigit && id[0] >= '0' && id[0] <= '9':
-		a.invalid(field+".service_id", row.label+" service IDs cannot start with a numeric digit")
+		a.invalid(field+".service_id", row.label+" service IDs cannot start with a numeric digit", "rename service_id so its first character is not a digit and update references to the service")
 	case !service.Has("service_id") && row.serviceID != serviceIDForbidden && !partial:
 		a.required(service, "service_id", field)
 	case service.Has("service_id") && row.name == "mds" && !partial:
@@ -424,16 +428,16 @@ func (a *admission) nativeServices(ceph api.Value, partial bool) {
 		}
 		name := NativeServiceName(service)
 		if seen[name] {
-			a.invalid(field+".service_id", "qualified native service identities must be unique")
+			a.invalid(field+".service_id", "qualified native service identities must be unique", "rename or remove the duplicate service so each service_type and service_id pair is unique")
 		}
 		seen[name], core[typeName] = true, true
 		a.nativeServiceID(service, row, field, partial)
 		if service.Has("service_name") && textOf(service, "service_name") != name {
-			a.invalid(field+".service_name", "native service_name must agree with its qualified identity")
+			a.invalid(field+".service_name", "native service_name must agree with its qualified identity", "omit service_name or set it to service_type followed by a dot and service_id when present")
 		}
 		for _, key := range []string{"unmanaged", "preview_only"} {
 			if service.Get(key).Bool() {
-				a.invalid(field+"."+key, "owned services must remain managed and executable")
+				a.invalid(field+"."+key, "owned services must remain managed and executable", "remove this flag or set it to false so Bootwright can manage and run the service")
 			}
 		}
 		for _, key := range []string{"extra_container_args", "extra_entrypoint_args", "custom_configs"} {
@@ -453,14 +457,14 @@ func (a *admission) nativeServices(ceph api.Value, partial bool) {
 			for _, location := range service.Get("spec", "crush_locations").Fields() {
 				node, ok := nativeNode(a.object, location.Name)
 				if !partial && (!ok || !slices.ContainsFunc(placed, func(selected api.Value) bool { return textOf(selected, "name") == textOf(node, "name") })) {
-					a.invalid(field+".spec.crush_locations", "monitor CRUSH locations must resolve to eligible registered hosts")
+					a.invalid(field+".spec.crush_locations", "monitor CRUSH locations must resolve to eligible registered hosts", "use only MON-placement hostnames as crush_locations keys")
 				}
 				for _, entry := range location.Value.Strings() {
 					key, value, valid := strings.Cut(entry, "=")
 					if !valid || !nativeID.MatchString(key) || !nativeID.MatchString(value) || key == "host" {
-						a.invalid(field+".spec.crush_locations", "monitor CRUSH location entries must use qualified bucket=value identities")
+						a.invalid(field+".spec.crush_locations", "monitor CRUSH location entries must use qualified bucket=value identities", "remove the host bucket; write each remaining crush_locations entry as a nonempty bucket=value pair using qualified names")
 					} else if !partial && node.Has("location", key) && textOf(node, "location", key) != value {
-						a.invalid(field+".spec.crush_locations", "monitor CRUSH location must agree with declared host topology")
+						a.invalid(field+".spec.crush_locations", "monitor CRUSH location must agree with declared host topology", "set each monitor CRUSH location to the location declared for its topology node")
 					}
 				}
 			}
@@ -470,17 +474,17 @@ func (a *admission) nativeServices(ceph api.Value, partial bool) {
 		}
 		for _, config := range service.Get("config").Fields() {
 			if slices.Contains([]string{"public_network", "cluster_network", "container_image"}, config.Name) {
-				a.invalid(field+".config", "native config cannot repeat a typed or frozen field")
+				a.invalid(field+".config", "native config cannot repeat a typed or frozen field", "remove the duplicate config option and use its typed service field")
 			}
 		}
 		if service.Get("config").Len() != 0 {
-			a.invalid(field+".config", "native service config options need a release-qualified effect and confidential-field record")
+			a.invalid(field+".config", "native service config options need a release-qualified effect and confidential-field record", "remove config options without a qualified effect and confidential-field record")
 		}
 	}
 	if !partial {
 		for _, row := range nativeServiceTypes {
 			if row.core && !core[row.name] {
-				a.invalid("$.spec.ceph.services", "managed data-bearing Ceph requires explicit MON, MGR and OSD services")
+				a.invalid("$.spec.ceph.services", "managed data-bearing Ceph requires explicit MON, MGR and OSD services", "declare mon, mgr and osd entries in spec.ceph.services")
 			}
 		}
 	}
@@ -541,12 +545,12 @@ func (a *admission) nativeBindings(ceph api.Value, partial bool) {
 		field := indexed("$.spec.ceph.serviceBindings", i)
 		ref := textOf(binding, "serviceRef")
 		if refs[ref] {
-			a.invalid(field+".serviceRef", "service binding identities must be unique")
+			a.invalid(field+".serviceRef", "service binding identities must be unique", "combine bindings for the same serviceRef into one entry")
 		}
 		refs[ref] = true
 		service, found := NativeService(a.object, ref)
 		if !partial && !found {
-			a.invalid(field+".serviceRef", "service binding must resolve to one declared native service")
+			a.invalid(field+".serviceRef", "service binding must resolve to one declared native service", "set serviceRef to the qualified identity of one entry in spec.ceph.services")
 		}
 		refusal := ""
 		if found {
@@ -560,11 +564,11 @@ func (a *admission) nativeBindings(ceph api.Value, partial bool) {
 			pointer := textOf(secret, "path")
 			leaf := indexed(field+".secrets", j)
 			if !validSecretPointer(pointer) {
-				a.invalid(leaf+".path", "secret binding path must be a non-root exact JSON Pointer")
+				a.invalid(leaf+".path", "secret binding path must be a non-root exact JSON Pointer", "set path to the exact non-root JSON Pointer of a supported credential leaf")
 			}
 			for _, earlier := range paths {
 				if earlier == pointer || strings.HasPrefix(earlier, pointer+"/") || strings.HasPrefix(pointer, earlier+"/") {
-					a.invalid(leaf+".path", "secret binding paths cannot duplicate or overlap")
+					a.invalid(leaf+".path", "secret binding paths cannot duplicate or overlap", "remove duplicate paths and keep only one binding for each overlapping ancestor and descendant pair")
 				}
 			}
 			paths = append(paths, pointer)

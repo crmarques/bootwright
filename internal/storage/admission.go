@@ -21,13 +21,16 @@ func isStorage(kind api.Kind) bool {
 }
 
 func (a *admission) issue(code, field, message, remediation string) {
+	if cephProduct(a.object) {
+		message = textOf(a.object.Spec(), "type") + " Entitlement " + field + ": " + message
+	}
 	if len(a.issues) < 999 {
 		a.issues = append(a.issues, api.Issue{Code: code, Field: field, Message: message, Remediation: remediation})
 	}
 }
 
-func (a *admission) invalid(field, message string) {
-	a.issue("api.invariant", field, message, "correct "+field+" to satisfy this requirement: "+message)
+func (a *admission) invalid(field, message, remediation string) {
+	a.issue("api.invariant", field, message, remediation)
 }
 
 func (a *admission) deferred(field, message, what, item string) {
@@ -36,14 +39,27 @@ func (a *admission) deferred(field, message, what, item string) {
 
 func (a *admission) required(value api.Value, key, field string) {
 	if !a.partial && !value.Has(key) {
-		a.issue("api.required", field+"."+key, "this declaration requires the named field", "supply "+field+"."+key+" using its documented type")
+		remedy := "supply " + field + "." + key + " using its documented type"
+		if cephProduct(a.object) {
+			remedy = "set " + field + "." + key
+			if key == "registry" {
+				remedy += " with credentialsRef naming the registry-credentials Secret"
+			} else if key == "credentialsRef" {
+				remedy += " to the registry-credentials Secret name"
+			}
+		}
+		a.issue("api.required", field+"."+key, "this declaration requires the named field", remedy)
 	}
 }
 
 func (a *admission) forbid(value api.Value, field string, keys ...string) {
 	for _, key := range keys {
 		if value.Has(key) {
-			a.invalid(field+"."+key, "this field is forbidden for the selected storage mode")
+			message := "this field is forbidden for the selected storage mode"
+			if cephProduct(a.object) {
+				message = "this field is forbidden for the selected entitlement product or RHSM management"
+			}
+			a.invalid(field+"."+key, message, "remove "+field+"."+key)
 		}
 	}
 }
@@ -90,14 +106,14 @@ func (a *admission) sameOwner(kind api.Kind, name, field string, owner api.Objec
 		return api.Object{}, false
 	}
 	if textOf(target.Spec(), "clusterRef") != owner.Name() {
-		a.invalid(field, "referenced storage child belongs to a different cluster")
+		a.invalid(field, "referenced storage child belongs to a different cluster", "select a referenced resource whose spec.clusterRef matches this resource")
 		return target, false
 	}
 	return target, true
 }
 func (a *admission) entitlement(value api.Value, path, expected string) {
 	if target, ok := a.catalog.Find(api.Entitlement, value.Text()); ok && textOf(target.Spec(), "type") != "" && textOf(target.Spec(), "type") != expected {
-		a.invalid(path, "entitlement product does not match this storage consumer")
+		a.invalid(path, "entitlement product does not match this storage consumer", "set "+path+" to an Entitlement whose spec.type is "+expected)
 	}
 }
 
@@ -138,7 +154,7 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 	}
 	managed := fallback(owner.Spec().Get("management"), "managed") == "managed"
 	if !managed && object.Kind() != api.StorageExport {
-		a.invalid("$.spec.clusterRef", "this storage child requires a managed cluster")
+		a.invalid("$.spec.clusterRef", "this storage child requires a managed cluster", "set spec.clusterRef to a StorageCluster with spec.management managed")
 		return a.issues
 	}
 	if item, ok := map[api.Kind]string{api.StorageExport: "B86"}[object.Kind()]; ok {
@@ -204,7 +220,7 @@ func (a *admission) client(owner api.Object) {
 	spec := a.object.Spec()
 	a.required(spec, "access", "$.spec")
 	if access := textOf(spec, "access"); access != "read-only" && access != "read-write" {
-		a.invalid("$.spec.access", "client access must be read-only or read-write")
+		a.invalid("$.spec.access", "client access must be read-only or read-write", "set spec.access to read-only or read-write")
 	}
 	if spec.Has("poolRef") {
 		a.poolRole(textOf(spec, "poolRef"), "$.spec.poolRef", "rbd", owner)
@@ -227,7 +243,7 @@ func (a *admission) uniqueValues(values []string, field, message string) {
 			continue
 		}
 		if seen[value] {
-			a.invalid(indexed(field, i), message)
+			a.invalid(indexed(field, i), message, "remove the duplicate entry from "+field)
 		}
 		seen[value] = true
 	}

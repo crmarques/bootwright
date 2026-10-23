@@ -37,7 +37,7 @@ func (a *admission) filesystem(cluster api.Object) {
 	}
 	a.uniqueValues(names, "$.spec.dataPoolRefs", "data pool references must be unique")
 	if len(names) > 1 && defaults != 1 {
-		a.invalid("$.spec.dataPoolRefs", "multiple data pools require exactly one explicit default")
+		a.invalid("$.spec.dataPoolRefs", "multiple data pools require exactly one explicit default", "set default: true on exactly one entry in spec.dataPoolRefs")
 	}
 	a.defaultDataPool(cluster)
 	a.mdsCoverage(cluster)
@@ -46,7 +46,7 @@ func (a *admission) filesystem(cluster api.Object) {
 		if pool := textOf(group, "poolLayoutRef"); pool != "" {
 			a.poolRole(pool, indexed("$.spec.subvolumeGroups", i)+".poolLayoutRef", "cephfs-data", cluster)
 			if !slices.Contains(names, pool) {
-				a.invalid(indexed("$.spec.subvolumeGroups", i)+".poolLayoutRef", "group layout must use an attached filesystem data pool")
+				a.invalid(indexed("$.spec.subvolumeGroups", i)+".poolLayoutRef", "group layout must use an attached filesystem data pool", "set poolLayoutRef to a cephfs-data pool attached in spec.dataPoolRefs, or omit poolLayoutRef")
 			}
 		}
 	}

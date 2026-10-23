@@ -35,7 +35,7 @@ func (a *admission) distribution(ceph api.Value) {
 	switch distribution {
 	case "oss":
 		if ceph.Get("security", "fips", "enabled").Bool() {
-			a.invalid("$.spec.ceph.security.fips.enabled", "FIPS storage requires a vendor distribution")
+			a.invalid("$.spec.ceph.security.fips.enabled", "FIPS storage requires a vendor distribution", "set spec.ceph.distribution to a supported vendor distribution or disable spec.ceph.security.fips.enabled")
 		}
 	case "redhat", "ibm":
 		a.required(ceph, "entitlementRef", "$.spec.ceph")
@@ -94,11 +94,11 @@ func (a *admission) vendorImages(ceph api.Value) {
 	}
 	registry := textOf(entitlement.Spec(), "registry", "url")
 	if base := textOf(ceph, "image", "base"); base != "" && registry != "" && !strings.HasPrefix(base, registry+"/") {
-		a.invalid("$.spec.ceph.image.base", "vendor image must be beneath its entitlement registry namespace")
+		a.invalid("$.spec.ceph.image.base", "vendor image must be beneath its entitlement registry namespace", "set this image base beneath the registry URL of the Entitlement named by spec.ceph.entitlementRef")
 	}
 	for _, entry := range ceph.Get("images").Fields() {
 		if base := textOf(entry.Value, "base"); base != "" && registry != "" && !strings.HasPrefix(base, registry+"/") {
-			a.invalid("$.spec.ceph.images."+entry.Name+".base", "vendor image must be beneath its entitlement registry namespace")
+			a.invalid("$.spec.ceph.images."+entry.Name+".base", "vendor image must be beneath its entitlement registry namespace", "set this image base beneath the registry URL of the Entitlement named by spec.ceph.entitlementRef")
 		}
 	}
 }
@@ -112,18 +112,18 @@ func (a *admission) clusterAccess(ceph api.Value) {
 	if key != "" {
 		for _, environment := range a.catalog.OfKind(api.Environment) {
 			if textOf(environment.Spec(), "remoteMachinesAccessKey", "keyRef") == key {
-				a.invalid("$.spec.ceph.cephadm.clusterSSH.keyRef", "cluster SSH key must differ from the fleet install key")
+				a.invalid("$.spec.ceph.cephadm.clusterSSH.keyRef", "cluster SSH key must differ from the fleet install key", "set spec.ceph.cephadm.clusterSSH.keyRef to a dedicated Secret distinct from the fleet install key")
 			}
 		}
 		for _, machine := range a.catalog.OfKind(api.Machine) {
 			if textOf(machine.Spec(), "access", "ssh", "auth", "privateKeyRef") == key {
-				a.invalid("$.spec.ceph.cephadm.clusterSSH.keyRef", "cluster SSH key must differ from Machine access keys")
+				a.invalid("$.spec.ceph.cephadm.clusterSSH.keyRef", "cluster SSH key must differ from Machine access keys", "set spec.ceph.cephadm.clusterSSH.keyRef to a dedicated Secret distinct from every Machine access key")
 				break
 			}
 		}
 		for _, cluster := range a.catalog.OfKind(api.StorageCluster) {
 			if cluster.Name() != a.object.Name() && textOf(cluster.Spec(), "ceph", "cephadm", "clusterSSH", "keyRef") == key {
-				a.invalid("$.spec.ceph.cephadm.clusterSSH.keyRef", "each storage cluster requires a distinct cluster SSH key")
+				a.invalid("$.spec.ceph.cephadm.clusterSSH.keyRef", "each storage cluster requires a distinct cluster SSH key", "set spec.ceph.cephadm.clusterSSH.keyRef to a Secret unused by other StorageClusters")
 				break
 			}
 		}
@@ -131,10 +131,10 @@ func (a *admission) clusterAccess(ceph api.Value) {
 	bootstrap := ceph.Get("cephadm", "bootstrap")
 	if name := textOf(bootstrap, "node"); name != "" && ceph.Get("topology", "nodes").Len() > 0 {
 		if node, ok := lookupNode(a.object, name); !ok {
-			a.invalid("$.spec.ceph.cephadm.bootstrap.node", "bootstrap node must resolve to one storage topology node")
+			a.invalid("$.spec.ceph.cephadm.bootstrap.node", "bootstrap node must resolve to one storage topology node", "set spec.ceph.cephadm.bootstrap.node to one name declared in spec.ceph.topology.nodes")
 		} else {
 			if !nativeMember(a.object, "mon", textOf(node, "name")) {
-				a.invalid("$.spec.ceph.cephadm.bootstrap.node", "bootstrap node must be eligible for the declared MON service")
+				a.invalid("$.spec.ceph.cephadm.bootstrap.node", "bootstrap node must be eligible for the declared MON service", "select a bootstrap node included by the MON service placement or expand that placement")
 			}
 			if machine, ok := a.catalog.Find(api.Machine, textOf(node, "machineRef")); ok {
 				a.machineAddress(machine, textOf(bootstrap, "addressRef"), "$.spec.ceph.cephadm.bootstrap.addressRef")
@@ -158,13 +158,13 @@ func (a *admission) machineAddress(machine api.Object, name, field string) {
 		}
 	}
 	if count != 1 {
-		a.invalid(field, "address reference must resolve to one address on the bound Machine")
+		a.invalid(field, "address reference must resolve to one address on the bound Machine", "set this address reference to a network and address declared on the bound Machine")
 	}
 }
 
 func (a *admission) topology(ceph api.Value) {
 	if ceph.Get("security", "fips", "enabled").Bool() && ceph.Get("security", "cephx", "keyType").Text() == "aes256k" {
-		a.invalid("$.spec.ceph.security.cephx.keyType", "FIPS storage refuses AES256K CephX keys")
+		a.invalid("$.spec.ceph.security.cephx.keyType", "FIPS storage refuses AES256K CephX keys", "set spec.ceph.security.cephx.keyType to aes for FIPS storage")
 	}
 	nodes := ceph.Get("topology", "nodes").Items()
 	fqdns, names, machines := []string{}, []string{}, []string{}
@@ -175,24 +175,24 @@ func (a *admission) topology(ceph api.Value) {
 		machines = append(machines, textOf(node, "machineRef"))
 		if machine, ok := a.catalog.Find(api.Machine, textOf(node, "machineRef")); ok {
 			if !contains(machine.Spec().Get("capabilities"), "ceph-node") {
-				a.invalid(field+".machineRef", "storage nodes require a Machine with the ceph-node capability")
+				a.invalid(field+".machineRef", "storage nodes require a Machine with the ceph-node capability", "select a Machine whose spec.capabilities includes ceph-node")
 			}
 			if site := textOf(machine.Spec(), "placement", "site"); site != "" && textOf(node, "site") != "" && site != textOf(node, "site") {
-				a.invalid(field+".site", "storage node site must agree with its Machine placement")
+				a.invalid(field+".site", "storage node site must agree with its Machine placement", "set the topology node site to its Machine placement site")
 			}
 			if ceph.Get("security", "fips", "enabled").Bool() {
 				if profile, ok := a.catalog.Find(api.MachineInstallProfile, textOf(machine.Spec(), "os", "installProfileRef")); !ok || machine.Spec().Get("os", "provided").Bool() || !profile.Spec().Get("customizations", "security", "fips", "enabled").Bool() {
-					a.invalid(field+".machineRef", "FIPS storage requires a FIPS install profile on installed nodes")
+					a.invalid(field+".machineRef", "FIPS storage requires a FIPS install profile on installed nodes", "select Machines installed with FIPS enabled or disable FIPS for the storage cluster")
 				}
 			}
 		}
 		a.storageSite(textOf(node, "site"), field+".site")
 		for _, location := range node.Get("location").Fields() {
 			if location.Name == "host" || location.Value.Type() != api.String || !nativeID.MatchString(location.Name) || !nativeID.MatchString(location.Value.Text()) {
-				a.invalid(field+".location", "CRUSH location uses nonempty qualified bucket names; host identity is generated")
+				a.invalid(field+".location", "CRUSH location uses nonempty qualified bucket names; host identity is generated", "remove the host bucket and use nonempty qualified bucket names and values in location")
 			}
 			if domain := textOf(ceph, "topology", "stretch", "failureDomain"); domain != "" && location.Name == domain && location.Value.Text() != textOf(node, "site") {
-				a.invalid(field+".location", "CRUSH site location must agree with the proved site")
+				a.invalid(field+".location", "CRUSH site location must agree with the proved site", "set location."+domain+" to the topology node's proved site")
 			}
 		}
 	}
@@ -201,7 +201,7 @@ func (a *admission) topology(ceph api.Value) {
 	a.uniqueValues(machines, "$.spec.ceph.topology.nodes", "one Machine cannot register as multiple storage nodes")
 	if ceph.Get("cephadm", "bootstrap", "singleHostDefaults").Bool() {
 		if len(nodes) != 1 || ceph.Has("topology", "stretch") {
-			a.invalid("$.spec.ceph.cephadm.bootstrap.singleHostDefaults", "single-host defaults require exactly one non-stretch node")
+			a.invalid("$.spec.ceph.cephadm.bootstrap.singleHostDefaults", "single-host defaults require exactly one non-stretch node", "remove spec.ceph.cephadm.bootstrap.singleHostDefaults or use exactly one topology node without stretch")
 		}
 	}
 	if ceph.Has("topology", "stretch") {
@@ -226,7 +226,7 @@ func (a *admission) storageSite(site, field string) {
 			return
 		}
 	}
-	a.invalid(field, "storage site must resolve to a declared Environment site")
+	a.invalid(field, "storage site must resolve to a declared Environment site", "set this site reference to a name in Environment.spec.sites")
 }
 
 func declaredDataDevices(osd api.Value) int {
@@ -240,7 +240,7 @@ func (a *admission) stretch(ceph api.Value) {
 	}
 	sites := stretch.Get("dataSites").Strings()
 	if len(sites) != 2 {
-		a.invalid("$.spec.ceph.topology.stretch.dataSites", "stretch requires exactly two data sites")
+		a.invalid("$.spec.ceph.topology.stretch.dataSites", "stretch requires exactly two data sites", "declare exactly two distinct sites in spec.ceph.topology.stretch.dataSites")
 	}
 	for _, site := range sites {
 		mon, osd := 0, 0
@@ -255,7 +255,7 @@ func (a *admission) stretch(ceph api.Value) {
 			}
 		}
 		if mon == 0 || osd < 2 {
-			a.invalid("$.spec.ceph.topology.stretch.dataSites", "each stretch data site requires monitor membership and capacity for two replicas")
+			a.invalid("$.spec.ceph.topology.stretch.dataSites", "each stretch data site requires monitor membership and capacity for two replicas", "assign MON membership and at least two OSD-bearing nodes to each stretch data site")
 		}
 	}
 	tie := stretch.Get("tiebreaker")
@@ -264,19 +264,19 @@ func (a *admission) stretch(ceph api.Value) {
 		return
 	}
 	if textOf(tie, "node") == "" {
-		a.invalid("$.spec.ceph.topology.stretch.tiebreaker.node", "a populated tiebreaker requires a node")
+		a.invalid("$.spec.ceph.topology.stretch.tiebreaker.node", "a populated tiebreaker requires a node", "set spec.ceph.topology.stretch.tiebreaker.node or omit tiebreaker")
 		return
 	}
 	node, ok := lookupNode(a.object, textOf(tie, "node"))
 	if !ok {
-		a.invalid("$.spec.ceph.topology.stretch.tiebreaker.node", "tiebreaker must resolve to one topology node")
+		a.invalid("$.spec.ceph.topology.stretch.tiebreaker.node", "tiebreaker must resolve to one topology node", "set spec.ceph.topology.stretch.tiebreaker.node to a declared topology node name")
 		return
 	}
 	if !hasRole(node, "mon") || node.Get("roles").Len() != 1 {
-		a.invalid("$.spec.ceph.topology.stretch.tiebreaker.node", "tiebreaker requires a monitor-only non-OSD node")
+		a.invalid("$.spec.ceph.topology.stretch.tiebreaker.node", "tiebreaker requires a monitor-only non-OSD node", "select a tiebreaker node with only the mon role and no OSD membership")
 	}
 	if textOf(tie, "site") == "" || textOf(node, "site") != textOf(tie, "site") || slices.Contains(sites, textOf(tie, "site")) {
-		a.invalid("$.spec.ceph.topology.stretch.tiebreaker.site", "tiebreaker must occupy its node's distinct third site")
+		a.invalid("$.spec.ceph.topology.stretch.tiebreaker.site", "tiebreaker must occupy its node's distinct third site", "set tiebreaker.site to its node's site, distinct from both stretch dataSites")
 	}
 }
 

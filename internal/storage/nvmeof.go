@@ -126,7 +126,7 @@ func (a *admission) nvmeofSubsystemIntrinsic() {
 	}
 	for _, key := range []string{"hosts", "namespaces"} {
 		if a.object.Spec().Get(key).Len() > 128 {
-			a.invalid("$.spec."+key, "the bounded NVMe-oF resource limit is 128 entries")
+			a.invalid("$.spec."+key, "the bounded NVMe-oF resource limit is 128 entries", "reduce this list to at most 128 entries")
 		}
 	}
 	if nqn := spec.Get("nqn"); nqn.Type() == api.String && !validNQN(nqn.Text()) {

@@ -39,13 +39,13 @@ func (a *admission) storageReplication(primary api.Object) {
 	spec := a.object.Spec()
 	peer, found := a.catalog.Find(api.StorageCluster, spec.Get("peerClusterRef").Text())
 	if !found || peer.Name() == primary.Name() || fallback(peer.Spec().Get("management"), "managed") != "managed" {
-		a.invalid("$.spec.peerClusterRef", "replication requires a distinct managed StorageCluster in the same context")
+		a.invalid("$.spec.peerClusterRef", "replication requires a distinct managed StorageCluster in the same context", "set spec.peerClusterRef to another managed StorageCluster in this context")
 		return
 	}
 	for _, node := range primary.Spec().Get("ceph", "topology", "nodes").Items() {
 		for _, other := range peer.Spec().Get("ceph", "topology", "nodes").Items() {
 			if node.Get("machineRef").Text() == other.Get("machineRef").Text() {
-				a.invalid("$.spec.peerClusterRef", "the two clusters must use disjoint Machines")
+				a.invalid("$.spec.peerClusterRef", "the two clusters must use disjoint Machines", "change the replication endpoint topologies so no Machine belongs to both clusters")
 			}
 		}
 	}
@@ -56,18 +56,18 @@ func (a *admission) storageReplication(primary api.Object) {
 	}
 	mode := left.Spec().Get("mirroring", "mode").Text()
 	if mode != "image" && mode != "pool" || right.Spec().Get("mirroring", "mode").Text() != mode {
-		a.invalid("$.spec.poolRef", "both pools must explicitly select the same mirroring.mode, image or pool")
+		a.invalid("$.spec.poolRef", "both pools must explicitly select the same mirroring.mode, image or pool", "set spec.mirroring.mode on both endpoint pools to the same value, image or pool")
 	}
 	if PoolName(left) != PoolName(right) {
-		a.invalid("$.spec.peerPoolRef", "both pools must have the same nativeName; metadata.name remains distinct")
+		a.invalid("$.spec.peerPoolRef", "both pools must have the same nativeName; metadata.name remains distinct", "set the endpoint pools' spec.nativeName to the same name, keeping their metadata.name distinct")
 	}
 	for _, p := range []api.Object{left, right} {
 		if p.Spec().Get("role").Text() != "rbd" || fallback(p.Spec().Get("type"), "replicated") != "replicated" {
-			a.invalid("$.spec.poolRef", "mirroring endpoints require replicated pools with role rbd")
+			a.invalid("$.spec.poolRef", "mirroring endpoints require replicated pools with role rbd", "select endpoint pools with spec.type replicated and spec.role rbd")
 		}
 	}
 	if _, ok := NativeService(peer, "rbd-mirror"); !ok {
-		a.invalid("$.spec.peerClusterRef", "the receiving cluster must declare its rbd-mirror service")
+		a.invalid("$.spec.peerClusterRef", "the receiving cluster must declare its rbd-mirror service", "add an rbd-mirror service to the receiving cluster's spec.ceph.services")
 	}
 	for _, other := range a.catalog.OfKind(api.StorageReplication) {
 		if other.Name() == a.object.Name() {
@@ -75,32 +75,32 @@ func (a *admission) storageReplication(primary api.Object) {
 		}
 		for _, cluster := range []string{primary.Name(), peer.Name()} {
 			if other.Spec().Get("clusterRef").Text() == cluster || other.Spec().Get("peerClusterRef").Text() == cluster {
-				a.invalid("$.spec.clusterRef", "a managed cluster participates in at most one replication relationship")
+				a.invalid("$.spec.clusterRef", "a managed cluster participates in at most one replication relationship", "remove the additional StorageReplication or choose an endpoint cluster without another relationship")
 			}
 		}
 	}
 	refs := spec.Get("imageRefs").Strings()
 	if mode == "image" && len(refs) == 0 || mode == "pool" && spec.Has("imageRefs") {
-		a.invalid("$.spec.imageRefs", "image mode requires explicit imageRefs; pool mode derives every declared source image and forbids imageRefs")
+		a.invalid("$.spec.imageRefs", "image mode requires explicit imageRefs; pool mode derives every declared source image and forbids imageRefs", "set spec.imageRefs for image mode, or remove spec.imageRefs for pool mode")
 	}
 	for _, ref := range refs {
 		image, ok := a.sameOwner(api.StorageRBDImage, ref, "$.spec.imageRefs", primary)
 		if ok && image.Spec().Get("poolRef").Text() != left.Name() {
-			a.invalid("$.spec.imageRefs", "every image must belong to poolRef")
+			a.invalid("$.spec.imageRefs", "every image must belong to poolRef", "select imageRefs whose StorageRBDImage.spec.poolRef matches this replication's spec.poolRef")
 		}
 	}
 	images := ReplicationImages(a.catalog, a.object)
 	if len(images) == 0 || len(images) > 3 {
-		a.invalid("$.spec.imageRefs", "a replication relationship requires one to three source images")
+		a.invalid("$.spec.imageRefs", "a replication relationship requires one to three source images", "declare between one and three source images for this replication relationship")
 	}
 	for _, image := range images {
 		if !slices.Contains(RBDImageFeatures(image.Spec()), "journaling") || image.Spec().Has("dataPoolRef") {
-			a.invalid("$.spec.imageRefs", "replicated images require journaling and no separate dataPoolRef")
+			a.invalid("$.spec.imageRefs", "replicated images require journaling and no separate dataPoolRef", "enable journaling on each replicated image and remove its spec.dataPoolRef")
 		}
 	}
 	for _, image := range a.catalog.OfKind(api.StorageRBDImage) {
 		if image.Spec().Get("poolRef").Text() == right.Name() {
-			a.invalid("$.spec.peerPoolRef", "the receiving pool must contain no independently declared images")
+			a.invalid("$.spec.peerPoolRef", "the receiving pool must contain no independently declared images", "remove independently declared images from the receiving pool or select an empty receiving pool")
 		}
 	}
 }

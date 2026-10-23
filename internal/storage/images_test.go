@@ -34,14 +34,14 @@ func features(names ...string) api.Value { return api.StringList(names...) }
 func TestRBDImagePoolMustBeReplicatedRBD(t *testing.T) {
 	catalog := imageCatalog(ecBlock("ec-block"))
 	noIssues(t, admitted(catalog, rbdImage("disk")))
-	onlyIssue(t, admitted(catalog, rbdImage("disk", "poolRef", "data")), "$.spec.poolRef", "referenced pool does not have the consumer's required role", "correct $.spec.poolRef to satisfy this requirement: referenced pool does not have the consumer's required role")
+	onlyIssue(t, admitted(catalog, rbdImage("disk", "poolRef", "data")), "$.spec.poolRef", "referenced pool does not have the consumer's required role", "set $.spec.poolRef to a StoragePool with spec.role rbd")
 	onlyIssue(t, admitted(catalog, rbdImage("disk", "poolRef", "ec-block")), "$.spec.poolRef", "StoragePool ec-block is erasure-coded; an RBD image keeps its header and metadata in a replicated pool", "point spec.poolRef at a replicated rbd pool and name the erasure-coded pool in spec.dataPoolRef")
 }
 
 func TestRBDImageDataPoolMustDifferAndBeRBD(t *testing.T) {
 	catalog := imageCatalog(ecBlock("ec-block"), replicatedBlock("other-block"))
 	onlyIssue(t, admitted(catalog, rbdImage("disk", "dataPoolRef", "block")), "$.spec.dataPoolRef", "the data pool is the image pool; omitting dataPoolRef already keeps the image's data there", "remove spec.dataPoolRef or name another rbd pool")
-	onlyIssue(t, admitted(catalog, rbdImage("disk", "dataPoolRef", "data")), "$.spec.dataPoolRef", "referenced pool does not have the consumer's required role", "correct $.spec.dataPoolRef to satisfy this requirement: referenced pool does not have the consumer's required role")
+	onlyIssue(t, admitted(catalog, rbdImage("disk", "dataPoolRef", "data")), "$.spec.dataPoolRef", "referenced pool does not have the consumer's required role", "set $.spec.dataPoolRef to a StoragePool with spec.role rbd")
 	noIssues(t, admitted(catalog, rbdImage("disk", "dataPoolRef", "ec-block")))
 	noIssues(t, admitted(catalog, rbdImage("disk", "dataPoolRef", "other-block")))
 }
@@ -93,8 +93,8 @@ func TestRBDImageWrongClusterReferenceRefuses(t *testing.T) {
 	other := api.NewObject(api.StorageCluster, "other", api.MapValue(), storage.Spec())
 	catalog := imageCatalog(other, object(api.StoragePool, "other-block", m("clusterRef", "other", "type", "replicated", "role", "rbd")))
 	message := "referenced storage child belongs to a different cluster"
-	onlyIssue(t, admitted(catalog, rbdImage("disk", "poolRef", "other-block")), "$.spec.poolRef", message, "correct $.spec.poolRef to satisfy this requirement: "+message)
-	onlyIssue(t, admitted(catalog, rbdImage("disk", "dataPoolRef", "other-block")), "$.spec.dataPoolRef", message, "correct $.spec.dataPoolRef to satisfy this requirement: "+message)
+	onlyIssue(t, admitted(catalog, rbdImage("disk", "poolRef", "other-block")), "$.spec.poolRef", message, "select a referenced resource whose spec.clusterRef matches this resource")
+	onlyIssue(t, admitted(catalog, rbdImage("disk", "dataPoolRef", "other-block")), "$.spec.dataPoolRef", message, "select a referenced resource whose spec.clusterRef matches this resource")
 }
 
 func TestRBDImagePartialChecksOnlyIntrinsicRules(t *testing.T) {
