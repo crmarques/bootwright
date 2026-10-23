@@ -13,7 +13,7 @@ listed commands return the [unavailable result](cli.md#recognized-but-unavailabl
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
 | [M1](milestones/m1.md) | Foundations: substrates, infrastructure components and Machines | none | in progress | X55/X60 for M2c (D159) |
-| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | D156; applicable M1c/M1d/M1e; B509 | in progress | M2c in progress; matrix and operator gates remain |
+| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | D156; applicable M1c/M1d/M1e | in progress | M2c in progress; matrix and operator gates remain |
 | [M3](milestones/m3.md) | Full OpenShift on libvirt+sushy, BMCs, KubeVirt, vSphere | M2; applicable M1c to M1g; B18/B23/B265 | in progress | M3b operator gate |
 | [M4](milestones/m4.md) | Cluster add-ons | M2, M3c | in progress | M4b/M4c in-tree; live gates pending |
 | [M5](milestones/m5.md) | Retired: moved to M3e (D172) | none | not started | nothing |

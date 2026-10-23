@@ -8233,3 +8233,30 @@ encodings, accepted UTF-8/US-ASCII, byte order marks and short reads. New
 regressions failed before the guard. The delivering commits record the exact
 focused and full checks, race gate and independent safety review; this
 host-independent barrier has no separate operator-run gate.
+
+### X159 — Runbook diagnostics and retained SSH policy
+
+**Item:** B509 (opened on 2026-10-12, moved from M2 to M1c under D158).
+**Kind:** enabling. **Owners:** Controller and Storage. Delivered on
+2026-10-23 under the owner's answers D178 and D179.
+
+D178 permits runbook-only diagnostic dependencies to be installed and removed
+by that runbook. Bootwright's own package requirements remain limited to
+what its execution needs. The
+[lab-rhel procedure](../../examples/machines/lab-rhel/README.md) preserves its
+independent DNS-answer and NTP-offset checks and adds operator installation
+of only absent diagnostic roots. A private package record stays outside the
+frozen input and is retained across interruptions; cleanup selects only those
+recorded roots, disables dependency cleanup and requires review of the native
+transaction so pre-existing packages and reverse dependents are preserved.
+The procedure states partial-install recovery and removal limitations.
+
+B509's revised documentation gate is complete; no package transaction or live
+run was performed. The delivering commit records shell syntax and isolated
+command-double checks, documentation checks and the full repository gate.
+There is no separate operator-run acceptance gate for this procedure item.
+
+D179 retains the implemented guest SSH policy, reload and include-closure
+proof, resolving the pending D135 review question. It removes no transport
+restriction and supplies no live qualification evidence. M2c's service and
+matrix acceptance and M2d/M2e's physical/stretch gates remain open.

@@ -4030,3 +4030,20 @@ Requires cell as `owner decision: <question>`.
   addressable bytes, and deliver a durable receipt before shutdown. This
   contract claims neither remapped-sector coverage nor hardware sanitization;
   implementation and hardware qualification remain required.
+
+- **D178** (2026-10-23, the owner): tools used only by a runbook may be
+  installed by that runbook and removed at its end. Bootwright installs and
+  manages only packages its own execution needs. This narrows B509's
+  2026-10-12 rule: the lab-rhel diagnostic tools remain in its independent
+  checks, with operator installation and cleanup preserving pre-existing
+  packages, rather than becoming controller prerequisites. B509 closes when
+  that procedure is documented and verified; no host operation is performed
+  by recording this decision.
+
+- **D179** (2026-10-23, the owner): keep the implemented guest SSH forwarding
+  restrictions under D135 and complete their qualification. The policy is
+  additional hygiene for the root-equivalent cluster account; pinned host-key
+  verification, fixed loopback forwarding and no direct fallback remain the
+  transport boundary. This answers the 2026-10-11 review's Q1 without removing
+  policy management, reloads or the include-closure proof. Live qualification
+  remains a separate gate.

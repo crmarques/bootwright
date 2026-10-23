@@ -13,6 +13,11 @@ are selected by one Environment's own graph, so the
 that context's apply owns them. Each prerequisite belongs to exactly one side,
 and neither command performs the other's work.
 
+Bootwright installs and manages only packages its own execution needs.
+Tools used solely for an operator runbook's independent diagnostics belong
+to that runbook, which documents installation and removal while preserving
+packages already present ([D178](milestones/backlog.md#decisions)).
+
 | Scope | Prerequisites | Owner |
 | --- | --- | --- |
 | Host | A [supported](#supported-hosts) OS family and architecture and verified installed-host identity; the fixed root and its [setup subtree](contexts/controller-record.md#the-setup-subtree); the [controller runtime](#the-controller-runtime), a virtual environment on the host's own CPython holding the [locked](#the-runtime-lock) `ansible-core` closure; the baseline [host packages](#host-packages) `openssh-clients` and `podman`. | `setup` |

@@ -31,7 +31,9 @@ this example generates every Secret locally in its context.
 
 See the [operator guide](../../../docs/operator-guide.md#prepare-a-host) for
 build prerequisites, privileges and network egress. Independent DNS and time
-checks below also need `dig` and `chronyd` installed on the host.
+checks below use `dig` and `chronyd`. These are runbook-only tools: the
+temporary installation and cleanup below belong to the operator. Bootwright
+installs the packages its own execution needs.
 
 ## Lab conventions
 
@@ -79,6 +81,46 @@ Use a current `./bin/bootwright` executable (`make build` builds it from this
 checkout). Keep the variable in this shell, replace the ISO paths, and run the
 commands separately. Mutation commands present their plan and confirmation;
 sudo authorization may also be needed.
+
+Use the same Bash session for the following package preparation and cleanup.
+Before installing the diagnostic tools, save which packages were already
+present in a private directory outside the input copy. Keep the printed path
+if the session is interrupted; create this record only once for this run.
+
+```bash
+lab_rhel_checks=$(mktemp -d /tmp/bootwright-lab-rhel-checks.XXXXXX)
+printf 'Diagnostic package record: %s\n' "$lab_rhel_checks"
+(
+  set -e
+  rpm -qa --qf '%{NAME}\n' > "$lab_rhel_checks/before"
+  : > "$lab_rhel_checks/added"
+  for lab_rhel_check_package in bind-utils chrony; do
+    if ! grep -Fxq "$lab_rhel_check_package" "$lab_rhel_checks/before"; then
+      printf '%s\n' "$lab_rhel_check_package" >> "$lab_rhel_checks/added"
+    fi
+  done
+)
+```
+
+Install the tools from that record. If the transaction fails or is
+interrupted, stop before applying the lab and retain the record: installation
+may have partly succeeded. Retry only this block with the same record path,
+without taking another baseline.
+
+```bash
+(
+  set -e
+  mapfile -t lab_rhel_check_packages < "$lab_rhel_checks/added"
+  if ((${#lab_rhel_check_packages[@]})); then
+    sudo dnf install --setopt=assumeyes=False --setopt=defaultyes=False \
+      --setopt=install_weak_deps=False -- "${lab_rhel_check_packages[@]}"
+  fi
+)
+```
+
+Review the package transaction before confirming it. Package installation can
+affect host services; check the listener ownership described above before
+applying the lab.
 
 ```sh
 ./bin/bootwright version
@@ -183,6 +225,29 @@ destroyed. Keep it for other examples, or remove it afterward:
 ./bin/bootwright media delete --name rhel-9.8-x86_64-dvd.iso
 ```
 
-Host packages and prepared runtime remain installed. Restore any host daemon
-or firewall configuration changed for the lab, and remove the temporary input
-copy when no longer needed.
+Bootwright's host packages and prepared runtime remain installed. Remove only
+the diagnostic packages this run added. If resuming in another Bash session,
+set `lab_rhel_checks` to the printed record directory first.
+
+```bash
+(
+  set -e
+  mapfile -t lab_rhel_check_packages < "$lab_rhel_checks/added"
+  if ((${#lab_rhel_check_packages[@]})); then
+    sudo dnf remove --setopt=assumeyes=False --setopt=defaultyes=False \
+      --setopt=clean_requirements_on_remove=False -- "${lab_rhel_check_packages[@]}"
+  fi
+)
+```
+
+At the confirmation prompt, continue only if every package to be removed is
+in the saved `added` list. Cancel if other packages would be removed, including
+software that now depends on these tools. Packages present before the run are
+excluded from the requested removal list. The
+[DNF cleanup setting](https://dnf5.readthedocs.io/en/latest/commands/remove.8.html)
+keeps dependency cleanup off; dependencies installed alongside the tools stay
+installed. Retain the record if cleanup fails or is declined.
+
+Restore any host daemon or firewall configuration changed for the lab. After
+successful cleanup, remove the diagnostic record directory and the temporary
+input copy when no longer needed.

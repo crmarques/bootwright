@@ -73,11 +73,11 @@ such a public root-only path, as RHEL's
 `/etc/crypto-policies/back-ends/opensshserver.config` is, is followed through
 the same proof under a bound of eight links, and such a file may carry a
 package's hard links, as that back-end's target does. Every other native
-source refuses a link and is the only name of its inode. Removing
-the policy, its reload and its include parser is code work that waits for the
-owner's answer on amending D135 (session question Q1 of the 2026-10-11 M2
-review). Current candidate alias resolution is deliberately
-closed pending the actual RHEL configuration qualification.
+source refuses a link and is the only name of its inode. The guest policy,
+its reload and its include-closure proof remain required hygiene; the owner
+retained them under [D179](milestones/backlog.md#decisions). Candidate alias
+resolution is deliberately closed pending the actual RHEL configuration
+qualification.
 
 The bundle manifest binds the validated cluster public key and hashes only
 nonsecret configuration and code. Original private material remains in
