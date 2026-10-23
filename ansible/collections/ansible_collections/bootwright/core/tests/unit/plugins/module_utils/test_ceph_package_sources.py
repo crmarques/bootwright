@@ -133,3 +133,85 @@ def test_a_declaration_split_across_the_read_boundary_is_still_refused(tmp_path,
     with pytest.raises(ceph_native.Refusal, match="^packages$"):
         member(tmp_path, "group", data)
     assert member(tmp_path, "group", data.replace(head + rest, b" " * len(head + rest))) == len(data)
+
+
+UNSAFE_XML = [
+    b"<metadata>\x00</metadata>",
+    '<?xml version="1.0"?><metadata/>'.encode("utf-16"),
+    '<?xml version="1.0"?><metadata/>'.encode("utf-32"),
+    b"+/v8-<metadata/>",
+    b'<?xml version="1.0" encoding="UTF-7"?><metadata/>',
+    b'<?xml version="1.0" encoding="ISO-8859-1"?><metadata/>',
+]
+
+
+@pytest.mark.parametrize("data", UNSAFE_XML, ids=["nul", "utf16", "utf32", "utf7-bom", "utf7-declaration", "latin1"])
+@pytest.mark.parametrize("kind", sorted(sources.METADATA_TYPES))
+@pytest.mark.parametrize("compress", [False, True])
+def test_every_metadata_member_refuses_hidden_declaration_encodings(tmp_path, data, kind, compress):
+    with pytest.raises(ceph_native.Refusal, match="^packages$"):
+        member(tmp_path, kind, data, compress)
+
+
+@pytest.mark.parametrize("data", UNSAFE_XML, ids=["nul", "utf16", "utf32", "utf7-bom", "utf7-declaration", "latin1"])
+def test_repomd_encoding_is_refused_before_parsing_or_publication(tmp_path, monkeypatch, data):
+    acquisition = object.__new__(sources.Acquisition)
+    monkeypatch.setattr(acquisition, "bytes", lambda *_args: data)
+    parsed = []
+    monkeypatch.setattr(sources.ET, "fromstring", parsed.append)
+    with pytest.raises(ceph_native.Refusal, match="^packages$"):
+        acquisition.repository(str(tmp_path), "repo", sources.IBM_BASE, "signer")
+    assert not parsed
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("encoding", [b"UTF-8", b"US-ASCII", b"utf-8", b"UTF-7", b"UTF-16", b"US-ASCII-foreign"])
+@pytest.mark.parametrize("split", [b"enc|oding=", b"encoding | =", b"encoding= |", b"encoding=\"UT|F-7\""])
+def test_encoding_declarations_are_checked_across_stream_boundaries(tmp_path, encoding, split):
+    before, after = split.split(b"|")
+    if b"UT" in before:
+        before, after = b'encoding="' + encoding[:2], encoding[2:] + b'"'
+    else:
+        after += b'"' + encoding + b'"'
+    head = b'<?xml version="1.0" '
+    data = head + b" " * ((1 << 20) - len(head) - len(before)) + before + after + b"?><metadata/>"
+    if encoding.upper() in (b"UTF-8", b"US-ASCII"):
+        assert member(tmp_path, "primary", data) == len(data)
+    else:
+        with pytest.raises(ceph_native.Refusal, match="^packages$"):
+            member(tmp_path, "primary", data)
+
+
+@pytest.mark.parametrize("data", [PRIMARY, b"\xef\xbb\xbf" + PRIMARY, PRIMARY.replace(b"UTF-8", b"US-ASCII")])
+def test_safe_xml_encodings_keep_original_size_and_checksum(tmp_path, data):
+    assert member(tmp_path, "primary", data, True) == len(data)
+
+
+@pytest.mark.parametrize("data", UNSAFE_XML + [PRIMARY, b"\xef\xbb\xbf" + PRIMARY])
+@pytest.mark.parametrize("width", [1, 2, 3, 7])
+def test_short_reads_cannot_hide_the_bom_or_encoding(tmp_path, monkeypatch, data, width):
+    import io
+
+    class ShortReader(io.BytesIO):
+        def read(self, size=-1):
+            return super().read(min(size, width))
+
+    monkeypatch.setattr(sources, "open", lambda *_args: ShortReader(data), raising=False)
+    if data in UNSAFE_XML:
+        with pytest.raises(ceph_native.Refusal, match="^packages$"):
+            member(tmp_path, "primary", data)
+    else:
+        assert member(tmp_path, "primary", data) == len(data)
+
+
+def test_a_nul_after_the_declaration_is_refused_on_a_later_read(tmp_path):
+    data = PRIMARY + b" " * (1 << 20) + b"\x00"
+    with pytest.raises(ceph_native.Refusal, match="^packages$"):
+        member(tmp_path, "primary", data)
+
+
+@pytest.mark.parametrize("bom", [b"\xfe\xff", b"\xff\xfe", b"+/v8", b"+/v9", b"+/v+", b"+/v/",
+                                 b"\xf7\x64\x4c", b"\xdd\x73\x66\x73", b"\x0e\xfe\xff", b"\xfb\xee\x28", b"\x84\x31\x95\x33"])
+def test_each_foreign_byte_order_mark_is_refused(tmp_path, bom):
+    with pytest.raises(ceph_native.Refusal, match="^packages$"):
+        member(tmp_path, "primary", bom + b"<metadata/>")

@@ -35,6 +35,80 @@ COMPS_PROLOG = re.compile(rb"""\A(?:<\?xml\s{1,8}version=(["'])1\.0\1(?:\s{1,8}e
                           rb"""\s{1,64}(?:"comps\.dtd"|'comps\.dtd')\s{0,64}>""")
 
 
+class MetadataEncoding:
+    """Keep declaration scanning ASCII-visible without buffering an XML header."""
+
+    def __init__(self):
+        self.prefix = b""
+        self.started = False
+        self.declaration = False
+        self.previous = b""
+        self.pending = b""
+        self.state = "name"
+        self.quote = b""
+        self.value = b""
+
+    def feed(self, block, final=False):
+        ceph_native.require(b"\x00" not in block, "packages")
+        if not self.started:
+            needed = 9 - len(self.prefix)
+            self.prefix += block[:needed]
+            block = block[needed:]
+            if len(self.prefix) < 9 and not final:
+                return
+            forbidden = (b"\xff\xfe", b"\xfe\xff", b"+/v8", b"+/v9", b"+/v+", b"+/v/",
+                         b"\xf7\x64\x4c", b"\xdd\x73\x66\x73", b"\x0e\xfe\xff", b"\xfb\xee\x28", b"\x84\x31\x95\x33")
+            ceph_native.require(not self.prefix.startswith(forbidden), "packages")
+            prefix = self.prefix.removeprefix(b"\xef\xbb\xbf")
+            self.declaration = prefix.startswith(b"<?xml") and prefix[5:6] in (b" ", b"\t", b"\r", b"\n")
+            self.started = True
+            block = prefix[5:] + block
+        if not self.declaration:
+            return
+        end = (self.previous + block).find(b"?>")
+        offset = len(self.previous)
+        self.previous = block[-1:]
+        if end >= 0:
+            block = block[:max(0, end - offset)]
+            self.declaration = False
+        self.scan(block)
+
+    def scan(self, block):
+        block = self.pending + block
+        self.pending = b""
+        while block:
+            if self.state == "name":
+                index = block.find(b"encoding")
+                if index < 0:
+                    self.pending = block[-7:]
+                    return
+                block = block[index + 8:]
+                self.state = "equals"
+            elif self.state in ("equals", "quote"):
+                block = block.lstrip(b" \t\r\n")
+                if not block:
+                    return
+                if self.state == "equals" and block[:1] == b"=":
+                    self.state = "quote"
+                elif self.state == "quote" and block[:1] in (b"'", b'"'):
+                    self.quote, self.value, self.state = block[:1], b"", "value"
+                else:
+                    self.state = "name"
+                    continue
+                block = block[1:]
+            else:
+                end = block.find(self.quote)
+                value = block if end < 0 else block[:end]
+                ceph_native.require(len(self.value) + len(value) <= 8, "packages")
+                self.value += value.upper()
+                allowed = (b"UTF-8", b"US-ASCII")
+                ceph_native.require(any(candidate.startswith(self.value) for candidate in allowed), "packages")
+                if end < 0:
+                    return
+                ceph_native.require(self.value in allowed, "packages")
+                block, self.state = block[end + 1:], "name"
+
+
 def source_for(request, host):
     ceph_native.validate_scope(request)
     package = request.get("packages")
@@ -180,6 +254,7 @@ class Acquisition:
     def repository(self, scratch, identifier, base, signer):
         data = self.bytes(child_url(base, "repodata/repomd.xml"), 1 << 20)
         ceph_native.require(b"<!DOCTYPE" not in data.upper() and b"<!ENTITY" not in data.upper(), "packages")
+        MetadataEncoding().feed(data, final=True)
         tree = ET.fromstring(data)
         ceph_native.require(tree.tag == NAMESPACE + "repomd", "packages")
         records = tree.findall(NAMESPACE + "data")
@@ -228,12 +303,14 @@ class Acquisition:
             ceph_native.require(path.endswith((".xml", ".yaml")), "packages")
         ceph_native.require(0 < size <= 256 << 20 and self.expanded + size <= 512 << 20, "package-limit")
         count, digest, tail = 0, hashlib.sha256(), b""
+        encoding = MetadataEncoding()
         with opener(path, "rb") as source:
             while True:
                 ceph_native.require(time.monotonic() < self.deadline, "package-timeout")
                 block = source.read(1 << 20)
                 if not block:
                     break
+                encoding.feed(block)
                 visible = block
                 if count == 0 and record.get("type") in ("group", "group_gz"):
                     prolog = COMPS_PROLOG.match(block)
@@ -244,6 +321,7 @@ class Acquisition:
                 ceph_native.require(b"<!DOCTYPE" not in scanned and b"<!ENTITY" not in scanned, "packages")
                 tail = scanned[-16:]
                 digest.update(block)
+        encoding.feed(b"", final=True)
         ceph_native.require(count == size and digest.hexdigest() == checksum, "packages")
         self.expanded += count
 
