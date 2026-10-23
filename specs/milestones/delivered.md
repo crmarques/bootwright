@@ -8174,3 +8174,62 @@ registration remains owned by the installation profile.
 the production decoder's object, field, code and remediation. The delivering
 commit records exact in-tree checks and their results; this item has no
 operator-run gate.
+
+### X52 — Shared storage admission and actionable diagnostics
+
+**Items:** B315 and B317, moved from M4 on 2026-10-10 (D128).
+**Owner:** Storage, with Desired state. Verified and completed on 2026-10-23
+under the owner's request to finish M2 blockers needing no owner input.
+The remaining X52 items stay on [M2](m2.md#planned-slices).
+
+B315 shares intrinsic invariants between partial and complete admission;
+`TestPartialValidationIssuesAlsoRefuseTheCompleteObject` in
+`internal/storage/partial_test.go` guards parity. Its implementation was
+already present; this delivery records the previously unrecorded exit.
+
+B317 removes the generic invariant remedy. Each call now supplies its own
+corrective action, and Ceph Entitlement diagnostics name the selected product
+and exact field with registry or RHSM actions. Admission conditions, issue
+ordering and frozen requests are unchanged. The regression tests
+`TestStorageContradictionsNameCorrectiveActions` and
+`TestCephEntitlementDiagnosticsNameProductAndField` in
+`internal/storage/remediation_test.go` failed before the fix and pass after it;
+existing exact-remedy assertions cover pool, image and cross-cluster cases.
+The delivering commits record exact in-tree commands and results. Neither
+item requires an operator-run acceptance row.
+
+### X157 — Foreign client refusal
+
+**Item:** B621 (found on 2026-10-18). **Owners:** Storage and CLI.
+Delivered on 2026-10-23 under the owner's M2 completion request.
+
+The coordinator preserves the native `foreign-client` refusal and the Go
+adapter names the frozen `client.<name>` principal, explains that this
+operation did not create it and supplies both safe external remediation and
+the destroy-before-input-change path. It never adopts the foreign principal.
+The request, evidence and mutation contracts are unchanged.
+
+**Guard tests:** `test_a_foreign_client_refusal_keeps_its_named_reason` in
+`test_ceph_core.py` and
+`TestAForeignClientRefusalNamesTheClientAndFrozenInputRecovery` in
+`internal/storage/ceph/refusal_test.go` failed before the fix. The reason-map
+parity test covers the Go/Python boundary. The delivering commits record exact
+in-tree checks and their results; this diagnostic item has no operator gate.
+
+### X158 — Package metadata encoding barrier
+
+**Item:** B511 (found on 2026-10-12). **Owner:** Storage.
+Delivered on 2026-10-23 under the owner's M2 completion request.
+
+One bounded streaming guard checks `repomd.xml` and every acquired metadata
+member before native package processing. It rejects NUL bytes, non-UTF-8 byte
+order marks and XML encoding declarations other than UTF-8 or US-ASCII,
+including split headers and late NUL bytes. It retains the existing standard
+comps-prolog exception, original-byte checksum verification and expansion,
+download and deadline limits. No request version changes.
+
+**Guard tests:** `test_ceph_package_sources.py` exercises repository and member
+encodings, accepted UTF-8/US-ASCII, byte order marks and short reads. New
+regressions failed before the guard. The delivering commits record the exact
+focused and full checks, race gate and independent safety review; this
+host-independent barrier has no separate operator-run gate.

@@ -47,7 +47,7 @@ The table records decisions and gaps rather than duplicating every field.
 | --- | --- | --- |
 | Cluster type, management and distribution | Keep explicit ownership and distribution. External-cluster admission does not promise an M2 managed lifecycle; do not infer a distribution from a version string. | [B472](milestones/m2.md#b472), [B80](milestones/m2.md#b80) |
 | Release, package, image, repository and entitlement | Keep exact coordinates and separate entitlement/trust. Explain which coordinate belongs to which component and freeze auxiliary images as well as Ceph. A reusable release-profile abstraction is not justified by this review. | B472, [B493](milestones/m2.md#b493) |
-| Bootstrap host, SSH and networks | Keep Machine/address/Secret binding and distinct public/replication networks. Diagnose absent addresses and network mismatches at their authored field; do not invent a second host inventory. | [B317](milestones/m2.md#b317), [B490](milestones/m2.md#b490) |
+| Bootstrap host, SSH and networks | Keep Machine/address/Secret binding and distinct public/replication networks. Diagnose absent addresses and network mismatches at their authored field; do not invent a second host inventory. | [B317](milestones/delivered.md#x52--shared-storage-admission-and-actionable-diagnostics), [B490](milestones/m2.md#b490) |
 | FIPS, CephX, encryption and call-home | Keep explicit policy. Keep the explicit choice; pass the combination to the native tools, whose failure is reported with its cause; Bootwright screens no version or release combination and never silently weakens a choice (D157, D163). | [B75](milestones/m1.md#b75), [B346](milestones/m1.md#b346), B472 |
 | Cluster configuration, manager modules and workarounds | Keep native config keys; reject collisions with generated ownership. Freeze native defaults; a manager module a declared service derives is that service's effect, and the workaround list is retired because no workaround had a recorded effect. Do not turn config into a way to bypass the resource graph. | [B474](milestones/m2.md#b474) |
 | Generic services and placement | Current `serviceType`, `serviceID`, custom placement and inner `spec` preserve only part of ServiceSpec. Missing native `count`, `label` and `host_pattern` prevent useful native placements; MON/MGR cannot use the generic path. P1 proposes full native documents. | B472, B474 |
@@ -375,7 +375,8 @@ but makes cross-service references and individual ownership less clear.
 
 [B494](milestones/m2.md#b494) owns confirmed current validation gaps; it must
 apply them to the approved target rather than repair helpers that a chosen
-migration removes. They are recorded here as findings, not implemented fixes:
+migration removes. The table preserves the original review findings; B494
+and its linked family items own current delivery evidence:
 
 | Finding and evidence | Required correction/evidence |
 | --- | --- |
@@ -390,8 +391,9 @@ B475's device-proof work, including legitimate qualified shared DB/WAL cases.
 Its capacity proof also distinguishes a path count from resolved device and
 OSD counts, including `osdsPerDevice` and dynamic selectors.
 Native placement/ingress/OAuth expressiveness gaps belong to B474 and their
-service items. Existing partial/full validation duplication, missing site
-resolution and misleading remedies remain B315, B316 and B317.
+service items. Remaining site-resolution scope belongs to B316;
+[X52](milestones/delivered.md#x52--shared-storage-admission-and-actionable-diagnostics)
+records B315's shared validation and B317's actionable remedies.
 
 Two safe documentation corrections retain current API behavior: external
 clusters cannot set `ceph`, so the documented external `clusterSSH` default is
