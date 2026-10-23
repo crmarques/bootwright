@@ -325,7 +325,14 @@ address, and one RGW daemon stopped and started while the other answers. The
 NFS example serves a subvolume through a direct `nfs` service and one export
 whose own access is `NONE`, with a denied client address listed before the
 allowed client network. Its runbook records an NFSv4 mount, write and read
+from an allowed guest and a refused mount from the denied guest.
 
+P2 authors synthetic auxiliary image coordinates for offline planning. Its
+runbook requires operator-selected authenticated images of the chosen release
+and records their resolved digests before live qualification. All P2 operator
+runs and ingress acceptance remain unrun.
+
+`TestIngressFixturesPlanWithSelectedImages` applies an RGW ingress on two
 hosts, an NFS keepalive-only ingress and an NFS haproxy-protocol ingress
 ([fixtures](../cmd/bootwright/testdata/ingress/)) to these examples with
 synthetic `spec.ceph.images` coordinates, asserts that every production binding
