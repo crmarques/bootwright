@@ -68,7 +68,7 @@ CLUSTER_REASONS = (
     "request", "artifact", "ownership", "evidence", "material", "packages", "package-artifact", "package-drift", "package-journal", "package-license",
     "package-limit", "package-timeout", "package-platform", "package-host", "call-home-drift", "config-drift", "partial-cluster", "not-ready",
     "not-removed", "cluster-unavailable", "device", "foreign-cluster", "native-command", "native-timeout", "native-output", "unknown", "transport",
-    "remote-refusal", "adapter-exception", "foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget",
+    "remote-refusal", "adapter-exception", "foreign-client", "foreign-pool", "foreign-profile", "foreign-rule", "crush-capacity", "pg-budget",
     "foreign-rbd-image", "rbd-image-identity", "foreign-filesystem", "filesystem-identity", "filesystem-multiple-disabled", "foreign-subvolume-group",
     "mds-coverage", "foreign-subvolume", "subvolume-identity", "foreign-image", "nfs-module-disabled", "nfs-pool-foreign", "object-realm-foreign",
     "object-zone-pools", "object-endpoint-certificate", "object-user-foreign", "object-user-identity", "object-bucket-foreign",

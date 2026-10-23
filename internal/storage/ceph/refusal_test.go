@@ -86,6 +86,25 @@ func TestAClusterRefusalReachesTheOperatorWithItsRemedy(t *testing.T) {
 	}
 }
 
+func TestAForeignClientRefusalNamesTheClientAndFrozenInputRecovery(t *testing.T) {
+	e := clientExecution(t)
+	var r Request
+	if err := json.Unmarshal(e.Block.Request, &r); err != nil {
+		t.Fatal(err)
+	}
+	e = withMaterial(e, r)
+	_, err := New(api.StorageClient, &refusingRunner{reason: "foreign-client"}).Observe(context.Background(), e)
+	d := diagnostics.Of(err)
+	if len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+		d[0].Message != "Ceph client client.consumer exists that this operation did not create" ||
+		!strings.Contains(d[0].Remediation, "outside Bootwright") ||
+		!strings.Contains(d[0].Remediation, "bootwright destroy --context <context>") ||
+		!strings.Contains(d[0].Remediation, "bootwright context update") ||
+		!strings.Contains(d[0].Remediation, "never adopts") {
+		t.Fatalf("a foreign-client refusal reached the operator as %+v", d)
+	}
+}
+
 func TestADashboardManagerRefusalNamesTheManagerContainerNotTheAdminUser(t *testing.T) {
 	r := coreRequest()
 	e := withMaterial(executionFor(t, r), r)

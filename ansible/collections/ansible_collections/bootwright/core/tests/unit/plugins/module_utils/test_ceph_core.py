@@ -161,6 +161,11 @@ def test_a_general_flow_refusal_names_only_the_image_and_package(core_request):
     assert detail["cause"] == "synthetic native failure"
 
 
+def test_a_foreign_client_refusal_keeps_its_named_reason():
+    detail = "native-refusal:foreign-client@ceph_native_resources.Clients:632"
+    assert ceph_core.refusal(ceph_native.RemoteRefusal(detail), ceph_core.CLUSTER_REASONS) == ("foreign-client", detail)
+
+
 def test_a_refusal_after_a_matched_seam_names_the_applied_ids_in_order(core_request):
     detail = failing_command(core_request, {"ceph-call-home-opt-in", "ceph-bootstrap-without-license-flag"})
     assert detail["coordinate"] == (core_request["image"] + "; host package " + core_request["cephadm"]["packageVersion"]
