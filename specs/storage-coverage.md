@@ -556,6 +556,34 @@ before B484's exit.
 | U07 | `clusterSSH.transport: native`, or the transport omitted | [Release qualification](#release-qualification); [upstream ssh.py v20.2.1](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/ssh.py#L161) | [B79](milestones/m2.md#b79) (refusal), B595 (table) | [Ceph refusal table](storage.md#refusal-table): Incomplete or unsafe Ceph coordinates or transport | tested | [U07.yaml](../cmd/bootwright/testdata/matrix/U07.yaml) |
 | U09 | Replicated size above the OSD hosts that could carry the pool rule's declared device class | [upstream CRUSH device classes](https://docs.ceph.com/en/tentacle/rados/operations/crush-map/#device-classes) (rule semantics, not an IBM statement) | [B81](milestones/m2.md#b81) | admission `api.invariant` on StoragePlacementPolicy and StoragePool `$.spec.replicated.size` | tested | [U09.yaml](../cmd/bootwright/testdata/matrix/U09.yaml) |
 
+## Physical qualification
+
+[B485](milestones/m2.md#b485) repeats the applicable P1 to P7 feature and
+combination rows using BMC-installed hosts and real disks, on the
+[B78 host foundation](managed-os.md#physical-host-qualification) with B70 erase
+evidence. The [three-host physical example](../examples/storage-clusters/physical-3-nodes-ceph/README.md)
+supplies the base installation and storage trajectory. Expand its authored
+hosts, devices and native services to each catalog profile's required shape.
+
+| Physical profile | Required coverage beyond the common host foundation |
+| --- | --- |
+| P1 | Representative larger host count, explicit WWN data/DB/WAL disks and observed serial/capacity/native identities, device classes, replicated and EC pools, OSD encryption and its TPM2 arm. |
+| P2 | CephFS, RGW, NFS and SMB service placement, their clients, ingress and failure/recovery on physical networks. |
+| P3 | Observability, management/authentication, TLS, alerts and logs with the declared auxiliary images and external dependencies. |
+| P4 | Physical gateway CPU prerequisites, separately managed initiator, NVMe-oF access and gateway/host/network failover. |
+| P5 | Bond/VLAN networking, managed registration, FIPS and CephX policy, encrypted root with TPM2/recovery and reboot access; host evidence and Ceph service evidence are both required. |
+| P6 | Private registry/package trust and complete image/package closure with external egress denied. |
+| P7 | Separate physical clusters, client replication, interrupted setup, peer failure, exercised failover and ordered whole-cluster retirement. The RGW multisite credential-interface blocker remains applicable. |
+
+Each profile includes disk/NIC/host substitution refusals, interruption and exact
+continuation, client data checks and B70-authorized retirement. The final
+Storage retirement proof must cover all originally observed OSD/DB/WAL disks;
+an early pending-erase record cannot complete storage removal or release its
+machine claims. Record actual measured capacity separately from synthetic
+scale-boundary tests. All physical rows remain unrun until the owner supplies
+and accepts their evidence using the
+[physical ledger template](../docs/acceptance.md#physical-qualification-row).
+
 ## Acceptance evidence
 
 Each profile records its frozen build/release, redacted effective-intent and

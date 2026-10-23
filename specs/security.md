@@ -489,11 +489,17 @@ procedure and ports by source.
 Private URL capabilities travel over verified TLS, subject only to the
 [emulated-controller boot-media exception](container-clusters.md#boot-media).
 Public package trees carry no credentials.
-Not yet met: preflight and plan do not prove per-socket firewall reachability;
-tracked as [B318](milestones/m1.md#b318).
+Preflight and plan report each declared controller listener's runtime firewall
+admission. Closed or unknown required sockets refuse before listener or
+dependent-consumer registration; inspection changes no firewall rules. The
+[controller contract](controller.md#results-and-qualification) owns the bounded
+firewalld query and manual remedy. [B318](milestones/delivered.md#x62--controller-listener-firewall-inspection)
+records its in-tree evidence; B78 retains real-hardware qualification.
 Not yet met: the emulated BMC does not refuse a non-loopback bind and has no
-confined SELinux type; tracked as [B334](milestones/backlog.md#b334). Its TLS
-transport is tracked separately as [B446](milestones/m1.md#b446).
+confined SELinux type; tracked as [B334](milestones/backlog.md#b334).
+
+Verified TLS transport is delivered under
+[B446](milestones/delivered.md#x47--verified-emulated-controller-trust-and-bounds).
 
 ### Direct SSH sessions
 

@@ -185,8 +185,10 @@ defines `CertificateType` `PEM` as a single certificate and `PEMchain` as a
 chain; the client posts `PEM` with the server's own certificate, the first
 block of what it was given, and compares members by DER.
 
-The rules Bootwright's client applies, set once before the first attach and
-settled after a proved eject:
+The device-collection rules qualified before B319, set once before the first
+attach and settled after a proved eject, follow. The current
+[media trust contract](../../specs/substrates.md#identity-and-power-operations)
+also owns the qualified SecurityService path when the device has no collection.
 
 - `import-certificate` reads the collection in full (at most 8 members, failing
   closed beyond that), posts the server's certificate unless its DER is
@@ -197,7 +199,7 @@ settled after a proved eject:
 - `disable-verification` writes `VerifyCertificate` `false` only when it reads
   `true`; a refused write fails, because verification stays on. Where a manager
   publishes `HttpsTransferCertVerification` it refuses before any write,
-  naming that switch (D121, [B447](../../specs/milestones/m1.md#b447)).
+  naming that switch (D121, [B447](../../specs/milestones/delivered.md#x47--verified-emulated-controller-trust-and-bounds)).
 - There is **no fallback**. A member without `Certificates`, or a
   `VerifyCertificate` write answered 501, 400 or 405, fails the import naming
   the two exceptions an operator may declare instead, and a post refused while
@@ -206,8 +208,8 @@ settled after a proved eject:
   attempt itself wrote, and removal deletes only the member that is the given
   certificate.
 
-On the captured BMC neither CD view links `Certificates`, so
-`import-certificate` refuses there before any write; and `disable-verification`
+At the original capture neither CD view linked `Certificates`, so the then
+device-only `import-certificate` refused before any write; `disable-verification`
 used to write nothing, because `VerifyCertificate` already reads `false` and
 the manager's switch is what decides, so an operator who declared it was told
 nothing while the insert proceeded under whatever the switch held. It now

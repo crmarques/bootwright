@@ -78,6 +78,33 @@ accepted qualification. Count `OOM kills` as the `Out of memory` lines in each
 guest's journal over the run, read through `cluster exec` or the console. A
 nonzero count fails the row.
 
+## Physical qualification row
+
+[B78](../specs/milestones/m1.md#b78) and [B70](../specs/milestones/m1.md#b70)
+use the [physical host arms](../specs/managed-os.md#physical-host-qualification).
+[B485](../specs/milestones/m2.md#b485) repeats each applicable Ceph profile on
+that qualified host foundation. Each item first registers its acceptance
+baseline on its milestone page. Copy this template for an actual run:
+
+```text
+| <YYYY-MM-DD> | Commit <sha>; Source clean | Retained locally | <tracked example and qualification arm/profile ID> | Retained locally | <B78 host arms, B70 erase cases or B485 profile and accepted families; each pass, refusal and unrun case> | Retained locally | observation, not acceptance |
+```
+
+The private archive retains the exact OS/media/firmware coordinate tuple,
+effective-intent and plan digests, commands, per-case outcomes and operation-log
+digests. B70 evidence includes every target's identity and capacity, worker and
+request identity, interruption point, complete overwrite/readback receipt,
+durable controller acknowledgement and final media/claim state. Retention is
+recorded separately. A disk mismatch, lost receipt or unresolved operation
+remains a refusal or incomplete case.
+
+B485 additionally records each profile's host/service/device counts, memory and
+storage capacity, measured wall time, client data checks, availability and
+recovery. Use the Ceph matrix's applicable budget fields, recording physical
+capacity and measured memory in place of guest balloon measurements. Keep the
+actual hardware inventory, topology, endpoints and credentials in the private
+archive. The public row carries the accepted scope and private archive digest.
+
 ## Ledger
 
 **B615 retrospective baseline:** X99 records B615's implementation baseline

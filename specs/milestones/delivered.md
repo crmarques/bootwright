@@ -3273,18 +3273,18 @@ effect on a host are unrun, and each depends on X47.
 
 **Constraints left behind:** [B73](m1.md#b73) completes on an owner-accepted
 ledger row of the lab-baremetal rehearsal on a build that descends from this
-commit, which X47's [B446](m1.md#b446) makes runnable (D120), and
+commit, which X47's [B446](#x47--verified-emulated-controller-trust-and-bounds) makes runnable (D120), and
 [B305](m1.md#b305) on physical hardware, which D60 records as an
-observation and which needs [B447](m1.md#b447)'s rule (D121) first; real
+observation and which needs [B447](#x47--verified-emulated-controller-trust-and-bounds)'s rule (D121) first; real
 hardware is [B78](m1.md#b78)'s (D17). A
 [residual race](../state-reconciliation.md#mutation-safety) between the last
 controller proof and the installer's first write, and physical destroy that
 retains the system ([B70](m1.md#b70)), stay. None of the follow-ups joins M1:
 each lies in the physical-installation or the Redfish journey, so four joined
-M4, the emulated controller's TLS ([B446](m1.md#b446)) and the read-back's rule
-with the silent `disable-verification` ([B447](m1.md#b447)), which D120 and
+M4, the emulated controller's TLS ([B446](#x47--verified-emulated-controller-trust-and-bounds)) and the read-back's rule
+with the silent `disable-verification` ([B447](#x47--verified-emulated-controller-trust-and-bounds)), which D120 and
 D121 put on the new slice X47, a key type the controller's policy excludes
-([B448](#x47--pre-effect-ssh-key-policy)) and the insert bound ([B449](m1.md#b449)); under D48 three
+([B448](#x47--pre-effect-ssh-key-policy)) and the insert bound ([B449](#x47--verified-emulated-controller-trust-and-bounds)); under D48 three
 were parked: the private subtree on plain listeners ([B450](backlog.md#b450)),
 the host observations ([B451](backlog.md#b451)) and the wording and tests
 ([B452](backlog.md#b452)). Already tracked: the physical BMC's privilege refusal, HTTP
@@ -8092,6 +8092,69 @@ authored service identifiers or credentials. The owning contract is
 **Guard tests:** `internal/storage/native_test.go` covers full admission,
 partial admission and protected diagnostic output; `internal/storage/partial_test.go`
 covers Environment-default admission. These are offline refusal gates.
+
+### X47 — Verified emulated controller trust and bounds
+
+**Items:** B446, B447, B449. **Owners:** Substrate and Managed OS. The closure
+audit confirms the existing implementation meets these in-tree exits. B496
+retains the separately split CA-issued physical-copy rehearsal; B73, B305 and
+B78 retain their operator gates. No emulator or hardware acceptance is added.
+
+#### B446
+
+The emulated controller serves HTTPS using its declared certificate/key. Role
+template goldens pin serving paths and mounts; substrate, machine-power and
+installation request fixtures carry the same verified HTTPS endpoint and
+declared certificate anchor. `test_redfish_control_trust.py` exercises real
+loopback TLS with issued and self-signed certificates, and refuses an unrelated
+anchor or hostname.
+`internal/substrate/admission_certificate_test.go` rejects a generated serving
+certificate that omits the provider bind address. D175's issuerRef additionally
+supplies B496's CA-issued rehearsal input without changing the CA-bundle rule.
+
+#### B447
+
+D121's manager-switch precedence is implemented in the shared Redfish client
+and stated in the substrate, Machine API and knowledge contracts. The four
+`test_redfish_boot.py` cases cover manager enabled/device read-only false,
+manager disabled before any write, device fallback with no manager switch,
+and refusal of disable-verification under an authoritative manager. D104 is
+explicitly amended by D121. Physical switch observation remains with B305.
+
+#### B449
+
+The controller insert allowance includes `(8 + 5 + 1) * 30` seconds for
+certificate inventory, setup and one conditional retry. Substrate bound tests
+pin native constants, documented steps and the 46m20s insert figure; the
+installation margin test pins all controller calls and the resulting
+4h50m50s reference installation deadline. Omitting the certificate allowance
+fails those guards. The managed-OS contract records the additional seven
+minutes. These tests qualify the bounded adapter contract without running an
+installer.
+
+### X62 — Controller listener firewall inspection
+
+**Item:** B318. **Owners:** Controller and Infrastructure services. Preflight
+and plan report per-socket runtime firewall admission under D110. Apply refuses
+closed or unknown required listener and dependent-consumer paths before
+registration. The controller stage remains available to establish prerequisites.
+
+#### B318
+
+The read-only firewalld adapter binds an exact local address to its interface
+and runtime zone, qualifies explicit TCP/UDP port admission and structurally
+bounded ICMPv6-only CONTINUE policies, and returns unknown for other policies,
+source zones, rules, ambiguous interfaces or unavailable firewalld. Wildcard listeners retain
+explicit unknown rows when no exact endpoint exists. Unknown never passes
+preflight; the diagnostic supplies the operator-owned verification remedy.
+
+**Guard tests:** `internal/controller/firewall/check_test.go` covers loopback
+omission and unknown admission; `internal/controller/firewalllocal/inspect_test.go`
+and `policies_test.go` cover bounded native queries, open/closed zones and
+ambiguous rule shapes. `cmd/bootwright/wiring_firewall_test.go` exercises plan,
+preflight, early dependent admission and wildcard projection. CLI goldens cover
+human and JSON results. These are in-tree gates; B78's hardware qualification
+and B490's cluster reachability retain their separate exits.
 
 ### X59 — Vendor package source admission
 

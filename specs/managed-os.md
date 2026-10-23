@@ -1297,6 +1297,32 @@ profile arms that carry secret bytes remain refused, and promoting one is now a
 question of what it delivers through this path rather than of whether a path
 exists.
 
+### Physical host qualification
+
+[B78](milestones/m1.md#b78) qualifies the shared host contract on real hardware.
+The reference input uses RHEL 9.8 x86_64 Anaconda media; the operator freezes
+the selected boot and package-media digests before the run. Each qualification
+records its exact OS release, architecture, kernel, image digests, BMC firmware
+and Redfish behavior, system firmware, boot mode and Secure Boot state, NIC and
+storage-controller drivers/firmware, disk identity capabilities and TPM version.
+These coordinates and the machine inventory remain in the private evidence
+archive. A changed coordinate needs the applicable rows repeated.
+
+| Host arm | Required real-hardware evidence |
+| --- | --- |
+| Base installation | Verified BMC and artifact TLS, complete original UUID/MAC proof, powered-off insert, explicit root path, pinned installed SSH key, final network, reboot access and removal of private publication. |
+| Networking | Plain ethernet, bond, VLAN and VLAN over bond; each admitted bond mode used by the profile, its required switch configuration and final NMState. Repeat identity proof after MAC-changing bonding and after reboot. |
+| FIPS | Host and fleet key admission before publication, installed FIPS state, native SSH access and reboot; record the actual declared services separately in the Ceph matrix. |
+| Registration | Managed RHSM registration, interruption and continuation, package access, replay and owned unregistration. |
+| Root encryption | The declared root disk alone receives TPM2 enrollment; normal reboot unlock, private recovery unlock and cleanup, plus refusal when another disk or ambiguous ancestry is present. |
+| Failure and recovery | Wrong UUID or NIC set, untrusted media/BMC, blocked or unknown required controller listener, interrupted publication/install/network convergence and exact continuation. No refusal counts as a completed install. |
+| Removal | Retention when erase is omitted; separately authorized B70 logical overwrite of every explicit target, complete readback and durable receipt, interrupted write/readback/receipt acknowledgement, media cleanup and claim release ordering. |
+
+The [physical acceptance template](../docs/acceptance.md#physical-qualification-row)
+records each arm's result on a registered clean build. Host qualification and
+B70 erase evidence feed [B485](milestones/m2.md#b485)'s complete physical Ceph
+matrix; each retains its own operator exit.
+
 ### Refusal table
 
 Each row is one refusal of the installation capability, and

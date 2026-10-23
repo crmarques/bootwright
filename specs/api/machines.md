@@ -274,6 +274,11 @@ and such a Machine's MACs take no part in the graph-wide uniqueness check.
 | `virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Only with `disable-verification`; the eject turns verification back on. |
 | `virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Only with `import-certificate`; the eject deletes the imported certificate. |
 
+For private media delivery, a manager's published
+`HttpsTransferCertVerification` is authoritative and must read `true`; only
+without that switch does the device's `VerifyCertificate` decide. An
+authoritative manager switch refuses `disable-verification` before any write.
+
 `address` is what a destructive operation is aimed at, so it has one spelling:
 admission accepts only that spelling, and nothing rewrites it before the
 controller claim and every request are derived from it. It starts with exactly

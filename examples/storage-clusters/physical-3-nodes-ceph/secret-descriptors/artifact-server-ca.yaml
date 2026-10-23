@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: artifact-server-ca
+
+spec:
+  type: caBundle
+
+  source:
+    generated:
+      commonName: artifact-ca.metal.example.test
+      validityDays: 3650
