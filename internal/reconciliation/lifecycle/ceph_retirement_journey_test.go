@@ -362,3 +362,7 @@ func TestACephClusterWhoseHostsSurviveNamesItsOwnRemedy(t *testing.T) {
 		}
 	}
 }
+
+func (fleetProofs) PhysicalMachine(reconciliation.Block, []byte) (ceph.PhysicalIdentity, bool, error) {
+	return ceph.PhysicalIdentity{}, false, errors.New("synthetic fleet has no physical hardware proof")
+}

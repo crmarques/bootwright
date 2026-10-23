@@ -67,7 +67,7 @@ def request_value():
               "devices": [{"path": "/dev/sda", "serial": "drive-scsi" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    return {"controller": "controller", "version": "ceph-core-v31", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v32", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": IMAGE,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "5.0.3-1", "packageRepository": "https://publisher.example.test/ceph",
@@ -1422,3 +1422,123 @@ def test_rotational_media_identity_is_frozen(request_value, tmp_path, monkeypatc
     else:
         with pytest.raises(ceph_native.Refusal, match="^device-identity$"):
             worker.block_device(device)
+
+
+PHYSICAL_WWN = "0x5000000000000001"
+PHYSICAL_PATH = "/dev/disk/by-id/wwn-" + PHYSICAL_WWN
+PHYSICAL_HARDWARE = {"uuid": "11111111-1111-4111-8111-111111111111", "macs": ["02:00:00:00:00:01"]}
+
+
+def physical_runtime(request_value, tmp_path, monkeypatch):
+    host = request_value["hosts"][0]
+    host.update(physical=True, hardware=copy.deepcopy(PHYSICAL_HARDWARE))
+    host["devices"] = [{"path": PHYSICAL_PATH, "wwn": PHYSICAL_WWN, "serial": "", "sizeBytes": 0}]
+    osd = request_value["services"].pop()
+    osd["placement"]["hosts"] = [h["name"] for h in request_value["hosts"][1:]]
+    service = {"service_type": "osd", "service_id": "physical", "placement": {"hosts": [host["name"]]},
+               "spec": {"data_devices": {"paths": [PHYSICAL_PATH]}}}
+    request_value["services"].extend([osd, service])
+    monkeypatch.setattr(runtime, "physical_hardware", lambda host: None)
+    monkeypatch.setattr(runtime.os.path, "realpath", lambda path: "/dev/sda" if path == PHYSICAL_PATH else path)
+    state = {"disk": {"path": "/dev/sda", "type": "disk", "serial": "serial-1", "size": 1 << 40, "rota": True,
+                      "maj:min": "8:0", "wwn": PHYSICAL_WWN, "ro": False, "rm": False},
+             "udev": "MAJOR=8\nMINOR=0\nID_VENDOR=SYNTHETIC\nID_MODEL=DISK\nID_SCSI_SERIAL=serial-1\nID_WWN=" + PHYSICAL_WWN + "\n"}
+    podman = Podman(request_value, present=True)
+
+    def command(argv, timeout, limit):
+        if argv[0] == "/usr/bin/lsblk":
+            return 0, json.dumps({"blockdevices": [state["disk"]]}).encode()
+        if argv[0] == "/usr/bin/udevadm":
+            return 0, state["udev"].encode()
+        return podman(argv, timeout, limit)
+
+    worker, markers, unused = host_runtime(request_value, tmp_path, command)
+    seed_profile(markers, request_value)
+    result = {"version": "ceph-host-device-id-v1", "deviceID": "SYNTHETIC_DISK_serial-1",
+              "dependencyInput": "ceph_volume.util.disk.UdevData.environment"}
+    monkeypatch.setattr(worker, "contained", lambda *args, **kwargs: result)
+    return worker, markers, state
+
+
+def test_physical_device_binds_real_serial_and_size_and_observes_without_writes(request_value, tmp_path, monkeypatch):
+    worker, markers, unused = physical_runtime(request_value, tmp_path, monkeypatch)
+    assert worker.device_identity() == {"changed": True}
+    retained = copy.deepcopy(markers.records)
+    row = retained[runtime.DEVICES]["devices"][0]
+    assert row == {"host": "node-1", "path": PHYSICAL_PATH, "wwn": PHYSICAL_WWN, "serial": "serial-1", "kernelPath": "/dev/sda",
+                   "deviceID": "SYNTHETIC_DISK_serial-1", "sizeBytes": 1 << 40, "rotational": True}
+    assert worker.physical_readback([row]) == [row]
+    assert worker.device_identity() == {"changed": False}
+    assert markers.records == retained
+    assert worker.request["hosts"][0]["devices"][0]["serial"] == ""
+
+
+@pytest.mark.parametrize("field,value", [("wwn", "0x5000000000000002"), ("serial", "replacement"), ("size", 4096), ("rota", False),
+                                         ("path", "/dev/sdb"), ("type", "part"), ("ro", True), ("rm", True), ("maj:min", "8:16")])
+def test_physical_device_observation_refuses_changed_live_identity(request_value, tmp_path, monkeypatch, field, value):
+    worker, markers, state = physical_runtime(request_value, tmp_path, monkeypatch)
+    worker.device_identity()
+    retained = copy.deepcopy(markers.records)
+    state["disk"][field] = value
+    with pytest.raises(ceph_native.Refusal, match="device-identity"):
+        worker.physical_readback(retained[runtime.DEVICES]["devices"])
+    assert markers.records == retained
+
+
+@pytest.mark.parametrize("damage", ["uuid", "missing-mac", "extra-mac", "unreadable"])
+def test_physical_hardware_requires_original_uuid_and_complete_mac_inventory(tmp_path, damage):
+    uuid = tmp_path / "class/dmi/id/product_uuid"
+    uuid.parent.mkdir(parents=True)
+    uuid.write_text(PHYSICAL_HARDWARE["uuid"] + "\n")
+    nic = tmp_path / "class/net/eth0"
+    (nic / "device").mkdir(parents=True)
+    (nic / "address").write_text(PHYSICAL_HARDWARE["macs"][0] + "\n")
+    host = {"physical": True, "hardware": PHYSICAL_HARDWARE}
+    runtime.physical_hardware(host, str(tmp_path))
+    if damage == "uuid":
+        uuid.write_text("22222222-2222-4222-8222-222222222222\n")
+    elif damage == "missing-mac":
+        (nic / "device").rmdir()
+    elif damage == "extra-mac":
+        other = tmp_path / "class/net/eth1"
+        (other / "device").mkdir(parents=True)
+        (other / "address").write_text("02:00:00:00:00:02\n")
+    else:
+        uuid.unlink()
+    with pytest.raises(ceph_native.Refusal, match="device-identity"):
+        runtime.physical_hardware(host, str(tmp_path))
+
+
+@pytest.mark.parametrize("changed", [False, True])
+def test_physical_lost_sdk_reply_recovers_only_the_original_disk_binding(request_value, tmp_path, monkeypatch, changed):
+    worker, markers, state = physical_runtime(request_value, tmp_path, monkeypatch)
+    original = worker.contained
+
+    def interrupted(*args, **kwargs):
+        raise ceph_native.Refusal("synthetic-lost-reply")
+
+    monkeypatch.setattr(worker, "contained", interrupted)
+    with pytest.raises(ceph_native.Refusal, match="synthetic-lost-reply"):
+        worker.device_identity()
+    assert runtime.BINDING in markers.records and runtime.DEVICES not in markers.records
+    retained = copy.deepcopy(markers.records)
+    monkeypatch.setattr(worker, "contained", original)
+    if changed:
+        state["disk"]["size"] += 4096
+        with pytest.raises(ceph_native.Refusal, match="device-identity"):
+            worker.device_identity()
+        assert markers.records == retained
+    else:
+        assert worker.device_identity() == {"changed": True}
+        assert markers.records[runtime.BINDING] == retained[runtime.BINDING]
+
+
+def test_physical_missing_completed_identity_cannot_relearn_a_replacement(request_value, tmp_path, monkeypatch):
+    worker, markers, state = physical_runtime(request_value, tmp_path, monkeypatch)
+    worker.device_identity()
+    del markers.records[runtime.DEVICES]
+    state["disk"]["size"] += 4096
+    retained = copy.deepcopy(markers.records)
+    with pytest.raises(ceph_native.Refusal, match="device-identity"):
+        worker.device_identity()
+    assert markers.records == retained

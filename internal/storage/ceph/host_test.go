@@ -641,3 +641,7 @@ func TestHostRequestCarriesTheRegistryTrustBundle(t *testing.T) {
 }
 
 func (hostProofs) FIPS([]lifecycle.BlockEvidence, string, string) error { return nil }
+
+func (hostProofs) PhysicalMachine(reconciliation.Block, []byte) (PhysicalIdentity, bool, error) {
+	return PhysicalIdentity{}, false, failure("lifecycle.state", "physical proof unavailable", "")
+}

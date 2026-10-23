@@ -301,3 +301,7 @@ func (dependencyProofs) PackageTree(proofs []lifecycle.BlockEvidence, profile st
 }
 
 func (dependencyProofs) FIPS([]lifecycle.BlockEvidence, string, string) error { return nil }
+
+func (dependencyProofs) PhysicalMachine(reconciliation.Block, []byte) (PhysicalIdentity, bool, error) {
+	return PhysicalIdentity{}, false, failure("lifecycle.state", "physical proof unavailable", "")
+}

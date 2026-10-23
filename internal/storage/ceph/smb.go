@@ -462,6 +462,9 @@ func (c SMBCapability) prepare(ctx context.Context, e lifecycle.Execution) (SMBR
 		}
 		r.Images[i].Image = scope.Scope.Auxiliary[completed].Image
 	}
+	if err := bindPhysicalHosts(scope.Scope.Hosts, e, c.proofs); err != nil {
+		return SMBRequest{}, ProvedClusterScope{}, err
+	}
 	if r.Scope, err = reconciliation.Freeze(scope.Scope, "Ceph SMB cluster scope"); err != nil {
 		return SMBRequest{}, ProvedClusterScope{}, err
 	}

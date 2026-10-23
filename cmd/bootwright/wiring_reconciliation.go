@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/ansible"
@@ -334,4 +335,9 @@ func (cephDependencyProofs) PackageTree(proofs []lifecycle.BlockEvidence, profil
 		return ceph.PackageTree{}, err
 	}
 	return ceph.PackageTree{Context: request.Identity.Context, Media: request.Media.Name, MediaSHA256: request.Media.SHA256, MediaSize: request.Media.Size, Path: request.Publication.Path}, nil
+}
+
+func (cephDependencyProofs) PhysicalMachine(block reconciliation.Block, evidence []byte) (ceph.PhysicalIdentity, bool, error) {
+	value, recognized, err := baremetal.ProvedPresence(block, evidence)
+	return ceph.PhysicalIdentity{UUID: strings.ToLower(value.UUID), MACs: value.Addresses}, recognized, err
 }

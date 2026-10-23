@@ -102,13 +102,14 @@ func automationFormats() map[string]automationFormat {
 		"bootwright.cluster-objects.owner-v1": {class: formatMirrored},
 		// The host block writes them; the core block's workers read them back
 		// for the manager account, the cephadm cache and the OSD identities.
-		"ceph-runtime-profile-v3":   persistedBy(ceph.HostImplementation, ceph.Implementation),
-		"ceph-device-identities-v1": persistedBy(ceph.HostImplementation, ceph.Implementation),
-		"ceph-host-route-v3":        host,
-		"ceph-package-decision-v1":  host,
-		"ceph-package-artifacts-v1": host,
-		"ceph-package-complete-v1":  host,
-		"ceph-crypto-policy-v1":     host,
+		"ceph-runtime-profile-v3":         persistedBy(ceph.HostImplementation, ceph.Implementation),
+		"ceph-physical-device-binding-v1": persistedBy(ceph.HostImplementation, ceph.Implementation),
+		"ceph-device-identities-v2":       persistedBy(ceph.HostImplementation, ceph.Implementation),
+		"ceph-host-route-v3":              host,
+		"ceph-package-decision-v1":        host,
+		"ceph-package-artifacts-v1":       host,
+		"ceph-package-complete-v1":        host,
+		"ceph-crypto-policy-v1":           host,
 		// The resolved package plan the host's package decision record holds.
 		"bootwright.native-plan-v1": host,
 
@@ -133,7 +134,7 @@ func automationFormats() map[string]automationFormat {
 		"ceph-dashboard-port-repair-v1":     core,
 		"ceph-dashboard-port-attempt-v1":    core,
 		"ceph-dashboard-user-v1":            core,
-		"ceph-cluster-device-identities-v1": core,
+		"ceph-cluster-device-identities-v2": core,
 		"ceph-osd-device-intent-v1":         core,
 		"ceph-service-inputs-v1":            core,
 		// The core block's cache phase publishes cephadm on each host under it.
@@ -156,9 +157,9 @@ func automationFormats() map[string]automationFormat {
 		// The guest package transaction policy ceph_packages.transaction_request builds and the shared resolver reads within one run.
 		"ceph-packages-v2": {class: formatTransient},
 
-		"ceph-host-v6":                 {class: formatMirrored},
-		"ceph-host-evidence-v2":        {class: formatMirrored},
-		"ceph-core-v31":                {class: formatMirrored},
+		"ceph-host-v7":                 {class: formatMirrored},
+		"ceph-host-evidence-v3":        {class: formatMirrored},
+		"ceph-core-v32":                {class: formatMirrored},
 		"ceph-core-evidence-v11":       {class: formatMirrored},
 		"ceph-packages-v3":             {class: formatMirrored},
 		"ceph-image-v4":                {class: formatMirrored},

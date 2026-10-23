@@ -53,7 +53,7 @@ MAX_REGISTRY = 65536
 # Artifact selection is authored; the adapter independently proves its SSH
 # route rather than treating a version identifier as transport trust.
 DEVICE_IDENTITIES = "device-identities.json"
-DEVICE_IDENTITIES_VERSION = "ceph-cluster-device-identities-v1"
+DEVICE_IDENTITIES_VERSION = "ceph-cluster-device-identities-v2"
 HOST_PHASES = frozenset(("profile", "route", "device_identity", "host_devices", "host_observe"))
 WORKER_DEADLINE = None
 
@@ -602,7 +602,7 @@ def package_url(value):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v31")
+    require(request["version"] == "ceph-core-v32")
     if "security" in request:
         security = request["security"]
         require(isinstance(security, dict) and set(security) == {"fips", "cephxKeyType"})
@@ -706,9 +706,11 @@ def validate_hosts(request):
     hosts = request["hosts"]
     require(isinstance(hosts, list) and 1 <= len(hosts) <= 64)
     seen = set()
+    wwns = set()
     for host in hosts:
         require(isinstance(host, dict) and set(host) >= {"name", "machine", "address", "user", "port", "devices", "labels", "location", "sshKeyRef"})
-        require(not set(host) - {"name", "machine", "address", "user", "port", "devices", "labels", "location", "sshKeyRef", "hostKeyRef", "knownHosts"})
+        require(not set(host) - {"name", "machine", "address", "user", "port", "devices", "labels", "location", "sshKeyRef",
+                                 "hostKeyRef", "knownHosts", "physical", "hardware"})
         require(all(named(host[k]) for k in ("name", "machine", "user")))
         require(named(host["sshKeyRef"]))
         require(host["labels"] is None or isinstance(host["labels"], list) and all(named(v) for v in host["labels"]))
@@ -724,12 +726,29 @@ def validate_hosts(request):
             raise Refusal("request") from None
         require(type(host["port"]) is int and 1 <= host["port"] <= 65535)
         require(isinstance(host["devices"], list) and len(host["devices"]) <= 128)
+        physical = host.get("physical", False)
+        require(type(physical) is bool and ("hardware" not in host or physical))
+        if physical:
+            hardware = host.get("hardware")
+            require(isinstance(hardware, dict) and set(hardware) == {"uuid", "macs"})
+            require(isinstance(hardware["uuid"], str) and SUBVOLUME_UUID.fullmatch(hardware["uuid"]) is not None)
+            require(isinstance(hardware["macs"], list) and 1 <= len(hardware["macs"]) <= 32
+                    and all(isinstance(m, str) and re.fullmatch(r"[0-9a-f]{2}(?::[0-9a-f]{2}){5}", m) for m in hardware["macs"])
+                    and hardware["macs"] == sorted(set(hardware["macs"])) and len(host["devices"]) <= 3)
         paths = set()
         serials = set()
         for device in host["devices"]:
             require(isinstance(device, dict) and set(device) >= {"path", "serial", "sizeBytes"}
-                    and not set(device) - {"path", "serial", "sizeBytes", "rotational"})
+                    and not set(device) - {"path", "serial", "sizeBytes", "rotational", "wwn"})
             require(isinstance(device["path"], str) and DEVICE.fullmatch(device["path"]) is not None)
+            if physical:
+                require(set(device) == {"path", "serial", "sizeBytes", "wwn"} and device["serial"] == "" and device["sizeBytes"] == 0)
+                require(isinstance(device["wwn"], str) and re.fullmatch(r"0x[0-9a-f]{16}(?:[0-9a-f]{16})?", device["wwn"]) is not None)
+                require(device["path"] == "/dev/disk/by-id/wwn-" + device["wwn"] and device["path"] not in paths and device["wwn"] not in wwns)
+                wwns.add(device["wwn"])
+                paths.add(device["path"])
+                continue
+            require("wwn" not in device)
             require(named(device["serial"]) and device["path"] not in paths and device["serial"] not in serials)
             paths.add(device["path"])
             serials.add(device["serial"])
@@ -1222,6 +1241,9 @@ class Worker:
         self.selection = native_specializations.Selection({"host-cephadm": self.verified_tool, "image-cephadm": self.image_payload})
         self._tool_bytes = None
         self.packages = None
+        if self.host.get("physical"):
+            from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime
+            ceph_host_runtime.physical_hardware(self.host)
 
     def native_coordinate(self):
         """The selected image and package, then as many applied specialization ids as the public bound leaves room for."""
@@ -1592,8 +1614,10 @@ class Worker:
         daemons = self.daemons()
         exists = bool(daemons)
         require(owned or not exists, "foreign-cluster")
+        physical = {}
         if owned and exists:
             self.prove_registry()
+            physical = self.physical_devices()
         if owned and self.recovery_enabled() and self.host["name"] == self.request["bootstrap"] and self.markers.read("bootstrap-enrollment.json") is None:
             self.bootstrap_state()
         elif owned and self.request["clusterSSHTransport"] == "verified-tunnel" and any(str(d.get("name", "")).startswith("mgr.") for d in daemons):
@@ -1602,15 +1626,16 @@ class Worker:
             if pending:
                 return {"name": self.host["name"], "owned": owned, "exists": exists, "pending": pending}
         if owned and any(str(d.get("name", "")).startswith("osd.") for d in daemons):
-            self.prove_completed_osd_variants()
+            self.prove_completed_osd_variants(physical)
         return {"name": self.host["name"], "owned": owned, "exists": exists}
 
-    def prove_completed_osd_variants(self):
+    def prove_completed_osd_variants(self, physical=None):
         services = [s for s in self.request["services"] if s["service_type"] == "osd" and self.host["name"] in s["placement"]["hosts"]
                     and any(s["spec"].get(k) for k in ("encrypted", "tpm2", "db_devices", "wal_devices"))]
         if not services:
             return
         require(self.markers.owned() and self.markers.read("osd-device-intent.json") == self.osd_device_scope(), "ownership")
+        physical = self.physical_devices() if physical is None else physical
         observed = self.command(["/usr/bin/lsblk", "--json", "--bytes", "--paths", "--output", "PATH,TYPE,SERIAL,SIZE,FSTYPE,MOUNTPOINTS"])
         output = self.command(["/usr/sbin/lvs", "--reportformat", "json", "--options", "lv_path,lv_uuid,lv_tags,devices"])
         require(isinstance(observed, dict) and isinstance(observed.get("blockdevices"), list), "native-output")
@@ -1621,7 +1646,7 @@ class Worker:
             spec, allocations = service["spec"], {}
             for field, role in (("data_devices", "block"), ("db_devices", "db"), ("wal_devices", "wal")):
                 for path in spec.get(field, {}).get("paths", []):
-                    device = next(d for d in self.host["devices"] if d["path"] == path)
+                    device = physical.get(path) or next(d for d in self.host["devices"] if d["path"] == path)
                     disks = [d for d in observed["blockdevices"] if d.get("path") == os.path.realpath(path)]
                     require(len(disks) == 1, "device-identity")
                     disk = disks[0]
@@ -1968,7 +1993,7 @@ class Worker:
             require(isinstance(row.get("lv_uuid"), str) and row["lv_uuid"] and isinstance(row.get("lv_path"), str), "foreign-osd")
             children = item.get("children") or []
             specs = [s["spec"] for s in self.request["services"] if s["service_type"] == "osd"
-                     and self.host["name"] in s["placement"]["hosts"] and actual in s["spec"]["data_devices"]["paths"]]
+                     and self.host["name"] in s["placement"]["hosts"] and any(os.path.realpath(path) == actual for path in s["spec"]["data_devices"]["paths"])]
             require(len(specs) == 1 and len(children) == 1, "foreign-osd")
             self.prove_osd_crypto(row, tags, children, specs[0])
             candidates.append({"path": actual, "id": int(tags["ceph.osd_id"]), "uuid": tags["ceph.osd_fsid"], "lvUUID": row["lv_uuid"]})
@@ -1982,7 +2007,10 @@ class Worker:
         return "osd-device-" + hashlib.sha256(path.encode()).hexdigest() + ".json"
 
     def stable_device_path(self, host, device, *, submission=False):
-        """Only the already qualified QEMU Virtio and SCSI disk identities."""
+        """Only the authored immutable physical WWN or qualified QEMU disk identities."""
+        if host.get("physical"):
+            require(device.get("wwn") and device["path"] == "/dev/disk/by-id/wwn-" + device["wwn"], "device-identity")
+            return device["path"]
         if re.fullmatch(r"/dev/vd[a-z]+", device["path"]):
             return "/dev/disk/by-id/virtio-" + device["serial"]
         require(re.fullmatch(r"/dev/sd[a-z]+", device["path"]) is not None, "device-identity")
@@ -1992,7 +2020,15 @@ class Worker:
             require(identities is not None and identities.get((host["name"], device["path"])) == identifier, "device-identity")
         return "/dev/disk/by-id/scsi-0" + identifier
 
+    def physical_devices(self):
+        if not self.host.get("physical"):
+            return {}
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime
+        reader = ceph_host_runtime.HostRuntime(self.request, self.host["name"])
+        return {value["path"]: value for value in reader.host_devices()["devices"]}
+
     def devices(self):
+        physical = self.physical_devices()
         self.observed_device_ids = []
         if self.markers.owned() and self.markers.read("registry-file.json") is not None:
             self.prove_registry()
@@ -2008,8 +2044,12 @@ class Worker:
                 visit(item.get("children", []))
 
         visit(observed["blockdevices"])
-        for device in self.host["devices"]:
+        resolved = set()
+        for frozen_device in self.host["devices"]:
+            device = physical.get(frozen_device["path"], frozen_device)
             actual = os.path.realpath(device["path"])
+            require(actual not in resolved, "device-identity")
+            resolved.add(actual)
             alias = self.stable_device_path(self.host, device)
             require(os.path.realpath(alias) == actual, "device-identity")
             matches = [value for value in flattened if value.get("path") == actual]
@@ -3100,9 +3140,9 @@ class Worker:
         require(isinstance(rows, list) and len(rows) == len(wanted), "device-identity")
         result = {}
         for value, (host, device) in zip(rows, wanted):
-            require(isinstance(value, dict) and set(value) == {"host", "path", "serial", "deviceID"}, "device-identity")
-            require(value["host"] == host and value["path"] == device["path"] and value["serial"] == device["serial"], "device-identity")
-            require(isinstance(value["deviceID"], str) and re.fullmatch(r"[A-Za-z0-9_.:+/-]{1,512}", value["deviceID"]) is not None, "device-identity")
+            from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime
+            ceph_host_runtime.row(value, self.request, host)
+            require(value["path"] == device["path"], "device-identity")
             result[(host, device["path"])] = value["deviceID"]
         return result
 
@@ -3787,6 +3827,14 @@ class Worker:
         evidence["partial"] = evidence["exists"] and not evidence["ready"]
         return evidence
 
+    def metadata_device_name(self, host, device):
+        if not host.get("physical"):
+            return os.path.basename(device["path"])
+        record = self.markers.read(DEVICE_IDENTITIES)
+        self.identity_rows(record)
+        found = next(row for row in record["devices"] if row["host"] == host["name"] and row["path"] == device["path"])
+        return os.path.basename(found["kernelPath"])
+
     def expected_device_id(self, host, device):
         """The native ID the host's preparation derived through the image SDK, never a guessed serial."""
         identities = self.device_identities()
@@ -3810,9 +3858,9 @@ class Worker:
             require(not metadata and not running_osds, "device-identity")
             return False
         for host, device in devices:
-            device_id = os.path.basename(device["path"]) + "=" + self.expected_device_id(host, device)
+            device_id = self.metadata_device_name(host, device) + "=" + self.expected_device_id(host, device)
             groups = osd_device_group(self.request, host, device["path"])
-            group_ids = [{os.path.basename(d["path"]) + "=" + self.expected_device_id(host, d) for d in group}
+            group_ids = [{self.metadata_device_name(host, d) + "=" + self.expected_device_id(host, d) for d in group}
                          for group in groups.values()]
             allowed_ids = set().union(*group_ids)
             candidates = []

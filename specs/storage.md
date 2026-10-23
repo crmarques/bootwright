@@ -694,6 +694,24 @@ and `media: ssd` disks. The frozen request binds rotational identity as well
 as path, serial and size; the original Machine proof and host runtime must
 agree. This proves virtual presentation, with no physical qualification claim.
 
+Managed physical hosts use the same native explicit path selectors, restricted
+here to `/dev/disk/by-id/wwn-0x` plus 16 or 32 lowercase hexadecimal digits.
+At most three local whole disks per host are admitted; shared WWNs across hosts,
+partitions and multipath targets refuse. The request records WWN intent without
+inventing a serial or capacity. Original physical Machine presence evidence
+supplies the system UUID and complete MAC inventory; installed-host SSH proof
+remains mandatory. Before device binding, the host re-proves those hardware
+facts from bounded kernel inventory. An unreadable or changed inventory refuses.
+
+Host preparation records each disk's observed serial, size, rotational status,
+kernel path and native image SDK identity. It compares lsblk and udev WWNs and
+device numbers, rejects read-only/removable disks and ambiguous aliases, and
+re-proves the same facts on read-only host readiness. A replay cannot extend
+or replace the bound disk set. Physical host removal still refuses: releasing
+a Machine claim does not retire its operating system or Ceph data. See the
+[physical example](../examples/storage-clusters/physical-3-nodes-ceph/README.md).
+This code path has synthetic coverage; live physical acceptance remains unrun.
+
 Live checks exclude the OS root device and its backing devices, boot media,
 mounted filesystems, swap, foreign signatures, foreign OSDs and devices owned by
 another operation. Path spelling and native “available” status alone are
@@ -1481,7 +1499,7 @@ retirement remains supported.
 `nvmeof-identity` names a changed backing, gateway, authorization or native
 identity; `nvmeof-foreign` names a subsystem without this attempt's intent.
 These are fixed, non-secret refusals with recovery guidance. Request formats
-move to `ceph-core-v31` and `ceph-host-v6`; old incomplete operations
+move to `ceph-core-v32` and `ceph-host-v7`; old incomplete operations
 must be finished or destroyed with their original build.
 
 ## RBD replication

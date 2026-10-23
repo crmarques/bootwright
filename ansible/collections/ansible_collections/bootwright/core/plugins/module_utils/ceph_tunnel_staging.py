@@ -49,7 +49,7 @@ def named(value):
 def bindings(request):
     """Validate the staging subset without inferring ownership from native names."""
     require(isinstance(request, dict))
-    require(request.get("version") == "ceph-core-v31" and request.get("clusterSSHTransport") == "verified-tunnel")
+    require(request.get("version") == "ceph-core-v32" and request.get("clusterSSHTransport") == "verified-tunnel")
     require(named(request.get("owner")) and named(request.get("bootstrap")))
     fsid = request.get("fsid")
     try:

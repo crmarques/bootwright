@@ -1,6 +1,6 @@
 implementation: storage-ceph-host-v1
-content-digest: 69f54edb5b8407831dc5d5701259f488923a8e79cfca82d0ac148f8bd51aef9e
-automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v1, ceph-host-route-v3, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-runtime-profile-v3
+content-digest: 3d18600685b3f7a1e1a33c3ffab9055129185390a3fa2962e3b19df602c3c05d
+automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v2, ceph-host-route-v3, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-physical-device-binding-v1, ceph-runtime-profile-v3
 request-schema:
   cluster struct ceph.ClusterScope
   cluster.ansiblePackageVersion string
@@ -27,12 +27,17 @@ request-schema:
   cluster.hosts[].devices[].rotational bool omitempty
   cluster.hosts[].devices[].serial string
   cluster.hosts[].devices[].sizeBytes int64
+  cluster.hosts[].devices[].wwn string omitempty
+  cluster.hosts[].hardware *struct ceph.PhysicalIdentity omitempty
+  cluster.hosts[].hardware.macs []string
+  cluster.hosts[].hardware.uuid string
   cluster.hosts[].hostKeyRef string omitempty
   cluster.hosts[].knownHosts string omitempty
   cluster.hosts[].labels []string
   cluster.hosts[].location map[string]string
   cluster.hosts[].machine string
   cluster.hosts[].name string
+  cluster.hosts[].physical bool omitempty
   cluster.hosts[].port int
   cluster.hosts[].sshKeyRef string
   cluster.hosts[].user string
@@ -71,8 +76,12 @@ evidence-schema:
   cephadmSHA256 string
   devices []struct ceph.HostDevice
   devices[].deviceID string
+  devices[].kernelPath string omitempty
   devices[].path string
+  devices[].rotational bool omitempty
   devices[].serial string
+  devices[].sizeBytes int64 omitempty
+  devices[].wwn string omitempty
   fsid string
   gid int
   host string

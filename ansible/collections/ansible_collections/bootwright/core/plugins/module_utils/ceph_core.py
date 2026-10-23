@@ -1247,7 +1247,7 @@ def dashboard_phase(request, operation, request_digest, bootstrap, transport, ob
 
 def host_request(value):
     """A frozen host block request: its cluster's host scope and one of its hosts."""
-    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "version"} and value["version"] == "ceph-host-v6")
+    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "version"} and value["version"] == "ceph-host-v7")
     cluster = ceph_native.validate_scope(value["cluster"])
     ceph_native.require("packages" in cluster)
     ceph_native.require(sum(host["name"] == value["host"] for host in cluster["hosts"]) == 1)
@@ -1271,9 +1271,13 @@ def host_evidence(value, request_digest, request=None):
     ceph_native.require(value["label"] in ("", ceph_host_runtime.SHARED_LABEL), "evidence")
     ceph_native.require(isinstance(value["devices"], list) and len(value["devices"]) <= 128, "evidence")
     for device in value["devices"]:
-        ceph_native.require(isinstance(device, dict) and set(device) == {"path", "serial", "deviceID"}, "evidence")
-        ceph_native.require(all(isinstance(device[key], str) for key in device) and ceph_host_runtime.DEVICE_ID.fullmatch(device["deviceID"]) is not None,
-                            "evidence")
+        ceph_native.require(isinstance(device, dict) and set(device) in ({"path", "serial", "deviceID"},
+                            {"path", "serial", "deviceID", "wwn", "kernelPath", "sizeBytes", "rotational"}), "evidence")
+        ceph_native.require(all(isinstance(device[key], str) for key in ("path", "serial", "deviceID"))
+                            and ceph_host_runtime.DEVICE_ID.fullmatch(device["deviceID"]) is not None, "evidence")
+        if "wwn" in device:
+            ceph_native.require(request is not None, "evidence")
+            ceph_host_runtime.row(dict(device, host=value["host"]), request["cluster"], value["host"])
     ceph_native.require(not (value["ready"] and value["removed"]), "evidence")
     if request is not None:
         cluster = request["cluster"]

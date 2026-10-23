@@ -63,6 +63,7 @@ func Supported(release, packageVersion, ansibleVersion, base, version, transport
 }
 
 type DependencyProofs interface {
+	PhysicalMachine(reconciliation.Block, []byte) (PhysicalIdentity, bool, error)
 	FIPS([]lifecycle.BlockEvidence, string, string) error
 	DataDisk(reconciliation.Block, []byte, string, string, int64, bool) bool
 	HostKey([]lifecycle.BlockEvidence, string, string) (trust.HostKey, error)

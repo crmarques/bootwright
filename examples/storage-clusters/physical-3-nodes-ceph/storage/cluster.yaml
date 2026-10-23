@@ -1,0 +1,133 @@
+# Example authored IBM Storage Ceph 9.9.2.0 at its build tag; apply resolves this tag through the Entitlement and freezes its digest.
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: ceph-lab
+
+spec:
+  type: ceph
+  management: managed
+
+  ceph:
+    distribution: ibm
+    release: 9.9.2.0
+    packageVersion: 20.2.2-349.el9cp
+
+    image:
+      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+      version: v9.9.2-26947
+
+    ibm:
+      callHome: enabled
+
+      packages:
+        source: vendor
+
+    entitlementRef: ibm-ceph
+
+    cephadm:
+      addressRef: ip
+
+      ansible:
+        packageVersion: 5.0.3-1.el9cp
+
+      clusterSSH:
+        user: bootwright
+        keyRef: ceph-cluster-key
+        transport: verified-tunnel
+
+      bootstrap:
+        node: metal-01
+        addressRef: ip
+
+    networks:
+      publicCIDRs:
+        - 198.51.100.0/24
+
+    config:
+      global:
+        osd_pool_default_size: '2'
+        osd_pool_default_min_size: '2'
+
+      osd:
+        osd_memory_target_autotune: 'false'
+        osd_memory_target: '4294967296'
+
+    services:
+      - service_type: mon
+
+        placement:
+          count: 3
+          label: ceph-core
+
+      - service_type: mgr
+
+        placement:
+          count: 2
+          label: ceph-core
+
+      - service_type: osd
+        service_id: data-1
+
+        placement:
+          hosts:
+            - metal-01.metal.example.test
+
+        spec:
+          data_devices:
+            paths:
+              - /dev/disk/by-id/wwn-0x5000000000000001
+
+      - service_type: osd
+        service_id: data-2
+
+        placement:
+          hosts:
+            - metal-02.metal.example.test
+
+        spec:
+          data_devices:
+            paths:
+              - /dev/disk/by-id/wwn-0x5000000000000002
+
+      - service_type: osd
+        service_id: data-3
+
+        placement:
+          hosts:
+            - metal-03.metal.example.test
+
+        spec:
+          data_devices:
+            paths:
+              - /dev/disk/by-id/wwn-0x5000000000000003
+
+      - service_type: mds
+        service_id: files
+
+        placement:
+          count: 1
+          label: ceph-core
+
+    topology:
+      nodes:
+        - name: metal-01
+          fqdn: metal-01.metal.example.test
+          machineRef: metal-01
+
+          labels:
+            - ceph-core
+
+        - name: metal-02
+          fqdn: metal-02.metal.example.test
+          machineRef: metal-02
+
+          labels:
+            - ceph-core
+
+        - name: metal-03
+          fqdn: metal-03.metal.example.test
+          machineRef: metal-03
+
+          labels:
+            - ceph-core

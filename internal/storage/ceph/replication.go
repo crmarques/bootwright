@@ -199,6 +199,9 @@ func (c ReplicationCapability) prepare(ctx context.Context, e lifecycle.Executio
 		if !slices.Equal(proof.Machines, end.Machines) {
 			return r, nil, failure("lifecycle.state", "replication machines do not match original cluster creation evidence", "")
 		}
+		if err := bindPhysicalHosts(proof.Scope.Hosts, e, c.proofs); err != nil {
+			return r, nil, err
+		}
 		end.Scope, err = reconciliation.Freeze(proof.Scope, "Ceph replication scope")
 		if err != nil {
 			return r, nil, err

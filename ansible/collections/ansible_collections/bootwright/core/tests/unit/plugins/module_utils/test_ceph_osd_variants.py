@@ -191,11 +191,11 @@ def test_existing_host_readiness_round_requires_variant_proof(core_request):
     native.daemons = lambda: [{"name": "osd.0"}]
     native.prove_registry = lambda: None
     calls = []
-    native.prove_completed_osd_variants = lambda: calls.append("proved")
+    native.prove_completed_osd_variants = lambda physical: calls.append("proved")
     assert native.host_state()["exists"]
     assert calls == ["proved"]
 
-    def refuse():
+    def refuse(physical):
         raise ceph_native.Refusal("foreign-osd")
 
     native.prove_completed_osd_variants = refuse

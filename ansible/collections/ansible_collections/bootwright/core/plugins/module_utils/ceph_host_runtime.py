@@ -35,15 +35,17 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 
 ROOT = "/var/lib/bootwright/ceph-host"
 PACKAGE_ROOT = "/var/lib/bootwright/ceph-packages"
-VERSION = "ceph-host-v6"
+VERSION = "ceph-host-v7"
 PROFILE_VERSION = "ceph-runtime-profile-v3"
 ROUTE_VERSION = "ceph-host-route-v3"
-DEVICES_VERSION = "ceph-device-identities-v1"
-EVIDENCE_VERSION = "ceph-host-evidence-v2"
+DEVICES_VERSION = "ceph-device-identities-v2"
+BINDING_VERSION = "ceph-physical-device-binding-v1"
+EVIDENCE_VERSION = "ceph-host-evidence-v3"
 PROFILE = "runtime-profile.json"
 PAYLOAD = "cephadm-payload"
 ROUTE = "route.json"
 DEVICES = "device-identities.json"
+BINDING = "physical-device-binding.json"
 SHARED_LABEL = "system_u:object_r:container_file_t:s0"
 SENTINEL = b"bootwright-contained-public-label-probe-v1\n"
 # Podman adds HOSTNAME to a started container's environment unless one is set, so the probe pins both.
@@ -72,7 +74,7 @@ EXPECTED_CASES = {
     "unknownTarget": (0, 0, 0, 0, 0, 0), "unavailableProxy": (0, 0, 0, 0, 0, 0),
     "missingNativeConfig": (0, 0, 0, 0, 0, 0),
 }
-UDEV_FIELDS = frozenset(("ID_VENDOR", "ID_MODEL", "ID_MODEL_ENC", "ID_SERIAL_SHORT", "ID_SCSI_SERIAL", "ID_SERIAL"))
+UDEV_FIELDS = frozenset(("ID_VENDOR", "ID_MODEL", "ID_MODEL_ENC", "ID_SERIAL_SHORT", "ID_SCSI_SERIAL", "ID_SERIAL", "ID_WWN", "ID_WWN_WITH_EXTENSION"))
 Refusal = ceph_native.Refusal
 
 PROBE = r'''
@@ -424,6 +426,7 @@ class HostRuntime:
         self.request = ceph_native.host_scope(request)
         self.host = next((item for item in self.request["hosts"] if item["name"] == host), None)
         require(self.host is not None, "request")
+        physical_hardware(self.host)
         self.run = command or ceph_native.bounded_command
         self.clock = clock
         self.pause = pause
@@ -762,7 +765,8 @@ class HostRuntime:
     def block_device(self, device):
         """Bind the declared path to one disk with its frozen media identity, its device number, serial and size."""
         actual = os.path.realpath(device["path"])
-        output = self.command(["/usr/bin/lsblk", "--json", "--bytes", "--paths", "--nodeps", "--output", "PATH,TYPE,SERIAL,SIZE,ROTA,MAJ:MIN", actual],
+        columns = "PATH,TYPE,SERIAL,SIZE,ROTA,MAJ:MIN" + (",WWN,RO,RM" if device.get("wwn") else "")
+        output = self.command(["/usr/bin/lsblk", "--json", "--bytes", "--paths", "--nodeps", "--output", columns, actual],
                               30, 65536, "device-identity")
         try:
             observed = json.loads(output, object_pairs_hook=ceph_native.unique_object)
@@ -773,13 +777,24 @@ class HostRuntime:
         require(isinstance(item, dict) and item.get("path") == actual and item.get("type") == "disk", "device-identity")
         pair = item.get("maj:min")
         require(isinstance(pair, str) and re.fullmatch(r"[0-9]+:[0-9]+", pair) is not None, "device-identity")
+        if device.get("wwn"):
+            require(actual != device["path"] and re.fullmatch(r"/dev/(?:sd[a-z]+|nvme[0-9]+n[0-9]+)", actual) is not None, "device-identity")
+            require(item.get("wwn") == device["wwn"] and item.get("ro") in (False, 0) and item.get("rm") in (False, 0), "device-identity")
+            require(isinstance(item.get("serial"), str) and 0 < len(item["serial"]) <= 128
+                    and all(33 <= ord(c) <= 126 for c in item["serial"]), "device-identity")
+            require(type(item.get("size")) is int and 0 < item["size"] < 1 << 63, "device-identity")
         rotational = item.get("rota")
-        require(type(rotational) in (bool, int) and rotational in (0, 1) and bool(rotational) == device.get("rotational", False), "device-identity")
-        require(item.get("serial") == device["serial"] and type(item.get("size")) is int and item["size"] == device["sizeBytes"], "device-identity")
+        require(type(rotational) in (bool, int) and rotational in (0, 1)
+                and (device.get("wwn") or bool(rotational) == device.get("rotational", False)), "device-identity")
+        require(device.get("wwn") or item.get("serial") == device["serial"]
+                and type(item.get("size")) is int and item["size"] == device["sizeBytes"], "device-identity")
         major, minor = (int(value) for value in pair.split(":"))
         require(major > 0 and minor >= 0, "device-identity")
-        return {"path": device["path"], "serial": device["serial"], "sizeBytes": device["sizeBytes"],
-                "rotational": int(rotational), "major": major, "minor": minor}
+        result = {"path": device["path"], "serial": item["serial"], "sizeBytes": item["size"],
+                  "rotational": int(rotational), "major": major, "minor": minor}
+        if device.get("wwn"):
+            result.update(wwn=device["wwn"], kernelPath=actual)
+        return result
 
     def udev(self, observed):
         raw = self.command(["/usr/bin/udevadm", "info", "--query=property", "--name=" + observed["path"]], 30, 128 << 10, "device-identity")
@@ -789,10 +804,17 @@ class HostRuntime:
         with self.journal() as durable:
             profile = self.current(durable)
             existing = durable.read(DEVICES)
+            observations = [(device, self.block_device(device)) for device in self.host["devices"]]
+            inputs = [(device, observed, self.udev(observed)) for device, observed in observations]
+            if self.host.get("physical"):
+                candidates = [self.physical_row(observed, environment) for unused, observed, environment in inputs]
+                binding = {"version": BINDING_VERSION, "scope": self.scope(), "devices": candidates}
+                retained = durable.read(BINDING)
+                require(retained == binding or retained is None and existing is None, "device-identity")
+                if retained is None:
+                    durable.write(BINDING, binding)
             rows = []
-            for device in self.host["devices"]:
-                observed = self.block_device(device)
-                environment = self.udev(observed)
+            for device, observed, environment in inputs:
                 if existing is None:
                     result = self.contained(profile["imageID"], (profile["uid"], profile["gid"]), DEVICE_PROBE,
                                             (canonical({"path": observed["path"], "environment": environment}).decode("ascii"),), limit=4096)
@@ -804,8 +826,13 @@ class HostRuntime:
                     identifier = result["deviceID"]
                 else:
                     identifier = native_form(environment)
-                value = {"host": self.host["name"], "path": device["path"], "serial": device["serial"], "deviceID": identifier}
+                value = {"host": self.host["name"], "path": device["path"], "serial": observed["serial"], "deviceID": identifier}
+                if device.get("wwn"):
+                    value.update(wwn=observed["wwn"], kernelPath=observed["kernelPath"], sizeBytes=observed["sizeBytes"],
+                                 rotational=bool(observed["rotational"]))
                 rows.append(row(value, self.request, self.host["name"]))
+            if self.host.get("physical"):
+                require(len({entry["kernelPath"] for entry in rows}) == len({entry["deviceID"] for entry in rows}) == len(rows), "device-identity")
             record = {"version": DEVICES_VERSION, "scope": self.scope(), "imageID": profile["imageID"], "devices": rows}
             if existing is not None:
                 require(canonical(existing) == canonical(record), "device-identity")
@@ -814,11 +841,30 @@ class HostRuntime:
             durable.write(DEVICES, record)
             return {"changed": True}
 
+    def physical_row(self, observed, environment):
+        return {"host": self.host["name"], "path": observed["path"], "serial": observed["serial"],
+                "deviceID": native_form(environment), "wwn": observed["wwn"], "kernelPath": observed["kernelPath"],
+                "sizeBytes": observed["sizeBytes"], "rotational": bool(observed["rotational"])}
+
+    def physical_readback(self, values):
+        if not self.host.get("physical"):
+            return values
+        physical_hardware(self.host)
+        paths = []
+        for device, retained in zip(self.host["devices"], values):
+            observed = self.block_device(device)
+            environment = self.udev(observed)
+            current = self.physical_row(observed, environment)
+            require(current == retained, "device-identity")
+            paths.append(observed["kernelPath"])
+        require(len(paths) == len(set(paths)), "device-identity")
+        return values
+
     def host_devices(self):
         """Read-only: this host's retained identities for the cluster's OSD checks."""
         durable = prepared(self.request, self.host["name"], markers=self.markers)
         require(durable is not None, "device-identity")
-        return {"devices": retained_devices(self.request, self.host["name"], durable)}
+        return {"devices": self.physical_readback(retained_devices(self.request, self.host["name"], durable))}
 
     def host_observe(self):
         """Read-only evidence; absence is proved only from the absent owner record."""
@@ -843,8 +889,8 @@ class HostRuntime:
                 evidence["route"] = True
             identified = durable.read(DEVICES) is not None
             if identified:
-                evidence["devices"] = [{key: value[key] for key in ("path", "serial", "deviceID")}
-                                       for value in retained_devices(self.request, self.host["name"], durable, profile["imageID"])]
+                values = self.physical_readback(retained_devices(self.request, self.host["name"], durable, profile["imageID"]))
+                evidence["devices"] = [{key: entry for key, entry in value.items() if key != "host"} for value in values]
             evidence["ready"] = bool(evidence["planDigest"] and evidence["route"] and identified)
         return evidence
 
@@ -922,7 +968,7 @@ def route_cases(value):
 @contextlib.contextmanager
 def staged(directory, synthetic, uid, gid):
     """Retain the synthetic bytes outside the read-only mounted children."""
-    request = {"version": "ceph-core-v31", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
+    request = {"version": "ceph-core-v32", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
                "clusterSSHTransport": "verified-tunnel", "clusterSSHUser": probe.USER,
                "hosts": [{"name": probe.HOST, "address": probe.ADDRESS, "port": probe.OUTER_PORT}]}
     known = ("[" + probe.ADDRESS + "]:" + str(probe.OUTER_PORT) + " " + synthetic["keys"]["outer"]["public"] + "\n").encode()
@@ -979,6 +1025,38 @@ def staged(directory, synthetic, uid, gid):
         prove()
 
 
+def physical_hardware(host, root="/sys"):
+    """Read only kernel hardware identity; virtual interfaces do not identify a machine."""
+    if not host.get("physical"):
+        return
+
+    def read(path):
+        try:
+            with open(path, "rb") as source:
+                value = source.read(257)
+            require(0 < len(value) <= 256, "device-identity")
+            return value.decode("ascii").strip().lower()
+        except (OSError, UnicodeError):
+            raise Refusal("device-identity") from None
+
+    require(read(os.path.join(root, "class/dmi/id/product_uuid")) == host["hardware"]["uuid"], "device-identity")
+    directory = os.path.join(root, "class/net")
+    try:
+        interfaces = os.listdir(directory)
+    except OSError:
+        raise Refusal("device-identity") from None
+    require(len(interfaces) <= 256, "device-identity")
+    addresses = []
+    for interface in interfaces:
+        path = os.path.join(directory, interface)
+        if not os.path.exists(os.path.join(path, "device")):
+            continue
+        address = read(os.path.join(path, "address"))
+        require(re.fullmatch(r"[0-9a-f]{2}(?::[0-9a-f]{2}){5}", address) is not None, "device-identity")
+        addresses.append(address)
+    require(len(addresses) == len(set(addresses)) and sorted(addresses) == host["hardware"]["macs"], "device-identity")
+
+
 def properties(raw, device):
     """Only the identity fields udev binds to the proved device number."""
     require(isinstance(raw, bytes) and 0 < len(raw) <= 128 << 10, "device-identity")
@@ -1002,6 +1080,8 @@ def properties(raw, device):
     require(numbers == {"MAJOR": device["major"], "MINOR": device["minor"]}, "device-identity")
     selected = "ID_SCSI_SERIAL" if "ID_VENDOR" in values and "ID_SCSI_SERIAL" in values else "ID_SERIAL_SHORT" if "ID_SERIAL_SHORT" in values else "ID_SERIAL"
     require(values.get(selected) == device["serial"], "device-identity")
+    if device.get("wwn"):
+        require(values.get("ID_WWN_WITH_EXTENSION", values.get("ID_WWN")) == device["wwn"], "device-identity")
     native_form(values)
     return values
 
@@ -1024,11 +1104,20 @@ def native_form(values):
 
 
 def row(value, request, host):
-    require(isinstance(value, dict) and set(value) == {"host", "path", "serial", "deviceID"}, "device-identity")
+    require(isinstance(value, dict), "device-identity")
     wanted = [item for item in request["hosts"] if item["name"] == host]
     require(len(wanted) == 1, "device-identity")
-    devices = [device for device in wanted[0]["devices"] if device["path"] == value["path"]]
-    require(value["host"] == host and len(devices) == 1 and value["serial"] == devices[0]["serial"], "device-identity")
+    devices = [device for device in wanted[0]["devices"] if device["path"] == value.get("path")]
+    require(value.get("host") == host and len(devices) == 1, "device-identity")
+    if wanted[0].get("physical"):
+        require(set(value) == {"host", "path", "serial", "deviceID", "wwn", "kernelPath", "sizeBytes", "rotational"}, "device-identity")
+        require(value["wwn"] == devices[0]["wwn"] and isinstance(value["serial"], str) and 0 < len(value["serial"]) <= 128
+                and all(33 <= ord(c) <= 126 for c in value["serial"]), "device-identity")
+        require(type(value["sizeBytes"]) is int and 0 < value["sizeBytes"] < 1 << 63 and type(value["rotational"]) is bool, "device-identity")
+        require(isinstance(value["kernelPath"], str)
+                and re.fullmatch(r"/dev/(?:sd[a-z]+|nvme[0-9]+n[0-9]+)", value["kernelPath"]) is not None, "device-identity")
+    else:
+        require(set(value) == {"host", "path", "serial", "deviceID"} and value["serial"] == devices[0]["serial"], "device-identity")
     require(isinstance(value["deviceID"], str) and DEVICE_ID.fullmatch(value["deviceID"]) is not None, "device-identity")
     return json.loads(canonical(value))
 
@@ -1048,7 +1137,10 @@ def retained_devices(request, host, durable, image_id=None):
     require(record["version"] == DEVICES_VERSION and canonical(record["scope"]) == canonical(scope(request, host)), "device-identity")
     require(isinstance(record["imageID"], str) and IDENTIFIER.fullmatch(record["imageID"]) is not None, "device-identity")
     require(image_id is None or record["imageID"] == image_id, "device-identity")
-    return rows(request, host, record["devices"])
+    result = rows(request, host, record["devices"])
+    if next(item for item in request["hosts"] if item["name"] == host).get("physical"):
+        require(durable.read(BINDING) == {"version": BINDING_VERSION, "scope": scope(request, host), "devices": result}, "device-identity")
+    return result
 
 
 CACHE_FIELDS = frozenset(("dev", "inode", "uid", "gid", "mode", "size", "mtimeNS"))

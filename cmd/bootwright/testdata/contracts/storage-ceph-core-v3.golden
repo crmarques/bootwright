@@ -1,6 +1,6 @@
 implementation: storage-ceph-core-v3
-content-digest: 15e3216877f921e15f377118d7c216ff9742c02c44a55ad4caf3d4ab9cdf9bd8
-automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v1, ceph-dashboard-port-attempt-v1, ceph-dashboard-port-repair-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-user-v1, ceph-device-identities-v1, ceph-filesystem-attempt-v1, ceph-host-cache-v1, ceph-native-teardown-v1, ceph-osd-device-intent-v1, ceph-policy-attempt-v1, ceph-pool-attempt-v2, ceph-rbd-image-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v3, ceph-service-inputs-v1, ceph-subvolume-attempt-v1, ceph-subvolume-group-attempt-v1, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v3
+content-digest: 6cdc351bb2559038f8554d4011e683d517016cb1a38de6553b6f61f258c5b9b0
+automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v2, ceph-dashboard-port-attempt-v1, ceph-dashboard-port-repair-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-user-v1, ceph-device-identities-v2, ceph-filesystem-attempt-v1, ceph-host-cache-v1, ceph-native-teardown-v1, ceph-osd-device-intent-v1, ceph-physical-device-binding-v1, ceph-policy-attempt-v1, ceph-pool-attempt-v2, ceph-rbd-image-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v3, ceph-service-inputs-v1, ceph-subvolume-attempt-v1, ceph-subvolume-group-attempt-v1, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v3
 request-schema:
   action string
   ansiblePackageVersion string
@@ -70,12 +70,17 @@ request-schema:
   hosts[].devices[].rotational bool omitempty
   hosts[].devices[].serial string
   hosts[].devices[].sizeBytes int64
+  hosts[].devices[].wwn string omitempty
+  hosts[].hardware *struct ceph.PhysicalIdentity omitempty
+  hosts[].hardware.macs []string
+  hosts[].hardware.uuid string
   hosts[].hostKeyRef string omitempty
   hosts[].knownHosts string omitempty
   hosts[].labels []string
   hosts[].location map[string]string
   hosts[].machine string
   hosts[].name string
+  hosts[].physical bool omitempty
   hosts[].port int
   hosts[].sshKeyRef string
   hosts[].user string

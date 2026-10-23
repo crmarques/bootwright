@@ -16,6 +16,12 @@ func proveDisks(e lifecycle.Execution, r Request, readers DependencyProofs) erro
 		proofs = e.Proved
 	}
 	for _, host := range r.Hosts {
+		if host.Physical {
+			if host.Hardware == nil {
+				return failure("lifecycle.state", "physical Ceph host lacks its original hardware proof", "")
+			}
+			continue
+		}
 		for _, disk := range host.Devices {
 			matched := false
 			for _, proof := range proofs {

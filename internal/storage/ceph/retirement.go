@@ -51,6 +51,9 @@ func (c Capability) retirement(ctx context.Context, e lifecycle.Execution) (Requ
 	if err != nil {
 		return r, nil, err
 	}
+	if physicalHosts(r.Hosts) {
+		return r, nil, physicalRemovalRefusal()
+	}
 	if len(requestMachines(r)) == 0 {
 		return r, nil, failure("lifecycle.state", "a Ceph block retires only with the host Machines its frozen request names", "")
 	}
@@ -81,6 +84,9 @@ func (c Capability) observeRetirement(ctx context.Context, e lifecycle.Execution
 }
 
 func EvaluateRetirement(data []byte, r Request, retired bool) (reconciliation.EffectState, error) {
+	if physicalHosts(r.Hosts) {
+		return reconciliation.EffectUnknown, physicalRemovalRefusal()
+	}
 	return evaluateRetirement(data, retirementFor(r), retired)
 }
 

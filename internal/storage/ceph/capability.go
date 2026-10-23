@@ -377,6 +377,9 @@ func (c Capability) identity(ctx context.Context, e lifecycle.Execution) (Reques
 	if r.Owner != "" || r.FSID != "" || e.ApplyOperation == "" {
 		return Request{}, failure("lifecycle.state", "Ceph requires the immutable original apply identity", "")
 	}
+	if err := bindPhysicalHosts(r.Hosts, e, c.proofs); err != nil {
+		return Request{}, err
+	}
 	r.Owner = e.ApplyOperation
 	r.FSID = FSIDFor(e.ApplyOperation, r.Cluster)
 	return r, nil
@@ -451,6 +454,9 @@ func (c Capability) mutate(ctx context.Context, e lifecycle.Execution, operation
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
+	if operation == "destroy" && physicalHosts(r.Hosts) {
+		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, physicalRemovalRefusal()
+	}
 	if operation == "apply" {
 		if err := proveDisks(e, r, c.proofs); err != nil {
 			return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
@@ -517,7 +523,7 @@ func (Capability) Quiescent(ctx context.Context, probe lifecycle.Probe) (lifecyc
 		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
 	}
 	if probe.RetiredWithHosts {
-		if r, err := DecodeRequest(probe.Block.Request); err == nil && len(requestMachines(r)) != 0 {
+		if r, err := DecodeRequest(probe.Block.Request); err == nil && !physicalHosts(r.Hosts) && len(requestMachines(r)) != 0 {
 			return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: retiredReason}, nil
 		}
 	}

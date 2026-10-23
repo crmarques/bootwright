@@ -17,8 +17,8 @@ import (
 )
 
 const HostImplementation = "storage-ceph-host-v1"
-const HostVersion = "ceph-host-v6"
-const HostEvidenceVersion = "ceph-host-evidence-v2"
+const HostVersion = "ceph-host-v7"
+const HostEvidenceVersion = "ceph-host-evidence-v3"
 const SharedLabel = "system_u:object_r:container_file_t:s0"
 const maxHostEvidence = 16384
 
@@ -110,9 +110,13 @@ func HostBlockID(cluster, machineName string) string {
 }
 
 type HostDevice struct {
-	DeviceID string `json:"deviceID"`
-	Path     string `json:"path"`
-	Serial   string `json:"serial"`
+	DeviceID   string `json:"deviceID"`
+	KernelPath string `json:"kernelPath,omitempty"`
+	Path       string `json:"path"`
+	Rotational bool   `json:"rotational,omitempty"`
+	Serial     string `json:"serial"`
+	SizeBytes  int64  `json:"sizeBytes,omitempty"`
+	WWN        string `json:"wwn,omitempty"`
 }
 
 type HostEvidence struct {
@@ -182,6 +186,13 @@ func (e HostEvidence) prepared(r HostRequest) bool {
 		return false
 	}
 	for i, device := range host.Devices {
+		if host.Physical {
+			observed := e.Devices[i]
+			if observed.Path != device.Path || observed.WWN != device.WWN || !physicalSerial.MatchString(observed.Serial) || observed.SizeBytes <= 0 || !validDeviceID(observed.DeviceID) || !physicalKernelPath.MatchString(observed.KernelPath) {
+				return false
+			}
+			continue
+		}
 		if e.Devices[i].Path != device.Path || e.Devices[i].Serial != device.Serial || !validDeviceID(e.Devices[i].DeviceID) {
 			return false
 		}
@@ -251,6 +262,11 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 			}
 			description, impacts := hostDescription(input.Verb, cluster.Cluster, host.Name)
 			requires := []reconciliation.ObjectRef{hostRequirement(host)}
+			for _, peer := range cluster.Hosts {
+				if peer.Physical {
+					requires = append(requires, hostRequirement(peer))
+				}
+			}
 			for _, profile := range cluster.Packages.Sources {
 				requires = append(requires, reconciliation.ObjectRef{Kind: string(api.MachineInstallProfile), Object: profile.Profile})
 			}
@@ -306,6 +322,9 @@ func (c HostCapability) prepare(ctx context.Context, e lifecycle.Execution) (Hos
 	}
 	if r.Cluster.Owner != "" || r.Cluster.FSID != "" || e.ApplyOperation == "" {
 		return HostRequest{}, failure("lifecycle.state", "Ceph host preparation requires the immutable original apply identity", "")
+	}
+	if err := bindPhysicalHosts(r.Cluster.Hosts, e, c.proofs); err != nil {
+		return HostRequest{}, err
 	}
 	r.Cluster.Owner = e.ApplyOperation
 	r.Cluster.FSID = FSIDFor(e.ApplyOperation, r.Cluster.Cluster)
@@ -478,6 +497,13 @@ func (c HostCapability) Observe(ctx context.Context, e lifecycle.Execution) (lif
 }
 
 func (c HostCapability) Destroy(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
+	frozen, decodeErr := DecodeHostRequest(e.Block.Request)
+	if decodeErr != nil {
+		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, decodeErr
+	}
+	if physicalHosts(frozen.Cluster.Hosts) {
+		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, physicalRemovalRefusal()
+	}
 	r, err := c.prepare(ctx, e)
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
@@ -500,6 +526,13 @@ func retained(e HostEvidence, r HostRequest) bool {
 }
 
 func (c HostCapability) ObserveRemoval(ctx context.Context, e lifecycle.Execution) (lifecycle.Observation, error) {
+	frozen, decodeErr := DecodeHostRequest(e.Block.Request)
+	if decodeErr != nil {
+		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, decodeErr
+	}
+	if physicalHosts(frozen.Cluster.Hosts) {
+		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, physicalRemovalRefusal()
+	}
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	r, err := c.prepare(ctx, e)
 	if err != nil {

@@ -15,7 +15,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v31"
+const Version = "ceph-core-v32"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -23,17 +23,25 @@ type Device struct {
 	Rotational bool   `json:"rotational,omitempty"`
 	Serial     string `json:"serial"`
 	SizeBytes  int64  `json:"sizeBytes"`
+	WWN        string `json:"wwn,omitempty"`
+}
+
+type PhysicalIdentity struct {
+	MACs []string `json:"macs"`
+	UUID string   `json:"uuid"`
 }
 
 type Host struct {
 	Address    string            `json:"address"`
 	Devices    []Device          `json:"devices"`
+	Hardware   *PhysicalIdentity `json:"hardware,omitempty"`
 	HostKeyRef string            `json:"hostKeyRef,omitempty"`
 	KnownHosts string            `json:"knownHosts,omitempty"`
 	Labels     []string          `json:"labels"`
 	Location   map[string]string `json:"location"`
 	Machine    string            `json:"machine"`
 	Name       string            `json:"name"`
+	Physical   bool              `json:"physical,omitempty"`
 	Port       int               `json:"port"`
 	SSHKeyRef  string            `json:"sshKeyRef"`
 	User       string            `json:"user"`
@@ -338,15 +346,8 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	if err := bindHosts(&r, c, cluster, contextName); err != nil {
 		return Request{}, err
 	}
-	if r.ClusterSSHTransport == "verified-tunnel" {
-		seen := map[string]bool{}
-		for _, host := range r.Hosts {
-			address, err := netip.ParseAddr(host.Address)
-			if err != nil || address.String() != host.Address || address.Zone() != "" || address.IsUnspecified() || address.IsMulticast() || seen[host.Address] {
-				return Request{}, failure("lifecycle.unsupported", "verified Ceph transport requires distinct canonical IP endpoints", "declare one distinct canonical management IP per Ceph host")
-			}
-			seen[host.Address] = true
-		}
+	if err := validateHostEndpoints(r); err != nil {
+		return Request{}, err
 	}
 	if err := projectServices(&r, cluster); err != nil {
 		return Request{}, err
@@ -360,6 +361,9 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	slices.SortStableFunc(r.Delegated, func(a, b DelegatedService) int { return strings.Compare(a.Name, b.Name) })
 
 	selectDevices(&r)
+	if err := uniquePhysicalDevices(r.Hosts); err != nil {
+		return Request{}, err
+	}
 	return r, nil
 }
 
@@ -378,8 +382,8 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 		}
 		ssh, ok := machine.SSH(m)
 		provider, _ := c.Find(api.InfraProvider, m.Spec().Get("substrate", "providerRef").Text())
-		if !ok || !machine.Installed(m) || !provider.Spec().Has("libvirt") || ssh.PrivateKeyRef == "" || ssh.PasswordRef != "" || ssh.OperatorIdentity || ssh.User != r.ClusterSSHUser || ssh.PrivateKeyRef == r.ClusterKeyRef {
-			return failure("lifecycle.unsupported", "core Ceph requires installed libvirt guests and separate fleet and cluster SSH keys", "use the three-node libvirt Ceph example and distinct fleet and orchestration identities")
+		if !ok || !machine.Installed(m) || (!provider.Spec().Has("libvirt") && !provider.Spec().Has("baremetal")) || ssh.PrivateKeyRef == "" || ssh.PasswordRef != "" || ssh.OperatorIdentity || ssh.User != r.ClusterSSHUser || ssh.PrivateKeyRef == r.ClusterKeyRef {
+			return failure("lifecycle.unsupported", "core Ceph requires installed managed hosts and separate fleet and cluster SSH keys", "use the three-node libvirt Ceph example and distinct fleet and orchestration identities")
 		}
 		if len(r.Hosts) > 0 && ssh.PrivateKeyRef != r.Hosts[0].SSHKeyRef {
 			return failure("lifecycle.unsupported", "core Ceph currently requires one fleet SSH key for its guests", "declare a shared fleet identity distinct from the native cluster identity")
@@ -405,20 +409,15 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 		if len(h.Location) != 0 {
 			return failure("lifecycle.unsupported", "native host CRUSH locations require release qualification", "omit topology.nodes[].location for the core virtual profile")
 		}
-		profile := api.Value{}
-		for _, p := range provider.Spec().Get("libvirt", "machineProfiles").Items() {
-			if p.Get("name").Text() == m.Spec().Get("substrate", "profileRef").Text() {
-				profile = p
-			}
+		h.Physical = provider.Spec().Has("baremetal")
+		var err error
+		if h.Physical {
+			h.Devices, err = physicalDevices(cluster, name)
+		} else {
+			h.Devices, err = virtualDevices(provider, m, contextName)
 		}
-		dataDisks := profile.Get("dataDisks").Items()
-		presentations, valid := substrate.DataDiskPresentations(dataDisks)
-		if !valid {
-			return failure("lifecycle.unsupported", "unsupported virtual data disk media or targets", "use the supported libvirt profile disk bound and media")
-		}
-		for i, disk := range dataDisks {
-			size, _ := disk.Get("sizeGiB").Int64()
-			h.Devices = append(h.Devices, Device{Path: "/dev/" + presentations[i].Target, Serial: substrate.DataDiskSerial(contextName, m.Name(), disk.Get("name").Text()), SizeBytes: size << 30, Rotational: presentations[i].Media == "hdd"})
+		if err != nil {
+			return err
 		}
 		r.Hosts = append(r.Hosts, h)
 		addressRef := spec.Get("cephadm", "addressRef").Text()
@@ -631,4 +630,39 @@ func securityPolicy(c api.Catalog, spec api.Value, keyRef string) (*Security, er
 		}
 	}
 	return policy, nil
+}
+
+func virtualDevices(provider, m api.Object, contextName string) ([]Device, error) {
+	devices := []Device{}
+	profile := api.Value{}
+	for _, p := range provider.Spec().Get("libvirt", "machineProfiles").Items() {
+		if p.Get("name").Text() == m.Spec().Get("substrate", "profileRef").Text() {
+			profile = p
+		}
+	}
+	dataDisks := profile.Get("dataDisks").Items()
+	presentations, valid := substrate.DataDiskPresentations(dataDisks)
+	if !valid {
+		return nil, failure("lifecycle.unsupported", "unsupported virtual data disk media or targets", "use the supported libvirt profile disk bound and media")
+	}
+	for i, disk := range dataDisks {
+		size, _ := disk.Get("sizeGiB").Int64()
+		devices = append(devices, Device{Path: "/dev/" + presentations[i].Target, Serial: substrate.DataDiskSerial(contextName, m.Name(), disk.Get("name").Text()), SizeBytes: size << 30, Rotational: presentations[i].Media == "hdd"})
+	}
+	return devices, nil
+}
+
+func validateHostEndpoints(r Request) error {
+	if r.ClusterSSHTransport != "verified-tunnel" {
+		return nil
+	}
+	seen := map[string]bool{}
+	for _, host := range r.Hosts {
+		address, err := netip.ParseAddr(host.Address)
+		if err != nil || address.String() != host.Address || address.Zone() != "" || address.IsUnspecified() || address.IsMulticast() || seen[host.Address] {
+			return failure("lifecycle.unsupported", "verified Ceph transport requires distinct canonical IP endpoints", "declare one distinct canonical management IP per Ceph host")
+		}
+		seen[host.Address] = true
+	}
+	return nil
 }

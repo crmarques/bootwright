@@ -38,7 +38,7 @@ def core_request():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v31", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v32", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -351,8 +351,8 @@ def host_block(core_request):
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "e" * 64, "mediaSize": 1024,
          "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"} for host in cluster["hosts"]]}
-    request = {"version": "ceph-host-v6", "cluster": cluster, "host": "node-2"}
-    record = {"version": "ceph-host-evidence-v2", "host": "node-2", "owner": cluster["owner"], "fsid": cluster["fsid"], "image": cluster["image"],
+    request = {"version": "ceph-host-v7", "cluster": cluster, "host": "node-2"}
+    record = {"version": "ceph-host-evidence-v3", "host": "node-2", "owner": cluster["owner"], "fsid": cluster["fsid"], "image": cluster["image"],
               "ready": False, "removed": False, "imageID": "", "uid": 0, "gid": 0, "label": "", "policySHA256": "", "cephadmSHA256": "",
               "planDigest": "", "route": False, "devices": []}
     return request, record
@@ -620,8 +620,9 @@ def test_private_input_is_opened_without_links_and_not_in_argv(core_request, tmp
         ceph_native.read_regular(str(link), private=True)
 
 
+@pytest.mark.parametrize("physical", [False, True])
 @pytest.mark.parametrize("mutation", ["mounted", "filesystem", "partition", "wrong-serial", "wrong-size", "signature"])
-def test_device_proof_never_accepts_foreign_or_in_use_disk(core_request, mutation):
+def test_device_proof_never_accepts_foreign_or_in_use_disk(core_request, mutation, physical, monkeypatch):
     disk = {"path": "/dev/vdb", "type": "disk", "serial": "disk1", "size": 1024 ** 3, "fstype": None, "mountpoints": [None]}
     signatures = []
     if mutation == "mounted":
@@ -639,9 +640,17 @@ def test_device_proof_never_accepts_foreign_or_in_use_disk(core_request, mutatio
     answers = {("/usr/bin/lsblk", "--json", "--bytes", "--paths", "--output", "PATH,TYPE,SERIAL,SIZE,FSTYPE,MOUNTPOINTS"): {"blockdevices": [disk]},
                ("/usr/sbin/wipefs", "--no-act", "--json", "/dev/vdb"): {"signatures": signatures}}
     native, calls = worker(core_request, answers)
+    if physical:
+        path, wwn = "/dev/disk/by-id/wwn-0x5000000000000001", "0x5000000000000001"
+        native.host.update(physical=True)
+        native.host["devices"] = [{"path": path, "wwn": wwn, "serial": "", "sizeBytes": 0}]
+        native.physical_devices = lambda: {path: {"path": path, "wwn": wwn, "serial": "disk1", "sizeBytes": 1024 ** 3}}
+        realpath = ceph_native.os.path.realpath
+        monkeypatch.setattr(ceph_native.os.path, "realpath", lambda value: "/dev/vdb" if value == path else realpath(value))
     with pytest.raises(ceph_native.Refusal, match="device-"):
         native.devices()
     assert all("--no-act" in argv or argv[0] == "/usr/bin/lsblk" for argv in calls)
+    assert native.markers.writes == []
 
 
 def test_foreign_cluster_is_not_absence(core_request):

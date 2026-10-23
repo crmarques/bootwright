@@ -1,0 +1,17 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: physical-3-nodes-ceph
+
+spec:
+  domains:
+    base: metal.example.test
+
+  controller:
+    machineRef: controller
+
+  remoteMachinesAccessKey:
+    keyRef: bootwright-machine-key
+
+  storageClusters:
+    - ceph-lab
