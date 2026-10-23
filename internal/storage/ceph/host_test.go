@@ -146,7 +146,7 @@ func TestDeadlinesFitTheRunCeilingForThreeAndTheLargestAdmittedCluster(t *testin
 	r := packageRequest(t)
 	r.ClusterSSHTransport = PinnedTransport
 	three, err := cephDeadline(r, "apply")
-	if err != nil || three > lifecycle.MaxDeadline || three != time.Duration((15+3+len(r.Services))*660+1860+2*900+60)*time.Second {
+	if err != nil || three > lifecycle.MaxDeadline || three != time.Duration((16+3)*660+1860+2*900+60)*time.Second {
 		t.Fatalf("three-host cluster deadline %s: %v", three, err)
 	}
 	largest := len(r.Hosts)

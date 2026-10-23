@@ -814,8 +814,9 @@ def apply_tunnel_cluster(request, bootstrap, transport, state, preparations):
     names = {name for service in request["services"] if service["service_type"] == "osd" for name in service["placement"]["hosts"]}
     prepared = host_round(transport, [host for host in request["hosts"] if host["name"] in names], "osd_prepare")
     changed = any(value["changed"] for value in prepared) or changed
-    for index, service in enumerate(request["services"]):
-        changed = transport.call(bootstrap, "services", devices=devices, service=index)["changed"] or changed
+    # Every pending service document shares one owned apply and readback. The
+    # native worker journals each child independently before sending stdin.
+    changed = transport.call(bootstrap, "services", devices=devices)["changed"] or changed
     return changed
 
 

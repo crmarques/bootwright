@@ -233,7 +233,7 @@ func cephDeadline(r Request, operation string) (time.Duration, error) {
 	if operation == "apply" {
 		nativeCalls = 2*len(r.Hosts) + 3
 		if r.Action == "cluster" {
-			nativeCalls, waits = 15+len(r.Hosts)+len(r.Services), bootstrapCall+2*readinessWait
+			nativeCalls, waits = 16+len(r.Hosts), bootstrapCall+2*readinessWait
 		}
 		if r.Action == "filesystem" && r.Filesystem != nil {
 			nativeCalls, waits = 2*len(r.Hosts)+3+len(r.Filesystem.DataPools)+len(r.Filesystem.Groups), readinessWait
@@ -244,7 +244,7 @@ func cephDeadline(r Request, operation string) (time.Duration, error) {
 	}
 	deadline := time.Duration(nativeCalls*nativeCall+waits+60) * time.Second
 	if deadline > lifecycle.MaxDeadline {
-		return 0, failure("lifecycle.unsupported", fmt.Sprintf("StorageCluster %s needs a cluster run deadline of %s, past the 6h0m0s every adapter run is held to", r.Cluster, deadline), fmt.Sprintf("declare fewer hosts in spec.ceph.topology.nodes or fewer mon, mgr, osd and mds services in spec.ceph.services of StorageCluster %s", r.Cluster))
+		return 0, failure("lifecycle.unsupported", fmt.Sprintf("StorageCluster %s needs a cluster run deadline of %s, past the 6h0m0s every adapter run is held to", r.Cluster, deadline), fmt.Sprintf("declare fewer hosts in spec.ceph.topology.nodes of StorageCluster %s", r.Cluster))
 	}
 	return deadline, nil
 }

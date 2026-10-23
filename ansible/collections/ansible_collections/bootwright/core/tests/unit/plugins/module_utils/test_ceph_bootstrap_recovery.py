@@ -318,9 +318,13 @@ def test_coordinator_runs_only_missing_proved_transitions(core_request, monkeypa
     core_request["clusterSSHTransport"] = "verified-tunnel"
     core_fixtures.package_intent(core_request)
     clock = core_fixtures.ReadinessClock()
+    services = copy.deepcopy(core_request["services"])
+    submissions = []
 
     class Transport(core_fixtures.ReadinessTransport):
         def call(self, host, phase, private=None, *, timeout=None, devices=None, service=None):
+            if phase == "services":
+                submissions.append((copy.deepcopy(self.request["services"]), service))
             if phase == "prerequisites":
                 self.calls.append((host["name"], phase, timeout))
                 local = stage if stage in ("unclaimed", "claimed", "prepared") else "complete" if host["name"] == core_request["bootstrap"] else "prepared"
@@ -348,7 +352,8 @@ def test_coordinator_runs_only_missing_proved_transitions(core_request, monkeypa
     assert phases.count("tunnel_configure") == (0 if stage in ("configured", "mounted") else 1)
     assert phases.count("tunnel_mount") == (0 if stage == "mounted" else 1)
     assert phases.count("enroll") == 1
-    assert phases.count("services") == len(core_request["services"])
+    assert phases.count("services") == 1
+    assert submissions == [(services, None)]
     assert phases.count("cache") == phases.count("host_devices") == 3 and "packages" not in phases
     assert max(index for index, phase in enumerate(phases) if phase == "cache") < phases.index("enroll")
     assert phases.count("tunnel_preflight") == (3 if stage in ("unclaimed", "claimed") else 0)

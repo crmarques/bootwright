@@ -179,8 +179,8 @@ func TestClusterDeadlineUnchangedByDelegatedServices(t *testing.T) {
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	if got, err := cephDeadline(r, "apply"); err != nil || got != 18240*time.Second {
-		t.Fatalf("cluster deadline %v (%v), want 18240s", got, err)
+	if got, err := cephDeadline(r, "apply"); err != nil || got != 16260*time.Second {
+		t.Fatalf("cluster deadline %v (%v), want 16260s", got, err)
 	}
 }
 

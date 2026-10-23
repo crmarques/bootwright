@@ -1,7 +1,6 @@
 package ceph
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -9,7 +8,23 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 )
 
-func TestClusterBudgetPlansThreeThroughSixHostsAndServiceCeiling(t *testing.T) {
+func TestSixHostClusterBudgetAdmitsHostSpecificOSDServices(t *testing.T) {
+	for _, services := range []int{8, 9, 14} {
+		request := packageRequest(t)
+		for len(request.Hosts) < 6 {
+			request.Hosts = append(request.Hosts, request.Hosts[0])
+		}
+		for len(request.Services) < services {
+			request.Services = append(request.Services, request.Services[2])
+		}
+		deadline, err := cephDeadline(request, "apply")
+		if err != nil || deadline > 6*time.Hour {
+			t.Fatalf("six hosts with %d core services: deadline %s: %v", services, deadline, err)
+		}
+	}
+}
+
+func TestClusterBudgetPlansThreeThroughSixHostsWithOneServiceSubmission(t *testing.T) {
 	for hosts := 3; hosts <= 6; hosts++ {
 		catalog := planCatalog(hosts, hosts, nil)
 		request, err := planned(t, catalog, api.StorageCluster, "example")
@@ -21,14 +36,10 @@ func TestClusterBudgetPlansThreeThroughSixHostsAndServiceCeiling(t *testing.T) {
 			for len(request.Services) < services {
 				request.Services = append(request.Services, request.Services[2])
 			}
-			want := time.Duration((15+hosts+services)*660+1860+1800+60) * time.Second
+			want := time.Duration((16+hosts)*660+1860+1800+60) * time.Second
 			got, err := cephDeadline(request, "apply")
-			if want <= 6*time.Hour {
-				if err != nil || got != want {
-					t.Fatalf("%d hosts %d services: %s %v, want %s", hosts, services, got, err, want)
-				}
-			} else {
-				refusedWith(t, err, "lifecycle.unsupported", fmt.Sprintf("StorageCluster example needs a cluster run deadline of %s, past the 6h0m0s every adapter run is held to", want), "declare fewer hosts in spec.ceph.topology.nodes or fewer mon, mgr, osd and mds services in spec.ceph.services of StorageCluster example")
+			if err != nil || got != want || got > 6*time.Hour {
+				t.Fatalf("%d hosts %d services: %s %v, want %s", hosts, services, got, err, want)
 			}
 		}
 	}
@@ -54,7 +65,7 @@ func TestSeventhHostRefusesClusterAndDependentResources(t *testing.T) {
 }
 
 func TestClusterBudgetExamples(t *testing.T) {
-	for _, row := range []struct{ hosts, services, seconds int }{{3, 3, 17580}, {6, 4, 20220}, {6, 6, 21540}, {3, 9, 21540}} {
+	for _, row := range []struct{ hosts, services, seconds int }{{3, 3, 16260}, {6, 4, 18240}, {6, 14, 18240}, {3, 9, 16260}} {
 		request := packageRequest(t)
 		for len(request.Hosts) < row.hosts {
 			request.Hosts = append(request.Hosts, request.Hosts[0])

@@ -34,8 +34,11 @@ def test_six_host_fresh_call_plan_has_concurrent_rounds(core_request, monkeypatc
     core.package_intent(core_request)
     extra = copy.deepcopy(core_request["services"][-1])
     extra["service_id"] = "second"
-    extra["placement"]["hosts"] = extra["placement"]["hosts"][3:]
-    core_request["services"][-1]["placement"]["hosts"] = core_request["services"][-1]["placement"]["hosts"][:3]
+    extra["spec"]["data_devices"]["paths"] = ["/dev/vdc"]
+    for host in core_request["hosts"]:
+        device = copy.deepcopy(host["devices"][0])
+        device.update(path="/dev/vdc", serial=device["serial"] + "second")
+        host["devices"].append(device)
     core_request["services"].append(extra)
     hosts = core_request["hosts"]
     phases, counts, lock = [], Counter(), threading.Lock()
@@ -59,6 +62,8 @@ def test_six_host_fresh_call_plan_has_concurrent_rounds(core_request, monkeypatc
                 return state
             if phase in ("tunnel_configure", "tunnel_mount"):
                 return {"changed": True}
+            if phase == "services":
+                assert kwargs.get("service") is None and len(kwargs["devices"]) == 12
             if phase == "enroll":
                 return {"changed": True, "remaining": counts[phase] < 6}
             return super().call(host, phase, private, **kwargs)
@@ -70,9 +75,9 @@ def test_six_host_fresh_call_plan_has_concurrent_rounds(core_request, monkeypatc
                              now=clock.now, pause=clock.pause)["evidence"]["ready"]
     assert counts == Counter(bootstrap_state=1, dashboard=1, observe=2, host_state=12, prerequisites=6, devices=12,
                              tunnel_preflight=6, claim=6, authorize=6, bootstrap=1,
-                             tunnel_configure=1, tunnel_mount=1, cache=6, enroll=6, license=1, host_devices=6, osd_prepare=6, services=4)
-    # Nine host rounds plus the seed cache, five single calls (state/configure/mount/license/dashboard), n enrollment and S services.
-    assert 10 + 5 + counts["enroll"] + counts["services"] == 25
+                             tunnel_configure=1, tunnel_mount=1, cache=6, enroll=6, license=1, host_devices=6, osd_prepare=6, services=1)
+    # Nine host rounds plus the seed cache, five single calls (state/configure/mount/license/dashboard), n enrollment and one service submission.
+    assert 10 + 5 + counts["enroll"] + counts["services"] == 22
     assert max(index for index, phase in enumerate(phases) if phase == "osd_prepare") < phases.index("services")
 
 
@@ -182,6 +187,85 @@ def test_osd_children_have_one_apply_between_two_inventories(native):
     assert calls == ["read", "apply", "read"]
     assert native.services(tunnel.device_rows(native.request), service=2) == {"changed": False}
     assert calls == ["read", "apply", "read", "read"]
+
+
+@pytest.mark.parametrize("host_specific", [False, True])
+@pytest.mark.parametrize("interrupted", [False, True])
+def test_all_core_services_share_one_apply_and_recover_its_lost_reply(native, host_specific, interrupted):
+    six_hosts(native.request)
+    original = copy.deepcopy(native.request["services"][-1])
+    services = native.request["services"][:2]
+    for number, host in enumerate(native.request["hosts"]):
+        host["physical"] = host_specific
+        for disk in range(2):
+            device = copy.deepcopy(host["devices"][0])
+            device.update(path="/dev/vd" + ("b" if disk == 0 else "c"), serial="disk" + str(number) + str(disk))
+            if host_specific:
+                device["wwn"] = "0x50000000000000" + str(number) + str(disk)
+                device["path"] = "/dev/disk/by-id/wwn-" + device["wwn"]
+            if disk == 0:
+                host["devices"] = [device]
+            else:
+                host["devices"].append(device)
+            if host_specific:
+                service = copy.deepcopy(original)
+                service.update(service_id="data" + str(number) + str(disk), placement={"hosts": [host["name"]]})
+                service["spec"]["data_devices"]["paths"] = [device["path"]]
+                services.append(service)
+    if not host_specific:
+        for disk, path in enumerate(("/dev/vdb", "/dev/vdc")):
+            service = copy.deepcopy(original)
+            service["service_id"] = "data" + str(disk)
+            service["spec"]["data_devices"]["paths"] = [path]
+            services.append(service)
+    native.request["services"] = services
+    devices = tunnel.device_rows(native.request)
+    if host_specific:
+        for row in devices:
+            device = next(device for host in native.request["hosts"] for device in host["devices"] if device["path"] == row["path"])
+            row.update(wwn=device["wwn"], kernelPath="/dev/sda", sizeBytes=device["sizeBytes"], rotational=False)
+    calls, inventory = [], {}
+
+    def ceph(*args, **kwargs):
+        assert not kwargs
+        calls.append(args)
+        if args == ("fsid",):
+            return {"fsid": native.request["fsid"]}
+        assert args == ("orch", "ls", "--export")
+        return copy.deepcopy(list(inventory.values()))
+
+    def normalized(groups):
+        calls.append("normalize")
+        assert len([value for group in groups for value in group]) == 14
+        return groups
+
+    def apply(*args, **kwargs):
+        assert args == ("orch", "apply", "-i", "-") and kwargs["json_result"] is False
+        calls.append(args)
+        documents = list(yaml.safe_load_all(kwargs["data"]))
+        assert len(documents) == 14
+        for value in documents:
+            key = value["service_type"] + ("." + value["service_id"] if value.get("service_id") else "")
+            assert native.markers.read("service-" + key + "-attempt.json") is not None
+            inventory[key] = value
+        if interrupted:
+            raise ceph_native.Refusal("native-timeout")
+
+    native.ceph, native.tunnel_effect = ceph, apply
+    native.verify_tunnel_configuration = lambda: None
+    native.normalized_services = normalized
+    native.recovery_scope = lambda: {"fixture": True}
+    if interrupted:
+        with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):
+            native.services(devices)
+    else:
+        assert native.services(devices) == {"changed": True}
+    assert calls[:4] == [("fsid",), "normalize", ("orch", "ls", "--export"), ("orch", "apply", "-i", "-")]
+    assert calls[4:] == ([] if interrupted else [("orch", "ls", "--export")])
+    calls.clear()
+    assert native.services(devices) == {"changed": False}
+    assert calls == [("fsid",), "normalize", ("orch", "ls", "--export")]
+    assert len([name for name in native.markers.records if name.endswith("-complete.json")]) == 14
 
 
 def test_license_has_no_effect_without_every_host_completion(native):

@@ -628,21 +628,26 @@ never stops between its first daemon-deploying
 apply and readiness except on a native failure.
 
 The cluster block's apply deadline is
-(10 rounds + 5 single calls + n enrollment calls + S services calls) × 660 s +
-1860 s + 2 × 900 s + 60 s, where n is the host count and S the number of mon,
-mgr, osd and mds services. The ten rounds are the nine above with the bootstrap
-host's cache round; the five single calls are the bootstrap state, tunnel
-configuration, tunnel mount, license and dashboard calls. Three hosts with mon, mgr and
-one osd service need 21 calls and 17580 s; six hosts with mon, mgr and two osd
-services need 25 calls and 20220 s. Within the 6h0m0s every adapter run is held
-to, six hosts admit at most six such services (27 calls, 21540 s) and three
-hosts at most nine. A request whose deadline exceeds the ceiling refuses at
+(10 rounds + 5 single calls + n enrollment calls + 1 services call) × 660 s +
+1860 s + 2 × 900 s + 60 s, where n is the host count. The ten rounds are the
+nine above with the bootstrap host's cache round; the five single calls are
+the bootstrap state, tunnel configuration, tunnel mount, license and dashboard
+calls. The services call validates every mon, mgr, osd and mds specification
+and its original attempt, submits the pending documents together through the
+native multi-document apply, and proves their readback. A lost response retains
+each service's attempt identity; continuation never adopts a foreign service.
+Physical hosts may therefore select their distinct WWN devices in separate
+OSD specifications without multiplying bounded remote calls.
+Three hosts need 19 calls and 16260 s; six hosts need 22 calls and 18240 s,
+including P1's physical shape with twelve host-specific OSD specifications.
+The six-hour adapter ceiling, per-call budgets, input bounds and readiness
+proofs remain unchanged. A request whose deadline exceeds the ceiling refuses at
 planning, coded `lifecycle.unsupported`, with reason
 `StorageCluster <cluster> needs a cluster run deadline of <deadline>, past the 6h0m0s every adapter run is held to`
 and remedy
-`declare fewer hosts in spec.ceph.topology.nodes or fewer mon, mgr, osd and mds services in spec.ceph.services of StorageCluster <cluster>`.
+`declare fewer hosts in spec.ceph.topology.nodes of StorageCluster <cluster>`.
 
-Both readiness waits stay 900 s. A readiness timeout after the services calls
+Both readiness waits stay 900 s. A readiness timeout after the services call
 is recoverable: once cephadm has converged, the next apply observes a ready
 cluster, every host's stage is complete, and the apply passes. The six-host
 live runs of the [virtual provider matrix](milestones/m2.md#b484) record the

@@ -60,3 +60,119 @@ If the original records positively prove that neither OS installation nor the
 Ceph cluster started, cleanup can release the unused claims without overwriting
 disks. It records retention without installation rather than an erase receipt.
 Missing or uncertain history cannot authorize that cleanup.
+
+## Prepare and install
+
+Complete the controller setup, media import and BMC/media trust preparation in
+the [physical installation runbook](../../machines/lab-baremetal/README.md#run-it).
+Set `physical_ceph_input` to your customized private input directory. Review
+every root and Ceph disk against independent inventory, including the original
+`eraseOnRemoval` policy, before initializing the context:
+
+```sh
+./bin/bootwright validate -f "$physical_ceph_input"
+./bin/bootwright context init --name physical-ceph --input-dir "$physical_ceph_input"
+./bin/bootwright secret generate --context physical-ceph
+./bin/bootwright secret set --context physical-ceph --name lab-bmc-credentials --username <account> --password-stdin
+./bin/bootwright secret set --context physical-ceph --name lab-bmc-ca --certificate-file /path/to/bmc-ca.pem
+./bin/bootwright secret set --context physical-ceph --name ibm-registry --username cp --password-stdin
+./bin/bootwright secret check --context physical-ceph
+./bin/bootwright plan --context physical-ceph
+```
+
+The generated artifact certificate chains to `artifact-server-ca`; the BMC's
+declared media trust must accept that authority. The BMC CA supplied above
+independently verifies the controller-to-BMC connection. Complete any additional
+context-store Secrets introduced by the selected service or host variant before
+applying. Keep the context's bound credentials and recovery values available
+through removal.
+
+The complete frozen plan includes physical installation's `data-loss`
+authorization, including during earlier staged applies. Start with the machines
+powered off and run the stages separately:
+
+```sh
+./bin/bootwright apply --context physical-ceph --stage controller --authorize data-loss
+./bin/bootwright preflight controller --context physical-ceph
+./bin/bootwright apply --context physical-ceph --stage infra-components,substrates --authorize data-loss
+./bin/bootwright apply --context physical-ceph --stage machines --authorize data-loss
+./bin/bootwright status --context physical-ceph
+./bin/bootwright machine list --context physical-ceph --power-status
+./bin/bootwright machine exec --context physical-ceph --name metal-01,metal-02,metal-03 -- lsblk -b -o NAME,TYPE,SIZE,SERIAL,WWN,ROTA,FSTYPE,MOUNTPOINTS
+./bin/bootwright plan --context physical-ceph --stage clusters
+./bin/bootwright apply --context physical-ceph --stage clusters --authorize data-loss
+./bin/bootwright cluster info --context physical-ceph --name ceph-lab
+./bin/bootwright diff --context physical-ceph --observe
+```
+
+Review the installed identity, final networking and every selected disk before
+starting the clusters stage. After interruption, read `status` and repeat the
+same stage and authorization against the original frozen input. A changed disk,
+host key or UUID requires resolving the reported mismatch; a retry cannot adopt
+the replacement.
+
+## Exercise the physical matrix
+
+Use the [P1-P7 profile catalog](../../../specs/storage-coverage.md#profile-catalog)
+and each linked README for service intent, client checks, failure/recovery,
+replay and measured resource obligations. Adapt a private copy of each
+canonical profile:
+
+1. Convert only the Machines named by each StorageCluster's topology to the
+   bare-metal provider shape above. Preserve independently managed clients,
+   initiators and their context boundaries. Declare every physical ethernet
+   NIC and its MAC, verified BMC trust, explicit root path and delivered host
+   key. Preserve the profile's final network and host/security variants; FIPS
+   needs admitted fleet and delivered host-key types.
+2. Replace each selected data, DB and WAL path with that host's canonical WWN
+   path. Give each host its own OSD ServiceSpec and unique `service_id`, retaining
+   the original encryption, TPM2 and allocation fields. Carry the other native
+   services and declarative storage resources across unchanged, adjusting only
+   the actual host/network coordinates in the private copy.
+3. Include the root disk and every selected data/DB/WAL disk in that Machine's
+   original erase policy, with independently verified serial and exact byte
+   capacity. Validate and inspect the complete plan before the first apply.
+4. Follow the staged physical sequence above, then the canonical profile's
+   service and client checks on physical hosts. Record real capacity and wall
+   time in place of guest allocation/balloon measurements, and exercise the
+   [physical qualification cases](../../../specs/storage-coverage.md#physical-qualification).
+
+P1 uses six hosts with two data disks and one DB disk per host. P2 uses six
+storage hosts and retains its separate client. P4 retains its independently
+managed initiator; P7 retains two separate clusters and their client/peer
+boundaries. P7's RGW multisite credential interface remains blocked by
+[B483](../../../specs/milestones/m2.md#b483); planning its currently implemented
+RBD-mirroring trajectory does not qualify full P7.
+
+`TestPhysicalCephMatrixPreservesCanonicalPlans` adapts these canonical inputs
+in memory and checks production admission, frozen physical installation/erase
+requests and inverse ordering for all seven profiles. It preserves their
+storage resources and independent client declarations. It proves composition;
+firmware behavior, actual service/client effects and owner acceptance remain
+operator gates. Record each executed case using the
+[physical ledger template](../../../docs/acceptance.md#physical-qualification-row).
+
+## Remove and continue cleanup
+
+Retain the required data and review the removal plan first. Keep Machines
+reachable for any online cleanup, including managed unregistration. Begin with:
+
+```sh
+./bin/bootwright destroy --context physical-ceph --authorize data-loss
+./bin/bootwright status --context physical-ceph
+```
+
+Follow the reported `Stop first` and `Stop after online cleanup` groups. Stop a
+deferred Machine only after Bootwright records its required online cleanup;
+then use `machine stop` for the named Machines and repeat the same destroy with
+`--authorize data-loss`. A failed online cleanup must be resolved before those
+Machines stop. Bootwright performs no implicit power-off to bypass this proof.
+
+The offline worker then overwrites and reads back the exact original targets,
+and the controller records its receipt before shutdown. Storage verifies every
+original disk binding against those receipts before the physical claim releases.
+After interruption, keep the context and original hardware intact, inspect
+`status`, and repeat destroy with the same authorization. Retain the final
+receipt, media cleanup and claim-release evidence before deleting the context.
+Omitted erase authority records retention and cannot complete realized physical
+Ceph retirement.

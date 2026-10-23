@@ -222,7 +222,7 @@ func TestEveryCapabilityDeadlineCoversItsFrozenBudgets(t *testing.T) {
 			if operation == "apply" {
 				minimum = time.Duration(hosts+2)*native + convergence + margin
 				if action == "cluster" {
-					minimum = time.Duration(15+hosts+len(r.Services))*native + 1860*time.Second + 2*convergence + margin
+					minimum = time.Duration(16+hosts)*native + 1860*time.Second + 2*convergence + margin
 				}
 			}
 			deadline, err := cephDeadline(r, operation)
