@@ -726,7 +726,7 @@ include [CephFS/MDS](milestones/m2.md#b492), [RGW](milestones/m2.md#b477),
 [NVMe](milestones/m2.md#b480),
 [SMB](milestones/m2.md#b482), [multi-cluster/mirroring](milestones/m2.md#b483)
 and [client handoff](milestones/m2.md#b489). The iSCSI gateway is not a family: admission refuses
-`service_type: iscsi` ([B481](milestones/m2.md#b481)). B472 qualifies exact
+`service_type: iscsi` ([B481](milestones/delivered.md#x58--iscsi-refusal)). B472 qualifies exact
 provider support and typed gaps. Observation proves usability, not just object existence.
 The [API ownership rules](api/storage.md) prevent one resource from implicitly
 creating or deleting another resource's pools, services or credentials.

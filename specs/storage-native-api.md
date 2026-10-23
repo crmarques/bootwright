@@ -363,7 +363,7 @@ An authored `service_type: smb` refuses at its `service_type` because the SMB
 manager module generates that service from a StorageSMBResource, and
 `service_type: iscsi` refuses because Bootwright does not realize the iSCSI
 gateway; block access over the network goes through the NVMe-oF gateway
-([B481](milestones/m2.md#b481)). `service_type: cephfs-mirror` refuses because
+([B481](milestones/delivered.md#x58--iscsi-refusal)). `service_type: cephfs-mirror` refuses because
 Bootwright does not realize CephFS snapshot mirroring
 ([B483](milestones/m2.md#b483)).
 The [resource contract](storage-resources.md) owns those relationships.

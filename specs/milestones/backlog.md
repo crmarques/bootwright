@@ -3709,7 +3709,7 @@ Requires cell as `owner decision: <question>`.
   The same rule merged X58's in-tree work and the lane od28-aux-image-source
   (D164's OD28 (a)) after the int-x58 checkpoint: [B482](m2.md#b482) awaits
   operator acceptance, with the active-directory live row unrun (D161, OD15);
-  [B481](m2.md#b481) stays in progress for the vendor support statement the
+  [B481](delivered.md#x58--iscsi-refusal) stays in progress for the vendor support statement the
   owner left open (D161, OD27); and [B477](m2.md#b477), [B478](m2.md#b478) and
   [B479](m2.md#b479) plan their families once the images are authored.
   It then merged X59's in-tree lanes after the int-x59 checkpoint, with the
@@ -4009,3 +4009,24 @@ Requires cell as `owner decision: <question>`.
   B726's secondary-network block. D173's implementation waiver applies;
   operator rehearsals and their acceptance remain separate gates. No M4d
   to M4f implementation or host operation is authorized by these requests.
+
+- **D175** (2026-10-22, accepted by the owner): B496 adds optional
+  `Secret.spec.source.generated.issuerRef` to a generated `tlsCertificate`, naming
+  a generated `caBundle`. Generation signs the leaf with that authority while
+  retaining the signing key in private custody. Existing self-signed
+  generation remains available when the reference is omitted. This resolves
+  the API choice; implementation and rehearsal evidence remain B496's gates.
+
+- **D176** (2026-10-22, accepted by the owner): B481 closes with the
+  implemented field-specific refusal of iSCSI declarations, with guidance
+  toward NVMe-oF and no vendor support-status claim. This supplies the closing
+  decision left open under D161, OD27; it authorizes no iSCSI lifecycle.
+
+- **D177** (2026-10-22, accepted by the owner): B70 uses opt-in
+  `Machine.spec.hardware.eraseOnRemoval` with `method: logicalOverwrite` and
+  explicit targets containing `deviceName`, `wwn`, `serialNumber` and
+  `sizeBytes`. Omission retains the installed system. An offline RAM worker
+  must prove the machine and every target, overwrite and read back all
+  addressable bytes, and deliver a durable receipt before shutdown. This
+  contract claims neither remapped-sector coverage nor hardware sanitization;
+  implementation and hardware qualification remain required.

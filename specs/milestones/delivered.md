@@ -8074,6 +8074,25 @@ and live proof are still open.
 (endpoint sources, node composition, claim parity, determinism and network
 settings), and package pool admission tests.
 
+### X58 — iSCSI refusal
+
+**Item:** B481. **Owner:** Storage and Desired state. D176 accepts the
+implemented refusal as the closing outcome under OD27, resolving D161's
+remaining owner decision. This closes B481 alone, with no iSCSI provisioning
+or vendor support-status claim.
+
+#### B481
+
+An authored `spec.ceph.services` entry with `service_type: iscsi` refuses at
+its `service_type` during full and partial validation before any effect. The
+diagnostic directs block-access consumers toward NVMe-oF without echoing
+authored service identifiers or credentials. The owning contract is
+[native service admission](../storage-native-api.md).
+
+**Guard tests:** `internal/storage/native_test.go` covers full admission,
+partial admission and protected diagnostic output; `internal/storage/partial_test.go`
+covers Environment-default admission. These are offline refusal gates.
+
 ### X59 — Vendor package source admission
 
 **Item:** B620. **Owner:** Storage and Desired state. Delivered under D169
