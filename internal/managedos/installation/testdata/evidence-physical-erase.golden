@@ -1,0 +1,26 @@
+{
+  "version": "physical-erase-v1",
+  "request": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "prepared": true,
+  "removed": true,
+  "receipt": {
+    "version": "physical-erase-v1",
+    "state": "complete",
+    "originalAttempt": "remove-1/physical-erase-metal-01/1",
+    "request": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "uuid": "example-system",
+    "macs": [
+      "52:54:00:9a:1b:01"
+    ],
+    "targets": [
+      {
+        "deviceName": "/dev/vda",
+        "serialNumber": "serial-example",
+        "sizeBytes": 8192,
+        "wwn": "wwn-example",
+        "written": 8192,
+        "verified": 8192
+      }
+    ]
+  }
+}

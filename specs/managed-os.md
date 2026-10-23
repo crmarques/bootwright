@@ -735,15 +735,19 @@ request's digest, so neither a continuation nor a new plan can change the
 declared network of an installed Machine: a network declaration error is
 recovered only by `bootwright destroy`, which is context-wide, and a fresh
 apply. A `libvirt` Machine's destroy erases its disks. A `baremetal` Machine's
-destroy keeps the system installed on it until physical erasure lands
-([B70](milestones/m1.md#b70)), and a powered-on guest that answers with another
+destroy retains the system unless its frozen `eraseOnRemoval` policy selects
+[verified logical overwrite](state-reconciliation.md#opt-in-physical-logical-overwrite).
+A powered-on guest that answers with another
 marker refuses, so its recovery also powers it off from its management
 controller: only a powered-off Machine with no readable marker installs. In
 the texts below, `<recovery>` is `run bootwright destroy, which erases the
 Machines this context installed` on `libvirt`, and `run bootwright destroy,
 which releases Machine <m> but keeps the system installed on it, then power <m>
 off from its management controller so the next apply installs it again` on
-`baremetal`. A Machine without nmstatectl ends with `<recovery>, then apply
+`baremetal` with retaining removal. With opt-in erase, `<recovery>` instead names
+`run bootwright destroy --authorize data-loss, which overwrites the declared
+disks of Machine <m> and removes its installed system before releasing it`.
+A Machine without nmstatectl ends with `<recovery>, then apply
 with an install source that carries the nmstate package`. A refusal that may
 be transient (NetworkManager refused the document or
 the rollback, the change stayed uncommitted after the connection returned,
@@ -1151,7 +1155,7 @@ referenced install profile in the `machines` stage. It realizes the
 `MachineInstallProfile` publication under implementation and request version
 `os-package-tree-v1`; each machine installation requires that profile
 publication alongside its own Machine realization and referenced services.
-An installation uses request version `os-install-anaconda-v15`. Profiles using
+An installation uses request version `os-install-anaconda-v16`. Profiles using
 a URL package source contribute no publication block.
 
 The request freezes only context and profile identity, artifact-server
@@ -1208,6 +1212,25 @@ setup with this build, then start fresh. An old incomplete apply cannot
 silently continue across these changes. A moved automation digest alone
 freezes no block differently, so an apply continues across it once `setup` has
 run ([dependency safety](state-reconciliation.md#dependency-safety-during-recovery)).
+
+### Physical removal
+
+The physical claim and ordinary installation cleanup retain the installed
+system. Opt-in `spec.hardware.eraseOnRemoval` plans a separate Managed OS erase
+capability before the installation so removal runs cleanup first, offline erase
+second and claim release last. Its
+[logical-overwrite contract](state-reconciliation.md#opt-in-physical-logical-overwrite)
+owns exact identities, private RAM boot, direct I/O, receipt acknowledgement and
+failure recovery. Omission retains disks. An original installation proved never
+started removes its unused policy without booting or writing a disk.
+
+Installation request version `os-install-anaconda-v16` freezes the optional
+`eraseOnRemoval` Boolean so recovery guidance agrees with the separate policy.
+An erasing recovery names data-loss authorization and the overwritten disks;
+a retaining recovery continues to name the retained installed system. Version
+changes refuse earlier frozen requests rather than silently reinterpret them.
+Source and host-independent tests do not qualify any physical model; B70's
+real-hardware identity, interruption and cache/readback gates remain unrun.
 
 ### Physical installation
 

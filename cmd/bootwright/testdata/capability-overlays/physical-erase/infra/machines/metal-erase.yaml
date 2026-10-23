@@ -1,0 +1,41 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: metal-erase
+spec:
+  substrate:
+    providerRef: lab-metal
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      hostKeyRef: metal-erase-host-key
+      rootDeviceHints:
+        deviceName: /dev/sda
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+  hardware:
+    eraseOnRemoval:
+      method: logicalOverwrite
+      targets:
+        - deviceName: /dev/sda
+          wwn: naa.5000000000000001
+          serialNumber: EXAMPLE-ROOT-01
+          sizeBytes: 107374182400
+    nics:
+      - name: eno1
+        macAddress: 52:54:00:9a:1b:02
+    management:
+      bmc:
+        address: https://bmc-erase.metal.example.test/redfish/v1/Systems/1
+  network:
+    configRef: lab-metal
+    attachmentRef: lab-metal
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: metal-erase.metal.example.test
+      - name: ip
+        address: 198.51.100.12/24
+        interface: eno1

@@ -483,8 +483,7 @@ type SSHReservation struct {
 	Reservation prerequisites.HostReservation
 }
 
-// Execution is one authorized attempt against one frozen block. Material is
-// bounded memory owned by the caller and cleared after the attempt.
+// Execution lends bounded material for one frozen attempt and clears it afterward.
 type Execution struct {
 	LendProduced     func(context.Context, ProducedInput) (secrets.Material, error)
 	PreviousEvidence json.RawMessage
@@ -495,11 +494,7 @@ type Execution struct {
 	// stable native identity from it and its frozen object identity. Context
 	// names and the current destroy operation are not identity inputs.
 	ApplyOperation string
-	// Context names the context the operation belongs to, so a command a
-	// capability's diagnostic names acts on this context's object only, and
-	// the runner records it against the adapter's job, so a job it holds
-	// refuses only that context's next run. It is never part of what the
-	// block froze.
+	// Context scopes diagnostics and adapter jobs to this operation's context; it is not frozen.
 	Context string
 	// Continuation is the exact command that continues this apply, bound to
 	// its context and carrying every token its frozen plan consumes; empty
@@ -528,6 +523,13 @@ type Execution struct {
 	ApplyProved       []BlockEvidence
 	ApplyPreparations []json.RawMessage
 	Prepare           func(context.Context, json.RawMessage) error
+	// Completed inverse dependencies are paired with their original apply records.
+	RemovalProved []RemovalEvidence
+	// Original transitive descendants include positive Pending records, never siblings.
+	OriginalRemovalDependents []BlockEvidence
+	RemovalPreparations       []json.RawMessage
+	// Only effectful destroy attempts receive this immutable receipt write port.
+	PrepareRemoval func(context.Context, json.RawMessage) error
 	// LocateTool answers where the controller stage installed one executable,
 	// so a block runs the exact file that stage published for the release its
 	// own graph selected. The engine asks the plan's controller stage block,

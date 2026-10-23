@@ -632,8 +632,10 @@ it are retained exactly as they are, so the block's removal description says it
 retains the machine and lists no impact. It consumes no authorization, because
 it destroys nothing. The removal's resolution observes nothing and is always
 its completion, because the removal changes nothing on the machine. Physical
-erasure is deliberately not part of this contract
-and remains [B70](milestones/m1.md#b70).
+erasure belongs to the separately selected
+[Managed OS erase policy](state-reconciliation.md#opt-in-physical-logical-overwrite),
+which orders its verified receipt and cleanup before this claim is released.
+The claim block itself never writes a disk or turns retention into erase proof.
 
 **Quiescence.** The removal takes back only a claim, which nothing reads, so
 this block is always quiescent under the

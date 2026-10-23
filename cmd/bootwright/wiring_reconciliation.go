@@ -158,6 +158,8 @@ func operationPlaybook() map[string]string {
 		installation.Implementation + "/apply":          "managedos/install_apply.yml",
 		installation.Implementation + "/observe":        "managedos/install_observe.yml",
 		installation.Implementation + "/destroy":        "managedos/install_destroy.yml",
+		installation.EraseImplementation + "/destroy":   "managedos/erase_destroy.yml",
+		installation.EraseImplementation + "/observe":   "managedos/erase_observe.yml",
 		ceph.Implementation + "/apply":                  "storage/core_apply.yml",
 		ceph.Implementation + "/observe":                "storage/core_observe.yml",
 		ceph.Implementation + "/destroy":                "storage/core_destroy.yml",
@@ -210,6 +212,9 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	}, {
 		kind: installation.TreeKind, implementation: installation.TreeImplementation,
 		capability: installation.NewTree(runner).WithMedia(records),
+	}, {
+		kind: installation.Kind, implementation: installation.EraseImplementation,
+		capability: installation.NewErase(runner).WithClaims(baremetal.BlockID).WithIdentities(provedIdentities{}).WithMedia(records),
 	}, {
 		kind: installation.Kind, implementation: installation.Implementation,
 		capability: installation.New(runner).WithIdentities(provedIdentities{}).WithMedia(records),

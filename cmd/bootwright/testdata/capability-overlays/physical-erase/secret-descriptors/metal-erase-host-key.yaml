@@ -1,0 +1,8 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: metal-erase-host-key
+spec:
+  type: sshKeyPair
+  source:
+    generated: {}

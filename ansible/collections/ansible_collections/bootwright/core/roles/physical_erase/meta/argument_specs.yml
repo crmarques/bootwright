@@ -1,0 +1,38 @@
+---
+argument_specs:
+  destroy:
+    short_description: Execute one frozen offline physical erase
+    options: &erase_options
+      bootwright_physical_erase_request:
+        type: dict
+        required: true
+        options:
+          version:
+            type: str
+            required: true
+            choices: [physical-erase-v1]
+          deadlineSeconds:
+            type: int
+            required: true
+          install:
+            type: dict
+            required: true
+          installDigest:
+            type: str
+            required: true
+          network:
+            type: str
+            required: true
+          targets:
+            type: list
+            elements: dict
+            required: true
+      bootwright_physical_erase_digest:
+        type: str
+        required: true
+      bootwright_physical_erase_material:
+        type: dict
+        required: true
+  observe:
+    short_description: Read a durable physical erase receipt
+    options: *erase_options

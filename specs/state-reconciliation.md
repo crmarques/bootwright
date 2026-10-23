@@ -1928,9 +1928,95 @@ retains all controller-side proofs, fails closed on any mismatch or unknown
 probe, and passes explicit real-hardware qualification before it is called
 supported.
 
-Physical destroy and offline disk erase are outside this contract: a removal
-retains the machine and the system installed on it, and erasing one requires a
-separate safety contract ([B70](milestones/m1.md#b70)).
+Omitting the opt-in physical erase policy retains the machine and its installed
+system. Offline erase follows its separate safety contract below
+([B70](milestones/m1.md#b70)).
+
+### Opt-in physical logical overwrite
+
+`Machine.spec.hardware.eraseOnRemoval` is an explicit removal policy. Its only
+method is `logicalOverwrite`; omission retains disks. Each target supplies
+`deviceName`, `wwn`, `serialNumber` and exact `sizeBytes`. The approved
+`rootDeviceHints.deviceName` must be listed; data disks are individually listed.
+The initial execution bound is 16 whole disks, each at most 64 TiB with a
+4096-byte aligned logical size. These are implementation bounds, not hardware
+sanitize capabilities. All addressable bytes are overwritten with zero and
+independently read back after flush through direct I/O; hidden, remapped and
+overprovisioned storage is outside this claim.
+
+The erase block depends on the physical claim and publication services; the
+installation depends on it. Reverse order unregisters and removes installation
+content before erase, and releases the hardware claim only after erase. Removal
+consumes `data-loss`. It never chooses disks from authorization or discovery.
+An original installation block proved never started is retained without booting
+or writing disks; the policy's removal records retention, never an erase receipt.
+Missing original records refuse rather than imply that no installation started.
+The original system UUID, exact complete physical MAC set, WWN, serial and size
+must agree immediately before media insertion and in the RAM worker. Missing
+identity is unknown. All targets are opened exclusively before the first write;
+held descriptors, Linux disk sequence and live sysfs identity are rechecked
+throughout write and readback. A path replacement is not a new target.
+Linux SCSI `naa.<hex>` and a declared canonical `0x<hex>` WWN compare by the
+same complete 8- or 16-byte NAA identifier; other native forms remain exact.
+This follows the
+[kernel NAA formatter](https://github.com/torvalds/linux/blob/v6.12/drivers/scsi/scsi_lib.c)
+and [sysfs attributes](https://github.com/torvalds/linux/blob/v6.12/drivers/scsi/scsi_sysfs.c).
+Serial identity comes from the native serial attribute or a complete bounded
+SCSI VPD page 0x80, never from a guessed path or stale udev text.
+
+The private image contains only network configuration and a nonreturning
+Anaconda `%pre` which launches a dedicated RAM service. The service masks and
+stops installer frontends and refuses any remaining installer process before
+starting the writer. It requires RAM-backed runtime/root filesystems; no
+ordinary installation directives are present. The image selects `rd.live.ram=1`,
+`rd.live.overlay.overlayfs=1` and `inst.zram=0`; an overlay's upper and work
+directories must both resolve to tmpfs. The
+[dracut 057 live-root implementation](https://github.com/dracutdevs/dracut/blob/057/modules.d/90dmsquash-live/dmsquash-live-root.sh)
+defines the RAM copy and overlay selection, and
+[RHEL 9's boot reference](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html-single/interactively_installing_rhel_from_installation_media/index)
+documents the stage2 RAM copy. Installer isolation follows the
+[RHEL 9 Anaconda startup order](https://github.com/rhinstaller/anaconda/blob/rhel-9/anaconda.py)
+and [synchronous pre-script execution](https://github.com/rhinstaller/anaconda/blob/rhel-9/pyanaconda/kickstart.py),
+also present in the
+[RHEL 10 implementation](https://github.com/rhinstaller/anaconda/blob/rhel-10/pyanaconda/kickstart.py).
+The boot media's frozen size and SHA-256 remain mandatory. Source review does
+not qualify an image build or physical machine.
+
+Original-attempt custody and a fresh erase-only SSH host key remain private on
+the execution host, beneath the immutable original apply operation identity so
+reuse of a context name cannot adopt an old receipt. Initial private custody is
+atomically committed before boot; its first erase attempt remains frozen across
+retries. The installed OS's existing host key is never the erase
+receipt identity. The RAM service accepts only receipt reads and receipt-hash
+acknowledgement through pinned SSH. A complete receipt binds request, original
+attempt, system UUID, MAC set and exact written/verified coverage of every disk.
+It is durably recorded on the execution host and in the lifecycle attempt
+before shutdown acknowledgement. Completion additionally proves the same
+machine powered off, media ejected and private image withdrawn. The durable
+receipt remains; boot-private material is removed. A durable finalization
+checkpoint follows powered-off/eject proof and publication withdrawal. Cleanup
+removes the private key and boot files and fsyncs their directory before the
+completion record is published. Interrupted cleanup resumes without recreating
+keys, booting or acknowledging another worker.
+
+The worker has four hours for full overwrite and readback. Erase-owned native
+controller phases cap their entire discovery/retry/poll sequence; together with
+the 900-second build and 900-second RAM startup allowance they fit within the
+two-hour controller margin, keeping the invocation within six hours. Exhaustion
+leaves a partial or unknown result and retains the claim.
+
+Cancellation never means erase finished. An authenticated partial status resumes
+only while the independent RAM worker service is active. A stopped or failed
+worker refuses promptly; the operator powers off the Machine before continuing
+the same destroy, whose fresh boot repeats the entire frozen overwrite and
+readback after rechecking every identity. A completed durable receipt is replayed.
+Without a receipt, another boot must
+reprove all identities and repeat the whole overwrite/readback. A powered-off
+machine, missing OS or zero prefix never proves completion. Identity drift,
+short writes, failed readback and unavailable probes refuse without selecting
+another disk. B70 remains subject to failure-injection and real-hardware
+qualification; firmware identity, hotplug and cache semantics are not inferred
+from passing unit tests.
 
 ### Controller-host protection
 

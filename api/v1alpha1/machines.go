@@ -43,7 +43,7 @@ func machineSchema() *Shape {
 		defaulted("capabilities", set(enumeration("openshift-node", "ceph-node", "ceph-arbiter", "container-runtime", "libvirt")), ListValue()),
 		field("placement", record(field("site", name()))),
 		field("substrate", record(field("providerRef", ref(InfraProvider)), field("profileRef", nonempty()))),
-		field("hardware", record(field("nics", named(record(required("name", nonempty()), field("macAddress", lexical("mac"))))), field("management", record(field("bmc", machineBMCSchema()))))),
+		field("hardware", record(field("eraseOnRemoval", machineEraseSchema()), field("nics", named(record(required("name", nonempty()), field("macAddress", lexical("mac"))))), field("management", record(field("bmc", machineBMCSchema()))))),
 		required("os", record(required("provided", boolean()), field("installProfileRef", ref(MachineInstallProfile)), field("install", record(field("hostKeyRef", secret("sshKeyPair")), field("ntp", serverSelections(NTPServer)), field("rootDeviceHints", record(field("deviceName", lexical("device-path")), field("hctl", nonempty()), field("model", nonempty()), field("vendor", nonempty()), field("serialNumber", nonempty()), field("minSizeGigabytes", integer("0", "")), field("wwn", nonempty()), field("rotational", boolean()))))))),
 		field("proxy", proxySelection()),
 		field("network", network), field("access", access),

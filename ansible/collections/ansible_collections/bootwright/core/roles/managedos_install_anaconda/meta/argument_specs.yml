@@ -114,6 +114,9 @@ argument_specs:
           target:
             type: dict
             required: true
+          eraseOnRemoval:
+            type: bool
+            required: false
           tlsCertificateRef:
             type: str
             required: false
@@ -129,7 +132,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [os-install-anaconda-v15]
+            choices: [os-install-anaconda-v16]
       bootwright_os_install_material:
         type: dict
         required: true

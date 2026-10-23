@@ -79,6 +79,12 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 	add("cluster_objects", "observe.yml", "ansible.builtin.assert", "validates the frozen shared program version", read)
 	add("cluster_objects", "observe.yml", "ansible.builtin.fail", "reports the bounded read-only adapter refusal", read)
 	add("cluster_objects", "observe.yml", observeCollection+"cluster_objects_read", "reads the frozen object program through projected oc get operations", read)
+	add("physical_erase", "observe.yml", observeCollection+"physical_erase", "reads durable receipt/custody without boot, overwrite, acknowledgement, shutdown or deletion", func(params, _ map[string]any) bool {
+		return params["phase"] == "observe"
+	})
+	add("physical_erase", "observe.yml", observeCollection+"physical_erase_protocol", "publishes loaded or read-only completion, never a durable effect preparation", func(params, _ map[string]any) bool {
+		return params["phase"] == "loaded" || params["phase"] == "completed" && params["observed"] == true
+	})
 	addObserveReads(add, read)
 	addObserveScratch(add, read)
 	return allow
@@ -405,4 +411,23 @@ func TestEveryObservePlaybookRunsOnlyAllowedTasks(t *testing.T) {
 			t.Fatalf("the ungated copy was not reported: %v", problems)
 		}
 	})
+}
+
+func TestPhysicalEraseObservationRefusesEffectPhases(t *testing.T) {
+	for _, phase := range []string{"prepare", "build", "start", "await", "ack", "stop-proof", "finish"} {
+		planted := "\n- name: Mutate erase custody\n  bootwright.core.physical_erase:\n    phase: " + phase + "\n"
+		problems := walkObservePlaybooks(observeAssetsWith(observeRoleRoot+"physical_erase/tasks/observe.yml", planted))
+		if !slices.ContainsFunc(problems, func(problem string) bool {
+			return strings.Contains(problem, `physical_erase ("Mutate erase custody") outside its constraint`)
+		}) {
+			t.Fatalf("effect phase %s was admitted: %v", phase, problems)
+		}
+	}
+	planted := "\n- name: Prepare a receipt\n  bootwright.core.physical_erase_protocol:\n    phase: prepared\n"
+	problems := walkObservePlaybooks(observeAssetsWith(observeRoleRoot+"physical_erase/tasks/observe.yml", planted))
+	if !slices.ContainsFunc(problems, func(problem string) bool {
+		return strings.Contains(problem, `physical_erase_protocol ("Prepare a receipt") outside its constraint`)
+	}) {
+		t.Fatalf("write handshake was admitted: %v", problems)
+	}
 }

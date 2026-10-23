@@ -192,6 +192,8 @@ func contractRows() []contractRow {
 			drift: map[string]any{"identity": strings.Repeat("a", 64)}},
 		{kind: installation.Kind, implementation: installation.Implementation, example: "lab-rhel", presence: contractInstallationPresence, retains: true,
 			noEffect: map[string]any{"power": "Off"}, drift: map[string]any{"reachable": false}},
+		{kind: installation.Kind, implementation: installation.EraseImplementation, example: "lab-baremetal+erase",
+			completedFrom: "specs/state-reconciliation.md, Opt-in physical logical overwrite: erase requires the original physical claim UUID before any adapter or receipt can be trusted"},
 		{kind: libvirt.HostKind, implementation: libvirt.HostImplementation, example: "lab-rhel", presence: contractHostPresence,
 			absence:   map[string]any{"uri": true, "poolAnswered": true, "directory": false, "firewallReady": map[string]any{"answered": true}},
 			readiness: "services", removalPartial: contractStoppedPool, drift: map[string]any{"poolAutostart": false}},
@@ -218,6 +220,7 @@ const cephSMBCompletedFrom = "specs/storage.md, SMB resources: an SMB request ta
 // example and a synthetic overlay under testdata, for a kind no tracked example
 // declares yet.
 var contractOverlays = map[string][2]string{
+	"lab-baremetal+erase":                {"lab-baremetal", filepath.Join("testdata", "capability-overlays", "physical-erase")},
 	"libvirt-3-nodes-ceph+smb":           {"libvirt-3-nodes-ceph", filepath.Join("testdata", "capability-overlays", "ceph-smb")},
 	"libvirt-3-nodes-ceph-object+user":   {"libvirt-3-nodes-ceph-object", filepath.Join("testdata", "capability-overlays", "ceph-object-user")},
 	"libvirt-3-nodes-ceph-object+bucket": {"libvirt-3-nodes-ceph-object", filepath.Join("testdata", "capability-overlays", "ceph-object-bucket")},

@@ -154,6 +154,9 @@ type Request struct {
 	// DiskEncryption names the Secret whose value is the recovery passphrase
 	// of an encrypted root disk. The value reaches only the private subtree.
 	DiskEncryption *DiskEncryption `json:"diskEncryption,omitempty"`
+	// EraseOnRemoval freezes destructive recovery guidance with the separate
+	// opt-in erase policy; omission keeps the retaining physical journey.
+	EraseOnRemoval bool `json:"eraseOnRemoval,omitempty"`
 	// FleetKeyRef names the Secret whose public half the installation
 	// authorizes for the product-owned account. Only that half ever leaves the
 	// binding, and it reaches the adapter at execution rather than in the plan.

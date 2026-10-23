@@ -226,6 +226,19 @@ def test_a_physical_machine_is_told_to_power_off_after_destroy():
                 ) in message, (name, message)
 
 
+def test_opt_in_physical_erase_recovery_names_the_destructive_policy_and_authorization():
+    tasks = flattened("network.yml")
+    scope = failing_scope()
+    scope["bootwright_os_install_request"]["target"] = {"substrate": "baremetal"}
+    scope["bootwright_os_install_request"]["eraseOnRemoval"] = True
+    templar = Templar(loader=LOADER, variables=dict(defaults(), **scope))
+    for name in DESTROYING:
+        message = templar.template(trust_as_template(tasks[index_of(tasks, named(name), name)][FAIL]["msg"]))
+        assert "bootwright destroy --authorize data-loss" in message
+        assert "overwrites the declared disks of Machine " + MACHINE in message
+        assert "keeps the system installed" not in message
+
+
 def option_values(argv):
     return [argv[position + 1] for position, word in enumerate(argv) if word == "-o"]
 

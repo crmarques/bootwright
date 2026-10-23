@@ -40,7 +40,7 @@ VALIDATION = "ansible.builtin.validate_argument_spec"
 
 # Every playbook the collection ships. Finding fewer means the walk stopped
 # seeing them, which would pass these rules vacuously.
-PLAYBOOK_COUNT = 55
+PLAYBOOK_COUNT = 57
 
 # The version no role admits: each role admits exactly one request version,
 # its own (TestRoleVersionAssertionsMatchTheirArgumentSpecs).

@@ -140,8 +140,9 @@ type Invocation struct {
 	NativeErrors bool
 	// Deadline is the run's own deadline, derived from the budgets the frozen
 	// request carries; zero keeps the runner's default.
-	Deadline    time.Duration
-	Preparation func(json.RawMessage) error
+	Deadline           time.Duration
+	Preparation        func(json.RawMessage) error
+	RemovalPreparation func(json.RawMessage) error
 }
 
 // RunFor builds the adapter request one attempt authorizes. A capability never
@@ -157,6 +158,14 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 				return err
 			}
 			return execution.Prepare(ctx, preparation)
+		}
+	}
+	if execution.PrepareRemoval != nil && invocation.RemovalPreparation != nil && !readOnly {
+		prepare = func(ctx context.Context, preparation json.RawMessage) error {
+			if err := invocation.RemovalPreparation(preparation); err != nil {
+				return err
+			}
+			return execution.PrepareRemoval(ctx, preparation)
 		}
 	}
 	return RunRequest{

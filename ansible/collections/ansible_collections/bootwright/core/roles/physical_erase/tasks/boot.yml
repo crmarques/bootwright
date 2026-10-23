@@ -1,0 +1,67 @@
+---
+- name: Create the private erase publication directories
+  ansible.builtin.file:
+    path: '{{ item }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0711'
+  loop:
+    - '{{ bootwright_physical_erase_request.install.private.path }}'
+    - '{{ physical_erase_prepared.private }}'
+  no_log: true
+
+- name: Remove only the interrupted image before rebuilding
+  ansible.builtin.file:
+    path: '{{ physical_erase_prepared.private }}/erase.iso'
+    state: absent
+  no_log: true
+
+- name: Build and privately publish the erase-only image
+  bootwright.core.physical_erase:
+    phase: build
+    request: '{{ bootwright_physical_erase_request }}'
+    digest: '{{ bootwright_physical_erase_digest }}'
+    material: '{{ bootwright_physical_erase_material }}'
+  no_log: true
+
+- name: Keep the private image readable only by its serving group
+  ansible.builtin.file:
+    path: '{{ physical_erase_prepared.private }}/erase.iso'
+    owner: root
+    group: root
+    mode: '0640'
+  no_log: true
+
+- name: Label the private image for its existing artifact listener
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/chcon
+      - --reference
+      - '{{ bootwright_physical_erase_request.install.private.path | dirname | dirname | dirname }}'
+      - --recursive
+      - '{{ bootwright_physical_erase_request.install.private.path }}'
+    expand_argument_vars: false
+  changed_when: true
+  no_log: true
+
+- name: Prove the private image is served over its verified listener
+  ansible.builtin.uri:
+    url: '{{ physical_erase_prepared.url }}'
+    method: GET
+    headers:
+      Range: bytes=0-0
+    status_code: [200, 206]
+    validate_certs: true
+    ca_path: '{{ bootwright_physical_erase_material.artifactCertificate }}'
+    return_content: false
+    timeout: 30
+  no_log: true
+
+- name: Reprove the stopped target and boot only its private erase worker
+  bootwright.core.physical_erase:
+    phase: start
+    request: '{{ bootwright_physical_erase_request }}'
+    digest: '{{ bootwright_physical_erase_digest }}'
+    material: '{{ bootwright_physical_erase_material }}'
+  no_log: true

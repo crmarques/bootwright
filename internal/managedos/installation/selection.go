@@ -242,6 +242,7 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 		BootMedia:         boot,
 		Budgets:           installationBudgets,
 		DiskEncryption:    requestEncryption(profile),
+		EraseOnRemoval:    machine.Spec().Has("hardware", "eraseOnRemoval"),
 		FleetKeyRef:       fleetKeyRef(catalog),
 		HostKeyPath:       HostKeyPath,
 		Identity:          Identity{Block: BlockID(name), Context: contextName, Object: name, Profile: profile.Name()},
@@ -297,6 +298,10 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	if request.Network, err = networkFor(catalog, machine, install); err != nil {
 		return Request{}, Requirements{}, err
 	}
+	return finishInstallationRequest(request, needs, install)
+}
+
+func finishInstallationRequest(request Request, needs Requirements, install Installation) (Request, Requirements, error) {
 	kickstart, err := RenderKickstart(install)
 	if err != nil {
 		return Request{}, Requirements{}, err

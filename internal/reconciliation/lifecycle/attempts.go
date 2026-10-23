@@ -455,6 +455,9 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 					Completed: len(settled), Declared: len(block.Groups)})
 			},
 		}
+		if err := populateRemovalExecution(ctx, store, operation, plan, &execution); err != nil {
+			return err
+		}
 		release, lendErr := s.prepareProducedExecution(ctx, tx, store, operation, plan, &execution)
 		if lendErr != nil {
 			return lendErr

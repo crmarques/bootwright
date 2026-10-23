@@ -149,3 +149,39 @@ func (o specOption) refusals(path string, value any) []string {
 	}
 	return found
 }
+
+func TestTheEraseRoleAdmitsTheFrozenRequest(t *testing.T) {
+	path := "collections/ansible_collections/bootwright/core/roles/physical_erase/meta/argument_specs.yml"
+	data, ok := ansible.Assets()[path]
+	if !ok {
+		t.Fatal("the embedded erase argument specification is absent")
+	}
+	var document struct {
+		ArgumentSpecs map[string]struct {
+			Options map[string]specOption `yaml:"options"`
+		} `yaml:"argument_specs"`
+	}
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join("testdata", "erase-request-physical.golden"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var request any
+	if err := decoder.Decode(&request); err != nil {
+		t.Fatal(err)
+	}
+	variable := eraseVariable + "_request"
+	for _, operation := range []string{"observe", "destroy"} {
+		specification, found := document.ArgumentSpecs[operation].Options[variable]
+		if !found {
+			t.Fatalf("erase %s declares no request", operation)
+		}
+		if problems := specification.refusals(variable, request); len(problems) != 0 {
+			t.Fatalf("erase %s rejects the frozen request: %v", operation, problems)
+		}
+	}
+}

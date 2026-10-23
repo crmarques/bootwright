@@ -26,6 +26,8 @@ func applicationValues() packageSymbols {
 	return packageSymbols{
 		"internal/desiredstate/compilation": {"State": true},
 		"internal/workspace/contexts":       {"Configuration": true},
+		// A frozen installation request owns bytes and derivations, with no service.
+		"internal/managedos/installation": {"Request": true},
 		// ScopedFailure is the failure value a dependency adapter raises for
 		// its caller's scope to render; it binds no replaceable service.
 		// WheelMirror is the validated --wheel-mirror value the CLI checks and

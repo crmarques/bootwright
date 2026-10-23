@@ -1,0 +1,22 @@
+---
+- name: Complete the physical erase execution handoff
+  bootwright.core.physical_erase_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Read the durable erase receipt without effects
+  bootwright.core.physical_erase:
+    phase: observe
+    request: '{{ bootwright_physical_erase_request }}'
+    digest: '{{ bootwright_physical_erase_digest }}'
+    material: '{{ bootwright_physical_erase_material }}'
+  register: physical_erase_observed
+  no_log: true
+
+- name: Publish physical erase observation
+  bootwright.core.physical_erase_protocol:
+    phase: completed
+    digest: '{{ bootwright_physical_erase_digest }}'
+    evidence: '{{ physical_erase_observed.evidence }}'
+    observed: true
+  no_log: true

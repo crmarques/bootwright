@@ -10,15 +10,13 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-// Implementation is the frozen identity of this capability. A plan records it,
-// and a continuation refuses when the executable no longer offers it.
+// Implementation is frozen; continuation requires the executable to offer it.
 const Implementation = "os-install-anaconda-v1"
 
-// Kind is the API kind this capability realizes. The substrate realizes the
-// same kind through another implementation, so a block resolves by both.
+// Kind is shared with the substrate; resolution also requires the implementation.
 const Kind = "Machine"
 
-const requestVersion = "os-install-anaconda-v15"
+const requestVersion = "os-install-anaconda-v16"
 
 // installationBudgets are the waits every installation this build plans
 // freezes. The installer takes minutes to write a disk; a physical server adds
@@ -57,13 +55,10 @@ const mediaMargin = time.Hour + controllerCalls
 const controllerCalls = substrate.ControllerPowerReadBound + substrate.ControllerInsertBound +
 	4*substrate.ControllerPowerBound + 3*substrate.ControllerBootSelectionBound + 2*substrate.ControllerEjectBound
 
-// consumerPrefix is the subtree this capability owns beneath a managed artifact
-// server's served root. The server owns the root; this block owns exactly
-// os/<object>/ and removes it in its own inverse.
+// consumerPrefix owns os/<object>/ beneath the artifact server's served root.
 const consumerPrefix = "os"
 
-// servedRoot is the directory the managed artifact server serves, beneath its
-// own content root.
+// servedRoot is beneath the artifact server's content root.
 const servedRoot = "public"
 
 // privatePrefix is the subtree material only the installing machine may read
@@ -72,11 +67,10 @@ const servedRoot = "public"
 // plan, the evidence or any log.
 const privatePrefix = "private"
 
-// IdentityFile is the name the delivered host key pair is published under,
-// inside the attempt's own unguessable directory.
+// IdentityFile names the delivered host key pair in the private attempt directory.
 const IdentityFile = "identity"
 
-// RecoveryFile is the name a recovery passphrase is published under beside it.
+// RecoveryFile names the adjacent recovery passphrase.
 const RecoveryFile = "recovery"
 
 // MarkerPath is where a completed installation leaves its proof, and
