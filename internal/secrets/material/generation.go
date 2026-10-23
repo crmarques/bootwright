@@ -323,7 +323,8 @@ func (s *Service) validateGeneratedCertificate(declaration secrets.Declaration, 
 	validity := generatedValidity(cert, days)
 	if configuration.IssuerRef != "" {
 		issuer = certificates[1]
-		validity = validity || (cert.NotAfter.Equal(issuer.NotAfter) && cert.NotAfter.After(cert.NotBefore) && cert.NotAfter.Before(cert.NotBefore.Add(certificateBackdate).AddDate(0, 0, days)))
+		startCapped := cert.NotBefore.Equal(issuer.NotBefore) && !cert.NotAfter.Before(cert.NotBefore.AddDate(0, 0, days)) && !cert.NotAfter.After(cert.NotBefore.Add(certificateBackdate).AddDate(0, 0, days))
+		validity = validity || startCapped || (cert.NotAfter.Equal(issuer.NotAfter) && cert.NotAfter.After(cert.NotBefore) && cert.NotAfter.Before(cert.NotBefore.Add(certificateBackdate).AddDate(0, 0, days)))
 		if !validAt(issuer, now) || len(issuer.UnhandledCriticalExtensions) != 0 || issuer.CheckSignatureFrom(issuer) != nil || cert.CheckSignatureFrom(issuer) != nil || cert.NotAfter.After(issuer.NotAfter) || cert.NotBefore.Before(issuer.NotBefore) {
 			return failure("input", "generated TLS issuer chain is invalid", "")
 		}
