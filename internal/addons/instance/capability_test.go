@@ -86,7 +86,7 @@ type scriptedRunner struct {
 
 func (r *scriptedRunner) Run(_ context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	r.calls = append(r.calls, request)
-	r.material, _ = request.Material["produced-kubeconfig"].Part(secrets.ValuePart)
+	r.material, _ = request.Material["produced:kubeconfig"].Part(secrets.ValuePart)
 	return r.result, r.err
 }
 func fixtureExecution(t *testing.T, request Request) lifecycle.Execution {

@@ -36,7 +36,7 @@ func wireCompilerWithRegistry(registry addons.Registry) compilation.Compiler {
 			normalized, packageIssues := addons.NormalizePackages(normalized, registry)
 			return normalized, append(issues, packageIssues...)
 		}, ValidateAuthored: addons.ValidateAuthored, ValidatePartial: addons.ValidatePartial, Validate: func(o api.Object, c api.Catalog) []api.Issue {
-			return addons.ValidateWithRegistry(o, c, registry, containercluster.AddonFacts(c, o.Spec().Get("clusterRef").Text()))
+			return addons.ValidateWithRegistry(o, c, registry, addonFacts(c, o.Spec().Get("clusterRef").Text()))
 		}},
 		compilation.Rules{Normalize: customplaybooks.Normalize, ValidateAuthored: customplaybooks.ValidateAuthored, ValidatePartial: customplaybooks.ValidatePartial, Validate: customplaybooks.Validate},
 		compilation.Rules{RetiredField: storage.RetiredField, Normalize: storage.Normalize, ValidateAuthored: storage.ValidateAuthored, ValidatePartial: storage.ValidatePartial, Validate: storage.Validate},
@@ -47,6 +47,14 @@ func wireCompilerWithRegistry(registry addons.Registry) compilation.Compiler {
 			return append(containercluster.Validate(o, c), containercluster.ValidateNetworkProviders(o, c, registry)...)
 		}},
 		compilation.Rules{Normalize: infrastructureservices.Normalize, ValidateAuthored: infrastructureservices.ValidateAuthored, ValidatePartial: infrastructureservices.ValidatePartial, Validate: infrastructureservices.Validate})
+}
+
+func addonFacts(c api.Catalog, cluster string) addons.ClusterFacts {
+	facts := containercluster.AddonFacts(c, cluster)
+	for _, export := range storage.AddonExportFacts(c) {
+		facts.Exports = append(facts.Exports, addons.ExportFacts{Name: export.Name, Cluster: export.Cluster, Gateway: export.Gateway, TLS: export.TLS})
+	}
+	return facts
 }
 
 func wireDesiredState(deps serviceDependencies, compiler compilation.Compiler) cli.DesiredStateService {

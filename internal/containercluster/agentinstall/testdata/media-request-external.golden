@@ -244,6 +244,6 @@
     "lab-root-ca",
     "corp-proxy-ca"
   ],
-  "version": "cluster-media-agent-v6",
+  "version": "cluster-media-agent-v7",
   "workRoot": "/var/lib/bootwright-clusters/lab/ocp"
 }

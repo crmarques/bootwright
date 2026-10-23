@@ -9,5 +9,5 @@
   "receipts": null,
   "request": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "retired": true,
-  "version": "addon-instance-evidence-v1"
+  "version": "addon-instance-evidence-v2"
 }

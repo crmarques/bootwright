@@ -63,6 +63,7 @@ func contractVersions() []contractVersion {
 		{ceph.PhysicalRetirementImplementation, ceph.PhysicalRetirementContentDigest(), reflect.TypeFor[ceph.PhysicalRetirementRequest](), reflect.TypeFor[ceph.PhysicalRetirementEvidence]()},
 		{ceph.SMBImplementation, ceph.SMBContentDigest(), reflect.TypeFor[ceph.SMBRequest](), reflect.TypeFor[ceph.SMBEvidence]()},
 		{ceph.ReplicationImplementation, ceph.ReplicationContentDigest(), reflect.TypeFor[ceph.ReplicationRequest](), reflect.TypeFor[ceph.ReplicationEvidence]()},
+		{ceph.ExportImplementation, ceph.ExportContentDigest(), reflect.TypeFor[ceph.ExportRequest](), reflect.TypeFor[ceph.ExportEvidence]()},
 	}
 	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
 		versions = append(versions, contractVersion{definition.Implementation, definition.ContentDigest(),
@@ -99,6 +100,8 @@ func automationFormats() map[string]automationFormat {
 	host, core := persistedBy(ceph.HostImplementation), persistedBy(ceph.Implementation)
 	return map[string]automationFormat{
 		"addon-instance-request-v1":           {class: formatMirrored},
+		"ceph-export-request-v1":              {class: formatMirrored},
+		"ceph-export-evidence-v1":             {class: formatMirrored},
 		"cluster-network-request-v1":          {class: formatMirrored},
 		"cluster-objects-v1":                  {class: formatMirrored},
 		"bootwright.cluster-objects.owner-v1": {class: formatMirrored},
@@ -177,7 +180,7 @@ func automationFormats() map[string]automationFormat {
 		"os-package-tree-v1":        {class: formatMirrored},
 		"os-install-anaconda-v16":   {class: formatMirrored},
 		"physical-erase-v1":         {class: formatMirrored},
-		"cluster-media-agent-v6":    {class: formatMirrored},
+		"cluster-media-agent-v7":    {class: formatMirrored},
 		"cluster-install-agent-v5":  {class: formatMirrored},
 		"artifact-server-nginx-v2":  {class: formatMirrored},
 		"managed-service-v3":        {class: formatMirrored},

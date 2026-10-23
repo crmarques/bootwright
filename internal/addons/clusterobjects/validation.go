@@ -119,7 +119,7 @@ func validateStep(step Step, options Options, namespaces []string, owned map[str
 		subscription := step.Subscribe
 		err = validateObject(subscription.Object)
 		ref = &subscription.Object.Ref
-		if subscription.Approval != Exact {
+		if subscription.Approval != Exact && subscription.Approval != OperatorManaged {
 			err = fmt.Errorf("Subscription %s approval %q is unavailable", ref.Name, subscription.Approval)
 		}
 		if ref.Kind != "Subscription" || ref.APIVersion != "operators.coreos.com/v1alpha1" || !ref.Namespaced || !validName(subscription.CSV) {
@@ -280,18 +280,17 @@ func validatePlacement(entry PlacementEntry, namespaces []string) error {
 		return fmt.Errorf("Secret placement %s/%s: %s", p.Namespace, p.Name, reason)
 	}
 	if p.Produced != nil {
-		if !AllowedProduced(*p.Produced) {
+		if !AllowedProduced(*p.Produced) || p.Secret != "" || len(p.Keys) != 0 || len(p.Strings) != 0 || p.Type != "Opaque" || !dataKey.MatchString(p.ProducedKey) || len(p.ProducedKey) > 253 {
 			return fail("produced source is outside the closed allowlist")
 		}
-		return fail("produced source is unavailable")
 	}
-	if !validName(p.Secret) || p.ProducedKey != "" || !validName(p.Name) || !validName(p.Namespace) || !slices.Contains(namespaces, p.Namespace) {
+	if p.Produced == nil && (!validName(p.Secret) || p.ProducedKey != "") || !validName(p.Name) || !validName(p.Namespace) || !slices.Contains(namespaces, p.Namespace) {
 		return fail("invalid source or namespace")
 	}
 	if p.Type != "Opaque" && p.Type != "kubernetes.io/tls" {
 		return fail("unsupported type")
 	}
-	if len(p.Keys) == 0 {
+	if len(p.Keys) == 0 && p.Produced == nil {
 		return fail("no mapped parts")
 	}
 	keys, parts := map[string]bool{}, map[string]bool{}

@@ -157,11 +157,8 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 		a.invalid("$.spec.clusterRef", "this storage child requires a managed cluster", "set spec.clusterRef to a StorageCluster with spec.management managed")
 		return a.issues
 	}
-	if item, ok := map[api.Kind]string{api.StorageExport: "B86"}[object.Kind()]; ok {
-		if !managed {
-			item = "parked item B107"
-		}
-		a.deferred("$.spec", "this storage resource family requires its later qualified service slice", "this "+string(object.Kind())+" from the input", item)
+	if object.Kind() == api.StorageExport && !managed {
+		a.deferred("$.spec", "this storage resource family requires its later qualified service slice", "this StorageExport from the input", "parked item B107")
 		return a.issues
 	}
 	switch object.Kind() {

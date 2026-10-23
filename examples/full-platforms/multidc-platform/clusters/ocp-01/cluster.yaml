@@ -23,6 +23,7 @@ spec:
         - master
 
   install:
+    additionalTrustBundlePolicy: Always
     method: agent
     mode: connected
 

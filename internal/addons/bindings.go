@@ -190,6 +190,9 @@ func StorageAttachments(c api.Catalog) []Attachment {
 	seen := map[Attachment]bool{}
 	profiles, definitions := uniqueObjects(c.OfKind(api.ClusterAddonProfile)), uniqueObjects(c.OfKind(api.ClusterAddon))
 	for _, binding := range c.OfKind(api.ClusterAddonBinding) {
+		if ref := binding.Spec().Get("packages", "fdf", "storageExportRef"); ref.Type() == api.String && ref.Text() != "" {
+			seen[Attachment{ClusterRef: binding.Spec().Get("clusterRef").Text(), ExportRef: ref.Text()}] = true
+		}
 		// Validation owns selection diagnostics; this projection grants no effects.
 		selected, _, _ := expandIndexed(binding, c, profiles, definitions)
 		configsByName := uniqueNamedValues(binding.Spec().Get("addonConfigs"), "addonRef")

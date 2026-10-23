@@ -96,8 +96,6 @@ requires the instance that provides `nmstate`
 address pools and advertisements as its configuration
 ([B727](milestones/m4.md#b727)), never the cluster's.
 
-Not yet met: no package configuration names a `StorageExport`; tracked as
-[B760](milestones/m4.md#b760).
 
 ### Package qualification
 
@@ -308,8 +306,6 @@ checked like the package's own, and its absence after a completed apply is
 a partial realization. These approvals are the only writes to objects
 Bootwright did not create.
 
-Not yet met: every package uses exact approval; tracked as
-[B759](milestones/m4.md#b759).
 
 ## Readiness
 
@@ -369,8 +365,6 @@ only a `StorageExport`'s `external-details`. Planning refuses any other
 producer kind or output, in particular every `kubeconfig` and `dashboard`
 output, naming the placement.
 
-Not yet met: no placement takes produced material; tracked as
-[B760](milestones/m4.md#b760).
 
 ## Observation and continuation
 
@@ -445,9 +439,6 @@ created. The object is retired with its cluster and keeps working on a
 physical cluster that outlives its context. Bootwright publishes no
 application or fleet GitOps content: it creates one pointer to content the
 operator owns.
-
-Not yet met: no package creates a bootstrap object; tracked as
-[B765](milestones/m4.md#b765).
 
 ## Refusals
 

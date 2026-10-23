@@ -84,6 +84,11 @@ artifact server and its placement Machine.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
+| An agent OVN section | a node's composed `ovn` or `ovs-db` | `agent network configuration of <machine> contains an ovn or ovs-db section` | `declare OVN bridges through ContainerCluster secondaryNetworks` |
+| An agent bridge interface | a node's bridge interface | `agent network configuration of <machine> contains an unqualified bridge interface <interface>` | `declare bridges through ContainerCluster secondaryNetworks` |
+| An agent reserved interface | a node interface named `br-int` | `agent network configuration of <machine> uses reserved interface br-int` | `choose an interface name not reserved by OVN-Kubernetes` |
+| An agent install interface off the default route | a node's install address and default route select different interfaces | `installation address of <machine> is not on its default-route interface` | `assign the installation address to the interface carrying its default route` |
+| Ambiguous agent default-route interfaces | same-family default routes select different interfaces, regardless of metric or table | `installation address of <machine> has default routes on multiple interfaces` | `use one default-route interface for the installation address family` |
 | A boot-image server off the controller | selected artifact server’s `spec.machineRef` differs from the controller Machine | `a cluster's boot image is built on the controller, so the server it is published through is placed there` | `set spec.machineRef on <server> to the controller Machine` |
 | An OKD cluster | `spec.distribution.type: okd` | `this executable installs no OKD cluster` | `correct <cluster>` |
 | A release pinned by image alone | `spec.distribution.release` without `version` | `a cluster pinned to a release image alone names no version for its installer to match` | `correct <cluster>` |
@@ -260,8 +265,9 @@ A cluster that selects additional trust bundles freezes an empty
 the certificate part of each bundle's Secret, in the order the cluster selects
 them, each trimmed of surrounding whitespace and joined to the next by one line
 break, because the installer refuses a bundle holding anything after its last
-certificate. No `additionalTrustBundlePolicy` is written, so the installer
-applies its own default.
+certificate. The optional `additionalTrustBundlePolicy` is written unchanged
+when selected as `Always` or `Proxyonly`, and refuses without bundle references.
+When omitted, the installer applies its own default.
 
 ### Node networking
 
@@ -275,12 +281,11 @@ any other. Interface MTUs reach the installer as declared. A node whose network
 configuration holds an OVS or Linux bridge, an `ovn` or `ovs-db` section, or an
 interface named as OVN-Kubernetes reserves refuses, and so does a node whose
 install address is not on its default-route interface, because the installed
-node builds `br-ex` from that interface on every boot. The agent renames a
+node builds `br-ex` from that interface on every boot. Same-family default
+routes on distinct interfaces refuse regardless of metric or routing table;
+multiple routes on the same interface remain supported. The agent renames a
 logical interface name to the device's kernel name, so a node's `ethernet`
 names are its kernel names once it is installed.
-
-Not yet met: bond members are not identified by permanent address and none of
-these refusals exists; tracked as [B718](milestones/m3.md#b718).
 
 The name servers a node selects through its network's `dns` field become
 `dns-resolver.config.server` in that node's host record. Admission refuses a

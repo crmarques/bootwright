@@ -30,15 +30,29 @@ type InstallPlan struct {
 }
 
 type OLMFacts struct {
-	Namespace           string      `json:"namespace"`
-	Subscription        string      `json:"subscription"`
-	InstallPlan         InstallPlan `json:"installPlan"`
-	InstalledCSV        string      `json:"installedCSV"`
-	CSVVersion          string      `json:"csvVersion"`
-	UpgradePending      bool        `json:"upgradePending"`
-	MaxOpenShiftVersion string      `json:"maxOpenShiftVersion"`
-	CatalogImage        string      `json:"catalogImage"`
-	BundleImage         string      `json:"bundleImage"`
+	Namespace           string         `json:"namespace"`
+	Subscription        string         `json:"subscription"`
+	InstallPlan         InstallPlan    `json:"installPlan"`
+	InstalledCSV        string         `json:"installedCSV"`
+	CSVVersion          string         `json:"csvVersion"`
+	UpgradePending      bool           `json:"upgradePending"`
+	MaxOpenShiftVersion string         `json:"maxOpenShiftVersion"`
+	CatalogImage        string         `json:"catalogImage"`
+	BundleImage         string         `json:"bundleImage"`
+	Plans               []OperatorPlan `json:"plans,omitempty"`
+	CSVs                []OperatorCSV  `json:"csvs,omitempty"`
+}
+
+type OperatorPlan struct {
+	Name     string   `json:"name"`
+	CSVs     []string `json:"csvs"`
+	Approved bool     `json:"approved"`
+}
+
+type OperatorCSV struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Phase   string `json:"phase"`
 }
 
 type DependentFacts struct {

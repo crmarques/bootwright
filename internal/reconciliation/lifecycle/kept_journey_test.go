@@ -203,7 +203,7 @@ func keptMediaRequest() agentinstall.MediaRequest {
 		Identity: agentinstall.Identity{Block: agentinstall.MediaBlockID(installedCluster), Cluster: installedCluster, Context: lifecycle.JourneyContext},
 		Image:    install.Image, InstallConfig: map[string]any{}, Placement: install.Placement,
 		PullSecretRef: "lab-pull-secret", Release: install.Release, SSHKeyRef: "lab-cluster-key",
-		TLSCertificateRef: "lab-artifact-tls", Tool: install.Tool, Version: "cluster-media-agent-v6", WorkRoot: install.WorkRoot,
+		TLSCertificateRef: "lab-artifact-tls", Tool: install.Tool, Version: "cluster-media-agent-v7", WorkRoot: install.WorkRoot,
 	}
 }
 

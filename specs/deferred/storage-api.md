@@ -326,7 +326,8 @@ defaults and normalizes these values:
   binding, and for a CephFS FSAL `cmount_path: /` and the bound filesystem's
   `fs_name`, with canonical client addresses
   ([field record](../storage-resources.md#storagenfsexport)); and
-- `StorageExport.spec.type: dataFoundation` when that arm is authored.
+- `StorageExport.spec.type: dataFoundation` and
+  `spec.dataFoundation.cephxKeyType: aes` when that arm is authored.
 
 Implicit defaults owned by Ceph or a native renderer remain absent from
 effective state. Apart from the canonicalizations above, authored values are

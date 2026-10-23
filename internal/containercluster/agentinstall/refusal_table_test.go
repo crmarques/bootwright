@@ -60,7 +60,29 @@ func TestContainerClusterRefusalTableMatchesUnsupported(t *testing.T) {
 	onSNOCluster := map[string]string{"<cluster>": "ContainerCluster/sno"}
 	onNode := map[string]string{"<cluster>": "ContainerCluster/sno", "<machine>": "Machine/sno-01"}
 	onProvider := map[string]string{"<cluster>": "ContainerCluster/sno", "<provider>": "InfraProvider/lab-libvirt"}
+
+	networkCase := func(change func(api.Value) api.Value) refusalCase {
+		n := guest("sno-01", "198.51.100.21/24")
+		configuration := networkConfiguration().Spec()
+		configuration = configuration.With("nmstate", change(configuration.Get("nmstate")))
+		n = n.WithSpec(n.Spec().With("network", n.Spec().Get("network").Without("configRef").With("inline", configuration)))
+		return refusalCase{onSNO(n), "ContainerCluster/sno", map[string]string{"<machine>": "Machine/sno-01", "<interface>": "extra"}}
+	}
 	cases := map[string]refusalCase{
+		"An agent OVN section": networkCase(func(v api.Value) api.Value { return v.With("ovn", api.MapValue()) }),
+		"An agent bridge interface": networkCase(func(v api.Value) api.Value {
+			return v.With("interfaces", api.ListValue(append(v.Get("interfaces").Items(), api.MapValue(text("name", "extra"), text("type", "linux-bridge")))...))
+		}),
+		"An agent reserved interface": networkCase(func(v api.Value) api.Value {
+			return v.With("interfaces", api.ListValue(append(v.Get("interfaces").Items(), api.MapValue(text("name", "br-int"), text("type", "ethernet")))...))
+		}),
+		"Ambiguous agent default-route interfaces": networkCase(func(v api.Value) api.Value {
+			return v.WithPath(api.ListValue(api.MapValue(text("destination", "0.0.0.0/0"), text("next-hop-interface", "eth0")), api.MapValue(text("destination", "0.0.0.0/0"), text("next-hop-interface", "extra"))), "routes", "config")
+		}),
+		"An agent install interface off the default route": networkCase(func(v api.Value) api.Value {
+			return v.WithPath(api.ListValue(api.MapValue(text("destination", "0.0.0.0/0"), text("next-hop-interface", "extra"))), "routes", "config")
+		}),
+
 		"A boot-image server off the controller": {
 			api.NewCatalog(append(append(base(), hypervisor()...), onRemote(guest("sno-01", "198.51.100.21/24")), servedBy("far-artifacts", cluster("sno", installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")), node("master-0", "master", "sno-01", "master-0.sno.lab.example.test"))))),
 			"ContainerCluster/sno", map[string]string{"<server>": "ArtifactServer/far-artifacts"},

@@ -25,6 +25,7 @@ def source_bundle():
             "ceph_native_nvmeof": '"""Fixed fixture."""\n', "ceph_native_nfs": '"""Fixed fixture."""\n', "ceph_native_observability": '"""Fixed fixture."""\n',
             "ceph_native_units": '"""Fixed fixture."""\n',
             "ceph_native_object": '"""Fixed fixture."""\n', "ceph_smb_native": '"""Fixed fixture."""\n', "ceph_replication_native": '"""Fixed fixture."""\n',
+            "ceph_export_dns": '"""Fixed fixture."""\n', "ceph_export_native": '"""Fixed fixture."""\n',
             "ceph_host_route_probe": '"""Fixed fixture."""\n', "physical_machine_identity": '"""Fixed fixture."""\n',
             "ceph_host_runtime": '"""Fixed fixture."""\n',
             "ceph_native": ('class Refusal(ValueError): pass\nCOMMAND_SESSION = True\ndef dispatch(value):\n'

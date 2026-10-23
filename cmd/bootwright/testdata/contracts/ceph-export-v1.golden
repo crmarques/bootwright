@@ -1,0 +1,43 @@
+implementation: ceph-export-v1
+content-digest: 65d626bbba8a32a2a1fe2b5168467dbf4c48aff8ded24688ac55a52b7ea5fc66
+automation-formats: none
+request-schema:
+  cluster string
+  controller string
+  defaultDataPool string
+  filesystem string
+  gateway *struct ceph.ExportGateway omitempty
+  gateway.addresses []string
+  gateway.certificateRef string
+  gateway.fqdn string
+  gateway.indexPool string
+  gateway.name string
+  gateway.port int
+  gateway.realm string
+  gateway.tls bool
+  gateway.zone string
+  gateway.zoneGroup string
+  keyType string
+  machines []string
+  monitoringHosts []string
+  monitoringPort int
+  monitors map[string]string
+  name string
+  physicalHosts bool
+  pool string
+  principals map[string]map[string]string
+  scope opaque omitempty
+  version string
+evidence-schema:
+  address string
+  entries map[string]string
+  fsid string
+  keyType string
+  leader string
+  name string
+  owner string
+  principals map[string]map[string]string
+  ready bool
+  request string
+  rgwUser string
+  version string

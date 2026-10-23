@@ -42,7 +42,7 @@ func (a *networkAdapter) Run(_ context.Context, run lifecycle.RunRequest) (lifec
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	evidence := driver.Evidence{Version: "cluster-network-evidence-v1", Request: run.Digest, Postcondition: !a.unready && !a.foreign}
+	evidence := driver.Evidence{Version: "cluster-network-evidence-v2", Request: run.Digest, Postcondition: !a.unready && !a.foreign}
 	checks := len(program.Checks)
 	for _, step := range program.Steps {
 		checks += len(step.Wait)

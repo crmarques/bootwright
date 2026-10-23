@@ -22,10 +22,11 @@ JSON_TEMPLATE = ('{{define "json"}}{{$t := printf "%T" .}}'
                  '{{else if eq $t "<nil>"}}null{{else}}{{.}}{{end}}{{end}}')
 
 
-def resource(value):
+def resource(value, listing=False):
+    allowed_listing = listing and not value["name"] and value["kind"] in ("InstallPlan", "ClusterServiceVersion")
     if (not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", value["kind"])
             or not re.fullmatch(r"(?:[a-z0-9.-]+/)?[a-z][a-z0-9]*", value["apiVersion"])
-            or not re.fullmatch(r"[a-z0-9][a-z0-9.-]*", value["name"])
+            or not allowed_listing and not re.fullmatch(r"[a-z0-9][a-z0-9.-]*", value["name"])
             or (value.get("namespace") and not re.fullmatch(r"[a-z0-9][a-z0-9-]*", value["namespace"]))):
         raise ValueError("invalid object identity")
     version = value["apiVersion"].split("/")
@@ -113,17 +114,25 @@ def decode(output, secret=False):
 
 def get(params):
     obj = params["object"]
-    argv = ["get", resource(obj), obj["name"], "--ignore-not-found=true"]
+    listing = not obj["name"]
+    if listing and obj["kind"] not in ("InstallPlan", "ClusterServiceVersion"):
+        raise ValueError("unsupported object listing")
+    argv = ["get", resource(obj, listing=listing)] + ([obj["name"], "--ignore-not-found=true"] if not listing else [])
     if obj.get("namespace"):
         argv += ["--namespace", obj["namespace"]]
-    argv += ["-o", "go-template=" + projection(obj, params.get("fields", []))]
+    template = projection(obj, params.get("fields", []))
+    if listing:
+        template = JSON_TEMPLATE + '{"items":[{{range $i,$v := .items}}{{if $i}},{{end}}{{with $v}}' + template[len(JSON_TEMPLATE):] + '{{end}}{{end}}]}'
+    argv += ["-o", "go-template=" + template]
     code, output, ignored_error = run(params["oc"], params["kubeconfig"], argv, params["deadline"])
     if code:
         return {"answered": False}
     if not output.strip():
         return {"answered": True, "object": None}
     try:
-        value = decode(output, obj["kind"] == "Secret")
+        value = json.loads(output) if listing else decode(output, obj["kind"] == "Secret")
+        if listing and (not isinstance(value, dict) or not isinstance(value.get("items"), list)):
+            raise ValueError("invalid object listing")
     except (ValueError, TypeError):
         return {"answered": False}
     return {"answered": True, "object": value}

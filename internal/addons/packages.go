@@ -29,14 +29,16 @@ const (
 )
 
 type Package struct {
-	Name               string
-	Provides, Requires []string
-	RequiresFor        func(Instance) []string
-	Last               bool
-	Budget             time.Duration
-	OLM                *OLM
-	Admit              func(Instance, ClusterFacts) []api.Issue
-	Render             func(Instance) (Rendered, error)
+	Name                string
+	Provides, Requires  []string
+	RequiresFor         func(Instance) []string
+	Last                bool
+	PlacementNamespaces []string
+	Normalize           func(api.Value) api.Value
+	Budget              time.Duration
+	OLM                 *OLM
+	Admit               func(Instance, ClusterFacts) []api.Issue
+	Render              func(Instance) (Rendered, error)
 }
 type OLM struct {
 	Namespace                                       string
@@ -48,6 +50,7 @@ type OLM struct {
 type Instance struct {
 	Cluster, Binding string
 	Config           api.Value
+	Facts            ClusterFacts
 }
 type ClusterFacts struct {
 	Name, Release                                     string
@@ -59,6 +62,18 @@ type ClusterFacts struct {
 	Reserved                                          []AddressHolder
 	Gateway                                           OVNGateway
 	SecondaryNetworks                                 []SecondaryNetwork
+	Exports                                           []ExportFacts
+	Trust                                             TrustFacts
+}
+
+type ExportFacts struct {
+	Name, Cluster string
+	Gateway, TLS  bool
+}
+
+type TrustFacts struct {
+	Policy  string
+	Bundles int
 }
 type AddressHolder struct {
 	Addr   netip.Addr
@@ -166,6 +181,9 @@ func NewRegistryWithExamples(entries []Package, examples map[string][]api.Value)
 			}
 		}
 		if p.OLM != nil {
+			if p.OLM.Approval != Exact && (p.OLM.Approval != OperatorManaged || p.Name != "fdf") {
+				return Registry{}, fmt.Errorf("package %q has an unqualified OLM approval policy", p.Name)
+			}
 			if p.OLM.Namespace == "" || p.OLM.Namespace == "openshift-operators" || namespaces[p.OLM.Namespace] {
 				return Registry{}, fmt.Errorf("package %q has an invalid or shared operator namespace", p.Name)
 			}
@@ -189,6 +207,7 @@ func NewRegistryWithExamples(entries []Package, examples map[string][]api.Value)
 	return r, nil
 }
 func clonePackage(p Package) Package {
+	p.PlacementNamespaces = slices.Clone(p.PlacementNamespaces)
 	p.Provides = slices.Clone(p.Provides)
 	p.Requires = slices.Clone(p.Requires)
 	if p.OLM != nil {

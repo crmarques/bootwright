@@ -41,6 +41,7 @@ func Normalize(object api.Object, catalog api.Catalog) (api.Object, []api.Issue)
 	case api.StorageExport:
 		if spec.Has("dataFoundation") {
 			spec = spec.Default("type", api.StringValue("dataFoundation"))
+			spec = spec.With("dataFoundation", spec.Get("dataFoundation").Default("cephxKeyType", api.StringValue("aes")))
 		}
 	}
 	return object.WithSpec(spec), nil

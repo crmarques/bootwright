@@ -250,6 +250,6 @@
     "kind": "openshift-install",
     "version": "4.21.15"
   },
-  "version": "cluster-media-agent-v6",
+  "version": "cluster-media-agent-v7",
   "workRoot": "/var/lib/bootwright-clusters/lab/ocp"
 }

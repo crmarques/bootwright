@@ -127,7 +127,7 @@ func lineDiff(want, got string) string {
 func TestPackageRenderGoldens(t *testing.T) {
 	for _, p := range Builtin().Packages() {
 		t.Run(p.Name, func(t *testing.T) {
-			configuration := config().Without("pools")
+			configuration := packageTestConfig(p.Name)
 			if p.Name == "metallb" {
 				configuration = config(pool("services", "192.0.2.80-192.0.2.90"))
 			}

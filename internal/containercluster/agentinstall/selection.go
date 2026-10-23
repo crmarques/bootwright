@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/containercluster"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
@@ -104,6 +105,11 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 		if machine.Installed(bound) {
 			return "a declared node selects an install profile, so two installations would write its disk",
 				"remove spec.os.installProfileRef from " + bound.Identity() + " or drop it from " + cluster.Identity()
+		}
+		if native, errors := machine.ComposeNetwork(bound, catalog); len(errors) == 0 {
+			if issues := containercluster.NodeNetworkIssues(bound, catalog, native); len(issues) > 0 {
+				return issues[0].Message, issues[0].Remediation
+			}
 		}
 		target, err := substrate.TargetFor(catalog, bound, cluster.Name(), controllerMachine)
 		if err != nil {

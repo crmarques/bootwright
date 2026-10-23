@@ -105,8 +105,9 @@ func TestProgramRefusesClosedAndDeferredArms(t *testing.T) {
 			t.Fatal(err)
 		}
 		p.Steps = append(p.Steps, Step{Kind: "place", Place: &entry})
-		if _, err := Freeze(p, Options{Namespace: "operators"}); err == nil {
-			t.Fatal("accepted produced source")
+		_, err = Freeze(p, Options{Namespace: "operators"})
+		if (err == nil) != AllowedProduced(source) {
+			t.Fatal("unexpected produced source admission", source, err)
 		}
 	}
 }
@@ -202,7 +203,11 @@ func TestSubscriptionAndDependentValidation(t *testing.T) {
 	if _, err := Freeze(p, Options{}); err != nil {
 		t.Fatal(err)
 	}
-	for _, policy := range []Approval{OperatorManaged, "automatic", ""} {
+	subscription.Approval = OperatorManaged
+	if _, err := Freeze(p, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, policy := range []Approval{"automatic", ""} {
 		subscription.Approval = policy
 		if _, err := Freeze(p, Options{}); err == nil {
 			t.Fatal("accepted approval policy", policy)
@@ -275,6 +280,8 @@ func TestVocabularyGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	evidence := Evidence{Receipts: []Receipt{{Ref: ref, UID: "uid-1", DesiredDigest: p.Steps[0].Create.DesiredDigest, Disposition: "created"}}, OLM: []OLMFacts{{Namespace: "operators", Subscription: "operator", InstallPlan: InstallPlan{Name: "install-1", UID: "plan-1", CSVs: []string{"operator.v1.0.0"}}, InstalledCSV: "operator.v1.0.0", CSVVersion: "1.0.0", UpgradePending: true, MaxOpenShiftVersion: "4.21", CatalogImage: "registry.example.test/catalog:v1", BundleImage: "registry.example.test/bundle:v1"}}, Dependents: []DependentFacts{{Namespace: "engine", Subscription: "engine", UID: "engine-1", InstallPlan: InstallPlan{Name: "engine-install", UID: "engine-plan", CSVs: []string{"engine.v1.0.0"}}, InstalledCSV: "engine.v1.0.0"}}, Checks: []CheckResult{{Index: 0, Satisfied: true, Stale: true, LastObservation: "Available", Unknown: true}}, Observations: []ObjectObservation{{Ref: ref, Ownership: Own, Equal: true}}}
+	evidence.OLM[0].Plans = []OperatorPlan{{Name: "install-1", CSVs: []string{"operator.v1.0.0"}, Approved: true}}
+	evidence.OLM[0].CSVs = []OperatorCSV{{Name: "operator.v1.0.0", Version: "1.0.0", Phase: "Succeeded"}}
 	data, err = Canonical(evidence)
 	if err != nil {
 		t.Fatal(err)

@@ -13,26 +13,32 @@ func placementMaterials(placements []co.SecretPlacement, material map[string]sec
 	files := []lifecycle.MaterialFile{}
 	sources := map[string]map[string]string{}
 	for i, placement := range placements {
-		source, ok := material[placement.Secret]
+		name := placement.Secret
+		keys := placement.Keys
+		if placement.Produced != nil {
+			name = "produced:export:" + placement.Produced.Object
+			keys = []co.KeyPart{{Part: string(secrets.ValuePart), Key: placement.ProducedKey}}
+		}
+		source, ok := material[name]
 		if !ok {
-			return nil, nil, failure("Secret "+placement.Secret+" is not bound for placement", "restore its Secret binding")
+			return nil, nil, failure("placement source "+name+" is not bound for placement", "restore its Secret binding or apply the export producer first")
 		}
 		mapped := []secrets.Part{}
-		for _, key := range placement.Keys {
+		for _, key := range keys {
 			mapped = append(mapped, secrets.Part(key.Part))
 		}
 		slices.Sort(mapped)
 		if !slices.Equal(mapped, source.Parts()) {
 			return nil, nil, failure("Secret placement "+placement.Name+" does not map exactly its bound parts", "correct the package part mapping")
 		}
-		if _, exists := sources[placement.Secret]; exists {
+		if _, exists := sources[name]; exists {
 			continue
 		}
-		sources[placement.Secret] = map[string]string{}
-		for j, key := range placement.Keys {
+		sources[name] = map[string]string{}
+		for j, key := range keys {
 			variable := fmt.Sprintf("secret-%d-%d", i, j)
-			sources[placement.Secret][key.Part] = variable
-			files = append(files, lifecycle.MaterialFile{Name: variable, Part: secrets.Part(key.Part), Secret: placement.Secret, Variable: variable})
+			sources[name][key.Part] = variable
+			files = append(files, lifecycle.MaterialFile{Name: variable, Part: secrets.Part(key.Part), Secret: name, Variable: variable})
 		}
 	}
 	data, err := co.Canonical(sources)

@@ -142,7 +142,7 @@ func StorageNFSExportNativeSchema() *Shape {
 }
 
 func storageExportSchema() *Shape {
-	return record(field("type", enumeration("dataFoundation")), required("clusterRef", ref(StorageCluster)), field("dataFoundation", record(required("rbdPoolRef", ref(StoragePool)), required("filesystemRef", ref(StorageFilesystem)), field("objectGatewayRef", ref(StorageObjectGateway)))), field("externalDetails", record(required("fromSecretRef", secret("opaque")))))
+	return record(field("type", enumeration("dataFoundation")), required("clusterRef", ref(StorageCluster)), field("dataFoundation", record(required("rbdPoolRef", ref(StoragePool)), required("filesystemRef", ref(StorageFilesystem)), field("objectGatewayRef", ref(StorageObjectGateway)), field("cephxKeyType", enumeration("aes", "aes256k")))), field("externalDetails", record(required("fromSecretRef", secret("opaque")))))
 }
 
 func storageReplicationSchema() *Shape {

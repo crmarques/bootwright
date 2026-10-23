@@ -27,6 +27,24 @@ func ValidateEvidence(evidence Evidence) error {
 		}
 	}
 	for _, olm := range evidence.OLM {
+		if len(olm.Plans) > 16 || len(olm.CSVs) > 16 {
+			return fail()
+		}
+		for _, plan := range olm.Plans {
+			if !nativeName(plan.Name) || len(plan.CSVs) > 16 {
+				return fail()
+			}
+			for _, csv := range plan.CSVs {
+				if !nativeName(csv) {
+					return fail()
+				}
+			}
+		}
+		for _, csv := range olm.CSVs {
+			if !nativeName(csv.Name) || !bounded(csv.Version) || !bounded(csv.Phase) {
+				return fail()
+			}
+		}
 		if !nativeName(olm.Namespace) || !nativeName(olm.Subscription) || !nativeName(olm.InstalledCSV) || !bounded(olm.CSVVersion) || !nativeImage(olm.CatalogImage) || !nativeImage(olm.BundleImage) || !validPlan(olm.InstallPlan) {
 			return fail()
 		}

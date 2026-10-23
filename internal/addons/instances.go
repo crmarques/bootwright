@@ -149,6 +149,9 @@ func NormalizePackages(o api.Object, r Registry) (api.Object, []api.Issue) {
 			}
 			v = v.With("pools", sortedNamed(api.ListValue(pools...), "name"))
 		}
+		if p.Normalize != nil {
+			v = p.Normalize(v)
+		}
 		configs = configs.With(f.Name, v)
 	}
 	if configs.Present() {
@@ -161,6 +164,19 @@ func ValidatePackages(o api.Object, c api.Catalog, r Registry, facts ClusterFact
 		return nil
 	}
 	issues := []api.Issue{}
+	if ref := o.Spec().Get("packages", "fdf", "storageExportRef").Text(); ref != "" {
+		bindings := c.OfKind(api.ClusterAddonBinding)
+		slices.SortFunc(bindings, func(a, b api.Object) int { return strings.Compare(a.Name(), b.Name()) })
+		for _, earlier := range bindings {
+			if earlier.Name() >= o.Name() {
+				break
+			}
+			if earlier.Spec().Get("packages", "fdf", "storageExportRef").Text() == ref {
+				issues = append(issues, api.Issue{Code: "api.duplicate", Field: "$.spec.packages.fdf.storageExportRef", Message: "StorageExport/" + ref + " is already consumed by package fdf of ClusterAddonBinding/" + earlier.Name(), Remediation: "give each consuming cluster its own StorageExport"})
+				break
+			}
+		}
+	}
 	_, selection := Instances(c, r)
 	for _, i := range selection {
 		if i.Binding == o.Name() {

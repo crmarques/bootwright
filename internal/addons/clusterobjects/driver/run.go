@@ -48,7 +48,27 @@ func Run(ctx context.Context, runner Runner, execution lifecycle.Execution, oper
 	if execution.Material == nil {
 		execution.Material = map[string]secrets.Material{}
 	}
-	execution.Material["produced-kubeconfig"] = material
+	execution.Material["produced:kubeconfig"] = material
+	if operation == "apply" {
+		lent := map[string]bool{}
+		for _, placement := range config.Placements {
+			if placement.Produced == nil {
+				continue
+			}
+			source := "produced:export:" + placement.Produced.Object
+			if lent[source] {
+				continue
+			}
+			ref := placement.Produced
+			entry, err := execution.LendProduced(ctx, lifecycle.ProducedInput{Kind: ref.Kind, Object: ref.Object, Output: ref.Output})
+			if err != nil {
+				return lifecycle.RunResult{}, err
+			}
+			defer entry.Clear()
+			execution.Material[source] = entry
+			lent[source] = true
+		}
+	}
 	previous := co.Evidence{}
 	if len(execution.PreviousEvidence) > 0 {
 		evidence, err := DecodeEvidence(execution.PreviousEvidence, execution.Block.RequestDigest, config.EvidenceVersion)
@@ -61,7 +81,7 @@ func Run(ctx context.Context, runner Runner, execution lifecycle.Execution, oper
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	invocation := lifecycle.Invocation{Implementation: config.Implementation, Operation: operation, Variable: config.Variable, Canonical: execution.Block.Request, Placement: config.Placement, Materials: []lifecycle.MaterialFile{{Name: "kubeconfig", Part: secrets.ValuePart, Secret: "produced-kubeconfig", Variable: "kubeconfig"}}, Values: map[string]string{"oc": tool, "operation": execution.ApplyOperation, "block": execution.Block.ID, "registered": execution.ApplyRegistered, "evidence": string(receiptData)}, Deadline: time.Duration(config.BudgetSeconds)*time.Second + 10*time.Minute}
+	invocation := lifecycle.Invocation{Implementation: config.Implementation, Operation: operation, Variable: config.Variable, Canonical: execution.Block.Request, Placement: config.Placement, Materials: []lifecycle.MaterialFile{{Name: "kubeconfig", Part: secrets.ValuePart, Secret: "produced:kubeconfig", Variable: "kubeconfig"}}, Values: map[string]string{"oc": tool, "operation": execution.ApplyOperation, "block": execution.Block.ID, "registered": execution.ApplyRegistered, "evidence": string(receiptData)}, Deadline: time.Duration(config.BudgetSeconds)*time.Second + 10*time.Minute}
 	if operation == "apply" {
 		files, sources, err := placementMaterials(config.Placements, execution.Material)
 		if err != nil {

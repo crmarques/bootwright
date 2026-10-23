@@ -1,0 +1,80 @@
+{
+  "checks": [
+    {
+      "statusPhase": {
+        "apiVersion": "operator.open-cluster-management.io/v1",
+        "kind": "MultiClusterHub",
+        "name": "multiclusterhub",
+        "namespace": "open-cluster-management",
+        "namespaced": true,
+        "path": "status.phase",
+        "values": [
+          "Running"
+        ]
+      }
+    }
+  ],
+  "steps": [
+    {
+      "kind": "wait",
+      "wait": [
+        {
+          "condition": {
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "name": "multiclusterhubs.operator.open-cluster-management.io",
+            "namespace": "",
+            "namespaced": false,
+            "status": "True",
+            "type": "Established"
+          }
+        }
+      ]
+    },
+    {
+      "create": {
+        "apiVersion": "operator.open-cluster-management.io/v1",
+        "body": {
+          "apiVersion": "operator.open-cluster-management.io/v1",
+          "kind": "MultiClusterHub",
+          "metadata": {
+            "annotations": {
+              "installer.open-cluster-management.io/mce-subscription-spec": "{\"channel\":\"stable\",\"installPlanApproval\":\"Manual\",\"source\":\"hub-catalog\",\"sourceNamespace\":\"openshift-marketplace\",\"startingCSV\":\"engine.v1\"}"
+            },
+            "name": "multiclusterhub",
+            "namespace": "open-cluster-management"
+          },
+          "spec": {
+            "disableHubSelfManagement": false
+          }
+        },
+        "desiredDigest": "7077d6015997f20d90abf34cdd52e68186b274b31ebfcbe5f782bf124dbb0c86",
+        "kind": "MultiClusterHub",
+        "name": "multiclusterhub",
+        "namespace": "open-cluster-management",
+        "namespaced": true
+      },
+      "kind": "create"
+    },
+    {
+      "approveDependent": {
+        "channel": "stable",
+        "creator": {
+          "apiVersion": "operator.open-cluster-management.io/v1",
+          "kind": "MultiClusterHub",
+          "name": "multiclusterhub",
+          "namespace": "open-cluster-management",
+          "namespaced": true
+        },
+        "csv": "engine.v1",
+        "namespace": "multicluster-engine",
+        "package": "multicluster-engine",
+        "source": "hub-catalog",
+        "sourceNamespace": "openshift-marketplace",
+        "subscription": "multicluster-engine"
+      },
+      "kind": "approveDependent"
+    }
+  ],
+  "version": "cluster-objects-v1"
+}

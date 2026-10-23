@@ -381,9 +381,6 @@ repository credential, for example, is readable by Argo CD's components in
 their namespace, so a credential placed there should be one scoped to reading
 that repository.
 
-Not yet met: a placement cannot consume produced StorageExport material;
-tracked as [B760](milestones/m4.md#b760).
-
 ## Local keyring v4
 
 The `secrets/` subtree is initialized during context creation, independently

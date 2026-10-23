@@ -44,6 +44,7 @@ func containerClusterSchema() *Shape {
 		field("pullSecretRef", secret("dockerConfigJson")),
 		field("nodeSSH", nodeSSH),
 		defaulted("additionalTrustBundleRefs", set(secret("caBundle")), ListValue()),
+		field("additionalTrustBundlePolicy", enumeration("Always", "Proxyonly")),
 		field("servingCertificates", certificates),
 	)
 	install.Suppress = []Suppression{{Field: "mode", Value: StringValue("connected"), Fields: []string{"agent.bootArtifacts"}}}

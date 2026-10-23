@@ -63,6 +63,12 @@ func installConfig(catalog api.Catalog, cluster api.Object, nodes []nodeProjecti
 	if len(cluster.Spec().Get("install", "additionalTrustBundleRefs").Strings()) != 0 {
 		config["additionalTrustBundle"] = placeholderPullToken
 	}
+	if policy := cluster.Spec().Get("install", "additionalTrustBundlePolicy"); policy.Present() {
+		if len(cluster.Spec().Get("install", "additionalTrustBundleRefs").Strings()) == 0 {
+			return nil, refusalAt("api.invariant", "$.spec.install.additionalTrustBundlePolicy", "additionalTrustBundlePolicy requires additional trust bundles", "select at least one caBundle Secret in install.additionalTrustBundleRefs, or remove additionalTrustBundlePolicy")
+		}
+		config["additionalTrustBundlePolicy"] = policy.Text()
+	}
 	return config, nil
 }
 
@@ -262,6 +268,9 @@ func networkConfig(catalog api.Catalog, node api.Object, interfaces []substrate.
 		return nil, refusal("api.value", "the cluster node's network configuration does not compose",
 			"correct spec.network on "+node.Identity())
 	}
+	if issues := containercluster.NodeNetworkIssues(node, catalog, composed); len(issues) > 0 {
+		return nil, refusal(issues[0].Code, issues[0].Message, issues[0].Remediation)
+	}
 	native, ok := nativeValue(composed).(map[string]any)
 	if !ok {
 		return nil, refusal("api.value", "the cluster node's network configuration is not a mapping",
@@ -271,6 +280,14 @@ func networkConfig(catalog api.Catalog, node api.Object, interfaces []substrate.
 	for _, declared := range interfaces {
 		addresses[declared.Name] = declared.MACAddress
 	}
+	members := map[string]bool{}
+	for _, entry := range composed.Get("interfaces").Items() {
+		if entry.Get("type").Text() == "bond" {
+			for _, port := range entry.Get("link-aggregation", "port").Strings() {
+				members[port] = true
+			}
+		}
+	}
 	if items, ok := native["interfaces"].([]any); ok {
 		for index, item := range items {
 			entry, ok := item.(map[string]any)
@@ -278,8 +295,16 @@ func networkConfig(catalog api.Catalog, node api.Object, interfaces []substrate.
 				continue
 			}
 			name, _ := entry["name"].(string)
-			if address, found := addresses[name]; found && entry["mac-address"] == nil {
-				entry["mac-address"] = address
+			if entry["type"] == "ethernet" {
+				if address, found := addresses[name]; found {
+					entry["mac-address"] = address
+					if members[name] {
+						entry["identifier"] = "mac-address"
+					}
+				}
+			} else if entry["type"] == "bond" || entry["type"] == "vlan" {
+				delete(entry, "mac-address")
+				delete(entry, "identifier")
 			}
 			items[index] = entry
 		}

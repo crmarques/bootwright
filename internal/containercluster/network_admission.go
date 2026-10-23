@@ -45,7 +45,7 @@ func ValidateNetworkIntent(o api.Object, c api.Catalog) []api.Issue {
 	if len(networks) > 0 {
 		familyBits = networks[0].Addr().BitLen()
 	}
-	for _, node := range o.Spec().Get("nodes").Items() {
+	for nodeIndex, node := range o.Spec().Get("nodes").Items() {
 		bound, ok := c.Find(api.Machine, node.Get("machineRef").Text())
 		if !ok {
 			continue
@@ -53,6 +53,10 @@ func ValidateNetworkIntent(o api.Object, c api.Catalog) []api.Issue {
 		native, errors := machine.ComposeNetwork(bound, c)
 		if len(errors) > 0 {
 			continue
+		}
+		for _, issue := range NodeNetworkIssues(bound, c, native) {
+			issue.Field = fmt.Sprintf("$.spec.nodes[%d].machineRef", nodeIndex)
+			issues = append(issues, issue)
 		}
 		install := defaultRouteInterface(native, familyBits)
 		if hasMTU {
@@ -110,15 +114,27 @@ func ValidateNetworkIntent(o api.Object, c api.Catalog) []api.Issue {
 	return issues
 }
 func defaultRouteInterface(native api.Value, familyBits int) string {
+	interfaces := defaultRouteInterfaces(native, familyBits)
+	if len(interfaces) == 1 {
+		return interfaces[0]
+	}
+	return ""
+}
+
+func defaultRouteInterfaces(native api.Value, familyBits int) []string {
+	interfaces := []string{}
 	for _, route := range native.Get("routes", "config").Items() {
 		if route.Get("state").Text() == "absent" {
 			continue
 		}
 		if p, err := netip.ParsePrefix(route.Get("destination").Text()); err == nil && p.Bits() == 0 && (familyBits == 0 || p.Addr().BitLen() == familyBits) {
-			return route.Get("next-hop-interface").Text()
+			if name := route.Get("next-hop-interface").Text(); name != "" {
+				interfaces = append(interfaces, name)
+			}
 		}
 	}
-	return ""
+	slices.Sort(interfaces)
+	return slices.Compact(interfaces)
 }
 func interfaceMTU(native api.Value, name string) int64 {
 	for _, nic := range native.Get("interfaces").Items() {

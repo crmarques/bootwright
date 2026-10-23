@@ -6,6 +6,46 @@
   "result": {
     "addOns": [
       {
+        "name": "acm",
+        "provides": [],
+        "requires": [],
+        "olmPackage": "advanced-cluster-management",
+        "defaultSource": "redhat-operators",
+        "configuration": [
+          "hub",
+          "mce",
+          "subscription",
+          "timeout"
+        ]
+      },
+      {
+        "name": "fdf",
+        "provides": [
+          "dataFoundation"
+        ],
+        "requires": [],
+        "olmPackage": "odf-operator",
+        "defaultSource": "",
+        "configuration": [
+          "defaultStorageClass",
+          "storageExportRef",
+          "subscription",
+          "timeout"
+        ]
+      },
+      {
+        "name": "gitops",
+        "provides": [],
+        "requires": [],
+        "olmPackage": "openshift-gitops-operator",
+        "defaultSource": "redhat-operators",
+        "configuration": [
+          "bootstrap",
+          "subscription",
+          "timeout"
+        ]
+      },
+      {
         "name": "metallb",
         "provides": [
           "metallb"

@@ -1,0 +1,22 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: compact-data-foundation
+
+spec:
+  clusterRef: compact
+
+  packages:
+    fdf:
+      storageExportRef: compact-storage
+
+      subscription:
+        channel: stable-4.20
+        startingCSV: odf-operator.v4.20.0
+        source: isf-data-foundation-catalog
+
+        catalogSource:
+          name: isf-data-foundation-catalog
+          image: icr.io/cpopen/isf-data-foundation-catalog@sha256:2222222222222222222222222222222222222222222222222222222222222222
+          priority: 100
+          securityContextConfig: restricted

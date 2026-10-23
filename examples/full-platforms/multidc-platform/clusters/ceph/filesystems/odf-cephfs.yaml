@@ -16,4 +16,5 @@ spec:
     activeCount: 2
     standbyReplay: false
 
-  subvolumeGroups: []
+  subvolumeGroups:
+    - name: csi

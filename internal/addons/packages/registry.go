@@ -8,7 +8,7 @@ import (
 )
 
 func Builtin() addons.Registry {
-	registry, err := addons.NewRegistry([]addons.Package{nmstate(), metallb()})
+	registry, err := addons.NewRegistry([]addons.Package{nmstate(), metallb(), fdf(), acm(), gitops()})
 	if err != nil {
 		panic(err)
 	} // Shipped constants, never authored input.

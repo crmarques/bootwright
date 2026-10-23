@@ -85,6 +85,7 @@ release-independent topology rules apply to it, and
 | `spec.install.pullSecretRef` | string | OpenShift | environment/convention | `dockerConfigJson` `Secret`; not required for OKD. |
 | `spec.install.nodeSSH` | object | normalized | environment/convention | Cluster administration public/private SSH material. |
 | `spec.install.additionalTrustBundleRefs` | array of strings | no | `[]` | Ordered unique `caBundle` Secret references for this cluster's native installation trust. |
+| `spec.install.additionalTrustBundlePolicy` | string | no | — | `Always` or `Proxyonly`; requires non-empty `additionalTrustBundleRefs`. Written to the installer only when selected. |
 | `spec.install.servingCertificates` | object | no | — | Typed API and ingress serving-certificate refs below. |
 
 Disconnected mode requires `spec.install.registries.mirror`, whose Registry
@@ -297,6 +298,12 @@ cluster's native install rendering. Each scalar reference resolves directly to
 a `caBundle` Secret, and authored order is retained. The complete list is the
 cluster's additional trust selection; there is no Environment trust list to
 append to it.
+
+The optional `spec.install.additionalTrustBundlePolicy` is `Always` or
+`Proxyonly`. It has no default and is projected unchanged only when selected;
+without it, the installer applies its own default. A selected policy without
+additional bundle references refuses. `Always` also makes those bundles
+available through the cluster-wide trusted CA, as TLS gateway consumers require.
 
 Kind defaults may share the choice:
 

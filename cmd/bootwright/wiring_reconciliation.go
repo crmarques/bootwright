@@ -10,7 +10,6 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons/instance"
 	"github.com/crmarques/bootwright/internal/addons/packages"
-	"github.com/crmarques/bootwright/internal/containercluster"
 	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
 	"github.com/crmarques/bootwright/internal/containercluster/networking"
 	"github.com/crmarques/bootwright/internal/controller/clients"
@@ -176,6 +175,8 @@ func operationPlaybook() map[string]string {
 		ceph.SMBImplementation + "/observe":             "storage/smb_observe.yml",
 		ceph.SMBImplementation + "/destroy":             "storage/smb_destroy.yml",
 	}
+	bindings[ceph.ExportImplementation+"/apply"] = "storage/export_apply.yml"
+	bindings[ceph.ExportImplementation+"/observe"] = "storage/export_observe.yml"
 	for prefix, definition := range map[string]managedservice.Definition{
 		"proxy": proxy.Definition(), "dns_server": dnsserver.Definition(), "ntp_server": ntpserver.Definition(),
 	} {
@@ -199,7 +200,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	resolver := capabilityResolver{{
 		kind: networking.Kind, implementation: networking.Implementation, capability: networking.New(runner, packages.Builtin()),
 	}, {
-		kind: instance.Kind, implementation: instance.Implementation, capability: instance.New(runner, packages.Builtin(), containercluster.AddonFacts),
+		kind: instance.Kind, implementation: instance.Implementation, capability: instance.New(runner, packages.Builtin(), addonFacts),
 	}, {
 		kind: clients.Kind, implementation: clients.Implementation,
 		capability: clients.New(controller.Tools, controller.StagePackages, controller.Setup, controller.ClientInstaller),
@@ -232,6 +233,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		resolver = append(resolver, boundCapability{kind: string(kind), implementation: ceph.Implementation, capability: ceph.New(kind, runner).WithProofs(cephDependencyProofs{})})
 	}
 	resolver = append(resolver, boundCapability{kind: string(api.StorageCluster), implementation: ceph.ImageImplementation, capability: ceph.NewImage(runner)})
+	resolver = append(resolver, boundCapability{kind: string(api.StorageExport), implementation: ceph.ExportImplementation, capability: ceph.NewExport(runner).WithProofs(cephDependencyProofs{})})
 	resolver = append(resolver, boundCapability{kind: string(api.StorageCluster), implementation: ceph.HostImplementation, capability: ceph.NewHost(runner).WithProofs(cephDependencyProofs{})})
 	resolver = append(resolver, boundCapability{kind: string(api.StorageCluster), implementation: ceph.PhysicalRetirementImplementation,
 		capability: ceph.NewPhysicalRetirement().WithClaims(baremetal.BlockID).WithProofs(cephDependencyProofs{}).WithErasureProofs(physicalCephEraseProof).WithUninstalledProofs(installation.PhysicalEraseUnstarted)})

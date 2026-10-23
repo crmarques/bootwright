@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
@@ -16,7 +17,7 @@ import (
 )
 
 func TestBuiltinAddonExamplePlansGolden(t *testing.T) {
-	for _, name := range []string{"lab-sno-nmstate", "lab-sno-metallb"} {
+	for _, name := range []string{"lab-sno-nmstate", "lab-sno-metallb", "lab-compact-df", "lab-compact-hub"} {
 		t.Run(name, func(t *testing.T) {
 			state, _ := compileAcceptance(t, exampleDirectory(t, name))
 			resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
@@ -60,13 +61,19 @@ func TestBuiltinAddonExamplePlansGolden(t *testing.T) {
 					if !slices.Contains(block.Dependencies, agentinstall.InstallBlockID(request.Cluster)) {
 						t.Fatal("add-on lacks installation dependency", block.Dependencies)
 					}
-					compareAddonAdapterFixture(t, request.Package, request.Program)
+					if request.Package == "nmstate" || request.Package == "metallb" {
+						compareAddonAdapterFixture(t, request.Package, request.Program)
+					}
 					view.Request = block.Request
 					addonCount++
 				}
 				blocks = append(blocks, view)
 			}
-			if addonCount != 1 {
+			want := 1
+			if name == "lab-compact-hub" {
+				want = 2
+			}
+			if addonCount != want {
 				t.Fatalf("got %d add-on blocks", addonCount)
 			}
 			data, err := json.MarshalIndent(blocks, "", "  ")
@@ -74,6 +81,21 @@ func TestBuiltinAddonExamplePlansGolden(t *testing.T) {
 				t.Fatal(err)
 			}
 			matchesTextGolden(t, "plan-"+name, append(data, '\n'))
+		})
+	}
+}
+
+func TestAddonExamplesPreviewWithAllProducedInputs(t *testing.T) {
+	for _, name := range []string{"lab-compact-df", "lab-compact-hub"} {
+		t.Run(name, func(t *testing.T) {
+			services, _ := productionExampleContext(t, name, name)
+			out, _ := contextRun(t, services, 0, "plan", "--context", name, "--output", "json")
+			if name == "lab-compact-df" && (!strings.Contains(out, "ceph-export-compact-storage") || !strings.Contains(out, "addon-fdf-compact")) {
+				t.Fatal("preview omitted export or its consumer", out)
+			}
+			if name == "lab-compact-hub" && (!strings.Contains(out, "addon-acm-compact") || !strings.Contains(out, "addon-gitops-compact")) {
+				t.Fatal("preview omitted a hub package", out)
+			}
 		})
 	}
 }

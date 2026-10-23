@@ -5,7 +5,7 @@ external Ceph cluster: the details Secret, what the exporter prints, what
 `ocs-operator` builds, when the StorageCluster is ready, and what stays on Ceph
 after removal. The package is [B85](../../specs/milestones/m4.md#b85), the Ceph
 side is [B86](../../specs/milestones/m4.md#b86) and
-[B762](../../specs/milestones/m4.md#b762), the produced-details placement is
+[B762](../../specs/milestones/delivered.md#b762), the produced-details placement is
 [B760](../../specs/milestones/m4.md#b760), and the live proof is
 [B761](../../specs/milestones/m4.md#b761). The catalog and entitlement are in
 [fusion-data-foundation-catalog.md](fusion-data-foundation-catalog.md), key

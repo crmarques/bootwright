@@ -1,0 +1,29 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: compact-hub
+
+spec:
+  clusterRef: compact
+
+  packages:
+    acm:
+      subscription:
+        channel: release-2.16
+        startingCSV: advanced-cluster-management.v2.16.0
+
+      mce:
+        channel: stable-2.11
+        startingCSV: multicluster-engine.v2.11.0
+
+    gitops:
+      subscription:
+        channel: gitops-1.18
+        startingCSV: openshift-gitops-operator.v1.18.0
+
+      bootstrap:
+        repoURL: https://git.example.test/platform/bootstrap.git
+        targetRevision: main
+        path: clusters/compact
+        destinationNamespace: bootstrap-demo
+        credentials: bootstrap-repository

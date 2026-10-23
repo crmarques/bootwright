@@ -1,0 +1,54 @@
+{
+  "address": "192.0.2.1",
+  "entries": {
+    "ceph-rbd": "StorageClass",
+    "cephfs": "StorageClass",
+    "external-cluster-user-command": "ConfigMap",
+    "monitoring-endpoint": "CephCluster",
+    "rook-bw-decfe99dd8c77b66-fs-node": "Secret",
+    "rook-bw-decfe99dd8c77b66-fs-prov": "Secret",
+    "rook-bw-decfe99dd8c77b66-rbd-node": "Secret",
+    "rook-bw-decfe99dd8c77b66-rbd-prov": "Secret",
+    "rook-ceph-mon": "Secret",
+    "rook-ceph-mon-endpoints": "ConfigMap",
+    "rook-ceph-operator-creds": "Secret"
+  },
+  "fsid": "d4abb618-ae4a-5062-a0a9-152f2ad78e5a",
+  "keyType": "aes",
+  "leader": "node-1",
+  "name": "consumer",
+  "owner": "apply-test",
+  "principals": {
+    "client.bw-decfe99dd8c77b66-fs-node": {
+      "mds": "allow rw",
+      "mgr": "allow rw",
+      "mon": "allow r, allow command 'osd blocklist'",
+      "osd": "allow rw tag cephfs *=files"
+    },
+    "client.bw-decfe99dd8c77b66-fs-prov": {
+      "mds": "allow *",
+      "mgr": "allow rw",
+      "mon": "allow r, allow command 'osd blocklist'",
+      "osd": "allow rw tag cephfs metadata=files"
+    },
+    "client.bw-decfe99dd8c77b66-health": {
+      "mds": "allow *",
+      "mgr": "allow command config",
+      "mon": "allow r, allow command quorum_status, allow command version",
+      "osd": "profile rbd-read-only"
+    },
+    "client.bw-decfe99dd8c77b66-rbd-node": {
+      "mon": "profile rbd, allow command 'osd blocklist'",
+      "osd": "profile rbd pool=block"
+    },
+    "client.bw-decfe99dd8c77b66-rbd-prov": {
+      "mgr": "allow rw",
+      "mon": "profile rbd, allow command 'osd blocklist'",
+      "osd": "profile rbd pool=block"
+    }
+  },
+  "ready": true,
+  "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "rgwUser": "",
+  "version": "ceph-export-evidence-v1"
+}

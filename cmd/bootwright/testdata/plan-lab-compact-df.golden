@@ -1,0 +1,907 @@
+[
+  {
+    "id": "artifact-server-lab-artifacts",
+    "stage": "infra-components",
+    "dependencies": [],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-df-artifacts-lab-artifacts",
+      "create-path /var/lib/bootwright-services/lab-compact-df/artifact-server/lab-artifacts",
+      "open-listener 192.0.2.1:8080",
+      "open-listener 192.0.2.1:8443"
+    ]
+  },
+  {
+    "id": "ceph-image-ceph-lab",
+    "stage": "clusters",
+    "dependencies": [],
+    "impacts": [
+      "resolve-image cp.icr.io/cp/ibm-ceph/ceph-9-rhel10:v9.9.2-26947"
+    ]
+  },
+  {
+    "id": "controller-prerequisites",
+    "stage": "controller",
+    "dependencies": [],
+    "impacts": [
+      "install-host-package iputils",
+      "install-host-package libvirt-client",
+      "install-host-package libvirt-daemon",
+      "install-host-package libvirt-daemon-driver-network",
+      "install-host-package libvirt-daemon-driver-qemu",
+      "install-host-package libvirt-daemon-driver-storage-core",
+      "install-host-package lorax",
+      "install-host-package nmstate",
+      "install-host-package qemu-img",
+      "install-host-package qemu-kvm",
+      "install-host-package swtpm",
+      "install-host-package swtpm-tools",
+      "install-host-package xorriso",
+      "publish-target-client helm latest",
+      "publish-target-client openshift-clients 4.21.15",
+      "publish-target-client openshift-install 4.21.15"
+    ]
+  },
+  {
+    "id": "dns-lab-dns",
+    "stage": "infra-components",
+    "dependencies": [],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-df-dns-lab-dns",
+      "create-path /var/lib/bootwright-services/lab-compact-df/dns/lab-dns",
+      "open-listener 192.0.2.1:53"
+    ]
+  },
+  {
+    "id": "ntp-lab-ntp",
+    "stage": "infra-components",
+    "dependencies": [],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-df-ntp-lab-ntp",
+      "create-path /var/lib/bootwright-services/lab-compact-df/ntp/lab-ntp",
+      "open-listener 192.0.2.1:123"
+    ]
+  },
+  {
+    "id": "proxy-lab-proxy",
+    "stage": "infra-components",
+    "dependencies": [],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-df-proxy-lab-proxy",
+      "create-path /var/lib/bootwright-services/lab-compact-df/proxy/lab-proxy",
+      "open-listener 192.0.2.1:3128"
+    ]
+  },
+  {
+    "id": "substrate-host-lab-libvirt",
+    "stage": "substrates",
+    "dependencies": [],
+    "impacts": [
+      "create-bridge virbr-lab",
+      "create-libvirt-network bootwright-lab-compact-df-lab-guests",
+      "create-libvirt-pool bootwright-lab-compact-df-lab-libvirt-vmedia",
+      "create-path /var/lib/libvirt/images/bootwright/lab-compact-df/providers/lab-libvirt/vmedia"
+    ]
+  },
+  {
+    "id": "cluster-media-compact",
+    "stage": "clusters",
+    "dependencies": [
+      "artifact-server-lab-artifacts"
+    ],
+    "impacts": [
+      "create-path /var/lib/bootwright-clusters/lab-compact-df/compact",
+      "publish-content /var/lib/bootwright-services/lab-compact-df/artifact-server/lab-artifacts/public/private/clusters/compact"
+    ]
+  },
+  {
+    "id": "machine-compact-01",
+    "stage": "machines",
+    "dependencies": [
+      "substrate-host-lab-libvirt"
+    ],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-df-bmc-compact-01",
+      "create-disk /var/lib/libvirt/images/bootwright/lab-compact-df/machines/compact-01/root.qcow2",
+      "create-libvirt-domain bootwright-lab-compact-df-compact-01",
+      "create-path /var/lib/libvirt/images/bootwright/lab-compact-df/machines/compact-01",
+      "open-listener 127.0.0.1:8000"
+    ]
+  },
+  {
+    "id": "machine-compact-02",
+    "stage": "machines",
+    "dependencies": [
+      "substrate-host-lab-libvirt"
+    ],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-df-bmc-compact-02",
+      "create-disk /var/lib/libvirt/images/bootwright/lab-compact-df/machines/compact-02/root.qcow2",
+      "create-libvirt-domain bootwright-lab-compact-df-compact-02",
+      "create-path /var/lib/libvirt/images/bootwright/lab-compact-df/machines/compact-02",
+      "open-listener 127.0.0.1:8001"
+    ]
+  },
+  {
+    "id": "machine-compact-03",
+    "stage": "machines",
+    "dependencies": [
+      "substrate-host-lab-libvirt"
+    ],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-df-bmc-compact-03",
+      "create-disk /var/lib/libvirt/images/bootwright/lab-compact-df/machines/compact-03/root.qcow2",
+      "create-libvirt-domain bootwright-lab-compact-df-compact-03",
+      "create-path /var/lib/libvirt/images/bootwright/lab-compact-df/machines/compact-03",
+      "open-listener 127.0.0.1:8002"
+    ]
+  },
+  {
+    "id": "machine-rhel-01",
+    "stage": "machines",
+    "dependencies": [
+      "substrate-host-lab-libvirt"
+    ],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-df-bmc-rhel-01",
+      "create-disk /var/lib/libvirt/images/bootwright/lab-compact-df/machines/rhel-01/ceph-data.qcow2",
+      "create-disk /var/lib/libvirt/images/bootwright/lab-compact-df/machines/rhel-01/root.qcow2",
+      "create-libvirt-domain bootwright-lab-compact-df-rhel-01",
+      "create-path /var/lib/libvirt/images/bootwright/lab-compact-df/machines/rhel-01",
+      "open-listener 127.0.0.1:8003"
+    ]
+  },
+  {
+    "id": "machine-rhel-02",
+    "stage": "machines",
+    "dependencies": [
+      "substrate-host-lab-libvirt"
+    ],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-df-bmc-rhel-02",
+      "create-disk /var/lib/libvirt/images/bootwright/lab-compact-df/machines/rhel-02/ceph-data.qcow2",
+      "create-disk /var/lib/libvirt/images/bootwright/lab-compact-df/machines/rhel-02/root.qcow2",
+      "create-libvirt-domain bootwright-lab-compact-df-rhel-02",
+      "create-path /var/lib/libvirt/images/bootwright/lab-compact-df/machines/rhel-02",
+      "open-listener 127.0.0.1:8004"
+    ]
+  },
+  {
+    "id": "machine-rhel-03",
+    "stage": "machines",
+    "dependencies": [
+      "substrate-host-lab-libvirt"
+    ],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-df-bmc-rhel-03",
+      "create-disk /var/lib/libvirt/images/bootwright/lab-compact-df/machines/rhel-03/ceph-data.qcow2",
+      "create-disk /var/lib/libvirt/images/bootwright/lab-compact-df/machines/rhel-03/root.qcow2",
+      "create-libvirt-domain bootwright-lab-compact-df-rhel-03",
+      "create-path /var/lib/libvirt/images/bootwright/lab-compact-df/machines/rhel-03",
+      "open-listener 127.0.0.1:8005"
+    ]
+  },
+  {
+    "id": "os-package-tree-rhel-9-8",
+    "stage": "machines",
+    "dependencies": [
+      "artifact-server-lab-artifacts",
+      "controller-prerequisites"
+    ],
+    "impacts": [
+      "publish-content /var/lib/bootwright-services/lab-compact-df/artifact-server/lab-artifacts/public/os/rhel-9-8/tree"
+    ]
+  },
+  {
+    "id": "cluster-install-compact",
+    "stage": "clusters",
+    "dependencies": [
+      "cluster-media-compact",
+      "dns-lab-dns",
+      "machine-compact-01",
+      "machine-compact-02",
+      "machine-compact-03",
+      "ntp-lab-ntp"
+    ],
+    "impacts": [
+      "install-cluster compact-01",
+      "install-cluster compact-02",
+      "install-cluster compact-03",
+      "power-on compact-01",
+      "power-on compact-02",
+      "power-on compact-03"
+    ]
+  },
+  {
+    "id": "os-install-rhel-01",
+    "stage": "machines",
+    "dependencies": [
+      "artifact-server-lab-artifacts",
+      "dns-lab-dns",
+      "machine-rhel-01",
+      "ntp-lab-ntp",
+      "os-package-tree-rhel-9-8"
+    ],
+    "impacts": [
+      "configure-network rhel-01",
+      "install-operating-system rhel-01",
+      "power-on rhel-01",
+      "publish-content /var/lib/bootwright-services/lab-compact-df/artifact-server/lab-artifacts/public/os/rhel-01/install.iso",
+      "restart rhel-01"
+    ]
+  },
+  {
+    "id": "os-install-rhel-02",
+    "stage": "machines",
+    "dependencies": [
+      "artifact-server-lab-artifacts",
+      "dns-lab-dns",
+      "machine-rhel-02",
+      "ntp-lab-ntp",
+      "os-package-tree-rhel-9-8"
+    ],
+    "impacts": [
+      "configure-network rhel-02",
+      "install-operating-system rhel-02",
+      "power-on rhel-02",
+      "publish-content /var/lib/bootwright-services/lab-compact-df/artifact-server/lab-artifacts/public/os/rhel-02/install.iso",
+      "restart rhel-02"
+    ]
+  },
+  {
+    "id": "os-install-rhel-03",
+    "stage": "machines",
+    "dependencies": [
+      "artifact-server-lab-artifacts",
+      "dns-lab-dns",
+      "machine-rhel-03",
+      "ntp-lab-ntp",
+      "os-package-tree-rhel-9-8"
+    ],
+    "impacts": [
+      "configure-network rhel-03",
+      "install-operating-system rhel-03",
+      "power-on rhel-03",
+      "publish-content /var/lib/bootwright-services/lab-compact-df/artifact-server/lab-artifacts/public/os/rhel-03/install.iso",
+      "restart rhel-03"
+    ]
+  },
+  {
+    "id": "ceph-host-ceph-lab-rhel-01",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-image-ceph-lab",
+      "machine-rhel-01",
+      "os-install-rhel-01",
+      "os-package-tree-rhel-9-8"
+    ],
+    "impacts": [
+      "prepare-host rhel-01.lab.example.test packages, image, runtime, route and devices"
+    ]
+  },
+  {
+    "id": "ceph-host-ceph-lab-rhel-02",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-image-ceph-lab",
+      "machine-rhel-02",
+      "os-install-rhel-02",
+      "os-package-tree-rhel-9-8"
+    ],
+    "impacts": [
+      "prepare-host rhel-02.lab.example.test packages, image, runtime, route and devices"
+    ]
+  },
+  {
+    "id": "ceph-host-ceph-lab-rhel-03",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-image-ceph-lab",
+      "machine-rhel-03",
+      "os-install-rhel-03",
+      "os-package-tree-rhel-9-8"
+    ],
+    "impacts": [
+      "prepare-host rhel-03.lab.example.test packages, image, runtime, route and devices"
+    ]
+  },
+  {
+    "id": "ceph-cluster-ceph-lab",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-host-ceph-lab-rhel-01",
+      "ceph-host-ceph-lab-rhel-02",
+      "ceph-host-ceph-lab-rhel-03",
+      "ceph-image-ceph-lab",
+      "machine-rhel-01",
+      "machine-rhel-02",
+      "machine-rhel-03",
+      "os-install-rhel-01",
+      "os-install-rhel-02",
+      "os-install-rhel-03"
+    ],
+    "impacts": [
+      "realize Ceph cluster ceph-lab"
+    ]
+  },
+  {
+    "id": "ceph-gateway-objects-pool-buckets-data",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab"
+    ],
+    "impacts": [
+      "realize Ceph zone pool objects.rgw.buckets.data of object gateway objects"
+    ]
+  },
+  {
+    "id": "ceph-gateway-objects-pool-buckets-index",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab"
+    ],
+    "impacts": [
+      "realize Ceph zone pool objects.rgw.buckets.index of object gateway objects"
+    ]
+  },
+  {
+    "id": "ceph-gateway-objects-pool-buckets-non-ec",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab"
+    ],
+    "impacts": [
+      "realize Ceph zone pool objects.rgw.buckets.non-ec of object gateway objects"
+    ]
+  },
+  {
+    "id": "ceph-gateway-objects-pool-control",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab"
+    ],
+    "impacts": [
+      "realize Ceph zone pool objects.rgw.control of object gateway objects"
+    ]
+  },
+  {
+    "id": "ceph-gateway-objects-pool-dedup",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab"
+    ],
+    "impacts": [
+      "realize Ceph zone pool objects.rgw.dedup of object gateway objects"
+    ]
+  },
+  {
+    "id": "ceph-gateway-objects-pool-log",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab"
+    ],
+    "impacts": [
+      "realize Ceph zone pool objects.rgw.log of object gateway objects"
+    ]
+  },
+  {
+    "id": "ceph-gateway-objects-pool-meta",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab"
+    ],
+    "impacts": [
+      "realize Ceph zone pool objects.rgw.meta of object gateway objects"
+    ]
+  },
+  {
+    "id": "ceph-gateway-objects-pool-otp",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab"
+    ],
+    "impacts": [
+      "realize Ceph zone pool objects.rgw.otp of object gateway objects"
+    ]
+  },
+  {
+    "id": "ceph-policy-ssd-hosts",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab"
+    ],
+    "impacts": [
+      "realize Ceph policy ssd-hosts"
+    ]
+  },
+  {
+    "id": "ceph-pool-cephfs-data",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab"
+    ],
+    "impacts": [
+      "realize Ceph pool cephfs-data"
+    ]
+  },
+  {
+    "id": "ceph-pool-cephfs-metadata",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab"
+    ],
+    "impacts": [
+      "realize Ceph pool cephfs-metadata"
+    ]
+  },
+  {
+    "id": "ceph-settings-ceph-lab",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab"
+    ],
+    "impacts": [
+      "realize Ceph settings ceph-lab"
+    ]
+  },
+  {
+    "id": "ceph-filesystem-files",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab",
+      "ceph-pool-cephfs-data",
+      "ceph-pool-cephfs-metadata"
+    ],
+    "impacts": [
+      "realize Ceph filesystem files"
+    ]
+  },
+  {
+    "id": "ceph-gateway-objects",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-gateway-objects-pool-buckets-data",
+      "ceph-gateway-objects-pool-buckets-index",
+      "ceph-gateway-objects-pool-buckets-non-ec",
+      "ceph-gateway-objects-pool-control",
+      "ceph-gateway-objects-pool-dedup",
+      "ceph-gateway-objects-pool-log",
+      "ceph-gateway-objects-pool-meta",
+      "ceph-gateway-objects-pool-otp",
+      "ceph-image-ceph-lab"
+    ],
+    "impacts": [
+      "realize Ceph object gateway objects"
+    ]
+  },
+  {
+    "id": "ceph-pool-rbd-data",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab",
+      "ceph-policy-ssd-hosts"
+    ],
+    "impacts": [
+      "realize Ceph pool rbd-data"
+    ]
+  },
+  {
+    "id": "ceph-service-ceph-lab-crash",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab",
+      "ceph-settings-ceph-lab"
+    ],
+    "impacts": [
+      "realize Ceph service crash of ceph-lab"
+    ]
+  },
+  {
+    "id": "ceph-service-ceph-lab-monitoring",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab",
+      "ceph-settings-ceph-lab"
+    ],
+    "impacts": [
+      "realize Ceph service monitoring of ceph-lab",
+      "monitoring endpoints are unauthenticated without a management gateway",
+      "cephadm enables the prometheus manager module, whose exporter listens on port 9283 of every MGR host"
+    ]
+  },
+  {
+    "id": "ceph-client-rbd-canary",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab",
+      "ceph-pool-rbd-data"
+    ],
+    "impacts": [
+      "realize Ceph client rbd-canary"
+    ]
+  },
+  {
+    "id": "ceph-export-compact-storage",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-filesystem-files",
+      "ceph-gateway-objects",
+      "ceph-gateway-objects-pool-buckets-data",
+      "ceph-gateway-objects-pool-buckets-index",
+      "ceph-gateway-objects-pool-buckets-non-ec",
+      "ceph-gateway-objects-pool-control",
+      "ceph-gateway-objects-pool-dedup",
+      "ceph-gateway-objects-pool-log",
+      "ceph-gateway-objects-pool-meta",
+      "ceph-gateway-objects-pool-otp",
+      "ceph-host-ceph-lab-rhel-01",
+      "ceph-host-ceph-lab-rhel-02",
+      "ceph-host-ceph-lab-rhel-03",
+      "ceph-image-ceph-lab",
+      "ceph-pool-rbd-data",
+      "ceph-service-ceph-lab-crash",
+      "ceph-service-ceph-lab-monitoring",
+      "ceph-settings-ceph-lab",
+      "dns-lab-dns"
+    ],
+    "impacts": [
+      "create per-export Ceph principals for compact-storage"
+    ]
+  },
+  {
+    "id": "ceph-rbd-rbd-disk",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-image-ceph-lab",
+      "ceph-pool-rbd-data"
+    ],
+    "impacts": [
+      "realize Ceph rbd rbd-disk"
+    ]
+  },
+  {
+    "id": "ceph-subvolume-docs",
+    "stage": "clusters",
+    "dependencies": [
+      "ceph-cluster-ceph-lab",
+      "ceph-filesystem-files",
+      "ceph-image-ceph-lab"
+    ],
+    "impacts": [
+      "realize Ceph subvolume docs"
+    ]
+  },
+  {
+    "id": "addon-fdf-compact",
+    "stage": "add-ons",
+    "dependencies": [
+      "ceph-export-compact-storage",
+      "cluster-install-compact",
+      "cluster-media-compact"
+    ],
+    "impacts": [
+      "install-addon fdf compact"
+    ],
+    "request": {
+      "binding": "compact-data-foundation",
+      "budgetSeconds": 3600,
+      "cluster": "compact",
+      "package": "fdf",
+      "placement": {
+        "connection": "local",
+        "machine": "controller"
+      },
+      "producedInputs": [
+        {
+          "kind": "ContainerCluster",
+          "object": "compact",
+          "output": "kubeconfig"
+        },
+        {
+          "kind": "StorageExport",
+          "object": "compact-storage",
+          "output": "external-details"
+        }
+      ],
+      "program": {
+        "checks": [
+          {
+            "csvSucceeded": {
+              "csv": "odf-operator.v4.20.0",
+              "namespace": "openshift-storage",
+              "subscription": "odf-operator"
+            }
+          },
+          {
+            "statusPhase": {
+              "apiVersion": "ocs.openshift.io/v1",
+              "kind": "StorageCluster",
+              "name": "ocs-external-storagecluster",
+              "namespace": "openshift-storage",
+              "namespaced": true,
+              "path": "",
+              "values": [
+                "Ready"
+              ]
+            }
+          },
+          {
+            "condition": {
+              "apiVersion": "ocs.openshift.io/v1",
+              "kind": "StorageCluster",
+              "name": "ocs-external-storagecluster",
+              "namespace": "openshift-storage",
+              "namespaced": true,
+              "status": "True",
+              "type": "ReconcileComplete"
+            }
+          },
+          {
+            "statusPhase": {
+              "apiVersion": "noobaa.io/v1alpha1",
+              "kind": "NooBaa",
+              "name": "noobaa",
+              "namespace": "openshift-storage",
+              "namespaced": true,
+              "path": "",
+              "values": [
+                "Ready"
+              ]
+            }
+          },
+          {
+            "resourceExists": {
+              "apiVersion": "storage.k8s.io/v1",
+              "kind": "StorageClass",
+              "name": "ocs-external-storagecluster-ceph-rbd",
+              "namespace": "",
+              "namespaced": false
+            }
+          },
+          {
+            "resourceExists": {
+              "apiVersion": "storage.k8s.io/v1",
+              "kind": "StorageClass",
+              "name": "ocs-external-storagecluster-cephfs",
+              "namespace": "",
+              "namespaced": false
+            }
+          },
+          {
+            "resourceExists": {
+              "apiVersion": "storage.k8s.io/v1",
+              "kind": "StorageClass",
+              "name": "openshift-storage.noobaa.io",
+              "namespace": "",
+              "namespaced": false
+            }
+          },
+          {
+            "resourceExists": {
+              "apiVersion": "storage.k8s.io/v1",
+              "kind": "StorageClass",
+              "name": "ocs-external-storagecluster-ceph-rgw",
+              "namespace": "",
+              "namespaced": false
+            }
+          },
+          {
+            "statusPhase": {
+              "apiVersion": "operators.coreos.com/v1alpha1",
+              "kind": "CatalogSource",
+              "name": "isf-data-foundation-catalog",
+              "namespace": "openshift-marketplace",
+              "namespaced": true,
+              "path": "status.connectionState.lastObservedState",
+              "values": [
+                "READY"
+              ]
+            }
+          }
+        ],
+        "steps": [
+          {
+            "create": {
+              "apiVersion": "v1",
+              "body": {
+                "apiVersion": "v1",
+                "kind": "Namespace",
+                "metadata": {
+                  "labels": {
+                    "openshift.io/cluster-monitoring": "true"
+                  },
+                  "name": "openshift-storage"
+                }
+              },
+              "desiredDigest": "cbbccd7a95e25aaa2a7e49ed6abac587296a330c1b5b389b97f928055db0f7a3",
+              "kind": "Namespace",
+              "name": "openshift-storage",
+              "namespace": "",
+              "namespaced": false
+            },
+            "kind": "create"
+          },
+          {
+            "create": {
+              "apiVersion": "operators.coreos.com/v1",
+              "body": {
+                "apiVersion": "operators.coreos.com/v1",
+                "kind": "OperatorGroup",
+                "metadata": {
+                  "name": "openshift-storage",
+                  "namespace": "openshift-storage"
+                },
+                "spec": {
+                  "targetNamespaces": [
+                    "openshift-storage"
+                  ]
+                }
+              },
+              "desiredDigest": "8bdf442246b942b751421f01ce27228fcd4a1e1f20ca487b9e24a721445851fb",
+              "kind": "OperatorGroup",
+              "name": "openshift-storage",
+              "namespace": "openshift-storage",
+              "namespaced": true
+            },
+            "kind": "create"
+          },
+          {
+            "create": {
+              "apiVersion": "operators.coreos.com/v1alpha1",
+              "body": {
+                "apiVersion": "operators.coreos.com/v1alpha1",
+                "kind": "CatalogSource",
+                "metadata": {
+                  "name": "isf-data-foundation-catalog",
+                  "namespace": "openshift-marketplace"
+                },
+                "spec": {
+                  "grpcPodConfig": {
+                    "securityContextConfig": "restricted"
+                  },
+                  "image": "icr.io/cpopen/isf-data-foundation-catalog@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                  "priority": 100,
+                  "sourceType": "grpc"
+                }
+              },
+              "desiredDigest": "72aa6e41ef94ed3f9308d60118e00dd41849fc7de87b7a3643a5f7e68b6fd842",
+              "kind": "CatalogSource",
+              "name": "isf-data-foundation-catalog",
+              "namespace": "openshift-marketplace",
+              "namespaced": true
+            },
+            "kind": "create"
+          },
+          {
+            "catalogReady": {
+              "apiVersion": "operators.coreos.com/v1alpha1",
+              "kind": "CatalogSource",
+              "name": "isf-data-foundation-catalog",
+              "namespace": "openshift-marketplace",
+              "namespaced": true
+            },
+            "kind": "catalogReady"
+          },
+          {
+            "kind": "subscribe",
+            "subscribe": {
+              "approval": "operatorManaged",
+              "csv": "odf-operator.v4.20.0",
+              "object": {
+                "apiVersion": "operators.coreos.com/v1alpha1",
+                "body": {
+                  "apiVersion": "operators.coreos.com/v1alpha1",
+                  "kind": "Subscription",
+                  "metadata": {
+                    "name": "odf-operator",
+                    "namespace": "openshift-storage"
+                  },
+                  "spec": {
+                    "channel": "stable-4.20",
+                    "installPlanApproval": "Manual",
+                    "name": "odf-operator",
+                    "source": "isf-data-foundation-catalog",
+                    "sourceNamespace": "openshift-marketplace",
+                    "startingCSV": "odf-operator.v4.20.0"
+                  }
+                },
+                "desiredDigest": "62e1cf1542b2775711b3db1059102ce4774696fd0da824b025528df1778183ff",
+                "kind": "Subscription",
+                "name": "odf-operator",
+                "namespace": "openshift-storage",
+                "namespaced": true
+              }
+            }
+          },
+          {
+            "kind": "wait",
+            "wait": [
+              {
+                "condition": {
+                  "apiVersion": "apiextensions.k8s.io/v1",
+                  "kind": "CustomResourceDefinition",
+                  "name": "storageclusters.ocs.openshift.io",
+                  "namespace": "",
+                  "namespaced": false,
+                  "status": "True",
+                  "type": "Established"
+                }
+              }
+            ]
+          },
+          {
+            "kind": "place",
+            "place": {
+              "desiredDigest": "61cf4e71d2b2a6bd80fc7ba651219b470aaa995ab4c91bb856709f475ac1c4db",
+              "keys": null,
+              "name": "rook-ceph-external-cluster-details",
+              "namespace": "openshift-storage",
+              "produced": {
+                "kind": "StorageExport",
+                "object": "compact-storage",
+                "output": "external-details"
+              },
+              "producedKey": "external_cluster_details",
+              "type": "Opaque"
+            }
+          },
+          {
+            "create": {
+              "apiVersion": "ocs.openshift.io/v1",
+              "body": {
+                "apiVersion": "ocs.openshift.io/v1",
+                "kind": "StorageCluster",
+                "metadata": {
+                  "name": "ocs-external-storagecluster",
+                  "namespace": "openshift-storage"
+                },
+                "spec": {
+                  "externalStorage": {
+                    "enable": true
+                  },
+                  "managedResources": {
+                    "cephBlockPools": {
+                      "defaultStorageClass": false
+                    }
+                  }
+                }
+              },
+              "desiredDigest": "dece6ac0d70c5d87d7c68947e5459fc91da6358aa1a83dd05319b73f1a2b2e09",
+              "kind": "StorageCluster",
+              "name": "ocs-external-storagecluster",
+              "namespace": "openshift-storage",
+              "namespaced": true
+            },
+            "kind": "create"
+          }
+        ],
+        "version": "cluster-objects-v1"
+      },
+      "secrets": [],
+      "tool": {
+        "compatibility": "openshift",
+        "kind": "openshift-clients",
+        "version": "4.21.15"
+      },
+      "version": "addon-instance-request-v1"
+    }
+  }
+]

@@ -29,9 +29,13 @@ def material(path):
 
 def desired(placement, paths, owner):
     if placement.get("produced"):
-        raise ValueError("produced Secret placement unavailable")
-    parts = paths[placement["secret"]]
-    data = {entry["key"]: material(parts[entry["part"]]) for entry in placement.get("keys", [])}
+        source = placement["produced"]
+        if source.get("kind") != "StorageExport" or source.get("output") != "external-details" or placement.get("secret") or placement.get("keys"):
+            raise ValueError("unsupported produced Secret source")
+        data = {placement["producedKey"]: material(paths["produced:export:" + source["object"]]["value"])}
+    else:
+        parts = paths[placement["secret"]]
+        data = {entry["key"]: material(parts[entry["part"]]) for entry in placement.get("keys", [])}
     for key, value in placement.get("strings", {}).items():
         if key in data:
             raise ValueError("duplicate Secret key")

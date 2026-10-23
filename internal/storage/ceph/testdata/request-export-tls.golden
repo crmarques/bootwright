@@ -1,0 +1,72 @@
+{
+  "cluster": "example",
+  "controller": "controller",
+  "defaultDataPool": "fs-data",
+  "filesystem": "files",
+  "gateway": {
+    "addresses": [
+      "192.0.2.1",
+      "192.0.2.2",
+      "192.0.2.3"
+    ],
+    "certificateRef": "gateway-tls",
+    "fqdn": "objects.example.test",
+    "indexPool": "objects.rgw.buckets.index",
+    "name": "objects",
+    "port": 443,
+    "realm": "objects",
+    "tls": true,
+    "zone": "objects",
+    "zoneGroup": "objects"
+  },
+  "keyType": "aes256k",
+  "machines": [
+    "node-1",
+    "node-2",
+    "node-3"
+  ],
+  "monitoringHosts": [
+    "192.0.2.1",
+    "192.0.2.2",
+    "192.0.2.3"
+  ],
+  "monitoringPort": 9283,
+  "monitors": {
+    "node-1": "192.0.2.1",
+    "node-2": "192.0.2.2",
+    "node-3": "192.0.2.3"
+  },
+  "name": "consumer",
+  "physicalHosts": true,
+  "pool": "block",
+  "principals": {
+    "fs-node": {
+      "mds": "allow rw",
+      "mgr": "allow rw",
+      "mon": "allow r, allow command 'osd blocklist'",
+      "osd": "allow rw tag cephfs *=files"
+    },
+    "fs-prov": {
+      "mds": "allow *",
+      "mgr": "allow rw",
+      "mon": "allow r, allow command 'osd blocklist'",
+      "osd": "allow rw tag cephfs metadata=files"
+    },
+    "health": {
+      "mds": "allow *",
+      "mgr": "allow command config",
+      "mon": "allow r, allow command quorum_status, allow command version",
+      "osd": "profile rbd-read-only, allow rwx pool=objects.rgw.meta, allow r pool=.rgw.root, allow rw pool=objects.rgw.control, allow rx pool=objects.rgw.log, allow x pool=objects.rgw.buckets.index"
+    },
+    "rbd-node": {
+      "mon": "profile rbd, allow command 'osd blocklist'",
+      "osd": "profile rbd pool=block"
+    },
+    "rbd-prov": {
+      "mgr": "allow rw",
+      "mon": "profile rbd, allow command 'osd blocklist'",
+      "osd": "profile rbd pool=block"
+    }
+  },
+  "version": "ceph-export-request-v1"
+}

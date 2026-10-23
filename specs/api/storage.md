@@ -106,9 +106,6 @@ are retained only for the later owning slices.
 [field record](../storage-resources.md#storageexport); its `externalDetails`
 arm refuses, naming the parked external-cluster item.
 
-Not yet met: every StorageExport refuses as a later resource family; tracked
-as [B762](../milestones/m4.md#b762).
-
 Operators select IBM Ceph release identifiers, package and tool versions,
 container tags or digests and related service-version coordinates in input.
 Bootwright preserves those selections through native package, container and

@@ -85,7 +85,7 @@ func TestShippedPackagesRenderPurePrograms(t *testing.T) {
 	r := Builtin()
 	for _, p := range r.Packages() {
 		t.Run(p.Name, func(t *testing.T) {
-			v := config().Without("pools")
+			v := packageTestConfig(p.Name)
 			if p.Name == "metallb" {
 				v = config(pool("services", "192.0.2.80-192.0.2.90"))
 			}
@@ -98,7 +98,7 @@ func TestShippedPackagesRenderPurePrograms(t *testing.T) {
 			if err != nil || !reflect.DeepEqual(a, b) {
 				t.Fatal("render not deterministic")
 			}
-			if len(a.After) == 0 || len(a.After[0].Gate) == 0 || a.After[0].Gate[0].Condition.Type != "Established" {
+			if p.Name != "gitops" && (len(a.After) == 0 || len(a.After[0].Gate) == 0 || a.After[0].Gate[0].Condition.Type != "Established") {
 				t.Fatal("operand has no CRD gate")
 			}
 			for _, phase := range a.After {
@@ -113,9 +113,9 @@ func TestShippedPackagesRenderPurePrograms(t *testing.T) {
 	}
 	entries := r.Packages()
 	entries[0].OLM.Namespace = "changed"
-	entries[0].Provides[0] = "changed"
+	entries[0].Provides = append(entries[0].Provides, "changed")
 	again := r.Packages()
-	if again[0].OLM.Namespace == "changed" || again[0].Provides[0] == "changed" {
+	if again[0].OLM.Namespace == "changed" || len(again[0].Provides) != len(entries[0].Provides)-1 {
 		t.Fatal("registry exposes mutable state")
 	}
 }

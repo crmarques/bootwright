@@ -344,10 +344,28 @@ func (a *admission) export(cluster api.Object, managed bool) {
 		a.required(spec, "dataFoundation", "$.spec")
 		a.forbid(spec, "$.spec", "externalDetails")
 		refs := spec.Get("dataFoundation")
+		if len(a.object.Name()) > 51 {
+			a.invalid("$.metadata.name", "a managed export name exceeds 51 bytes", "use a name of at most 51 bytes")
+		}
+		pool, _ := a.catalog.Find(api.StoragePool, textOf(refs, "rbdPoolRef"))
+		if pool.Name() != "" && fallback(pool.Spec().Get("type"), "replicated") != "replicated" {
+			a.invalid("$.spec.dataFoundation.rbdPoolRef", "a managed export requires a replicated RBD pool", "select a replicated StoragePool of role rbd")
+		}
+		filesystem, found := a.catalog.Find(api.StorageFilesystem, textOf(refs, "filesystemRef"))
+		if found && !slices.ContainsFunc(filesystem.Spec().Get("subvolumeGroups").Items(), func(group api.Value) bool { return group.Get("name").Text() == "csi" }) {
+			a.invalid("$.spec.dataFoundation.filesystemRef", "a managed export requires the csi subvolume group", "declare subvolumeGroups with name csi on the referenced filesystem")
+		}
+		if !slices.ContainsFunc(cluster.Spec().Get("ceph", "services").Items(), func(service api.Value) bool { return service.Get("service_type").Text() == "prometheus" }) {
+			a.invalid("$.spec.clusterRef", "a managed export requires a prometheus service", "declare a prometheus service on the referenced StorageCluster")
+		}
 		a.poolRole(textOf(refs, "rbdPoolRef"), "$.spec.dataFoundation.rbdPoolRef", "rbd", cluster)
 		a.sameOwner(api.StorageFilesystem, textOf(refs, "filesystemRef"), "$.spec.dataFoundation.filesystemRef", cluster)
 		if refs.Has("objectGatewayRef") {
 			a.sameOwner(api.StorageObjectGateway, textOf(refs, "objectGatewayRef"), "$.spec.dataFoundation.objectGatewayRef", cluster)
+			gateway, found := a.catalog.Find(api.StorageObjectGateway, textOf(refs, "objectGatewayRef"))
+			if found && gateway.Spec().Get("endpoint", "fqdn").Text() == "" {
+				a.invalid("$.spec.dataFoundation.objectGatewayRef", "a managed export requires a gateway endpoint FQDN", "declare endpoint.fqdn on the referenced StorageObjectGateway")
+			}
 		}
 	} else {
 		a.required(spec, "type", "$.spec")

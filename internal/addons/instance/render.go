@@ -15,6 +15,7 @@ import (
 
 func Render(selected addons.SelectedInstance, facts addons.ClusterFacts, controller string) (Request, []reconciliation.ObjectRef, error) {
 	p, instance := selected.Package, selected.Instance
+	instance.Facts = facts
 	rendered, err := p.Render(instance)
 	if err != nil {
 		return Request{}, nil, err
@@ -49,7 +50,7 @@ func Render(selected addons.SelectedInstance, facts addons.ClusterFacts, control
 	if err := appendPhases(&program, rendered.After); err != nil {
 		return Request{}, nil, err
 	}
-	options := co.Options{}
+	options := co.Options{PlacementNamespaces: slices.Clone(p.PlacementNamespaces)}
 	if p.OLM != nil {
 		options.Namespace = p.OLM.Namespace
 	}
@@ -58,14 +59,22 @@ func Render(selected addons.SelectedInstance, facts addons.ClusterFacts, control
 		return Request{}, nil, fmt.Errorf("program of package %s for %s: %w", p.Name, instance.Cluster, err)
 	}
 	secrets := []string{}
+	produced := []lifecycle.ProducedInput{{Kind: "ContainerCluster", Object: instance.Cluster, Output: "kubeconfig"}}
 	for _, step := range program.Steps {
 		if step.Place != nil {
-			secrets = append(secrets, step.Place.Secret)
+			if p := step.Place.Produced; p != nil {
+				ref := lifecycle.ProducedInput{Kind: p.Kind, Object: p.Object, Output: p.Output}
+				if !slices.Contains(produced, ref) {
+					produced = append(produced, ref)
+				}
+			} else {
+				secrets = append(secrets, step.Place.Secret)
+			}
 		}
 	}
 	slices.Sort(secrets)
 	secrets = slices.Compact(secrets)
-	request := Request{Binding: instance.Binding, BudgetSeconds: int64(budget / time.Second), Cluster: instance.Cluster, Package: p.Name, Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: controller}, ProducedInputs: []lifecycle.ProducedInput{{Kind: "ContainerCluster", Object: instance.Cluster, Output: "kubeconfig"}}, Program: data, Secrets: secrets, Tool: Tool{Compatibility: "openshift", Kind: "openshift-clients", Version: facts.Release}, Version: requestVersion}
+	request := Request{Binding: instance.Binding, BudgetSeconds: int64(budget / time.Second), Cluster: instance.Cluster, Package: p.Name, Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: controller}, ProducedInputs: produced, Program: data, Secrets: secrets, Tool: Tool{Compatibility: "openshift", Kind: "openshift-clients", Version: facts.Release}, Version: requestVersion}
 	requires := []reconciliation.ObjectRef{{Kind: "ContainerCluster", Object: instance.Cluster}}
 	for _, provider := range selected.Providers {
 		if provider.Package != "" {
@@ -134,9 +143,9 @@ func operatorPrelude(program *co.Program, olm addons.OLM, config api.Value) erro
 		return err
 	}
 	if olm.OperatorGroup != addons.NoGroup {
-		spec := api.MapValue()
+		spec := api.Value{}
 		if olm.OperatorGroup == addons.OwnNamespace {
-			spec = spec.With("targetNamespaces", api.StringList(olm.Namespace))
+			spec = api.MapValue(api.FieldValue{Name: "targetNamespaces", Value: api.StringList(olm.Namespace)})
 		} else if olm.OperatorGroup != addons.AllNamespaces {
 			return fmt.Errorf("invalid OperatorGroup shape")
 		}

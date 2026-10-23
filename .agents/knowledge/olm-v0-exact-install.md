@@ -163,7 +163,7 @@ plans the add-on is not the sole approver. The pin is the `odf-operator`
 [fusion-data-foundation-catalog.md](fusion-data-foundation-catalog.md) and
 [data-foundation-external-mode.md](data-foundation-external-mode.md).
 
-[B759](../../specs/milestones/m4.md#b759) installs such an operator by
+[B759](../../specs/milestones/delivered.md#b759) installs such an operator by
 approving only its first exact plan. Not yet observed on this tree: the first
 plan's CSV list and which later plans odf-operator approves.
 [B761](../../specs/milestones/m4.md#b761) records both.

@@ -95,7 +95,7 @@ effects. No new field inherits an undocumented default from another resource.
 | `StoragePool` | Pool identity, replicated/EC protection, application, PG/autoscaler, quota, compression and supported mirroring intent. EC `rbd`/`cephfs-data` pools derive irreversible overwrite enablement; mirroring is [B483](milestones/m2.md#b483)'s. | Services and resources reference owned pools; native auto-created pools require an explicitly recorded derived owner. |
 | `StorageFilesystem` | Metadata/data-pool composition, default/layout, active ranks and standby/replay resource policy, declared subvolume groups; several filesystems per cluster. | `spec.mdsServiceRef` binds one declared MDS service whose `service_id` is the filesystem name; placement and container configuration belong to that service. One `ceph fs new` creates the native filesystem. |
 | `StorageObjectGateway` | The realm, zone group and zone it creates (never with `--default`; only an export of one of its users makes them the defaults, under [StorageNFSExport](#storagenfsexport)), its zone placement binding, its derived zone pools and its endpoint identity. | `spec.serviceRef` binds exactly one declared rgw service by full native identity; the gateway executes that service and the ingress whose `spec.backend_service` is it. It embeds no daemon placement, frontend, configuration or ingress specification. |
-| `StorageExport` | Existing Data Foundation handoff, or the external-details arm. Admission refuses it until [B762](milestones/m4.md#b762) admits a managed export, whose material is [B86](milestones/m4.md#b86)'s, or parked item [B107](milestones/backlog.md#b107) the external-details arm. | It waits for the resources and access material it describes; it neither creates an add-on nor becomes a general native-command resource. |
+| `StorageExport` | Managed Data Foundation handoff with per-export principals and private external-cluster details. The external-details arm remains refused under parked [B107](milestones/backlog.md#b107). | It waits for the resources and access material it describes; it neither creates an add-on nor becomes a general native-command resource. |
 
 Their existing non-daemon fields remain unless an owning approved migration
 changes them. B474 records retired daemon helper paths explicitly. A
@@ -1160,6 +1160,17 @@ input. `aes` is the default because kernel CephFS and RBD clients need
 Linux 7.0 or later for `aes256k` keys; the operator chooses `aes256k` for
 nodes that run it.
 
+### Export refusals
+
+| Unsupported condition | Boundary and correction |
+| --- | --- |
+| External-cluster details | Admission refuses the external arm under B107; use a managed cluster. |
+| Erasure-coded RBD pool, missing `csi` group, monitoring service or gateway FQDN | Admission names the reference; select a replicated RBD pool and declare each prerequisite. |
+| Ambiguous public address on a selected MON or MGR host | Planning requires exactly one address inside the declared Ceph public networks per selected host. |
+| Direct RGW placement selects fewer daemons than eligible hosts | Planning requires an ingress VIP or a placement whose count covers its selected hosts. |
+| Disallowed key type, missing native prerequisite or mismatched owned identity | Realization refuses before creating credentials; correct the declared prerequisites or restore the original owned state. It does not change cipher policy or adopt foreign entities. |
+| Removing an export while its hosts survive, or with physical hosts | Removal refuses; export retirement requires every host to be an owned virtual Machine removed by the same destroy. |
+
 The export block depends on the cluster, the pool, the filesystem, the
 gateway and the monitoring unit, is exclusive on its cluster, and runs on the
 bootstrap host. Before any effect it proves the cluster's ownership record and
@@ -1243,15 +1254,29 @@ Bootwright-owned virtual Machine the same destroy removes; otherwise its
 removal refuses with the cluster's other resources, and revoking one export
 while the cluster stays is [B491](milestones/m2.md#b491)'s.
 
-Not yet met: every StorageExport refuses as a later resource family; tracked
-as [B762](milestones/m4.md#b762). No export block mints a principal
-or produces details; tracked as [B86](milestones/m4.md#b86). The gateway's
-endpoint name is not resolvable from a consuming cluster; tracked as
-[B763](milestones/m4.md#b763). Whether ocs-operator and Rook accept a
-`ceph-rgw-tls-cert` holding the certificate chain without the private key is
-unverified, because Red Hat's document says the file includes private keys;
-tracked as [B761](milestones/m4.md#b761). "Never its key" is Bootwright's
-security decision, not a native requirement.
+### Attached gateway DNS
+
+An attached gateway contributes its endpoint FQDN and terminating addresses to
+all retained managed DNS services, which already serve the retained graph's
+machine and cluster names. The addresses are the fronting ingress virtual IP,
+or the public-network addresses of the RGW placement when no ingress fronts
+it. Direct RGW placement must put a daemon on every eligible host; a smaller
+count requires an ingress VIP because native scheduling does not freeze which
+hosts terminate the endpoint. An unresolved address refuses planning; two
+contributions for one name must agree, and a conflicting existing record refuses. An unattached gateway
+contributes no record. The export declaration owns the contribution; the DNS
+service owns its frozen publication and inverse, so shared gateway contributions
+are deduplicated and retire with that service. Independent export revocation
+while its cluster remains belongs to [B491](milestones/m2.md#b491).
+
+The export depends on the managed DNS blocks. Before creating credentials and
+when observing readiness, it checks resolution read-only from the bootstrap
+host within a bounded process. The resolved address set must equal the declared
+terminating set; an absent, additional or wrong address, malformed reply or
+timeout refuses naming the FQDN. This check also applies when no managed DNS
+service is retained: the operator supplies resolution, and Bootwright never
+changes external DNS. Bootstrap resolution does not prove node or pod resolution;
+that remains the live [B761](milestones/m4.md#b761) acceptance gate.
 
 ### StorageObjectUser field record
 

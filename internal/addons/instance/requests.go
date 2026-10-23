@@ -55,6 +55,9 @@ func (r Request) Objects() (clusterobjects.Program, error) {
 		return p, err
 	}
 	options := clusterobjects.Options{}
+	if r.Package == "gitops" {
+		options.PlacementNamespaces = []string{"openshift-gitops"}
+	}
 	for _, step := range p.Steps {
 		if step.Subscribe != nil {
 			options.Namespace = step.Subscribe.Object.Namespace
@@ -75,7 +78,7 @@ func (r Request) validate() error {
 	if r.Tool.Kind != "openshift-clients" || r.Tool.Compatibility != "openshift" || r.Tool.Version == "" {
 		return fmt.Errorf("invalid add-on instance client")
 	}
-	if len(r.ProducedInputs) != 1 || r.ProducedInputs[0] != (lifecycle.ProducedInput{Kind: "ContainerCluster", Object: r.Cluster, Output: "kubeconfig"}) {
+	if len(r.ProducedInputs) < 1 || r.ProducedInputs[0] != (lifecycle.ProducedInput{Kind: "ContainerCluster", Object: r.Cluster, Output: "kubeconfig"}) {
 		return fmt.Errorf("add-on instance must name its cluster kubeconfig")
 	}
 	if !slices.IsSorted(r.Secrets) || len(slices.Compact(slices.Clone(r.Secrets))) != len(r.Secrets) {
@@ -86,10 +89,21 @@ func (r Request) validate() error {
 		return err
 	}
 	expected := []string{}
+	produced := []lifecycle.ProducedInput{r.ProducedInputs[0]}
 	for _, step := range program.Steps {
 		if step.Place != nil {
-			expected = append(expected, step.Place.Secret)
+			if p := step.Place.Produced; p != nil {
+				ref := lifecycle.ProducedInput{Kind: p.Kind, Object: p.Object, Output: p.Output}
+				if !slices.Contains(produced, ref) {
+					produced = append(produced, ref)
+				}
+			} else {
+				expected = append(expected, step.Place.Secret)
+			}
 		}
+	}
+	if !slices.Equal(produced, r.ProducedInputs) {
+		return fmt.Errorf("add-on produced inputs differ from placements")
 	}
 	slices.Sort(expected)
 	expected = slices.Compact(expected)

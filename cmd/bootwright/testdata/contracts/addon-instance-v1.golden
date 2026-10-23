@@ -1,5 +1,5 @@
 implementation: addon-instance-v1
-content-digest: 993b57e89d799b7d6b525517aa2dd88e8f31ece5cba2c1f1dcf19e590385f16c
+content-digest: 493e3268d9a21775626378b40d42829af4892dfc23f8e9cc142598a817a63681
 automation-formats: none
 request-schema:
   binding string
@@ -48,6 +48,14 @@ evidence-schema:
   olm[].maxOpenShiftVersion string
   olm[].catalogImage string
   olm[].bundleImage string
+  olm[].plans []struct clusterobjects.OperatorPlan omitempty
+  olm[].plans[].name string
+  olm[].plans[].csvs []string
+  olm[].plans[].approved bool
+  olm[].csvs []struct clusterobjects.OperatorCSV omitempty
+  olm[].csvs[].name string
+  olm[].csvs[].version string
+  olm[].csvs[].phase string
   dependents []struct clusterobjects.DependentFacts
   dependents[].namespace string
   dependents[].subscription string

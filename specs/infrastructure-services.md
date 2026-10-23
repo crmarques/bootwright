@@ -532,6 +532,11 @@ because nothing yet says which cluster's ingress an authored name belongs to. Th
 [the container-cluster zone](api/environment.md#domains), so the resolver a
 Machine uses and the installer that polls the cluster agree by construction.
 
+A retained StorageExport with an attached object gateway also contributes its
+endpoint record through [the export DNS contract](storage-resources.md#attached-gateway-dns).
+The declaration owns the contribution and this service owns its publication and
+inverse, using the same frozen-record and content ownership as other names.
+
 **Readiness.** Completion requires a positive answer on every address the
 service serves: the declared bind address, or every declared endpoint address
 when the bind address is a wildcard. A frozen request naming no such address,

@@ -7,7 +7,6 @@ spec:
   profileRefs: []
 
   addonRefs:
-    - fusion-data-foundation
     - openshift-virtualization
     - nmstate
     - virtual-cluster-network

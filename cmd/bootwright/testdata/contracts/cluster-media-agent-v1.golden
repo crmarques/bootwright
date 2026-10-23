@@ -1,5 +1,5 @@
 implementation: cluster-media-agent-v1
-content-digest: ed813aef84344363cc149044c7d3bf8b311993f730556212751483ab79e86edb
+content-digest: 9575283e825ffeebe4ce26c7002a6efadec1899d2bb7251ab88e3518a57b2fe5
 automation-formats: none
 request-schema:
   agentConfig opaque

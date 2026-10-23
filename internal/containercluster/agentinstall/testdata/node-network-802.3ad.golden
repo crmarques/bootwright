@@ -1,0 +1,98 @@
+{
+  "interfaces": [
+    {
+      "macAddress": "02:00:00:00:00:01",
+      "name": "eno1"
+    },
+    {
+      "macAddress": "02:00:00:00:00:02",
+      "name": "eno2"
+    },
+    {
+      "macAddress": "02:00:00:00:00:03",
+      "name": "eno3"
+    }
+  ],
+  "networkConfig": {
+    "interfaces": [
+      {
+        "identifier": "mac-address",
+        "ipv4": {
+          "enabled": false
+        },
+        "ipv6": {
+          "enabled": false
+        },
+        "mac-address": "02:00:00:00:00:01",
+        "name": "eno1",
+        "state": "up",
+        "type": "ethernet"
+      },
+      {
+        "identifier": "mac-address",
+        "ipv4": {
+          "enabled": false
+        },
+        "ipv6": {
+          "enabled": false
+        },
+        "mac-address": "02:00:00:00:00:02",
+        "name": "eno2",
+        "state": "up",
+        "type": "ethernet"
+      },
+      {
+        "ipv4": {
+          "enabled": false
+        },
+        "ipv6": {
+          "enabled": false
+        },
+        "mac-address": "02:00:00:00:00:03",
+        "name": "eno3",
+        "state": "up",
+        "type": "ethernet"
+      },
+      {
+        "link-aggregation": {
+          "mode": "802.3ad",
+          "port": [
+            "eno1",
+            "eno2"
+          ]
+        },
+        "name": "bond0",
+        "state": "up",
+        "type": "bond"
+      },
+      {
+        "ipv4": {
+          "address": [
+            {
+              "ip": "198.51.100.21",
+              "prefix-length": 24
+            }
+          ],
+          "dhcp": false,
+          "enabled": true
+        },
+        "name": "bond0.100",
+        "state": "up",
+        "type": "vlan",
+        "vlan": {
+          "base-iface": "bond0",
+          "id": 100
+        }
+      }
+    ],
+    "routes": {
+      "config": [
+        {
+          "destination": "0.0.0.0/0",
+          "next-hop-address": "198.51.100.1",
+          "next-hop-interface": "bond0.100"
+        }
+      ]
+    }
+  }
+}

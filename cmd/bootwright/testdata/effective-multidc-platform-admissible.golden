@@ -250,7 +250,7 @@ spec:
         interface: bond0.100
       - name: ceph-public
         address: 198.51.100.21/25
-        interface: ceph-public
+        interface: bond0.200
     interfaceBinding:
       - nicRef: eth0
         interfaceName: eth0
@@ -304,7 +304,7 @@ spec:
         interface: bond0.100
       - name: ceph-public
         address: 198.51.100.22/25
-        interface: ceph-public
+        interface: bond0.200
     interfaceBinding:
       - nicRef: eth0
         interfaceName: eth0
@@ -358,7 +358,7 @@ spec:
         interface: bond0.100
       - name: ceph-public
         address: 198.51.100.23/25
-        interface: ceph-public
+        interface: bond0.200
     interfaceBinding:
       - nicRef: eth0
         interfaceName: eth0
@@ -412,7 +412,7 @@ spec:
         interface: bond0.100
       - name: ceph-public
         address: 198.51.100.24/25
-        interface: ceph-public
+        interface: bond0.200
     interfaceBinding:
       - nicRef: eth0
         interfaceName: eth0
@@ -466,7 +466,7 @@ spec:
         interface: bond0.100
       - name: ceph-public
         address: 198.51.100.25/25
-        interface: ceph-public
+        interface: bond0.200
     interfaceBinding:
       - nicRef: eth0
         interfaceName: eth0
@@ -520,7 +520,7 @@ spec:
         interface: bond0.100
       - name: ceph-public
         address: 198.51.100.26/25
-        interface: ceph-public
+        interface: bond0.200
     interfaceBinding:
       - nicRef: eth0
         interfaceName: eth0
@@ -1968,7 +1968,7 @@ spec:
           base-iface: bond0
           id: 100
       - ipv4:
-          enabled: false
+          enabled: true
         ipv6:
           enabled: false
         mtu: 1500
@@ -1979,30 +1979,6 @@ spec:
         vlan:
           base-iface: bond0
           id: 200
-      - bridge:
-          allow-extra-patch-ports: true
-          options:
-            stp: false
-          port:
-            - name: bond0.200
-            - name: ceph-public
-        ipv4:
-          enabled: false
-        ipv6:
-          enabled: false
-        mtu: 1500
-        name: br-ceph-public
-        state: up
-        type: ovs-bridge
-      - ipv4:
-          dhcp: false
-          enabled: true
-        ipv6:
-          enabled: false
-        mtu: 1500
-        name: ceph-public
-        state: up
-        type: ovs-interface
     routes:
       config:
         - destination: 0.0.0.0/0
@@ -2405,6 +2381,7 @@ spec:
       keyPairRef: hub-multidc-01-cluster-admin-ssh-key
     additionalTrustBundleRefs:
       - custom-ca-bundle
+    additionalTrustBundlePolicy: Always
   networking:
     clusterNetwork:
       - cidr: 10.132.0.0/14
@@ -2506,6 +2483,7 @@ spec:
       keyPairRef: hub-multidc-02-cluster-admin-ssh-key
     additionalTrustBundleRefs:
       - custom-ca-bundle
+    additionalTrustBundlePolicy: Always
   networking:
     clusterNetwork:
       - cidr: 10.132.0.0/14
@@ -2612,6 +2590,7 @@ spec:
       keyPairRef: ocp-multidc-01-cluster-admin-ssh-key
     additionalTrustBundleRefs:
       - custom-ca-bundle
+    additionalTrustBundlePolicy: Always
   networking:
     clusterNetwork:
       - cidr: 10.128.0.0/14
@@ -2692,6 +2671,7 @@ spec:
       keyPairRef: ocp-multidc-02-cluster-admin-ssh-key
     additionalTrustBundleRefs:
       - custom-ca-bundle
+    additionalTrustBundlePolicy: Always
   networking:
     clusterNetwork:
       - cidr: 10.128.0.0/14
@@ -3218,15 +3198,6 @@ spec:
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonProfile
 metadata:
-  name: hub-cluster-addons
-spec:
-  profileRefs: []
-  addonRefs:
-    - nmstate
----
-apiVersion: bootwright.io/v1alpha1
-kind: ClusterAddonProfile
-metadata:
   name: physical-cluster-addons
 spec:
   profileRefs: []
@@ -3241,9 +3212,9 @@ metadata:
   name: hub-multidc-01-addons
 spec:
   clusterRef: hub-multidc-01
-  profileRefs:
-    - hub-cluster-addons
-  addonRefs: []
+  profileRefs: []
+  addonRefs:
+    - nmstate
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding
@@ -3251,9 +3222,9 @@ metadata:
   name: hub-multidc-02-addons
 spec:
   clusterRef: hub-multidc-02
-  profileRefs:
-    - hub-cluster-addons
-  addonRefs: []
+  profileRefs: []
+  addonRefs:
+    - nmstate
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding

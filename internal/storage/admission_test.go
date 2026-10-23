@@ -103,7 +103,7 @@ func TestAllStorageKindsAdmitAndNormalizeWithoutMutatingInput(t *testing.T) {
 		before := object.Spec()
 		issues := Validate(object, catalog)
 		if object.Kind() == api.StorageExport {
-			requireIssue(t, issues, "$.spec")
+			requireIssue(t, issues, "$.spec.dataFoundation.filesystemRef")
 		} else if len(issues) != 0 {
 			t.Errorf("%s: %#v", object.Identity(), issues)
 		}
@@ -429,15 +429,7 @@ func TestDeferredScopeRefusalsNameTheDeliveringItem(t *testing.T) {
 		}
 		t.Fatalf("missing %s remediation %q: %#v", field, remediation, issues)
 	}
-	for kind, item := range map[api.Kind]string{api.StorageExport: "B86"} {
-		candidates := catalog.OfKind(kind)
-		if len(candidates) == 0 {
-			t.Fatalf("fixture has no %s", kind)
-		}
-		for _, candidate := range candidates {
-			requireRemedy(Validate(candidate, catalog), "$.spec", "remove this "+string(kind)+" from the input; "+item+" delivers it")
-		}
-	}
+
 	external := object(api.StorageCluster, "external", m("type", "ceph", "management", "external"))
 	export := object(api.StorageExport, "external-export", m("clusterRef", "external", "externalDetails", m("fromSecretRef", "details")))
 	requireRemedy(Validate(export, api.NewCatalog([]api.Object{external, export})), "$.spec", "remove this StorageExport from the input; parked item B107 delivers it")

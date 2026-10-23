@@ -1,0 +1,126 @@
+{
+  "checks": [
+    {
+      "statusPhase": {
+        "apiVersion": "argoproj.io/v1beta1",
+        "kind": "ArgoCD",
+        "name": "openshift-gitops",
+        "namespace": "openshift-gitops",
+        "namespaced": true,
+        "path": "status.server",
+        "values": [
+          "Running"
+        ]
+      }
+    },
+    {
+      "statusPhase": {
+        "apiVersion": "argoproj.io/v1beta1",
+        "kind": "ArgoCD",
+        "name": "openshift-gitops",
+        "namespace": "openshift-gitops",
+        "namespaced": true,
+        "path": "status.phase",
+        "values": [
+          "Available"
+        ]
+      }
+    }
+  ],
+  "steps": [
+    {
+      "kind": "wait",
+      "wait": [
+        {
+          "condition": {
+            "apiVersion": "apiextensions.k8s.io/v1",
+            "kind": "CustomResourceDefinition",
+            "name": "applications.argoproj.io",
+            "namespace": "",
+            "namespaced": false,
+            "status": "True",
+            "type": "Established"
+          }
+        },
+        {
+          "statusPhase": {
+            "apiVersion": "argoproj.io/v1beta1",
+            "kind": "ArgoCD",
+            "name": "openshift-gitops",
+            "namespace": "openshift-gitops",
+            "namespaced": true,
+            "path": "status.phase",
+            "values": [
+              "Available"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "kind": "place",
+      "place": {
+        "desiredDigest": "b846c29a7189172013bbd162e9668adb3a35f67d15aa9571155eb076e8650b77",
+        "keys": [
+          {
+            "key": "username",
+            "part": "username"
+          },
+          {
+            "key": "password",
+            "part": "password"
+          }
+        ],
+        "labels": {
+          "argocd.argoproj.io/secret-type": "repository"
+        },
+        "name": "bootwright-bootstrap-repository",
+        "namespace": "openshift-gitops",
+        "secret": "repository-login",
+        "strings": {
+          "type": "git",
+          "url": "https://example.test/repository.git"
+        },
+        "type": "Opaque"
+      }
+    },
+    {
+      "create": {
+        "apiVersion": "argoproj.io/v1alpha1",
+        "body": {
+          "apiVersion": "argoproj.io/v1alpha1",
+          "kind": "Application",
+          "metadata": {
+            "name": "bootwright-bootstrap",
+            "namespace": "openshift-gitops"
+          },
+          "spec": {
+            "destination": {
+              "namespace": "application",
+              "server": "https://kubernetes.default.svc"
+            },
+            "project": "default",
+            "source": {
+              "path": ".",
+              "repoURL": "https://example.test/repository.git",
+              "targetRevision": "main"
+            },
+            "syncPolicy": {
+              "automated": {
+                "prune": false,
+                "selfHeal": false
+              }
+            }
+          }
+        },
+        "desiredDigest": "655e668f8b228651fafaaa86715e06731abb61421f09f0ac63048193ee2a418f",
+        "kind": "Application",
+        "name": "bootwright-bootstrap",
+        "namespace": "openshift-gitops",
+        "namespaced": true
+      },
+      "kind": "create"
+    }
+  ],
+  "version": "cluster-objects-v1"
+}

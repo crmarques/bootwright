@@ -25,7 +25,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_native_resources, ceph_native_observe, ceph_native_units, ceph_native_object, ceph_native_worker, ceph_package_sources, ceph_package_worker,
     ceph_packages, ceph_registry_discovery, ceph_smb_native, ceph_replication_native, ceph_ssh_policy, ceph_tunnel,
     ceph_tunnel_staging, ceph_tunnel_custody, native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
-    physical_machine_identity,
+    physical_machine_identity, ceph_export_native, ceph_export_dns,
 )
 
 # Every id the shipped specialization registry declares; a worker answer or a record naming any other id is refused.
@@ -493,7 +493,7 @@ class Transport:
         modules = (native_diagnostics, native_specializations, ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
                    ceph_native_resources, ceph_native_nfs, ceph_native_nvmeof, ceph_native_observability,
                    ceph_native_units, ceph_native_object, ceph_smb_native,
-                   ceph_replication_native,
+                   ceph_replication_native, ceph_export_dns, ceph_export_native,
                    ceph_host_route_probe, ceph_pull_broker, physical_machine_identity, ceph_host_runtime)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
         ceph_native.require(tuple(sources) == ceph_native_worker.MODULES, "transport")
@@ -527,6 +527,14 @@ class Transport:
         source = ceph_native_worker.launcher(inspect.getsource(ceph_native_worker)) + "s['main']()"
         return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": budget}, timeout,
                           worker_budget=budget)
+
+    def export(self, host, phase, request, private=None, *, timeout=600):
+        """One bounded export phase; only private stdin and a private reply carry keys."""
+        ceph_native.require(phase in ceph_export_native.PHASES and 0 < timeout <= 660, "transport")
+        budget = min(640, timeout - 2)
+        payload = {"request": request, "host": host["name"], "phase": phase, "private": private or {}}
+        source = ceph_native_worker.launcher(inspect.getsource(ceph_native_worker)) + "s['main']()"
+        return self._call(host, source, {"sources": self.native_sources(), "payload": payload, "budget": budget}, timeout, worker_budget=budget)
 
     def smb(self, host, phase, request, private=None, *, timeout=660):
         """One SMB phase on the bootstrap host; the bound passwords travel only in the worker's stdin payload."""

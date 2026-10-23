@@ -380,7 +380,7 @@ Rules, each at its field under `$.spec.packages.fdf`:
 The default catalogs are `redhat-operators`, `certified-operators`,
 `community-operators` and `redhat-marketplace`. The trust rule holds when the
 cluster selects at least one additional trust bundle under the effective
-policy `Always`, which [B195](../milestones/m3.md#b195) defines. It is a
+policy `Always`, which [B195](../milestones/delivered.md#b195) defines. It is a
 conservative Bootwright choice, not a native fact: v1 observed NooBaa failing
 with `x509` against a private RGW CA until the issuing CA was in the
 cluster-wide trusted bundle, the trust source in 4.20 to 4.22 is not
@@ -388,8 +388,6 @@ established, and [B761](../milestones/m4.md#b761) re-verifies it. It also
 refuses a gateway whose certificate already chains to a CA in cluster trust,
 because admission cannot see that trust.
 
-Not yet met: package fdf is not selectable; tracked as
-[B85](../milestones/m4.md#b85).
 
 ### Package acm
 
@@ -444,10 +442,6 @@ Red Hat OpenShift GitOps with its default Argo CD instance, a
 | Prune or self-heal without automation | `api.invariant` | `$.spec.packages.gitops.bootstrap.sync` | `bootstrap sync prune and selfHeal of package gitops need sync.automated` | `set sync.automated to true, or remove prune and selfHeal` |
 
 Diagnostics never echo a repository URL, which could hold credentials.
-
-Not yet met: neither package is selectable; tracked as
-[B91](../milestones/m4.md#b91), [B92](../milestones/m4.md#b92) and
-[B765](../milestones/m4.md#b765).
 
 ### Package certmgr
 

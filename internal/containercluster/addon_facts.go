@@ -17,6 +17,7 @@ func AddonFacts(catalog api.Catalog, name string) addons.ClusterFacts {
 		return facts
 	}
 	spec := cluster.Spec()
+	facts.Trust = addons.TrustFacts{Policy: spec.Get("install", "additionalTrustBundlePolicy").Text(), Bundles: spec.Get("install", "additionalTrustBundleRefs").Len()}
 	facts.Release = spec.Get("distribution", "release", "version").Text()
 	networks, _ := machineNetworks(cluster, catalog)
 	facts.MachineNetworks = uniquePrefixes(networks)

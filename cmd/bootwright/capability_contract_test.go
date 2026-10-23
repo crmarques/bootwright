@@ -176,6 +176,7 @@ func contractRows() []contractRow {
 		{kind: string(api.StorageCluster), implementation: ceph.PhysicalRetirementImplementation, example: "physical-3-nodes-ceph", completedFrom: "specs/storage.md: physical retirement verifies original host disk bindings against complete original-policy erase receipts before claim release"},
 		{kind: string(api.StorageReplication), implementation: ceph.ReplicationImplementation, example: "libvirt-2x4-nodes-ceph-multisite", completedFrom: "specs/storage.md, RBD replication: both cluster scopes and credentials require original apply proofs"},
 		{kind: string(api.StorageSMBResource), implementation: ceph.SMBImplementation, example: "libvirt-3-nodes-ceph+smb", completedFrom: cephSMBCompletedFrom},
+		{kind: string(api.StorageExport), implementation: ceph.ExportImplementation, example: "lab-compact-df", completedFrom: "specs/storage-resources.md, StorageExport: produced details require the original apply's proved Ceph cluster scope"},
 		{kind: string(api.StorageCluster), implementation: ceph.ImageImplementation, example: "libvirt-3-nodes-ceph", presence: contractImagePresence, indivisible: true,
 			removalObservesNothing: "specs/storage.md, Frozen release and trust: a resolution retains nothing, so its removal takes back nothing a run could observe",
 			drift:                  map[string]any{"platform": "linux/arm64"}},
@@ -397,6 +398,9 @@ func contractExampleOf(t *testing.T, resolver capabilityResolver, name string) c
 		capability, _ := resolver.Resolve(binding.Kind, binding.Implementation)
 		contribution, err := capability.Plan(context.Background(), example.apply)
 		if err != nil {
+			if binding.Implementation == ceph.ExportImplementation && name == "lab-compact-df" {
+				t.Fatalf("Ceph export example planning: %v", diagnostics.Of(err))
+			}
 			// A binding may refuse an example it has no row for.
 			continue
 		}
@@ -405,7 +409,7 @@ func contractExampleOf(t *testing.T, resolver capabilityResolver, name string) c
 	}
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, definitions)
 	if err != nil {
-		t.Fatalf("%s: the plan model refuses what the bindings planned: %v", name, err)
+		t.Fatalf("%s: the plan model refuses what the bindings planned: %v", name, diagnostics.Of(err))
 	}
 	example.plan = plan
 	return example

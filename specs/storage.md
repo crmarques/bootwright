@@ -958,9 +958,6 @@ its export block, which mints the consumer's own principals and produces its
 external-cluster details in custody; it installs nothing on the consuming
 cluster.
 
-Not yet met: no export block exists; tracked as
-[B86](milestones/m4.md#b86).
-
 The management gateway unit `ceph-service-<cluster>-mgmt-gateway` runs its
 apply phase only on the bootstrap host, after the firewall check below on each
 host of its keepalive-only ingress when it declares a `virtual_ip`. Before any

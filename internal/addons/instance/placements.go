@@ -17,6 +17,12 @@ func validatePlacements(request Request, catalog api.Catalog) error {
 			continue
 		}
 		p := step.Place
+		if p.Produced != nil {
+			if _, ok := catalog.Find(api.StorageExport, p.Produced.Object); !ok {
+				return refusal("Secret placement "+p.Name+" names an undeclared StorageExport "+p.Produced.Object, "declare the managed StorageExport before planning")
+			}
+			continue
+		}
 		object, ok := catalog.Find(api.Secret, p.Secret)
 		if !ok {
 			return refusal("Secret placement "+p.Name+" names an undeclared Secret "+p.Secret, "declare the Secret before planning")

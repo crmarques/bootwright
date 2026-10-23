@@ -20,4 +20,4 @@
     cluster_objects_material: "{{ bootwright_cluster_network_material }}"
     cluster_objects_evidence: "{{ bootwright_cluster_network_material.evidence | default('{}') | from_json }}"
     cluster_objects_digest: "{{ bootwright_cluster_network_digest }}"
-    cluster_objects_evidence_version: cluster-network-evidence-v1
+    cluster_objects_evidence_version: cluster-network-evidence-v2

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -111,7 +112,6 @@ func expandedExampleSources(t *testing.T) desiredstate.Sources {
 var refusedKinds = []api.Kind{api.StorageExport}
 
 const (
-	fusionAddOn           = "fusion-data-foundation"
 	admissibleCephSources = "acceptance-ceph.yaml"
 )
 
@@ -126,8 +126,8 @@ func mustReplaceOnce(t *testing.T, path, body, old, replacement string) string {
 }
 
 // admissibleExampleSources is the reference as admission accepts it today:
-// the Ceph sources and the add-on that can only consume a refused export
-// dropped (the hub profile keeps the add-on every cluster profile shares), a
+// the Ceph sources and their FDF package consumers dropped (hubs retain an
+// NMState fixture), agent bridge networking projected onto its existing VLAN, a
 // non-stretch StorageCluster with its policy and pool substituted from
 // testdata, external cluster endpoints projected onto platform none, and the
 // extras without the refused families. The public example is
@@ -137,37 +137,44 @@ func admissibleExampleSources(t *testing.T, withExtras bool) desiredstate.Source
 	sources := exampleSources(t)
 	root := sources.Roots[0]
 	ceph := filepath.Join(root, "clusters", "ceph") + string(filepath.Separator)
-	addOn := filepath.Join(root, "add-ons", fusionAddOn) + string(filepath.Separator)
 	var files []desiredstate.SourceFile
 	dropped := 0
 	for _, file := range sources.Files {
 		body := string(file.Bytes())
 		switch {
-		case strings.HasPrefix(file.Path(), ceph), strings.HasPrefix(file.Path(), addOn):
+		case strings.HasPrefix(file.Path(), ceph):
 			dropped++
 			continue
 		case strings.Contains(body, "kind: ContainerCluster\n") && strings.Contains(body, "    platform:\n      type: baremetal\n"):
 			body = mustReplaceOnce(t, file.Path(), body, "    platform:\n      type: baremetal\n\n      baremetal:\n        provisioningNetwork: disabled\n", "    platform:\n      type: none\n")
-		case strings.Contains(body, "kind: ClusterAddonProfile\n"):
-			replacement := ""
-			if strings.Contains(body, "  name: hub-cluster-addons\n") {
-				replacement = "    - nmstate\n"
+		case strings.Contains(file.Path(), "ocp-bare-metal-network.yaml"):
+			start := strings.Index(body, "\n      - name: br-ceph-public\n")
+			end := strings.Index(body, "\n    dns-resolver:\n")
+			if start < 0 || end < start {
+				t.Fatal("reference bridge fixture missing")
 			}
-			body = mustReplaceOnce(t, file.Path(), body, "    - "+fusionAddOn+"\n", replacement)
+			body = body[:start] + body[end:]
+			vlanStart := strings.Index(body, "      - name: bond0.200\n")
+			body = body[:vlanStart] + strings.Replace(body[vlanStart:], "enabled: false", "enabled: true", 1)
+		case strings.Contains(body, "kind: Machine\n") && strings.Contains(body, "configRef: ocp-bare-metal-network"):
+			body = strings.ReplaceAll(body, "interface: ceph-public", "interface: bond0.200")
 		case strings.Contains(body, "kind: ClusterAddonBinding\n"):
-			head, _, found := strings.Cut(body, "  addonConfigs:\n")
-			if !found || !strings.Contains(body, "addonRef: "+fusionAddOn+"\n") {
-				t.Fatalf("%s: the projection expects the %s input block", file.Path(), fusionAddOn)
+			head, _, found := strings.Cut(body, "  packages:\n")
+			if !found || !strings.Contains(body, "    fdf:\n") {
+				t.Fatalf("%s: projection expects the fdf package", file.Path())
 			}
 			body = head
+			if strings.Contains(body, "  profileRefs: []") {
+				body = mustReplaceOnce(t, file.Path(), body, "  addonRefs: []", "  addonRefs:\n    - nmstate")
+			}
 		default:
 			files = append(files, file)
 			continue
 		}
 		files = append(files, desiredstate.NewSourceFile(file.Path(), []byte(body)))
 	}
-	if dropped != 15+1 {
-		t.Fatalf("the projection dropped %d sources, want the 15 Ceph sources and the add-on", dropped)
+	if dropped != 15 {
+		t.Fatalf("the projection dropped %d sources, want the 15 Ceph sources", dropped)
 	}
 	files = append(files, desiredstate.NewSourceFile(filepath.Join(root, admissibleCephSources), readAcceptanceFixture(t, "ceph-admissible.yaml")))
 	if withExtras {
@@ -221,8 +228,8 @@ func requireObject(t *testing.T, catalog api.Catalog, kind api.Kind, name string
 // refuses those declarations explicitly rather than dropping them from input.
 func TestActualCLIRefusesFutureReferenceFeatures(t *testing.T) {
 	sources := exampleSources(t)
-	if len(sources.Files) != 106 {
-		t.Fatalf("reference discovery: got %d files, want 106", len(sources.Files))
+	if len(sources.Files) != 104 {
+		t.Fatalf("reference discovery: got %d files, want 104", len(sources.Files))
 	}
 	var out, errOut bytes.Buffer
 	code := run(context.Background(), []string{"validate", "-f", sources.Roots[0], "--output", "json"}, &out, &errOut)
@@ -248,13 +255,16 @@ func TestReferenceReadmeListsExactlyTheReferenceRefusals(t *testing.T) {
 		return d.field == "$.spec.ceph.mgrModules" || d.field == "$.spec.ceph.topology.stretch"
 	}
 	global := func(d diagnosticTuple) bool { return strings.HasPrefix(d.field, "$.spec.ceph.config.global.") }
-	export := func(d diagnosticTuple) bool { return d.kind == "StorageExport" }
 	bullets := map[string]func(diagnosticTuple) bool{
-		"External endpoint sources on the two baremetal ContainerClusters.":                                        func(d diagnosticTuple) bool { return d.kind == "ContainerCluster" },
+		"External endpoint sources on the two baremetal ContainerClusters.": func(d diagnosticTuple) bool {
+			return d.kind == "ContainerCluster" && strings.HasPrefix(d.field, "$.spec.install.endpoints.")
+		},
 		"Stretch topology and manager-module intent.":                                                              stretch,
 		"Unqualified global Ceph options, including missing members of the currently qualified pool-default pair.": global,
 		"A FIPS Ceph node without a managed FIPS installation profile.":                                            func(d diagnosticTuple) bool { return d.field == "$.spec.ceph.topology.nodes[6].machineRef" },
-		"Four `StorageExport` objects.":                                                                            export,
+		"Agent-install bridge interfaces on the two physical ContainerClusters.": func(d diagnosticTuple) bool {
+			return d.kind == "ContainerCluster" && strings.HasPrefix(d.field, "$.spec.nodes[")
+		},
 	}
 	data, err := os.ReadFile(filepath.Join(examplePath(t, "multidc-platform"), "README.md"))
 	if err != nil {
@@ -316,10 +326,7 @@ func referenceRefusals() []diagnosticTuple {
 	cluster := func(field string) diagnosticTuple {
 		return diagnosticTuple{"api.invariant", storageClusterKind, multidcCluster, field}
 	}
-	family := func(kind, name string) diagnosticTuple {
-		return diagnosticTuple{"api.invariant", kind, name, laterServiceRefusal}
-	}
-	return []diagnosticTuple{
+	result := []diagnosticTuple{
 		{"api.invariant", "ContainerCluster", "ocp-multidc-01", "$.spec.install.endpoints.api.source.type"},
 		{"api.invariant", "ContainerCluster", "ocp-multidc-01", "$.spec.install.endpoints.api-int.source.type"},
 		{"api.invariant", "ContainerCluster", "ocp-multidc-01", "$.spec.install.endpoints.ingress.source.type"},
@@ -334,10 +341,15 @@ func referenceRefusals() []diagnosticTuple {
 		cluster("$.spec.ceph.mgrModules"),
 		cluster("$.spec.ceph.topology.stretch"),
 		cluster("$.spec.ceph.topology.nodes[6].machineRef"),
-		family("StorageExport", "ceph-multidc-01-odf-hub-multidc-01"),
-		family("StorageExport", "ceph-multidc-01-odf-hub-multidc-02"),
-		family("StorageExport", "ceph-multidc-01-odf-ocp-multidc-01"),
-		family("StorageExport", "ceph-multidc-01-odf-ocp-multidc-02")}
+	}
+	for _, name := range []string{"ocp-multidc-01", "ocp-multidc-02"} {
+		for index := 0; index < 3; index++ {
+			for count := 0; count < 2; count++ {
+				result = append(result, diagnosticTuple{"api.invariant", "ContainerCluster", name, fmt.Sprintf("$.spec.nodes[%d].machineRef", index)})
+			}
+		}
+	}
+	return result
 }
 
 // expandedRefusals adds what the acceptance extras contribute to the
@@ -429,7 +441,7 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 			t.Errorf("kind %s has no full-wiring positive admission coverage", kind)
 		}
 	}
-	if report.Counts != (compilation.Counts{FilesSeen: 92, ObjectsDecoded: 127}) {
+	if report.Counts != (compilation.Counts{FilesSeen: 91, ObjectsDecoded: 126}) {
 		t.Errorf("projection counts: %#v", report.Counts)
 	}
 	if len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "api.deferred" || report.Diagnostics[0].Object == nil || report.Diagnostics[0].Object.Name != "acceptance-playbook" {

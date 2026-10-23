@@ -1,0 +1,25 @@
+[
+  {
+    "package": "acm",
+    "providers": []
+  },
+  {
+    "package": "fixture",
+    "providers": []
+  },
+  {
+    "package": "gitops",
+    "providers": [
+      {
+        "Binding": "hub",
+        "Package": "acm",
+        "Addon": ""
+      },
+      {
+        "Binding": "hub",
+        "Package": "fixture",
+        "Addon": ""
+      }
+    ]
+  }
+]

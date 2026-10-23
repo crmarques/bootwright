@@ -1,0 +1,56 @@
+{
+  "cluster": "example",
+  "controller": "controller",
+  "defaultDataPool": "fs-data",
+  "filesystem": "files",
+  "keyType": "aes",
+  "machines": [
+    "node-1",
+    "node-2",
+    "node-3"
+  ],
+  "monitoringHosts": [
+    "192.0.2.1",
+    "192.0.2.2",
+    "192.0.2.3"
+  ],
+  "monitoringPort": 9283,
+  "monitors": {
+    "node-1": "192.0.2.1",
+    "node-2": "192.0.2.2",
+    "node-3": "192.0.2.3"
+  },
+  "name": "consumer",
+  "physicalHosts": false,
+  "pool": "block",
+  "principals": {
+    "fs-node": {
+      "mds": "allow rw",
+      "mgr": "allow rw",
+      "mon": "allow r, allow command 'osd blocklist'",
+      "osd": "allow rw tag cephfs *=files"
+    },
+    "fs-prov": {
+      "mds": "allow *",
+      "mgr": "allow rw",
+      "mon": "allow r, allow command 'osd blocklist'",
+      "osd": "allow rw tag cephfs metadata=files"
+    },
+    "health": {
+      "mds": "allow *",
+      "mgr": "allow command config",
+      "mon": "allow r, allow command quorum_status, allow command version",
+      "osd": "profile rbd-read-only"
+    },
+    "rbd-node": {
+      "mon": "profile rbd, allow command 'osd blocklist'",
+      "osd": "profile rbd pool=block"
+    },
+    "rbd-prov": {
+      "mgr": "allow rw",
+      "mon": "profile rbd, allow command 'osd blocklist'",
+      "osd": "profile rbd pool=block"
+    }
+  },
+  "version": "ceph-export-request-v1"
+}

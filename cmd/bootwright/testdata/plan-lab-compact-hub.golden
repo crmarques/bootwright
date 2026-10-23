@@ -1,0 +1,592 @@
+[
+  {
+    "id": "artifact-server-lab-artifacts",
+    "stage": "infra-components",
+    "dependencies": [],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-hub-artifacts-lab-artifacts",
+      "create-path /var/lib/bootwright-services/lab-compact-hub/artifact-server/lab-artifacts",
+      "open-listener 192.0.2.1:8080",
+      "open-listener 192.0.2.1:8443"
+    ]
+  },
+  {
+    "id": "controller-prerequisites",
+    "stage": "controller",
+    "dependencies": [],
+    "impacts": [
+      "install-host-package iputils",
+      "install-host-package libvirt-client",
+      "install-host-package libvirt-daemon",
+      "install-host-package libvirt-daemon-driver-network",
+      "install-host-package libvirt-daemon-driver-qemu",
+      "install-host-package libvirt-daemon-driver-storage-core",
+      "install-host-package nmstate",
+      "install-host-package qemu-img",
+      "install-host-package qemu-kvm",
+      "install-host-package swtpm",
+      "install-host-package swtpm-tools",
+      "publish-target-client helm latest",
+      "publish-target-client openshift-clients 4.21.15",
+      "publish-target-client openshift-install 4.21.15"
+    ]
+  },
+  {
+    "id": "dns-lab-dns",
+    "stage": "infra-components",
+    "dependencies": [],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-hub-dns-lab-dns",
+      "create-path /var/lib/bootwright-services/lab-compact-hub/dns/lab-dns",
+      "open-listener 192.0.2.1:53"
+    ]
+  },
+  {
+    "id": "ntp-lab-ntp",
+    "stage": "infra-components",
+    "dependencies": [],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-hub-ntp-lab-ntp",
+      "create-path /var/lib/bootwright-services/lab-compact-hub/ntp/lab-ntp",
+      "open-listener 192.0.2.1:123"
+    ]
+  },
+  {
+    "id": "proxy-lab-proxy",
+    "stage": "infra-components",
+    "dependencies": [],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-hub-proxy-lab-proxy",
+      "create-path /var/lib/bootwright-services/lab-compact-hub/proxy/lab-proxy",
+      "open-listener 192.0.2.1:3128"
+    ]
+  },
+  {
+    "id": "substrate-host-lab-libvirt",
+    "stage": "substrates",
+    "dependencies": [],
+    "impacts": [
+      "create-bridge virbr-lab",
+      "create-libvirt-network bootwright-lab-compact-hub-lab-guests",
+      "create-libvirt-pool bootwright-lab-compact-hub-lab-libvirt-vmedia",
+      "create-path /var/lib/libvirt/images/bootwright/lab-compact-hub/providers/lab-libvirt/vmedia"
+    ]
+  },
+  {
+    "id": "cluster-media-compact",
+    "stage": "clusters",
+    "dependencies": [
+      "artifact-server-lab-artifacts"
+    ],
+    "impacts": [
+      "create-path /var/lib/bootwright-clusters/lab-compact-hub/compact",
+      "publish-content /var/lib/bootwright-services/lab-compact-hub/artifact-server/lab-artifacts/public/private/clusters/compact"
+    ]
+  },
+  {
+    "id": "machine-compact-01",
+    "stage": "machines",
+    "dependencies": [
+      "substrate-host-lab-libvirt"
+    ],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-hub-bmc-compact-01",
+      "create-disk /var/lib/libvirt/images/bootwright/lab-compact-hub/machines/compact-01/root.qcow2",
+      "create-libvirt-domain bootwright-lab-compact-hub-compact-01",
+      "create-path /var/lib/libvirt/images/bootwright/lab-compact-hub/machines/compact-01",
+      "open-listener 127.0.0.1:8000"
+    ]
+  },
+  {
+    "id": "machine-compact-02",
+    "stage": "machines",
+    "dependencies": [
+      "substrate-host-lab-libvirt"
+    ],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-hub-bmc-compact-02",
+      "create-disk /var/lib/libvirt/images/bootwright/lab-compact-hub/machines/compact-02/root.qcow2",
+      "create-libvirt-domain bootwright-lab-compact-hub-compact-02",
+      "create-path /var/lib/libvirt/images/bootwright/lab-compact-hub/machines/compact-02",
+      "open-listener 127.0.0.1:8001"
+    ]
+  },
+  {
+    "id": "machine-compact-03",
+    "stage": "machines",
+    "dependencies": [
+      "substrate-host-lab-libvirt"
+    ],
+    "impacts": [
+      "create-container-unit bootwright-lab-compact-hub-bmc-compact-03",
+      "create-disk /var/lib/libvirt/images/bootwright/lab-compact-hub/machines/compact-03/root.qcow2",
+      "create-libvirt-domain bootwright-lab-compact-hub-compact-03",
+      "create-path /var/lib/libvirt/images/bootwright/lab-compact-hub/machines/compact-03",
+      "open-listener 127.0.0.1:8002"
+    ]
+  },
+  {
+    "id": "cluster-install-compact",
+    "stage": "clusters",
+    "dependencies": [
+      "cluster-media-compact",
+      "dns-lab-dns",
+      "machine-compact-01",
+      "machine-compact-02",
+      "machine-compact-03",
+      "ntp-lab-ntp"
+    ],
+    "impacts": [
+      "install-cluster compact-01",
+      "install-cluster compact-02",
+      "install-cluster compact-03",
+      "power-on compact-01",
+      "power-on compact-02",
+      "power-on compact-03"
+    ]
+  },
+  {
+    "id": "addon-acm-compact",
+    "stage": "add-ons",
+    "dependencies": [
+      "cluster-install-compact",
+      "cluster-media-compact"
+    ],
+    "impacts": [
+      "install-addon acm compact"
+    ],
+    "request": {
+      "binding": "compact-hub",
+      "budgetSeconds": 2700,
+      "cluster": "compact",
+      "package": "acm",
+      "placement": {
+        "connection": "local",
+        "machine": "controller"
+      },
+      "producedInputs": [
+        {
+          "kind": "ContainerCluster",
+          "object": "compact",
+          "output": "kubeconfig"
+        }
+      ],
+      "program": {
+        "checks": [
+          {
+            "csvSucceeded": {
+              "csv": "advanced-cluster-management.v2.16.0",
+              "namespace": "open-cluster-management",
+              "subscription": "acm-operator-subscription"
+            }
+          },
+          {
+            "statusPhase": {
+              "apiVersion": "operator.open-cluster-management.io/v1",
+              "kind": "MultiClusterHub",
+              "name": "multiclusterhub",
+              "namespace": "open-cluster-management",
+              "namespaced": true,
+              "path": "status.phase",
+              "values": [
+                "Running"
+              ]
+            }
+          },
+          {
+            "csvSucceeded": {
+              "csv": "multicluster-engine.v2.11.0",
+              "namespace": "multicluster-engine",
+              "subscription": "multicluster-engine"
+            }
+          }
+        ],
+        "steps": [
+          {
+            "create": {
+              "apiVersion": "v1",
+              "body": {
+                "apiVersion": "v1",
+                "kind": "Namespace",
+                "metadata": {
+                  "name": "open-cluster-management"
+                }
+              },
+              "desiredDigest": "c69fc6b3b8c55c04a54f9fa25e668a74eb6d489d84e4c5e49d016cd43f9d7618",
+              "kind": "Namespace",
+              "name": "open-cluster-management",
+              "namespace": "",
+              "namespaced": false
+            },
+            "kind": "create"
+          },
+          {
+            "create": {
+              "apiVersion": "operators.coreos.com/v1",
+              "body": {
+                "apiVersion": "operators.coreos.com/v1",
+                "kind": "OperatorGroup",
+                "metadata": {
+                  "name": "open-cluster-management",
+                  "namespace": "open-cluster-management"
+                },
+                "spec": {
+                  "targetNamespaces": [
+                    "open-cluster-management"
+                  ]
+                }
+              },
+              "desiredDigest": "a92efb03f34fc2d6b9300487fd43429eb94014894f8ab61f1d46e1fa2459f40a",
+              "kind": "OperatorGroup",
+              "name": "open-cluster-management",
+              "namespace": "open-cluster-management",
+              "namespaced": true
+            },
+            "kind": "create"
+          },
+          {
+            "kind": "subscribe",
+            "subscribe": {
+              "approval": "exact",
+              "csv": "advanced-cluster-management.v2.16.0",
+              "object": {
+                "apiVersion": "operators.coreos.com/v1alpha1",
+                "body": {
+                  "apiVersion": "operators.coreos.com/v1alpha1",
+                  "kind": "Subscription",
+                  "metadata": {
+                    "name": "acm-operator-subscription",
+                    "namespace": "open-cluster-management"
+                  },
+                  "spec": {
+                    "channel": "release-2.16",
+                    "installPlanApproval": "Manual",
+                    "name": "advanced-cluster-management",
+                    "source": "redhat-operators",
+                    "sourceNamespace": "openshift-marketplace",
+                    "startingCSV": "advanced-cluster-management.v2.16.0"
+                  }
+                },
+                "desiredDigest": "d1eb58dfa0206b15a706c68a735bd48782e5abf9fb1586d6ff9917eaf71133fa",
+                "kind": "Subscription",
+                "name": "acm-operator-subscription",
+                "namespace": "open-cluster-management",
+                "namespaced": true
+              }
+            }
+          },
+          {
+            "kind": "wait",
+            "wait": [
+              {
+                "condition": {
+                  "apiVersion": "apiextensions.k8s.io/v1",
+                  "kind": "CustomResourceDefinition",
+                  "name": "multiclusterhubs.operator.open-cluster-management.io",
+                  "namespace": "",
+                  "namespaced": false,
+                  "status": "True",
+                  "type": "Established"
+                }
+              }
+            ]
+          },
+          {
+            "create": {
+              "apiVersion": "operator.open-cluster-management.io/v1",
+              "body": {
+                "apiVersion": "operator.open-cluster-management.io/v1",
+                "kind": "MultiClusterHub",
+                "metadata": {
+                  "annotations": {
+                    "installer.open-cluster-management.io/mce-subscription-spec": "{\"channel\":\"stable-2.11\",\"installPlanApproval\":\"Manual\",\"source\":\"redhat-operators\",\"sourceNamespace\":\"openshift-marketplace\",\"startingCSV\":\"multicluster-engine.v2.11.0\"}"
+                  },
+                  "name": "multiclusterhub",
+                  "namespace": "open-cluster-management"
+                },
+                "spec": {
+                  "disableHubSelfManagement": false
+                }
+              },
+              "desiredDigest": "2ab17813d811d24a11d2405d383122d7cac25bacbc058469bd9d0afa3bdadf8c",
+              "kind": "MultiClusterHub",
+              "name": "multiclusterhub",
+              "namespace": "open-cluster-management",
+              "namespaced": true
+            },
+            "kind": "create"
+          },
+          {
+            "approveDependent": {
+              "channel": "stable-2.11",
+              "creator": {
+                "apiVersion": "operator.open-cluster-management.io/v1",
+                "kind": "MultiClusterHub",
+                "name": "multiclusterhub",
+                "namespace": "open-cluster-management",
+                "namespaced": true
+              },
+              "csv": "multicluster-engine.v2.11.0",
+              "namespace": "multicluster-engine",
+              "package": "multicluster-engine",
+              "source": "redhat-operators",
+              "sourceNamespace": "openshift-marketplace",
+              "subscription": "multicluster-engine"
+            },
+            "kind": "approveDependent"
+          }
+        ],
+        "version": "cluster-objects-v1"
+      },
+      "secrets": [],
+      "tool": {
+        "compatibility": "openshift",
+        "kind": "openshift-clients",
+        "version": "4.21.15"
+      },
+      "version": "addon-instance-request-v1"
+    }
+  },
+  {
+    "id": "addon-gitops-compact",
+    "stage": "add-ons",
+    "dependencies": [
+      "addon-acm-compact",
+      "cluster-install-compact",
+      "cluster-media-compact"
+    ],
+    "impacts": [
+      "install-addon gitops compact"
+    ],
+    "request": {
+      "binding": "compact-hub",
+      "budgetSeconds": 1200,
+      "cluster": "compact",
+      "package": "gitops",
+      "placement": {
+        "connection": "local",
+        "machine": "controller"
+      },
+      "producedInputs": [
+        {
+          "kind": "ContainerCluster",
+          "object": "compact",
+          "output": "kubeconfig"
+        }
+      ],
+      "program": {
+        "checks": [
+          {
+            "csvSucceeded": {
+              "csv": "openshift-gitops-operator.v1.18.0",
+              "namespace": "openshift-gitops-operator",
+              "subscription": "openshift-gitops-operator"
+            }
+          },
+          {
+            "statusPhase": {
+              "apiVersion": "argoproj.io/v1beta1",
+              "kind": "ArgoCD",
+              "name": "openshift-gitops",
+              "namespace": "openshift-gitops",
+              "namespaced": true,
+              "path": "status.server",
+              "values": [
+                "Running"
+              ]
+            }
+          },
+          {
+            "statusPhase": {
+              "apiVersion": "argoproj.io/v1beta1",
+              "kind": "ArgoCD",
+              "name": "openshift-gitops",
+              "namespace": "openshift-gitops",
+              "namespaced": true,
+              "path": "status.phase",
+              "values": [
+                "Available"
+              ]
+            }
+          }
+        ],
+        "steps": [
+          {
+            "create": {
+              "apiVersion": "v1",
+              "body": {
+                "apiVersion": "v1",
+                "kind": "Namespace",
+                "metadata": {
+                  "labels": {
+                    "openshift.io/cluster-monitoring": "true"
+                  },
+                  "name": "openshift-gitops-operator"
+                }
+              },
+              "desiredDigest": "f01a99da420d3afce8340b9b8085562248cd06b9cdbec7376956a6940f528082",
+              "kind": "Namespace",
+              "name": "openshift-gitops-operator",
+              "namespace": "",
+              "namespaced": false
+            },
+            "kind": "create"
+          },
+          {
+            "create": {
+              "apiVersion": "operators.coreos.com/v1",
+              "body": {
+                "apiVersion": "operators.coreos.com/v1",
+                "kind": "OperatorGroup",
+                "metadata": {
+                  "name": "openshift-gitops-operator",
+                  "namespace": "openshift-gitops-operator"
+                }
+              },
+              "desiredDigest": "e153b7c642142960560a49fe04089f88854e3361e40c6f8600077598a94b0333",
+              "kind": "OperatorGroup",
+              "name": "openshift-gitops-operator",
+              "namespace": "openshift-gitops-operator",
+              "namespaced": true
+            },
+            "kind": "create"
+          },
+          {
+            "kind": "subscribe",
+            "subscribe": {
+              "approval": "exact",
+              "csv": "openshift-gitops-operator.v1.18.0",
+              "object": {
+                "apiVersion": "operators.coreos.com/v1alpha1",
+                "body": {
+                  "apiVersion": "operators.coreos.com/v1alpha1",
+                  "kind": "Subscription",
+                  "metadata": {
+                    "name": "openshift-gitops-operator",
+                    "namespace": "openshift-gitops-operator"
+                  },
+                  "spec": {
+                    "channel": "gitops-1.18",
+                    "installPlanApproval": "Manual",
+                    "name": "openshift-gitops-operator",
+                    "source": "redhat-operators",
+                    "sourceNamespace": "openshift-marketplace",
+                    "startingCSV": "openshift-gitops-operator.v1.18.0"
+                  }
+                },
+                "desiredDigest": "3fabaf2e1538d641848894c643ecc8230a44238a284f7a1ef9eb48a62f850d38",
+                "kind": "Subscription",
+                "name": "openshift-gitops-operator",
+                "namespace": "openshift-gitops-operator",
+                "namespaced": true
+              }
+            }
+          },
+          {
+            "kind": "wait",
+            "wait": [
+              {
+                "condition": {
+                  "apiVersion": "apiextensions.k8s.io/v1",
+                  "kind": "CustomResourceDefinition",
+                  "name": "applications.argoproj.io",
+                  "namespace": "",
+                  "namespaced": false,
+                  "status": "True",
+                  "type": "Established"
+                }
+              },
+              {
+                "statusPhase": {
+                  "apiVersion": "argoproj.io/v1beta1",
+                  "kind": "ArgoCD",
+                  "name": "openshift-gitops",
+                  "namespace": "openshift-gitops",
+                  "namespaced": true,
+                  "path": "status.phase",
+                  "values": [
+                    "Available"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "kind": "place",
+            "place": {
+              "desiredDigest": "74c24114abd24245b5acf8d88eae6209f104fb8d4d29ccbb33cf9c51ba8f9f56",
+              "keys": [
+                {
+                  "key": "username",
+                  "part": "username"
+                },
+                {
+                  "key": "password",
+                  "part": "password"
+                }
+              ],
+              "labels": {
+                "argocd.argoproj.io/secret-type": "repository"
+              },
+              "name": "bootwright-bootstrap-repository",
+              "namespace": "openshift-gitops",
+              "secret": "bootstrap-repository",
+              "strings": {
+                "type": "git",
+                "url": "https://git.example.test/platform/bootstrap.git"
+              },
+              "type": "Opaque"
+            }
+          },
+          {
+            "create": {
+              "apiVersion": "argoproj.io/v1alpha1",
+              "body": {
+                "apiVersion": "argoproj.io/v1alpha1",
+                "kind": "Application",
+                "metadata": {
+                  "name": "bootwright-bootstrap",
+                  "namespace": "openshift-gitops"
+                },
+                "spec": {
+                  "destination": {
+                    "namespace": "bootstrap-demo",
+                    "server": "https://kubernetes.default.svc"
+                  },
+                  "project": "default",
+                  "source": {
+                    "path": "clusters/compact",
+                    "repoURL": "https://git.example.test/platform/bootstrap.git",
+                    "targetRevision": "main"
+                  },
+                  "syncPolicy": {
+                    "automated": {
+                      "prune": false,
+                      "selfHeal": false
+                    }
+                  }
+                }
+              },
+              "desiredDigest": "a507a3c0542e59bb736dba54e3a783ac361cef0947a87f7e839656799691524e",
+              "kind": "Application",
+              "name": "bootwright-bootstrap",
+              "namespace": "openshift-gitops",
+              "namespaced": true
+            },
+            "kind": "create"
+          }
+        ],
+        "version": "cluster-objects-v1"
+      },
+      "secrets": [
+        "bootstrap-repository"
+      ],
+      "tool": {
+        "compatibility": "openshift",
+        "kind": "openshift-clients",
+        "version": "4.21.15"
+      },
+      "version": "addon-instance-request-v1"
+    }
+  }
+]

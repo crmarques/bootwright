@@ -1,0 +1,905 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: lab-compact-df
+spec:
+  domains:
+    base: lab.example.test
+    machines: lab.example.test
+    clusters: lab.example.test
+    containerClusters: lab.example.test
+    storageClusters: lab.example.test
+  containerClusters:
+    - compact
+  storageClusters:
+    - ceph-lab
+  remoteMachinesAccessKey:
+    keyRef: bootwright-machine-key
+  controller:
+    machineRef: controller
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Entitlement
+metadata:
+  name: ibm-ceph
+spec:
+  type: ibm-storage-ceph
+  registry:
+    url: cp.icr.io
+    credentialsRef: ibm-registry
+  license:
+    accept: true
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: compact-01
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: compact
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+  network:
+    configRef: lab-guests
+    attachmentRef: lab-guests
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: compact-01.lab.example.test
+      - name: ip
+        address: 198.51.100.21/24
+        interface: enp1s0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: compact-02
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: compact
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+  network:
+    configRef: lab-guests
+    attachmentRef: lab-guests
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: compact-02.lab.example.test
+      - name: ip
+        address: 198.51.100.22/24
+        interface: enp1s0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: compact-03
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: compact
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+  network:
+    configRef: lab-guests
+    attachmentRef: lab-guests
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: compact-03.lab.example.test
+      - name: ip
+        address: 198.51.100.23/24
+        interface: enp1s0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: controller
+spec:
+  capabilities:
+    - container-runtime
+    - libvirt
+  os:
+    provided: true
+  proxy:
+    direct: {}
+  network:
+    addresses:
+      - name: fqdn
+        address: controller.lab.example.test
+      - name: ip
+        address: 192.0.2.1
+  access:
+    local: true
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rhel-01
+spec:
+  capabilities:
+    - ceph-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: rhel
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+      rootDeviceHints:
+        deviceName: /dev/vda
+  proxy:
+    direct: {}
+  network:
+    configRef: lab-guests
+    attachmentRef: lab-guests
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: rhel-01.lab.example.test
+      - name: ip
+        address: 198.51.100.31/24
+        interface: enp1s0
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rhel-02
+spec:
+  capabilities:
+    - ceph-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: rhel
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+      rootDeviceHints:
+        deviceName: /dev/vda
+  proxy:
+    direct: {}
+  network:
+    configRef: lab-guests
+    attachmentRef: lab-guests
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: rhel-02.lab.example.test
+      - name: ip
+        address: 198.51.100.32/24
+        interface: enp1s0
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rhel-03
+spec:
+  capabilities:
+    - ceph-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: rhel
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+      rootDeviceHints:
+        deviceName: /dev/vda
+  proxy:
+    direct: {}
+  network:
+    configRef: lab-guests
+    attachmentRef: lab-guests
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: rhel-03.lab.example.test
+      - name: ip
+        address: 198.51.100.33/24
+        interface: enp1s0
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata:
+  name: rhel-9-8-boot
+spec:
+  bootMedia: local-media:rhel-9.8-x86_64-boot.iso
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-9-8
+spec:
+  os:
+    family: rhel
+    version: "9.8"
+    architecture: x86_64
+  installer:
+    anaconda:
+      imageRef: rhel-9-8-boot
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+      packageSource:
+        hostedTree:
+          fromMedia: local-media:rhel-9.8-x86_64-dvd.iso
+          artifactServerEndpoint:
+            serverRef: lab-artifacts
+            endpointRef: ip-http
+  customizations:
+    localization:
+      language: en_US.UTF-8
+      formats: en_US.UTF-8
+      keyboard: us
+      timezone: Etc/UTC
+    ssh:
+      passwordAuthentication: false
+    packages:
+      install:
+        - chrony
+        - qemu-guest-agent
+        - podman
+        - lvm2
+        - python3
+      excludeDocs: true
+      installWeakDeps: false
+    repositories:
+      configure:
+        - id: ibm-storage-ceph-9
+          baseURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/
+          displayName: IBM Storage Ceph 9 packages
+          enabled: true
+          gpgCheck: true
+          gpgKeyURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH
+    services:
+      enabled:
+        - chronyd
+        - qemu-guest-agent
+        - sshd
+    security:
+      selinux:
+        mode: enforcing
+  proxy:
+    direct: {}
+  ntp:
+    - serverRef: lab-ntp
+      endpointRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: lab-guests
+spec:
+  machineNetwork:
+    - cidr: 198.51.100.0/24
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+  nmstate:
+    dns-resolver:
+      config:
+        search:
+          - lab.example.test
+    interfaces:
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: enp1s0
+        state: up
+        type: ethernet
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          metric: 100
+          next-hop-address: 198.51.100.1
+          next-hop-interface: enp1s0
+          table-id: 254
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt
+spec:
+  libvirt:
+    machineRef: controller
+    uri: qemu:///system
+    capacityReserve:
+      cpu: 4
+      memoryMiB: 8192
+      diskGiB: 40
+    bmcEmulationDefaults:
+      enabled: true
+      protocol: redfish
+      emulator: sushy-tools
+      bindAddress: 127.0.0.1
+      certificateRef: lab-bmc-tls
+      port: 8000
+      auth:
+        credentialsRef: lab-bmc-credentials
+    machineProfiles:
+      - name: compact
+        cpu: 6
+        memoryMiB: 16384
+        diskGiB: 120
+        tpm: {}
+      - name: rhel
+        cpu: 4
+        memoryMiB: 13312
+        diskGiB: 60
+        dataDisks:
+          - name: ceph-data
+            sizeGiB: 80
+            media: ssd
+        tpm: {}
+  networkAttachments:
+    - name: lab-guests
+      libvirt:
+        bridge: virbr-lab
+        management: managed
+        address: 198.51.100.1/24
+        forward: nat
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Proxy
+metadata:
+  name: lab-proxy
+spec:
+  management: managed
+  machineRef: controller
+  implementation: squid
+  bindAddress: 192.0.2.1
+  port: 3128
+  endpoints:
+    - name: ip
+      addressRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: lab-dns
+spec:
+  management: managed
+  machineRef: controller
+  implementation: dnsmasq
+  bindAddress: 192.0.2.1
+  port: 53
+  endpoints:
+    - name: ip
+      addressRef: ip
+  forwarders:
+    - 192.0.2.53
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NTPServer
+metadata:
+  name: lab-ntp
+spec:
+  management: managed
+  machineRef: controller
+  implementation: chrony
+  bindAddress: 192.0.2.1
+  port: 123
+  endpoints:
+    - name: ip
+      addressRef: ip
+  upstreamSources:
+    - 192.0.2.123
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ArtifactServer
+metadata:
+  name: lab-artifacts
+spec:
+  management: managed
+  machineRef: controller
+  bindAddress: 192.0.2.1
+  retention: persistent
+  tls:
+    secretRef: artifact-server-tls
+    minVersion: TLSv1.2
+  listeners:
+    - name: https
+      protocol: https
+      port: 8443
+    - name: http
+      protocol: http
+      port: 8080
+  endpoints:
+    - name: ip-https
+      listenerRef: https
+      addressRef: ip
+    - name: ip-http
+      listenerRef: http
+      addressRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: compact
+spec:
+  distribution:
+    type: openshift
+    release:
+      version: 4.21.15
+      channel: stable-4.21
+  install:
+    method: agent
+    mode: connected
+    platform:
+      type: baremetal
+      baremetal:
+        provisioningNetwork: disabled
+    proxy:
+      direct: {}
+    ntp:
+      - serverRef: lab-ntp
+        endpointRef: ip
+    endpoints:
+      api:
+        address: 198.51.100.10
+        interfaceNetworks: []
+        source:
+          type: openshift
+      api-int:
+        address: 198.51.100.10
+        source:
+          type: openshift
+      ingress:
+        address: 198.51.100.11
+        interfaceNetworks: []
+        source:
+          type: openshift
+    agent:
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+    pullSecretRef: openshift-pull-secret
+    nodeSSH:
+      keyPairRef: compact-cluster-admin-ssh-key
+    additionalTrustBundleRefs:
+      - rgw-issuer
+    additionalTrustBundlePolicy: Always
+  networking:
+    clusterNetwork:
+      - cidr: 10.128.0.0/14
+        hostPrefix: 23
+    serviceNetwork:
+      - 172.30.0.0/16
+  nodes:
+    - name: master-0
+      fqdn: master-0.compact.lab.example.test
+      role: master
+      machineRef: compact-01
+    - name: master-1
+      fqdn: master-1.compact.lab.example.test
+      role: master
+      machineRef: compact-02
+    - name: master-2
+      fqdn: master-2.compact.lab.example.test
+      role: master
+      machineRef: compact-03
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageCluster
+metadata:
+  name: ceph-lab
+spec:
+  type: ceph
+  management: managed
+  ceph:
+    distribution: ibm
+    release: 9.9.2.0
+    packageVersion: 20.2.2-349.el9cp
+    image:
+      base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+      version: v9.9.2-26947
+    images:
+      prometheus:
+        base: cp.icr.io/cp/synthetic/prometheus
+        version: sha256:1111111111111111111111111111111111111111111111111111111111111111
+    ibm:
+      callHome: enabled
+      packages:
+        source: vendor
+    entitlementRef: ibm-ceph
+    cephadm:
+      addressRef: ip
+      ansible:
+        packageVersion: 5.0.3-1.el9cp
+      clusterSSH:
+        user: bootwright
+        keyRef: ceph-cluster-key
+        transport: verified-tunnel
+      bootstrap:
+        node: rhel-01
+        addressRef: ip
+    networks:
+      publicCIDRs:
+        - 198.51.100.0/24
+    config:
+      global:
+        osd_pool_default_min_size: "2"
+        osd_pool_default_size: "2"
+      osd:
+        osd_memory_target: "2147483648"
+        osd_memory_target_autotune: "false"
+    services:
+      - service_type: mon
+        placement:
+          label: ceph-core
+          count: 3
+      - service_type: mgr
+        placement:
+          label: ceph-core
+          count: 2
+      - service_type: osd
+        service_id: data
+        placement:
+          label: ceph-core
+        spec:
+          data_devices:
+            paths:
+              - /dev/sda
+      - service_type: mds
+        service_id: files
+        placement:
+          label: ceph-core
+          count: 2
+      - service_type: rgw
+        service_id: objects
+        placement:
+          hosts:
+            - rhel-01.lab.example.test
+          count: 1
+        spec:
+          certificate_source: inline
+          rgw_frontend_port: 443
+          ssl: true
+      - service_type: prometheus
+        placement:
+          label: ceph-core
+          count: 1
+        spec:
+          port: 9095
+    serviceBindings:
+      - serviceRef: rgw.objects
+        secrets:
+          - path: /spec/ssl_cert
+            secretRef: rgw-objects-tls
+          - path: /spec/ssl_key
+            secretRef: rgw-objects-tls
+    topology:
+      nodes:
+        - name: rhel-01
+          fqdn: rhel-01.lab.example.test
+          machineRef: rhel-01
+          labels:
+            - ceph-core
+        - name: rhel-02
+          fqdn: rhel-02.lab.example.test
+          machineRef: rhel-02
+          labels:
+            - ceph-core
+        - name: rhel-03
+          fqdn: rhel-03.lab.example.test
+          machineRef: rhel-03
+          labels:
+            - ceph-core
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePlacementPolicy
+metadata:
+  name: ssd-hosts
+spec:
+  clusterRef: ceph-lab
+  ruleName: ssd-hosts
+  crushDeviceClass: ssd
+  replicated:
+    size: 2
+    minSize: 2
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: cephfs-data
+spec:
+  clusterRef: ceph-lab
+  type: replicated
+  role: cephfs-data
+  replicated:
+    size: 2
+    minSize: 2
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: cephfs-metadata
+spec:
+  clusterRef: ceph-lab
+  type: replicated
+  role: cephfs-metadata
+  replicated:
+    size: 2
+    minSize: 2
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StoragePool
+metadata:
+  name: rbd-data
+spec:
+  clusterRef: ceph-lab
+  placementPolicyRef: ssd-hosts
+  type: replicated
+  role: rbd
+  autoscale:
+    mode: on
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageRBDImage
+metadata:
+  name: rbd-disk
+spec:
+  clusterRef: ceph-lab
+  poolRef: rbd-data
+  sizeBytes: 1073741824
+  features:
+    - layering
+    - exclusive-lock
+    - object-map
+    - fast-diff
+    - deep-flatten
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageClient
+metadata:
+  name: rbd-canary
+spec:
+  clusterRef: ceph-lab
+  poolRef: rbd-data
+  access: read-write
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageFilesystem
+metadata:
+  name: files
+spec:
+  clusterRef: ceph-lab
+  mdsServiceRef: mds.files
+  metadataPoolRef: cephfs-metadata
+  dataPoolRefs:
+    - name: cephfs-data
+      default: true
+  mds:
+    activeCount: 1
+    standbyReplay: false
+    standbyCountWanted: 1
+  subvolumeGroups:
+    - name: apps
+      mode: "750"
+    - name: csi
+      mode: "750"
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageSubvolume
+metadata:
+  name: docs
+spec:
+  clusterRef: ceph-lab
+  filesystemRef: files
+  group: apps
+  sizeBytes: 1073741824
+  mode: "750"
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageObjectGateway
+metadata:
+  name: objects
+spec:
+  clusterRef: ceph-lab
+  serviceRef: rgw.objects
+  realm: objects
+  zoneGroup: objects
+  zone: objects
+  endpoint:
+    fqdn: s3.lab.example.test
+---
+apiVersion: bootwright.io/v1alpha1
+kind: StorageExport
+metadata:
+  name: compact-storage
+spec:
+  type: dataFoundation
+  clusterRef: ceph-lab
+  dataFoundation:
+    rbdPoolRef: rbd-data
+    filesystemRef: files
+    objectGatewayRef: objects
+    cephxKeyType: aes
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: compact-data-foundation
+spec:
+  clusterRef: compact
+  packages:
+    fdf:
+      subscription:
+        channel: stable-4.20
+        startingCSV: odf-operator.v4.20.0
+        source: isf-data-foundation-catalog
+        sourceNamespace: openshift-marketplace
+        catalogSource:
+          name: isf-data-foundation-catalog
+          image: icr.io/cpopen/isf-data-foundation-catalog@sha256:2222222222222222222222222222222222222222222222222222222222222222
+          priority: 100
+          securityContextConfig: restricted
+      storageExportRef: compact-storage
+      defaultStorageClass: false
+      timeout: 1h
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: artifact-server-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: controller.lab.example.test
+      dnsNames:
+        - controller.lab.example.test
+      ipAddresses:
+        - 192.0.2.1
+      validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: bootwright-machine-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: bootwright-machine-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ceph-cluster-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: ceph-cluster-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: compact-cluster-admin-ssh-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: compact-cluster-admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: ibm-registry
+spec:
+  type: usernamePassword
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-credentials
+spec:
+  type: usernamePassword
+  source:
+    generated:
+      username: admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: localhost
+      dnsNames:
+        - localhost
+      ipAddresses:
+        - 127.0.0.1
+      validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: openshift-pull-secret
+spec:
+  type: dockerConfigJson
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: rgw-issuer
+spec:
+  type: caBundle
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: rgw-objects-tls
+spec:
+  type: tlsCertificate
+  source:
+    contextStore: {}

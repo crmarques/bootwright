@@ -48,7 +48,7 @@ func contractNetworkPresence(t *testing.T, execution lifecycle.Execution) map[st
 	if err := json.Unmarshal(data, &fields); err != nil {
 		t.Fatal(err)
 	}
-	fields["version"] = "cluster-network-evidence-v1"
+	fields["version"] = "cluster-network-evidence-v2"
 	fields["postcondition"] = true
 	fields["classification"] = "completed"
 	return fields

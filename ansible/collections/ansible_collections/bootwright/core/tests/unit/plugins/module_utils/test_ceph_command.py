@@ -115,6 +115,7 @@ def test_actual_shipped_command_works_inside_supervised_remote_group(tmp_path):
                "ceph_native_nvmeof": '"""Fixed fixture."""\n', "ceph_native_nfs": '"""Fixed fixture."""\n',
                "ceph_native_observability": '"""Fixed fixture."""\n', "ceph_native_units": '"""Fixed fixture."""\n',
                "ceph_native_object": '"""Fixed fixture."""\n', "ceph_smb_native": '"""Fixed fixture."""\n', "ceph_replication_native": '"""Fixed fixture."""\n',
+               "ceph_export_dns": '"""Fixed fixture."""\n', "ceph_export_native": '"""Fixed fixture."""\n',
                "ceph_native": inspect.getsource(ceph_native) +
                '\ndef dispatch(value):\n    code, output = bounded_command(' + repr(invocation) +
                ', timeout=1)\n    return {"code": code, "session": COMMAND_SESSION}\n'}

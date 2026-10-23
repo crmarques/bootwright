@@ -47,10 +47,9 @@
           "metadata": {
             "name": "metallb-operator",
             "namespace": "metallb-system"
-          },
-          "spec": {}
+          }
         },
-        "desiredDigest": "1bc5ea098ec080340efea30347fd42b6cc8e7522fe13ab5526f55094fa1a90f0",
+        "desiredDigest": "ddba3cb64e15a523f2fddabff1991ac7d374eab0961d3dd1e006f11dbc6e45b8",
         "kind": "OperatorGroup",
         "name": "metallb-operator",
         "namespace": "metallb-system",

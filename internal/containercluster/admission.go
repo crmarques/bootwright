@@ -271,6 +271,9 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	issues = add(issues, infrastructureservices.ValidateProxy(install.Get("proxy"), c, "$.spec.install.proxy", false)...)
 	issues = add(issues, infrastructureservices.ValidateServerSelections(install.Get("ntp"), c, api.NTPServer, "$.spec.install.ntp")...)
 	issues = add(issues, infrastructureservices.ValidateRegistrySelection(install.Get("registries", "mirror"), c, "$.spec.install.registries.mirror")...)
+	if install.Has("additionalTrustBundlePolicy") && install.Get("additionalTrustBundleRefs").Len() == 0 {
+		issues = add(issues, invariantRemediation("$.spec.install.additionalTrustBundlePolicy", "additionalTrustBundlePolicy requires additional trust bundles", "select at least one caBundle Secret in install.additionalTrustBundleRefs, or remove additionalTrustBundlePolicy"))
+	}
 	issues = add(issues, validateEndpoints(o, c)...)
 	issues = add(issues, validateNetworks(o, c)...)
 	issues = add(issues, ValidateNetworkIntent(o, c)...)

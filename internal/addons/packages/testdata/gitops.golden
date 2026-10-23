@@ -1,0 +1,32 @@
+{
+  "checks": [
+    {
+      "statusPhase": {
+        "apiVersion": "argoproj.io/v1beta1",
+        "kind": "ArgoCD",
+        "name": "openshift-gitops",
+        "namespace": "openshift-gitops",
+        "namespaced": true,
+        "path": "status.server",
+        "values": [
+          "Running"
+        ]
+      }
+    },
+    {
+      "statusPhase": {
+        "apiVersion": "argoproj.io/v1beta1",
+        "kind": "ArgoCD",
+        "name": "openshift-gitops",
+        "namespace": "openshift-gitops",
+        "namespaced": true,
+        "path": "status.phase",
+        "values": [
+          "Available"
+        ]
+      }
+    }
+  ],
+  "steps": [],
+  "version": "cluster-objects-v1"
+}

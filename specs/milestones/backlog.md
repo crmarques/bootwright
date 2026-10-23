@@ -3956,7 +3956,7 @@ Requires cell as `owner decision: <question>`.
   [B761](m4.md#b761), the same package from Red Hat's, as the binding names
   ([Q38](m4.md#m4a-open-decisions)), attached in external mode to the Ceph
   cluster M2 manages; the Ceph side stays Storage's
-  ([B86](m4.md#b86), [B762](m4.md#b762), [B763](m4.md#b763)), and the IBM
+  ([B86](m4.md#b86), [B762](delivered.md#b762), [B763](delivered.md#b763)), and the IBM
   entitlement travels in the cluster's install pull secret
   ([Q33](m4.md#m4a-open-decisions)). (6) The words "so i could use other AIs
   to implement the following m4 submilestones" are read, as D172 (5) read
@@ -4047,3 +4047,10 @@ Requires cell as `owner decision: <question>`.
   transport boundary. This answers the 2026-10-11 review's Q1 without removing
   policy management, reloads or the include-closure proof. Live qualification
   remains a separate gate.
+
+- **D180** (2026-10-23, the owner's request): implement every independent
+  blocker of M4a to M4e, including their specified code prerequisites, while
+  leaving operator inputs, live rehearsals and owner acceptance open. B195
+  follows Q13(a): an authored-only typed additional trust policy, without a
+  default, required by M4a's accepted Data Foundation trust contract. This
+  authorizes no host operation and claims no passed operator gate.

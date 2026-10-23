@@ -20,7 +20,7 @@ Start at [Environment](environment.yaml), then follow:
 | Machine and network | [Physical node](infra/machines/ocp-01/machine-01.yaml), [virtual node](infra/machines/hub-01/machine-01.yaml), [shared NMState network](infra/networkconfigs/ocp-bare-metal-network.yaml). |
 | Container cluster | [Physical OpenShift cluster](clusters/ocp-01/cluster.yaml), [virtual hub cluster](clusters/hub-01/cluster.yaml). |
 | Storage | [Cluster](clusters/ceph/cluster.yaml), [placement policy](clusters/ceph/placement-policy.yaml), [pool](clusters/ceph/pools/odf-hub-multidc-01-rbd.yaml), [export](clusters/ceph/exports/odf-hub-multidc-01.yaml). |
-| Add-ons | [Fusion definition](add-ons/fusion-data-foundation/add-on.yaml), [profile](add-ons/profiles/hub-cluster-addons.yaml), [binding](clusters/hub-01/add-on-binding.yaml). |
+| Add-ons | [Built-in package contract](../../../specs/api/addons.md#package-fdf), [profile](add-ons/profiles/physical-cluster-addons.yaml), [binding](clusters/hub-01/add-on-binding.yaml). |
 
 The native Kubernetes files under `add-ons/virtual-cluster-network/manifests/`
 are referenced payloads, rather than Bootwright objects. Input discovery excludes
@@ -70,19 +70,20 @@ policy expresses four replicas with a minimum of two. The
 standby policy and pools, bound by `mdsServiceRef` to its native MDS service.
 The [object gateway](clusters/ceph/object-gateways/odf-rgw-all.yaml) binds the
 cluster's native RGW service through `serviceRef`; its endpoint is the HTTPS
-ingress whose backend is that service. Admission accepts the gateway, its RGW
-and ingress services and their TLS binding; executing them is still
-unsupported. Admission also accepts the native observability services and the
+ingress whose backend is that service. The gateway, RGW and ingress services have a native lifecycle; this
+reference's live qualification remains unrun. Admission also accepts the native observability services and the
 Grafana Secret binding; planning refuses each service that needs an auxiliary
-image until that image can be selected. Consumer exports remain future intent;
+image until that image can be selected. Managed exports now use the built-in export lifecycle;
 see [storage API](../../../specs/api/storage.md) and
 [native service qualification](../../../specs/storage-native-api.md).
 
-Add-on definitions declare typed inputs, readiness and effects; profiles compose
-them and bindings supply cluster-specific values. `storageExportAttachment`
-and `globalPullSecretMerge` describe intended consumption, without granting
-execution authority. Global pull-secret merging and these dependent platform
-lifecycles are unsupported. See the [add-on contract](../../../specs/api/addons.md).
+The four Data Foundation bindings select the built-in `fdf` package and
+separate managed exports. Each declares an owned catalog, channel and exact
+starting CSV; replace the synthetic digest and versions with verified vendor
+choices. Include IBM registry credentials in the cluster installation pull
+secret. Bootwright does not merge the global pull secret. Each cluster selects
+its CA bundle under `Always` for the TLS gateway. Other authored add-ons remain
+future lifecycle intent; see the [add-on contract](../../../specs/api/addons.md).
 
 ## Secret declarations and verification
 
@@ -109,7 +110,7 @@ The expected result is failure with explicit diagnostics for:
 - Unqualified global Ceph options, including missing members of the currently
   qualified pool-default pair.
 - A FIPS Ceph node without a managed FIPS installation profile.
-- Four `StorageExport` objects.
+- Agent-install bridge interfaces on the two physical ContainerClusters.
 
 The exact diagnostic set is pinned by `TestActualCLIRefusesFutureReferenceFeatures`
 in [admission acceptance tests](../../../cmd/bootwright/admission_acceptance_test.go).

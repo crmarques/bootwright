@@ -128,7 +128,8 @@ class Engine:
                "strings": placement.get("strings", {})}
         live = self.probe(obj, ["type", "metadata.labels"], wait=not observe)
         own = "unknown" if live is False else model.ownership(obj, live, self.request)
-        keys = sorted([entry["key"] for entry in placement.get("keys", [])] + list(placement.get("strings", {})))
+        keys = sorted([entry["key"] for entry in (placement.get("keys") or [])] + list(placement.get("strings", {}))
+                      + ([placement["producedKey"]] if placement.get("produced") else []))
         equal = bool(live and own == "own" and live.get("type") == placement["type"]
                      and sorted(live.get("dataKeys", [])) == keys
                      and all(live.get("stringsEqual", {}).get(key) is True for key in placement.get("strings", {}))
@@ -235,6 +236,7 @@ class Engine:
         expected = step if dependent else step["object"]
         obj = olm_ref("Subscription", expected["namespace"], expected["subscription"]) if dependent else expected
         csv = step["csv"]
+        approved = None
         if not dependent:
             self.object(obj, observe)
         while True:
@@ -249,15 +251,21 @@ class Engine:
                     self.unknown = True
                     return
                 raise Refused(model.label(obj) + " differs at spec")
-            for condition in (live.get("status", {}).get("conditions") or []):
+            managed = not dependent and step["approval"] == "operatorManaged"
+            installed = live.get("status", {}).get("installedCSV", "")
+            for condition in ([] if managed and installed == csv else live.get("status", {}).get("conditions") or []):
                 if condition.get("type") == "ResolutionFailed" and condition.get("status") == "True":
                     if observe:
                         self.unknown = True
                         return
                     raise Refused(model.label(obj) + " resolution failed: " + model.native(condition.get("message", "")))
             plan_name = (live.get("status", {}).get("installPlanRef") or {}).get("name", "")
-            approved = self.plan(obj, live, csv, plan_name, observe) if plan_name else None
-            installed = live.get("status", {}).get("installedCSV", "")
+            if managed:
+                approved = self.first_plan(obj, live, csv, observe) or approved
+                if installed == csv and approved is None:
+                    approved = self.installed_plan(obj, live, csv)
+            else:
+                approved = self.plan(obj, live, csv, plan_name, observe) if plan_name else None
             succeeded, last = self.csv({"namespace": obj["namespace"], "subscription": obj["name"], "csv": csv}, observe)
             if observe or succeeded:
                 self.not_ready = self.not_ready or not succeeded
@@ -268,9 +276,75 @@ class Engine:
                 else:
                     fact.update(self.olm_facts(obj, live, approved, installed))
                     fact["upgradePending"] = live.get("status", {}).get("currentCSV", installed) != installed
+                    if managed:
+                        fact.update(self.operator_facts(obj["namespace"]))
                 self.state["dependents" if dependent else "olm"].append(fact)
                 return
             self.pause(model.label(obj) + " " + last)
+
+    def listed(self, kind, namespace, selected):
+        result = self.probe(olm_ref(kind, namespace, ""), selected)
+        if not result or not isinstance(result.get("items"), list):
+            return None
+        return sorted(result["items"], key=lambda item: item.get("metadata", {}).get("name", ""))
+
+    def first_plan(self, obj, live, csv, observe):
+        if live.get("status", {}).get("installedCSV") == csv:
+            return None
+        plans = self.listed("InstallPlan", obj["namespace"], ["spec", "metadata.ownerReferences", "status.bundleLookups"])
+        if plans is None:
+            return None
+        candidate = None
+        for plan in plans:
+            owners = plan.get("metadata", {}).get("ownerReferences") or []
+            if not any(owner.get("kind") == "Subscription" and owner.get("uid") == live["metadata"]["uid"] for owner in owners):
+                continue
+            csvs = plan.get("spec", {}).get("clusterServiceVersionNames") or []
+            if csv not in csvs:
+                continue
+            if csvs != [csv]:
+                if not observe:
+                    raise Refused("InstallPlan/" + obj["namespace"] + "/" + model.native(plan.get("metadata", {}).get("name", ""), "name")
+                                  + " approval proof differs; CSVs " + model.native(",".join(csvs)))
+                self.unknown = True
+                return None
+            if candidate is None:
+                candidate = plan
+        if candidate is not None:
+            # plan() re-reads the UID-owned plan and the patch tests the full proof.
+            return self.plan(obj, live, csv, candidate["metadata"]["name"], observe)
+        return None
+
+    def installed_plan(self, obj, live, csv):
+        # Later plans belong to the operator. Recover only initial install facts,
+        # without approving or rejecting any current or subsequent plan.
+        plans = self.listed("InstallPlan", obj["namespace"], ["spec", "metadata.ownerReferences", "status.bundleLookups"])
+        for plan in plans or []:
+            spec, meta = plan.get("spec", {}), plan.get("metadata", {})
+            lookups = plan.get("status", {}).get("bundleLookups") or []
+            catalog = live.get("spec", {})
+            if (spec.get("clusterServiceVersionNames") == [csv] and spec.get("approval") == "Manual"
+                    and spec.get("approved") is True and meta.get("uid")
+                    and lookups and all(lookup.get("catalogSourceRef", {}).get("name") == catalog.get("source")
+                                        and lookup.get("catalogSourceRef", {}).get("namespace") == catalog.get("sourceNamespace") for lookup in lookups)
+                    and any(r.get("kind") == "Subscription" and r.get("uid") == live["metadata"]["uid"] for r in meta.get("ownerReferences", []))):
+                name = model.native(meta.get("name", ""), "name")
+                if name and name != "invalid":
+                    self.plan_readings[(obj["namespace"], name)] = plan
+                    return {"name": name, "uid": meta["uid"], "csvs": [csv]}
+        return None
+
+    def operator_facts(self, namespace):
+        plans = self.listed("InstallPlan", namespace, ["spec.clusterServiceVersionNames", "spec.approved"])
+        csvs = self.listed("ClusterServiceVersion", namespace, ["spec.version", "status.phase"])
+        if plans is None or csvs is None:
+            self.unknown = True
+        return {"plans": [{"name": model.native(item.get("metadata", {}).get("name", ""), "name"),
+                           "csvs": [model.native(csv, "name") for csv in (item.get("spec", {}).get("clusterServiceVersionNames") or [])[:16]],
+                           "approved": item.get("spec", {}).get("approved") is True} for item in (plans or [])[:16]],
+                "csvs": [{"name": model.native(item.get("metadata", {}).get("name", ""), "name"),
+                          "version": model.native(item.get("spec", {}).get("version", "")),
+                          "phase": model.native(item.get("status", {}).get("phase", ""))} for item in (csvs or [])[:16]]}
 
     def plan(self, subscription, live, csv, name, observe):
         if model.native(name, "name") == "invalid":
@@ -363,8 +437,8 @@ class Engine:
             elif kind == "place":
                 self.place(step[kind], observe)
             elif kind == "subscribe":
-                if step[kind]["approval"] != "exact":
-                    raise Refused("operator-managed approval is unavailable")
+                if step[kind]["approval"] not in ("exact", "operatorManaged"):
+                    raise Refused("unsupported approval policy")
                 self.subscription(step[kind], observe=observe)
             elif kind == "approveDependent":
                 self.subscription(step[kind], dependent=True, observe=observe)

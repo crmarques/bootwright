@@ -8260,3 +8260,70 @@ D179 retains the implemented guest SSH policy, reload and include-closure
 proof, resolving the pending D135 review question. It removes no transport
 restriction and supplies no live qualification evidence. M2c's service and
 matrix acceptance and M2d/M2e's physical/stretch gates remain open.
+
+### X145 — Operator-managed first installation
+
+#### B759
+
+The shared object adapter approves only the first UID-owned Manual plan with
+exactly the declared CSV. After installation it leaves subsequent plans to
+the operator and retains bounded namespace and initial bundle evidence.
+Native listing and restart recovery are covered by the fake-client tests.
+The added operator evidence moves the instance and network evidence to v2;
+request and program versions remain unchanged.
+
+### X146 — Managed Ceph exports
+
+#### B762
+
+Managed export admission, the explicit CephX key type, dependency planning,
+export facts and separate `ceph-export` contracts are implemented. Per-export
+credential custody and produced external details are implemented by
+[B86](m4.md#b86), whose operator gate remains B761. Request/evidence goldens,
+admission twins and native recovery/refusal tests supply in-tree evidence.
+
+### X147 — Data Foundation and produced placement
+
+[B85](m4.md#b85) and [B760](m4.md#b760) have their in-tree implementation:
+the built-in `fdf` package, export closure/dependency, private produced Secret
+placement, readiness, synthetic rehearsal example and migrated bindings.
+They await B761; no live storage I/O or compatibility is claimed.
+
+### X148 — Export gateway resolution
+
+#### B763
+
+Attached gateway records contribute to the existing managed DNS service's
+frozen publication and teardown. The export depends on those DNS blocks and
+proves bootstrap resolution read-only before generating credentials. External
+DNS must resolve the declared terminating addresses. Ambiguous direct RGW
+placement refuses. Pod resolution remains B761's live gate.
+
+### X150 — Advanced Cluster Management
+
+[B91](m4.md#b91) implements the ACM hub and exact dependent engine approval,
+with the final engine CSV and hub readiness checks. It awaits B766.
+
+### X151 — OpenShift GitOps bootstrap
+
+[B92](m4.md#b92) and [B765](m4.md#b765) implement the default Argo CD readiness,
+per-cluster last ordering, optional owned bootstrap Application, credential
+placement and explicit access binding. They await B766, also B753's first
+live Secret proof. Repository publication is outside this implementation.
+
+The 2026-10-23 completion work implements the specified B718 host-network
+projection and B195 authored additional trust policy needed by M4. Their
+remaining qualification and unrelated definition clauses stay on M3's page.
+The delivering commit records exact focused/full commands and results and
+the independent safety review. No operator-run row was added or accepted.
+
+### X123 — Authored trust policy prerequisite
+
+#### B195
+
+The M4 completion request implements Q13(a): optional
+`spec.install.additionalTrustBundlePolicy` accepts `Always` or `Proxyonly`,
+has no default, refuses without bundle references, and reaches install-config
+only when authored. Admission twins and three projection goldens qualify the
+in-tree behavior. This supplies M4d's TLS trust prerequisite and does not
+claim live gateway trust or complete the other X123 items.

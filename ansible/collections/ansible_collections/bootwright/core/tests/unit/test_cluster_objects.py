@@ -145,6 +145,14 @@ def test_resource_qualification(api_version, qualified):
     assert native.resource({"kind": "Example", "apiVersion": api_version, "name": "example"}) == qualified
 
 
+@pytest.mark.parametrize("kind", ["InstallPlan", "ClusterServiceVersion"])
+def test_operator_namespace_listing_uses_native_transport(tmp_path, kind):
+    oc = ScriptedOC(tmp_path, [response({"items": []})])
+    obj = {"kind": kind, "apiVersion": "operators.coreos.com/v1alpha1", "namespace": "operators", "name": ""}
+    assert oc.read(obj, ["spec"]) == {"answered": True, "object": {"items": []}}
+    assert oc.calls()[0]["argv"][3:5] == ["get", kind + ".v1alpha1.operators.coreos.com"]
+
+
 def test_lagging_condition_and_failure():
     check = {"type": "Available", "status": "True", "failOn": [{"type": "Degraded", "status": "True"}]}
     live = {"metadata": {"generation": 2}, "status": {"conditions": [{"type": "Available", "status": "True", "observedGeneration": 1}]}}
@@ -219,6 +227,50 @@ def test_already_approved_plan_does_not_patch(object_request, olm_values):
     engine = Engine(object_request, lambda *_: {"answered": True, "object": plan}, lambda *a: writes.append(a))
     assert engine.plan(sub, live, "example.v1", "plan", False)["uid"] == "plan-1"
     assert not writes
+
+
+@pytest.mark.parametrize("fault", ["", "extra-csv", "foreign", "installed", "already-approved"])
+def test_operator_managed_only_approves_first_owned_exact_plan(object_request, olm_values, fault):
+    sub, live, plan = olm_values
+    plan["metadata"]["name"] = "first"
+    if fault == "extra-csv":
+        plan["spec"]["clusterServiceVersionNames"].append("other.v1")
+    elif fault == "foreign":
+        plan["metadata"]["ownerReferences"][0]["uid"] = "foreign"
+    elif fault == "installed":
+        live["status"] = {"installedCSV": "example.v1", "installPlanRef": {"name": "dependency"}}
+    elif fault == "already-approved":
+        plan["spec"]["approved"] = True
+    writes = []
+    reads = []
+
+    def read(obj, selected):
+        reads.append(obj)
+        return {"answered": True, "object": {"items": [plan]} if not obj["name"] else plan}
+
+    engine = Engine(object_request, read, lambda *args: writes.append(args) or {"accepted": True})
+    if fault == "extra-csv":
+        with pytest.raises(Refused, match="example.v1,other.v1"):
+            engine.first_plan(sub, live, "example.v1", False)
+    else:
+        result = engine.first_plan(sub, live, "example.v1", False)
+        assert bool(result) == (fault in ("", "already-approved"))
+    assert len(writes) == (1 if not fault else 0)
+    if fault == "installed":
+        assert not reads
+
+
+def test_operator_managed_namespace_evidence_is_bounded_and_sorted(object_request):
+    plans = [{"metadata": {"name": "plan-%02d" % i}, "spec": {"clusterServiceVersionNames": ["example.v1"], "approved": True}} for i in range(20)]
+    csvs = [{"metadata": {"name": "csv-%02d" % i}, "spec": {"version": "1.0.0"}, "status": {"phase": "Succeeded"}} for i in range(20)]
+
+    def read(obj, selected):
+        return {"answered": True, "object": {"items": list(reversed(plans if obj["kind"] == "InstallPlan" else csvs))}}
+
+    evidence = Engine(object_request, read).operator_facts("operators")
+    assert len(evidence["plans"]) == len(evidence["csvs"]) == 16
+    assert evidence["plans"][0]["name"] == "plan-00"
+    assert evidence["csvs"][-1]["name"] == "csv-15"
 
 
 @pytest.mark.parametrize("field", ["name", "channel", "source", "sourceNamespace", "startingCSV", "installPlanApproval", "creationTimestamp"])

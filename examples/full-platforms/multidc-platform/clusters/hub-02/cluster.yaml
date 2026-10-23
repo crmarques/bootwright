@@ -25,6 +25,7 @@ spec:
         - infra
 
   install:
+    additionalTrustBundlePolicy: Always
     method: agent
     mode: connected
 

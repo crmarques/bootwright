@@ -27,6 +27,11 @@ const (
 
 func cephExampleContext(t *testing.T, name string) (cli.Services, *contextfs.Store) {
 	t.Helper()
+	return productionExampleContext(t, name, blockFileExample)
+}
+
+func productionExampleContext(t *testing.T, name, example string) (cli.Services, *contextfs.Store) {
+	t.Helper()
 	root := filepath.Join(t.TempDir(), "state")
 	repository := testRepository(root)
 	deps := testContextWiring(t, root)
@@ -40,11 +45,11 @@ func cephExampleContext(t *testing.T, name string) (cli.Services, *contextfs.Sto
 	}
 	services := assembleServices(deps)
 	input := filepath.Join(t.TempDir(), name)
-	base, err := filepath.Abs(examplePath(t, blockFileExample))
+	base, err := filepath.Abs(examplePath(t, example))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, file := range exampleDirectory(t, blockFileExample).Files {
+	for _, file := range exampleDirectory(t, example).Files {
 		relative, err := filepath.Rel(base, file.Path())
 		if err != nil {
 			t.Fatal(err)

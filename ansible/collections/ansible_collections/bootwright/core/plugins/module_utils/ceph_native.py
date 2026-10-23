@@ -3927,6 +3927,9 @@ def dispatch(envelope):
     if phase in HOST_PHASES:
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime
         return ceph_host_runtime.dispatch(envelope)
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_export_native
+    if phase in ceph_export_native.PHASES:
+        return ceph_export_native.dispatch(envelope)
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_smb_native
     if phase in ceph_smb_native.PHASES:
         return ceph_smb_native.dispatch(envelope)
