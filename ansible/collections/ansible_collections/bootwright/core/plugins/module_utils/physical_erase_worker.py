@@ -16,9 +16,9 @@ import re
 import stat
 import time
 
-try:
+if __package__:
     from ansible_collections.bootwright.core.plugins.module_utils import physical_machine_identity
-except ModuleNotFoundError:
+else:
     import physical_machine_identity
 
 CHUNK = 1024 * 1024

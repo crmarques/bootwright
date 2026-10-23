@@ -203,3 +203,38 @@ class WorkerLivenessTests(unittest.TestCase):
                     namespace["command"] = Mock(return_value=service)
                     self.assertEqual(namespace["status"]()["state"], expected)
                     self.assertEqual(namespace["command"].call_args.args[0][-1], "bootwright-erase.service")
+
+
+class WorkerSourceAuthorityTests(unittest.TestCase):
+    def test_standalone_worker_uses_frozen_sibling_when_an_ambient_collection_exists(self):
+        import inspect
+        import sys
+        import types
+        from unittest.mock import Mock, patch
+        from ansible_collections.bootwright.core.plugins import module_utils
+        from ansible_collections.bootwright.core.plugins.module_utils import physical_machine_identity
+
+        frozen = types.ModuleType("physical_machine_identity")
+        exec(compile(inspect.getsource(physical_machine_identity), "frozen-identity", "exec"), frozen.__dict__)
+        ambient = types.ModuleType("ambient_identity")
+        ambient.prove = Mock(side_effect=AssertionError("ambient source must not identify erase targets"))
+        prefix = "ansible_collections.bootwright.core.plugins.module_utils"
+        modules = {"physical_machine_identity": frozen, prefix + ".physical_machine_identity": ambient}
+        namespace = {"__name__": "physical_erase_worker", "__package__": ""}
+        with patch.dict(sys.modules, modules), patch.object(module_utils, "physical_machine_identity", ambient):
+            exec(compile(inspect.getsource(worker), "frozen-worker", "exec"), namespace)
+        self.assertIs(namespace["physical_machine_identity"], frozen)
+        ambient.prove.assert_not_called()
+
+    def test_packaged_worker_keeps_the_collection_loader_as_its_source_authority(self):
+        import inspect
+        import sys
+        import types
+        from unittest.mock import patch
+
+        ambient = types.ModuleType("physical_machine_identity")
+        namespace = {"__name__": worker.__name__, "__package__": worker.__package__}
+        with patch.dict(sys.modules, {"physical_machine_identity": ambient}):
+            exec(compile(inspect.getsource(worker), "packaged-worker", "exec"), namespace)
+        self.assertIs(namespace["physical_machine_identity"], worker.physical_machine_identity)
+        self.assertIsNot(namespace["physical_machine_identity"], ambient)
