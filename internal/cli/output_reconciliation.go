@@ -138,6 +138,15 @@ func lifecycleHeadline(result lifecycle.PlanResult) string {
 }
 
 func writeLifecycleSteps(text *display, result lifecycle.PlanResult) {
+	if len(result.Checks) != 0 {
+		text.section("Controller listener firewall")
+		for _, check := range result.Checks {
+			text.lines([]string{check.Summary})
+			if check.Status != "open" {
+				text.lines([]string{check.Remedy})
+			}
+		}
+	}
 	if len(result.Steps) == 0 {
 		text.section("Plan")
 		text.lines([]string{"no blocks"})

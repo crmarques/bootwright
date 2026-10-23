@@ -8,11 +8,13 @@ import (
 	"strconv"
 	"strings"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 type inspection struct {
+	catalog   api.Catalog
 	view      SetupView
 	stored    StorageView
 	selection controller.Selection
@@ -160,6 +162,7 @@ func (s Service) selectContext(ctx context.Context, current *inspection) error {
 	if state == nil {
 		return failure("context.input", "context input could not be admitted", "import Environment input with context update")
 	}
+	current.catalog = state.Effective()
 	if current.selection, err = controller.Select(state.Effective()); err != nil {
 		return err
 	}

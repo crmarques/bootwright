@@ -24,8 +24,9 @@ func testContextWiring(t *testing.T, root string) serviceDependencies {
 	t.Helper()
 	home := filepath.Dir(root)
 	return serviceDependencies{
-		Selection: selectionfs.New(selectionfs.Options{UID: os.Getuid(), GID: os.Getgid(), Home: home}),
-		Operator:  testMaterialOperator{home: home},
+		Controller: controllerDependencies{Firewall: &firewallProbe{status: "open"}},
+		Selection:  selectionfs.New(selectionfs.Options{UID: os.Getuid(), GID: os.Getgid(), Home: home}),
+		Operator:   testMaterialOperator{home: home},
 	}
 }
 

@@ -45,28 +45,39 @@ type planBuildPresentation struct {
 	Steps        []int  `json:"steps"`
 }
 
+type planCheckPresentation struct {
+	ID      string `json:"id"`
+	Status  string `json:"status"`
+	Summary string `json:"summary"`
+	Remedy  string `json:"remedy"`
+}
+
 type planPresentation struct {
-	Context          resultContext          `json:"context"`
-	Verb             string                 `json:"verb"`
-	Steps            []planStepPresentation `json:"steps"`
-	Stages           []string               `json:"stages"`
-	Waves            int                    `json:"waves"`
-	Widest           int                    `json:"widest"`
-	Bound            int                    `json:"bound"`
-	Startable        int                    `json:"startable"`
-	Deferred         int                    `json:"deferred"`
-	Continuation     bool                   `json:"continuation"`
-	Finalizes        bool                   `json:"finalizes"`
-	AnotherBuild     *planBuildPresentation `json:"anotherBuild,omitempty"`
-	Stops            []string               `json:"stops"`
-	StopsAfterOnline []string               `json:"stopsAfterOnline"`
-	Receipt          receiptPresentation    `json:"receipt"`
+	Checks           []planCheckPresentation `json:"checks,omitempty"`
+	Context          resultContext           `json:"context"`
+	Verb             string                  `json:"verb"`
+	Steps            []planStepPresentation  `json:"steps"`
+	Stages           []string                `json:"stages"`
+	Waves            int                     `json:"waves"`
+	Widest           int                     `json:"widest"`
+	Bound            int                     `json:"bound"`
+	Startable        int                     `json:"startable"`
+	Deferred         int                     `json:"deferred"`
+	Continuation     bool                    `json:"continuation"`
+	Finalizes        bool                    `json:"finalizes"`
+	AnotherBuild     *planBuildPresentation  `json:"anotherBuild,omitempty"`
+	Stops            []string                `json:"stops"`
+	StopsAfterOnline []string                `json:"stopsAfterOnline"`
+	Receipt          receiptPresentation     `json:"receipt"`
 }
 
 func (planPresentation) documentedResult() {}
 
 func displayPlan(result *lifecycle.PlanResult) planPresentation {
 	shown := planPresentation{Context: resultContext{Name: escapeDisplayLine(result.Context.Name), Mode: escapeDisplayLine(result.Context.Mode)}, Verb: escapeDisplayLine(result.Verb), Steps: displayPlanSteps(result.Steps), Stages: displayLines(result.Stages), Waves: result.Waves, Widest: result.Widest, Bound: result.Bound, Startable: result.Startable, Deferred: result.Deferred, Continuation: result.Continuation, Finalizes: result.Finalizes, Stops: displayLines(result.Stops), StopsAfterOnline: displayLines(result.StopsAfterOnline), Receipt: displayReceipt(result.Receipt)}
+	for _, check := range result.Checks {
+		shown.Checks = append(shown.Checks, planCheckPresentation{ID: escapeDisplayLine(check.ID), Status: escapeDisplayLine(check.Status), Summary: escapeDisplayLine(check.Summary), Remedy: escapeDisplayLine(check.Remedy)})
+	}
 	if b := result.AnotherBuild; b != nil {
 		shown.AnotherBuild = &planBuildPresentation{RegisteredBy: escapeDisplayLine(b.RegisteredBy), Steps: append([]int{}, b.Steps...)}
 	}

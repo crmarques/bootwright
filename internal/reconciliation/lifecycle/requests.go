@@ -129,9 +129,12 @@ type AnotherBuild struct {
 	Steps        []int
 }
 
+type PlanCheck struct{ ID, Status, Summary, Remedy string }
+
 // PlanResult previews the next legal operation or the exact continuation point
 // of an incomplete one. It allocates no identity and creates no log.
 type PlanResult struct {
+	Checks  []PlanCheck
 	Context ContextIdentity
 	Verb    string
 	Steps   []PlanStep

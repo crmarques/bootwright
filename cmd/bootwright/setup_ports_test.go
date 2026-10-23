@@ -114,5 +114,5 @@ var testRuntimeLock = &prerequisites.RuntimeLock{
 
 // setupDependencies composes setup over these ports and storage.
 func (p *setupPorts) setupDependencies(storage prerequisites.Storage, setup prerequisites.SetupStore) controllerDependencies {
-	return controllerDependencies{Storage: storage, Setup: setup, Host: p, Packages: p.packages, Python: p, Lock: testRuntimeLock}
+	return controllerDependencies{Firewall: &firewallProbe{status: "open"}, Storage: storage, Setup: setup, Host: p, Packages: p.packages, Python: p, Lock: testRuntimeLock}
 }

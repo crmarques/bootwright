@@ -606,3 +606,7 @@ type StageTailConsumer interface {
 }
 
 type OfflineRetirement interface{ RetiresOffline() bool }
+
+type PlanInspection func(context.Context, string, api.Catalog, reconciliation.Plan, []reconciliation.Block) ([]PlanCheck, error)
+
+type ListenerAdmission func(context.Context, string, api.Catalog, reconciliation.Plan, []reconciliation.Block) error

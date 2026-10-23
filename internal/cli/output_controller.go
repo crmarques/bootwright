@@ -219,6 +219,8 @@ func controllerActionLabel(id string) string {
 		return "Setup receipt"
 	case "discard-setup-state":
 		return "Earlier setup state"
+	case "listener-firewall":
+		return "Listener firewall"
 	case "target-tools":
 		return "Target tools"
 	case "libvirt-client":

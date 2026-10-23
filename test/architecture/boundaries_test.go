@@ -46,6 +46,7 @@ func packageRoles() map[string]packageRole {
 		"internal/workspace/invokerfs":             adapterRole,
 		"internal/controller/privilege":            adapterRole,
 		"internal/controller/hostlinux":            adapterRole,
+		"internal/controller/firewalllocal":        adapterRole,
 		"internal/controller/bundlelocal":          adapterRole,
 		"internal/controller/ansiblelocal":         adapterRole,
 		"internal/controller/runtimelock":          domainRole,
@@ -96,7 +97,7 @@ func packageRoles() map[string]packageRole {
 		"infrastructureservices/dnsserver", "infrastructureservices/ntpserver", "infrastructureservices/proxy",
 		"containercluster/access", "containercluster/agentinstall",
 		"containercluster/installation", "containercluster/preflight",
-		"controller/clients", "controller/prerequisites", "desiredstate/compilation",
+		"controller/clients", "controller/prerequisites", "controller/firewall", "desiredstate/compilation",
 		"environment/access", "environment/inspection", "environment/preflight",
 		"machine/access", "machine/inventory", "machine/power", "managedos/media", "managedos/installation",
 		"nativeartifacts/rendering", "reconciliation/lifecycle",
@@ -145,6 +146,7 @@ func applicationDependencies() map[string][]string {
 		"internal/trust/enrollment":                      {"internal/desiredstate/compilation"},
 		"internal/managedos/media":                       {},
 		"internal/controller/prerequisites":              {"internal/desiredstate/compilation"},
+		"internal/controller/firewall":                   {},
 		"internal/secrets/custody":                       {"internal/desiredstate/compilation", "internal/secrets/secretstore"},
 		"internal/secrets/encryption":                    {"internal/secrets/secretstore"},
 		"internal/secrets/secretstore":                   {},
@@ -468,7 +470,8 @@ func effectGrants() map[string][]string {
 	return map[string][]string{
 		everyPackage: {"net.ParseMAC", "net/netip", "net/url"},
 		"internal/containercluster/preflightlocal": {"io", "os/exec"},
-		"internal/cli": {"fmt.Fprintf", "fmt.Fprintln", "github.com/spf13/cobra", "github.com/spf13/pflag", "io"},
+		"internal/controller/firewalllocal":        {"os/exec", "net.Interfaces"},
+		"internal/cli":                             {"fmt.Fprintf", "fmt.Fprintln", "github.com/spf13/cobra", "github.com/spf13/pflag", "io"},
 		// The input adapter reads through the handles it holds and names no
 		// other os member.
 		readOnlyInput:                           {"io", "os.File", "os.NewFile", "syscall"},

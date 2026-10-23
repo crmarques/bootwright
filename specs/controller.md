@@ -928,7 +928,39 @@ scope, then one `Checks` row per host check as it is verified, and, after
 confirmation, one `Progress` step per action. The host checks are `host`,
 `installed-host`, `fips-mode`, `state-root`, `setup-state`, `python-runtime`
 and `host-packages`; the context checks are `target-tools`, `libvirt-client`,
-`hypervisor`, `installer-media`, `nmstate`, `iputils` and `controller-binding`.
+`hypervisor`, `installer-media`, `nmstate`, `iputils`, `controller-binding`
+and one `listener-firewall` row per declared controller socket.
+
+Context preflight and public `plan` inspect the controller's managed DNS
+(TCP and UDP), NTP (UDP), proxy (TCP), artifact listeners (TCP), and locally
+hosted emulated BMC listeners. Loopback listeners require no ingress admission.
+Exact bind addresses, or every declared endpoint of a wildcard listener, must
+belong to one local interface. Inspection reads that interface's runtime
+firewalld zone and reports the socket, interface, zone and `open`, `closed` or
+`unknown` result. It never changes firewall configuration.
+
+Only an explicit runtime port/range or an accepting zone proves admission in
+the bounded interface-zone shape. An active policy with target `CONTINUE`,
+no transport rules, no redirect or masquerade, and only ICMPv6 accept rules
+is harmless to the inspected TCP/UDP sockets regardless of its name; this
+includes the [shipped host IPv6 policy](https://github.com/firewalld/firewalld/blob/main/config/policies/allow-host-ipv6.xml). Source-bound zones, other policies, direct or
+passthrough rules, rich rules, admission depending on unresolved service
+expansion, and unsupported or
+ambiguous inspection report `unknown`. A stopped, missing or inaccessible
+firewalld also reports `unknown`; another firewall's presence or absence is
+never inferred safe. The operator must verify the declared port from every
+BMC, installer and client, configure the operator-owned firewall, and repeat
+preflight. These rows inspect the local zone, not end-to-end reachability.
+
+Unknown and closed required sockets cannot pass preflight. Public `plan`
+retains its preview and includes the observations and manual remedy. Before
+claims or registration, `apply` checks every starting listener and the
+listeners its starting consumers depend on, including listeners already
+proved ready. It repeats inspection under the exclusive transaction. A
+controller-only stage with no listener dependency has no listener admission
+requirement. The native queries use the runtime semantics documented by
+[firewall-cmd](https://firewalld.org/documentation/man-pages/firewall-cmd.html)
+and [zone targets](https://firewalld.org/documentation/man-pages/firewalld.zone.html).
 
 Setup's ready path and `preflight controller` render the same short receipt
 table, for example:

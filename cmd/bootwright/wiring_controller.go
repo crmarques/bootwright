@@ -6,6 +6,8 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/ansiblelocal"
 	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
 	"github.com/crmarques/bootwright/internal/controller/clients"
+	"github.com/crmarques/bootwright/internal/controller/firewall"
+	"github.com/crmarques/bootwright/internal/controller/firewalllocal"
 	"github.com/crmarques/bootwright/internal/controller/hostdnf"
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -23,6 +25,7 @@ const (
 // the controller stage consume. A nil field leaves its capability unavailable
 // rather than substituting one.
 type controllerDependencies struct {
+	Firewall        firewall.Inspector
 	Storage         prerequisites.Storage
 	Setup           prerequisites.SetupStore
 	Host            prerequisites.HostInspector
@@ -42,6 +45,7 @@ type controllerDependencies struct {
 func localControllerDependencies(storage prerequisites.Storage, process processDependencies) (controllerDependencies, func()) {
 	stager := stagelocal.NewAutomationStager(stagelocal.StagingParent)
 	deps := controllerDependencies{
+		Firewall:        firewalllocal.Inspector{},
 		Storage:         storage,
 		Host:            hostlinux.New(),
 		Packages:        hostPackages,
@@ -97,10 +101,11 @@ func wireController(deps controllerDependencies, compiler prerequisites.Compiler
 		}
 	}
 	return prerequisites.New(deps.Storage, compiler, deps.Host, ports, prerequisites.Options{
-		AmbientRoute: route,
-		Confirmer:    confirmer,
-		Presenter:    deps.Presenter,
-		Progress:     deps.Progress,
-		Tools:        deps.Tools,
+		ListenerChecks: firewallPreflight(deps.Firewall),
+		AmbientRoute:   route,
+		Confirmer:      confirmer,
+		Presenter:      deps.Presenter,
+		Progress:       deps.Progress,
+		Tools:          deps.Tools,
 	})
 }

@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "plan",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "checks": [
+      {
+        "id": "listener-firewall",
+        "status": "open",
+        "summary": "DNSServer/resolver 192.0.2.1:53/udp: open (interface synthetic0, zone public); explicit runtime port",
+        "remedy": ""
+      },
+      {
+        "id": "listener-firewall",
+        "status": "closed",
+        "summary": "ArtifactServer/media 192.0.2.1:8443/tcp: closed (interface synthetic0, zone public); runtime port missing",
+        "remedy": "configure the operator-owned firewall and repeat preflight"
+      },
+      {
+        "id": "listener-firewall",
+        "status": "unknown",
+        "summary": "Proxy/egress 192.0.2.1:3128/tcp: unknown (interface synthetic0, zone public); unqualified rules",
+        "remedy": "verify runtime firewall admission manually"
+      }
+    ],
+    "context": {
+      "name": "synthetic",
+      "mode": ""
+    },
+    "verb": "apply",
+    "steps": [],
+    "stages": [],
+    "waves": 0,
+    "widest": 0,
+    "bound": 0,
+    "startable": 0,
+    "deferred": 0,
+    "continuation": false,
+    "finalizes": false,
+    "stops": [],
+    "stopsAfterOnline": [],
+    "receipt": {
+      "operation": "none",
+      "verb": "plan",
+      "state": "preview",
+      "next": "apply"
+    }
+  },
+  "diagnostics": [],
+  "logs": []
+}

@@ -12,6 +12,7 @@ import (
 )
 
 type Options struct {
+	ListenerChecks ListenerChecks
 	// AmbientRoute is the acquisition route the invoking environment selected.
 	// It applies to context-free work alone; a selected context always uses its
 	// own controller Machine's proxy choice.
@@ -76,6 +77,31 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*Report, erro
 			return err
 		}
 		result = &current.report
+		if s.options.ListenerChecks != nil && current.stored.Context.Name != "" {
+			checks, err := s.options.ListenerChecks(ctx, current.catalog, current.stored.Context.Name)
+			if err != nil {
+				return err
+			}
+			code, remedy := "", ""
+			for _, row := range checks {
+				check := Check{ID: "listener-firewall", Required: row.Required, Observed: row.Observed, Status: row.Status, Scope: ContextScope}
+				result.Checks = append(result.Checks, check)
+				s.report(ctx, result, checkEvent(ReadinessPhase, check))
+				if row.Status != "ready" && code != "preflight.failed" {
+					code, remedy = "preflight.unknown", row.Observed
+					if row.Status == "not-ready" {
+						code = "preflight.failed"
+					}
+				}
+			}
+			if code != "" && current.ready() {
+				result.Outcome = "not-ready"
+				if code == "preflight.failed" {
+					return failure("preflight.failed", "controller listener firewall admission is closed", remedy)
+				}
+				return failure("preflight.unknown", "controller listener firewall admission is unknown", remedy)
+			}
+		}
 		if current.contextReady() {
 			result.Outcome = "ready"
 			return nil

@@ -712,6 +712,8 @@ func cliGoldens() []cliGolden {
 				Receipt: lifecycle.Receipt{Operation: "none", Verb: "plan", State: "preview", Next: "apply"},
 			}
 		}},
+		{golden: "cli-plan-firewall", args: "plan", record: func(r *dispatchRecord) { r.result.lifecyclePlan = firewallPlanFixture() }},
+		{golden: "cli-plan-firewall-json", args: "plan --output json", record: func(r *dispatchRecord) { r.result.lifecyclePlan = firewallPlanFixture() }},
 		{golden: "cli-plan-finalization", args: "plan", record: func(r *dispatchRecord) {
 			r.result.lifecyclePlan = &lifecycle.PlanResult{
 				Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply",

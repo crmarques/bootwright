@@ -212,7 +212,7 @@ func (s Service) authorized(name string, decided transition, authorizations, unr
 }
 
 func (s Service) admitApply(ctx context.Context, name string, decided transition) error {
-	if decided.verb != reconciliation.Apply || s.options.ApplyAdmission == nil {
+	if decided.verb != reconciliation.Apply || (s.options.ApplyAdmission == nil && s.options.ListenerAdmission == nil) {
 		return nil
 	}
 	return s.workspace.ReadLifecycle(ctx, name, func(view View) error {
@@ -221,7 +221,7 @@ func (s Service) admitApply(ctx context.Context, name string, decided transition
 }
 
 func (s Service) admitApplyView(ctx context.Context, view View, decided transition) error {
-	if decided.verb != reconciliation.Apply || s.options.ApplyAdmission == nil {
+	if decided.verb != reconciliation.Apply || (s.options.ApplyAdmission == nil && s.options.ListenerAdmission == nil) {
 		return nil
 	}
 	state, err := s.compile(ctx, view)
@@ -239,7 +239,15 @@ func (s Service) admitApplyView(ctx context.Context, view View, decided transiti
 			starting = append(starting, block)
 		}
 	}
-	return s.options.ApplyAdmission(ctx, view.Identity().Name, state.Effective(), owned, starting)
+	if s.options.ListenerAdmission != nil {
+		if err := s.options.ListenerAdmission(ctx, view.Identity().Name, state.Effective(), decided.plan, starting); err != nil {
+			return err
+		}
+	}
+	if s.options.ApplyAdmission != nil {
+		return s.options.ApplyAdmission(ctx, view.Identity().Name, state.Effective(), owned, starting)
+	}
+	return nil
 }
 
 // decideShared takes one decision from durable state read under the shared
@@ -1898,4 +1906,15 @@ func digestOf(sources desiredstate.Sources) string {
 	slices.Sort(parts)
 	digest := sha256.Sum256([]byte("bootwright.reconciliation.input-v1\x00" + strings.Join(parts, "\x00")))
 	return hex.EncodeToString(digest[:])
+}
+
+func startingBlocks(decided transition) []reconciliation.Block {
+	var starting []reconciliation.Block
+	for _, block := range decided.plan.Blocks {
+		current := decided.states[block.ID]
+		if current != reconciliation.BlockDone && (unproved(current) || decided.selection.Selects(block.Stage)) {
+			starting = append(starting, block)
+		}
+	}
+	return starting
 }

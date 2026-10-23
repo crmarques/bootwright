@@ -3,6 +3,7 @@ package prerequisites
 import (
 	"context"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
@@ -226,3 +227,5 @@ type ProgressReporter interface {
 	// before that Ansible starts, so the run can be followed while it happens.
 	ReportLogLocation(context.Context, string)
 }
+
+type ListenerChecks func(context.Context, api.Catalog, string) ([]Check, error)

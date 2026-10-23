@@ -131,7 +131,7 @@ func TestComposedControllerSuppliesEveryPort(t *testing.T) {
 			t.Fatalf("composition left %s unsupplied", fields.Field(index).Name)
 		}
 	}
-	if fields.NumField() != 12 {
+	if fields.NumField() != 13 {
 		t.Fatalf("controller port count = %d; update this gate with the port it covers", fields.NumField())
 	}
 	if _, reports := composed.Host.(prerequisites.FIPSInspector); !reports {

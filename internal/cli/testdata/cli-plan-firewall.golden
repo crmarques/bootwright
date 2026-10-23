@@ -1,0 +1,18 @@
+  Apply plan
+
+  Controller listener firewall
+    DNSServer/resolver 192.0.2.1:53/udp: open (interface synthetic0, zone public); explicit
+    runtime port
+    ArtifactServer/media 192.0.2.1:8443/tcp: closed (interface synthetic0, zone public);
+    runtime port missing
+    configure the operator-owned firewall and repeat preflight
+    Proxy/egress 192.0.2.1:3128/tcp: unknown (interface synthetic0, zone public); unqualified
+    rules
+    verify runtime firewall admission manually
+
+  Plan
+    no blocks
+operation: none
+verb: plan
+state: preview
+next: apply

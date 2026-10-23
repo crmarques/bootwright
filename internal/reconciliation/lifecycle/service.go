@@ -24,14 +24,16 @@ type Executable struct {
 type ApplyAdmission func(context.Context, string, api.Catalog, map[string]ObjectOwnership, []reconciliation.Block) error
 
 type Options struct {
-	BeginInvocation BeginInvocation
-	Confirmer       Confirmer
-	Presenter       PlanPresenter
-	Progress        ProgressReporter
-	Clock           Clock
-	Entropy         reconciliation.Entropy
-	Selection       CurrentSelection
-	ApplyAdmission  ApplyAdmission
+	BeginInvocation   BeginInvocation
+	Confirmer         Confirmer
+	Presenter         PlanPresenter
+	Progress          ProgressReporter
+	Clock             Clock
+	Entropy           reconciliation.Entropy
+	Selection         CurrentSelection
+	ApplyAdmission    ApplyAdmission
+	ListenerAdmission ListenerAdmission
+	PlanInspection    PlanInspection
 	// Concurrency bounds how many of an operation's blocks run at once. It is
 	// how much this host is asked to do at the same time, never what the plan
 	// permits, so it is not frozen with the plan. Zero takes the default.
@@ -119,6 +121,14 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 			return err
 		}
 		result, decided, read = previewed, from, durable
+		if s.options.PlanInspection != nil && decided.verb == reconciliation.Apply && !result.Finalizes {
+			state, err := s.compile(ctx, view)
+			if err != nil {
+				return err
+			}
+			result.Checks, err = s.options.PlanInspection(ctx, name, state.Effective(), decided.plan, startingBlocks(decided))
+			return err
+		}
 		return nil
 	})
 	if err != nil {
