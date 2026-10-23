@@ -1257,10 +1257,12 @@ this context.
 by its realization and destroyed by its inverse, so `data-loss` is
 acknowledged when they are removed. A physical Machine's disk already holds
 whatever it held, and the `clearpart` this installation performs is the moment
-that content is lost, so the block consumes `data-loss` on **apply**. Its
-destroy consumes nothing, because removing the published media takes back
-nothing from the machine. The authorization acknowledges already-planned loss;
-it selects no target and relaxes no proof. The erasure is confined to the disk
+that content is lost, so the block consumes `data-loss` on **apply**. The
+installation block's destroy consumes nothing, because removing the published
+media takes back nothing from the machine. The separate opt-in
+[physical erase](#physical-removal) consumes `data-loss` on removal. The
+authorization acknowledges already-planned loss; it selects no target and
+relaxes no proof. Installation erasure is confined to the disk
 `rootDeviceHints.deviceName` names: an installation that names none, including
 one selecting by `wwn` alone, refuses before registration, and the Kickstart
 renderer refuses rather than clearing every disk. One declaring any other hint
@@ -1315,10 +1317,11 @@ as [Root-disk encryption](#root-disk-encryption) states; its controller leg is
 bounded by the emulated-controller exception stated there rather than by the
 verified-fetch read-back.
 
-This is the private path the rest of this contract was shaped to admit. The
-profile arms that carry secret bytes remain refused, and promoting one is now a
-question of what it delivers through this path rather than of whether a path
-exists.
+Physical FIPS and TPM2 root encryption use this private delivered-key path
+and its pinned identity and completion proofs. Managed registration uses the
+[pinned registration session](#registration), keeping its credentials out of
+publications. Their real-hardware qualification remains
+[B78](milestones/m1.md#b78); in-tree delivery does not qualify a physical host.
 
 ### Physical host qualification
 
