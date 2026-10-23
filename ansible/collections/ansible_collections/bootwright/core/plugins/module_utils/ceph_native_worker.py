@@ -31,7 +31,7 @@ MODULES = ("native_diagnostics", "native_specializations", "ceph_tunnel", "ceph_
            "ceph_native_resources", "ceph_native_nfs", "ceph_native_nvmeof", "ceph_native_observability", "ceph_native_units",
            "ceph_native_object", "ceph_smb_native",
            "ceph_replication_native",
-           "ceph_host_route_probe", "ceph_pull_broker", "ceph_host_runtime")
+           "ceph_host_route_probe", "ceph_pull_broker", "physical_machine_identity", "ceph_host_runtime")
 MAX_INPUT = 2 << 20
 MAX_SOURCE = 1 << 20
 MAX_RESULT = 1 << 20

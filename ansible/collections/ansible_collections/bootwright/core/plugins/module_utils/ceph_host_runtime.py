@@ -30,7 +30,7 @@ import uuid
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_host_route_probe as probe, ceph_native, ceph_native_observe as observe, ceph_tunnel, ceph_tunnel_custody as custody, ceph_pull_broker,
-    native_diagnostics,
+    native_diagnostics, physical_machine_identity,
 )
 
 ROOT = "/var/lib/bootwright/ceph-host"
@@ -1030,31 +1030,10 @@ def physical_hardware(host, root="/sys"):
     if not host.get("physical"):
         return
 
-    def read(path):
-        try:
-            with open(path, "rb") as source:
-                value = source.read(257)
-            require(0 < len(value) <= 256, "device-identity")
-            return value.decode("ascii").strip().lower()
-        except (OSError, UnicodeError):
-            raise Refusal("device-identity") from None
-
-    require(read(os.path.join(root, "class/dmi/id/product_uuid")) == host["hardware"]["uuid"], "device-identity")
-    directory = os.path.join(root, "class/net")
     try:
-        interfaces = os.listdir(directory)
-    except OSError:
+        physical_machine_identity.prove(host["hardware"]["uuid"], host["hardware"]["macs"], root)
+    except ValueError:
         raise Refusal("device-identity") from None
-    require(len(interfaces) <= 256, "device-identity")
-    addresses = []
-    for interface in interfaces:
-        path = os.path.join(directory, interface)
-        if not os.path.exists(os.path.join(path, "device")):
-            continue
-        address = read(os.path.join(path, "address"))
-        require(re.fullmatch(r"[0-9a-f]{2}(?::[0-9a-f]{2}){5}", address) is not None, "device-identity")
-        addresses.append(address)
-    require(len(addresses) == len(set(addresses)) and sorted(addresses) == host["hardware"]["macs"], "device-identity")
 
 
 def properties(raw, device):

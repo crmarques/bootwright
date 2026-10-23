@@ -214,10 +214,10 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		capability: installation.NewTree(runner).WithMedia(records),
 	}, {
 		kind: installation.Kind, implementation: installation.EraseImplementation,
-		capability: installation.NewErase(runner).WithClaims(baremetal.BlockID).WithIdentities(provedIdentities{}).WithMedia(records),
+		capability: installation.NewErase(runner).WithClaims(baremetal.BlockID).WithIdentities(provedIdentities{}).WithMedia(records).WithRetirementPolicies(ceph.PhysicalRetirementPolicies),
 	}, {
 		kind: installation.Kind, implementation: installation.Implementation,
-		capability: installation.New(runner).WithIdentities(provedIdentities{}).WithMedia(records),
+		capability: installation.New(runner).WithIdentities(provedIdentities{}).WithMedia(records).WithRetirementPolicies(ceph.PhysicalRetirementPolicies),
 	}, {
 		kind: libvirt.HostKind, implementation: libvirt.HostImplementation,
 		capability: libvirt.NewHost(runner),
@@ -233,6 +233,8 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	}
 	resolver = append(resolver, boundCapability{kind: string(api.StorageCluster), implementation: ceph.ImageImplementation, capability: ceph.NewImage(runner)})
 	resolver = append(resolver, boundCapability{kind: string(api.StorageCluster), implementation: ceph.HostImplementation, capability: ceph.NewHost(runner).WithProofs(cephDependencyProofs{})})
+	resolver = append(resolver, boundCapability{kind: string(api.StorageCluster), implementation: ceph.PhysicalRetirementImplementation,
+		capability: ceph.NewPhysicalRetirement().WithClaims(baremetal.BlockID).WithProofs(cephDependencyProofs{}).WithErasureProofs(physicalCephEraseProof).WithUninstalledProofs(installation.PhysicalEraseUnstarted)})
 	resolver = append(resolver, boundCapability{kind: string(api.StorageSMBResource), implementation: ceph.SMBImplementation, capability: ceph.NewSMB(runner).WithProofs(cephDependencyProofs{})})
 	resolver = append(resolver, boundCapability{kind: string(api.StorageReplication), implementation: ceph.ReplicationImplementation, capability: ceph.NewReplication(runner).WithProofs(cephDependencyProofs{})})
 	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
@@ -347,4 +349,13 @@ func (cephDependencyProofs) PackageTree(proofs []lifecycle.BlockEvidence, profil
 func (cephDependencyProofs) PhysicalMachine(block reconciliation.Block, evidence []byte) (ceph.PhysicalIdentity, bool, error) {
 	value, recognized, err := baremetal.ProvedPresence(block, evidence)
 	return ceph.PhysicalIdentity{UUID: strings.ToLower(value.UUID), MACs: value.Addresses}, recognized, err
+}
+
+func physicalCephEraseProof(applied reconciliation.Block, removed lifecycle.BlockEvidence, uuid string) (ceph.PhysicalErasure, bool, error) {
+	receipt, recognized, err := installation.PhysicalEraseProof(applied, removed, uuid)
+	proof := ceph.PhysicalErasure{MACs: receipt.MACs, Targets: []ceph.Device{}}
+	for _, target := range receipt.Targets {
+		proof.Targets = append(proof.Targets, ceph.Device{Path: target.DeviceName, WWN: target.WWN, Serial: target.SerialNumber, SizeBytes: target.SizeBytes})
+	}
+	return proof, recognized, err
 }

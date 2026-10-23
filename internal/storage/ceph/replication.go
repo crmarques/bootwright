@@ -23,7 +23,7 @@ const ReplicationImplementation = "storage-ceph-replication-v2"
 const ReplicationEvidenceVersion = "ceph-replication-evidence-v1"
 
 func ReplicationContentDigest() string {
-	sum := sha256.Sum256([]byte(ReplicationImplementation + "\x00" + ReplicationVersion + "\x00" + ReplicationEvidenceVersion))
+	sum := sha256.Sum256([]byte(ReplicationImplementation + "\x00" + ReplicationVersion + "\x00" + ReplicationEvidenceVersion + "\x00" + PhysicalRetirementImplementation))
 	return hex.EncodeToString(sum[:])
 }
 func ReplicationBlockID(name string) string { return "ceph-replication-" + name }
@@ -316,13 +316,18 @@ func (c ReplicationCapability) retirement(ctx context.Context, e lifecycle.Execu
 	if err != nil {
 		return nil, err
 	}
+	pending, err := pendingPhysicalClusters(e, []string{r.Primary.Cluster, r.Secondary.Cluster}, machines)
+	if err != nil {
+		return nil, err
+	}
 	return reconciliation.Freeze(struct {
-		Object      string   `json:"object"`
-		Owner       string   `json:"owner"`
-		Primary     string   `json:"primary"`
-		RetiredWith []string `json:"retiredWith"`
-		Secondary   string   `json:"secondary"`
-	}{r.Object, e.ApplyOperation, FSIDFor(e.ApplyOperation, r.Primary.Cluster), machines, FSIDFor(e.ApplyOperation, r.Secondary.Cluster)}, "Ceph replication retirement")
+		Object       string   `json:"object"`
+		Owner        string   `json:"owner"`
+		PendingErase []string `json:"pendingErase,omitempty"`
+		Primary      string   `json:"primary"`
+		RetiredWith  []string `json:"retiredWith"`
+		Secondary    string   `json:"secondary"`
+	}{r.Object, e.ApplyOperation, pending, FSIDFor(e.ApplyOperation, r.Primary.Cluster), machines, FSIDFor(e.ApplyOperation, r.Secondary.Cluster)}, "Ceph replication retirement")
 }
 func (c ReplicationCapability) Destroy(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
 	data, err := c.retirement(ctx, e)
@@ -343,7 +348,18 @@ func (c ReplicationCapability) Quiescent(ctx context.Context, p lifecycle.Probe)
 		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
 	}
 	if p.RetiredWithHosts {
-		if _, err := c.HostMachines(p.Block); err == nil {
+		if r, err := DecodeReplicationRequest(p.Block.Request); err == nil {
+			machines, err := c.HostMachines(p.Block)
+			if err != nil {
+				return lifecycle.Quiescence{State: lifecycle.Unproved}, err
+			}
+			pending, err := pendingPhysicalClusters(p.Execution(), []string{r.Primary.Cluster, r.Secondary.Cluster}, machines)
+			if err != nil {
+				return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: survivingReason, Remedy: survivingRemedy}, nil
+			}
+			if len(pending) != 0 {
+				return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: pendingPhysicalReason}, nil
+			}
 			return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: retiredReason}, nil
 		}
 	}

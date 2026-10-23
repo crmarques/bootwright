@@ -702,15 +702,44 @@ inventing a serial or capacity. Original physical Machine presence evidence
 supplies the system UUID and complete MAC inventory; installed-host SSH proof
 remains mandatory. Before device binding, the host re-proves those hardware
 facts from bounded kernel inventory. An unreadable or changed inventory refuses.
+Bond slaves use the kernel's saved pre-enslavement address only when reciprocal
+master/slave links and the complete physical bond membership agree. Missing
+permanent-address metadata refuses; no current-address fallback replaces it.
+Virtual bond and VLAN interfaces do not add hardware identities. The bounded
+reader is shared with the offline erase worker. See the
+[Linux bond-slave attribute](https://github.com/torvalds/linux/blob/v6.12/drivers/net/bonding/bond_sysfs_slave.c)
+and [its original-address capture](https://github.com/torvalds/linux/blob/v6.12/drivers/net/bonding/bond_main.c).
 
 Host preparation records each disk's observed serial, size, rotational status,
 kernel path and native image SDK identity. It compares lsblk and udev WWNs and
 device numbers, rejects read-only/removable disks and ambiguous aliases, and
 re-proves the same facts on read-only host readiness. A replay cannot extend
-or replace the bound disk set. Physical host removal still refuses: releasing
-a Machine claim does not retire its operating system or Ceph data. See the
+or replace the bound disk set. See the
 [physical example](../examples/storage-clusters/physical-3-nodes-ceph/README.md).
 This code path has synthetic coverage; live physical acceptance remains unrun.
+
+Physical retirement requires the original opt-in logical-overwrite policy to
+cover the root disk and every selected data, DB and WAL WWN. Without it, a
+realized cluster's removal refuses before registration. Storage first records a pending-erasure disposition
+so consumer removal and managed-OS cleanup can precede the offline erase worker.
+A separate terminal verification block then matches every complete original-policy
+erase receipt to the original machine UUID, complete MAC set and observed Ceph
+disk WWN, serial and capacity. Only that terminal proof permits claim release.
+A stopped host, a released claim, or a pending disposition proves no erasure.
+
+When the original core cluster block is positively unstarted, the terminal
+verification may use its frozen WWN intent without an observed OSD binding;
+the original sealed dependency scope must prove that unstarted state. Missing
+evidence cannot substitute for it. Every started core block requires its
+completed original host binding. A partial or lost erase receipt leaves the
+removal incomplete and resumes through B70's original receipt protocol.
+
+If both the original core cluster and every physical OS installation are
+positively unstarted, terminal verification may instead prove retaining cleanup
+without installation. The original installation owner must validate the frozen
+erase-policy history, including an unstarted policy or its completed retaining
+cleanup. This releases unused claims and records `retainedWithoutInstall`,
+without claiming that any disk was erased. Unknown or missing history refuses.
 
 Live checks exclude the OS root device and its backing devices, boot media,
 mounted filesystems, swap, foreign signatures, foreign OSDs and devices owned by
@@ -728,9 +757,9 @@ selector or permission to bootstrap does not authorize them.
 
 Physical erase remains governed by
 [physical disk safety](state-reconciliation.md#physical-disk-safety) and
-[B70](milestones/m1.md#b70). Storage planning cannot remove that refusal.
+[B70](milestones/m1.md#b70). Storage planning cannot authorize erase implicitly.
 B79 and B80 define which device preparation can be proved within apply; any
-path requiring physical erase waits for its safety contract and qualification.
+path requiring physical erase remains subject to that contract and qualification.
 [B475](milestones/m2.md#b475) qualifies OSD identity, ownership and write/erase
 safety; virtual-disk ownership never establishes physical-disk safety.
 

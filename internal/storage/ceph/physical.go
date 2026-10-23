@@ -55,7 +55,7 @@ func physicalHosts(hosts []Host) bool {
 }
 
 func physicalRemovalRefusal() error {
-	return failure("lifecycle.unsupported", "physical Ceph hosts survive Machine claim removal", "physical Ceph retirement requires qualified client fencing and disk erasure; a virtual-host retirement proof cannot remove this cluster")
+	return failure("lifecycle.unsupported", "physical Ceph retirement lacks original disk-erasure authority", "retain this context; automatic retirement requires the root disk and every selected data, DB and WAL disk in each Machine's original eraseOnRemoval policy")
 }
 
 func bindPhysicalHosts(hosts []Host, e lifecycle.Execution, readers DependencyProofs) error {

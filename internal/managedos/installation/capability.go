@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/managedos"
@@ -20,9 +21,10 @@ import (
 // It owns what completion, replay and absence mean for that installation and
 // nothing else: the Machine it installs onto is the substrate's.
 type Capability struct {
-	runner     Runner
-	identities Identities
-	media      MediaRecords
+	runner             Runner
+	identities         Identities
+	media              MediaRecords
+	retirementPolicies func(api.Catalog, string) ([]string, error)
 }
 
 func New(runner Runner) Capability { return Capability{runner: runner} }
@@ -38,6 +40,11 @@ func (c Capability) WithIdentities(identities Identities) Capability {
 // record the host media store publishes for it.
 func (c Capability) WithMedia(records MediaRecords) Capability {
 	c.media = records
+	return c
+}
+
+func (c Capability) WithRetirementPolicies(reader func(api.Catalog, string) ([]string, error)) Capability {
+	c.retirementPolicies = reader
 	return c
 }
 
@@ -94,6 +101,10 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			ContentDigest:  digest,
 			Request:        canonical,
 		}
+		definition.Dependencies, err = c.retirementDependencies(catalog, request)
+		if err != nil {
+			return lifecycle.CapabilityPlan{}, err
+		}
 		// A machine its substrate created holds nothing until this installs
 		// something, and its disks are acknowledged when that substrate
 		// destroys them. A physical machine already holds whatever it holds,
@@ -118,6 +129,19 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
 	return plan, nil
+}
+
+func (c Capability) retirementDependencies(catalog api.Catalog, request Request) ([]string, error) {
+	if !request.Target.Physical || c.retirementPolicies == nil {
+		return nil, nil
+	}
+	ids, err := c.retirementPolicies(catalog, request.Identity.Object)
+	if err != nil {
+		return nil, err
+	}
+	ids = slices.Clone(ids)
+	slices.Sort(ids)
+	return slices.Compact(ids), nil
 }
 
 func installationRequires(needs Requirements, request Request) []reconciliation.ObjectRef {

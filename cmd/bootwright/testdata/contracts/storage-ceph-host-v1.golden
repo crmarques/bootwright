@@ -1,5 +1,5 @@
 implementation: storage-ceph-host-v1
-content-digest: 3d18600685b3f7a1e1a33c3ffab9055129185390a3fa2962e3b19df602c3c05d
+content-digest: a3abfd47845c35f38f64b81d7c9b4064d28a72af865157a03dd8bdc7004585bb
 automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v2, ceph-host-route-v3, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-physical-device-binding-v1, ceph-runtime-profile-v3
 request-schema:
   cluster struct ceph.ClusterScope

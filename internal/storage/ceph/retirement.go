@@ -17,10 +17,11 @@ const (
 )
 
 type Retirement struct {
-	Action      string   `json:"action"`
-	Cluster     string   `json:"cluster"`
-	FSID        string   `json:"fsid"`
-	RetiredWith []string `json:"retiredWith"`
+	Action       string   `json:"action"`
+	Cluster      string   `json:"cluster"`
+	FSID         string   `json:"fsid"`
+	PendingErase bool     `json:"pendingErase,omitempty"`
+	RetiredWith  []string `json:"retiredWith"`
 }
 
 func requestMachines(r Request) []string {
@@ -43,7 +44,7 @@ func (c Capability) HostMachines(block reconciliation.Block) ([]string, error) {
 }
 
 func retirementFor(r Request) Retirement {
-	return Retirement{Action: r.Action, Cluster: r.Cluster, FSID: r.FSID, RetiredWith: requestMachines(r)}
+	return Retirement{Action: r.Action, Cluster: r.Cluster, FSID: r.FSID, PendingErase: physicalHosts(r.Hosts), RetiredWith: requestMachines(r)}
 }
 
 func (c Capability) retirement(ctx context.Context, e lifecycle.Execution) (Request, json.RawMessage, error) {
@@ -52,7 +53,9 @@ func (c Capability) retirement(ctx context.Context, e lifecycle.Execution) (Requ
 		return r, nil, err
 	}
 	if physicalHosts(r.Hosts) {
-		return r, nil, physicalRemovalRefusal()
+		if err := authorizePhysicalRetirement(e, r); err != nil {
+			return r, nil, err
+		}
 	}
 	if len(requestMachines(r)) == 0 {
 		return r, nil, failure("lifecycle.state", "a Ceph block retires only with the host Machines its frozen request names", "")
@@ -84,9 +87,6 @@ func (c Capability) observeRetirement(ctx context.Context, e lifecycle.Execution
 }
 
 func EvaluateRetirement(data []byte, r Request, retired bool) (reconciliation.EffectState, error) {
-	if physicalHosts(r.Hosts) {
-		return reconciliation.EffectUnknown, physicalRemovalRefusal()
-	}
 	return evaluateRetirement(data, retirementFor(r), retired)
 }
 
@@ -104,6 +104,11 @@ func (c SMBCapability) retirement(ctx context.Context, e lifecycle.Execution) (j
 		return nil, err
 	}
 	want := Retirement{Action: "smb", Cluster: r.Cluster, FSID: FSIDFor(e.ApplyOperation, r.Cluster), RetiredWith: r.Machines}
+	pending, err := pendingPhysicalClusters(e, []string{r.Cluster}, r.Machines)
+	if err != nil {
+		return nil, err
+	}
+	want.PendingErase = len(pending) != 0
 	evidence, err := json.Marshal(want)
 	if err != nil {
 		return nil, failure("lifecycle.state", "the Ceph retirement evidence cannot be encoded", "")
@@ -139,7 +144,11 @@ func evaluateRetirement(data []byte, want Retirement, retired bool) (reconciliat
 		return reconciliation.EffectUnknown, evidenceFailure()
 	}
 	fields, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](data, 60*1024, "Ceph retirement members")
-	if err != nil || len(fields) != 4 || canonicaljson.ProveObject(data) != nil {
+	count := 4
+	if want.PendingErase {
+		count++
+	}
+	if err != nil || len(fields) != count || canonicaljson.ProveObject(data) != nil {
 		return reconciliation.EffectUnknown, evidenceFailure()
 	}
 	for _, key := range []string{"action", "cluster", "fsid", "retiredWith"} {
@@ -147,7 +156,7 @@ func evaluateRetirement(data []byte, want Retirement, retired bool) (reconciliat
 			return reconciliation.EffectUnknown, evidenceFailure()
 		}
 	}
-	if want.FSID == "" || len(want.RetiredWith) == 0 || e.Action != want.Action || e.Cluster != want.Cluster || e.FSID != want.FSID || !slices.Equal(e.RetiredWith, want.RetiredWith) {
+	if want.FSID == "" || len(want.RetiredWith) == 0 || e.Action != want.Action || e.Cluster != want.Cluster || e.FSID != want.FSID || e.PendingErase != want.PendingErase || !slices.Equal(e.RetiredWith, want.RetiredWith) {
 		return reconciliation.EffectUnknown, evidenceFailure()
 	}
 	return reconciliation.EffectCompleted, nil

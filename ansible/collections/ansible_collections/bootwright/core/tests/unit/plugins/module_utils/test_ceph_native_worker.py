@@ -25,7 +25,8 @@ def source_bundle():
             "ceph_native_nvmeof": '"""Fixed fixture."""\n', "ceph_native_nfs": '"""Fixed fixture."""\n', "ceph_native_observability": '"""Fixed fixture."""\n',
             "ceph_native_units": '"""Fixed fixture."""\n',
             "ceph_native_object": '"""Fixed fixture."""\n', "ceph_smb_native": '"""Fixed fixture."""\n', "ceph_replication_native": '"""Fixed fixture."""\n',
-            "ceph_host_route_probe": '"""Fixed fixture."""\n', "ceph_host_runtime": '"""Fixed fixture."""\n',
+            "ceph_host_route_probe": '"""Fixed fixture."""\n', "physical_machine_identity": '"""Fixed fixture."""\n',
+            "ceph_host_runtime": '"""Fixed fixture."""\n',
             "ceph_native": ('class Refusal(ValueError): pass\nCOMMAND_SESSION = True\ndef dispatch(value):\n'
                             '    return {"session": COMMAND_SESSION, "source": bool(_BOOTWRIGHT_SOURCE)}\n')}
 
@@ -42,6 +43,7 @@ def test_native_sources_and_names_are_closed_before_any_module_load():
 def test_specialization_registry_ships_in_the_closed_bundle_after_diagnostics():
     names = ceph_native_worker.MODULES
     assert names.index("native_specializations") == names.index("native_diagnostics") + 1
+    assert names.index("physical_machine_identity") < names.index("ceph_host_runtime")
     sources = ceph_core.Transport.native_sources()
     assert tuple(sources) == names and sources["native_specializations"] == inspect.getsource(native_specializations)
 

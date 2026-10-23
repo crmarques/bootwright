@@ -1,5 +1,5 @@
 implementation: storage-ceph-replication-v2
-content-digest: 11f7b5e91423c6a6b1a063f4ee8a226b79268e55c08afd8b88e8fb3626072165
+content-digest: 3824163f16c60d7009f6d9916a6cc42468fcd7f9fa92f4465523e0a71884c1dd
 automation-formats: ceph-replication-custody-v1
 request-schema:
   controller string

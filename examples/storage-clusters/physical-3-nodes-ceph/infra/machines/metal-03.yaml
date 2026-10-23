@@ -24,6 +24,20 @@ spec:
           endpointRef: ip
 
   hardware:
+    eraseOnRemoval:
+      method: logicalOverwrite
+
+      targets:
+        - deviceName: /dev/sda
+          wwn: '0x6000000000000003'
+          serialNumber: SYNTHETIC-ROOT-03
+          sizeBytes: 53687091200
+
+        - deviceName: /dev/disk/by-id/wwn-0x5000000000000003
+          wwn: '0x5000000000000003'
+          serialNumber: SYNTHETIC-CEPH-03
+          sizeBytes: 107374182400
+
     nics:
       - name: eno1
         macAddress: 52:54:00:9a:1b:03

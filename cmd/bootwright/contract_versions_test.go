@@ -60,6 +60,7 @@ func contractVersions() []contractVersion {
 		{ceph.Implementation, ceph.ContentDigest(), reflect.TypeFor[ceph.Request](), reflect.TypeFor[ceph.Evidence]()},
 		{ceph.ImageImplementation, ceph.ImageContentDigest(), reflect.TypeFor[ceph.ImageRequest](), reflect.TypeFor[ceph.ImageEvidence]()},
 		{ceph.HostImplementation, ceph.HostContentDigest(), reflect.TypeFor[ceph.HostRequest](), reflect.TypeFor[ceph.HostEvidence]()},
+		{ceph.PhysicalRetirementImplementation, ceph.PhysicalRetirementContentDigest(), reflect.TypeFor[ceph.PhysicalRetirementRequest](), reflect.TypeFor[ceph.PhysicalRetirementEvidence]()},
 		{ceph.SMBImplementation, ceph.SMBContentDigest(), reflect.TypeFor[ceph.SMBRequest](), reflect.TypeFor[ceph.SMBEvidence]()},
 		{ceph.ReplicationImplementation, ceph.ReplicationContentDigest(), reflect.TypeFor[ceph.ReplicationRequest](), reflect.TypeFor[ceph.ReplicationEvidence]()},
 	}

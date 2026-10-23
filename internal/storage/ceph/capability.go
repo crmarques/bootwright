@@ -523,7 +523,13 @@ func (Capability) Quiescent(ctx context.Context, probe lifecycle.Probe) (lifecyc
 		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
 	}
 	if probe.RetiredWithHosts {
-		if r, err := DecodeRequest(probe.Block.Request); err == nil && !physicalHosts(r.Hosts) && len(requestMachines(r)) != 0 {
+		if r, err := DecodeRequest(probe.Block.Request); err == nil && len(requestMachines(r)) != 0 {
+			if physicalHosts(r.Hosts) {
+				if err := authorizePhysicalRetirement(probe.Execution(), r); err != nil {
+					return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: survivingReason, Remedy: "physical retirement requires every host's original erase policy and a terminal verified erase receipt"}, nil
+				}
+				return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: pendingPhysicalReason}, nil
+			}
 			return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: retiredReason}, nil
 		}
 	}

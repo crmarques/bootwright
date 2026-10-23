@@ -1,5 +1,5 @@
 implementation: storage-ceph-core-v3
-content-digest: 6cdc351bb2559038f8554d4011e683d517016cb1a38de6553b6f61f258c5b9b0
+content-digest: 4d9c2e770ef9f47665b051a3bd797a6bd1804bcac737f8aa477453929e5ab3ba
 automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v2, ceph-dashboard-port-attempt-v1, ceph-dashboard-port-repair-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-user-v1, ceph-device-identities-v2, ceph-filesystem-attempt-v1, ceph-host-cache-v1, ceph-native-teardown-v1, ceph-osd-device-intent-v1, ceph-physical-device-binding-v1, ceph-policy-attempt-v1, ceph-pool-attempt-v2, ceph-rbd-image-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v3, ceph-service-inputs-v1, ceph-subvolume-attempt-v1, ceph-subvolume-group-attempt-v1, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v3
 request-schema:
   action string

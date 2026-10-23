@@ -1,0 +1,30 @@
+implementation: storage-ceph-physical-retirement-v1
+content-digest: c278273c035e12b44eca61c1c7ec12c2bd31f3f7fba10e9e54c009cd6c4a6190
+automation-formats: none
+request-schema:
+  cluster string
+  hosts []struct ceph.PhysicalRetirementHost
+  hosts[].devices []struct ceph.Device
+  hosts[].devices[].path string
+  hosts[].devices[].rotational bool omitempty
+  hosts[].devices[].serial string
+  hosts[].devices[].sizeBytes int64
+  hosts[].devices[].wwn string omitempty
+  hosts[].eraseWWNs []string
+  hosts[].machine string
+  hosts[].name string
+  version string
+evidence-schema:
+  cluster string
+  fsid string
+  owner string
+  prepared bool
+  receipts []struct ceph.PhysicalRetirementReceipt
+  receipts[].block string omitempty
+  receipts[].digest string omitempty
+  receipts[].machine string
+  receipts[].request string omitempty
+  receipts[].retainedWithoutInstall bool omitempty
+  request string
+  retired bool
+  version string

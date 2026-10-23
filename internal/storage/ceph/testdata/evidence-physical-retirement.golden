@@ -1,0 +1,29 @@
+{
+  "cluster": "example",
+  "fsid": "5effe704-a878-5cae-8b43-c81f7112832a",
+  "owner": "apply-original",
+  "prepared": true,
+  "receipts": [
+    {
+      "block": "erase-node-1",
+      "digest": "5770f7b1991e033c5b59b94f72663f889549ca165b74b1aaa0f2333da3b80e94",
+      "machine": "node-1",
+      "request": "39e388b2beda0cc04db3b81abc178537d526498642e4137abe91dcb0ba23328e"
+    },
+    {
+      "block": "erase-node-2",
+      "digest": "5770f7b1991e033c5b59b94f72663f889549ca165b74b1aaa0f2333da3b80e94",
+      "machine": "node-2",
+      "request": "2e68a50f46f1465a2f97f279da296f999f1db4fab0b41a4f51cc9dea976b31ab"
+    },
+    {
+      "block": "erase-node-3",
+      "digest": "5770f7b1991e033c5b59b94f72663f889549ca165b74b1aaa0f2333da3b80e94",
+      "machine": "node-3",
+      "request": "5ac7ce1021e3b279a7f67c50f3478d4a8b862c119900c812a94954eaa06906dd"
+    }
+  ],
+  "request": "ae51f5bd201797404791988833987fd8a1564658c1265deedccb30aca1efb984",
+  "retired": true,
+  "version": "storage-ceph-physical-retirement-v1"
+}

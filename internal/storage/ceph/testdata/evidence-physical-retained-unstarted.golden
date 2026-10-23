@@ -1,0 +1,23 @@
+{
+  "cluster": "example",
+  "fsid": "5effe704-a878-5cae-8b43-c81f7112832a",
+  "owner": "apply-original",
+  "prepared": true,
+  "receipts": [
+    {
+      "machine": "node-1",
+      "retainedWithoutInstall": true
+    },
+    {
+      "machine": "node-2",
+      "retainedWithoutInstall": true
+    },
+    {
+      "machine": "node-3",
+      "retainedWithoutInstall": true
+    }
+  ],
+  "request": "15505b08c8cb6bcb14cffcc9bddded0267b3020e316f8a0f652ada613762bbfd",
+  "retired": true,
+  "version": "storage-ceph-physical-retirement-v1"
+}

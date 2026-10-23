@@ -453,7 +453,7 @@ func TestSMBContentDigestMovesWithItsContract(t *testing.T) {
 	if SMBImplementation != "storage-ceph-smb-v1" || SMBVersion != "ceph-smb-v1" || SMBEvidenceVersion != "ceph-smb-evidence-v1" || SMBManagerModule != "smb" {
 		t.Fatalf("the SMB contract is %s %s %s %s", SMBImplementation, SMBVersion, SMBEvidenceVersion, SMBManagerModule)
 	}
-	d := sha256.Sum256([]byte("storage-ceph-smb-v1\x00ceph-smb-v1\x00ceph-smb-evidence-v1"))
+	d := sha256.Sum256([]byte("storage-ceph-smb-v1\x00ceph-smb-v1\x00ceph-smb-evidence-v1\x00storage-ceph-physical-retirement-v1"))
 	if SMBContentDigest() != hex.EncodeToString(d[:]) {
 		t.Fatalf("the SMB content digest is %s", SMBContentDigest())
 	}

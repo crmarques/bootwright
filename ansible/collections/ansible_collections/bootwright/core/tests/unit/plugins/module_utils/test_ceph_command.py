@@ -109,6 +109,7 @@ def test_actual_shipped_command_works_inside_supervised_remote_group(tmp_path):
     sources = {"native_diagnostics": inspect.getsource(native_diagnostics), "ceph_pull_broker": '"""Fixed fixture."""\n',
                "ceph_tunnel": '"""Fixed fixture."""\n', "ceph_tunnel_staging": '"""Fixed fixture."""\n', "ceph_tunnel_custody": '"""Fixed fixture."""\n',
                "ceph_native_observe": '"""Fixed fixture."""\n', "ceph_host_route_probe": '"""Fixed fixture."""\n',
+               "physical_machine_identity": '"""Fixed fixture."""\n',
                "ceph_host_runtime": '"""Fixed fixture."""\n', "native_specializations": '"""Fixed fixture."""\n',
                "ceph_native_resources": '"""Fixed fixture."""\n',
                "ceph_native_nvmeof": '"""Fixed fixture."""\n', "ceph_native_nfs": '"""Fixed fixture."""\n',

@@ -25,7 +25,7 @@ const (
 )
 
 func SMBContentDigest() string {
-	d := sha256.Sum256([]byte(SMBImplementation + "\x00" + SMBVersion + "\x00" + SMBEvidenceVersion))
+	d := sha256.Sum256([]byte(SMBImplementation + "\x00" + SMBVersion + "\x00" + SMBEvidenceVersion + "\x00" + PhysicalRetirementImplementation))
 	return hex.EncodeToString(d[:])
 }
 
@@ -580,6 +580,13 @@ func (SMBCapability) Quiescent(ctx context.Context, probe lifecycle.Probe) (life
 	}
 	if probe.RetiredWithHosts {
 		if r, err := DecodeSMBRequest(probe.Block.Request); err == nil && len(r.Machines) != 0 {
+			pending, err := pendingPhysicalClusters(probe.Execution(), []string{r.Cluster}, r.Machines)
+			if err != nil {
+				return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: survivingReason, Remedy: survivingRemedy}, nil
+			}
+			if len(pending) != 0 {
+				return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: pendingPhysicalReason}, nil
+			}
 			return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: retiredReason}, nil
 		}
 	}

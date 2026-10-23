@@ -101,7 +101,7 @@ func (r HostRequest) source() (int, bool) {
 }
 
 func HostContentDigest() string {
-	d := sha256.Sum256([]byte(HostImplementation + "\x00" + HostVersion + "\x00" + HostEvidenceVersion + "\x00" + "selected-packages-pull-profile-route-devices-v2"))
+	d := sha256.Sum256([]byte(HostImplementation + "\x00" + HostVersion + "\x00" + HostEvidenceVersion + "\x00" + "selected-packages-pull-profile-route-devices-v3"))
 	return hex.EncodeToString(d[:])
 }
 
@@ -274,8 +274,12 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 				return strings.Compare(a.Kind+"/"+a.Object, b.Kind+"/"+b.Object)
 			})
 			requires = slices.Compact(requires)
+			dependencies := []string{ImageBlockID(cluster.Cluster)}
+			if physicalHosts(cluster.Hosts) {
+				dependencies = append(dependencies, PhysicalRetirementBlockID(cluster.Cluster))
+			}
 			plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: HostBlockID(cluster.Cluster, host.Machine), Description: description, Stage: reconciliation.StageClusters,
-				Requires: requires, Dependencies: []string{ImageBlockID(cluster.Cluster)}, Exclusive: []string{"ceph-host/" + host.Machine}, Impacts: impacts, Consumes: []string{},
+				Requires: requires, Dependencies: dependencies, Exclusive: []string{"ceph-host/" + host.Machine}, Impacts: impacts, Consumes: []string{},
 				Kind: string(api.StorageCluster), Object: cluster.Cluster, Implementation: HostImplementation, ContentDigest: HostContentDigest(), Request: canonical})
 			if cluster.Security != nil && cluster.Security.FIPS {
 				plan.Secrets = append(plan.Secrets, cluster.ClusterKeyRef)
@@ -497,12 +501,19 @@ func (c HostCapability) Observe(ctx context.Context, e lifecycle.Execution) (lif
 }
 
 func (c HostCapability) Destroy(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
+	if err := ctx.Err(); err != nil {
+		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+	}
 	frozen, decodeErr := DecodeHostRequest(e.Block.Request)
 	if decodeErr != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, decodeErr
 	}
 	if physicalHosts(frozen.Cluster.Hosts) {
-		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, physicalRemovalRefusal()
+		evidence, err := physicalHostRelease(e, frozen)
+		if err != nil {
+			return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+		}
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnchanged, Evidence: evidence}, nil
 	}
 	r, err := c.prepare(ctx, e)
 	if err != nil {
@@ -526,12 +537,19 @@ func retained(e HostEvidence, r HostRequest) bool {
 }
 
 func (c HostCapability) ObserveRemoval(ctx context.Context, e lifecycle.Execution) (lifecycle.Observation, error) {
+	if err := ctx.Err(); err != nil {
+		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
+	}
 	frozen, decodeErr := DecodeHostRequest(e.Block.Request)
 	if decodeErr != nil {
 		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, decodeErr
 	}
 	if physicalHosts(frozen.Cluster.Hosts) {
-		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, physicalRemovalRefusal()
+		evidence, err := physicalHostRelease(e, frozen)
+		if err != nil {
+			return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
+		}
+		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Outcome: reconciliation.OutcomeUnchanged, Evidence: evidence}, nil
 	}
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	r, err := c.prepare(ctx, e)
