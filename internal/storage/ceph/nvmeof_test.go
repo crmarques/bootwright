@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/storage"
 )
 
 func nvmeCatalog() api.Catalog {
@@ -58,6 +60,57 @@ func TestNVMeOFRequestAndDependencies(t *testing.T) {
 	r.Owner = "other"
 	if identity == nvmeofSerial(r) {
 		t.Fatal("identity crossed original attempt")
+	}
+}
+
+func TestNVMeOFGatewayAdmissionMatchesBlockIdentity(t *testing.T) {
+	cluster, _ := nvmeCatalog().Find(api.StorageCluster, "example")
+	serviceID := strings.Repeat("native.", 10) + "gateway"
+	services := cluster.Spec().Get("ceph", "services").Items()
+	services[len(services)-1] = services[len(services)-1].With("service_id", api.StringValue(serviceID))
+	for _, length := range []int{26, 27} {
+		candidate := api.NewObject(api.StorageCluster, strings.Repeat("c", length), cluster.Labels(), cluster.Spec().WithPath(api.ListValue(services...), "ceph", "services"))
+		issues := storage.ValidatePartial(candidate, api.Catalog{})
+		units, err := nvmeofUnits(candidate)
+		if err != nil || len(units) != 1 {
+			t.Fatalf("gateway units %+v %v", units, err)
+		}
+		id := ServiceUnitBlockID(candidate.Name(), units[0])
+		if len(id) != length+37 || reconciliation.ValidSegment(id) != (length == 26) || (len(issues) == 0) != (length == 26) {
+			t.Fatalf("gateway name length %d: ID %q issues %+v", length, id, issues)
+		}
+		if units[0].ID != serviceID || !bytes.Contains(units[0].Documents[0], []byte(`"service_id":"`+serviceID+`"`)) {
+			t.Fatalf("native service ID changed: %+v", units[0])
+		}
+	}
+}
+
+func TestNVMeOFSubsystemAdmissionMatchesPlannedIdentity(t *testing.T) {
+	for _, length := range []int{51, 52} {
+		objects := nvmeCatalog().Objects()
+		var subsystem api.Object
+		for i, object := range objects {
+			if object.Kind() == api.StorageNVMeoFSubsystem {
+				subsystem = api.NewObject(object.Kind(), strings.Repeat("s", length), object.Labels(), object.Spec())
+				objects[i] = subsystem
+			}
+		}
+		catalog := api.NewCatalog(objects)
+		issues := storage.Validate(subsystem, catalog)
+		input := lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, State: compilation.NewState(catalog, catalog, nil), Controller: "controller"}
+		plan, err := New(api.StorageNVMeoFSubsystem, nil).Plan(context.Background(), input)
+		if length == 52 {
+			if len(issues) != 1 || issues[0].Field != "$.metadata.name" || err == nil {
+				t.Fatalf("oversized subsystem admitted: issues %+v plan error %v", issues, err)
+			}
+			continue
+		}
+		if len(issues) != 0 || err != nil || len(plan.Definitions) != 1 {
+			t.Fatalf("boundary subsystem issues %+v plan %+v error %v", issues, plan, err)
+		}
+		if id := plan.Definitions[0].ID; len(id) != 63 || !reconciliation.ValidSegment(id) {
+			t.Fatalf("boundary subsystem ID %q", id)
+		}
 	}
 }
 

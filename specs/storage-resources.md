@@ -1073,6 +1073,7 @@ images before effects; native identity and readiness proofs guard completion.
 
 | Field | Contract |
 | --- | --- |
+| `metadata.name` | DNS label of at most 51 characters, so the block `ceph-nvmeof-<name>` fits 63. |
 | `clusterRef` | Required managed StorageCluster. |
 | `serviceRef` | Required qualified native name `nvmeof.<service_id>` of a declared nvmeof service of that cluster; an absent or other-type target is a field error. It fixes the gateway pool and group. |
 | `nqn` | Required subsystem NQN: `nqn.yyyy-mm.<reverse domain>:<name>` or `nqn.2014-08.org.nvmexpress:uuid:<UUID>`, 11 to 223 printable ASCII characters, never the discovery NQN; unique among the cluster's subsystems, which is stricter than the gateway's per-group scope because an initiator identifies a subsystem by its NQN alone. |

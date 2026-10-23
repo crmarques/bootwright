@@ -512,6 +512,11 @@ The native worker realizes this gateway and its
 [subsystems](storage-resources.md#storagenvmeofsubsystem) after qualifying the
 selected runtime commands and verified management TLS.
 
+When a StorageCluster declares this service, its `metadata.name` has at most
+26 characters so the gateway's lifecycle block identity fits 63 characters.
+The native `service_id` retains its qualified name grammar; the block identity
+uses a fixed-length hash of that ID ([block identity](storage.md#nvme-of-subsystems)).
+
 | Member | Rule |
 | --- | --- |
 | `pool` | Required: the `metadata.name` of a same-cluster replicated StoragePool with role `rbd`. cephadm refuses to deploy a gateway whose pool is absent and does not retry ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/nvmeof.py#L28-L39)); the gateway keeps its state in omap there, which an erasure-coded pool does not support. |

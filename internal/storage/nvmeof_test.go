@@ -92,6 +92,48 @@ func TestNVMeoFServiceAndSubsystemAdmit(t *testing.T) {
 	requireNoIssues(t, nvmeofClusterIssues(t, nvmeofService("block", m("label", "mgr", "count", 3), "port", 5501, "discovery_port", 8010, "transports", "tcp", "enable_auth", false)))
 }
 
+func TestNVMeoFGatewayClusterNameAdmission(t *testing.T) {
+	service := nvmeofService(strings.Repeat("native.", 10)+"gateway", nvmeofHosts("node-1", "node-2"), "group", "block")
+	for _, length := range []int{26, 27} {
+		cluster, catalog := nvmeofCatalog(t, service)
+		name := strings.Repeat("c", length)
+		objects := catalog.Objects()
+		for i, candidate := range objects {
+			if candidate.Identity() == cluster.Identity() {
+				objects[i] = object(api.StorageCluster, name, candidate.Spec())
+			} else if textOf(candidate.Spec(), "clusterRef") == cluster.Name() {
+				objects[i] = candidate.WithSpec(candidate.Spec().With("clusterRef", api.StringValue(name)))
+			}
+		}
+		catalog = api.NewCatalog(objects)
+		cluster = find(t, catalog, api.StorageCluster, name)
+		for _, issues := range [][]api.Issue{Validate(cluster, catalog), ValidatePartial(cluster, catalog)} {
+			if length == 26 {
+				requireNoIssues(t, issues)
+			} else {
+				onlyIssue(t, issues, "$.metadata.name", "a cluster name longer than 26 characters does not fit its NVMe-oF gateway block identity ceph-service-<cluster>-nvmeof-<service-token> of at most 63 characters", "shorten metadata.name to at most 26 characters")
+			}
+		}
+		services := cluster.Spec().Get("ceph", "services").Items()
+		withoutGateway := cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services[:len(services)-1]...), "ceph", "services"))
+		requireNoIssues(t, Validate(withoutGateway, replace(catalog, withoutGateway)))
+	}
+}
+
+func TestNVMeoFSubsystemNameAdmission(t *testing.T) {
+	_, catalog := nvmeofCatalog(t)
+	for _, length := range []int{51, 52} {
+		subsystem := nvmeofSubsystem(strings.Repeat("s", length), "namespaces", []api.Value{m("nsid", 1, "imageRef", "disk-b")})
+		for _, issues := range [][]api.Issue{Validate(subsystem, catalog), ValidatePartial(subsystem, catalog)} {
+			if length == 51 {
+				requireNoIssues(t, issues)
+			} else {
+				onlyIssue(t, issues, "$.metadata.name", "a subsystem name longer than 51 characters does not fit its block identity ceph-nvmeof-<name> of at most 63 characters", "shorten metadata.name to at most 51 characters")
+			}
+		}
+	}
+}
+
 func TestNVMeoFServiceRequiresDeclaredRBDPoolAndGroup(t *testing.T) {
 	service := func(pool string) api.Value {
 		return m("service_type", "nvmeof", "service_id", "block", "placement", nvmeofHosts("node-1", "node-2"), "spec", m("pool", pool, "group", "block"))

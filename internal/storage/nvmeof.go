@@ -39,6 +39,12 @@ func validNQN(nqn string) bool {
 	return nvmeofNamedNQN.MatchString(nqn)
 }
 
+func (a *admission) nvmeofClusterIntrinsic(ceph api.Value) {
+	if len(a.object.Name()) > 26 && slices.ContainsFunc(ceph.Get("services").Items(), func(service api.Value) bool { return textOf(service, "service_type") == "nvmeof" }) {
+		a.issue("api.invariant", "$.metadata.name", "a cluster name longer than 26 characters does not fit its NVMe-oF gateway block identity ceph-service-<cluster>-nvmeof-<service-token> of at most 63 characters", "shorten metadata.name to at most 26 characters")
+	}
+}
+
 func (a *admission) nvmeofRecord(service api.Value, field string, placed []api.Value, partial bool) {
 	spec := service.Get("spec")
 
@@ -115,6 +121,9 @@ func nvmeofListeners(cluster api.Object, catalog api.Catalog, service api.Value,
 
 func (a *admission) nvmeofSubsystemIntrinsic() {
 	spec := a.object.Spec()
+	if len(a.object.Name()) > 51 {
+		a.issue("api.invariant", "$.metadata.name", "a subsystem name longer than 51 characters does not fit its block identity ceph-nvmeof-<name> of at most 63 characters", "shorten metadata.name to at most 51 characters")
+	}
 	for _, key := range []string{"hosts", "namespaces"} {
 		if a.object.Spec().Get(key).Len() > 128 {
 			a.invalid("$.spec."+key, "the bounded NVMe-oF resource limit is 128 entries")
