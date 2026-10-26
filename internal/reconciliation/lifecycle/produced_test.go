@@ -512,3 +512,39 @@ func TestApplyReceiptAndRunLogCarryNoProducedMaterial(t *testing.T) {
 		}
 	}
 }
+
+// A recapture keeps the identity of the effect its block proved: one that
+// presents another, as a reinstalled cluster's new authority does, refuses
+// lifecycle.state and leaves custody holding the original, while one of the
+// same identity replaces the bytes.
+func TestARecaptureOfAnotherIdentityRefusesBetweenAttempts(t *testing.T) {
+	h := newHarness(t, "install")
+	h.capability.identity = func(_ string, material secrets.Material) string {
+		value, _ := material.Part(secrets.ValuePart)
+		return strings.SplitN(string(value), "\n", 2)[0]
+	}
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := apply(h); err == nil {
+		t.Fatal("an unknown outcome completed")
+	}
+	h.binder.produced = map[string]string{"install/kubeconfig": "authority-a\nfirst"}
+	observed := func(value string) []Observation {
+		return []Observation{{Effect: reconciliation.EffectCompleted, Evidence: json.RawMessage(`{"ok":true}`),
+			Produced: []Produced{{Name: "kubeconfig", Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(value)})}}}}
+	}
+	h.capability.observations = observed("authority-b\nsecond")
+	_, err := apply(h)
+	if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "another identity (authority-b)") {
+		t.Fatalf("a recapture of another identity = %v", err)
+	}
+	if !slices.Equal(kept(h), []string{"install/kubeconfig=authority-a\nfirst"}) || blockState(t, h, "install") == reconciliation.BlockDone {
+		t.Fatalf("custody %v and block %s after a refused recapture", kept(h), blockState(t, h, "install"))
+	}
+	h.capability.observations = observed("authority-a\nrecaptured")
+	if _, err := apply(h); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(kept(h), []string{"install/kubeconfig=authority-a\nrecaptured"}) {
+		t.Fatalf("custody %v after a recapture of the same identity", kept(h))
+	}
+}

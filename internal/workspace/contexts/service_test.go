@@ -23,11 +23,13 @@ import (
 
 const pristineEvidence = `{"version":1,"operation":"none","ownership":"none"}`
 
-const orphanAction = "delete, abandoning the objects bootwright status --context example and bootwright diff --context example list, freeing the exclusive keys the plan names, and removing any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context example --name <cluster>)"
+const orphanAction = "delete, abandoning the objects bootwright status --context example and bootwright diff --context example list, freeing the exclusive keys the plan names, and removing any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context example --name <cluster>)" + retainedAction
 
-const lostAction = "delete with orphaned objects that cannot be listed (its directory is gone)"
+const lostAction = "delete with orphaned objects that cannot be listed (its directory is gone)" + retainedAction
 
-const unreadableAction = "delete with orphaned objects that cannot be listed (its mutation evidence cannot be read), removing any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context example --name <cluster>)"
+const unreadableAction = "delete with orphaned objects that cannot be listed (its mutation evidence cannot be read), removing any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context example --name <cluster>)" + retainedAction
+
+const retainedAction = ", and leaving on their hosts the native-side material those objects retain outside the keyring (Ceph keys and bootstrap material, erase custody and installer work areas), which goes only with them"
 
 const environmentInput = `apiVersion: bootwright.io/v1alpha1
 kind: Environment

@@ -212,6 +212,92 @@ func (s *session) Bind(ctx context.Context, inputs []secretstore.BoundInput) (se
 	return binding, nil
 }
 
+func (s *session) Rebind(ctx context.Context, bindingID string, replacements []secretstore.BoundInput) (secretstore.Binding, error) {
+	if err := s.usable(ctx, true); err != nil {
+		return secretstore.Binding{}, err
+	}
+	if s.context.Mode != "ready" {
+		return secretstore.Binding{}, secretstore.Failure("store.conflict", "new secret bindings require a ready context")
+	}
+	position, exists := slices.BinarySearchFunc(s.index.Bindings, bindingID, func(binding secretstore.Binding, id string) int { return strings.Compare(binding.ID, id) })
+	if !exists {
+		return secretstore.Binding{}, secretstore.Failure("input", "secret binding does not exist")
+	}
+	if len(replacements) == 0 || len(replacements) > secrets.MaxVersions || len(s.index.Bindings) >= maxBindings {
+		return secretstore.Binding{}, secretstore.Failure("store.limit", "secret binding exceeds its item limit")
+	}
+	next := cloneIndex(s.index)
+	versions := slices.Clone(next.Bindings[position].Versions)
+	pinned := make(map[string]int, len(versions))
+	for i, id := range versions {
+		version, exists := findVersion(next, id)
+		if !exists {
+			return secretstore.Binding{}, secretstore.Failure("store.corrupt", "secret binding references a missing version")
+		}
+		pinned[version.Declaration.Name] = i
+	}
+	knownBindings := bindingIDs(next)
+	identityNames, err := entryNames(ctx, s.area, "identities")
+	if err != nil {
+		return secretstore.Binding{}, err
+	}
+	for name := range identityNames {
+		knownBindings[strings.TrimSuffix(name, ".json")] = true
+	}
+	seenNames := make(map[string]bool, len(replacements))
+	for _, input := range replacements {
+		if err := ctx.Err(); err != nil {
+			return secretstore.Binding{}, err
+		}
+		if !validateDeclaration(input.Declaration) || seenNames[input.Declaration.Name] {
+			return secretstore.Binding{}, secretstore.Failure("declaration", "secret binding declarations are invalid or duplicated")
+		}
+		seenNames[input.Declaration.Name] = true
+		if err := validateMaterial(input.Declaration, input.Material); err != nil {
+			return secretstore.Binding{}, err
+		}
+		version, exists := findVersion(next, input.Version)
+		if input.Version == "" || !exists || version.Declaration != input.Declaration.Summary() {
+			return secretstore.Binding{}, secretstore.Failure("source", "secret binding version does not match its declaration")
+		}
+		equal, err := s.equalVersion(ctx, version, input.Material)
+		if err != nil {
+			return secretstore.Binding{}, err
+		}
+		if !equal {
+			return secretstore.Binding{}, secretstore.Failure("source", "secret binding material does not match its immutable version")
+		}
+		at, bound := pinned[input.Declaration.Name]
+		if !bound {
+			return secretstore.Binding{}, secretstore.Failure("input", "secret binding pins no version of "+input.Declaration.Name)
+		}
+		if versions[at] == version.ID {
+			return secretstore.Binding{}, secretstore.Failure("input", "secret binding already pins this version of "+input.Declaration.Name)
+		}
+		versions[at] = version.ID
+	}
+	slices.Sort(versions)
+	rebound, err := s.implementation.uniqueID("bind-", func(id string) bool { return knownBindings[id] })
+	if err != nil {
+		return secretstore.Binding{}, err
+	}
+	binding := secretstore.Binding{ID: rebound, Versions: slices.Clone(versions)}
+	next.Bindings = append(next.Bindings, binding)
+	collectVersions(&next)
+	canonicalizeIndex(&next)
+	if err := validateLogicalBounds(next); err != nil {
+		return secretstore.Binding{}, err
+	}
+	key, err := s.key(ctx, next.ActiveKey)
+	if err != nil {
+		return secretstore.Binding{}, err
+	}
+	if err := s.publish(ctx, &next, nil, publicationKey{id: next.ActiveKey, value: key}, []string{rebound}); err != nil {
+		return secretstore.Binding{}, err
+	}
+	return binding, nil
+}
+
 func (s *session) Reopen(ctx context.Context, bindingID string) ([]secretstore.BoundMaterial, error) {
 	if err := s.usable(ctx, false); err != nil {
 		return nil, err

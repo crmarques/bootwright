@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -153,8 +154,25 @@ func newHarness(t *testing.T) *harness {
 	return h
 }
 
+// enroll answers --yes as an operator who verified every fingerprint out of
+// band does: it names each key the dry run would add or replace, unless the
+// request names its own. The dry run's observations are not kept.
 func enroll(t *testing.T, h *harness, request EnrollRequest) (*Report, error) {
 	t.Helper()
+	if request.SkipConfirmation && !request.DryRun && request.Expect == nil {
+		preview := request
+		preview.DryRun = true
+		observed := slices.Clone(h.observer.observed)
+		if report, err := h.service.Enroll(context.Background(), preview); err == nil {
+			request.Expect = map[string]string{}
+			for _, host := range report.Hosts {
+				if host.Action == ActionAdd || host.Action == ActionReplace {
+					request.Expect[host.Machine] = host.Fingerprint
+				}
+			}
+		}
+		h.observer.observed = observed
+	}
 	return h.service.Enroll(context.Background(), request)
 }
 
@@ -917,5 +935,47 @@ func TestAStoredDivergentPinIsRepairedByTheMachineTrustItsRefusalNames(t *testin
 			}
 			test.check(t, h, report)
 		})
+	}
+}
+
+// Under --yes no person compares the plan, so an add or a replace records only
+// a key whose fingerprint the operator named; a named fingerprint the observed
+// key does not match refuses with or without --yes, and one for a Machine the
+// enrollment never observes refuses before anything is observed (D183, Q97).
+func TestUnderYesOnlyANamedFingerprintIsRecorded(t *testing.T) {
+	h := newHarness(t)
+	_, err := h.service.Enroll(context.Background(), EnrollRequest{SkipConfirmation: true})
+	if err == nil || code(t, err) != "trust.identity" || !strings.Contains(diagnostics.Of(err)[0].Remediation, "--expect <machine>=SHA256:<fingerprint>") {
+		t.Fatalf("an unnamed --yes enrollment = %v", err)
+	}
+	if len(h.trust.written) != 0 {
+		t.Fatal("an unnamed --yes enrollment wrote")
+	}
+	planned, err := enroll(t, h, EnrollRequest{DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect := map[string]string{}
+	for _, host := range planned.Hosts {
+		if host.Action == ActionAdd {
+			expect[host.Machine] = host.Fingerprint
+		}
+	}
+	substituted := maps.Clone(expect)
+	substituted["node-a"] = "SHA256:" + strings.Repeat("A", 43)
+	for _, request := range []EnrollRequest{{SkipConfirmation: true, Expect: substituted}, {Expect: substituted}} {
+		_, err := h.service.Enroll(context.Background(), request)
+		if err == nil || code(t, err) != "trust.identity" || !strings.Contains(diagnostics.Of(err)[0].Message, "not the expected "+substituted["node-a"]) {
+			t.Fatalf("a substituted key under %+v = %v", request, err)
+		}
+	}
+	if len(h.trust.written) != 0 || h.prompt.asked != 0 {
+		t.Fatal("a substituted key was recorded or confirmed")
+	}
+	if _, err := h.service.Enroll(context.Background(), EnrollRequest{SkipConfirmation: true, Expect: map[string]string{"absent": expect["node-a"]}}); err == nil || code(t, err) != "access.target" {
+		t.Fatalf("an expectation for an undeclared Machine = %v", err)
+	}
+	if report, err := h.service.Enroll(context.Background(), EnrollRequest{SkipConfirmation: true, Expect: expect}); err != nil || report.Recorded != len(expect) {
+		t.Fatalf("the named enrollment = %+v (%v)", report, err)
 	}
 }

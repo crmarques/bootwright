@@ -1509,3 +1509,43 @@ func TestADeletionReportsTheRecordItRemoved(t *testing.T) {
 		t.Fatalf("deletion of an unreadable record = %+v (%v)", result, err)
 	}
 }
+
+// urlFileAcquirer reads the one URL its file holds.
+type urlFileAcquirer struct {
+	*fakeAcquirer
+	url   string
+	reads []string
+}
+
+func (a *urlFileAcquirer) ReadURL(_ context.Context, path string) (string, error) {
+	a.reads = append(a.reads, path)
+	return a.url, nil
+}
+
+// --from-url-file downloads the URL its file or standard input holds, exactly
+// as --from-url downloads the one on the command line, and refuses beside
+// another source before it reads anything.
+func TestAURLFileSourceDownloadsTheURLItHolds(t *testing.T) {
+	signed := "https://example.test/demo.iso?X-Amz-Signature=abc"
+	acquirer := &urlFileAcquirer{fakeAcquirer: &fakeAcquirer{data: "installer bytes"}, url: signed}
+	service := New(&fakeStore{}, acquirer, &fakeConfirmer{}, fixedClock{})
+	_, err := service.Add(context.Background(), AddMediaRequest{Name: "demo.iso", SourceURLFile: "-", SHA256: digestOf("installer bytes")})
+	if expectMediaFailure(t, err); len(acquirer.reads) != 0 || !strings.Contains(diagnostics.Of(err)[0].Remediation, "--yes") {
+		t.Fatalf("standard input without --yes read %v (%v)", acquirer.reads, err)
+	}
+	if _, err := service.Add(context.Background(), AddMediaRequest{Name: "demo.iso", SourceURLFile: "-", SHA256: digestOf("installer bytes"), SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if acquirer.opened.URL != signed || acquirer.opened.Path != "" || len(acquirer.reads) != 1 || acquirer.reads[0] != "-" {
+		t.Fatalf("opened %+v after reading %v", acquirer.opened, acquirer.reads)
+	}
+	_, err = service.Add(context.Background(), AddMediaRequest{Name: "demo.iso", SourceURLFile: "/url", SourceURL: signed, SHA256: digestOf("installer bytes")})
+	expectMediaFailure(t, err)
+	if len(acquirer.reads) != 1 {
+		t.Fatal("a request naming two sources read its URL file")
+	}
+	unsupported := New(&fakeStore{}, &fakeAcquirer{}, &fakeConfirmer{}, fixedClock{})
+	if _, err := unsupported.Add(context.Background(), AddMediaRequest{Name: "demo.iso", SourceURLFile: "-", SHA256: digestOf("x"), SkipConfirmation: true}); err == nil {
+		t.Fatal("an acquirer that reads no URL file accepted one")
+	}
+}

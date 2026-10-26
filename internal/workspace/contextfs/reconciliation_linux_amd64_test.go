@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -36,6 +37,9 @@ func TestLifecycleViewExposesTheContextSnapshot(t *testing.T) {
 		identity := view.Identity()
 		if identity.Name != record.Name || identity.Revision != record.Revision || identity.Mode != "ready" {
 			t.Fatalf("identity = %+v, want %+v in mode ready", identity, record)
+		}
+		if want := strconv.FormatUint(record.DirectoryDevice, 10) + ":" + strconv.FormatUint(record.DirectoryInode, 10) + ":"; record.DirectoryInode == 0 || !strings.HasPrefix(identity.Incarnation, want) || len(identity.Incarnation) <= len(want)+1 {
+			t.Fatalf("incarnation = %q, want the registry's directory identity %q and its birth", identity.Incarnation, want)
 		}
 		if len(view.Inputs().Files) != 1 {
 			t.Fatalf("inputs = %+v", view.Inputs())
@@ -1020,5 +1024,30 @@ func TestOperationAreaLocationIsWhereItWrites(t *testing.T) {
 	written := filepath.Join(location, "op-one", "logs", "operation.jsonl")
 	if data, err := os.ReadFile(written); err != nil || string(data) != "{}\n" {
 		t.Fatalf("the reported location does not hold what the area wrote: %q (%v)", written, err)
+	}
+}
+
+func TestARecreatedDirectoryOnTheSameInodeIsAnotherIncarnation(t *testing.T) {
+	first := formatIncarnation(64768, 1234, directoryBirth{born: true, seconds: 1761490000, nanos: 5})
+	if first != "64768:1234:b1761490000.000000005" {
+		t.Fatalf("incarnation = %q", first)
+	}
+	for name, birth := range map[string]directoryBirth{
+		"a later birth time":        {born: true, seconds: 1761490000, nanos: 6},
+		"an inode generation alone": {generation: 1761490000},
+		"another inode generation":  {generation: 7},
+	} {
+		if got := formatIncarnation(64768, 1234, birth); got == first || got == formatIncarnation(64768, 1234, directoryBirth{generation: 8}) {
+			t.Fatalf("%s: incarnation %q is not told apart", name, got)
+		}
+	}
+	held, err := os.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	birth, err := birthOf(int(held.Fd()))
+	if err != nil {
+		t.Fatalf("a held directory reports birth %+v (%v)", birth, err)
 	}
 }

@@ -510,6 +510,23 @@ class ControllerFilesTests(unittest.TestCase):
         self.assertFalse(observed[1][2]["redirect"])
         self.assertFalse(observed[1][2]["preload_content"])
 
+    def test_download_refuses_bytes_whose_digest_disagrees_with_the_publisher_checksum(self):
+        source = tool(b"publisher bytes")["source"]
+        substituted = io.BytesIO(b"substituted!!!!")
+        response = types.SimpleNamespace(
+            status=200, headers={"Content-Length": str(source["bytes"])}, close=lambda: None
+        )
+        response.read = lambda amount, decode_content: substituted.read(amount)
+        manager = types.SimpleNamespace(request=lambda *args, **kwargs: response, clear=lambda: None)
+        library = types.SimpleNamespace(PoolManager=lambda **kwargs: manager, Timeout=lambda **kwargs: kwargs)
+        with mock.patch.dict("sys.modules", urllib3=library), mock.patch.object(
+            files, "trusted_roots", return_value=object()
+        ):
+            descriptor, _path = self.sink()
+            with self.assertRaises(files.AcquisitionRefused) as refused:
+                files.download(source, EGRESS, descriptor, DOWNLOAD, files.Routes())
+        self.assertEqual(refused.exception.reason, "integrity")
+
     def test_download_refuses_unapproved_redirects_bounds_and_raw_errors(self):
         source = tool(b"publisher bytes")["source"]
         for status, headers, body in (

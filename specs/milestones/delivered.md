@@ -8542,6 +8542,42 @@ so operations frozen before refuse by name rather than continue.
 interruption and release tests, each proved by a seeded mismatch; the
 delivering commit records the gates.
 
+### X166 — Audit lane D: credentials and trust
+
+**Items:** B817 and B831 (2026-10-26 spec audit step P1-J and batch L9).
+**Kind:** safety. **Owners:** Secrets, CLI, Controller setup and Container
+cluster. Delivered on 2026-10-26 as lane D of the
+[audit remediation](backlog.md#lane-order-and-progress) under D182, with
+D183's answers to Q70, Q97 to Q101 and Q116; the lane also partly delivered
+[B805](backlog.md#b805) and [B829](backlog.md#b829), which stay open.
+
+Every Secret reference names its class, access credential or effect
+material, and `--authorize rebind=<secret>` presents a rotated access
+credential's current version to a continuation or removal as a recorded new
+binding version, refusing effect material and any Secret no frozen block
+reads as an access credential; ownership proofs still run
+([B805](backlog.md#b805) keeps the KubeVirt and vCenter classes). Several-Machine
+`machine exec` and `cluster exec` sessions are bounded and an interrupted run
+never exits 0; `machine trust --expect <machine>=SHA256:<fp>` names the
+fingerprint an unattended enrollment or replacement must see; usernames are
+identity metadata; `media add --from-url-file` keeps a signed URL off argv;
+`cluster info --object-user <name>` reveals one object user's keys while
+`--secrets` reveals only the dashboard password; `access.unproved` marks only
+a custody-marked copy. The media work area carries its context incarnation
+(device, inode and birth time), and build, destroy and the D124 hand-over
+refuse another incarnation's area; a kubeconfig recapture compares server,
+authority and principal ([B829](backlog.md#b829) keeps the rest). A root-owned
+install re-executes by its proved absolute path, the elevated child proves it
+runs the supervisor's file, and every sudo-started root invocation refuses
+variables outside a named set, unsetting PAM session variables; a host whose
+PAM stack exports other names refuses naming them, which the operator guide
+says how to check.
+
+**Guard tests:** the class, rebind, trust, media, reveal, incarnation,
+recapture and privilege tests, each proved by a seeded mismatch; the
+delivering commit records the gates. The sudo variable set was not checked
+against a real sudo and PAM stack.
+
 ## M3 independent in-tree completion
 
 The owner's 2026-10-23 request (D181) delivers the independent implementation

@@ -104,7 +104,7 @@ Parameters are flat and type-scoped:
 
 | Field | Type | Secret types | Required | Default | Rule |
 | --- | --- | --- | --- | --- | --- |
-| `issuerRef` | string | `tlsCertificate` | no | omitted | Reference to a generated `caBundle` Secret; custody signs the leaf with its private CA key. External/contextStore issuers and CA issuer chains are refused. Omission keeps self-signing. |
+| `issuerRef` | string | `tlsCertificate` | no | omitted | Reference to a generated `caBundle` Secret; custody signs the leaf with its private CA key. External/contextStore issuers and CA issuer chains are refused. Omission keeps self-signing. Effect material: its CA key signs the leaf. |
 | `username` | string | `usernamePassword` | no | `admin` | UTF-8 within the [part byte limit](../secrets.md#acquisition-and-commands); no whitespace, colon, newline or NUL. The password itself is randomly generated material. |
 | `commonName` | string | `tlsCertificate`, `caBundle` | yes | — | Common name for the certificate: non-empty UTF-8 within the [part byte limit](../secrets.md#acquisition-and-commands), without NUL. |
 | `dnsNames` | array of strings | `tlsCertificate`, `caBundle` | no | omitted | DNS subject-alternative names. |
@@ -133,9 +133,6 @@ secret fields are plain references to first-class `Secret` objects; the object
 contains no organization ID, activation key, password, certificate, or token
 bytes. Each such reference states the
 [class of bound Secret](../secrets.md#immutable-binding-and-contexts) it names.
-
-Not yet met: no Entitlement reference field names its class; tracked as
-[B805](../milestones/backlog.md#b805).
 
 `Entitlement.spec` emits fields in the order `type`, `rhsm`, `registry`, then
 `license`:
@@ -174,8 +171,8 @@ or storage-cluster field.
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `management` | string | no | `managed` | `managed` or `external`; identifies who runs registration. |
-| `organizationRef` | string | conditional | — | Required for managed RHSM; `opaque` Secret containing the organization identifier. |
-| `activationKeyRef` | string | conditional | — | Required for managed RHSM; `opaque` or `token` Secret containing the activation key. |
+| `organizationRef` | string | conditional | — | Required for managed RHSM; `opaque` Secret containing the organization identifier. Access credential: registration presents it. |
+| `activationKeyRef` | string | conditional | — | Required for managed RHSM; `opaque` or `token` Secret containing the activation key. Access credential: registration presents it. |
 | `connectToInsights` | boolean | no | `false` | Future managed-registration enrollment intent. |
 | `satellite` | object | no | omitted | Optional managed Satellite/Capsule redirect. |
 
@@ -186,7 +183,7 @@ are rejected there.
 `satellite` contains `hostname`, `trustBundleRef`, then `contentBaseURL`.
 `hostname` is required when the block is present and is a bare host with no
 scheme, path, whitespace, or surrounding whitespace. `trustBundleRef`, when
-set, names a `caBundle` Secret. `contentBaseURL`, when set, is an absolute
+set, names a `caBundle` Secret, an access credential. `contentBaseURL`, when set, is an absolute
 HTTP(S) URL; omission derives
 `https://<hostname>/pulp/content` during normalization.
 
@@ -205,8 +202,8 @@ installation's [refusal table](../managed-os.md#refusal-table).
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `url` | string | no | `registry.redhat.io` for `redhat-ceph`; `cp.icr.io/cp` for `ibm-storage-ceph` | Scheme-less `host[:port][/namespace]`. |
-| `credentialsRef` | string | conditional | — | Required for `redhat-ceph` and `ibm-storage-ceph`; `usernamePassword` registry credential Secret. |
-| `trustBundleRef` | string | no | — | `caBundle` Secret. When set, it is the only TLS anchor that Ceph image resolution and the guest pull broker use for this registry, for the Ceph image and every auxiliary image; without it they verify against the host trust store ([storage](../storage.md#bootstrap-identity-and-continuation)). |
+| `credentialsRef` | string | conditional | — | Required for `redhat-ceph` and `ibm-storage-ceph`; `usernamePassword` registry credential Secret. Access credential: the registry login, which cephadm also retains [native-side](../secrets.md#native-side-retention). |
+| `trustBundleRef` | string | no | — | `caBundle` Secret. When set, it is the only TLS anchor that Ceph image resolution and the guest pull broker use for this registry, for the Ceph image and every auxiliary image; without it they verify against the host trust store ([storage](../storage.md#bootstrap-identity-and-continuation)). Access credential. |
 
 A registry address contains no scheme, inline credentials, query, fragment,
 whitespace, leading or trailing slash, empty path segment, `.` segment, or

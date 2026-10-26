@@ -977,9 +977,9 @@ states. The orphan confirmation names the exclusive keys the deletion frees
 and warns that another context may then claim a resource an abandoned object
 still uses, such as the management controller of a powered-off Machine.
 
-Not yet met: the orphan confirmation does not name the installer work areas
-or the native-side retention the deletion leaves; tracked as
-[B829](milestones/backlog.md#b829) and [B817](milestones/backlog.md#b817).
+Not yet met: the orphan confirmation names the installer work areas only as a
+class of the native-side retention it leaves, not each area and its Machine;
+tracked as [B829](milestones/backlog.md#b829).
 
 After proof and ordinary confirmation, durably mark the exact context deleting
 before removing any file or claim. Remove only verified objects through bounded

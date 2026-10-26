@@ -81,9 +81,9 @@ rules apply to it, and
 | `spec.install.proxy` | choice object | no | direct access | Independent Proxy choice for installation and cluster policy. |
 | `spec.install.ntp` | array of selections | no | native OS default | NTPServer selections; an empty list clears inherited selections. |
 | `spec.install.registries` | object | no | — | Cluster-owned mirror selection and image-source policy below. |
-| `spec.install.pullSecretRef` | string | OpenShift | environment/convention | `dockerConfigJson` `Secret`; not required for OKD. |
+| `spec.install.pullSecretRef` | string | OpenShift | environment/convention | `dockerConfigJson` `Secret`; not required for OKD. Effect material: the installation writes it into the cluster. |
 | `spec.install.nodeSSH` | object | normalized | environment/convention | Cluster administration public/private SSH material. |
-| `spec.install.additionalTrustBundleRefs` | array of strings | no | `[]` | Ordered unique `caBundle` Secret references for this cluster's native installation trust. |
+| `spec.install.additionalTrustBundleRefs` | array of strings | no | `[]` | Ordered unique `caBundle` Secret references for this cluster's native installation trust. Effect material: the installation adds them to the cluster's trust. |
 | `spec.install.additionalTrustBundlePolicy` | string | no | — | `Always` or `Proxyonly`; requires non-empty `additionalTrustBundleRefs`. Written to the installer only when selected. |
 | `spec.install.servingCertificates` | object | no | — | Typed API and ingress serving-certificate refs below. |
 
@@ -162,7 +162,8 @@ secondary cannot-derive error. An authored platform always wins.
 
 `vsphere.vcenterCredentials` is the cluster's own vCenter credential, set keyed
 by `server`: each `server` names a `vcenters[].server` of the nodes' provider,
-each `credentialsRef` a `usernamePassword` Secret, and when present it names
+each `credentialsRef` a `usernamePassword` Secret that is effect material, since
+the installation places it in the cluster, and when present it names
 every vCenter the nodes' failure domains use. It is never inferred from the
 provider's provisioning `credentialsRef`; naming that same Secret is an
 explicit choice. A cluster that declares it requires `topology.folder` on every
@@ -266,14 +267,17 @@ as for node addresses.
 following conventional fallbacks. An omitted OpenShift `pullSecretRef` may
 receive `Environment.spec.defaults.ContainerCluster.install.pullSecretRef`;
 if absent there too, normalization injects `openshift-pull-secret`. The
-resulting name must still resolve to a declared `dockerConfigJson` `Secret`.
+resulting name must still resolve to a declared `dockerConfigJson` `Secret`,
+which is effect material.
 
 `install.nodeSSH` is a presence union:
 
-- `keyPairRef` names an `sshKeyPair` `Secret` and is mutually exclusive with
+- `keyPairRef` names an `sshKeyPair` `Secret`, effect material whose public
+  half the installation authorizes on every node, and is mutually exclusive with
   the split fields; or
 - `publicKeyRef` names public SSH material and is required when the split form
   is authored; optional `privateKeyRef` names the matching private material.
+  Both are effect material, as `keyPairRef` is.
 
 When the whole block is omitted, it defaults from
 `Environment.spec.defaults.ContainerCluster.install.nodeSSH`; if that is
@@ -285,7 +289,7 @@ declare installation but cannot authorize a cluster SSH command.
 
 Media projection reads one authorized-key line from the `sshKeyPair` public
 part or the opaque `publicKeyRef` value. A malformed value refuses before the
-adapter runs and names the Secret to correct.
+adapter runs and names the Secret, effect material, to correct.
 
 `servingCertificates` admits only:
 
@@ -293,14 +297,15 @@ adapter runs and names the Secret to correct.
 | --- | --- | --- | --- |
 | `apiServer.namedCertificates` | array | when `apiServer` is set | Non-empty entries of `{names, secretRef}`. |
 | `apiServer.namedCertificates[].names` | array of strings | yes | Non-empty unique DNS names; the internal `api-int` name is forbidden. |
-| `apiServer.namedCertificates[].secretRef` | string | yes | `tlsCertificate` `Secret`. |
-| `ingress.defaultCertificateRef` | string | when `ingress` is set | `tlsCertificate` `Secret`. |
+| `apiServer.namedCertificates[].secretRef` | string | yes | `tlsCertificate` `Secret`. Effect material: the cluster serves it. |
+| `ingress.defaultCertificateRef` | string | when `ingress` is set | `tlsCertificate` `Secret`. Effect material: the cluster serves it. |
 
 ### Additional installation trust
 
 `spec.install.additionalTrustBundleRefs` selects additional CA bundles for this
 cluster's native install rendering. Each scalar reference resolves directly to
-a `caBundle` Secret, and authored order is retained. The complete list is the
+a `caBundle` Secret, effect material the installation adds to the cluster's
+trust, and authored order is retained. The complete list is the
 cluster's additional trust selection; there is no Environment trust list to
 append to it.
 

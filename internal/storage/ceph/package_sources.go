@@ -31,6 +31,17 @@ type PackageRequest struct {
 	Version                         string          `json:"version"`
 }
 
+func (p *PackageRequest) secretReferences() []string {
+	if p == nil {
+		return nil
+	}
+	references := []string{p.PackageRepositoryTrustBundleRef}
+	for _, source := range p.Sources {
+		references = append(references, source.CertificateRef)
+	}
+	return references
+}
+
 type PackageTree struct {
 	Context, Media, MediaSHA256, Path string
 	MediaSize                         int64

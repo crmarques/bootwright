@@ -701,10 +701,19 @@ silent answer as `unknown`. Because a consumer reads the entry again at each
 attempt, a producer's recapture keeps the identity of the effect it proved,
 such as a cluster's authority or a principal, as the dashboard credential's
 recapture without rotation does, and a recapture that presents another
-identity refuses `lifecycle.state` rather than replacing the entry.
+identity refuses `lifecycle.state` rather than replacing the entry. An
+installation's `kubeconfig` presents its cluster's server, the digest of its
+decoded authority and its client certificate's subject as principal
+(`TestARecaptureOfAnotherIdentityRefusesBetweenAttempts`,
+`TestAKubeconfigsIdentityIsItsServerAuthorityAndPrincipal`); a Ceph output's
+principal is the one its frozen request names, which its validation already
+holds every capture to. An entry custody marks unproved is replaced by a proved
+capture whatever it presents.
 
-Not yet met: custody compares no producer identity at recapture, so different
-bytes replace an entry's version whatever identity they present; tracked as
+Not yet met: only an installation's `kubeconfig` presents an identity for
+publication to compare; the Ceph outputs (`client`, `dashboard`,
+`object-user`, `ceph-cluster-<name>`) present none, so a recapture of another
+cluster's material under the same principal replaces the entry; tracked as
 [B829](milestones/backlog.md#b829).
 
 ### Block transitions
@@ -1592,7 +1601,9 @@ A fresh removal uses the secret material its apply bound, by reopening that
 operation's own binding rather than binding what the current declarations name.
 The material that created an effect is the material that proves it gone, and a
 declaration edited or rotated afterwards never silently changes which version a
-removal presents.
+removal presents; only the recorded
+[access-credential rebind](#access-credential-rebind) changes it, for an
+access credential alone.
 
 An attempt that cannot read a bound Secret or the part it needs, in the Ansible
 runner, a managed-OS installation or an agent installation, refuses naming the
@@ -1631,7 +1642,9 @@ so a refusal whose binding was released after its decision was read re-reads
 the context and reports that change instead. No re-binding of the current declarations,
 substitution of other material, removal without the binding or release of
 ownership inside the context exists, because none of them proves that the
-material a verb presents is the material that created the effects. `status`
+material a verb presents is the material that created the effects; the
+[access-credential rebind](#access-credential-rebind) reopens the binding it
+replaces, so it is no exit from a lost one. `status`
 names such an operation among its `contradictions`, in the refusal's words. It
 reads a keyring listing that fails reporting the material corrupt or
 undecryptable (`secret.store.corrupt`, `secret.store.crypto`) as the reopen
@@ -1691,6 +1704,52 @@ from.
 
 Destroy retains evidence until positive removal or positive absence is durable.
 It accepts no stage selection.
+
+### Access-credential rebind
+
+An access credential rotated at its endpoint after an operation bound it, such
+as a management controller's password, a provider's kubeconfig, a vCenter
+login or a registry login, would strand that operation's continuation and
+removal, because both present the bound version, which the endpoint now
+refuses. The access-credential rebind is the one recorded exit beside the two
+a [lost binding](#continuation-and-removal) names (D37), and it is not the
+bounded run's rebind, which binds nothing and names no operation. An `apply`
+or `destroy` that continues an operation or removes one names each such Secret
+with `--authorize rebind=<secret>` (D183, Q70). Before anything is confirmed,
+bound or registered, and after the plan's own tokens are authorized, each named
+Secret must meet every condition below, or the invocation refuses
+`lifecycle.authorization` naming the condition and the command without that
+token:
+
+- the transition reopens a frozen binding, so a fresh apply and a verb that
+  settles or finalizes take no rebind;
+- that binding pins a version of the Secret, and the Secret's current version,
+  read and validated as a binding reads one, is another version;
+- every block of the plan whose frozen request names the Secret reads it, through
+  its capability, as an access credential it presents only to authenticate. A
+  block that names it for any other reason, or whose capability reads no
+  access credential, rests on the bound version as effect material and refuses
+  the rebind, naming the step.
+
+Today the bare-metal Machine, the managed-OS installation and its physical
+erase of a bare-metal target, and the agent installation's bare-metal nodes
+present their management controller's `credentialsRef`, and the Ceph cluster,
+host and image blocks present the registry login. An emulated controller's
+credentials are effect material its libvirt host gave the emulator, and a
+trust anchor (`trustBundleRef`, `knownHostsRef`) is never presented, so neither
+is rebound. A KubeVirt or vSphere arm names its kubeconfig or vCenter login the
+same way when it lands.
+
+The rebind issues a new binding version: a binding equal to the reopened one
+except that each named Secret is pinned to its current version. A fresh removal
+registers with it; a continuation writes it into its operation's record as it
+resumes, so every later attempt and the removal that follows reopen it. The
+operation log records the binding it replaced, the one it issued and the
+Secrets rebound. The replaced binding stays until the operation that names it
+is released, and a rebind whose fresh removal provably did not register is
+released at once. Every ownership proof the plan runs is unchanged: the
+rebound credential only reaches the endpoint, and what the block proves it
+owns is proved as before.
 
 ## Comparing desired and real state
 
@@ -2222,8 +2281,10 @@ grants no permission. Irreversible authorization acknowledges already-planned
 loss but does not select a target or relax validation, identity, ownership,
 power, probe, or digest checks.
 
-`data-loss` is the only authorization token. `all`, unknown, duplicate, empty,
-and inapplicable values are errors. A plan requires exactly the tokens its
+`data-loss` is the only authorization token a block consumes; `rebind=<secret>`
+is the [access-credential rebind](#access-credential-rebind), which no block
+consumes and which refuses when it does not apply. `all`, unknown, duplicate,
+empty, and inapplicable values are errors. A plan requires exactly the tokens its
 blocks [consume](#plan-and-execution). A token the frozen plan does not require
 is inapplicable and refuses with `lifecycle.authorization` before registration,
 so a habitual authorization cannot pre-authorize a future destructive plan; a

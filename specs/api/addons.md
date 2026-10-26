@@ -19,7 +19,8 @@ acceptance implies no execution support; all declarations obey
 References are plain scalar names in fixed namespaces: `clusterRef` names a
 `ContainerCluster`, `profileRefs` name `ClusterAddonProfile` objects,
 `addonRefs` and `addonRef` name `ClusterAddon` objects, and `secretRefs` name
-`Secret` objects. An input's `resourceKind` or `secretType` constrains its
+`Secret` objects, each effect material that a binding places in its cluster as
+an [owned Secret](../add-ons.md#owned-secrets). An input's `resourceKind` or `secretType` constrains its
 binding value as described below. [Environment kind defaults](environment.md#kind-defaults)
 may supply only the fields permitted by that closed contract; this page owns
 their kind-specific validation and built-in defaults.
@@ -65,8 +66,9 @@ Each entry is:
 | `effects` | array | no | `[]` | Each entry is one effect union below. |
 
 Names do not determine input types or effects. `resourceKind: Secret` is
-invalid; Secret inputs use `secretType`. The former `resourceRef` and
-`secretRef` input declaration fields are unknown.
+invalid; Secret inputs use `secretType`, and a bound Secret input is effect
+material its binding places. The former `resourceRef` and `secretRef` input declaration
+fields are unknown.
 
 Effects declare how a supplied input is consumed. Their names belong to a
 closed vocabulary, unlike input names. Each effect entry sets exactly one
@@ -447,7 +449,7 @@ Red Hat OpenShift GitOps with its default Argo CD instance, a
 | `bootstrap.targetRevision` | string | yes, in the block | — | Branch, tag or commit; non-empty, no whitespace. |
 | `bootstrap.path` | string | yes, in the block | — | Relative path in the repository, `.` for its root; no leading `/` and no `..` segment. |
 | `bootstrap.destinationNamespace` | string | yes, in the block | — | DNS label; the namespace for manifests that name none. Naming `openshift-gitops` lets the repository's unscoped manifests write Argo CD's own namespace, including the placed repository Secret. |
-| `bootstrap.credentialsRef` | string | no | — | Name of a Secret of type `usernamePassword` read by Argo CD for the repository. |
+| `bootstrap.credentialsRef` | string | no | — | Name of a Secret of type `usernamePassword` read by Argo CD for the repository. Effect material: the package places it in the cluster as an [owned Secret](../add-ons.md#owned-secrets). |
 | `bootstrap.access.clusterRole` | string | no | — | Name of a ClusterRole granted to the default instance's application controller. |
 | `bootstrap.sync.automated` | boolean | no | `true` | Argo CD synchronizes automatically. |
 | `bootstrap.sync.prune` | boolean | no | `false` | Automated sync deletes what leaves the repository. |
@@ -491,19 +493,19 @@ parses, validates or repeats its contents.
 | `subscription` | object | yes | — | The [shared block](#subscription); `source` is required, with no default. |
 | `timeout` | string | no | `1h` | Positive Go duration of at most `5h50m`. |
 | `chartVersion` | string | yes | — | Semantic version `<major>.<minor>.<patch>` of the GitLab chart the `GitLab` resource names; the operator chooses one the installed operator release lists. |
-| `rootPasswordRef` | string | yes | — | `token` Secret holding the initial root password; GitLab reads it only when it first initializes its database. |
-| `tlsCertificateRef` | string | yes | — | `tlsCertificate` Secret whose certificate covers the three host names, for example a wildcard for the applications domain. |
-| `licenseRef` | string | no | — | `opaque` Secret holding an Enterprise Edition license. |
+| `rootPasswordRef` | string | yes | — | `token` Secret holding the initial root password; GitLab reads it only when it first initializes its database. Effect material: the package places it in the cluster as an [owned Secret](../add-ons.md#owned-secrets). |
+| `tlsCertificateRef` | string | yes | — | `tlsCertificate` Secret whose certificate covers the three host names, for example a wildcard for the applications domain. Effect material: the package places it in the cluster as an [owned Secret](../add-ons.md#owned-secrets). |
+| `licenseRef` | string | no | — | `opaque` Secret holding an Enterprise Edition license. Effect material: the package places it in the cluster as an [owned Secret](../add-ons.md#owned-secrets). |
 | `database.host` | string | yes | — | DNS name or IP address of a PostgreSQL server reachable from the cluster. |
 | `database.port` | integer | no | `5432` | `1..65535`. |
 | `database.name` | string | no | `gitlabhq_production` | Non-empty name of an existing empty database. |
 | `database.username` | string | yes | — | Non-empty user name with full access to the database. |
-| `database.passwordRef` | string | yes | — | `token` Secret holding that user's password. |
+| `database.passwordRef` | string | yes | — | `token` Secret holding that user's password. Effect material: the package places it in the cluster as an [owned Secret](../add-ons.md#owned-secrets). |
 | `redis.host` | string | yes | — | DNS name or IP address of a standalone Redis or Valkey server reachable from the cluster. |
 | `redis.port` | integer | no | `6379` | `1..65535`. |
-| `redis.passwordRef` | string | no | — | `token` Secret; when absent, GitLab connects without authentication. |
-| `objectStorage.connectionRef` | string | yes | — | `opaque` Secret whose value is the chart's consolidated object-storage connection document. |
-| `objectStorage.registryRef` | string | yes | — | `opaque` Secret whose value is the registry's storage driver document. |
+| `redis.passwordRef` | string | no | — | `token` Secret; when absent, GitLab connects without authentication. Effect material: the package places it in the cluster as an [owned Secret](../add-ons.md#owned-secrets). |
+| `objectStorage.connectionRef` | string | yes | — | `opaque` Secret whose value is the chart's consolidated object-storage connection document. Effect material: the package places it in the cluster as an [owned Secret](../add-ons.md#owned-secrets). |
+| `objectStorage.registryRef` | string | yes | — | `opaque` Secret whose value is the registry's storage driver document. Effect material: the package places it in the cluster as an [owned Secret](../add-ons.md#owned-secrets). |
 | `objectStorage.registryBucket` | string | no | `gitlab-registry-storage` | The bucket the registry document names. |
 | `gitaly.storageClass` | string | yes | — | DNS subdomain naming the StorageClass of Gitaly's ReadWriteOnce volume. |
 | `gitaly.size` | string | no | `50Gi` | Kubernetes quantity in `Gi` or `Ti`, at least `1Gi`. |

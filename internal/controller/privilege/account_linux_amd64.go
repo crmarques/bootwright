@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 )
 
@@ -19,13 +20,10 @@ func (Resolver) Resolve(ctx context.Context) (Account, error) {
 		uid: os.Getuid(), euid: os.Geteuid(), sudoUID: os.Getenv("SUDO_UID"), sudoGID: os.Getenv("SUDO_GID"), sudoUser: os.Getenv("SUDO_USER"),
 		sudoCommand: os.Getenv("SUDO_COMMAND"),
 	}
-	sudoParent := 0
+	sudoParentPID := 0
 	if request.euid == 0 && (request.sudoUID != "" || request.sudoGID != "" || request.sudoUser != "") {
-		sudo, err := QualifiedSudo()
-		sudoParent = os.Getppid()
-		parent, parentErr := os.Stat("/proc/" + strconv.Itoa(sudoParent) + "/exe")
-		trusted, trustedErr := os.Stat(sudo)
-		request.trustedParent = err == nil && parentErr == nil && trustedErr == nil && os.SameFile(parent, trusted)
+		sudoParentPID = os.Getppid()
+		request.trustedParent, request.selfCommand = sudoParent(request.sudoCommand)
 	}
 	directory, err := accountDirectoryAt(systemGetent, qualifiedSystemExecutable, systemAccountFiles)
 	if err != nil {
@@ -36,12 +34,23 @@ func (Resolver) Resolve(ctx context.Context) (Account, error) {
 	}
 	account, err := accountFrom(ctx, directory, request)
 	if err == nil && request.trustedParent {
-		if os.Getppid() != sudoParent {
+		if os.Getppid() != sudoParentPID {
 			return Account{}, accountRefusal{reexecutionOrphaned}
 		}
-		account.SudoParentPID = sudoParent
+		account.SudoParentPID = sudoParentPID
 	}
 	return account, err
+}
+
+func sudoParent(sudoCommand string) (trusted, self bool) {
+	sudo, err := QualifiedSudo()
+	parent, parentErr := os.Stat("/proc/" + strconv.Itoa(os.Getppid()) + "/exe")
+	qualified, qualifiedErr := os.Stat(sudo)
+	trusted = err == nil && parentErr == nil && qualifiedErr == nil && os.SameFile(parent, qualified)
+	path, _, _ := strings.Cut(sudoCommand, " ")
+	invoked, invokedErr := os.Stat(path)
+	running, runningErr := os.Stat("/proc/self/exe")
+	return trusted, filepath.IsAbs(path) && invokedErr == nil && runningErr == nil && os.SameFile(invoked, running)
 }
 
 func systemAccountFiles() (accountDirectory, error) {

@@ -1535,6 +1535,19 @@ func TestEveryBindingJoinsTheCapabilityContractSuite(t *testing.T) {
 	}
 }
 
+// TestEveryBindingNamesTheSecretsItsRequestReferences keeps a rebind from
+// guessing which blocks use a Secret: a capability this build offers that
+// cannot name them fails here rather than at an operator's rebind.
+func TestEveryBindingNamesTheSecretsItsRequestReferences(t *testing.T) {
+	resolver := buildCapabilities(systemClock{}, controllerDependencies{}, nil)
+	for _, binding := range resolver.Bindings() {
+		capability, found := resolver.Resolve(binding.Kind, binding.Implementation)
+		if _, named := capability.(lifecycle.SecretReferencer); !found || !named {
+			t.Errorf("%s/%s is offered by this build but cannot name the Secrets its request references", binding.Kind, binding.Implementation)
+		}
+	}
+}
+
 func contractTreePresence(t *testing.T, execution lifecycle.Execution) map[string]any {
 	t.Helper()
 	request, err := installation.DecodeTreeRequest(execution.Block.Request)

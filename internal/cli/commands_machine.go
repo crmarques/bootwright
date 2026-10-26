@@ -40,7 +40,7 @@ func machineCommands() []commandSpec {
 func machineExecCommand() commandSpec {
 	spec := sessionCommand(commandSpec{path: "machine exec", short: "Run a command over SSH", flags: []flagSpec{machineNamesFlag()}, payload: true})
 	spec.long = strings.Replace(spec.long, "The exit status is the client's.", "The exit status is the client's. "+
-		"--name takes a comma-separated list: the command runs on every listed machine at once, each output line is "+
+		"--name takes a comma-separated list: the command runs on every listed machine concurrently, at most eight at a time, each output line is "+
 		"prefixed by its machine, and the exit status is the highest any client returned.", 1)
 	return spec
 }

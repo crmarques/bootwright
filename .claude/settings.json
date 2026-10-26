@@ -44,6 +44,7 @@
       "Bash(*bootwright *secret show*)",
       "Bash(*bootwright *controller rebind*)",
       "Bash(*bootwright *cluster info*--secrets*)",
+      "Bash(*bootwright *cluster info*--object-user*)",
       "Bash(*bootwright *render*--sensitive*)",
       "Bash(sudo *)",
       "Bash(*ansible-playbook*)"

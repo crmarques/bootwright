@@ -204,7 +204,7 @@ func (s Service) inspection(ctx context.Context, view RunView, store recordReade
 	}
 	setup := view.Controller()
 	execution := Execution{
-		Context: view.Identity().Name, ApplyOperation: read.owning.ID, ApplyProved: proved, Block: block,
+		Context: view.Identity().Name, Incarnation: view.Identity().Incarnation, ApplyOperation: read.owning.ID, ApplyProved: proved, Block: block,
 		Launch: launch, Material: material,
 		LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
 			return s.locateTool(inner, store, setup, read.context.Name, read.owning, read.owningPlan, tool)

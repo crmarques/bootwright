@@ -474,9 +474,13 @@ func effectGrants() map[string][]string {
 		"internal/cli":                             {"fmt.Fprintf", "fmt.Fprintln", "github.com/spf13/cobra", "github.com/spf13/pflag", "io"},
 		// The input adapter reads through the handles it holds and names no
 		// other os member.
-		readOnlyInput:                           {"io", "os.File", "os.NewFile", "syscall"},
-		"internal/desiredstate/yamlstream":      {"io"},
-		"internal/workspace/contextfs":          {"crypto/rand", "io", "os", "syscall", "unsafe"},
+		readOnlyInput:                      {"io", "os.File", "os.NewFile", "syscall"},
+		"internal/desiredstate/yamlstream": {"io"},
+		// The context store reads a held directory's birth time or inode
+		// generation, which tell a recreated context from the one it replaced.
+		"internal/workspace/contextfs": {"crypto/rand", "golang.org/x/sys/unix.AT_EMPTY_PATH",
+			"golang.org/x/sys/unix.IoctlGetInt", "golang.org/x/sys/unix.STATX_BTIME", "golang.org/x/sys/unix.Statx", "golang.org/x/sys/unix.Statx_t",
+			"io", "os", "syscall", "unsafe"},
 		"internal/workspace/selectionfs":        {"crypto/rand", "io", "os", "os/exec", "syscall"},
 		"internal/workspace/contexts":           {"io"},
 		"internal/secrets/material":             {"crypto/rand", "io", "net.IP", "os", "syscall"},

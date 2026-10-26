@@ -351,8 +351,8 @@ func dispatchFlags() *pflag.FlagSet {
 	for name, value := range map[string]string{
 		"context": "example", "name": "demo", "client": "vm-disks", "ssh-id-file": "key.pem",
 		"ssh-user": "operator", "clusters": "first,second", "machines": "node-a,node-b",
-		"replace": "node-b", "node": "node-a", "version": "", "part": "private-key",
-		"from-file": "", "from-url": "https://example.invalid/image.iso",
+		"replace": "node-b", "expect": "", "object-user": "", "node": "node-a", "version": "", "part": "private-key",
+		"from-file": "", "from-url": "https://example.invalid/image.iso", "from-url-file": "",
 		"sha256":     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		"value-file": "secret.bin", "password-file": "", "certificate-file": "",
 		"private-key-file": "", "public-key-file": "", "type": "local-keyring",

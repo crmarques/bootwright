@@ -26,6 +26,15 @@ func TestSSHConnectionsShareNoControlConnection(t *testing.T) {
 	}
 }
 
+// A task placed on a remote host that receives material runs with pipelining,
+// so the module payload that carries a lent value crosses the connection's
+// standard input and no remote temporary file (specs/security.md#sensitive-material).
+func TestRemotePlacedTasksRunWithPipelining(t *testing.T) {
+	if value, ok := configured(t, "ssh_connection", "pipelining"); !ok || value != "True" {
+		t.Fatalf("ansible.cfg sets ssh_connection pipelining to %q, so a module payload is written to a remote temporary file", value)
+	}
+}
+
 // ansible-core only warns by default when it loads a collection whose
 // requires_ansible excludes it. The collection is qualified for one minor, so
 // running it under another is refused instead. That the pinned ansible-core

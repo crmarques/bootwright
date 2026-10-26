@@ -71,7 +71,12 @@ def test_the_observation_hands_over_a_whole_kept_kubeconfig_privately_before_it_
         "containercluster_media_agent_kept.stat.isreg | default(false)",
         "containercluster_media_agent_kept.stat.size | default(0) > 0",
         "containercluster_media_agent_kept.stat.size | default(0) <= containercluster_media_agent_kubeconfig_bound",
+        "not (containercluster_media_agent_foreign | bool)",
     ]
+    receipt = position(entries, lambda task: task.get("register") == "containercluster_media_agent_built")
+    assert receipt < copy
+    assert entries[receipt]["ansible.builtin.slurp"] == {"src": "{{ containercluster_media_agent_receipt }}"}
+    assert entries[receipt]["when"] == OUTPUT + " is defined"
 
 
 def test_only_the_observation_offers_it():

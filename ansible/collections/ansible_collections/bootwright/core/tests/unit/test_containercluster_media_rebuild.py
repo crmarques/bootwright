@@ -20,6 +20,7 @@ own tests stay beside its module.
 
 from __future__ import annotations
 
+import base64
 import itertools
 import json
 import os
@@ -178,8 +179,52 @@ def media_scope(tmp_path, observation, **variables):
 
 
 def refusal():
-    return one([task for task in tasks(MEDIA, "apply.yml") if "ansible.builtin.fail" in task],
-               "refuse a rebuild")
+    return one([task for task in tasks(MEDIA, "apply.yml") if "ansible.builtin.fail" in task
+                and task["name"].startswith("Refuse to rebuild")], "refuse a rebuild")
+
+
+def incarnation_refusal():
+    return one([task for task in tasks(MEDIA, "apply.yml") if "ansible.builtin.fail" in task
+                and task["name"].startswith("Refuse a work area an earlier context")], "refuse another incarnation")
+
+
+def receipt_of(incarnation):
+    content = {"inputs": DIGEST, "installer": RELEASE}
+    if incarnation is not None:
+        content["incarnation"] = incarnation
+    return {"content": base64.b64encode(json.dumps(content).encode()).decode()}
+
+
+INCARNATIONS = {
+    "another incarnation": (receipt_of("64769:9999"), True),
+    "this incarnation": (receipt_of("64769:4242"), False),
+    "a receipt an earlier build wrote": (receipt_of(None), False),
+    "no receipt": ({"failed": True, "msg": "file not found"}, False),
+}
+
+
+@pytest.mark.parametrize("built, foreign", INCARNATIONS.values(), ids=INCARNATIONS.keys())
+def test_a_work_area_another_incarnation_built_is_refused_before_any_effect(tmp_path, built, foreign):
+    task = incarnation_refusal()
+    scope = media_scope(tmp_path, dict(PUBLISHED), containercluster_media_agent_built=built,
+                        bootwright_cluster_media_material={"incarnation": "64769:4242"})
+    rendering = Templar(loader=LOADER, variables=scope)
+    assert rendering.evaluate_conditional(task["when"]) is foreign
+    message = rendering.template(task["ansible.builtin.fail"]["msg"])
+    assert message.startswith("the work area %s of cluster sno was built by an earlier context named lab" % request(tmp_path)["workRoot"])
+    assert "64769" not in message
+    apply = tasks(MEDIA, "apply.yml")
+    read = one([index for index, entry in enumerate(apply) if entry.get("register") == "containercluster_media_agent_built"], "read the receipt")
+    included = one([index for index, entry in enumerate(apply) if entry.get("ansible.builtin.include_tasks") == "build.yml"], "include the build")
+    assert read < apply.index(task) < included
+    assert not {"failed_when", "ignore_errors"} & set(task)
+
+
+def test_the_receipt_records_the_incarnation_that_built_the_area():
+    receipt = one([task for task in tasks(MEDIA, "build.yml")
+                   if str((task.get("ansible.builtin.copy") or {}).get("dest", "")) == "{{ containercluster_media_agent_receipt }}"],
+                  "record the receipt")
+    assert "'incarnation': bootwright_cluster_media_material.incarnation" in receipt["ansible.builtin.copy"]["content"]
 
 
 def refuses(tmp_path, observation):

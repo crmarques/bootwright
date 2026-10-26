@@ -12,6 +12,7 @@
             and bootwright_cluster_media_request.image.url == '')
       - bootwright_cluster_media_request.workRoot.startswith('/var/lib/bootwright-clusters/')
       - bootwright_cluster_media_digest is match('[0-9a-f]{64}')
+      - bootwright_cluster_media_material.incarnation | default('') is match('^[0-9]+:[0-9]+:(b[0-9]+[.][0-9]+|g[0-9]+)$')
     quiet: true
   no_log: true
 
@@ -33,6 +34,26 @@
   bootwright.core.containercluster_media_layout:
     request: '{{ bootwright_cluster_media_request }}'
     operation: remove
+
+- name: Read which context incarnation built the work area
+  ansible.builtin.slurp:
+    src: '{{ containercluster_media_agent_receipt }}'
+  register: containercluster_media_agent_built
+  failed_when: false
+
+# An area an earlier context of the same name built holds that context's
+# installer state, and may hold the only administrator access to a cluster
+# this context never installed, so it is kept and the removal refuses.
+- name: Refuse to remove a work area an earlier context of the same name built
+  ansible.builtin.fail:
+    msg: >-
+      the work area {{ containercluster_media_agent_work }} of cluster
+      {{ bootwright_cluster_media_request.identity.cluster }} was built by an earlier
+      context named {{ bootwright_cluster_media_request.identity.context }}, which
+      left it when it was deleted, and holds that context's installer state;
+      nothing was removed. Confirm nothing uses that area, remove it by hand, then
+      repeat bootwright destroy --context {{ bootwright_cluster_media_request.identity.context }}
+  when: containercluster_media_agent_foreign | bool
 
 - name: Remove the subtree this block owns beneath the served root
   ansible.builtin.file:

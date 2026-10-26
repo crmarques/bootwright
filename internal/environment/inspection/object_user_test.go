@@ -2,13 +2,17 @@ package inspection
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-func TestObjectUserCredentialsRequireExplicitClusterSecrets(t *testing.T) {
+// --secrets alone reveals only the dashboard password; --object-user <name>
+// reveals that one user's keys and nothing else (D183, Q116).
+func TestObjectUserCredentialsRequireTheirOwnSelector(t *testing.T) {
 	f := newFixture(t)
 	objects := append(f.catalog.Objects(), api.NewObject(api.StorageObjectUser, "documents", api.Value{}, api.MapValue(field("clusterRef", text("storage")), field("objectGatewayRef", text("objects")))), api.NewObject(api.StorageObjectGateway, "objects", api.Value{}, api.MapValue(field("clusterRef", text("storage")))))
 	f.catalog = api.NewCatalog(objects)
@@ -18,8 +22,13 @@ func TestObjectUserCredentialsRequireExplicitClusterSecrets(t *testing.T) {
 		t.Fatal("ordinary info read private object material", err)
 	}
 	result, err = f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, Secrets: true})
-	if err != nil || len(f.objectReads) != 1 || len(result.Storage[0].Ceph.ObjectUsers) != 1 {
-		t.Fatal("explicit private handoff did not return owned object credentials", err)
+	if err != nil || len(f.objectReads) != 0 || len(result.Storage[0].Ceph.ObjectUsers) != 0 || !result.Storage[0].Ceph.Dashboard.Revealed {
+		t.Fatal("--secrets revealed object material or no dashboard password", err)
+	}
+	ClearSecrets(result)
+	result, err = f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, ObjectUser: "documents"})
+	if err != nil || len(f.objectReads) != 1 || len(result.Storage[0].Ceph.ObjectUsers) != 1 || result.Storage[0].Ceph.Dashboard != nil && result.Storage[0].Ceph.Dashboard.Revealed {
+		t.Fatal("--object-user did not reveal that user's keys alone", err)
 	}
 	ClearSecrets(result)
 }
@@ -28,10 +37,10 @@ func TestObjectUserHandoffRefusesUnprovedCustodyAndClearsOtherSecrets(t *testing
 	f := newFixture(t)
 	f.catalog = api.NewCatalog(append(f.catalog.Objects(), api.NewObject(api.StorageObjectUser, "documents", api.Value{}, api.MapValue(field("clusterRef", text("storage")), field("objectGatewayRef", text("objects")))), api.NewObject(api.StorageObjectGateway, "objects", api.Value{}, api.MapValue(field("clusterRef", text("storage"))))))
 	f.objectUsers = map[string]Custodied{"documents": {Unproved: true, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.UsernamePart: []byte("ACCESS"), secrets.PasswordPart: []byte("PRIVATE")})}}
-	if result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, Secrets: true}); err == nil || result != nil {
+	if result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, ObjectUser: "documents"}); err == nil || result != nil {
 		t.Fatal("unproved credentials were revealed")
 	}
-	for _, material := range []secrets.Material{f.passwords["storage"].Material, f.objectUsers["documents"].Material} {
+	for _, material := range []secrets.Material{f.objectUsers["documents"].Material} {
 		for _, part := range material.Parts() {
 			value, _ := material.Part(part)
 			for _, b := range value {
@@ -68,11 +77,10 @@ func assertHandoffCleared(t *testing.T, materials ...secrets.Material) {
 func TestObjectUserHandoffDoesNotReadForeignClusterCustody(t *testing.T) {
 	f := newFixture(t)
 	f.catalog = api.NewCatalog(append(f.catalog.Objects(), handoffUser("foreign", "archive", "absent-gateway")))
-	result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, Secrets: true})
-	if err != nil || result == nil || len(f.objectReads) != 0 {
+	result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, ObjectUser: "foreign"})
+	if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "access.target" || result != nil || len(f.objectReads) != 0 {
 		t.Fatal("foreign user reached custody", err, f.objectReads)
 	}
-	ClearSecrets(result)
 }
 
 func TestObjectUserHandoffRefusesChangedScopeBeforeCustody(t *testing.T) {
@@ -89,17 +97,18 @@ func TestObjectUserHandoffRefusesChangedScopeBeforeCustody(t *testing.T) {
 			}
 			f.catalog = api.NewCatalog(objects)
 			f.objectUnproved = scenario == "unproved-original-scope"
-			result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, Secrets: true})
+			result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, ObjectUser: "documents"})
 			if err == nil || result != nil || len(f.objectReads) != 0 {
 				t.Fatal("changed scope read custody", err, f.objectReads)
 			}
-			assertHandoffCleared(t, f.passwords["storage"].Material)
 		})
 	}
 }
 
-func TestObjectUserHandoffLateFailureClearsEarlierUserAndDashboard(t *testing.T) {
-	for _, scenario := range []string{"missing", "unproved", "malformed"} {
+// Only the selected user's custody is read: a refusal of it reads no other
+// user's, and a name the cluster does not declare reads nothing.
+func TestObjectUserHandoffReadsOnlyTheSelectedUser(t *testing.T) {
+	for _, scenario := range []string{"missing", "unproved", "malformed", "undeclared"} {
 		t.Run(scenario, func(t *testing.T) {
 			f := newFixture(t)
 			f.catalog = api.NewCatalog(append(f.catalog.Objects(), handoffUser("z-last", "storage", "objects"), handoffUser("a-first", "storage", "objects"), api.NewObject(api.StorageObjectGateway, "objects", api.Value{}, api.MapValue(field("clusterRef", text("storage"))))))
@@ -112,15 +121,19 @@ func TestObjectUserHandoffLateFailureClearsEarlierUserAndDashboard(t *testing.T)
 				last = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("PRIVATE")})
 				f.objectUsers["z-last"] = Custodied{Material: last}
 			}
-			result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, Secrets: true})
-			if err == nil || result != nil || len(f.objectReads) != 2 || f.objectReads[0] != "lab/a-first" || f.objectReads[1] != "lab/z-last" {
-				t.Fatal("late refusal did not follow sorted users", err, f.objectReads)
+			selected, reads := "z-last", []string{"lab/z-last"}
+			if scenario == "undeclared" {
+				selected, reads = "absent", nil
 			}
-			assertHandoffCleared(t, first, f.passwords["storage"].Material)
-			if scenario != "missing" {
+			result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, ObjectUser: selected})
+			if err == nil || result != nil || !slices.Equal(f.objectReads, reads) {
+				t.Fatal("the refusal read other custody", err, f.objectReads)
+			}
+			if scenario != "missing" && scenario != "undeclared" {
 				assertHandoffCleared(t, last)
 			}
 			last.Clear()
+			first.Clear()
 		})
 	}
 }

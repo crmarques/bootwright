@@ -50,6 +50,7 @@ type Acquirer struct {
 	client *http.Client
 	proxy  func(*http.Request) (*url.URL, error)
 	files  Files
+	input  func(context.Context, []byte) (int, error)
 }
 
 func New(proxy func(*http.Request) (*url.URL, error), files Files) Acquirer {
@@ -391,4 +392,81 @@ func (d *download) Close() error {
 // failure names the absolute path of a file source, and nothing for a URL.
 func failure(message, source, remediation string) error {
 	return diagnostics.NewFailureWithRemediation("media.store", message, source, remediation)
+}
+
+const MaxURLFileBytes = 16 * 1024
+
+func (a Acquirer) Reading(input func(context.Context, []byte) (int, error)) Acquirer {
+	a.input = input
+	return a
+}
+
+func (a Acquirer) ReadURL(ctx context.Context, path string) (string, error) {
+	buffer := make([]byte, MaxURLFileBytes+2)
+	defer clear(buffer)
+	read, err := a.readURLSource(ctx, path, buffer)
+	if err != nil {
+		return "", err
+	}
+	line := buffer[:read]
+	if len(line) > 0 && line[len(line)-1] == '\n' {
+		line = line[:len(line)-1]
+	}
+	switch {
+	case read > MaxURLFileBytes+1 || len(line) > MaxURLFileBytes:
+		return "", failure("the media URL source holds more than "+strconv.Itoa(MaxURLFileBytes)+" bytes", "", "hold exactly one HTTPS URL in it")
+	case len(line) == 0 || slicesContainsLineBreak(line):
+		return "", failure("the media URL source does not hold exactly one URL line", "", "hold exactly one HTTPS URL in it, optionally ending in a line feed")
+	}
+	return string(line), nil
+}
+
+func slicesContainsLineBreak(line []byte) bool {
+	for _, b := range line {
+		if b == '\n' || b == '\r' || b == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (a Acquirer) readURLSource(ctx context.Context, path string, buffer []byte) (int, error) {
+	if path == "-" {
+		if a.input == nil {
+			return 0, failure("the media URL cannot be read from standard input here", "", "")
+		}
+		return readFull(func(b []byte) (int, error) { return a.input(ctx, b) }, buffer, len(buffer))
+	}
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return 0, failure("the media URL file path cannot be resolved", path, "name a readable file holding the URL")
+	}
+	if a.files == nil {
+		return 0, failure("the media source opener is not configured", absolute, "")
+	}
+	file, err := a.receive(ctx, absolute)
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return 0, failure("the media URL file is not a regular file", absolute, "name a regular file holding the URL")
+	}
+	return readFull(file.Read, buffer, int(min(info.Size(), int64(len(buffer)))))
+}
+
+func readFull(read func([]byte) (int, error), buffer []byte, size int) (int, error) {
+	total := 0
+	for total < size {
+		n, err := read(buffer[total:size])
+		total += n
+		if err != nil {
+			return total, failure("the media URL source could not be read", "", "")
+		}
+		if n == 0 {
+			return total, nil
+		}
+	}
+	return total, nil
 }

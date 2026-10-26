@@ -717,7 +717,13 @@ names, with no redirect and bounded requests, under the
 [verification and refusal rules](security.md#network-remote-systems-and-privilege)
 of a host cluster's kubeconfig; `virtctl image-upload` is the one command the
 arm runs. The kubeconfig is lent to a run as an operation-scoped file and
-removed on every return.
+removed on every return. It is an
+[access credential](secrets.md#immutable-binding-and-contexts): the arm's
+blocks present it only to authenticate, so a continuation or removal over a
+token that expired or was rotated since its operation bound it presents the
+current version through the
+[access-credential rebind](state-reconciliation.md#access-credential-rebind),
+and every ownership proof the arm runs is unchanged.
 
 The machine block of each Machine creates, once, a VirtualMachine with
 `runStrategy: Manual`, so no later write changes its power, and a root

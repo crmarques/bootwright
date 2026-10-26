@@ -93,6 +93,10 @@ type StoreSession interface {
 	Close() error
 }
 
+type Rebinder interface {
+	Rebind(ctx context.Context, binding string, replacements []BoundInput) (Binding, error)
+}
+
 type ImplementationResolver interface {
 	Types() []string
 	Select(string) (SecretStoreImplementation, error)

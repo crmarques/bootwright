@@ -535,3 +535,11 @@ func (Capability) Quiescent(ctx context.Context, probe lifecycle.Probe) (lifecyc
 	}
 	return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: survivingReason, Remedy: survivingRemedy}, nil
 }
+
+func (c Capability) AccessCredentials(block reconciliation.Block) ([]string, error) {
+	r, err := DecodeRequest(block.Request)
+	if err != nil {
+		return nil, err
+	}
+	return []string{r.RegistryRef}, nil
+}

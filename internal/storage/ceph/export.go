@@ -60,6 +60,13 @@ type ExportRequest struct {
 }
 
 func (r ExportRequest) Canonical() ([]byte, error) { return reconciliation.Freeze(r, "Ceph export") }
+
+func (r ExportRequest) SecretReferences() []string {
+	if r.Gateway == nil {
+		return nil
+	}
+	return lifecycle.SecretNames(r.Gateway.CertificateRef)
+}
 func DecodeExportRequest(data []byte) (ExportRequest, error) {
 	r, err := reconciliation.ThawVersion[ExportRequest](data, "Ceph export", ExportVersion)
 	if err != nil {

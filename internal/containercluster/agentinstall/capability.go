@@ -301,7 +301,7 @@ func (c MediaCapability) runWithOutputs(ctx context.Context, execution lifecycle
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	values := map[string]string{}
+	values := map[string]string{"incarnation": execution.Incarnation}
 	var materials []lifecycle.MaterialFile
 	if operation == "apply" {
 		installer, err := ToolPath(ctx, execution, request.Tool, request.Tool.Kind)

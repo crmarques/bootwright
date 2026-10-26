@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/url"
 
@@ -39,7 +41,7 @@ func localMediaDependencies(store media.Store, confirmer media.Confirmer, progre
 		sources = mediaFiles{files: files}
 	}
 	return mediaDependencies{
-		Store: store, Acquirer: medialocal.New(mediaRoute(route), sources), Confirmer: confirmer,
+		Store: store, Acquirer: medialocal.New(mediaRoute(route), sources).Reading(readStdinToEnd), Confirmer: confirmer,
 		Progress: cli.NewMediaProgress(progress), Presenter: presenter,
 	}
 }
@@ -66,4 +68,12 @@ func mediaRoute(route controller.Route) func(*http.Request) (*url.URL, error) {
 		return func(*http.Request) (*url.URL, error) { return nil, err }
 	}
 	return func(request *http.Request) (*url.URL, error) { return selector(request.URL), nil }
+}
+
+func readStdinToEnd(ctx context.Context, buffer []byte) (int, error) {
+	n, err := readStdin(ctx, buffer)
+	if errors.Is(err, io.EOF) {
+		return n, nil
+	}
+	return n, err
 }

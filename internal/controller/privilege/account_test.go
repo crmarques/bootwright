@@ -69,9 +69,12 @@ func TestARootShellOfSudoResolvesAsDirectRoot(t *testing.T) {
 		name          string
 		command       string
 		trustedParent bool
+		selfCommand   bool
 		uid           int
 		home, reason  string
 	}{
+		{name: "a path re-execution whose sudo is gone", command: "/usr/local/bin/bootwright status", selfCommand: true, reason: "the sudo parent of this re-execution is gone"},
+		{name: "a path re-execution under its sudo", command: "/usr/local/bin/bootwright status", selfCommand: true, trustedParent: true, uid: 1001, home: "/home/operator"},
 		{name: "a login shell of sudo -i", command: "/bin/bash", uid: 0, home: "/root"},
 		{name: "a shell of sudo -s", command: "/bin/bash -c bootwright status", uid: 0, home: "/root"},
 		{name: "metadata without a command", uid: 0, home: "/root"},
@@ -83,7 +86,7 @@ func TestARootShellOfSudoResolvesAsDirectRoot(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			request := metadata
-			request.sudoCommand, request.trustedParent = test.command, test.trustedParent
+			request.sudoCommand, request.trustedParent, request.selfCommand = test.command, test.trustedParent, test.selfCommand
 			got, err := accountFrom(context.Background(), files, request)
 			if test.reason != "" {
 				var refusal accountRefusal

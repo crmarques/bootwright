@@ -1330,13 +1330,14 @@ generates one S3 key pair when none is given
 ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/rgw/radosgw-admin/radosgw-admin.cc#L6872-L6875)),
 and it accepts keys only as command-line arguments, which Bootwright never
 fills with secret bytes. The pair crosses only the command's output into the
-worker, is retained in the bootstrap host's protected custody area before the
-block reports, and becomes the block's produced material `object-user`, the
+worker, is retained on the bootstrap host under
+[native-side retention](secrets.md#native-side-retention) before the block
+reports, and becomes the block's produced material `object-user`, the
 canonical JSON `{"accessKey", "secretKey", "uid"}`; a retry reads it back and
 never rotates it. Bootwright retains any key of 1 to 128 visible ASCII
 characters other than `&`, `<` and `>`, which the canonical JSON escapes, and
-pins no build's key format. The pair is revealed only as
-[storage dashboard access](cli.md#storage-dashboard-access) defines;
+pins no build's key format. The pair is revealed only by the one command
+[produced material](secrets.md#produced-material) lists for it;
 [B489](milestones/m2.md#b489) owns the rest of access handoff.
 
 Admission refuses, before any effect: a gateway of another cluster, the user ID

@@ -247,6 +247,14 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 	}))
 }
 
+func (c MachineCapability) AccessCredentials(block reconciliation.Block) ([]string, error) {
+	request, err := DecodeRequest(block.Request)
+	if err != nil || request.Controller.CredentialsRef == "" {
+		return nil, err
+	}
+	return []string{request.Controller.CredentialsRef}, nil
+}
+
 var systemToken = regexp.MustCompile(`^[0-9a-z][0-9a-z._-]{0,127}$`)
 
 func (MachineCapability) ProvedClaim(contextName string, block reconciliation.Block, evidence json.RawMessage) (prerequisites.HostReservation, bool, error) {

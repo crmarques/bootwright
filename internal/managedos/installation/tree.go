@@ -36,6 +36,10 @@ type TreeRequest struct {
 }
 
 func (r TreeRequest) Canonical() ([]byte, error) { return reconciliation.Freeze(r, "package tree") }
+
+func (r TreeRequest) SecretReferences() []string {
+	return lifecycle.SecretNames(append(r.Placement.SecretReferences(), r.Publication.CertificateRef)...)
+}
 func DecodeTreeRequest(data []byte) (TreeRequest, error) {
 	return reconciliation.ThawVersion[TreeRequest](data, "package tree", TreeImplementation)
 }

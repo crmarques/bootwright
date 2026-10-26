@@ -25,9 +25,10 @@ type BeginInvocation func(context.Context) (context.Context, func())
 // context record's mode, which a lifecycle read admits only while it is ready;
 // status reports it and no capability reads it.
 type ContextIdentity struct {
-	Name     string
-	Revision string
-	Mode     string
+	Name        string
+	Revision    string
+	Mode        string
+	Incarnation string
 }
 
 // View is a coherent read of everything an operation reasons about, taken
@@ -131,6 +132,22 @@ type SecretBinder interface {
 	Produce(context.Context, secretstore.Context, secretstore.Area, custody.ProduceRequest) ([]secretstore.Produced, error)
 	Holds(ctx context.Context, selected secretstore.Context, area secretstore.Area, block, name string) (bool, error)
 	Withdraw(context.Context, secretstore.Context, secretstore.Area) (bool, error)
+}
+
+type AccessCredentialReader interface {
+	AccessCredentials(reconciliation.Block) ([]string, error)
+}
+
+type SecretReferencer interface {
+	SecretReferences(reconciliation.Block) ([]string, error)
+}
+
+type ProducedIdentifier interface {
+	ProducedIdentity(block reconciliation.Block, name string, material secrets.Material) (string, error)
+}
+
+type CredentialRebinder interface {
+	Rebind(context.Context, custody.RebindRequest) (secretstore.Binding, error)
 }
 
 type HostIdentity interface {
@@ -502,7 +519,8 @@ type Execution struct {
 	// names and the current destroy operation are not identity inputs.
 	ApplyOperation string
 	// Context scopes diagnostics and adapter jobs to this operation's context; it is not frozen.
-	Context string
+	Context     string
+	Incarnation string
 	// Continuation is the exact command that continues this apply, bound to
 	// its context and carrying every token its frozen plan consumes; empty
 	// for a destroy, a resolution and a probe, whose next command depends on

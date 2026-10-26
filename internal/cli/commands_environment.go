@@ -30,7 +30,8 @@ func environmentClusterCommands() []commandSpec {
 			" Applicable to all selected ContainerClusters and StorageClusters, including external storage clusters." +
 			" A managed Ceph StorageCluster also reports its release, FSID, frozen image, monitors and administrator command." +
 			" --name takes a comma-separated list." +
-			" --secrets requires --name naming exactly one cluster and applies to managed Ceph StorageClusters only.", flags: []flagSpec{stringFlag("name", "Select comma-separated cluster names (default: all)"), boolFlag("secrets", "Include explicitly selected sensitive values")}}),
+			" --secrets and --object-user each require --name naming exactly one cluster and apply to managed Ceph StorageClusters only:" +
+			" --secrets reveals the dashboard administrator password, and --object-user <name> reveals that StorageObjectUser's S3 keys alone.", flags: []flagSpec{stringFlag("name", "Select comma-separated cluster names (default: all)"), boolFlag("secrets", "Reveal the dashboard administrator password"), stringFlag("object-user", "Reveal the S3 keys of this one StorageObjectUser")}}),
 		available(clusterSessionCommand(commandSpec{path: "cluster rsh", short: "Open an SSH session on a cluster node's Machine"})),
 		available(clusterExecCommand()),
 	}
@@ -53,7 +54,7 @@ func clusterExecCommand() commandSpec {
 			stringFlag("node", "Select declared nodes by comma-separated name, then FQDN (default: each cluster's first node in name order)")}})
 	spec.long += " --name takes a comma-separated list, and each cluster runs the command on the Machine behind its first node in name order." +
 		" --node takes a comma-separated list and selects those nodes, by name then by FQDN, in every listed cluster that declares them." +
-		" The command runs on every resolved Machine at once, each output line is prefixed by its Machine, and the exit status is the highest any client returned." +
+		" The command runs on every resolved Machine concurrently, at most eight at a time, each output line is prefixed by its Machine, and the exit status is the highest any client returned." +
 		clusterSessionLimits
 	return spec
 }
@@ -123,6 +124,7 @@ func (s Services) invokeEnvironmentInspection(ctx context.Context, path string, 
 			ContextName: values.text("context"),
 			Names:       values.names("name"),
 			Secrets:     values.boolean("secrets"),
+			ObjectUser:  values.text("object-user"),
 		}, s.EnvironmentInspection.ClusterInfo)
 		return commandResult{clusterInfo: result}, err
 	case "cluster keyring":

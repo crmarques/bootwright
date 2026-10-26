@@ -280,7 +280,6 @@ Alias cell.
 | [B814](#b814) | new, 2026-10-26 (spec audit P1-G) | enabling | Desired state | Owner API shape decisions for ContainerCluster, Storage, Machine and union rules | Audit roadmap work; implemented only on an explicit lane request |
 | [B815](#b815) | new, 2026-10-26 (spec audit P1-H) | enabling | Milestones | Portfolio separated from envelope; Requires state real dependencies; one clause queue | Audit roadmap work; implemented only on an explicit lane request |
 | [B816](#b816) | new, 2026-10-26 (spec audit P1-I) | safety | State reconciliation and Controller setup | Recovery refusals, partial-removal readings and host probes match the rules | Audit roadmap work; implemented only on an explicit lane request |
-| [B817](#b817) | new, 2026-10-26 (spec audit P1-J) | safety | Secrets and CLI | Bounded exec sessions, tool digest refusal test and settled custody reveals | Audit roadmap work; implemented only on an explicit lane request |
 | [B819](#b819) | new, 2026-10-26 (spec audit P2-A) | enabling | Milestones and Agent guidance | Milestone page openings budgeted, waiver history in decisions, per-decision anchors | Audit roadmap work; implemented only on an explicit lane request |
 | [B820](#b820) | new, 2026-10-26 (spec audit P2-B) | enabling | Agent guidance and Verification tooling | Section-level index rows and docs gates for budgets, reachability and history links | Audit roadmap work; implemented only on an explicit lane request |
 | [B821](#b821) | new, 2026-10-26 (spec audit P2-C) | enabling | Storage and Workspace | Each storage kind's fields on one page; restated lifecycle rules reduced to links | Audit roadmap work; implemented only on an explicit lane request |
@@ -293,7 +292,6 @@ Alias cell.
 | [B828](#b828) | new, 2026-10-26 (spec audit L6) | enabling | Add-ons | Reserved CustomPlaybook and ClusterAddon step shapes settled; example notes its target | Audit roadmap work; implemented only on an explicit lane request |
 | [B829](#b829) | new, 2026-10-26 (spec audit L7) | safety | Secrets | Work-area incarnation check, pipelined material payloads and fixed producer identity | Audit roadmap work; implemented only on an explicit lane request |
 | [B830](#b830) | new, 2026-10-26 (spec audit L8) | safety | State reconciliation and Add-ons | Unknown-operation rows allow continuation; add-on receipts carry their ownership basis | Audit roadmap work; implemented only on an explicit lane request |
-| [B831](#b831) | new, 2026-10-26 (spec audit L9) | safety | Controller setup and CLI | Elevation re-executes a root-owned install by path and refuses foreign variables | Audit roadmap work; implemented only on an explicit lane request |
 | [B833](#b833) | new, 2026-10-26 (spec audit L11) | enabling | Desired state | Examples drop defaulted values, gain an external-services scenario, distinct Environment names | Audit roadmap work; implemented only on an explicit lane request |
 | [B835](#b835) | new, 2026-10-26 (spec audit L13) | safety | Storage and CLI | Plan and status show a StorageExport's realm-wide grant | Audit roadmap work; implemented only on an explicit lane request |
 | [B837](#b837) | new, 2026-10-26 (D183, Q118) | product | Add-ons and CLI | Authored add-on ordering and an apply that stops after a named add-on | Lane I work under D182; implemented in its lane |
@@ -3058,6 +3056,13 @@ keeps D37's two exits until the owner decides.
 succeeds only through the chosen exit while the ownership proof still runs, and
 that an effect-material Secret refuses it; `make check` passes.
 
+**Partly delivered** on 2026-10-26 by X166: every Secret reference in
+`specs/api` names its class, held by `TestDocsSecretReferencesNameTheirClass`,
+and `--authorize rebind=<secret>` is the recorded access-credential rebind
+exit (D183, Q70), classified through each capability's Secret references.
+**Remains:** classifying the KubeVirt `kubeconfigRef` and the vCenter login
+when those arms exist ([B87](m1.md#b87), [B99](m1.md#b99)).
+
 ### B807
 
 **Owner:** Desired state and Architecture. **Kind:** safety.
@@ -3481,55 +3486,6 @@ their Not yet met lines point here.
 
 **Exit evidence:** the P1-I roadmap exit (F09-01 stays open until the owner
 reopens D38); the goldens and tests above pass; `make check` passes.
-
-### B817
-
-**Owner:** Secrets and CLI. **Kind:** safety. **Requires:** B805; owner
-decisions [Q97](#audit-remediation-decisions), [Q98](#audit-remediation-decisions),
-[Q99](#audit-remediation-decisions), [Q100](#audit-remediation-decisions) and
-[Q101](#audit-remediation-decisions) for their parts. **Definition:** Specified.
-Roadmap step P1-J of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings CX-R9,
-F11-01, F11-02, F11-03, F11-08, R2-04-02, R2-04-03, R2-04-04. Remote trust,
-tool authenticity and custody reveals each have one stated rule the code
-follows.
-
-**Specs:** [remote principals](../security.md#remote-principals),
-[supply chain](../security.md#cryptography-and-supply-chain) with the
-controller.md tool checksum table,
-[direct SSH sessions](../security.md#direct-ssh-sessions),
-[produced material](../secrets.md#produced-material),
-[native-side retention](../secrets.md#native-side-retention) and the cli.md
-exec bound; their Not yet met lines point here.
-
-**Work:**
-
-- CX-R9 (Medium): `internal/machine/access/several.go` bounds sessions by
-  `lifecycle.MaxRunningBlocks` or a named constant, starts them in canonical
-  order and stops admissions on cancellation; a test at the graph maximum and
-  a cancellation test; commands.md rows and help say "concurrently".
-- F11-01 (Medium): the state-reconciliation mutation-safety positive-proof
-  bullet links security.md#remote-principals.
-- F11-02 (Medium): a test refusing a source whose digest disagrees with the
-  publisher-fetched checksum (or cite
-  `TestFrozenToolRejectsVersionRouteAndChecksumSubstitution` if it covers it).
-- R2-04-03 (Medium): the orphan-acknowledged context deletion confirmation
-  names the native-side retention it abandons (contexts.md and code);
-  storage.md, storage-resources.md and storage-native-api.md link
-  secrets.md#native-side-retention and keep only domain facts.
-- Waits for [Q97](#audit-remediation-decisions): fingerprint arguments with a
-  substituted-key test, or the TOFU exception in security.md.
-- Waits for [Q98](#audit-remediation-decisions) and [Q99](#audit-remediation-decisions): the argv
-  rule and any new input flag.
-- Waits for [Q100](#audit-remediation-decisions): secrets.md lists every reveal once and
-  storage-resources.md and storage.md link it, or cli.md marks the reveal Not
-  yet met under B489.
-- Waits for [Q101](#audit-remediation-decisions): `access.unproved` only for a
-  custody-marked copy, in `internal/environment/inspection/service.go` and
-  `internal/cli/output_cluster.go`, with a test.
-
-**Exit evidence:** the P1-J roadmap exit; the tests above pass;
-`make check` passes.
 
 ### B819
 
@@ -4003,6 +3959,18 @@ earlier incarnation's area; a replaced custody entry with another identity
 refuses between attempts; the pipelining assertion passes; the Not yet met
 lines are removed; `make check`.
 
+**Partly delivered** on 2026-10-26 by X166: the media work area carries its
+context incarnation (device, inode and birth time), a build, destroy or
+hand-over over another incarnation's area refuses; ssh pipelining is set; a
+recapture whose kubeconfig identity (server, decoded authority, principal)
+differs refuses; the lent-part filter refuses a value containing a
+confidential part; `cluster info --object-user` reveals one user's keys
+(D183, Q116). **Remains:** the orphan confirmation names the work areas only
+as a class, not each area and its Machine; no test holds a remote file
+transfer free of material, and the media role still writes
+`install-config.yaml` with `copy: content:`; the Ceph outputs present no
+recapture identity.
+
 ### B830
 
 **Owner:** State reconciliation and Add-ons. **Kind:** safety. **Requires:**
@@ -4046,38 +4014,6 @@ receipt (Not yet met here) and the narrowed GitOps wait set;
 **Exit evidence:** `TestTransitionTablesMatchSpec` passes with the new rows;
 the failed-start publication test passes; receipts carry the basis in
 goldens; add-ons.md's Not yet met line is removed; `make check`.
-
-### B831
-
-**Owner:** Controller setup and CLI. **Kind:** safety. **Requires:** none.
-**Definition:** Specified.
-Batch L9 of the [2026-10-26 spec audit](../../audits/spec/2026-10-26.md);
-findings F11-04, F11-05, F11-10, F11-12. A sudoers rule naming the installed
-binary admits only that binary, and the elevated child accepts no foreign
-variable.
-
-**Specs:** [security.md](../security.md) now requires re-execution by the
-proved root-owned absolute path, procfs only for the invoking account's own
-build output, and a child that refuses variables outside the route set; it
-and [cli.md](../cli.md) carry Not yet met lines here. F11-05, F11-10 and
-F11-12 are stated and need no code.
-
-**Work:**
-
-- F11-04: `internal/controller/privilege` re-executes by the absolute path
-  when the file and every ancestor are root-owned, passing the file identity
-  (device and inode, or digest) for the child to check, and keeps procfs only
-  for the invoking account's own build output; the elevated child refuses any
-  caller-set variable outside `controller.ProxyEnvironmentNames`; tests for
-  both; the sudoers rule in [docs/operator-guide.md](../../docs/operator-guide.md)
-  names the installed path, and cli.md's `SUDO_COMMAND` and `/proc/self/exe`
-  passages follow the new rule.
-- F11-05, optional: operation.json records the invoking account's UID and
-  name, with a test that it survives elevation.
-
-**Exit evidence:** a privilege test proves a root-owned install re-executes by
-path and the child refuses a foreign variable; the two Not yet met lines are
-removed; `make check` and `make race`.
 
 ### B833
 
@@ -4229,7 +4165,7 @@ decision stay open while its other parts land.
 | A Harness and guards | B800 (X161), B801 (X161) | none | none | Q62, Q63, Q64 |
 | B Physical targets and shared hosts | B802 (X165), B803 (X165) | B801 | D, E, G, I | Q65, Q66, Q67 |
 | C Storage retirement | [B804](#b804), [B835](#b835) | none | F, G | Q68 |
-| D Credentials and trust | [B805](#b805), [B817](#b817), [B829](#b829), [B831](#b831) | none | B | Q70, Q97, Q98, Q99, Q100, Q101, Q116 |
+| D Credentials and trust | [B805](#b805), B817 (X166), [B829](#b829), B831 (X166) | none | B | Q70, Q97, Q98, Q99, Q100, Q101, Q116 |
 | E Store durability and controller records | B806 (X164), B836 (X164), B832 (X164) | B801 | B, J | none |
 | F Truthful admission | [B807](#b807) | none | C, I | Q71 |
 | G Extension architecture | [B808](#b808), [B811](#b811), [B809](#b809), [B810](#b810), [B812](#b812) | B800 to B807 | B, C, I, J, K | Q72, Q73, Q74, Q75 |
@@ -4255,7 +4191,7 @@ also updates this table.
 | 3 | H Cross-build continuation | merged (X163) |
 | 4 | E Store durability and controller records | merged (X164) |
 | 5 | B Physical targets and shared hosts | merged (X165) |
-| 6 | D Credentials and trust | not started |
+| 6 | D Credentials and trust | merged (X166) |
 | 7 | C Storage retirement | not started |
 | 8 | F Truthful admission | not started |
 | 9 | G Extension architecture | not started |
@@ -4319,11 +4255,11 @@ blocks.
 | Q94 | Does handoff readiness cover the selected input revision or the revision the apply froze? | (a) Add a predicate condition and status reason: the selected revision is not the one the apply froze, and diff shows what changed.; (b) Readiness covers the frozen scope; project.md says so and status prints the frozen revision beside ready. | **Answered by D183: a.** a (calibrator), mirroring the settlement scope. | [B816](#b816) |
 | Q95 | Does retention pin the runtime and wheels of every non-terminal operation so its continuation survives more than one lock change or a setup-format discard offline? | (a) Wording only: current-plus-previous retention stays and refusals name the registering build's setup with network or --wheel-mirror (spec today).; (b) A host-wide pin list under setup/lock written at registration, honoured by retention and format healing, dropped at finalization or deletion. | **Answered by D183: a.** a now; b parked as an owner option under D152 clauses 8 and 9. | [B816](#b816) |
 | Q96 | Are SSH-placed host claims published in the controller record, qualified by the SSH host token, so two contexts of one store targeting one SSH host conflict? | (a) Widen B247: every SSH-placed key gains an ssh/<address>:<port>/ qualifier with the controller conflict and release rules, best effort per declared address; controller-record schema moves pre-1.x.; (b) Keep B247 narrow and carry cross-context SSH coordination in a new parked item.; (c) Keep the limitation documented; contexts on one SSH host stay uncoordinated. | **Answered by D183: a.** a, decided with B247; do not edit delivered history. | [B816](#b816) |
-| Q97 | How does machine trust under --yes or structured output reconcile with the explicit host-key confirmation rule? | (a) Add --expect <machine>=SHA256:<fp> and make --replace take one; an add or replace whose fingerprint is not named refuses (new public flag syntax).; (b) security.md names --yes enrollment as an operator-accepted trust-on-first-use exception; no code change. | **Answered by D183: a.** The roadmap P1-J exit chooses a; the calibrator preferred b with a as hardening. a adds a public flag, so the owner decides. | [B817](#b817) |
-| Q98 | Is a usernamePassword Secret's username secret? | (a) Declare it non-secret identity metadata in security.md and secrets.md; cli.md stops treating --username as hidden.; (b) Add a file or stdin input for the username (new public flag). | **Answered by D183: a.** a (calibrator); D72/D73 keep usernames on the flag without deciding they are non-secret. | [B817](#b817) |
-| Q99 | May a query-signed media URL travel on argv for media add --from-url? | (a) Take the URL from a file or stdin (for example --from-url-file) and state that a signed query is a credential (new public flag).; (b) Record a named exception in security.md for a query-signed URL on argv. | **Answered by D183: a.** a or b (calibrator); refusing queries is rejected because managed OS intends signed URLs. | [B817](#b817) |
-| Q100 | Is the cluster info --secrets reveal of StorageObjectUser S3 keys (objectUsers) a current, authorized reveal? | (a) Current: secrets.md lists it, and storage-resources.md and storage.md link the reveal instead of saying no command reveals the pair.; (b) Not authorized: cli.md marks it Not yet met under B489 and the code stops revealing it. | **Answered by D183: a.** a (calibrator): delivered under B489's in-tree handoff, but D143 clause 7 authorizes only the dashboard password, so the owner confirms. | [B817](#b817) |
-| Q101 | What does cluster info --secrets emit for a dashboard password whose apply never proved the dashboard reachable? | (a) No warning: dashboard.status unproved and its reason convey it.; (b) A distinct registered warning code such as access.unreachable. | **Answered by D183: a.** a, the smaller change; either way access.unproved keeps only the D124 custody meaning. | [B817](#b817) |
+| Q97 | How does machine trust under --yes or structured output reconcile with the explicit host-key confirmation rule? | (a) Add --expect <machine>=SHA256:<fp> and make --replace take one; an add or replace whose fingerprint is not named refuses (new public flag syntax).; (b) security.md names --yes enrollment as an operator-accepted trust-on-first-use exception; no code change. | **Answered by D183: a.** The roadmap P1-J exit chooses a; the calibrator preferred b with a as hardening. a adds a public flag, so the owner decides. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) |
+| Q98 | Is a usernamePassword Secret's username secret? | (a) Declare it non-secret identity metadata in security.md and secrets.md; cli.md stops treating --username as hidden.; (b) Add a file or stdin input for the username (new public flag). | **Answered by D183: a.** a (calibrator); D72/D73 keep usernames on the flag without deciding they are non-secret. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) |
+| Q99 | May a query-signed media URL travel on argv for media add --from-url? | (a) Take the URL from a file or stdin (for example --from-url-file) and state that a signed query is a credential (new public flag).; (b) Record a named exception in security.md for a query-signed URL on argv. | **Answered by D183: a.** a or b (calibrator); refusing queries is rejected because managed OS intends signed URLs. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) |
+| Q100 | Is the cluster info --secrets reveal of StorageObjectUser S3 keys (objectUsers) a current, authorized reveal? | (a) Current: secrets.md lists it, and storage-resources.md and storage.md link the reveal instead of saying no command reveals the pair.; (b) Not authorized: cli.md marks it Not yet met under B489 and the code stops revealing it. | **Answered by D183: a.** a (calibrator): delivered under B489's in-tree handoff, but D143 clause 7 authorizes only the dashboard password, so the owner confirms. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) |
+| Q101 | What does cluster info --secrets emit for a dashboard password whose apply never proved the dashboard reachable? | (a) No warning: dashboard.status unproved and its reason convey it.; (b) A distinct registered warning code such as access.unreachable. | **Answered by D183: a.** a, the smaller change; either way access.unproved keeps only the D124 custody meaning. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) |
 | Q102 | Does the decision log stay in backlog.md (with per-decision anchors and status tokens) or move to its own page? | (a) Keep the log in backlog.md#decisions and add #d<n> anchors, status tokens and an order check.; (b) Move the log to specs/milestones/decisions.md, retarget every backlog.md#decisions link and amend milestones.md's D<n> bullet. | **Answered by D183: a.** a: the smallest change; anchors and status tokens need no move. | [B819](#b819) |
 | Q103 | May a pre-existing defect that blocks the authorized outcome or its gates be fixed inside the slice? | (a) AGENTS.md admits the fix in its own commit after the defect is recorded as an item the Refs line names; other defects are reported.; (b) Keep the unqualified ban; a blocking defect stops the slice until the owner authorizes its item. | **Answered by D183: a.** a, as the report drafts it; its only precedent (D152 clause 13) still awaits the owner's review. | [B822](#b822) |
 | Q104 | Does the State reconciliation context keep its display name, given its contract disclaims reconciliation? | (a) Rename the display name (architecture row, H1, index link text), keeping the file path and retargeting inbound anchors.; (b) Keep the name; the disclaimer now applied in state-reconciliation.md is the whole change. | **Answered by D183: b.** b is smallest; a if the owner wants the name fixed before 1.0. | [B823](#b823) |

@@ -112,7 +112,7 @@ External forms have these exact connection fields:
 
 | Kind | Fields | Rule |
 | --- | --- | --- |
-| `Proxy` | `connection.httpProxy`, `connection.httpsProxy`, `connection.auth.proxyAuthRef`, `connection.trustBundleRef` | `connection` sets at least one bare HTTP(S) proxy endpoint: at most 4096 ASCII bytes with a host and no userinfo, path, query or fragment, under the [context-free route's grammar](../controller.md#the-context-free-acquisition-route); validate refuses another at that field, naming the field and never the value. Authentication names a `usernamePassword` Secret; trust names a `caBundle` Secret. |
+| `Proxy` | `connection.httpProxy`, `connection.httpsProxy`, `connection.auth.proxyAuthRef`, `connection.trustBundleRef` | `connection` sets at least one bare HTTP(S) proxy endpoint: at most 4096 ASCII bytes with a host and no userinfo, path, query or fragment, under the [context-free route's grammar](../controller.md#the-context-free-acquisition-route); validate refuses another at that field, naming the field and never the value. Authentication names a `usernamePassword` Secret; trust names a `caBundle` Secret. `proxyAuthRef` and `trustBundleRef` name access credentials. |
 | `DNSServer` | `address`, optional `additionalIngressHosts[]` | Required resolver IP, canonicalized in effective state. |
 | `NTPServer` | `address` | Required IP or DNS hostname. |
 | `Registry` | `url` | Required registry location without embedded credentials. |
@@ -124,8 +124,9 @@ upstream sources. DNS names and list order remain unchanged.
 Proxy bypass policy belongs to the consumer's proxy choice, never to
 `Proxy.spec.connection`. Registry additionally accepts `credentialsRef` to a
 `usernamePassword` or `dockerConfigJson` Secret and `trustBundleRef` to a
-`caBundle` Secret in either management mode. Those fields are service facts;
-consumers do not duplicate them.
+`caBundle` Secret in either management mode, both access credentials of the
+consumers that reach the registry. Those fields are service facts; consumers do
+not duplicate them.
 
 ## ArtifactServer
 
@@ -137,7 +138,7 @@ A managed ArtifactServer accepts these fields after `management`:
 | `bindAddress` | string | no | IP literal; defaults `0.0.0.0`. |
 | `retention` | string | no | `persistent` by default, or `install-only`. |
 | `tls` | object | conditional | Required when any effective listener uses HTTPS; forbidden for HTTP-only listeners. |
-| `tls.secretRef` | string | with TLS | `tlsCertificate` Secret supplying certificate and key. A [generated](secrets.md#generated-source) Secret's `ipAddresses` or `dnsNames` name the address of every HTTPS endpoint, or that endpoint refuses at `$.spec.endpoints[i]` naming the Secret and the address. |
+| `tls.secretRef` | string | with TLS | `tlsCertificate` Secret supplying certificate and key. A [generated](secrets.md#generated-source) Secret's `ipAddresses` or `dnsNames` name the address of every HTTPS endpoint, or that endpoint refuses at `$.spec.endpoints[i]` naming the Secret and the address. Effect material: the server serves it. |
 | `tls.minVersion` | string | no | `TLSv1.2` by default, or `TLSv1.3`. |
 | `listeners` | array | no | Non-empty; defaults to `[{name: https, protocol: https, port: 8443}]`. |
 | `listeners[].name` | string | yes | Unique listener name. |

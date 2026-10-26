@@ -239,6 +239,7 @@
   ansible.builtin.copy:
     content: >-
       {{ {'inputs': bootwright_cluster_media_digest,
+          'incarnation': bootwright_cluster_media_material.incarnation,
           'installer': bootwright_cluster_media_request.release.version,
           'flow': 'cluster-manifests-image' if bootwright_cluster_media_request.diskEncryption is defined else 'image'} | to_json }}
     dest: '{{ containercluster_media_agent_receipt }}'

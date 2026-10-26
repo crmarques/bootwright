@@ -386,15 +386,16 @@ installation later needs, whose admin client certificate is the cluster's
 never enumerated in evidence, progress output or a log, and is discarded and
 rebuilt rather than reused whenever the inputs it was built from are not the
 inputs frozen now, unless an installation has booted from it. The build
-receipt also records the device and inode the registry holds for the context's
-directory. A build over an area whose receipt records another, as a recreated
-context of the same name finds one its predecessor left, refuses before any
-effect, naming the area, and the hand-over of a kept kubeconfig to custody
-takes nothing from such an area.
-
-Not yet met: the receipt records no directory identity and an area an earlier
-context left is reused or handed over; tracked as
-[B829](milestones/backlog.md#b829).
+receipt also records the context's incarnation: the device and inode the
+registry holds for the context's directory with that directory's birth time,
+or its inode generation where the filesystem reports no birth time, since a
+filesystem reuses a freed inode; a context directory with neither refuses
+`lifecycle.state`. A build or a removal over an area whose receipt records
+another incarnation, as a recreated context of the same name finds one its
+predecessor left, refuses before any effect, naming the area and keeping it,
+and the hand-over of a kept kubeconfig to custody before a removal refuses
+naming such an area rather than skipping it. A receipt an earlier build wrote
+records no directory identity and names no other incarnation.
 
 **A work area an installation booted from is never rebuilt.** The area also
 holds the state the [installation](#installation) boots its nodes into and the

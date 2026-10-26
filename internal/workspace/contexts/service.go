@@ -616,15 +616,18 @@ func deleteAction(plan DeletionPlan) string {
 	custody := " any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context " + plan.Context + " --name <cluster>)"
 	switch {
 	case plan.Abandons == AbandonsUnlisted && plan.Lost:
-		return "delete with orphaned objects that cannot be listed (" + plan.Reason + ")"
+		return "delete with orphaned objects that cannot be listed (" + plan.Reason + ")" + retained
 	case plan.Abandons == AbandonsUnlisted:
-		return "delete with orphaned objects that cannot be listed (" + plan.Reason + "), removing" + custody
+		return "delete with orphaned objects that cannot be listed (" + plan.Reason + "), removing" + custody + retained
 	case plan.Abandons == AbandonsOwned:
 		return "delete, abandoning the objects bootwright status --context " + plan.Context + " and bootwright diff --context " +
-			plan.Context + " list, freeing the exclusive keys the plan names, and removing" + custody
+			plan.Context + " list, freeing the exclusive keys the plan names, and removing" + custody + retained
 	}
 	return "delete"
 }
+
+const retained = ", and leaving on their hosts the native-side material those objects retain outside the keyring" +
+	" (Ceph keys and bootstrap material, erase custody and installer work areas), which goes only with them"
 
 func (s Service) Delete(ctx context.Context, request DeleteRequest) (*DeleteResult, error) {
 	if err := s.ready(ctx); err != nil {

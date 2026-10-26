@@ -1468,19 +1468,15 @@ transaction. Downstream material is scoped to declared resources and does not
 install an add-on.
 
 Produced storage material is not an authored Secret and cannot be revealed
-through Secret commands under the [custody contract](secrets.md#produced-material).
-The dashboard administrator password is revealed only as
-[storage dashboard access](cli.md#storage-dashboard-access) defines, and one
-StorageClient's Ceph keyring only as the
-[client keyring export](cli.md#client-keyring-export) defines: one selected
-managed cluster and one of its declared clients, settled before any custody
-read, in the native keyring form, until the destroy that completes the
-removal withdraws it. A StorageObjectUser's S3 key pair is produced material
-of its user block, revealed only through the same
-[storage dashboard access](cli.md#storage-dashboard-access) command; a bucket block reads it only into its
-worker's memory to sign its owner's S3 requests and never retains, answers or
-records it. This contract adds no other command or
-implicit reveal.
+through Secret commands under the [custody contract](secrets.md#produced-material),
+whose table lists each storage output's one revealing command: the dashboard
+administrator password, one StorageClient's Ceph keyring and a
+StorageObjectUser's S3 key pair. A client keyring is revealed in the native
+keyring form, for one selected managed cluster and one of its declared clients
+settled before any custody read, until the destroy that completes the removal
+withdraws it. A bucket block reads its owner's S3 key pair only into its
+worker's memory to sign the owner's S3 requests and never retains, answers or
+records it. This contract adds no other command or implicit reveal.
 
 ## Removal and concurrency
 

@@ -32,6 +32,7 @@ type ClusterInfoRequest struct {
 	ContextName string
 	Names       []string
 	Secrets     bool
+	ObjectUser  string
 }
 
 func (s Service) ListClusters(ctx context.Context, request ListClustersRequest) (*ListResult, error) {
@@ -52,6 +53,10 @@ func (s Service) ListClusters(ctx context.Context, request ListClustersRequest) 
 }
 
 func (s Service) ClusterInfo(ctx context.Context, request ClusterInfoRequest) (*InfoResult, error) {
+	if request.Secrets && request.ObjectUser != "" {
+		return nil, failure("cli.usage", "--secrets and --object-user each reveal one kind of value; give one of them",
+			"repeat bootwright cluster info with either --secrets or --object-user <name>")
+	}
 	selected, catalog, err := s.read(ctx, request.ContextName)
 	if err != nil {
 		return nil, err
@@ -61,7 +66,7 @@ func (s Service) ClusterInfo(ctx context.Context, request ClusterInfoRequest) (*
 	if err := unknownClusters(selected, names, containers, storages); err != nil {
 		return nil, err
 	}
-	if request.Secrets {
+	if request.Secrets || request.ObjectUser != "" {
 		if err := secretsTarget(selected, names, containers, storages); err != nil {
 			return nil, err
 		}
@@ -92,7 +97,9 @@ func (s Service) ClusterInfo(ctx context.Context, request ClusterInfoRequest) (*
 		if err := s.revealDashboard(ctx, selected, result.Storage[0]); err != nil {
 			return nil, err
 		}
-		if err := s.revealObjectUsers(ctx, selected, catalog, &result.Storage[0]); err != nil {
+	}
+	if request.ObjectUser != "" {
+		if err := s.revealObjectUser(ctx, selected, catalog, &result.Storage[0], request.ObjectUser); err != nil {
 			ClearSecrets(result)
 			return nil, err
 		}
@@ -123,7 +130,7 @@ func (s Service) revealDashboard(ctx context.Context, selected string, entry Sto
 		dashboard.Reason = "this context kept the password from an observation that never proved the dashboard reachable"
 	}
 	dashboard.Password, dashboard.Revealed = custodied.Material, true
-	dashboard.Warn = dashboard.Status != DashboardReady
+	dashboard.Warn = custodied.Unproved
 	return nil
 }
 

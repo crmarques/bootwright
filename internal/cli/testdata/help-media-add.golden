@@ -1,17 +1,20 @@
   bootwright / media add
       Import one installer image into this host's media store, where every context shares it. A
-      download requires --sha256 and follows no redirect. Replacing a stored image needs
+      download requires --sha256 and follows no redirect. A URL whose query carries a signature
+      is a credential: give it with --from-url-file <path> or --from-url-file - rather than on
+      the command line; --from-url-file - requires --yes. Replacing a stored image needs
       ordinary confirmation; --yes skips it.
 
   Usage
     bootwright media add [flags]
 
   Command flags
-      --from-file  Import a local image
-      --from-url   Import an HTTPS image
-      --name       Select the exact object name (required)
-      --sha256     Verify a SHA-256 digest
-      --yes        Confirm the command's ordinary confirmation
+      --from-file      Import a local image
+      --from-url       Import an HTTPS image
+      --from-url-file  Import the HTTPS image whose URL a file holds, or - for standard input
+      --name           Select the exact object name (required)
+      --sha256         Verify a SHA-256 digest
+      --yes            Confirm the command's ordinary confirmation
 
   Common flags
       --ascii       Use ASCII status markers

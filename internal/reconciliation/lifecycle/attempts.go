@@ -485,7 +485,7 @@ func (s Service) invoke(ctx context.Context, tx Transaction, store OperationStor
 			}
 		}
 		execution := Execution{
-			Operation: operation.ID, Context: tx.Identity().Name, Continuation: continuation, Attempt: attempt, Resolution: resolution, Block: block,
+			Operation: operation.ID, Context: tx.Identity().Name, Incarnation: tx.Identity().Incarnation, Continuation: continuation, Attempt: attempt, Resolution: resolution, Block: block,
 			ApplyOperation: owningApply(operation), ApplyProved: applyProved, ApplyPreparations: clonedPreparations(preparations), Prepare: prepare, Released: s.released(ctx, block),
 			Launch: launch, Material: material, Proved: proved,
 			LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {

@@ -252,8 +252,12 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 		}
 	}
 
+	born, err := incarnation(record, dir)
+	if err != nil {
+		return err
+	}
 	view := &lifecycleView{
-		identity:   lifecycle.ContextIdentity{Name: record.Name, Revision: record.Revision, Mode: string(record.Mode)},
+		identity:   lifecycle.ContextIdentity{Name: record.Name, Revision: record.Revision, Mode: string(record.Mode), Incarnation: born},
 		inputs:     inputs,
 		controller: controllerView,
 		evidence:   evidence,
@@ -328,10 +332,14 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 		if err != nil {
 			return err
 		}
+		born, err := incarnation(record, dir)
+		if err != nil {
+			return err
+		}
 		active := true
 		tx := &lifecycleTransaction{
 			lifecycleView: lifecycleView{
-				identity:   lifecycle.ContextIdentity{Name: record.Name, Revision: record.Revision, Mode: string(record.Mode)},
+				identity:   lifecycle.ContextIdentity{Name: record.Name, Revision: record.Revision, Mode: string(record.Mode), Incarnation: born},
 				inputs:     inputs,
 				controller: controllerView,
 				evidence:   evidence,

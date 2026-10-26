@@ -41,6 +41,8 @@ func EraseContentDigest() string {
 
 func (r EraseRequest) Canonical() ([]byte, error) { return reconciliation.Freeze(r, "physical erase") }
 
+func (r EraseRequest) SecretReferences() []string { return r.Install.SecretReferences() }
+
 func DecodeEraseRequest(data []byte) (EraseRequest, error) {
 	return reconciliation.ThawVersion[EraseRequest](data, "physical erase", EraseImplementation)
 }

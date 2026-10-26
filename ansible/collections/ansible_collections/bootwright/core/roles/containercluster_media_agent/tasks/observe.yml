@@ -17,10 +17,33 @@
     request: '{{ bootwright_cluster_media_request }}'
   register: containercluster_media_agent_observed
 
+- name: Read which context incarnation built the work area
+  ansible.builtin.slurp:
+    src: '{{ containercluster_media_agent_receipt }}'
+  register: containercluster_media_agent_built
+  failed_when: false
+  when: bootwright_cluster_media_output is defined
+
 # Declared only before a removal that deletes this work area while custody
 # holds no administrator access for the cluster: the copy the installation
 # kept is handed over, unproved, so it is never deleted while custody holds
-# none. Only a whole regular file within the bound is offered.
+# none. Only a whole regular file within the bound is offered. An area an
+# earlier context of the same name built offers nothing and refuses, naming it,
+# so the removal after this read never runs.
+- name: Refuse the hand-over from a work area an earlier context of the same name built
+  ansible.builtin.fail:
+    msg: >-
+      the work area {{ bootwright_cluster_media_request.workRoot }} of cluster
+      {{ bootwright_cluster_media_request.identity.cluster }} was built by an earlier
+      context named {{ bootwright_cluster_media_request.identity.context }}, which
+      left it when it was deleted, so its kept administrator access is not this
+      context's to hand over; nothing was changed. Confirm nothing uses that area,
+      remove it by hand, then repeat bootwright destroy --context
+      {{ bootwright_cluster_media_request.identity.context }}
+  when:
+    - bootwright_cluster_media_output is defined
+    - containercluster_media_agent_foreign | bool
+
 - name: Read the administrator access the installation kept
   ansible.builtin.stat:
     path: '{{ containercluster_media_agent_kubeconfig }}'
@@ -43,6 +66,7 @@
     - containercluster_media_agent_kept.stat.isreg | default(false)
     - containercluster_media_agent_kept.stat.size | default(0) > 0
     - containercluster_media_agent_kept.stat.size | default(0) <= containercluster_media_agent_kubeconfig_bound
+    - not (containercluster_media_agent_foreign | bool)
   no_log: true
 
 - name: Publish what the observation found

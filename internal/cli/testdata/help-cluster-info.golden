@@ -3,15 +3,18 @@
       from local desired state and evidence, with no host contact. Applicable to all selected
       ContainerClusters and StorageClusters, including external storage clusters. A managed
       Ceph StorageCluster also reports its release, FSID, frozen image, monitors and
-      administrator command. --name takes a comma-separated list. --secrets requires --name
-      naming exactly one cluster and applies to managed Ceph StorageClusters only.
+      administrator command. --name takes a comma-separated list. --secrets and --object-user
+      each require --name naming exactly one cluster and apply to managed Ceph StorageClusters
+      only: --secrets reveals the dashboard administrator password, and --object-user <name>
+      reveals that StorageObjectUser's S3 keys alone.
 
   Usage
     bootwright cluster info [flags]
 
   Command flags
-      --name     Select comma-separated cluster names (default: all)
-      --secrets  Include explicitly selected sensitive values
+      --name         Select comma-separated cluster names (default: all)
+      --object-user  Reveal the S3 keys of this one StorageObjectUser
+      --secrets      Reveal the dashboard administrator password
 
   Common flags
       --ascii       Use ASCII status markers

@@ -29,6 +29,10 @@ func (b *testBinder) ReadCurrent(ctx context.Context, request custody.ReadCurren
 	}
 	out := []secretstore.BoundMaterial{}
 	for _, name := range request.Names {
+		if version, tracked := b.versions[name]; tracked {
+			out = append(out, b.versioned(name, version))
+			continue
+		}
 		value, ok := b.material[name]
 		if !ok {
 			continue

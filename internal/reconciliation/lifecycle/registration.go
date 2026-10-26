@@ -243,14 +243,14 @@ func retainedExit(ctx context.Context, view View, store OperationStore, verb rec
 
 // unregistered gives back what a registration that provably did not happen
 // raised, and reports cause with any restoration that failed beside it. The
-// binding goes only when this invocation created it: a removal reopens its
-// apply's binding and a continuation its operation's, and releasing either
-// would leave effects no later removal can present the material for. A
+// binding goes only when this invocation created it, a fresh removal's rebind
+// included: releasing a reopened one would leave effects no later removal can
+// present the material for. A
 // release that fails leaves the binding for the next registration or destroy
 // to collect, so it never hides the failure being reported.
 func (s Service) unregistered(ctx context.Context, name string, decided transition, binding string, record *registering, cause error) error {
 	recording := recordingContext(ctx)
-	if decided.fresh && decided.reopen == "" && binding != "" {
+	if decided.fresh && binding != "" && (decided.reopen == "" || binding == decided.rebound.binding) {
 		_, _ = s.binder.Release(recording, custody.BindingRequest{ContextName: name, BindingID: binding})
 	}
 	return beside(cause, s.restoreEvidence(recording, name, record))

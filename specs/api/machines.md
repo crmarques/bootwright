@@ -58,7 +58,7 @@ only when the machine still omits that value. It copies the complete provider `v
 block only when the machine omits that block. A machine-local value always
 wins. Missing credentials never select a same-named Secret, another provider,
 or ambient identity; a consuming bare-metal installation requires the
-resolved reference and its `usernamePassword` type.
+resolved reference, an access credential, and its `usernamePassword` type.
 
 A provider `tls.trustBundleRef` is inherited only by a machine that keeps
 verification: one that authors `tls.verify: false` inherits no bundle, and a
@@ -66,8 +66,8 @@ machine-local bundle always wins. An Environment kind-default bundle likewise
 never reaches an object that authors `tls.verify: false`. A bundle beside
 verification turned off, whether either half was authored or inherited, fails
 admission at `tls.trustBundleRef`. A bundle replaces the system trust store
-rather than adding to it: it is the one anchor of the controller-to-BMC leg.
-A placement host reached over SSH verifies with its own interpreter, which may
+rather than adding to it: it is the one anchor of the controller-to-BMC leg, an access
+credential. A placement host reached over SSH verifies with its own interpreter, which may
 not accept a partial chain, so the bundle holds the issuing root rather than
 only an intermediate. A `caBundle` Secret holds CA certificates only
 ([secrets](../secrets.md)), so a BMC presenting a self-signed
@@ -240,6 +240,7 @@ declarations identify an install target but do not authorize a destructive
 operation.
 
 A bare-metal Bootwright-installed machine also names `os.install.hostKeyRef`,
+effect material,
 because a physical machine offers no out-of-band channel to read back what it
 holds, so the key it will answer with is declared in advance and
 [delivered by the installation](../substrates.md#identity-and-power-operations)
@@ -563,7 +564,7 @@ here; its placement refuses before planning under the
 Machines that are only cluster nodes, storage nodes or session targets keep
 any account.
 
-The `knownHostsRef` Secret's resolved material is UTF-8 text. Blank lines and
+The `knownHostsRef` Secret, an access credential, resolves to UTF-8 text. Blank lines and
 lines starting with `#` are ignored; exactly one data line remains,
 `<host> <type> <key>` optionally followed by a comment, and a second data line
 is invalid. Its host token is the effective SSH address for port `22`, or
@@ -576,7 +577,7 @@ and key is therefore bound before observation.
 A Bootwright-installed machine authors no `access` or `rootLogin`.
 Normalization derives its access only when the fleet
 `Environment.spec.remoteMachinesAccessKey.keyRef` names an `sshKeyPair`
-`Secret`; otherwise access stays underived, so the Environment's refusal of
+`Secret`, effect material; otherwise access stays underived, so the Environment's refusal of
 that key is the only one. The derived access is SSH user `bootwright`, that
 fleet key, `rootLogin: keep`, and
 `addressRef` `ssh` when the Machine declares that address, else its

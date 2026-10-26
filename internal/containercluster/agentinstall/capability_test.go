@@ -214,6 +214,7 @@ func applyRequest(t *testing.T) reconciliation.Block {
 // private material becomes a value.
 func TestAnApplyCrossesTheAdapterWithItsInstallerAndBoundMaterial(t *testing.T) {
 	execution, _ := mediaExecution(t, testDigest)
+	execution.Incarnation = "64769:4242"
 	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: mediaEvidence(t, testDigest, nil)}}
 	result, err := NewMedia(runner, material.AuthorizedKey).Apply(context.Background(), execution)
 	if err != nil {
@@ -234,6 +235,9 @@ func TestAnApplyCrossesTheAdapterWithItsInstallerAndBoundMaterial(t *testing.T) 
 	if !strings.HasPrefix(request.MaterialValues["installer"], installer) ||
 		!strings.HasSuffix(request.MaterialValues["installer"], "/tools/openshift-install/openshift/4.21.15/openshift-install") {
 		t.Fatalf("installer = %q", request.MaterialValues["installer"])
+	}
+	if request.MaterialValues["incarnation"] != "64769:4242" {
+		t.Fatalf("incarnation = %q, want the context's directory identity the receipt records", request.MaterialValues["incarnation"])
 	}
 	if request.MaterialValues["sshKey"] != "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA cluster" {
 		t.Fatalf("cluster key = %q", request.MaterialValues["sshKey"])

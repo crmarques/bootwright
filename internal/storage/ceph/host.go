@@ -62,6 +62,16 @@ type HostRequest struct {
 
 func (r HostRequest) canonical() ([]byte, error) { return reconciliation.Freeze(r, "Ceph host") }
 
+func (r HostRequest) SecretReferences() []string { return r.Cluster.secretReferences() }
+
+func (s ClusterScope) secretReferences() []string {
+	references := []string{s.ClusterKeyRef, s.RegistryRef, s.RegistryTrustBundleRef}
+	for _, host := range s.Hosts {
+		references = append(references, host.SSHKeyRef, host.HostKeyRef)
+	}
+	return lifecycle.SecretNames(append(references, s.Packages.secretReferences()...)...)
+}
+
 func DecodeHostRequest(data []byte) (HostRequest, error) {
 	r, err := reconciliation.ThawVersion[HostRequest](data, "Ceph host", HostVersion)
 	if err != nil {
@@ -602,4 +612,12 @@ func ProvedHost(proofs []lifecycle.BlockEvidence, cluster, machineName, image st
 		return HostEvidence{}, failure("lifecycle.state", "Ceph lacks its original apply's host preparation proof", "restore the original apply evidence; each host is prepared before the cluster block runs")
 	}
 	return *found, nil
+}
+
+func (c HostCapability) AccessCredentials(block reconciliation.Block) ([]string, error) {
+	r, err := DecodeHostRequest(block.Request)
+	if err != nil {
+		return nil, err
+	}
+	return []string{r.Cluster.RegistryRef}, nil
 }

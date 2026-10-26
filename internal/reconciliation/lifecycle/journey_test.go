@@ -944,6 +944,56 @@ type testCapability struct {
 	// verbose, when set, is how many more bytes an attempt prints on its
 	// adapter output, asked as it prints them.
 	verbose func() int
+	// access names, per block, the Secrets it reads as access credentials it
+	// presents; presenting answers an attempt or removal before anything
+	// else does when it reports false, as an endpoint refusing the material
+	// it was handed answers.
+	access     map[string][]string
+	presenting func(Execution) bool
+	// identity names the identity a produced output presents; nil names none.
+	identity func(string, secrets.Material) string
+}
+
+// ProducedIdentity answers from the fixture.
+func (c *testCapability) ProducedIdentity(_ reconciliation.Block, name string, material secrets.Material) (string, error) {
+	c.mutex.Lock()
+	identity := c.identity
+	c.mutex.Unlock()
+	if identity == nil {
+		return "", nil
+	}
+	return identity(name, material), nil
+}
+
+// AccessCredentials answers from the fixture.
+func (c *testCapability) AccessCredentials(block reconciliation.Block) ([]string, error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return slices.Clone(c.access[block.ID]), nil
+}
+
+// SecretReferences answers as a capability does from its own request: the
+// values of the members whose names end in Ref.
+func (c *testCapability) SecretReferences(block reconciliation.Block) ([]string, error) {
+	var members map[string]any
+	if err := json.Unmarshal(block.Request, &members); err != nil {
+		return nil, err
+	}
+	var names []string
+	for key, value := range members {
+		if name, ok := value.(string); ok && strings.HasSuffix(key, "Ref") {
+			names = append(names, name)
+		}
+	}
+	return SecretNames(names...), nil
+}
+
+// refused reports whether the endpoint refuses what this execution presents.
+func (c *testCapability) refused(execution Execution) bool {
+	c.mutex.Lock()
+	presenting := c.presenting
+	c.mutex.Unlock()
+	return presenting != nil && !presenting(execution)
 }
 
 // print writes what a verbose adapter prints beside its fixed lines.
@@ -1059,6 +1109,9 @@ func (c *testCapability) Apply(ctx context.Context, execution Execution) (Result
 		}
 		return scripted, nil
 	}
+	if c.refused(execution) {
+		return Result{Outcome: reconciliation.OutcomeFailed}, errors.New("the endpoint refused the credential")
+	}
 	if execution.Progress != nil {
 		execution.Progress(ctx, "pull-image", "running")
 		execution.Progress(ctx, "pull-image", "ok")
@@ -1090,6 +1143,9 @@ func (c *testCapability) Destroy(_ context.Context, execution Execution) (Result
 		hold(execution.Block.ID)
 	}
 	c.print(execution)
+	if c.refused(execution) {
+		return Result{Outcome: reconciliation.OutcomeFailed}, errors.New("the endpoint refused the credential")
+	}
 	return c.next(&c.outcomes), nil
 }
 
@@ -1190,6 +1246,71 @@ type testBinder struct {
 	journal     []string
 	produceErr  error
 	withdrawErr error
+	// versions names each Secret's current version once a test tracks them;
+	// a binding then pins the versions current when it was issued, and a
+	// version's material comes from versionMaterial. rebinds lists every
+	// rebind in order.
+	versions        map[string]string
+	pins            map[string]map[string]string
+	versionMaterial map[string]secrets.Material
+	rebinds         []custody.RebindRequest
+}
+
+// pinCurrent pins binding to the versions of names current now.
+func (b *testBinder) pinCurrent(binding string, names []string) {
+	if b.versions == nil {
+		return
+	}
+	if b.pins == nil {
+		b.pins = map[string]map[string]string{}
+	}
+	pinned := map[string]string{}
+	for _, name := range names {
+		pinned[name] = b.versions[name]
+	}
+	b.pins[binding] = pinned
+}
+
+// versioned is the bound material of one Secret at one version.
+func (b *testBinder) versioned(name, version string) secretstore.BoundMaterial {
+	value, ok := b.versionMaterial[version]
+	if !ok {
+		value = b.material[name]
+	}
+	parts := map[secrets.Part][]byte{}
+	for _, part := range value.Parts() {
+		parts[part], _ = value.Part(part)
+	}
+	return secretstore.BoundMaterial{
+		Version:  secretstore.Version{ID: version, Declaration: secrets.VersionDeclaration{Name: name}},
+		Material: secrets.NewMaterial(parts),
+	}
+}
+
+// Rebind models the store: a new binding pins what the old one pins except
+// each named Secret, pinned to its current version.
+func (b *testBinder) Rebind(_ context.Context, request custody.RebindRequest) (secretstore.Binding, error) {
+	if b.kill != nil {
+		if err := b.kill("publish secret binding"); err != nil {
+			return secretstore.Binding{}, err
+		}
+	}
+	if b.bindErr != nil {
+		return secretstore.Binding{}, b.bindErr
+	}
+	pinned, held := b.pins[request.BindingID]
+	if !held {
+		return secretstore.Binding{}, secretstore.Failure("input", "secret binding does not exist")
+	}
+	next := maps.Clone(pinned)
+	for _, name := range request.Names {
+		next[name] = b.versions[name]
+	}
+	b.issued++
+	binding := fmt.Sprintf("bind-%d", b.issued)
+	b.pins[binding] = next
+	b.rebinds = append(b.rebinds, request)
+	return secretstore.Binding{ID: binding}, nil
 }
 
 // Produce models the custody store: one publication for the block, which an
@@ -1318,6 +1439,7 @@ func (b *testBinder) Bind(_ context.Context, request custody.BindRequest) (secre
 	}
 	b.bound = append(b.bound, request.Names...)
 	b.issued++
+	b.pinCurrent(fmt.Sprintf("bind-%d", b.issued), request.Names)
 	return secretstore.Binding{ID: fmt.Sprintf("bind-%d", b.issued)}, nil
 }
 
@@ -1332,6 +1454,13 @@ func (b *testBinder) Reopen(_ context.Context, request custody.BindingRequest) (
 	}
 	if err := b.unreadable[request.BindingID]; err != nil {
 		return nil, err
+	}
+	if pinned, held := b.pins[request.BindingID]; held {
+		out := []secretstore.BoundMaterial{}
+		for _, name := range slices.Sorted(maps.Keys(pinned)) {
+			out = append(out, b.versioned(name, pinned[name]))
+		}
+		return out, nil
 	}
 	out := []secretstore.BoundMaterial{}
 	for name, value := range b.material {

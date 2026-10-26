@@ -107,3 +107,21 @@ func TestTheBoundaryGivesASessionItsOwnStatus(t *testing.T) {
 		}
 	}
 }
+
+// A root invocation sudo started refuses a foreign variable before it resolves
+// an account or runs anything, whether or not its command needs root.
+func TestASudoStartedRootInvocationRefusesAForeignVariableFirst(t *testing.T) {
+	foreign := &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: "this root invocation was given variable GODEBUG"}
+	for _, args := range [][]string{{"machine", "stop", "--name", "rhel-01"}, {"version"}} {
+		var elevated []privilege.Invocation
+		var stdout, stderr bytes.Buffer
+		boundary := boundaryUnderTest(errors.New("accounts were resolved"), privilege.Outcome{}, &elevated)
+		boundary.euid = func() int { return 0 }
+		checked := 0
+		boundary.sudoEnviron = func() *diagnostics.Diagnostic { checked++; return foreign }
+		code := boundary.run(context.Background(), args, &stdout, &stderr)
+		if code != 1 || checked != 1 || len(elevated) != 0 || !strings.Contains(stderr.String(), "variable GODEBUG") {
+			t.Fatalf("%v: exit %d, checked %d, elevated %d, stderr %q", args, code, checked, len(elevated), stderr.String())
+		}
+	}
+}

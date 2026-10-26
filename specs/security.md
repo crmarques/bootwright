@@ -37,9 +37,6 @@ limits precede parsing, while representation limits follow composition of one
 document. Cancellation stops admission of new work and releases bounded
 resources at the owning boundary's documented cancellation points.
 
-Not yet met: the sessions of several Machines start with no bound; tracked as
-[B817](milestones/backlog.md#b817).
-
 Validation must distinguish absence, known value, and unknown result. A failed
 or ambiguous probe is unknown, never proof that a machine, object, credential,
 path, or effect is absent. The one narrowing is a removal whose capability
@@ -109,7 +106,10 @@ Native tool output is no principal: it is untrusted input decoded under the
 
 Passwords, tokens, pull secrets, private keys, kubeconfigs, provider and
 management-controller credentials, credential-bearing URLs, generated secret
-material, and outputs containing them are sensitive. The
+material, and outputs containing them are sensitive. A URL whose query carries
+a signature is a credential (D183, Q99): `media add` takes one through
+`--from-url-file <path|->` rather than the argument vector, records only its
+scheme, host and path, and names it in no output. The
 [Secret schema](api/secrets.md#secret) owns source declarations and defaults;
 desired state never carries secret values.
 
@@ -118,7 +118,8 @@ state, normal or verbose output, diagnostics, logs, command-line arguments,
 environment variables, plan hashes, ownership or operation evidence, examples,
 fixtures, crash reports, inventory, facts, or caches. Names, public keys, public
 certificates, fingerprints, endpoints, image references and digests,
-desired-state hashes, and ownership identifiers are non-secret only when they
+desired-state hashes, ownership identifiers and a `usernamePassword` Secret's
+username, which is identity metadata (D183, Q98), are non-secret only when they
 embed no credential; private-estate identifiers still do not belong in public
 examples. The prohibition covers Bootwright-owned sinks. A management
 controller necessarily receives a private virtual-media URL to fetch an image
@@ -153,8 +154,12 @@ host that receives material runs with pipelining, so the module payload that
 carries it crosses the connection's standard input and no remote temporary
 file; a file transfer to a remote host carries no material.
 
-Not yet met: the adapter enables no pipelining, and no test holds material
-values or remote file transfers free of material; tracked as
+The adapter configuration enables pipelining
+(`TestRemotePlacedTasksRunWithPipelining`), and the runner refuses a material
+value equal to, or containing, a confidential part of the material it lends
+(`TestNoMaterialValueEqualsBoundMaterialBytes`).
+
+Not yet met: no test holds a remote file transfer free of material; tracked as
 [B829](milestones/backlog.md#b829).
 
 A managed-OS registration's organization and
@@ -412,15 +417,22 @@ remedy installs the binary to a root-owned path; the
 [CLI boundary](cli.md#local-privilege-and-user-identity) owns the report.
 A file that passes with root owning it and every directory above it is
 re-executed by that absolute path, so a sudoers rule can name the installed
-binary, and the child confirms it is the file the supervisor proved before it
-acts; only the invoking account's own build output is re-executed through
-`/proc/<pid>/exe`. The elevated child refuses a variable the caller set
-outside the [route vocabulary](controller.md#the-context-free-acquisition-route)
-before it acts, so a `SETENV` tag admits nothing more.
-
-Not yet met: every re-execution goes through `/proc/<pid>/exe`, which a
-sudoers rule naming the binary never matches, and the elevated child refuses
-no other variable; tracked as [B831](milestones/backlog.md#b831).
+binary, and the child confirms before it acts that it runs the file its
+supervisor runs, as `/proc/<supervisor pid>/exe` names it, and that the path
+sudo was named, the first word of `SUDO_COMMAND`, is that file and root-owned,
+so an install path holding a space refuses; only the invoking account's own
+build output is re-executed through `/proc/<pid>/exe`. Every root invocation
+whose parent is the qualified sudo, a supervised child or a command an
+operator ran with sudo by hand, refuses `runtime.privilege` before it acts on
+any variable outside what sudo sets, the
+[route vocabulary](controller.md#the-context-free-acquisition-route) and the
+PAM session variables `KRB5CCNAME`, `DBUS_SESSION_BUS_ADDRESS`,
+`XDG_RUNTIME_DIR`, `XDG_SESSION_*`, `XDG_SEAT` and `XDG_VTNR`, so a `SETENV`
+tag admits nothing more. It unsets those session variables before it starts
+any process. A host whose PAM stack, `/etc/environment` or pam_env
+configuration exports any other variable into sudo's commands refuses naming
+it; `env -i PATH=/usr/bin:/bin sudo -u '#0' -- /usr/bin/env` lists what a
+root command receives there.
 
 No password enters Bootwright
 memory, argv, environment, durable state or output. Per-user selection is
@@ -601,11 +613,8 @@ The client decides no trust and records none: a first-use record requires an
 explicit interactive confirmation of the displayed fingerprint, and a changed
 key is superseded only by an explicit re-trust. A host-key observation offers
 no credential, proves nothing by itself, and is never the source of a record.
-
-Not yet met: [host-key trust](cli.md#host-key-trust) under `--yes` or a
-structured format records or, with `--replace`, re-trusts an observed key that
-no person compared and no fingerprint the operator supplied; tracked as
-[B817](milestones/backlog.md#b817).
+Under `--yes` or a structured format, [host-key trust](cli.md#host-key-trust)
+records or re-trusts only a key whose fingerprint the operator supplied.
 
 Session material — the private key, the pinned host key and the client
 configuration — stays in anonymous mode-0600 files held by the launcher until

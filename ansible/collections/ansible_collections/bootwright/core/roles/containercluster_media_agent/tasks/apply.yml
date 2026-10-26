@@ -12,6 +12,7 @@
             and bootwright_cluster_media_request.image.url == '')
       - bootwright_cluster_media_request.workRoot.startswith('/var/lib/bootwright-clusters/')
       - bootwright_cluster_media_digest is match('[0-9a-f]{64}')
+      - bootwright_cluster_media_material.incarnation | default('') is match('^[0-9]+:[0-9]+:(b[0-9]+[.][0-9]+|g[0-9]+)$')
     quiet: true
   no_log: true
 
@@ -66,6 +67,26 @@
   bootwright.core.containercluster_media_inspect:
     request: '{{ bootwright_cluster_media_request }}'
   register: containercluster_media_agent_before
+
+- name: Read which context incarnation built the work area
+  ansible.builtin.slurp:
+    src: '{{ containercluster_media_agent_receipt }}'
+  register: containercluster_media_agent_built
+  failed_when: false
+
+# A context deleted with --allow-orphans leaves its work areas, and a context
+# recreated under the same name derives the same path, so the area is reused
+# or rebuilt only by the incarnation that built it.
+- name: Refuse a work area an earlier context of the same name built
+  ansible.builtin.fail:
+    msg: >-
+      the work area {{ containercluster_media_agent_work }} of cluster
+      {{ bootwright_cluster_media_request.identity.cluster }} was built by an earlier
+      context named {{ bootwright_cluster_media_request.identity.context }}, which
+      left it when it was deleted, and holds that context's installer state;
+      nothing was changed. Confirm nothing uses that area, remove it by hand, then
+      repeat bootwright apply --context {{ bootwright_cluster_media_request.identity.context }}
+  when: containercluster_media_agent_foreign | bool
 
 # A build starts by discarding the work area. Once the cluster's installation
 # has marked it, the area holds the state that installation's nodes install

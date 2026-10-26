@@ -429,6 +429,21 @@ func TestARemovalHereInterruptsNothing(t *testing.T) {
 	}
 }
 
+// A machine presents its controller credentials only to authenticate, so a
+// rotated one may be rebound; its trust bundle and placement are not
+// credentials it presents.
+func TestAMachineReadsOnlyItsControllerCredentialsAsAccessCredentials(t *testing.T) {
+	definition := planOf(t, reconciliation.Apply).Definitions[0]
+	request, err := DecodeRequest(definition.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	access, err := NewMachine(nil).AccessCredentials(reconciliation.Block{BlockDefinition: definition})
+	if err != nil || !slices.Equal(access, []string{request.Controller.CredentialsRef}) || request.Controller.CredentialsRef == "" {
+		t.Fatalf("access credentials = %v (%v), want only %q", access, err, request.Controller.CredentialsRef)
+	}
+}
+
 // A proved machine's claim gains bmc-system:<UUID>, the UUID in lower case,
 // beside its bmc: key; one whose proof recorded no UUID claims no such key,
 // and a UUID that cannot name a key refuses rather than claim nothing.

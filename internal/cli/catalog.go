@@ -40,8 +40,8 @@ type flagSpec struct {
 
 func stringFlag(name, help string) flagSpec { return flagSpec{name: name, help: help, kind: "string"} }
 
-// undisclosedFlag is a string flag whose value no output repeats: a Secret's
-// username part, or a download URL whose query may carry a token.
+// undisclosedFlag is a string flag whose value no output repeats: a download
+// URL, whose query may carry a token.
 func undisclosedFlag(name, help string) flagSpec {
 	f := stringFlag(name, help)
 	f.undisclosed = true
@@ -170,7 +170,7 @@ func stageFlag() flagSpec {
 }
 
 func authorizationFlag() flagSpec {
-	flag := stringFlag("authorize", "Acknowledge a planned risk (data-loss)")
+	flag := stringFlag("authorize", "Acknowledge a planned risk (data-loss), or present a rotated access credential at its current version (rebind=<secret>)")
 	flag.kind, flag.enum = "stringArray", []string{"data-loss"}
 	return flag
 }

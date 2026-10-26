@@ -90,7 +90,7 @@ alias, and `machine trust --name` keeps the empty and comma-only rules of
 | `bootwright secret encryption init` | none | configured implementation and active key | idempotent initialization using Context configuration |
 | `bootwright secret encryption status` | none | keyring and encrypted-store status | read confidential metadata |
 | `bootwright secret encryption rotate` | `--yes` false | new active key, retired keys and re-encrypted version and part counts | atomic local key rotation and re-encryption |
-| `bootwright media add` | required `--name <filename.iso>` and exactly one of `--from-file <path>` or `--from-url <https-url>`; `--sha256 <digest>`; `--yes` false | stored media identity, size, and verified digest | local copy or bounded download over the [context-free route](../controller.md#the-context-free-acquisition-route) and atomic publication |
+| `bootwright media add` | required `--name <filename.iso>` and exactly one of `--from-file <path>`, `--from-url <https-url>` or `--from-url-file <path\|->`; `--sha256 <digest>`; `--yes` false | stored media identity, size, and verified digest | local copy or bounded download over the [context-free route](../controller.md#the-context-free-acquisition-route) and atomic publication |
 | `bootwright media list` | `--checksums` false | media names, sizes, recorded digests and reserving contexts, and with `--checksums` each computed digest and its verification | read local media; `--checksums` reads each image in full |
 | `bootwright media delete` | required `--name <filename.iso>`; `--yes` false | deleted media identity | local media deletion when not frozen by an operation |
 
@@ -138,17 +138,17 @@ available.
 | `bootwright machine list` | `--clusters <list>` default all; `--power-status` false; `--silent` false | Machines with their declared contact and addresses and the evidence-backed lifecycle position each reached, their management-controller-reported power with `--power-status`, or sorted names with `--silent` | read local state; with `--power-status`, read each machine's power through its management controller |
 | `bootwright machine info` | `--name <list>` default all; an unknown name refuses | selected machine placement, contact, addresses, and recorded lifecycle evidence | read local inventory only; no host or power contact |
 | `bootwright machine rsh` | required `--name <machine>` | an interactive SSH session on the exact Machine as its resolved identity; the client's exit status is the result | read state, open the session's credential for its duration, read or record host trust, run one pinned SSH client |
-| `bootwright machine exec` | required `--name <list>` and `<command>...` | the exact argument vector runs on the Machine, or on every listed Machine at once with [each line prefixed by its Machine](../cli.md#machine-ssh-sessions); the remote command's exit status is the result, the highest of them for several | same |
-| `bootwright machine trust` | `--machines <list>` default all; `--replace <list>` default none; `--dry-run` false; `--yes` false | exact host-key trust plan, and the recorded result unless dry-run | bounded SSH host-key observation of the selected Machines; context trust-store write unless dry-run |
+| `bootwright machine exec` | required `--name <list>` and `<command>...` | the exact argument vector runs on the Machine, or on every listed Machine concurrently, at most the lifecycle bound at a time, with [each line prefixed by its Machine](../cli.md#machine-ssh-sessions); the remote command's exit status is the result, the highest of them for several | same |
+| `bootwright machine trust` | `--machines <list>` default all; `--replace <list>` default none, each member `<machine>` or `<machine>=SHA256:<fingerprint>`; `--expect <machine>=SHA256:<fingerprint>[,...]` default none; `--dry-run` false; `--yes` false | exact host-key trust plan, and the recorded result unless dry-run | bounded SSH host-key observation of the selected Machines; context trust-store write unless dry-run |
 | `bootwright machine start` | required `--name <list>` | the power state each Machine's management controller proved once the operation settled | bounded power operation through that management controller, one concurrent [batch](../cli.md#machine-power-operations) for several Machines |
 | `bootwright machine stop` | required `--name <list>`; `--force` false; `--yes` false | same, after the operating system is asked to shut down | same |
 | `bootwright machine restart` | required `--name <list>`; `--force` false; `--yes` false | same, after a proved stop and a proved start | same |
 | `bootwright setup` | `--dry-run` false; `--yes` false; `--wheel-mirror <file:///dir or https://base>` default none; `--download-only` false; `--dest-dir <dir>` default none | [context-independent controller prerequisite plan or completed setup](../controller.md#the-setup-flow); with `--dry-run --output json`, the plan and every locked wheel; with `--download-only`, the [files written for an offline host](../controller.md#offline-and-mirrored-wheels) | host packages through the host's own dnf after its verbatim preview, and the controller runtime from locked wheels over the [context-free route](../controller.md#the-context-free-acquisition-route), or from `--wheel-mirror`; a ready host makes no request and no change; dry-run only lists requirement names; `--download-only` requires `--dest-dir`, conflicts with `--dry-run`, never elevates, reads no setup state and writes only the directory |
 | `bootwright controller rebind` | `--yes` false; `--recorded-host-retired` false, required with `--yes`; `--machine-id <id>`, `--product-uuid <uuid>` and `--root-uuid <uuid>` default none, all three this host's and required with `--yes`, and a remedy repeating the command names them by placeholder | the outcome and the counts of the bindings and reservations it kept | [host identity rewrite](../contexts.md#controller-relationship-and-host-binding) of the controller record, once, under the exclusive root lock, after a confirmation naming the recorded and the new identity and affirming that the recorded host no longer runs this store; refuses a store whose directories are not the ones its registry attributed and an unchanged identity, and cannot tell a byte-for-byte clone from the store |
 | `bootwright cluster list` | none | container and storage cluster names and kinds in canonical order | read local state |
-| `bootwright cluster info` | `--name <list>` default all unless `--secrets`, which requires exactly one cluster; `--secrets` false | cluster kinds, endpoints, access-command applicability and availability, artifact availability, for a managed Ceph cluster its release, FSID, frozen image, monitors, administrator command and dashboard access, and optional explicit sensitive values | read local state and optional confidential material |
+| `bootwright cluster info` | `--name <list>` default all unless `--secrets` or `--object-user`, which require exactly one cluster; `--secrets` false; `--object-user <name>` none | cluster kinds, endpoints, access-command applicability and availability, artifact availability, for a managed Ceph cluster its release, FSID, frozen image, monitors, administrator command and dashboard access, and optional explicit sensitive values | read local state and optional confidential material |
 | `bootwright cluster rsh` | required `--name <cluster>` (one cluster); `--node <node>` default first node in canonical name order (at most one) | an interactive SSH session on the resolved node's Machine under the [cluster session contract](../cli.md#cluster-sessions); the client's exit status is the result | same as `machine rsh` |
-| `bootwright cluster exec` | required `--name <list>`; `--node <list>` default each cluster's first node in canonical name order; required `<command>...` | the exact argument vector runs on the resolved node's Machine, or on every resolved Machine at once with [each line prefixed by its Machine](../cli.md#several-clusters-and-nodes), under the [cluster session contract](../cli.md#cluster-sessions); the remote command's exit status is the result, the highest of them for several | same as `machine exec` |
+| `bootwright cluster exec` | required `--name <list>`; `--node <list>` default each cluster's first node in canonical name order; required `<command>...` | the exact argument vector runs on the resolved node's Machine, or on every resolved Machine concurrently, at most the lifecycle bound at a time, with [each line prefixed by its Machine](../cli.md#several-clusters-and-nodes), under the [cluster session contract](../cli.md#cluster-sessions); the remote command's exit status is the result, the highest of them for several | same as `machine exec` |
 | `bootwright cluster oc` | required `--name <cluster>` and non-empty `<command>...` | bounded `oc` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubectl` | required `--name <cluster>` and non-empty `<command>...` | bounded `kubectl` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubeconfig` | required `--name <cluster>` | kubeconfig through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
@@ -364,8 +364,12 @@ a supplied value that resolves to no member and an unrecognized member are both
 usage errors. Omission selects every stage. What a selection gates is owned by
 [state reconciliation](../state-reconciliation.md#stages-and-the-pause-boundary).
 
-`--authorize` accepts only `data-loss`, and only on `apply` and `destroy`.
-Unknown, empty, or duplicate tokens are usage errors; `all` is not accepted.
+`--authorize` accepts only `data-loss` and `rebind=<secret>`, and only on
+`apply` and `destroy`. `rebind=<secret>` names one Secret by its API name and
+presents a rotated access credential at its current version through the
+[access-credential rebind](../state-reconciliation.md#access-credential-rebind).
+Unknown, empty, or duplicate tokens, and a `rebind=` that names no valid Secret
+name, are usage errors; `all` is not accepted.
 Whitespace around comma-separated tokens is ignored. A token grants no
 confirmation authority either: it neither replaces nor implies
 [ordinary confirmation](../cli.md#ordinary-confirmation). Whether the frozen plan
@@ -393,7 +397,10 @@ It grants no confirmation authority either.
 
 A changed SSH host key always fails. `machine trust --replace` is the only
 interface for a deliberately changed key, and every replacement name must also
-be in that command's selected Machine set. The preflight `--trust-on-first-use`
+be in that command's selected Machine set. `--expect` and a `--replace` member
+of the form `<machine>=SHA256:<fingerprint>` name the fingerprint the operator
+verified out of band; a fingerprint that is not `SHA256:` and 43 base64
+characters, or two different fingerprints for one Machine, are usage errors. The preflight `--trust-on-first-use`
 flag permits bounded anonymous retrieval and presentation of an unknown SSH host
 key from the exact authorized endpoint, as the
 [storage preflight result](output.md#json-output) shows; it never accepts,
@@ -431,10 +438,20 @@ acts on nothing.
 
 A `machine trust` invocation selecting JSON or YAML with pending trust-store writes
 requires `--yes`; without it the invocation must use `--dry-run` or fails
-without writing.
+without writing. Under `--yes`, [host-key trust](../cli.md#host-key-trust)
+records an `add` or `replace` only for a Machine whose fingerprint
+`--expect` or `--replace` names (D183, Q97).
 
-`media add --from-url` requires `--sha256`; the digest is optional verification
-for `--from-file`. A plain `http://` URL, URL userinfo, a fragment, a control
+`media add --from-url` and `--from-url-file` require `--sha256`; the digest is
+optional verification for `--from-file`. `--from-url-file` reads the URL from
+the named file, opened under the invoking account like an image file, or from
+standard input for `-`: exactly one line of at most 16 KiB, an optional final
+line feed removed. A URL whose query carries a signature is a credential
+(D183, Q99), so it belongs in that file or on standard input, never on the
+argument vector; the URL a file holds is validated as `--from-url` is, and no
+output names it. Standard input is refused, before anything is read, under a
+sudo policy that would log it, as a Secret's standard input is, and without
+`--yes`, since standard input then cannot answer a replacement's confirmation. A plain `http://` URL, URL userinfo, a fragment, a control
 character in either source, an origin over 512 bytes as the
 [media store](../managed-os.md#media-store) defines it, and an unverifiable
 digest are rejected. A redirect is never followed: it refuses, naming its
@@ -450,10 +467,12 @@ alphanumeric character and otherwise contains only ASCII alphanumerics, `.`,
 A non-empty `--sha256` is 64 case-insensitive hexadecimal digits, optionally
 prefixed by exact lowercase `sha256:`, and normalizes to lowercase hexadecimal.
 
-`cluster info --secrets=true` requires an explicitly supplied `--name` naming
-exactly one cluster after list normalization, and a list of several is
-`cli.usage`; the default-all selection applies only when sensitive values are
-not requested.
+`cluster info --secrets=true` and `cluster info --object-user <name>` each
+require an explicitly supplied `--name` naming exactly one cluster after list
+normalization, and a list of several is `cli.usage`; the default-all selection
+applies only when sensitive values are not requested. The two are mutually
+exclusive, so one invocation reveals one credential, and `--object-user` names
+one StorageObjectUser by its API name.
 
 The [Secrets contract](../secrets.md#acquisition-and-commands) owns the exact
 type/source flag matrix, whole-version validation, generation and reveal parts.

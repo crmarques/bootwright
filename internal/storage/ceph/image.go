@@ -53,6 +53,10 @@ type ImageRequest struct {
 }
 
 func (r ImageRequest) Canonical() ([]byte, error) { return reconciliation.Freeze(r, "Ceph image") }
+
+func (r ImageRequest) SecretReferences() []string {
+	return lifecycle.SecretNames(r.RegistryRef, r.RegistryTrustBundleRef)
+}
 func DecodeImageRequest(data []byte) (ImageRequest, error) {
 	r, err := reconciliation.ThawVersion[ImageRequest](data, "Ceph image", ImageVersion)
 	if err != nil {
@@ -467,4 +471,12 @@ func authoredAuxiliary(c api.Catalog, cluster api.Object) ([]AuxiliaryImage, err
 		out = append(out, a)
 	}
 	return out, nil
+}
+
+func (c ImageCapability) AccessCredentials(block reconciliation.Block) ([]string, error) {
+	r, err := DecodeImageRequest(block.Request)
+	if err != nil {
+		return nil, err
+	}
+	return []string{r.RegistryRef}, nil
 }

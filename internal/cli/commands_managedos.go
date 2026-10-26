@@ -9,7 +9,7 @@ import (
 
 func mediaCommands() []commandSpec {
 	return []commandSpec{
-		available(commandSpec{path: "media add", short: "Import and verify an installer image", flags: []flagSpec{nameFlag(), fileFlag("from-file", "Import a local image"), undisclosedFlag("from-url", "Import an HTTPS image"), stringFlag("sha256", "Verify a SHA-256 digest"), confirmationFlag()}, long: "Import one installer image into this host's media store, where every context shares it. A download requires --sha256 and follows no redirect. Replacing a stored image needs ordinary confirmation; --yes skips it."}),
+		available(commandSpec{path: "media add", short: "Import and verify an installer image", flags: []flagSpec{nameFlag(), fileFlag("from-file", "Import a local image"), undisclosedFlag("from-url", "Import an HTTPS image"), fileFlag("from-url-file", "Import the HTTPS image whose URL a file holds, or - for standard input"), stringFlag("sha256", "Verify a SHA-256 digest"), confirmationFlag()}, long: "Import one installer image into this host's media store, where every context shares it. A download requires --sha256 and follows no redirect. A URL whose query carries a signature is a credential: give it with --from-url-file <path> or --from-url-file - rather than on the command line; --from-url-file - requires --yes. Replacing a stored image needs ordinary confirmation; --yes skips it."}),
 		available(commandSpec{path: "media list", short: "List installer images", flags: []flagSpec{boolFlag("checksums", "Compute image checksums")}, long: "List the images this host stores with their sizes, recorded digests and the contexts that reserve them. The default reads records and file metadata only; --checksums reads every image in full and reports each computed digest and whether the image still matches its record."}),
 		available(commandSpec{path: "media delete", short: "Delete an unbound installer image", flags: []flagSpec{nameFlag(), confirmationFlag()}, long: "Delete one stored image and its record. An image any context reserves is refused, because a frozen operation still needs exactly those bytes."}),
 	}
@@ -35,6 +35,7 @@ func (s Services) invokeMedia(ctx context.Context, path string, values *requestV
 			Name:             values.text("name"),
 			SourceFile:       values.text("from-file"),
 			SourceURL:        values.text("from-url"),
+			SourceURLFile:    values.text("from-url-file"),
 			SHA256:           values.text("sha256"),
 			SkipConfirmation: values.boolean("yes"),
 		}, s.Media.Add)

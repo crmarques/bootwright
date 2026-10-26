@@ -11,10 +11,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
@@ -58,7 +61,7 @@ func Executable() (string, error) {
 
 // verifiedExecutable proves path names the running binary that only root and
 // the invoking account can replace. Only the unprivileged supervisor resolves
-// it, before it elevates: the elevated child re-executes /proc/self/exe. A
+// it, before it elevates; the elevated child confirms it again by its path. A
 // directory on the path that account cannot search refuses naming the path
 // and the local copy that avoids it.
 func verifiedExecutable(path string) (string, error) {
@@ -119,14 +122,131 @@ func unreadableExecutable(path string) error {
 		"copy the executable to a local directory both the invoking account and root can read, such as /usr/local/bin, and run it from there")
 }
 
-// ReexecutionPath keeps the verified running executable pinned while sudo may
-// wait for authentication. The supervisor stays alive until its child exits,
-// so this process identity cannot be recycled during reexecution.
+// ReexecutionPath is the proved path of a root-owned install, which a sudoers
+// rule can name, and otherwise this live process's procfs executable.
 func ReexecutionPath() (string, error) {
-	if _, err := Executable(); err != nil {
+	resolved, err := Executable()
+	if err != nil {
 		return "", err
 	}
-	return "/proc/" + strconv.Itoa(os.Getpid()) + "/exe", nil
+	return reexecution(resolved, os.Getpid()), nil
+}
+
+func reexecution(resolved string, pid int) string {
+	if rootOwned(resolved) {
+		return resolved
+	}
+	return "/proc/" + strconv.Itoa(pid) + "/exe"
+}
+
+func rootOwned(path string) bool {
+	for current := path; ; current = filepath.Dir(current) {
+		info, err := os.Lstat(current)
+		if err != nil {
+			return false
+		}
+		status, ok := info.Sys().(*syscall.Stat_t)
+		if !ok || status.Uid != 0 || info.Mode().Perm()&0o022 != 0 && !(info.IsDir() && info.Mode()&fs.ModeSticky != 0) {
+			return false
+		}
+		if current == "/" {
+			return true
+		}
+	}
+}
+
+// ConfirmElevatedChild refuses a foreign variable and a file sudo was not named.
+func ConfirmElevatedChild(environ []string) *diagnostics.Diagnostic {
+	supervising := ""
+	if sudo, err := QualifiedSudo(); err == nil {
+		if pid, found := supervisor("/proc", os.Getppid(), sudo, "/proc/self/exe"); found {
+			supervising = "/proc/" + strconv.Itoa(pid) + "/exe"
+		}
+	}
+	return confirmChild(environ, "/proc/self/exe", supervising)
+}
+
+func confirmChild(environ []string, self, supervising string) *diagnostics.Diagnostic {
+	if refusal := foreignVariable(environ); refusal != nil {
+		return refusal
+	}
+	command := ""
+	for _, entry := range environ {
+		if name, value, _ := strings.Cut(entry, "="); name == "SUDO_COMMAND" {
+			command = value
+		}
+	}
+	running, runningErr := os.Stat(self)
+	proved, provedErr := os.Stat(supervising)
+	if supervising != "" && runningErr == nil && provedErr == nil && os.SameFile(running, proved) {
+		if procfsReexecution(command) {
+			return nil
+		}
+		path, _, _ := strings.Cut(command, " ")
+		if invoked, err := os.Stat(path); filepath.IsAbs(path) && err == nil && os.SameFile(invoked, proved) && rootOwned(path) {
+			return nil
+		}
+	}
+	return &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege",
+		Message:     "the elevated child is not the root-owned executable its supervisor named to sudo; nothing was done",
+		Remediation: "install Bootwright to a root-owned path without spaces, such as /usr/local/bin/bootwright, and run it from there"}
+}
+
+func ConfirmSudoEnvironment() *diagnostics.Diagnostic {
+	if os.Geteuid() != 0 {
+		return nil
+	}
+	trusted, _ := sudoParent(os.Getenv("SUDO_COMMAND"))
+	return confirmSudoEnvironment(os.Environ(), trusted, os.Unsetenv)
+}
+
+func confirmSudoEnvironment(environ []string, sudoStarted bool, unset func(string) error) *diagnostics.Diagnostic {
+	if !sudoStarted {
+		return nil
+	}
+	if refusal := foreignVariable(environ); refusal != nil {
+		return refusal
+	}
+	for _, entry := range environ {
+		if name, _, _ := strings.Cut(entry, "="); sessionVariable(name) {
+			if err := unset(name); err != nil {
+				return &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: "the session variable " + name + " cannot be removed before Bootwright starts a process; nothing was done"}
+			}
+		}
+	}
+	return nil
+}
+
+func foreignVariable(environ []string) *diagnostics.Diagnostic {
+	for _, entry := range environ {
+		if name, _, _ := strings.Cut(entry, "="); !childVariable(name) {
+			return &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege",
+				Message:     "this root invocation was given variable " + printableName(name) + ", which neither sudo, its PAM session nor the acquisition route sets; nothing was done",
+				Remediation: "remove what passes it, the sudo policy's SETENV or env_keep entry, /etc/environment or a pam_env configuration, and repeat the command"}
+		}
+	}
+	return nil
+}
+
+var sudoVariables = []string{"HOME", "LOGNAME", "USER", "USERNAME", "MAIL", "SHELL", "PATH", "TERM", "LANG", "LANGUAGE",
+	"SUDO_COMMAND", "SUDO_USER", "SUDO_UID", "SUDO_GID", "SUDO_HOME", "SUDO_TTY"}
+
+var sessionVariables = []string{"KRB5CCNAME", "DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR", "XDG_SEAT", "XDG_VTNR"}
+
+func sessionVariable(name string) bool {
+	return slices.Contains(sessionVariables, name) || strings.HasPrefix(name, "XDG_SESSION_")
+}
+
+func childVariable(name string) bool {
+	return slices.Contains(sudoVariables, name) || slices.Contains(controller.ProxyEnvironmentNames, name) ||
+		strings.HasPrefix(name, "LC_") || sessionVariable(name)
+}
+
+func printableName(name string) string {
+	if len(name) > 64 || strings.IndexFunc(name, func(r rune) bool { return r < '!' || r > '~' }) >= 0 {
+		return "with an unprintable name"
+	}
+	return name
 }
 
 func (ProcessExecutor) Run(ctx context.Context, request Command) (int, error) {

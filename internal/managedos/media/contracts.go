@@ -156,6 +156,10 @@ type Acquirer interface {
 	Open(context.Context, Source) (Acquisition, error)
 }
 
+type URLReader interface {
+	ReadURL(context.Context, string) (string, error)
+}
+
 // Source is one validated media origin; exactly one field is populated.
 type Source struct {
 	Path string

@@ -37,10 +37,26 @@ author:
 """
 
 EXAMPLES = r"""
-- name: Merge bound credentials privately
-  ansible.builtin.set_fact:
-    pull: '{{ pull | bootwright.core.registry_pull_secret(mirror, username, password) }}'
+# The merged secret reaches the target only inside the pipelined module
+# arguments, as standard input of a fixed executable, never as a transferred
+# file, and each lent file is read only where it is consumed.
+- name: Write the merged pull secret privately on the target
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/install
+      - --mode=0600
+      - /dev/stdin
+      - "{{ work }}/pull-secret.json"
+    stdin: >-
+      {{ lookup('ansible.builtin.file', material.pullSecret)
+         | bootwright.core.registry_pull_secret(
+             mirror,
+             lookup('ansible.builtin.file', material.mirrorUsername),
+             lookup('ansible.builtin.file', material.mirrorPassword, rstrip=false)) }}
+    stdin_add_newline: false
+  changed_when: true
   no_log: true
+  diff: false
 """
 
 RETURN = r"""

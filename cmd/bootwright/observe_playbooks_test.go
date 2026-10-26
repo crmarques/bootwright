@@ -109,6 +109,8 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("containercluster_install_agent", "state.yml", "ansible.builtin.set_fact", "resolves the answers in memory", read)
 	add("containercluster_media_agent", "observe.yml", observeCollection+"containercluster_media_inspect", "reads what the media block published", read)
 	add("containercluster_media_agent", "observe.yml", "ansible.builtin.stat", "reads the kept kubeconfig's metadata without following links", read)
+	add("containercluster_media_agent", "observe.yml", "ansible.builtin.slurp", "reads which context incarnation the build receipt records", read)
+	add("containercluster_media_agent", "observe.yml", "ansible.builtin.fail", "refuses the hand-over from a work area another context incarnation built", read)
 	add("containercluster_media_agent", "observe.yml", "ansible.builtin.copy", "hands the kept kubeconfig to custody through the declared output", observeCustodyCopy)
 	add("infra_artifact_server_nginx", "observe.yml", observeCollection+"artifact_server_inspect", "reads the served unit, container and content", read)
 	add("infra_managed_service", "observe.yml", observeCollection+"infra_service_inspect", "reads the managed service's unit, container and answers", read)

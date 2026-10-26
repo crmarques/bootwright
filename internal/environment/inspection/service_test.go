@@ -374,6 +374,16 @@ func TestSecretsRefusalsSettleTheTargetBeforeAnyEvidenceRead(t *testing.T) {
 	}
 }
 
+func TestARequestForBothRevealsRefusesBeforeAnyRead(t *testing.T) {
+	f := newFixture(t)
+	result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"ceph"}, Secrets: true, ObjectUser: "backup"})
+	found := diagnostics.Of(err)
+	if result != nil || len(found) != 1 || found[0].Code != "cli.usage" || !strings.Contains(found[0].Message, "--object-user") {
+		t.Fatalf("result %+v, err %v", result, err)
+	}
+	f.untouched()
+}
+
 func TestEvidenceFailuresPropagateInsteadOfReportingUnavailable(t *testing.T) {
 	f := newFixture(t)
 	f.failure = errors.New("the graph cannot be compiled")
@@ -415,6 +425,9 @@ func TestSecretsRevealTheCustodiedDashboardPasswordAfterTheTargetSettles(t *test
 	}
 }
 
+// Only a custody-marked copy warns access.unproved; a dashboard whose
+// evidence does not prove it reachable conveys that by its status and reason
+// alone (D183, Q101).
 func TestSecretsRevealAnUnprovedCopyWithAWarning(t *testing.T) {
 	for name, edit := range map[string]func(*fixture){
 		"custody copy never proved": func(f *fixture) {
@@ -422,6 +435,19 @@ func TestSecretsRevealAnUnprovedCopyWithAWarning(t *testing.T) {
 			copied.Unproved = true
 			f.passwords["storage"] = copied
 		},
+	} {
+		f := newFixture(t)
+		edit(f)
+		result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}, Secrets: true})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		dashboard := result.Storage[0].Ceph.Dashboard
+		if revealed(t, dashboard) != testPassword || !dashboard.Warn || dashboard.Status != DashboardUnproved || dashboard.Reason == "" || dashboard.User != "admin" {
+			t.Fatalf("%s: reveal = %+v", name, dashboard)
+		}
+	}
+	for name, edit := range map[string]func(*fixture){
 		"dashboard never reached": func(f *fixture) {
 			proof := f.cephFor["storage"]
 			proof.Dashboard.Status, proof.Dashboard.Reason = DashboardUnproved, "the controller-side TLS connect failed"
@@ -436,8 +462,8 @@ func TestSecretsRevealAnUnprovedCopyWithAWarning(t *testing.T) {
 			t.Fatalf("%s: %v", name, err)
 		}
 		dashboard := result.Storage[0].Ceph.Dashboard
-		if revealed(t, dashboard) != testPassword || !dashboard.Warn || dashboard.Status != DashboardUnproved || dashboard.Reason == "" || dashboard.User != "admin" {
-			t.Fatalf("%s: reveal = %+v", name, dashboard)
+		if revealed(t, dashboard) != testPassword || dashboard.Warn || dashboard.Status != DashboardUnproved || dashboard.Reason == "" || dashboard.User != "admin" {
+			t.Fatalf("%s: an unmarked copy warned or lost its status: %+v", name, dashboard)
 		}
 	}
 }

@@ -27,6 +27,7 @@ type accountRequest struct {
 	sudoUID, sudoGID, sudoUser string
 	sudoCommand                string
 	trustedParent              bool
+	selfCommand                bool
 }
 
 var errAccount = errors.New("invoking account identity cannot be verified")
@@ -85,7 +86,7 @@ func accountFrom(ctx context.Context, directory accountDirectory, request accoun
 				return Account{}, accountRefusal{disagreeingSudo}
 			}
 			uid, manual = parsed, true
-		case procfsReexecution(request.sudoCommand):
+		case procfsReexecution(request.sudoCommand), request.selfCommand:
 			return Account{}, accountRefusal{reexecutionOrphaned}
 		}
 	}

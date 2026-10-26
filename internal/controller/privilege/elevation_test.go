@@ -115,8 +115,8 @@ const (
 	authorization  = "sudo authorization could not be obtained"
 	authenticate   = "authenticate to sudo, or run Bootwright as root"
 	reauthenticate = "run sudo -v in this terminal, then repeat the command; or run Bootwright as root"
-	permitRule     = "the sudo policy must permit Bootwright's re-execution through /proc/<pid>/exe: grant ALL or a /proc/[0-9]*/exe rule " +
-		"(a rule naming the Bootwright binary does not match it); ask the policy's administrator, or run Bootwright as root"
+	permitRule     = "the sudo policy must permit Bootwright's re-execution: a rule naming the installed binary, such as /usr/local/bin/bootwright, " +
+		"when root owns it and every directory above it, or ALL or a /proc/[0-9]*/exe rule for any other executable; ask the policy's administrator, or run Bootwright as root"
 	copyLocally = "root cannot execute the Bootwright executable where it is (a network home with root squash?); " +
 		"copy it to a local directory such as /usr/local/bin and run it from there"
 	passwordNeeded = "sudo: a password is required\n"
@@ -711,6 +711,21 @@ func TestAStandardInputRefusalLimitsRootToASessionSudoDidNotStart(t *testing.T) 
 		d := test.outcome.Diagnostic
 		if test.outcome.ExitCode != 1 || d == nil || d.Code != "secret.input" || d.Remediation != test.want || strings.Contains(d.Remediation, "sudo logs nothing") {
 			t.Errorf("%s: outcome = %d %+v, want remediation %q", name, test.outcome.ExitCode, d, test.want)
+		}
+	}
+}
+
+// A media URL on standard input is guarded like a Secret's value and named as
+// what it is, with the file flag that keeps it out of sudo's I/O log.
+func TestAStandardInputMediaURLIsRefusedUnderALoggingPolicy(t *testing.T) {
+	for _, outcome := range []Outcome{
+		inputLoggedRefusal(&InputLogged{Option: "log_input", Secret: MediaURLInput}),
+		inputUnprovenRefusal(&InputUnproven{Secret: MediaURLInput, Validated: true}),
+	} {
+		d := outcome.Diagnostic
+		if d == nil || !strings.Contains(d.Message, "the media URL read from standard input") || strings.Contains(d.Message, "Secret") ||
+			!strings.HasPrefix(d.Remediation, "repeat the command with --from-url-file <path>") || d.Object != nil {
+			t.Fatalf("refusal = %+v", d)
 		}
 	}
 }

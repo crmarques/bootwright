@@ -1,5 +1,5 @@
 {
-  "confirm": "delete, abandoning the objects bootwright status --context example and bootwright diff --context example list, freeing the exclusive keys the plan names, and removing any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context example --name \u003ccluster\u003e)",
+  "confirm": "delete, abandoning the objects bootwright status --context example and bootwright diff --context example list, freeing the exclusive keys the plan names, and removing any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context example --name \u003ccluster\u003e), and leaving on their hosts the native-side material those objects retain outside the keyring (Ceph keys and bootstrap material, erase custody and installer work areas), which goes only with them",
   "freed": [
     "bmc:192.0.2.1:8000/1",
     "libvirt-domain:bootwright-example-rhel-01"

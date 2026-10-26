@@ -14,6 +14,18 @@ containercluster_media_agent_receipt: '{{ containercluster_media_agent_work }}/b
 # read bound on it.
 containercluster_media_agent_kubeconfig: '{{ containercluster_media_agent_work }}/.bootwright-kubeconfig'
 containercluster_media_agent_kubeconfig_bound: 65536
+# The incarnation of the context that built the work area, as its receipt
+# records it: the device and inode the registry holds for the context's
+# directory with that directory's birth time, or its inode generation where the
+# filesystem reports no birth time. A filesystem reuses a freed inode, so the
+# birth time is what a recreated context of the same name never shares. A
+# receipt that records none, or no receipt, names no other incarnation.
+containercluster_media_agent_built_by: >-
+  {{ ((containercluster_media_agent_built.content | b64decode | from_json).incarnation | default(''))
+     if containercluster_media_agent_built.content is defined else '' }}
+containercluster_media_agent_foreign: >-
+  {{ containercluster_media_agent_built_by | length > 0
+     and containercluster_media_agent_built_by != bootwright_cluster_media_material.incarnation | default('') }}
 containercluster_media_agent_installer: '{{ bootwright_cluster_media_material.installer }}'
 # The unguessable directory this attempt publishes in. The token is minted by
 # the attempt, so it names a path that exists in no request and no log.

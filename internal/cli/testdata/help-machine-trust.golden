@@ -1,15 +1,19 @@
   bootwright / machine trust
       Inspect and maintain exact host-key trust. It observes exactly the endpoints this context
       declares and records what they present. A Machine that proves its host key another way is
-      reported and left alone; a changed key is superseded only by naming it in --replace.
+      reported and left alone; a changed key is superseded only by naming it in --replace. A
+      key whose fingerprint --expect or --replace names must match it, and --yes records only
+      keys whose fingerprints are named, after you verify them out of band.
 
   Usage
     bootwright machine trust [flags]
 
   Command flags
       --dry-run   Limit work to the command's dry-run boundary
+      --expect    Name comma-separated verified fingerprints as <machine>=SHA256:<fingerprint>
       --machines  Select comma-separated machine names (default: all)
-      --replace   Select comma-separated replacements (default: none)
+      --replace   Select comma-separated replacements, each optionally
+                  <machine>=SHA256:<fingerprint> (default: none)
       --yes       Confirm the command's ordinary confirmation
 
   Common flags

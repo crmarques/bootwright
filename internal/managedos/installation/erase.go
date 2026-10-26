@@ -346,3 +346,11 @@ func eraseLineage(data json.RawMessage, request EraseRequest, execution lifecycl
 	}
 	return nil
 }
+
+func (c EraseCapability) AccessCredentials(block reconciliation.Block) ([]string, error) {
+	request, err := DecodeEraseRequest(block.Request)
+	if err != nil {
+		return nil, err
+	}
+	return controllerAccessCredentials(request.Install.Target), nil
+}

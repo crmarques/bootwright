@@ -702,3 +702,18 @@ func trees(t *testing.T, parents ...string) []string {
 	}
 	return paths
 }
+
+// A material value is non-secret by contract: one equal to, or containing, a
+// confidential part of the material the run is lent refuses before anything is
+// written, while a public certificate or key does not.
+func TestNoMaterialValueEqualsBoundMaterialBytes(t *testing.T) {
+	for value, refused := range map[string]bool{"PRIVATE": true, "auth: PRIVATE;": true, "SSHKEY": true, "host ssh-ed25519 AAAA": true, "escalate\n": true, "CERTIFICATE": false, "public": false} {
+		request := adapterRequest(t, &bytes.Buffer{})
+		request.Material = material()
+		request.MaterialValues = map[string]string{"fingerprint": value}
+		err := checkMaterials(request)
+		if (err != nil) != refused || refused && strings.Contains(err.Error(), value) {
+			t.Fatalf("material value %q = %v, want refused %v without naming it", value, err, refused)
+		}
+	}
+}

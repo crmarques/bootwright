@@ -2,7 +2,11 @@
 
 package privilege
 
-import "context"
+import (
+	"context"
+
+	"github.com/crmarques/bootwright/internal/diagnostics"
+)
 
 func (Resolver) Resolve(context.Context) (Account, error) { return Account{}, errAccount }
 
@@ -23,6 +27,10 @@ func Begin(ctx context.Context) (context.Context, func()) { return context.WithC
 func ExitCode(_ context.Context, fallback int) int { return fallback }
 
 func SupervisedChild() bool { return false }
+
+func ConfirmElevatedChild([]string) *diagnostics.Diagnostic { return nil }
+
+func ConfirmSudoEnvironment() *diagnostics.Diagnostic { return nil }
 
 func ForegroundOfOwnTerminal() bool { return false }
 

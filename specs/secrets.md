@@ -164,7 +164,9 @@ Bounds: 1 MiB/part, 2 MiB/version, 64 MiB referenced material, 4096 versions and
 lines, strip one optional final LF and reject embedded CR/LF/NUL. A
 `--username` is one nonempty UTF-8 line within the part bound holding no
 whitespace and no colon; any other value refuses like a flag set that does not
-fit, as a usage failure naming the Secret. Docker
+fit, as a usage failure naming the Secret. It is non-secret identity metadata
+(D183, Q98): it travels on the argument vector, a repeated command names it,
+and only the password of a `usernamePassword` Secret is confidential. Docker
 JSON rejects duplicates/trailing data and requires a nonempty auths object.
 The limits apply to decoded, normalized parts. A token/password transport may
 carry one extra final LF; an extra non-LF byte still exceeds the part limit.
@@ -322,10 +324,11 @@ created. An access credential is only presented to authenticate to an endpoint
 the operator owns, as a management controller's password or a provider's
 kubeconfig is, and no ownership proof rests on it. Each field that references
 a Secret names its class. Both classes follow the binding rule above: a
-continuation or removal presents the version its operation bound.
-
-Not yet met: no Secret reference field names its class; tracked as
-[B805](milestones/backlog.md#b805).
+continuation or removal presents the version its operation bound. An access
+credential rotated at its endpoint is presented at its current version only
+through the recorded
+[access-credential rebind](state-reconciliation.md#access-credential-rebind),
+which issues a new binding version; effect material refuses it.
 
 "A Secret declaration's fingerprint drops its provenance and covers type,
 source and parameters only, and a stored version whose fingerprint equals the
@@ -375,16 +378,14 @@ of the same name. Four outputs are revealed, each by its one command only:
 | `kubeconfig` (an installation) | `cluster kubeconfig` under the [explicit sensitive-output boundary](cli.md#administrator-access-export) | the custodied bytes | revealed with one `access.unproved` warning |
 | `client` (a StorageClient) | `cluster keyring` under the [client keyring export](cli.md#client-keyring-export) | the native keyring form | revealed with one `access.unproved` warning |
 | `dashboard` (a managed StorageCluster) | `cluster info --secrets` under the [storage dashboard access](cli.md#storage-dashboard-access) boundary | `passwordValue` of `dashboard` | carries no mark; see the note below |
-| `object-user` (a StorageObjectUser) | `cluster info --secrets`, same boundary | `accessKey` and `secretKey` of each entry of `objectUsers` | refused `access.unavailable`, with no partial output |
+| `object-user` (a StorageObjectUser) | `cluster info --object-user <name>`, same boundary | `accessKey` and `secretKey` of the one entry of `objectUsers` | refused `access.unavailable`, with no partial output |
 
 No other output is revealed: a storage export's `external-details` reach only
 the consuming cluster's [placed Secret](#material-placed-in-a-cluster). The
-`object-user` row records the reveal the code performs; whether that reveal
-stays is an open owner question of [B817](milestones/backlog.md#b817).
-
-Not yet met: `cluster info --secrets` also warns `access.unproved` for a
-dashboard whose evidence does not prove it reachable, though its password
-carries no mark; tracked as [B817](milestones/backlog.md#b817).
+`object-user` reveal is authorized (D183, Q100). A dashboard whose evidence
+does not prove it reachable is revealed with `dashboard.status` `unproved` and
+its reason, and no warning, because its password carries no mark (D183,
+Q101).
 
 Produced material's parts count in `materialParts`,
 rotation re-encrypts it with every other version, and it is removed with the
@@ -422,7 +423,10 @@ S3 key pair, a storage export's CephX keys and RGW key pair, an RBD mirroring
 bootstrap token, a Ceph cluster's original bootstrap configuration and
 administrator keyring, a physical erase's original-attempt custody and the
 material an installer keeps in its [work area](container-clusters.md#boot-media)
-are retained this way, each where its owning page places it.
+are retained this way, each where its owning page places it. The Ceph registry
+login, an access credential, is also retained native-side: each Ceph host
+keeps it in cephadm's registry login file `/etc/ceph/podman-auth.json`, which
+cephadm reads for its own image pulls.
 
 Each retained file is private under the
 [filesystem rules](security.md#filesystem-and-artifact-safety), lies beneath a
@@ -437,11 +441,9 @@ with its effect, or it goes with the hosts it lives on. A deletion that
 abandons the context's objects leaves it on those hosts, and its confirmation
 names it. A context recreated under the same name never adopts retention an
 earlier context left.
-
-Not yet met: a context deletion's confirmation names no retention, and an
-installer work area, or the kubeconfig a removal hands over from it, is not
-refused when an earlier context of the same name left it; tracked as
-[B817](milestones/backlog.md#b817) and [B829](milestones/backlog.md#b829).
+An installer work area an earlier context of the same name left is neither
+rebuilt nor handed over, as its [build receipt](container-clusters.md#boot-media)
+records which context built it.
 
 ## Local keyring v4
 

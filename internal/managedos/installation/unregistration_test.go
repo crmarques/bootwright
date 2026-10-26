@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 const releasedRefusal = "the installation removal did not prove its machine holds no subscription registration it created"
@@ -268,6 +269,25 @@ func TestRemovalEvidenceDecodesTheUnregistrationStates(t *testing.T) {
 		if _, err := decodeEvidence(encode(t, Evidence{Absent: true, Postcondition: true, Registration: registration, Request: "digest"}), "digest"); err != nil {
 			t.Fatalf("%+v refused: %v", registration, diagnostics.Of(err))
 		}
+	}
+}
+
+// An installation presents a bare-metal target's controller credentials only
+// to authenticate, so a rotated one may be rebound; an emulated controller's
+// credentials are effect material its libvirt host gave the emulator.
+func TestOnlyABareMetalControllerCredentialIsAnAccessCredential(t *testing.T) {
+	request := pinnedRequest(t, labCatalog())
+	if request.Target.Substrate != substrate.ArmLibvirt || request.Target.Controller.CredentialsRef == "" {
+		t.Fatalf("the fixture target = %+v, want a libvirt controller with credentials", request.Target)
+	}
+	access, err := New(nil).AccessCredentials(registeringBlock(t, request))
+	if err != nil || len(access) != 0 {
+		t.Fatalf("a libvirt installation reads %v (%v) as access credentials", access, err)
+	}
+	request.Target.Substrate = substrate.ArmBaremetal
+	access, err = New(nil).AccessCredentials(registeringBlock(t, request))
+	if err != nil || !slices.Equal(access, []string{request.Target.Controller.CredentialsRef}) {
+		t.Fatalf("a bare-metal installation reads %v (%v), want only %s", access, err, request.Target.Controller.CredentialsRef)
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -12,13 +11,13 @@ import (
 
 var ErrObjectUserMaterial = errors.New("the custodied object-user material is not one S3 credential of its user")
 
-func (s Service) revealObjectUsers(ctx context.Context, selected string, catalog api.Catalog, entry *StorageEntry) error {
-	users := catalog.OfKind(api.StorageObjectUser)
-	slices.SortFunc(users, func(a, b api.Object) int { return strings.Compare(a.Name(), b.Name()) })
-	for _, user := range users {
-		if user.Spec().Get("clusterRef").Text() != entry.Name {
-			continue
-		}
+func (s Service) revealObjectUser(ctx context.Context, selected string, catalog api.Catalog, entry *StorageEntry, name string) error {
+	user, declared := catalog.Find(api.StorageObjectUser, name)
+	if !declared || user.Spec().Get("clusterRef").Text() != entry.Name {
+		return failure("access.target", "StorageCluster "+entry.Name+" of context "+selected+" declares no StorageObjectUser named "+name,
+			"bootwright cluster info --context "+selected+" --name "+entry.Name+" lists its object users")
+	}
+	for _, user := range []api.Object{user} {
 		gatewayName := user.Spec().Get("objectGatewayRef").Text()
 		gateway, exists := catalog.Find(api.StorageObjectGateway, gatewayName)
 		if !exists || gateway.Spec().Get("clusterRef").Text() != entry.Name {

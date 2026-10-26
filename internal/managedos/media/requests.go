@@ -6,6 +6,7 @@ type AddMediaRequest struct {
 	Name             string
 	SourceFile       string
 	SourceURL        string
+	SourceURLFile    string
 	SHA256           string
 	SkipConfirmation bool
 }

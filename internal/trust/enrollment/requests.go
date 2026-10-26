@@ -4,6 +4,7 @@ type EnrollRequest struct {
 	ContextName      string
 	Machines         []string
 	Replace          []string
+	Expect           map[string]string
 	DryRun           bool
 	SkipConfirmation bool
 }

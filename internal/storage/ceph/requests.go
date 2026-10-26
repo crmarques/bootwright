@@ -11,6 +11,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/storage"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -254,6 +255,24 @@ type Request struct {
 }
 
 func (r Request) Canonical() ([]byte, error) { return reconciliation.Freeze(r, "Ceph") }
+
+func (r Request) SecretReferences() []string {
+	references := scopeOf(r).secretReferences()
+	if r.Gateway != nil {
+		for _, binding := range r.Gateway.Bindings {
+			references = append(references, binding.SecretRef)
+		}
+	}
+	if r.Service != nil {
+		for _, binding := range r.Service.Bindings {
+			references = append(references, binding.SecretRef)
+		}
+	}
+	if r.ObjectBucket != nil {
+		references = append(references, r.ObjectBucket.CertificateRef)
+	}
+	return lifecycle.SecretNames(references...)
+}
 func DecodeRequest(data []byte) (Request, error) {
 	return reconciliation.ThawVersion[Request](data, "Ceph", Version)
 }

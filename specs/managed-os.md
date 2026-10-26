@@ -968,7 +968,11 @@ log, an argv or the installed disk.
 recovery secret: it is never renewed or replaced while the Machine exists. An
 apply never re-keys an installed disk and does not detect a changed value, and
 Bootwright offers no command that reveals a bound version, so the operator
-keeps the value the installation bound.
+keeps the value the installation bound. The passphrase is effect material, so
+the [access-credential rebind](state-reconciliation.md#access-credential-rebind)
+refuses it, as it refuses the fleet key and a delivered host key; a bare-metal
+target's management controller credentials are the access credential an
+installation and its physical erase present, which that rebind may replace.
 
 **Publication.** `recovery` is published beneath the private subtree, beside
 the installer image, only by an apply that boots the installer: after the

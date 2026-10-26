@@ -36,6 +36,35 @@ func (s Service) Bind(ctx context.Context, request BindRequest) (secretstore.Bin
 	return result, nil
 }
 
+func (s Service) Rebind(ctx context.Context, request RebindRequest) (secretstore.Binding, error) {
+	selected, requested, err := s.requested(ctx, request.ContextName, request.Names)
+	if err != nil {
+		return secretstore.Binding{}, err
+	}
+	var result secretstore.Binding
+	err = s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+		rebinder, ok := session.(secretstore.Rebinder)
+		if !ok {
+			return secretstore.Failure("store.implementation", "the secret store cannot rebind a binding")
+		}
+		selection, err := s.readCurrent(ctx, session, selected.Name, requested)
+		if err != nil {
+			return err
+		}
+		defer clearCurrent(selection)
+		inputs := make([]secretstore.BoundInput, 0, len(selection))
+		for _, item := range selection {
+			inputs = append(inputs, secretstore.BoundInput{Declaration: item.declaration, Version: item.version.ID, Material: item.material})
+		}
+		result, err = rebinder.Rebind(ctx, request.BindingID, inputs)
+		return err
+	})
+	if err != nil {
+		return secretstore.Binding{}, err
+	}
+	return result, nil
+}
+
 // requested resolves what one bind or bounded read names: a ready context and
 // the declarations of a bounded unique set of its Secrets, in name order.
 func (s Service) requested(ctx context.Context, contextName string, names []string) (secretstore.Context, []secrets.Declaration, error) {

@@ -117,6 +117,8 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		// downloaded, a local file is copied.
 		{"media add", []string{"--name", "image.iso", "--from-url", source, "--sha256", digest}, readsRoute},
 		{"media add", []string{"--name", "image.iso", "--from-url", source, "--sha256", digest, "--context", "lab"}, readsRoute},
+		{"media add", []string{"--name", "image.iso", "--from-url-file", "-", "--sha256", digest}, readsRoute},
+		{"media add", []string{"--name", "image.iso", "--from-url-file", "/run/url", "--sha256", digest}, readsRoute},
 		{"media add", []string{"--name", "image.iso", "--from-file", "/images/image.iso"}, ignoresRoute},
 		{"media add", []string{"--name", "image.iso", "--from-file", "/images/image.iso", "--sha256", digest}, ignoresRoute},
 		{"media list", nil, ignoresRoute},
@@ -230,6 +232,33 @@ func TestOnlyAStandardInputSecretSetNamesItsSecretToTheBoundary(t *testing.T) {
 		classified := ClassifyInvocation(test.args)
 		if !classified.RequiresRoot || classified.SecretStdin != test.want {
 			t.Errorf("%v: requires root %v, standard-input Secret %q, want %q", test.args, classified.RequiresRoot, classified.SecretStdin, test.want)
+		}
+	}
+}
+
+// A media download reading its signed URL from standard input is marked for
+// the boundary's sudo input-logging guard; a URL file or a command-line URL is
+// not, and an invocation naming two sources is a usage error.
+func TestOnlyAStandardInputMediaURLIsMarkedForTheBoundary(t *testing.T) {
+	digest := strings.Repeat("a", 64)
+	for _, test := range []struct {
+		args []string
+		want bool
+	}{
+		{[]string{"media", "add", "--name", "i.iso", "--from-url-file", "-", "--sha256", digest}, true},
+		{[]string{"media", "add", "--name", "i.iso", "--from-url-file", "/run/url", "--sha256", digest}, false},
+		{[]string{"media", "add", "--name", "i.iso", "--from-url", "https://example.test/i.iso", "--sha256", digest}, false},
+	} {
+		if classified := ClassifyInvocation(test.args); !classified.RequiresRoot || classified.URLStdin != test.want {
+			t.Errorf("%v: requires root %v, URL on standard input %v, want %v", test.args, classified.RequiresRoot, classified.URLStdin, test.want)
+		}
+	}
+	for _, args := range [][]string{
+		{"media", "add", "--name", "i.iso", "--from-url-file", "-"},
+		{"media", "add", "--name", "i.iso", "--from-url-file", "-", "--from-url", "https://example.test/i.iso", "--sha256", digest},
+	} {
+		if code, _, _, record := runRecorded(args); code != 2 || record.calls != 0 {
+			t.Errorf("%v: code=%d calls=%d, want a usage error", args, code, record.calls)
 		}
 	}
 }

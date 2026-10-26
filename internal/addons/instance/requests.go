@@ -30,6 +30,9 @@ type Request struct {
 	Version        string                    `json:"version"`
 }
 
+func (r Request) SecretReferences() []string {
+	return lifecycle.SecretNames(append(slices.Clone(r.Secrets), r.Placement.SecretReferences()...)...)
+}
 func (r Request) Deadline() time.Duration {
 	return time.Duration(r.BudgetSeconds)*time.Second + 10*time.Minute
 }

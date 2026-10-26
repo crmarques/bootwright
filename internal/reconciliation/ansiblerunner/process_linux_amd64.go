@@ -19,6 +19,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 const (
@@ -177,12 +178,29 @@ func checkMaterials(request lifecycle.RunRequest) error {
 		}
 		names[file.Name], bound[file.Variable] = true, true
 	}
-	for name := range request.MaterialValues {
+	for name, value := range request.MaterialValues {
 		if bound[name] {
 			return failure("lifecycle.state", "a material value is named as a material file's variable", "")
 		}
+		if confidentialValue(request.Material, value) {
+			return failure("lifecycle.state", "material value "+name+" carries bound secret material, whole or within it, which reaches an adapter only as a lent file", "")
+		}
 	}
 	return nil
+}
+
+func confidentialValue(lent map[string]secrets.Material, value string) bool {
+	for _, material := range lent {
+		for _, part := range []secrets.Part{secrets.ValuePart, secrets.PasswordPart, secrets.PrivateKeyPart} {
+			bytes, ok := material.Part(part)
+			equal := ok && len(bytes) != 0 && strings.Contains(value, string(bytes))
+			clear(bytes)
+			if equal {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // materialName admits one segment of lowercase letters, digits, dots,

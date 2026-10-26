@@ -23,8 +23,10 @@ type InvocationClass struct {
 	// one of the same command, takes no route from it.
 	AmbientRoute bool
 	// SecretStdin names the Secret a secret set reads from standard input,
-	// which a sudo policy that logs input would record.
+	// which a sudo policy that logs input would record; URLStdin marks a media
+	// download reading its signed URL there.
 	SecretStdin string
+	URLStdin    bool
 }
 
 func ClassifyInvocation(args []string) InvocationClass {
@@ -58,6 +60,7 @@ func ClassifyInvocation(args []string) InvocationClass {
 	}
 	classification.RequiresRoot, classification.AmbientRoute = true, ambient
 	classification.SecretStdin = secretStdin(path, command.Flags())
+	classification.URLStdin = path == "media add" && stringValue(command.Flags(), "from-url-file") == "-"
 	return classification
 }
 
@@ -80,7 +83,7 @@ func contextFreeAcquisition(path string, flags *pflag.FlagSet) bool {
 	case "preflight controller":
 		return stringValue(flags, "context") == ""
 	case "media add":
-		return stringValue(flags, "from-url") != ""
+		return stringValue(flags, "from-url") != "" || stringValue(flags, "from-url-file") != ""
 	}
 	return false
 }

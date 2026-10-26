@@ -196,16 +196,31 @@ verifies against.
 
 ### The sudo rule
 
-Bootwright re-executes itself as root through
-`sudo -u '#0' -- /proc/<pid>/exe`, so the sudoers rule that admits the account
-must match that path
-([local privilege](../specs/cli.md#local-privilege-and-user-identity)). `ALL`
-matches it, as `%wheel ALL=(ALL) ALL` grants, and so does a `/proc/[0-9]*/exe`
-rule. Every running program has such a path, so that rule is `ALL` in effect
-unless a `sha256:<digest>` before the command pins it to one build's
-executable, the `Digest_Spec` of sudoers(5), which every new build must update.
-A rule naming the Bootwright binary does not match the re-execution: sudo
-compares a command's base name, `exe`, before its path. A policy a directory
+Bootwright re-executes itself as root through sudo
+([local privilege](../specs/cli.md#local-privilege-and-user-identity)). An
+executable root owns, below directories root owns, such as one installed with
+`sudo install -m 0755 bootwright /usr/local/bin/bootwright`, is re-executed by
+that absolute path, so a rule naming it admits exactly that binary:
+
+```
+%bootwright-operators ALL=(root) /usr/local/bin/bootwright
+```
+
+The elevated child confirms it is that file, so install it to a path without
+spaces. Every root invocation sudo starts, including one you run with sudo by
+hand, refuses any variable that sudo, the acquisition route or the PAM session
+variables `KRB5CCNAME`, `DBUS_SESSION_BUS_ADDRESS`, `XDG_RUNTIME_DIR`,
+`XDG_SESSION_*`, `XDG_SEAT` and `XDG_VTNR` did not set, and unsets those
+session variables before it starts anything. A host whose PAM stack,
+`/etc/environment` or pam_env configuration exports another variable refuses
+naming it; to see what a root command receives, run
+`env -i PATH=/usr/bin:/bin sudo -u '#0' -- /usr/bin/env`. Any other executable, such as your own
+build output, is re-executed through `sudo -u '#0' -- /proc/<pid>/exe`, which
+`ALL` matches, as `%wheel ALL=(ALL) ALL` grants, and so does a
+`/proc/[0-9]*/exe` rule. Every running program has such a path, so that rule is
+`ALL` in effect unless a `sha256:<digest>` before the command pins it to one
+build's executable, the `Digest_Spec` of sudoers(5), which every new build must
+update. A policy a directory
 service holds, such as SSSD or LDAP sudo rules, is changed by its
 administrator. A forwarded proxy route also needs `SETENV`
 ([on a proxied network](#on-a-proxied-network)). A JSON invocation, or one

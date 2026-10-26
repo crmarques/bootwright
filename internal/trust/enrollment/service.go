@@ -3,6 +3,7 @@ package enrollment
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -59,6 +60,9 @@ func (s Service) Enroll(ctx context.Context, request EnrollRequest) (*Report, er
 	if err != nil {
 		return nil, err
 	}
+	if err := expectable(chosen, request.Expect, selected); err != nil {
+		return nil, err
+	}
 	data, err := s.trust.ReadHostKeys(ctx, selected)
 	if err != nil {
 		return nil, err
@@ -85,6 +89,11 @@ func (s Service) Enroll(ctx context.Context, request EnrollRequest) (*Report, er
 		if err != nil {
 			return nil, err
 		}
+		if expected, named := request.Expect[entry.name]; named && host.Fingerprint != expected {
+			return nil, failure("trust.identity",
+				"the SSH host key for "+entry.name+" at "+trust.HostToken(entry.address, entry.port)+" is "+host.Fingerprint+", not the expected "+expected,
+				"verify "+entry.name+"'s fingerprint out of band before naming it with --expect")
+		}
 		report.Hosts = append(report.Hosts, host)
 		if host.Action == ActionAdd || host.Action == ActionReplace {
 			writing[entry.name] = true
@@ -102,6 +111,9 @@ func (s Service) Enroll(ctx context.Context, request EnrollRequest) (*Report, er
 	}
 	if request.DryRun || report.Pending == 0 {
 		return report, nil
+	}
+	if err := unnamedUnderYes(report, request, selected); err != nil {
+		return nil, err
 	}
 	if err := s.confirm(ctx, selected, request, report); err != nil {
 		return nil, err
@@ -170,6 +182,37 @@ func evaluate(entry candidate, observed observation, records trust.Store, replac
 		host.PreviousAddress, host.PreviousPort = previous.Address, previous.Port
 	}
 	return host, record, nil
+}
+
+func unnamedUnderYes(report *Report, request EnrollRequest, contextName string) error {
+	if !request.SkipConfirmation {
+		return nil
+	}
+	var unnamed []string
+	for _, host := range report.Hosts {
+		if _, named := request.Expect[host.Machine]; !named && (host.Action == ActionAdd || host.Action == ActionReplace) {
+			unnamed = append(unnamed, host.Machine)
+		}
+	}
+	if len(unnamed) == 0 {
+		return nil
+	}
+	return failure("trust.identity",
+		"--yes records only host keys whose fingerprints the operator named, and none is named for "+strings.Join(unnamed, ", "),
+		"list the fingerprints with bootwright machine trust --context "+contextName+" --dry-run, verify each out of band, then repeat with --expect <machine>=SHA256:<fingerprint> for each")
+}
+
+func expectable(chosen []candidate, expect map[string]string, contextName string) error {
+	for _, name := range slices.Sorted(maps.Keys(expect)) {
+		index := slices.IndexFunc(chosen, func(c candidate) bool { return c.name == name })
+		switch {
+		case index < 0:
+			return failure("access.target", "--expect names "+name+", which this enrollment does not select", listRemedy(contextName))
+		case !chosen[index].eligible():
+			return failure("access.unavailable", name+" does not use context-managed trust: "+chosen[index].skip, "drop it from --expect")
+		}
+	}
+	return nil
 }
 
 // removal reports a record the write removes because a selected Machine now

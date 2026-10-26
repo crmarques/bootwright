@@ -37,16 +37,18 @@ type privilegeBoundary struct {
 	euid          func() int
 	elevate       func(context.Context, privilege.Invocation) privilege.Outcome
 	inputTerminal func() (bool, error)
+	sudoEnviron   func() *diagnostics.Diagnostic
 }
 
 func processBoundary() privilegeBoundary {
 	elevator := privilege.Elevator{Executable: privilege.ReexecutionPath, Sudo: privilege.QualifiedSudo, Executor: privilege.ProcessExecutor{}, Delay: privilege.Timer{}}
-	return privilegeBoundary{lookupEnv: os.LookupEnv, accounts: privilege.Resolver{}, guard: privilege.GuardParent, euid: os.Geteuid, elevate: elevator.Run, inputTerminal: stdinTerminal}
+	return privilegeBoundary{lookupEnv: os.LookupEnv, accounts: privilege.Resolver{}, guard: privilege.GuardParent, euid: os.Geteuid, elevate: elevator.Run, inputTerminal: stdinTerminal,
+		sudoEnviron: privilege.ConfirmSudoEnvironment}
 }
 
 func (b privilegeBoundary) run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	classification := cli.ClassifyInvocation(args)
-	if classification.JSON && classification.SecretStdin != "" && b.inputTerminal != nil {
+	if classification.JSON && (classification.SecretStdin != "" || classification.URLStdin) && b.inputTerminal != nil {
 		terminal, err := b.inputTerminal()
 		if err != nil || terminal {
 			return refuseAtBoundary(classification, stdout, stderr, cli.StructuredSecretInputDiagnostic(), 2)
@@ -59,6 +61,16 @@ func (b privilegeBoundary) run(ctx context.Context, args []string, stdout, stder
 	route, refusal := privilege.AmbientRoute(classification.AmbientRoute, b.lookupEnv)
 	if refusal != nil {
 		return refuseAtBoundary(classification, stdout, stderr, *refusal, 1)
+	}
+	if b.euid() == 0 && b.sudoEnviron != nil {
+		if refusal := b.sudoEnviron(); refusal != nil {
+			return refuseAtBoundary(classification, stdout, stderr, *refusal, 1)
+		}
+	}
+	if classification.RequiresRoot && b.euid() == 0 && privilege.SupervisedChild() {
+		if refusal := privilege.ConfirmElevatedChild(os.Environ()); refusal != nil {
+			return refuseAtBoundary(classification, stdout, stderr, *refusal, 1)
+		}
 	}
 	if classification.RequiresRoot {
 		release, refusal := privilege.Admit(ctx, b.accounts, b.guard)
@@ -96,6 +108,9 @@ func elevationInvocation(classification cli.InvocationClass, args []string, rout
 		JSON: classification.JSON, Arguments: cli.CarryPresentation(args, cli.PresentationOptions{NoColor: noColor, Color: "auto"}), Route: route, Terminal: os.Getenv("TERM"),
 		Input: os.Stdin, Output: stdout, Error: stderr, InputTerminal: err == nil && terminal,
 		Session: sessionCommand(classification), SecretStdin: classification.SecretStdin,
+	}
+	if classification.URLStdin {
+		invocation.SecretStdin = privilege.MediaURLInput
 	}
 	if file, ok := terminalFile(stdout); ok {
 		invocation.OutputTerminal = file

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -339,5 +340,114 @@ func TestSeveralSessionsWritePrefixedLinesToTheirStreams(t *testing.T) {
 	}
 	if strings.Count(out.String(), "\n") != 6 {
 		t.Fatalf("stdout = %q", out.String())
+	}
+}
+
+// manySessions are more sessions than the bound admits at once, in canonical
+// order.
+func manySessions(count int) []machine.Session {
+	sessions := make([]machine.Session, count)
+	for i := range sessions {
+		sessions[i] = machine.Session{Machine: fmt.Sprintf("m%02d", i), Batch: true}
+	}
+	return sessions
+}
+
+// At the graph maximum, sessions start in canonical order and no more than the
+// engine's bound on running blocks run at once; the next starts only as one
+// ends.
+func TestSeveralSessionsRunAtMostTheBoundAtOnceInCanonicalOrder(t *testing.T) {
+	h := newHarness(t, nil)
+	var mu sync.Mutex
+	running, peak := 0, 0
+	var started []string
+	release, opened := make(chan struct{}), sync.Once{}
+	h.client.run = func(session machine.Session, _ io.Writer, _ io.Writer) (int, error) {
+		mu.Lock()
+		running++
+		peak = max(peak, running)
+		started = append(started, session.Machine)
+		full := running == maxConcurrentSessions
+		mu.Unlock()
+		if full {
+			opened.Do(func() { close(release) })
+		}
+		<-release
+		mu.Lock()
+		running--
+		mu.Unlock()
+		return 0, nil
+	}
+	sessions := manySessions(maxConcurrentSessions + 4)
+	outcomes := h.service.launch(context.Background(), sessions)
+	if peak != maxConcurrentSessions {
+		t.Fatalf("at most %d sessions ran at once, want exactly the bound %d", peak, maxConcurrentSessions)
+	}
+	want := make([]string, maxConcurrentSessions)
+	for i := range want {
+		want[i] = sessions[i].Machine
+	}
+	if !slices.Equal(slices.Sorted(slices.Values(started[:maxConcurrentSessions])), want) || len(started) != len(sessions) {
+		t.Fatalf("started %v, want the first %d in canonical order admitted before the rest", started, maxConcurrentSessions)
+	}
+	for i, ended := range outcomes {
+		if ended.err != nil || ended.unstarted {
+			t.Fatalf("session %d = %+v", i, ended)
+		}
+	}
+}
+
+// A cancellation stops admissions: the sessions already running finish, and
+// those still waiting for a slot never start and report no status.
+func TestACancellationStopsWaitingSessionsFromStarting(t *testing.T) {
+	h := newHarness(t, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	var mu sync.Mutex
+	running := 0
+	release, opened := make(chan struct{}), sync.Once{}
+	h.client.run = func(machine.Session, io.Writer, io.Writer) (int, error) {
+		mu.Lock()
+		running++
+		full := running == maxConcurrentSessions
+		mu.Unlock()
+		if full {
+			cancel()
+			opened.Do(func() { close(release) })
+		}
+		<-release
+		return 3, nil
+	}
+	sessions := manySessions(maxConcurrentSessions + 4)
+	outcomes := h.service.launch(ctx, sessions)
+	if len(h.client.sessions) != maxConcurrentSessions {
+		t.Fatalf("%d sessions started after the cancellation, want only the %d admitted before it", len(h.client.sessions), maxConcurrentSessions)
+	}
+	for i, ended := range outcomes {
+		if admitted := i < maxConcurrentSessions; admitted != !ended.unstarted || admitted && ended.code != 3 {
+			t.Fatalf("session %d = %+v", i, ended)
+		}
+	}
+	members := make([]member, len(sessions))
+	for i, session := range sessions {
+		members[i] = member{target: target{name: session.Machine}}
+	}
+	result := h.service.settle("lab", members, outcomes)
+	if len(result.Sessions) != maxConcurrentSessions || result.ExitCode != 3 || strings.Contains(h.errStream.String(), sessions[maxConcurrentSessions].Machine) {
+		t.Fatalf("result = %+v, stderr %q: an unstarted session reported a status", result, h.errStream.String())
+	}
+}
+
+// An interrupt that kept a session from starting ends the invocation as that
+// interrupt, even when every session that started exited zero.
+func TestAnInterruptThatKeptASessionFromStartingIsNotASuccess(t *testing.T) {
+	h := newHarness(t, nil)
+	members := []member{{target: target{name: "first"}}, {target: target{name: "second"}}}
+	outcomes := []outcome{{code: 0}, {err: context.Canceled, unstarted: true}}
+	result, err := h.service.conclude("lab", members, outcomes)
+	if !errors.Is(err, context.Canceled) || result != nil || strings.Contains(h.errStream.String(), "second") {
+		t.Fatalf("result = %+v, err %v, stderr %q", result, err, h.errStream.String())
+	}
+	if result, err := h.service.conclude("lab", members[:1], outcomes[:1]); err != nil || result.ExitCode != 0 || len(result.Sessions) != 1 {
+		t.Fatalf("result = %+v, err %v", result, err)
 	}
 }

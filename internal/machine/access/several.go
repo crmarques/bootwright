@@ -25,8 +25,9 @@ type member struct {
 }
 
 type outcome struct {
-	code int
-	err  error
+	code      int
+	err       error
+	unstarted bool
 }
 
 func memberNames(requested []string) []string {
@@ -85,7 +86,15 @@ func (s Service) several(ctx context.Context, contextName string, names []string
 	if err != nil {
 		return nil, err
 	}
-	return s.settle(selected, members, outcomes), nil
+	return s.conclude(selected, members, outcomes)
+}
+
+func (s Service) conclude(contextName string, members []member, outcomes []outcome) (*machine.SessionResult, error) {
+	result := s.settle(contextName, members, outcomes)
+	if kept := slices.IndexFunc(outcomes, func(ended outcome) bool { return ended.unstarted }); kept >= 0 {
+		return nil, outcomes[kept].err
+	}
+	return result, nil
 }
 
 func (s Service) members(ctx context.Context, catalog api.Catalog, contextName string, names []string,
@@ -159,12 +168,26 @@ func (s Service) prove(ctx context.Context, contextName string, members []member
 	return sessions, nil
 }
 
+const maxConcurrentSessions = lifecycle.MaxRunningBlocks
+
 func (s Service) launch(ctx context.Context, sessions []machine.Session) []outcome {
 	out, errOut := newDestination(s.options.Streams.Out), newDestination(s.options.Streams.Err)
 	outcomes := make([]outcome, len(sessions))
+	slots := make(chan struct{}, maxConcurrentSessions)
 	var group sync.WaitGroup
 	for i, session := range sessions {
+		select {
+		case slots <- struct{}{}:
+		case <-ctx.Done():
+		}
+		if err := ctx.Err(); err != nil {
+			for waiting := i; waiting < len(sessions); waiting++ {
+				outcomes[waiting] = outcome{err: err, unstarted: true}
+			}
+			break
+		}
 		group.Go(func() {
+			defer func() { <-slots }()
 			stdout, stderr := out.session(session.Machine), errOut.session(session.Machine)
 			code, err := s.options.Launcher.Run(ctx, session, nil, stdout, stderr)
 			stdout.Close()
@@ -179,6 +202,9 @@ func (s Service) launch(ctx context.Context, sessions []machine.Session) []outco
 func (s Service) settle(contextName string, members []member, outcomes []outcome) *machine.SessionResult {
 	result := &machine.SessionResult{Context: contextName}
 	for i, ended := range outcomes {
+		if ended.unstarted {
+			continue
+		}
 		name := members[i].target.name
 		code := ended.code
 		switch {

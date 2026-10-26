@@ -4,7 +4,9 @@
       plan's Stop first and Stop after online cleanup lists (bootwright machine stop): online
       cleanup, such as storage cleanup or a subscription unregistration, needs its Machines
       running, and destroy pauses for their stop after it. A plan that deletes disks needs
-      --authorize data-loss. A Machine whose subscription registration cannot be read and that
+      --authorize data-loss. A rotated management controller or registry login credential is
+      presented at its current version only with --authorize rebind=<secret>, which records a
+      new binding version. A Machine whose subscription registration cannot be read and that
       you unregistered with the subscription service's own tools is named with --unregistered.
       Review the plan before confirming; --yes skips ordinary confirmation.
 
@@ -12,7 +14,8 @@
     bootwright destroy [flags]
 
   Command flags
-      --authorize     Acknowledge a planned risk (data-loss) (values: data-loss)
+      --authorize     Acknowledge a planned risk (data-loss), or present a rotated access
+                      credential at its current version (rebind=<secret>) (values: data-loss)
       --unregistered  Name a Machine whose subscription registration you removed with the
                       subscription service's own tools
       --yes           Confirm the command's ordinary confirmation

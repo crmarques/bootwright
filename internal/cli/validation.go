@@ -4,12 +4,14 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/managedos/media"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -183,13 +185,15 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 			return "context delete requires --purge=true"
 		}
 	case "apply", "destroy":
-		seen := false
+		seen := map[string]bool{}
 		for _, occurrence := range arrayValue(flags, "authorize") {
 			for _, token := range strings.Split(occurrence, ",") {
-				if strings.TrimSpace(token) != "data-loss" || seen {
-					return "--authorize accepts data-loss exactly once"
+				token = strings.TrimSpace(token)
+				secret, rebind := strings.CutPrefix(token, lifecycle.RebindAuthorization)
+				if token != "data-loss" && (!rebind || !api.ValidLexical("name", secret)) || seen[token] {
+					return "--authorize accepts data-loss and rebind=<secret>, each at most once"
 				}
-				seen = true
+				seen[token] = true
 			}
 		}
 		for _, occurrence := range arrayValue(flags, "unregistered") {
@@ -228,20 +232,37 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 			return structuredLabel(command) + " power changes require --yes"
 		}
 	case "machine trust":
-		if selectedJSON(command) && !boolValue(flags, "yes") && !boolValue(flags, "dry-run") {
-			return structuredLabel(command) + " trust changes require --yes or --dry-run"
-		}
-		machines := normalizeNames(stringValue(flags, "machines"))
-		if len(machines) != 0 {
-			for _, replacement := range normalizeNames(stringValue(flags, "replace")) {
-				if !contains(machines, replacement) {
-					return "every --replace name must belong to --machines"
-				}
+		return validateMachineTrust(command, flags)
+	}
+	return ""
+}
+
+func validateMachineTrust(command *cobra.Command, flags *pflag.FlagSet) string {
+	if selectedJSON(command) && !boolValue(flags, "yes") && !boolValue(flags, "dry-run") {
+		return structuredLabel(command) + " trust changes require --yes or --dry-run"
+	}
+	machines := normalizeNames(stringValue(flags, "machines"))
+	expected := map[string]string{}
+	for _, flag := range []string{"replace", "expect"} {
+		for _, member := range normalizeNames(stringValue(flags, flag)) {
+			name, fingerprint, named := strings.Cut(member, "=")
+			switch {
+			case flag == "expect" && !named, named && !hostKeyFingerprint.MatchString(fingerprint):
+				return "--" + flag + " names a fingerprint as <machine>=SHA256:<fingerprint>"
+			case named && expected[name] != "" && expected[name] != fingerprint:
+				return "--expect and --replace name two fingerprints for " + name
+			case flag == "replace" && len(machines) != 0 && !contains(machines, name):
+				return "every --replace name must belong to --machines"
+			}
+			if named {
+				expected[name] = fingerprint
 			}
 		}
 	}
 	return ""
 }
+
+var hostKeyFingerprint = regexp.MustCompile(`^SHA256:[A-Za-z0-9+/]{43}$`)
 
 func validateSetupFlags(flags *pflag.FlagSet) string {
 	download := boolValue(flags, "download-only")
@@ -334,9 +355,9 @@ func mediaName(value string) bool {
 }
 
 func validateMediaSource(flags *pflag.FlagSet) string {
-	file, sourceURL := stringValue(flags, "from-file"), stringValue(flags, "from-url")
-	if (file == "") == (sourceURL == "") {
-		return "media add requires exactly one of --from-file and --from-url"
+	file, sourceURL, urlFile := stringValue(flags, "from-file"), stringValue(flags, "from-url"), stringValue(flags, "from-url-file")
+	if given := len(slices.DeleteFunc([]string{file, sourceURL, urlFile}, func(v string) bool { return v == "" })); given != 1 {
+		return "media add requires exactly one of --from-file, --from-url and --from-url-file"
 	}
 	digest := stringValue(flags, "sha256")
 	if digest != "" {
@@ -350,7 +371,13 @@ func validateMediaSource(flags *pflag.FlagSet) string {
 		return validateMediaFile(file)
 	}
 	if digest == "" {
-		return "--from-url requires --sha256"
+		return "a download requires --sha256"
+	}
+	if urlFile != "" {
+		if strings.ContainsFunc(urlFile, controlCharacter) {
+			return "--from-url-file must not contain a control character"
+		}
+		return ""
 	}
 	if strings.ContainsFunc(sourceURL, controlCharacter) {
 		return "--from-url must not contain a control character"

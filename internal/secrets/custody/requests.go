@@ -44,6 +44,12 @@ type BindingRequest struct {
 	BindingID   string
 }
 
+type RebindRequest struct {
+	ContextName string
+	BindingID   string
+	Names       []string
+}
+
 type BindingsRequest struct{ ContextName string }
 
 // ProduceRequest offers one block's outputs for custody.

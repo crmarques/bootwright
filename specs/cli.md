@@ -258,9 +258,10 @@ repeated command is the invocation's own: its command path and every flag it
 set, so a stage, Machine or source selection, an authorization and every other
 choice stay. It runs the verb afresh, so its plan is the one the records then
 current freeze, and an authorization names no plan. A command that acts in a
-context names it with `--context <name>` whether or not the invocation did, and a value no output repeats, a Secret's
-`--username` or a `--from-url`, is named by a placeholder such as
-`<username>`. The host-key confirmation of an [SSH session](#machine-ssh-sessions) reads its
+context names it with `--context <name>` whether or not the invocation did, and a value no output repeats, a `--from-url`,
+is named by a placeholder such as `<from-url>`. A Secret's `--username` is
+identity metadata rather than secret material
+([secrets](secrets.md#acquisition-and-commands)), so it is repeated as given. The host-key confirmation of an [SSH session](#machine-ssh-sessions) reads its
 answer the same way. `--yes` suppresses only this prompt, under
 [its flag rule](cli/commands.md#flag-relationships-and-safeguards).
 
@@ -292,10 +293,6 @@ standard stream it occupies, so sudo's own terminal relay carries prompts and
 answers to the child. A confirmation read whose terminal belongs to another
 foreground process group requests the terminal through job control instead of
 waiting for input that cannot arrive.
-
-Not yet met: every re-execution goes through `/proc/<pid>/exe`, which a sudoers
-rule naming the installed binary never matches; tracked as
-[B831](milestones/backlog.md#b831).
 
 Sudo and the elevated child share one standard error, and sudo exits 1 for its
 own refusals, so a noninteractive supervisor learns that the child started only
@@ -381,8 +378,8 @@ against that answer on manual sudo. Direct root uses root. So does a root
 process whose sudo metadata no verified sudo parent supplied, such as a
 `sudo -i` or `sudo -s` shell: it is root already, so this grants nothing and
 only selects root's own context selection and files. Its `SUDO_COMMAND`
-running `/proc/<pid>/exe` instead marks an elevated child whose sudo is gone,
-which refuses. Ignore spoofed sudo metadata on a non-root launch. Resolve
+running `/proc/<pid>/exe`, or the very file the process runs, instead marks an
+elevated child whose sudo is gone, which refuses. Ignore spoofed sudo metadata on a non-root launch. Resolve
 account homes without `HOME`. An unverifiable account refuses
 `runtime.privilege`, naming why, and names a local account or a clean root
 login (`su -`, `sudo su -` or a root SSH session) with `--context` as the
@@ -391,8 +388,10 @@ files, a key offered with `--ssh-id-file` and the selection files are opened
 with the invoking account's credentials: a bounded helper passes each
 descriptor to root, which keeps every type, stability and ownership proof.
 Root identity governs only root-owned runtime storage and the Bootwright
-executable, which root must be able to execute; the elevated child re-executes it through `/proc/self/exe` and never
-resolves its path, which a root-squashed home would refuse. Only the
+executable, which root must be able to execute; sudo runs it by its proved
+root-owned path, which the elevated child confirms is the file it runs, or
+through `/proc/<pid>/exe`, whose path the child never resolves, which a
+root-squashed home would refuse. Only the
 unprivileged supervisor resolves that path, before it elevates: an invoking
 account that cannot search a directory on it refuses `runtime.privilege`
 naming the path and that account, with the remedy of a local copy both that
@@ -1053,7 +1052,7 @@ opened, its status is the result even after an interrupt.
 `machine exec` accepts a comma-separated `--name` under the
 [list rules](#parsing-and-input-conventions); `machine rsh` names one Machine.
 One member after normalization is the session above, unchanged. Two or more
-members run the same argument vector on every Machine at once, each as its own
+members run the same argument vector on every Machine concurrently, each as its own
 session under the rules above, except where the rules below replace them.
 Canonical order is ascending bytewise Machine name, and it orders refusals,
 warnings and the sessions of the result.
@@ -1082,7 +1081,9 @@ concurrently, at most as the lifecycle engine's
 [bound on running blocks](state-reconciliation.md#stages-and-the-pause-boundary)
 allows, as the runs of a [power batch](#machine-power-operations) do; a session
 past the bound waits for a slot, and an interrupt or cancellation stops a
-waiting session from starting. Each client's standard output and standard error reach
+waiting session from starting. When it kept any from starting, the invocation
+ends as that interrupt, never with status `0`, whatever the started sessions
+returned. Each client's standard output and standard error reach
 Bootwright's own, line by line, each line prefixed `<machine>: `; a line is
 written whole, so lines of different sessions are interleaved but never mixed
 within a line. An unterminated final line is completed when its session ends,
@@ -1096,9 +1097,6 @@ session returned, `0` only when all returned `0`. An interrupt after sessions
 opened signals each client as it does a single session, and the statuses that
 result stand and aggregate the same way. A session an interrupt kept from
 starting returned no status and writes no warning.
-
-Not yet met: the sessions of several Machines start together with no bound;
-tracked as [B817](milestones/backlog.md#b817).
 
 ### Cluster sessions
 
@@ -1213,31 +1211,36 @@ run in this order, each before the next:
 
 The target and its applicability are settled from the compiled graph before
 any custody read, so a refusal of the first three kinds reads no credential
-bytes. A copy that custody holds from an apply that never proved the dashboard
-reachable is revealed with exactly one `access.unproved` warning naming the
-cluster, and its `dashboard.status` is `unproved`. The value occurs only in
+bytes. A copy custody marks unproved, kept from an apply that never proved the
+dashboard reachable, is revealed with exactly one `access.unproved` warning
+naming the cluster, and its `dashboard.status` is `unproved`. A dashboard whose
+evidence alone does not prove it reachable, its copy unmarked, is revealed with
+`dashboard.status` `unproved` and its reason and no warning (D183, Q101). The value occurs only in
 the `passwordValue` field, and is never copied to a diagnostic, log, evidence
 record, plan or second stream.
 
-The same explicit command also reveals the selected cluster's declared
-StorageObjectUsers in `objectUsers`, sorted by name. Each entry contains `name`,
-`gateway`, `accessKey` and `secretKey`; ordinary inspection omits this member
-and reads no object-user custody. The reader checks the original produced
-block/output, completed original cluster/gateway/realm/zone scope, exact
-canonical credential shape and matching user ID before
-export. A missing, corrupt or unproved copy refuses without any partial output,
-and all borrowed material is cleared on failure and after rendering. Credentials
-of a different cluster or gateway are never read. These fields occur only in
+`cluster info --object-user <name> --name <cluster>` reveals the S3 keys of
+that one declared StorageObjectUser of the cluster, and nothing else: no
+dashboard password and no other user's keys (D183, Q116). The result's
+`objectUsers` holds its one entry, with `name`, `gateway`, `accessKey` and
+`secretKey`; `--secrets` and ordinary inspection omit this member and read no
+object-user custody. A name the cluster does not declare fails `access.target`
+before any custody read. The reader checks the original produced block/output,
+completed original cluster/gateway/realm/zone scope, exact canonical credential
+shape and matching user ID before export. A missing, corrupt or unproved copy
+refuses without any partial output, and all borrowed material is cleared on
+failure and after rendering. Credentials of a different cluster or gateway, or
+of another user, are never read. These fields occur only in
 the explicitly sensitive standard output; no native credential retrieval runs.
 
 For a private S3 client handoff, redirect the result into a protected local
-file and transfer only the selected user's entry over an operator-verified
-channel. Keep this file outside logs and acceptance captures:
+file and transfer it over an operator-verified channel. Keep this file outside
+logs and acceptance captures:
 
 ```sh
 umask 077
 private_access=$(mktemp)
-bootwright cluster info --name ceph-lab --secrets --output json > "$private_access"
+bootwright cluster info --name ceph-lab --object-user documents --output json > "$private_access"
 ```
 
 The S3 client uses the declared gateway endpoint and its verified TLS trust.
@@ -1343,6 +1346,16 @@ be written to standard output asks nothing and records nothing, and fails
 Under `--yes` or `--dry-run`, and in either structured format, which
 [requires one of them](cli/commands.md#flag-relationships-and-safeguards),
 nothing precedes the result, which carries every Machine's row once.
+
+A fingerprint the operator names, with `--expect <machine>=SHA256:<fingerprint>`
+or a `--replace` member of that form, after verifying it out of band, must equal
+the observed key's, or the enrollment fails `trust.identity` naming both
+fingerprints and records nothing, interactive or not; an expectation for a
+Machine the enrollment does not observe through context trust refuses before
+any observation. Under `--yes`, and so in either structured format, no person
+compares the plan, so an `add` or `replace` whose fingerprint is not named fails
+`trust.identity` naming those Machines, records nothing, and names the dry run
+that lists the fingerprints and the `--expect` that records them (D183, Q97).
 
 ### Machine power operations
 

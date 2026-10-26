@@ -62,6 +62,8 @@ type transition struct {
 	// than whatever the current declarations name.
 	reopen    string
 	release   []string
+	rebinds   []string
+	rebound   rebinding
 	states    map[string]reconciliation.BlockState
 	selection reconciliation.StageSelection
 	// stops is what a fresh removal's quiescence gate observes on the host:
@@ -190,7 +192,14 @@ func (s Service) mutate(ctx context.Context, verb reconciliation.Verb, contextNa
 	if err := s.present(ctx, name, decided); err != nil {
 		return nil, err
 	}
-	if err := s.authorized(name, decided, authorizations, unregistered); err != nil {
+	tokens, rebinds, err := splitRebinds(name, verb, authorizations)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authorized(name, decided, tokens, unregistered); err != nil {
+		return nil, err
+	}
+	if decided, err = s.admitRebinds(ctx, name, decided, rebinds); err != nil {
 		return nil, err
 	}
 	if !skipConfirmation {
@@ -769,8 +778,8 @@ func (s Service) supersede(ctx context.Context, view View, store OperationStore,
 	}
 	// A superseded removal is continued by nothing, so its own binding is
 	// released beside the apply's once the replacement completes. The one it
-	// reopens is the apply's, because that is the material the effects it takes
-	// back were created with.
+	// reopens is the removal's own, which differs from the apply's only after
+	// an access-credential rebind.
 	release := slices.Clone(operation.Bindings)
 	reopen := firstBinding(operation.Bindings)
 	if operation.Source != "" {
@@ -783,7 +792,7 @@ func (s Service) supersede(ctx context.Context, view View, store OperationStore,
 				release = append(release, binding)
 			}
 		}
-		if inherited := firstBinding(applied.Bindings); inherited != "" {
+		if inherited := firstBinding(applied.Bindings); inherited != "" && reopen == "" {
 			reopen = inherited
 		}
 	}
@@ -1030,6 +1039,11 @@ func (s Service) execute(ctx context.Context, name string, decided transition) (
 		}
 		decided = protected
 	}
+	rebound, err := s.rebind(ctx, name, decided)
+	if err != nil {
+		return nil, s.unregistered(ctx, name, decided, "", record, err)
+	}
+	decided = rebound
 	binding, material, err := s.bind(ctx, name, decided)
 	if err != nil {
 		return nil, s.unregistered(ctx, name, decided, binding, record, err)
@@ -1182,6 +1196,11 @@ func (s Service) run(ctx context.Context, tx Transaction, decided transition, bi
 		}
 	}
 	defer logging.close(ctx, log)
+	if decided.rebound.binding != "" {
+		if err := logging.append(ctx, log, decided.rebound.record()); err != nil {
+			return result, err
+		}
+	}
 	// The location is named before the first effect, because its whole purpose
 	// is to be followed while the work runs.
 	result.LogLocation = store.LogDirectory(operation.ID)
@@ -1683,8 +1702,12 @@ func (s Service) resume(ctx context.Context, tx Transaction, store OperationStor
 	if err == nil {
 		err = s.raise(ctx, tx, operation.Verb, record)
 	}
-	if err == nil && operation.State != reconciliation.OperationRunning {
+	rebound := decided.rebound.binding != "" && !slices.Equal(operation.Bindings, []string{decided.rebound.binding})
+	if err == nil && (rebound || operation.State != reconciliation.OperationRunning) {
 		operation.State = reconciliation.OperationRunning
+		if rebound {
+			operation.Bindings = []string{decided.rebound.binding}
+		}
 		err = store.UpdateOperation(ctx, operation)
 	}
 	if err != nil {

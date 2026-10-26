@@ -110,7 +110,7 @@ func TestCompiledObjectUserHandoffUsesPublicGatewayReference(t *testing.T) {
 			if err != nil || ordinary == nil || len(fixture.reads) != 0 {
 				t.Fatal("ordinary inspection read credentials", err)
 			}
-			result, err := service.ClusterInfo(context.Background(), inspection.ClusterInfoRequest{Names: []string{selectedCluster}, Secrets: true})
+			result, err := service.ClusterInfo(context.Background(), inspection.ClusterInfoRequest{Names: []string{selectedCluster}, ObjectUser: user.Name()})
 			if scenario != "proved" {
 				if err == nil || result != nil || len(fixture.reads) != 0 {
 					t.Fatal("unproved scope reached custody", err, fixture.reads)

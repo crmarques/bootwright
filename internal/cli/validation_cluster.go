@@ -3,6 +3,7 @@ package cli
 import (
 	"strings"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/spf13/pflag"
 )
 
@@ -15,16 +16,29 @@ func validateClusterNames(flags *pflag.FlagSet, path string) string {
 		return ""
 	}
 	names := normalizeNames(rawName)
+	sensitive := ""
+	if path == "cluster info" {
+		switch user := stringValue(flags, "object-user"); {
+		case flags.Changed("object-user") && !api.ValidLexical("name", user):
+			return "--object-user must name one StorageObjectUser"
+		case user != "" && boolValue(flags, "secrets"):
+			return "--secrets and --object-user each reveal one credential; use one of them"
+		case user != "":
+			sensitive = "--object-user"
+		case boolValue(flags, "secrets"):
+			sensitive = "--secrets"
+		}
+	}
 	switch {
 	case len(names) == 0 && path == "cluster info" && rawName == "":
-		if boolValue(flags, "secrets") {
-			return "--secrets requires an explicit --name"
+		if sensitive != "" {
+			return sensitive + " requires an explicit --name"
 		}
 		return ""
 	case len(names) == 0:
 		return "--name must name at least one cluster"
-	case path == "cluster info" && boolValue(flags, "secrets") && len(names) > 1:
-		return "--secrets reveals one cluster's values; name one cluster"
+	case sensitive != "" && len(names) > 1:
+		return sensitive + " reveals one cluster's values; name one cluster"
 	}
 	normalizeScalar(flags, "name", strings.Join(names, ","))
 	if path != "cluster exec" || !flags.Changed("node") {

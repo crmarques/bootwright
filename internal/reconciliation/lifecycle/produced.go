@@ -20,14 +20,15 @@ func (s Service) capture(ctx context.Context, tx Transaction, boundary *logBound
 	if len(produced) == 0 || verb != reconciliation.Apply || state != reconciliation.BlockDone {
 		return nil
 	}
-	err := s.publishProduced(ctx, tx, block.ID, produced, false)
+	err := s.publishProduced(ctx, tx, block, produced, false)
 	for _, reported := range diagnostics.Of(err) {
 		_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "custody-failed", Block: block.ID, Detail: reported.Code + ": " + reported.Message})
 	}
 	return err
 }
 
-func (s Service) publishProduced(ctx context.Context, tx Transaction, block string, produced []Produced, unproved bool) error {
+func (s Service) publishProduced(ctx context.Context, tx Transaction, producer reconciliation.Block, produced []Produced, unproved bool) error {
+	block := producer.ID
 	outputs := make([]secretstore.ProducedInput, 0, len(produced))
 	names := make(map[string]bool, len(produced))
 	for _, output := range produced {
@@ -38,9 +39,48 @@ func (s Service) publishProduced(ctx context.Context, tx Transaction, block stri
 		outputs = append(outputs, secretstore.ProducedInput{Name: output.Name, Material: output.Material, Unproved: unproved})
 	}
 	return tx.Secrets(ctx, func(selected secretstore.Context, area secretstore.Area) error {
+		if !unproved {
+			if err := s.sameProducer(ctx, selected, area, producer, produced); err != nil {
+				return err
+			}
+		}
 		_, err := s.binder.Produce(ctx, selected, area, custody.ProduceRequest{Block: block, Outputs: outputs})
 		return err
 	})
+}
+
+func (s Service) sameProducer(ctx context.Context, selected secretstore.Context, area secretstore.Area, producer reconciliation.Block, produced []Produced) error {
+	capability, found := s.capabilities.Resolve(producer.Kind, producer.Implementation)
+	identifier, identifies := capability.(ProducedIdentifier)
+	reader, reads := s.binder.(ProducedBinder)
+	if !found || !identifies || !reads {
+		return nil
+	}
+	for _, output := range produced {
+		held, exists, err := reader.ReadProducedInArea(ctx, selected, area, producer.ID, output.Name)
+		if err != nil {
+			return err
+		}
+		if !exists || held.Unproved {
+			held.Material.Clear()
+			continue
+		}
+		before, err := identifier.ProducedIdentity(producer, output.Name, held.Material)
+		held.Material.Clear()
+		if err != nil {
+			return err
+		}
+		after, err := identifier.ProducedIdentity(producer, output.Name, output.Material)
+		if err != nil {
+			return err
+		}
+		if before != after {
+			return failure("lifecycle.state",
+				"the "+output.Name+" block "+producer.ID+" recaptured presents another identity ("+after+") than the one custody holds ("+before+"), so it does not replace it",
+				"find what replaced the effect "+producer.ID+" proved; this context's records name the original")
+		}
+	}
+	return nil
 }
 
 // keepBeforeRemoval moves the copy of produced material a removal would
@@ -97,7 +137,7 @@ func (s Service) keep(ctx context.Context, tx Transaction, keeper Keeper, entry 
 	if len(kept) == 0 {
 		return false, nil
 	}
-	if err := s.publishProduced(ctx, tx, entry.Block, kept, true); err != nil {
+	if err := s.publishProduced(ctx, tx, reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{ID: entry.Block}}, kept, true); err != nil {
 		return false, err
 	}
 	return true, nil

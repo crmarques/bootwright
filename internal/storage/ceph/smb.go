@@ -71,6 +71,14 @@ var smbUserPassword = regexp.MustCompile(`\A/values/users/(?:0|[1-9][0-9]{0,3})/
 
 func (r SMBRequest) Canonical() ([]byte, error) { return reconciliation.Freeze(r, "Ceph SMB") }
 
+func (r SMBRequest) SecretReferences() []string {
+	references := make([]string, 0, len(r.Bindings))
+	for _, binding := range r.Bindings {
+		references = append(references, binding.SecretRef)
+	}
+	return lifecycle.SecretNames(references...)
+}
+
 func DecodeSMBRequest(data []byte) (SMBRequest, error) {
 	r, err := reconciliation.ThawVersion[SMBRequest](data, "Ceph SMB", SMBVersion)
 	if err != nil {

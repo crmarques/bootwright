@@ -85,6 +85,10 @@ func (s Service) Add(ctx context.Context, request AddMediaRequest) (*MutationRes
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
+	request, err := s.readURL(ctx, request)
+	if err != nil {
+		return nil, err
+	}
 	source, expected, err := addition(request)
 	if err != nil {
 		return nil, err
@@ -133,6 +137,29 @@ func (s Service) Add(ctx context.Context, request AddMediaRequest) (*MutationRes
 
 // addition refuses what an add names before any store is read, and returns its
 // one source and its normalized digest pin.
+func (s Service) readURL(ctx context.Context, request AddMediaRequest) (AddMediaRequest, error) {
+	if request.SourceURLFile == "" {
+		return request, nil
+	}
+	if request.SourceURL != "" || request.SourceFile != "" {
+		return AddMediaRequest{}, failure("media add requires exactly one source", "name one of --from-file, --from-url and --from-url-file")
+	}
+	if request.SourceURLFile == "-" && !request.SkipConfirmation {
+		return AddMediaRequest{}, failure("--from-url-file - reads the URL from standard input, which then cannot answer a confirmation",
+			"repeat the command with --yes after reviewing that image "+request.Name+" may be replaced")
+	}
+	reader, ok := s.acquirer.(URLReader)
+	if !ok {
+		return AddMediaRequest{}, availability.ErrNotImplemented
+	}
+	sourceURL, err := reader.ReadURL(ctx, request.SourceURLFile)
+	if err != nil {
+		return AddMediaRequest{}, err
+	}
+	request.SourceURL, request.SourceURLFile = sourceURL, ""
+	return request, nil
+}
+
 func addition(request AddMediaRequest) (Source, string, error) {
 	if !managedos.ValidMediaName(request.Name) {
 		return Source{}, "", failure("the media name is not a portable ISO basename",
@@ -639,7 +666,7 @@ func deletable(ctx context.Context, view View, name string) (observed, error) {
 func selectSource(request AddMediaRequest) (Source, error) {
 	file, url := strings.TrimSpace(request.SourceFile), strings.TrimSpace(request.SourceURL)
 	if (file == "") == (url == "") {
-		return Source{}, failure("exactly one media source is required", "supply --from-file or --from-url")
+		return Source{}, failure("exactly one media source is required", "supply one of --from-file, --from-url and --from-url-file")
 	}
 	return Source{Path: file, URL: url}, nil
 }

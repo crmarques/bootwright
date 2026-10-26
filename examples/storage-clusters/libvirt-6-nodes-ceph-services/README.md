@@ -144,8 +144,8 @@ path with read-only `fs subvolume getpath files cephfs-canary --group_name ec`,
 and mount that exact path with `name=cephfs-canary,secretfile=<private-file>`.
 Do not pass the key value itself in a mount option or command argument.
 
-For S3, use the existing private `cluster info --secrets` handoff. It reveals
-only proved credentials whose original applied user, cluster and gateway scope
+For S3, use the private `cluster info --object-user` handoff. It reveals
+only the named user's proved credentials whose original applied user, cluster and gateway scope
 still match the selected graph; missing, changed or unproved scope refuses.
 On the controller, keep the full JSON outside acceptance captures:
 
@@ -153,7 +153,7 @@ On the controller, keep the full JSON outside acceptance captures:
 umask 077
 set -eu
 s3_private=$(mktemp -d)
-./bin/bootwright cluster info --name ceph-lab --secrets --output json > "$s3_private/access.json"
+./bin/bootwright cluster info --name ceph-lab --object-user services-canary --output json > "$s3_private/access.json"
 jq -er '[.result.storage[] | select(.name == "ceph-lab") | .objectUsers[] | select(.name == "services-canary")] | if length == 1 then .[0] | "[canary]\naws_access_key_id = \(.accessKey)\naws_secret_access_key = \(.secretKey)" else error("expected one canary user") end' "$s3_private/access.json" > "$s3_private/credentials"
 rm -- "$s3_private/access.json"
 ```
