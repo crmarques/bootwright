@@ -4585,7 +4585,7 @@ decision stay open while its other parts land.
 
 | Lane | Items in order | Starts after | Not concurrently with | Owner decisions |
 | --- | --- | --- | --- | --- |
-| A Harness and guards | [B800](#b800), [B801](#b801), [B822](#b822) | B822 after B813 and B818 | none | Q62, Q63, Q64, Q103 |
+| A Harness and guards | [B800](#b800), [B801](#b801) | none | none | Q62, Q63, Q64 |
 | B Physical targets and shared hosts | [B802](#b802), [B803](#b803) | B801 | D, E, G, I | Q65, Q66, Q67 |
 | C Storage retirement | [B804](#b804), [B835](#b835) | none | F, G | Q68, Q69 |
 | D Credentials and trust | [B805](#b805), [B817](#b817), [B829](#b829), [B831](#b831) | none | B | Q70, Q97, Q98, Q99, Q100, Q101, Q116 |
@@ -4596,8 +4596,44 @@ decision stay open while its other parts land.
 | I API shape and grammar | [B814](#b814), [B826](#b826), [B827](#b827), [B828](#b828), [B824](#b824), [B821](#b821) | B808 | B, F, G | Q77, Q78, Q79, Q80, Q81, Q82, Q83, Q84, Q85, Q86, Q87, Q88, Q105, Q106, Q107, Q110, Q111, Q112, Q113, Q114, Q115 |
 | J Reconciliation rules | [B816](#b816), [B830](#b830) | B800 to B807 | E, G | Q92, Q93, Q94, Q95, Q96, Q117, Q118 |
 | K Language and adapter contracts | [B818](#b818), [B834](#b834) | none | G | none |
-| L Corpus structure | [B815](#b815), [B819](#b819), [B820](#b820) | B801 | none | Q89, Q90, Q91, Q102 |
+| L Corpus structure and skills | [B815](#b815), [B819](#b819), [B820](#b820), [B822](#b822) | B801; B822 after B813 and B818 | none | Q89, Q90, Q91, Q102, Q103 |
 | M CLI and examples | [B825](#b825), [B833](#b833), [B823](#b823) | none | none | Q104, Q108, Q109 |
+
+### Lane order and progress
+
+[D182](#decisions) runs the lanes in this order, from the harness and the
+low-level contracts to the operator-facing surface, one at a time. Each lane
+is one branch, `lane-<letter>`, in the worktree
+`../bootwright-worktrees/lane-<letter>`, and lands on main as one commit that
+also updates this table.
+
+| Order | Lane | State |
+| --- | --- | --- |
+| 1 | A Harness and guards | not started |
+| 2 | K Language and adapter contracts | not started |
+| 3 | H Cross-build continuation | not started |
+| 4 | E Store durability and controller records | not started |
+| 5 | B Physical targets and shared hosts | not started |
+| 6 | D Credentials and trust | not started |
+| 7 | C Storage retirement | not started |
+| 8 | F Truthful admission | not started |
+| 9 | G Extension architecture | not started |
+| 10 | J Reconciliation rules | not started |
+| 11 | I API shape and grammar | not started |
+| 12 | M CLI and examples | not started |
+| 13 | L Corpus structure and skills | not started |
+
+To continue, take the first row not `merged`. If its branch exists, resume it:
+each finished item is a `wip` commit whose body names what remains, and the
+branch log is the progress record. Otherwise create the branch from main.
+Implement the lane's items in order under
+[code-implementation](../../.agents/skills/code-implementation/SKILL.md),
+leaving every part that waits for an owner question open. Before landing: run
+`make check` (and, for the safety class, `make race` and an independent
+review), rebase onto main, squash the branch into one commit whose body lists
+each item and gate, move each completed item to a delivered record of the
+lane's slice, trim a partly delivered item to what remains, set the row here
+to `merged (X<n>)`, and fast-forward main. Pushing waits for the owner.
 
 ### Audit remediation decisions
 
@@ -5792,3 +5828,13 @@ Requires cell as `owner decision: <question>`.
   operator-run acceptance open. This records no host operation or passed live
   gate. The resulting in-tree work is recorded under
   [M3 independent completion](delivered.md#m3-independent-in-tree-completion).
+
+- **D182** (2026-10-26, the owner's request): "order all lanes from most
+  basic, fundamentals, architectural and low level one to the high level
+  ones, and start implementing all of them in sequence. One branch for each
+  lane that will be merged to main branch as a single commit", proceeding so
+  another coding agent can continue. This authorizes the
+  [audit remediation lanes](#lane-order-and-progress) in the recorded order,
+  one lane at a time, each merged to local main as one commit once its gates
+  pass. Parts that wait for an owner question (Q62 to Q118) stay open, no host
+  operation or live gate is authorized, and pushing waits for the owner.
