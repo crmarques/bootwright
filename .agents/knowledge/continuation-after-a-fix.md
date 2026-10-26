@@ -18,8 +18,12 @@ automation first.
 ## Cause
 
 A block's content digest is computed from the implementation's declared
-contract: its identity, its request and evidence versions and its effect pins
-(images, the cephadm binary, package sets, host paths). No capability package
+contract: its identity, its request and evidence versions and its effect pins,
+the Go-owned values outside the frozen request that fix what an effect is (an
+artifact, a package set, a host path, a name prefix, an ownership mark); a
+value the request carries needs no pin. Today one implementation hashes such
+values directly and another a version tag moved by hand, so a pin change moves
+the latter's digest only when its author moves the tag. No capability package
 reads the automation, so a fix confined to automation moves the automation
 digest and no content digest, request byte or version. Another build continues
 an operation exactly when it freezes the same blocks

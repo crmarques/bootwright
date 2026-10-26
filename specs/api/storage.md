@@ -13,9 +13,10 @@ of the same cluster binds by name. StorageFilesystem is admitted under
 [CephFS filesystems](#cephfs-filesystems). RGW, ingress and NFS documents are admitted under their
 [native records](../storage-native-api.md#rgw-ingress-and-nfs-records).
 NVMe-oF gateway documents (`service_type: nvmeof`) are admitted under their
-[native record](../storage-native-api.md#nvme-of-gateway-record); Bootwright
-does not deploy them yet, so planning refuses a StorageCluster that declares
-one ([refusal table](../storage.md#refusal-table)).
+[native record](../storage-native-api.md#nvme-of-gateway-record) and plan as a
+`ceph-service` nvmeof [unit](../storage.md#nvme-of-subsystems) once the
+`nvmeof` image is authored under `spec.ceph.images`
+([refusal table](../storage.md#refusal-table)).
 Prometheus, Alertmanager, Grafana, node-exporter, ceph-exporter, snmp-gateway,
 mgmt-gateway and oauth2-proxy documents are admitted under their
 [native records](../storage-native-api.md#observability-and-management-gateway-records);
@@ -55,7 +56,7 @@ daemons are generated from a StorageSMBResource, and Bootwright does not
 realize the iSCSI gateway or CephFS snapshot mirroring (see [service identity](../storage-native-api.md#service-identity-and-references)).
 Unsupported
 service families, options with unqualified effects and protected leaves
-without a release-qualified binding refuse explicitly. There is no arbitrary
+without a qualified binding record refuse explicitly. There is no arbitrary
 provider-command escape hatch.
 
 `StorageClient` is admitted with required `clusterRef` and
@@ -88,8 +89,15 @@ plans it once the samba images of the StorageCluster it names are authored
 under `spec.ceph.images`; without them, planning refuses that StorageCluster
 (see the [refusal table](../storage.md#refusal-table)).
 `StorageNVMeoFSubsystem` is admitted under its
-[field record](../storage-resources.md#storagenvmeofsubsystem); no capability
-realizes it yet, so planning refuses every selected one before any effect.
+[field record](../storage-resources.md#storagenvmeofsubsystem) and realized by
+its [subsystem block](../storage.md#nvme-of-subsystems).
+`StorageReplication` is admitted under its
+[field record](../storage-resources.md#storagereplication) and realized by its
+replication block ([RBD replication](../storage.md#rbd-replication)). It names
+a primary and a receiving managed StorageCluster of one context, and a
+StoragePool declares `mirroring` only when a StorageReplication names it. The
+[resource graph](../storage-resources.md#managed-storage-resource-graph) states
+each kind's realization once.
 Other P2 resource additions remain target contracts, not admitted kinds.
 
 IBM packages use the vendor repository selected by `ceph.packageRepository`.
@@ -103,8 +111,9 @@ Their historical field tables in [field detail](../deferred/storage-api.md)
 are retained only for the later owning slices.
 
 `StorageExport` is admitted for a managed cluster under its
-[field record](../storage-resources.md#storageexport); its `externalDetails`
-arm refuses, naming the parked external-cluster item.
+[field record](../storage-resources.md#storageexport) and realized by its
+export block ([resources, readiness and access](../storage.md#resources-readiness-and-access));
+its `externalDetails` arm refuses, naming the parked external-cluster item.
 
 Operators select IBM Ceph release identifiers, package and tool versions,
 container tags or digests and related service-version coordinates in input.
@@ -124,10 +133,15 @@ that adaptation neither approves nor refuses a selection.
 Ordinary apply realizes the core cluster, placement policies, replicated and
 erasure-coded pools, RBD images, CephFS filesystems with their subvolume
 groups, CephFS subvolumes, native `nfs` services, NFS exports of a CephFS
-filesystem, a CephFS subvolume or an object user's buckets and StorageClients of an RBD pool, a CephFS
-filesystem or a CephFS subvolume over `verified-tunnel`; an ingress
+filesystem, a CephFS subvolume or an object user's buckets, one-way journal
+RBD mirroring of a StorageReplication, NVMe-oF subsystems, managed
+StorageExports and StorageClients of an RBD pool, a CephFS filesystem or a
+CephFS subvolume over `verified-tunnel`; an ingress
 plans once its auxiliary images are authored under `spec.ceph.images` and
 refuses at planning without them.
+`ceph.distribution` is `oss`, `redhat` or `ibm` and defaults to `oss`; core
+Ceph realizes only `ibm`, so planning refuses any other value, an omitted one
+included, with `lifecycle.unsupported`.
 `ceph.release` is the operator's release label;
 `ceph.packageVersion` selects the Ceph/cephadm RPM roots and
 `ceph.cephadm.ansible.packageVersion` selects the actual cephadm-ansible RPM.
@@ -166,7 +180,8 @@ The frozen core and host requests retain the exact selected key URL. Serving
 a key from a mirror never changes the code-pinned IBM fingerprint: a mismatched
 key or unsigned RPM refuses before package installation.
 
-`ceph.ibm.callHome` is `enabled` or `disabled`. `enabled` keeps the
+`ceph.ibm` is required for the `ibm` distribution, and its `callHome` is
+required, with no default, and is `enabled` or `disabled`. `enabled` keeps the
 provider's Call Home reporting active after bootstrap; `disabled` leaves it
 inactive. The selected build decides how an intent is realized: on a build
 whose Call Home is opt-in, `disabled` is the native default and requires the
@@ -203,13 +218,20 @@ no table of values. Resolution freezes each image's linux/amd64 digest with
 the Ceph image ([frozen release and trust](../storage.md#frozen-release-and-trust)).
 
 `ceph.cephadm.clusterSSH.transport` accepts `native` or `verified-tunnel`
-(D135). Omission selects `native`; an empty, null or unknown value refuses.
-The frozen core request records the effective transport for the cluster and
-its children. A verified tunnel never qualifies the direct native channel, and
-this field grants no exception to host-key verification. The three-node
-example selects `verified-tunnel` explicitly; its protected mounts and staged
-bootstrap remain subject to
+(D135). Omission selects `verified-tunnel`, the only transport a build
+realizes; `native` is reserved and `validate` refuses it, and an empty, null or
+unknown value refuses. The frozen core request records the effective transport
+for the cluster and its children. A verified tunnel never qualifies the direct
+native channel, and this field grants no exception to host-key verification.
+The three-node example selects `verified-tunnel` explicitly; its protected
+mounts and staged bootstrap remain subject to
 [release qualification](../storage-coverage.md#release-qualification).
+
+Not yet met: omission still selects `native`, and `native` or an omitted
+transport refuses at plan in the
+[refusal table](../storage.md#refusal-table) instead of `validate`; tracked as
+[B807](../milestones/backlog.md#b807).
+
 Core request v11 refuses continuation of v10 operations, image request v2 and
 package request v2 refuse continuation of older operations, and core
 evidence v3 and host request v2 refuse continuation of operations an
@@ -260,7 +282,7 @@ provider sizing and measured resource acceptance remain separate.
 | `StorageCluster` | One managed Ceph cluster or one externally managed Ceph identity. `spec.type` is exactly `ceph`; `spec.management` is `managed` (default) or `external`; `spec.ceph` is required for `managed` and forbidden for `external`. |
 | `StoragePlacementPolicy` | A reusable CRUSH placement policy and replicated defaults for one managed cluster. |
 | `StorageClient` | One CephX principal with exactly one same-cluster scope: an RBD `poolRef` (its OSD caps also name the data pools of the StorageRBDImages on that pool), a `filesystemRef` or a `subvolumeRef`; explicit access. |
-| `StoragePool` | One pool. `spec.type` is `replicated` (default) or `erasure` and selects protection; the referenced cluster selects the storage engine. |
+| `StoragePool` | One pool. `spec.type` is `replicated` (default) or `erasure` and selects protection; the referenced cluster selects the storage engine. An optional `spec.nativeName` (a DNS label, default `metadata.name`) names the native pool; references always use `metadata.name` ([StorageReplication](../storage-resources.md#storagereplication)). |
 | `StorageRBDImage` | One RBD image: same-cluster replicated rbd `poolRef`, exact `sizeBytes`, optional rbd `dataPoolRef` and a closed feature set; image format 2. |
 | `StorageFilesystem` | One CephFS filesystem: a same-cluster `cephfs-metadata` pool, one or more ordered `cephfs-data` pools (the default replicated), its rank and standby policy, subvolume groups, and the native MDS service it binds through `mdsServiceRef`. |
 | `StorageSubvolume` | One CephFS subvolume in a same-cluster `filesystemRef`, optionally in one of its declared groups, with an optional quota, layout pool, owner and mode. |
@@ -270,7 +292,8 @@ provider sizing and measured resource acceptance remain separate.
 | `StorageNFSExport` | One NFS export of one declared nfs service, backed by a same-cluster StorageFilesystem, StorageSubvolume or StorageObjectUser, with its native export under `native`. Daemon placement, ports and ingress belong to the native services. |
 | `StorageSMBResource` | One native SMB manager resource (`ceph.smb.cluster`, `ceph.smb.share`, `ceph.smb.join.auth` or `ceph.smb.usersgroups`) under `native`, with its share backing, auth references and password bindings. |
 | `StorageNVMeoFSubsystem` | One NVMe-oF subsystem of one declared nvmeof gateway service: its NQN, a listener on every gateway of the group, the host NQNs allowed to connect and its namespaces, each backed by a same-cluster StorageRBDImage. |
-| `StorageExport` | One downstream storage surface: the `dataFoundation` arm for a managed cluster, `externalDetails` for an external one. |
+| `StorageReplication` | One one-way journal RBD mirroring relationship from a primary pool of `clusterRef` to the same-named pool of `peerClusterRef`, in image or pool mode ([field record](../storage-resources.md#storagereplication)). |
+| `StorageExport` | One downstream storage surface, not an NFS export: the `dataFoundation` arm attaches one Data Foundation consumer to a managed cluster, and `externalDetails` is for an external one. |
 
 ## References
 
@@ -295,12 +318,24 @@ on the already selected Machine.
 | `ownerRef` (StorageObjectBucket) | `StorageObjectUser` |
 | `objectUserRef` (StorageNFSExport) | `StorageObjectUser` |
 | `imageRef` (StorageNVMeoFSubsystem) | `StorageRBDImage` |
+| `imageRefs` (StorageReplication) | `StorageRBDImage` |
+| `peerClusterRef` | `StorageCluster` |
+| `peerPoolRef` | `StoragePool` |
+| `cephadm.bootstrap.node` | nested owner-local: a `name` in the same cluster's `ceph.topology.nodes` that the MON service places on |
+| `cephadm.addressRef`, `cephadm.bootstrap.addressRef` | nested on a Machine: an address name on the Machine of every topology node, or of the bootstrap node; the bootstrap value defaults to `cephadm.addressRef`, else the Machine's `access.ssh.addressRef` |
+| `stretch.tiebreaker.node` | nested owner-local: a `name` in `ceph.topology.nodes` |
 | `machineRef` | `Machine` |
 | entitlement refs | `Entitlement` |
 | key, certificate, password, client-secret, cookie-secret, and external-detail refs | `Secret` |
 
+Every Secret a realized field of this page references is effect material under
+[binding](../secrets.md#immutable-binding-and-contexts): the cluster SSH key,
+each service binding's secret and the package repository trust bundle are
+placed on the hosts or in the cluster, and none is an access credential. The `externalDetails` secret belongs to an arm that
+refuses.
+
 Storage children select their owner through `spec.clusterRef`; they do not
-repeat the cluster's `ceph` implementation arm. The reference is required and
+repeat the cluster's `ceph` arm. The reference is required and
 is never inferred from directory placement or a sole cluster. A
 `placementPolicyRef` is likewise explicit; a sole policy is not selected
 automatically. `StorageCluster.spec.ceph` and the consumer-specific
@@ -390,9 +425,10 @@ bounds. `autoscale.mode` is `on` when omitted or `off`; `warn` refuses at plan
 `targetSizeRatio` and `compression.requiredRatio` freeze as decimal strings,
 and quota and compression values freeze as native values, with 0 and empty
 meaning unset. `pgNumMin` and `pgNumMax` are at most 32768 and the byte
-values fit a signed 64-bit integer. `mirroring` refuses at plan naming
-[B483](../milestones/m2.md#b483). A `cephfs-metadata` pool declares no PG
-bounds: `ceph fs new` sets its `pg_num_min`.
+values fit a signed 64-bit integer. `mirroring` is realized only when a
+[StorageReplication](../storage-resources.md#storagereplication) names the pool;
+without one, planning refuses it and names that owner. A `cephfs-metadata`
+pool declares no PG bounds: `ceph fs new` sets its `pg_num_min`.
 
 Before any effect, a plan refuses a pool whose CRUSH rule would exceed the
 monitor's per-OSD placement-group bound: the sum of `pgNum × width` over the
@@ -509,6 +545,9 @@ checks:
 
 - management mode, distribution, entitlement, image, package, bootstrap,
   topology, network, FIPS, CephX, and cluster-login declarations agree;
+- each `ceph.topology.nodes[].machineRef` names a Machine whose
+  `spec.capabilities` includes `ceph-node`
+  ([Machine capabilities](machines.md#machine));
 - native placement resolves to owned Machines and service counts fit finite
   candidate sets, with consistent site and label bindings;
 - OSD selectors are bounded and internally consistent and exclude the

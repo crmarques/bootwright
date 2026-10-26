@@ -48,9 +48,9 @@ host's configured repositories. Mutations may request confirmation and sudo.
 ./bin/bootwright context init --name lab-rhel-3-nodes --input-dir "$lab_rhel_three_input"
 ./bin/bootwright secret generate
 ./bin/bootwright secret check
+./bin/bootwright plan
 ./bin/bootwright apply --stage controller
 ./bin/bootwright preflight controller --context lab-rhel-3-nodes
-./bin/bootwright plan
 ./bin/bootwright apply --stage infra-components
 ./bin/bootwright apply
 ./bin/bootwright status

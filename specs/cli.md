@@ -256,9 +256,9 @@ confirming command's own code (`controller.setup`, `media.store`,
 repeated with `--yes` in `next:`; a cancellation names no command. The
 repeated command is the invocation's own: its command path and every flag it
 set, so a stage, Machine or source selection, an authorization and every other
-choice stay, and following it never does more than the plan the operator
-reviewed. A command that acts in a context names it with `--context <name>`
-whether or not the invocation did, and a value no output repeats, a Secret's
+choice stay. It runs the verb afresh, so its plan is the one the records then
+current freeze, and an authorization names no plan. A command that acts in a
+context names it with `--context <name>` whether or not the invocation did, and a value no output repeats, a Secret's
 `--username` or a `--from-url`, is named by a placeholder such as
 `<username>`. The host-key confirmation of an [SSH session](#machine-ssh-sessions) reads its
 answer the same way. `--yes` suppresses only this prompt, under
@@ -277,12 +277,14 @@ effects follow [Controller](controller.md#the-setup-flow).
 Available commands requiring context state run as root; a
 non-root invocation keeps an unprivileged supervisor and launches one exact
 Bootwright child as UID 0 through the qualified absolute sudo executable. Pin
-reexecution to the supervisor's verified executable through procfs so a pathname
-replacement during authentication cannot substitute code. Sudo policies that
-refuse that executable path fail closed. A sudoers rule must therefore match
-`/proc/<pid>/exe`: sudo compares a command's base name before its path, so a
-rule naming the Bootwright binary does not match the re-execution. Sudo owns
-terminal password handling; Bootwright never captures the password. JSON, YAML or
+reexecution to the supervisor's verified executable so a pathname replacement
+during authentication cannot substitute code. Re-execution names the proved
+root-owned absolute path ([local context privilege](security.md#local-context-privilege)),
+so a sudoers rule naming the installed binary matches it; only the invoking
+account's own build output re-executes through `/proc/<pid>/exe`, which a
+sudoers rule must then match, because sudo compares a command's base name
+before its path. Sudo policies that refuse the executable path fail closed.
+Sudo owns terminal password handling; Bootwright never captures the password. JSON, YAML or
 noninteractive invocation uses noninteractive sudo and fails without cached or
 passwordless authorization. Preserve argv, stdin payloads, outputs and status.
 An interactive invocation hands sudo the invoking terminal itself on every
@@ -290,6 +292,10 @@ standard stream it occupies, so sudo's own terminal relay carries prompts and
 answers to the child. A confirmation read whose terminal belongs to another
 foreground process group requests the terminal through job control instead of
 waiting for input that cannot arrive.
+
+Not yet met: every re-execution goes through `/proc/<pid>/exe`, which a sudoers
+rule naming the installed binary never matches; tracked as
+[B831](milestones/backlog.md#b831).
 
 Sudo and the elevated child share one standard error, and sudo exits 1 for its
 own refusals, so a noninteractive supervisor learns that the child started only
@@ -320,7 +326,7 @@ exited 1 having held a line. That `runtime.privilege` report, and a structured
 invocation's, carries the held lines, each without sudo's prefix, as the reason
 sudo refused. The first held line that names a cause decides its remedy: a
 required password points to `sudo -v` in that terminal, or running as root; a
-sudoers policy refusal points to the rule that permits `/proc/<pid>/exe`; a
+sudoers policy refusal points to the rule that permits the re-executed path; a
 failure to execute points to a local copy of the executable that root can
 execute; and the sudoers policy refusing to set the forwarded
 [acquisition route](controller.md#the-context-free-acquisition-route)'s
@@ -511,10 +517,16 @@ An invocation whose work durable state already proves settles before any of
 that: it presents no plan, asks for no confirmation, requires and refuses no
 authorization, and reports `done` with the blocks its completed operation
 finished, under the [settled-verb rule](state-reconciliation.md#lifecycle-unit).
-Its result says in one line that nothing is left to do and, when it first
+Its result says in one line that nothing is left for the verb to do and names
+`bootwright diff --observe` as the comparison with the hosts, because settling
+attests only that the context's own records are complete. When it first
 completed an interrupted finalization or a `destroy` first released what an
-interrupted registration left, that it did only that, so a table of completed
-blocks is never read as work this invocation performed.
+interrupted registration left, the line says it did only that, so a table of
+completed blocks is never read as work this invocation performed.
+
+Not yet met: the settled apply's line says the context already holds the state
+it declares and names no comparison with the hosts; tracked as
+[B824](milestones/backlog.md#b824).
 
 `apply` and `destroy` present the frozen plan, which marks each step that
 consumes an authorization and closes with the tokens it requires, then check
@@ -554,13 +566,12 @@ or safety gate.
 `plan` and `apply` accept the [`--stage` flag](cli/commands.md#flag-relationships-and-safeguards);
 what a selection gates, pauses and refuses is owned by the
 [stage contract](state-reconciliation.md#stages-and-the-pause-boundary).
-`plan --stage` previews which blocks the selection would start and which it
-would defer, as the next `apply` admits them. While a block is unproved or
-failed, that `apply` first resolves every unproved block, whatever its stage,
-or retries the one failed block the selection admits, so the preview marks
-those `resolve` or `retry`, and every other ready block is deferred behind the
-first of them until that resolution or retry succeeds. Previewing a fresh or
-continued `apply`, it fails `lifecycle.stage` exactly where that `apply` would,
+`plan --stage` previews which blocks the next `apply` would resolve, retry or
+start and which it would defer, as the
+[stage contract](state-reconciliation.md#stages-and-the-pause-boundary) admits
+them, with the markers of the
+[output contract](cli/output.md#lifecycle-and-status-results). Previewing a
+fresh or continued `apply`, it fails `lifecycle.stage` exactly where that `apply` would,
 naming the exact `apply` whose `--stage` adds the stage that would unblock
 work, with `--authorize <token>` for each token the plan consumes, since that
 `apply` is authorized against the whole plan; previewing a `destroy`, which accepts no selection, it fails
@@ -578,6 +589,17 @@ verb: <plan|apply|destroy>
 state: <preview|running|paused|failed|unknown|done>
 next: <apply|continue-apply|destroy|continue-destroy|resolve|none>
 ```
+
+The receipt's `next:` holds an action token, not a command, and `bootwright
+resolve` is no verb. A result's `Next` field and the steps `status` offers
+name the command the token maps to:
+
+| Token | Command |
+| --- | --- |
+| `apply`, `continue-apply` | `bootwright apply --context <name>` |
+| `destroy`, `continue-destroy` | `bootwright destroy --context <name>` |
+| `resolve` | the operation's own verb: `bootwright apply --context <name>` or `bootwright destroy --context <name>` |
+| `none` | no step |
 
 The labels, order, enum values, escaping, and final LF are stable. Every `plan`
 receipt has state `preview`, a CLI-only marker that is never persisted as an
@@ -619,11 +641,10 @@ destroy, but naming it as the next action instructs an operator to undo what
 just succeeded; the verbs a context admits are what `plan` reports. `apply`
 appears only as the previewed verb of a pure plan, and `destroy` only as that
 or as what a failed destroy calls for. Where `status` offers a next step it
-offers a command this executable runs: a continuation, a resolution and a
-replacement are all offered as the operation's own verb repeated —
-`continue-apply` and `resolve` as `bootwright apply --context <name>` — and
-`none` is offered as no step at all. No next step names a verb this executable
-does not expose. Every step that names a context-backed command carries
+offers the command the token maps to in the table above, a command this
+executable runs: a continuation, a resolution and a replacement are all offered
+as the operation's own verb repeated, and `none` as no step at all. No next
+step names a verb this executable does not expose. Every step that names a context-backed command carries
 `--context <name>` for the context `status` read
 ([context identity](cli/output.md#context-identity)). A continuation, a
 resolution or a replacement also carries `--authorize <token>` for each token
@@ -632,8 +653,17 @@ replacement, those of the blocks it retains. A finalization carries none, and
 neither does `bootwright destroy --context <name>` offered beside an incomplete
 apply, since its presented plan names them.
 
-`status` offers a next step only where that verb's decision would pass over the
-records `status` read, so it never offers a command those records refuse:
+`status` draws its next steps from one candidate list, in this order: the
+operation's own verb (`plan` and `apply` beside no operation), the `destroy`
+that supersedes an incomplete apply, `bootwright setup`, and the context
+deletion `bootwright context delete --name <name> --purge`. A candidate verb is
+offered only where its decision would pass over the records `status` read, so
+`status` never offers a command those records refuse; where the decision
+refuses, the exit its refusal names (setup, or the deletion) is offered in its
+place when `status` can run it, and otherwise no step. The decisions belong to
+[state reconciliation](state-reconciliation.md#continuation-and-removal); the
+cases below apply that rule and restate no decision, and a change of a decision
+changes the case it governs:
 
 - beside no operation, `bootwright setup` alone while the host's controller
   setup has not completed, because an apply claims the host only after it
@@ -677,9 +707,10 @@ records `status` read, so it never offers a command those records refuse:
   of a failed removal, which prove the setup before they resolve or register
   anything, are then replaced by it too, and a finalization is not held to it
   and stays offered;
-- over a completed operation, nothing, except over a completed destroy holding
-  a block that is not `done`, which both verbs refuse naming the deletion of
-  the context: there that deletion, as beside unindexed records;
+- over a completed operation, nothing, except over a completed destroy or a
+  completed apply holding a block that is not `done`, which both verbs refuse:
+  there the deletion of the context, as beside unindexed records, which
+  abandons what the operation owns;
 - over an operation whose continuation or removal reopens a Secret binding the
   context's keyring no longer lists, or whose keyring listing fails reporting
   the material corrupt or undecryptable, as the reopen would, in place of any
@@ -698,6 +729,10 @@ it stopped in, so taking them back is as legitimate a way forward as
 continuing. A completed apply is the exception, for the reason above. These are
 next steps only; the receipt's `next` still names what the operation's own
 records call for.
+
+Not yet met: over a completed apply holding a block that is not `done`, the
+refusals name only `bootwright status` and `status` offers no step; tracked as
+[B816](milestones/backlog.md#b816).
 
 ### Desired and realized state comparison
 
@@ -729,9 +764,15 @@ The text result opens with these header lines, each value starting at column 11:
 | --- | --- |
 | `Context` | `<name> at input revision <selected revision>` |
 | `Against` | `nothing; this context holds no operation, so nothing is realized`, or `apply <id> (<state>) of input revision <revision>, as its records prove; no host was contacted`, or `destroy <id> (<state>) of apply <id>, as its records prove; no host was contacted`, or, with `--observe`, `what apply <id> (<state>) realized, read live: <n> blocks observed, <u> unknown, <p> not projected` |
-| `Input` | `not applied yet; bootwright apply --context <name> realizes it`; `unchanged since <apply>; bootwright apply settles over it and repairs nothing shown here` for a done apply; `unchanged since <apply>, which bootwright apply --context <name> continues` for an incomplete one or `..., which bootwright destroy --context <name> takes back` under a removal; or `changed since <apply>; bootwright apply refuses it until bootwright destroy --context <name> takes back what that apply owns` |
+| `Input` | `not applied yet`; `unchanged since <apply>`, or `unchanged since <apply>, which the removal in progress takes back`; each ends with `; bootwright status --context <name> names the next step`. Or `changed since <apply>; bootwright apply refuses it until bootwright destroy --context <name> takes back what that apply owns` |
 | `Plan` | `this executable plans the same blocks`; `this executable plans <c> blocks differently, <a> more and <r> fewer`; `this executable no longer plans the input: <message>`; or `no apply froze a plan to compare with` |
 | `Build` | Only when another build than the one that registered the apply plans some of its blocks differently: `this executable plans <k> blocks of <apply> differently from the build that froze them`, followed with `--observe` by `; --observe does not read them` |
+
+No `Input` value says that `apply` continues, settles or realizes the input,
+because only `status` decides which command passes over the records.
+
+Not yet met: the `Input` line names `bootwright apply` as continuing, settling or
+realizing the input; tracked as [B825](milestones/backlog.md#b825).
 
 Each object whose difference is not `none`, or whose real side is `partial` or
 `unknown`, follows after a blank line, in API kind order and then name:
@@ -828,7 +869,7 @@ material, invoking reveal, or inventing usage metadata. The
 never conflates them. Its lifecycle position is how far this context's own
 operations have carried the Machine, which durable evidence proves locally. Its
 power is what the Machine's own management controller reports right now, which
-only that controller can answer.
+only that management controller can answer.
 
 The lifecycle position names the verb that last acted on the Machine and
 whether that verb completed: `applied` once an apply proved its realization,
@@ -858,18 +899,18 @@ host, so it never reports an address desired state does not carry.
 
 `--power-status` additionally reads each selected Machine's power state from
 [its own management controller](substrates.md#identity-and-power-operations),
-reporting `on`, `off`, or `unknown` when the controller gave no usable answer.
+reporting `on`, `off`, or `unknown` when the management controller gave no usable answer.
 It is the only part of this command that contacts a host: without it the
 command compiles local state alone and opens nothing. The reading registers no
 operation, publishes no evidence and changes nothing, so it neither claims nor
 releases ownership and never becomes durable. One bounded run answers for every
-Machine reachable through the same host, and one controller that does not
-answer leaves its own Machine `unknown` rather than denying the readings that
-run already has. A Machine this context resolves no reachable management
-controller for — one declaring no controller, or one whose emulated controller
-this context does not currently own — reports no reading at all, which is
-distinct from `unknown`. The result states separately whether controllers were
-asked, so a reading nobody requested is never mistaken for one that came back
+Machine reachable through the same host, and one management controller that
+does not answer leaves its own Machine `unknown` rather than denying the
+readings that run already has. A Machine this context resolves no reachable
+management controller for — one declaring no management controller, or one
+whose emulated management controller this context does not currently own —
+reports no reading at all, which is distinct from `unknown`. The result states
+separately whether management controllers were asked, so a reading nobody requested is never mistaken for one that came back
 without an answer.
 
 A reading names no retained output. It is an inspection, not an operation: it
@@ -1036,8 +1077,12 @@ Any refusal exits `255`, opens no session and runs nothing. `--ssh-user` and
 
 Every session of several runs non-interactively: it has no standard input and
 its client is told never to prompt, so none can ask for a password, a
-passphrase or a host key. All sessions start together and run concurrently,
-with no bound. Each client's standard output and standard error reach
+passphrase or a host key. Sessions start in canonical order and run
+concurrently, at most as the lifecycle engine's
+[bound on running blocks](state-reconciliation.md#stages-and-the-pause-boundary)
+allows, as the runs of a [power batch](#machine-power-operations) do; a session
+past the bound waits for a slot, and an interrupt or cancellation stops a
+waiting session from starting. Each client's standard output and standard error reach
 Bootwright's own, line by line, each line prefixed `<machine>: `; a line is
 written whole, so lines of different sessions are interleaved but never mixed
 within a line. An unterminated final line is completed when its session ends,
@@ -1049,7 +1094,11 @@ Machine and the status; a client that could not start counts as status `255`
 and its warning says so. The invocation's status is the highest status any
 session returned, `0` only when all returned `0`. An interrupt after sessions
 opened signals each client as it does a single session, and the statuses that
-result stand and aggregate the same way.
+result stand and aggregate the same way. A session an interrupt kept from
+starting returned no status and writes no warning.
+
+Not yet met: the sessions of several Machines start together with no bound;
+tracked as [B817](milestones/backlog.md#b817).
 
 ### Cluster sessions
 
@@ -1110,7 +1159,7 @@ Every resolved node's `machineRef` joins one list, deduplicated, and that list
 is run as [`machine exec`](#machine-ssh-sessions) runs it. A list of one
 Machine, which two nodes or clusters sharing that Machine also yield, is the
 single session above. Several run as `machine exec` runs several Machines: the
-sessions are concurrent, take no standard input and never prompt, and the
+sessions are concurrent under the same bound, take no standard input and never prompt, and the
 prefix of each output line is the Machine name, not the cluster or the node.
 Two nodes that share a Machine run it once. The invocation's status is the
 highest status any session returned, and a refusal before a session opens exits
@@ -1346,28 +1395,31 @@ names them; tracked as [B545](milestones/backlog.md#b545).
 Resolution follows explicit access: an unknown or excluded name fails
 `access.target`, and a Machine this executable cannot reach a management
 controller for fails `access.unavailable`, both with exit `1`, empty standard
-output and no effect. A Machine whose controller is emulated by its provider
-is reachable while the provider's machine block for it stands, because the
-controller is one of that block's own effects: from the moment that block
-completed under the current apply, whatever the Machine's installation reached,
-until a removal proves the block gone. A Machine that authors its own
-controller is reachable whenever that controller answers.
+output and no effect. A Machine whose management controller is emulated by its
+provider is reachable while the provider's machine block for it stands, because
+the management controller is one of that block's own effects: from the moment
+that block completed under the current apply, whatever the Machine's
+installation reached, until a removal proves the block gone. A Machine that
+authors its own management controller is reachable while that management
+controller answers, and a power command still refuses the controller Machine
+and the controller host's own identity, as stated below and in
+[Identity and power operations](substrates.md#identity-and-power-operations).
 
 Stopping and restarting ask the
 [ordinary confirmation](#ordinary-confirmation), whose prompt names the
 Machine and its context; a declined or unanswerable one refuses
 `machine.power` naming the command that repeats it with `--yes`. The
-controller identity check against the pin follows the prompt and still
-refuses before any power request.
+management controller's identity check against the pin follows the prompt and
+still refuses before any power request.
 
 Every power request crosses [the Machine's management controller](substrates.md#identity-and-power-operations)
 over the one adapter boundary, under the context's shared lock, so a power
 operation and a lifecycle mutation never run against the same host at once.
-A request is not evidence: the result reports the state the controller proved
-once the operation settled, together with the state before it and whether
+A request is not evidence: the result reports the state the management
+controller proved once the operation settled, together with the state before it and whether
 anything changed. A state that never arrived within the bounded window is
 `lifecycle.unknown` with exit `1`, never a success. Its remedy names the exact
-commands: a controller that proved no usable state is read again with
+commands: a management controller that proved no usable state is read again with
 `bootwright machine list --context <context> --power-status` once it answers,
 and the same request repeated if the Machine is not in the state it asked for;
 a Machine that did not reach that state repeats the same request, and a
@@ -1380,25 +1432,38 @@ proves the stop before it starts, so an interrupted restart is never reported
 as settled.
 
 A physical Machine whose [pin](substrates.md#physical-machine-realization) the
-context's current apply recorded is held to it: a controller reporting another
-identity refuses `lifecycle.state` with exit `1` before any power request. The
+context's current apply recorded is held to it: a management controller
+reporting another identity refuses `lifecycle.state` with exit `1` before any power request. The
 adapter names that refusal to its runner before it fails, so the diagnostic's
-object is the Machine, its message names the controller endpoint and that it
-answers as another system, and its remedy is to correct the Machine's
-controller address or destroy and apply the context so the machine is proved
+object is the Machine, its message names the management controller endpoint and
+that it answers as another system, and its remedy is to correct the Machine's
+management controller address or destroy and apply the context so the machine is proved
 again, pointing at the run's retained output for the identities. That output
 names the Machine and both identities, and the diagnostic repeats neither: each
-is what a controller reported, so it is printed with every character removed
+is what a management controller reported, so it is printed with every character removed
 that its [evidence](substrates.md#physical-machine-realization) refuses as not
 printable, a format character such as a bidi override included, and then cut
 to 128 characters, the bound that evidence holds it to. A
 current-operation record or pin of that Machine that cannot be read refuses
 `lifecycle.state` before any confirmation or run.
 
+A power command never acts on the host that runs Bootwright. One naming the
+environment's controller Machine refuses `machine.power` before any request, and
+so does one whose management controller reports a system UUID or MAC address
+that is the controller host's own, read locally; `--force` and `--yes` lift
+neither. A physical Machine with no recorded pin is proved by the
+[target proof](substrates.md#physical-machine-realization), a complete
+inventory that reports exactly its declared MAC set, before a power request, and
+refuses when it declares none, so no request is compared with nothing.
+
+Not yet met: a power command is not refused for the controller Machine or for
+the controller host's own identity, and an unpinned physical Machine is compared
+with nothing; tracked as [B802](milestones/backlog.md#b802).
+
 [`machine list --power-status`](#resource-inspection-and-explicit-access)
-reads the same controllers over the same boundary and under the same lock, and
-follows the same reachability rules, but drives nothing: it asks each
-controller what state it is in and reports the answer. Because it observes
-rather than converges, an unreachable controller leaves its own Machine
-`unknown` instead of refusing, and a Machine no controller resolves for is
-omitted from the reading instead of failing `access.unavailable`.
+reads the same management controllers over the same boundary and under the same
+lock, and follows the same reachability rules, but drives nothing: it asks each
+management controller what state it is in and reports the answer. Because it
+observes rather than converges, an unreachable management controller leaves its
+own Machine `unknown` instead of refusing, and a Machine no management
+controller resolves for is omitted from the reading instead of failing `access.unavailable`.

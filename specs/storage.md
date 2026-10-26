@@ -1,6 +1,9 @@
 # Managed storage lifecycle
 
-This page owns the target runtime contract for managed Ceph. The
+This page owns the target runtime contract for managed Ceph, the storage
+family's one implementation, which a StorageCluster selects with `spec.type:
+ceph` and `management: managed`
+([implementation selection](architecture.md#implementation-selection)). The
 [storage API](api/storage.md) owns admission and references;
 [state reconciliation](state-reconciliation.md) owns operation state,
 authorization, leases, continuation and removal. [M2](milestones/m2.md)
@@ -41,7 +44,8 @@ Missing intent receives a deliberate API extension. Admission of other
 distributions or external clusters does not select an M2 implementation.
 
 The approved [native service target](storage-native-api.md) uses complete
-ServiceSpec documents under a closed, release-qualified service-type allowlist.
+ServiceSpec documents under a closed allowlist of the service types Bootwright
+realizes.
 The [resource graph](storage-resources.md) binds daemon owners and gives
 imperative-only resources declarative identities. Explicit services and
 native-generated children cannot duplicate ownership. Unknown service types,
@@ -206,7 +210,7 @@ them:
 
 - Verified Machine and managed-OS completion, declared host networks, name and
   time services, trusted remote access, package and registry access, and
-  provider-qualified container/runtime and host prerequisites precede bootstrap.
+  container/runtime and host prerequisites precede bootstrap.
 - Bootstrap identity and seed readiness precede cluster host enrollment;
   per-host preparation precedes its service and OSD effects. Enrollment and
   required MON/MGR placement precede final membership, quorum and topology
@@ -346,15 +350,21 @@ Storage preflight reports future Machines whose managed OS installation has
 not started as pending without remote guest probes. Installed or provided OS
 guests require actual prerequisite observations before readiness is proved.
 
+Storage accepts any selected time source that answers
+([time service readiness](infrastructure-services.md#managed-network-services))
+and requires no proof of its upstream synchronization; Ceph's own `MON_CLOCK_SKEW` health check, which
+the readiness set below does not tolerate, reports MON clocks that disagree.
+
 B472 fixes provider-specific ordering and forbids cycles. Storage never installs
 another domain's prerequisites itself. Preflight names unmet prerequisites and
 their owners; [B490](milestones/m2.md#b490) qualifies host and capacity proofs.
 
-Topology placement binds nodes to proved Machines and declared sites. Native
-cluster size and role counts follow the
-[provider-qualified requirements](storage-coverage.md#release-qualification);
-acceptance-profile sizes impose no additional restriction. Native
-stretch mode requires the complete two-data-site topology and an independent
+Topology placement binds nodes to proved Machines that carry the `ceph-node`
+capability ([admission](api/storage.md#complete-graph-invariants)) and to
+declared sites. Native cluster size and role counts are the native tools' to
+judge ([release qualification](storage-coverage.md#release-qualification));
+acceptance-profile sizes impose no additional restriction. Native stretch mode
+requires the complete two-data-site topology and an independent
 third-site monitor-only tiebreaker; an incomplete tiebreaker declaration retains
 its [admission meaning](api/storage.md#complete-graph-invariants) and cannot
 claim stretch readiness. [B486](milestones/m2.md#b486) qualifies native stretch,
@@ -380,6 +390,11 @@ links each matrix combination that this table refuses.
 | StorageSMBResource objects whose samba images are not selected | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, that a StorageSMBResource of any resource type names in its `clusterRef` while `ceph.images` does not set both `samba` and `samba_metrics`, and that neither of the two previous rows refuses; `<smb>` is the first such StorageSMBResource in name order, `<name>` is `samba` unless `ceph.images` sets it, else `samba_metrics`, and `<cluster>` the StorageCluster | `StorageSMBResource <smb> needs cephadm's container_image_<name>, and spec.ceph.images.<name> is not set; Bootwright keeps no default` | `set spec.ceph.images.<name> of StorageCluster <cluster> to an image beneath its Entitlement registry, or remove every StorageSMBResource whose spec.clusterRef is <cluster> from the selected Environment` |
 | An auxiliary image that no declared service needs | a StorageCluster, or a StoragePlacementPolicy, StoragePool or StorageClient whose `clusterRef` names it, setting `ceph.images.<name>` for an image that no service in `ceph.services` and no StorageSMBResource naming it needs (per the auxiliary image table, with `samba` and `samba_metrics` for a StorageSMBResource) and that none of the three previous rows refuses; `<name>` is the first such name in name order and `<cluster>` the StorageCluster | `spec.ceph.images.<name> is set, but no declared service or StorageSMBResource of StorageCluster <cluster> needs cephadm's container_image_<name>` | `remove spec.ceph.images.<name> from StorageCluster <cluster>` |
 | More than six Ceph hosts | a StorageCluster or a StoragePlacementPolicy, StoragePool or StorageClient naming it, whose topology declares more than six nodes | `StorageCluster <cluster> declares <hosts> Ceph hosts, and Bootwright's cluster execution budget covers at most six hosts per cluster` | `declare at most six entries in spec.ceph.topology.nodes of StorageCluster <cluster>; B79 tracks larger clusters` |
+
+The transport row records the plan-time refusal the code makes today. The
+[`clusterSSH.transport` field rule](api/storage.md) states what omission
+selects and which stage refuses `native`, with the gap
+([B807](milestones/backlog.md#b807)); the row changes with the code.
 
 ## Bootstrap identity and continuation
 
@@ -479,8 +494,14 @@ Listener, upstream sockets, resolver children and workers finish before the
 private invocation directory is removed.
 
 Each bootstrap, enrollment, service and resource attempt observes first and
-defines partial-completion evidence and safe retry. Complete owned state is
-unchanged; other owned differences converge only through qualified transitions.
+defines partial-completion evidence and safe retry, except two states that
+refuse until their recovery is defined: a cluster that is not ready after a
+non-bootstrap host carries a daemon refuses `partial-cluster`
+([B659](milestones/backlog.md#b659)), and a nonempty or partial DB/WAL device
+refuses before submission ([B662](milestones/backlog.md#b662)). The
+[interruption table](#cluster-execution-budget) states their exits. Complete
+owned state is unchanged; other owned differences converge only through
+qualified transitions.
 Command success alone proves neither ownership nor readiness.
 
 Bootstrap runs as the cluster's one longer native call, under its own launcher
@@ -512,7 +533,8 @@ QEMU SCSI serial aliases. Immediately before submission each host proves empty d
 owned partial OSD/LV UUID and membership; raw path reuse cannot widen the write
 target. Read-only device observation publishes no custody records. Pool setters
 retain setting intent/completion, settle from the same numeric pool ID and
-refuse `pool-drift` without writing when a completed setting drifted.
+refuse `pool-drift` without writing when a completed setting
+[drifted](state-reconciliation.md#comparing-desired-and-real-state).
 An incomplete RBD init may repeat only the bounded native idempotent init of
 that exact owned pool; an application flag alone proves no completed init.
 
@@ -562,14 +584,18 @@ no refusal stays the generic adapter failure, which fails the attempt.
 ### Cluster execution budget
 
 The StorageCluster's cluster block, the verified-tunnel apply that bootstraps,
-enrolls and deploys the cluster, supports three to six hosts per cluster in
-`spec.ceph.topology.nodes`. Fewer than three hosts keep their existing refusal.
-More than six refuse before operation registration and secret custody, as a row
-of the [refusal table](#refusal-table) for the StorageCluster and every
+enrolls and deploys the cluster, covers every host count in
+`spec.ceph.topology.nodes` that the selected native tools accept (D130), within
+the deadline bound below. Fewer than three hosts keep their existing refusal.
+Today more than six refuse before operation registration and secret custody,
+as a row of the [refusal table](#refusal-table) for the StorageCluster and every
 StoragePlacementPolicy, StoragePool and StorageClient naming it, with reason
 `StorageCluster <cluster> declares <hosts> Ceph hosts, and Bootwright's cluster execution budget covers at most six hosts per cluster`
 and remedy
 `declare at most six entries in spec.ceph.topology.nodes of StorageCluster <cluster>; B79 tracks larger clusters`.
+
+Not yet met: clusters of more than six hosts refuse; tracked as
+[B79](milestones/m2.md#b79).
 
 The cluster block's deadline is at least the sum of the ceilings of the longest
 call sequence its run can make: every 660 s native call, the 1860 s bootstrap
@@ -660,6 +686,19 @@ measured OSD convergence time; a shortfall there is its own item.
 | inside enrollment, devices, host device identities, OSD preparation or the services calls, before any non-bootstrap host carries a daemon | continues from `enrolling`, every other host `prepared` |
 | after a non-bootstrap host carries a daemon, the cluster not ready | refuses `partial-cluster` until [B659](milestones/backlog.md#b659) defines its recovery |
 | in a readiness wait | continues once cephadm has converged, as above |
+
+Neither `partial-cluster` nor the partial DB/WAL refusal of
+[devices](#devices-and-destructive-ownership) has a forward exit until its item
+defines recovery. On Bootwright-owned virtual hosts, `machine stop` and a
+destroy that retires the cluster with its hosts
+([removal](#removal-and-concurrency)), then a fresh apply, leave either
+refusal. On physical hosts the only retirement is the erase-backed
+[physical retirement](#devices-and-destructive-ownership), which needs each
+Machine's original erase policy to cover its root disk and every selected
+data, DB and WAL disk. Without that policy an interrupted physical deployment
+has no forward or retirement exit today: only the orphan-acknowledged
+[context deletion](contexts.md#permanent-deletion) remains, and it abandons
+the hosts, their daemons, the claimed disks and their data.
 
 The budget changes no `partial-cluster` refusal. Observation, destruction,
 child blocks, host blocks and service units keep their deadlines; at six hosts
@@ -770,7 +809,7 @@ safety; virtual-disk ownership never establishes physical-disk safety.
 
 ## Resources, readiness and access
 
-Each resource family has a release-qualified request and native identity,
+Each resource family has a closed request and native identity,
 creation/update boundary, owned-state observation, readiness predicate and
 inverse. B81 covers placement and replicated/erasure-coded pools; other families
 include [CephFS/MDS](milestones/m2.md#b492), [RGW](milestones/m2.md#b477),
@@ -778,8 +817,8 @@ include [CephFS/MDS](milestones/m2.md#b492), [RGW](milestones/m2.md#b477),
 [NVMe](milestones/m2.md#b480),
 [SMB](milestones/m2.md#b482), [multi-cluster/mirroring](milestones/m2.md#b483)
 and [client handoff](milestones/m2.md#b489). The iSCSI gateway is not a family: admission refuses
-`service_type: iscsi` ([B481](milestones/delivered.md#x58--iscsi-refusal)). B472 qualifies exact
-provider support and typed gaps. Observation proves usability, not just object existence.
+`service_type: iscsi` ([B481](milestones/delivered.md#x58--iscsi-refusal)). B472 records the tested
+native behavior and typed gaps. Observation proves usability, not just object existence.
 The [API ownership rules](api/storage.md) prevent one resource from implicitly
 creating or deleting another resource's pools, services or credentials.
 
@@ -796,8 +835,12 @@ create, and record the native rule or pool ID after it. A retry adopts a
 same-name rule, profile or pool only with that record and the frozen shape:
 the rule's steps, the stored profile as exactly the passed keys plus the
 plugin's frozen defaults, and the pool's type, rule and PG count; anything else
-refuses before an effect. Neither phase ever removes a pool, profile or rule. A
-monitor's PG refusal of the create (`ERANGE`) refuses `pg-budget`. When fewer
+refuses before an effect. This adoption, like each adoption on an attempt
+record and a frozen shape below, trusts the one writer that the exclusive
+`ceph/<cluster>` reservation admits; a writer outside Bootwright on a managed
+cluster is outside that guarantee
+([mutation safety](state-reconciliation.md#mutation-safety)). Neither phase
+ever removes a pool, profile or rule. A monitor's PG refusal of the create (`ERANGE`) refuses `pg-budget`. When fewer
 hosts under root `default` hold an OSD of the class than the replica count or
 the erasure-code row requires, the policy or erasure-coded pool refuses
 `crush-capacity` before its rule or profile exists. Erasure-coded overwrites
@@ -1048,8 +1091,9 @@ then records the user's intent and attempt and runs
 so Ceph generates the S3 key pair. The pair crosses only that command's
 output, which stays in the worker's memory: a failed `radosgw-admin` user
 command reports its standard error only. The pair `user info` reports is
-retained in the protected custody area (a reserved root-only 0600 file and its
-identity record) before the phase answers; a lost reply is recovered under
+retained on the bootstrap host
+([native-side retention](secrets.md#native-side-retention)) before the phase
+answers; a lost reply is recovered under
 the attempt record from `user info`, and a retained pair is never read again
 from Ceph, regenerated or rotated. Readiness and every later phase prove with
 `user info` that the user has the frozen display name, is not suspended, has
@@ -1127,7 +1171,8 @@ the attempt record, which freezes the export JSON with its resolved path, and
 applies that JSON with `ceph nfs export apply <service> -i -`, never with an
 export ID, cluster ID or CephX principal. A failed apply, a warning, an answer
 other than `added` for a new export or `updated` for its own recorded one, or a
-readback that differs refuses `nfs-export-apply`. A lost reply is adopted only
+readback that differs refuses `nfs-export-apply`. A
+[lost reply](state-reconciliation.md#mutation-safety) is adopted only
 under the attempt record and only when the stored export equals the frozen
 JSON. The generated export ID and the CephFS principal the NFS manager derives
 are recorded once; an export that is gone or holds another ID refuses
@@ -1416,7 +1461,8 @@ Generated cluster access material is offered only with proved completion and
 enters [produced-material custody](state-reconciliation.md#produced-material-custody)
 before its block is done. Capture failure leaves an unknown outcome and safe
 recapture. Retries keep identity and material without incidental rotation.
-Private files use bounded protected storage and cleanup. Partial removal
+Confidential material kept beside a native effect follows
+[native-side retention](secrets.md#native-side-retention). Partial removal
 preserves custody for recovery; final withdrawal follows the engine
 transaction. Downstream material is scoped to declared resources and does not
 install an add-on.
@@ -1430,8 +1476,8 @@ StorageClient's Ceph keyring only as the
 managed cluster and one of its declared clients, settled before any custody
 read, in the native keyring form, until the destroy that completes the
 removal withdraws it. A StorageObjectUser's S3 key pair is produced material
-of its user block with no reveal command yet
-([B489](milestones/m2.md#b489)); a bucket block reads it only into its
+of its user block, revealed only through the same
+[storage dashboard access](cli.md#storage-dashboard-access) command; a bucket block reads it only into its
 worker's memory to sign its owner's S3 requests and never retains, answers or
 records it. This contract adds no other command or
 implicit reveal.
@@ -1468,9 +1514,14 @@ A managed cluster whose hosts are all Bootwright-owned virtual Machines that
 the same destroy removes is retired with them, with no native call: destroy
 requires data-loss authorization and the operator's prior `machine stop`, and
 each Machine inverse proves its target stopped and absent before deleting its
-domain and disks, including every OSD disk. A surviving host, or a bare-metal
-one, keeps the refusal below. Retirement is recorded as durable evidence, so
-continuation never contacts the stopped hosts.
+domain and disks, including every OSD disk. The hosts' stop proof stands in
+for client quiescence only when no declared consumer of the cluster survives
+the removal; the [StorageExport](storage-resources.md#storageexport) record
+states that condition and its refusal for a consuming container cluster. A
+surviving host keeps the refusal below, and a bare-metal one retires only
+through the erase-backed
+[physical retirement](#devices-and-destructive-ownership). Retirement is
+recorded as durable evidence, so continuation never contacts the stopped hosts.
 
 Not yet met: removal while hosts survive, including storage-native consumer
 quiescence and complete owned cleanup; tracked as
@@ -1557,10 +1608,8 @@ credentials refuse. Each effect is preceded by a durable original-attempt
 marker; immutable pool/image/peer IDs and constant-time comparison with the
 retained original token detect replacement. Tokens are capped at 1023 bytes,
 matching the native importer's fixed input buffer. The source retains the
-ASCII token in descriptor-bound root-only 0600 custody. The
-`ceph-replication-custody-v1` reservation and identity records contain only
-scope, a random custody ID and file metadata, never material or its digest.
-Continuation re-proves native output against the retained token and never
+ASCII token on its host under the `ceph-replication-custody-v1` reservation
+([native-side retention](secrets.md#native-side-retention)). Continuation re-proves native output against the retained token and never
 replaces completed custody. Raw tokens and CephX keys otherwise stay in
 worker/controller memory and stdin, never observations, diagnostics, argv or
 public produced files.

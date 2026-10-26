@@ -26,7 +26,8 @@ read at master, not per release.
   argument of the ISO (R6:C4).
 - The installer refuses `fips: true` unless the binary is FIPS-capable and the
   host is in FIPS mode. A static binary always refuses; the refusal names the
-  FIPS-capable installer (R6:C5).
+  FIPS-capable installer (R6:C5). The 4.22 refusal text and the documentation
+  name a RHEL 9 host; that is evidence, not a Bootwright rule.
 - A documented bypass exists. It downgrades the check to a warning and marks the
   install configuration (R6:C6). Bootwright never sets it.
 - The FIPS-capable binary is extracted from the release payload or downloaded

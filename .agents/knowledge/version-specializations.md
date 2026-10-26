@@ -85,8 +85,13 @@ next apply's continuation proves the same seed.
 ### General topology rule (OpenShift)
 
 The one rule of a Go-owned component. It is not a specialization: it applies
-to every release minor, and no per-minor record exists until an installer
-first differs. Decided in D162 clause (c).
+to every release minor, and no per-minor record exists. Decided in D162 clause
+(c). A per-minor installer difference is either absorbed by this rule, the
+installer judging the release, or detected at plan from the operation's frozen
+installer artifact, as
+[architecture](../../specs/architecture.md#implementations-and-version-variation)
+requires of every fact; admission never keys a record on the authored release
+label.
 
 | id | registry | component | rule | read from | code | test |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -97,8 +102,10 @@ first differs. Decided in D162 clause (c).
 A seam is one named decision point in a general flow with a closed set of
 variants, one of them general. The code asks the seam and never branches on a
 version. A refusal seam is one whose variants change which intents the adapter
-admits; a record may add a pre-effect refusal there and may never remove one
-that guards trust.
+admits; what such a variant may refuse is owned by
+[architecture](../../specs/architecture.md#implementations-and-version-variation),
+and the `refusal` column below marks each one. The Call Home case is owned by
+D162 clause (b) and the [storage API](../../specs/api/storage.md).
 
 | seam | variants | general | refusal | call sites |
 | --- | --- | --- | --- | --- |

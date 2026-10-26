@@ -1,41 +1,48 @@
 ---
 name: code-implementation
-description: Deliver any authorized Bootwright tracked change, including specs, skills, guidance, code, and tests, through change-class verification, the commit convention and branch or pull-request integration.
+description: Deliver any authorized Bootwright tracked change, including specs, skills, guidance, code and tests, through tiered verification, the safety class, the commit convention and local or pull-request integration.
 ---
 
 # Code Implementation
 
 The single owner of verification, commits and integration for tracked changes.
-It never authorizes a push, a release or product scope.
+It never authorizes a push, a release, product scope or a command with effects.
 
 ## Before editing
 
-1. Confirm the authorized slice (AGENTS.md) and its owning specs, milestone
-   page and knowledge. Record unrelated discoveries as an item under
-   `specs/milestones/`; report a pre-existing defect as a follow-up
-   instead of fixing it in this change.
+1. Confirm the authorized slice (AGENTS.md); read the item's row and its
+   `### B<n>` section, not the whole milestone page, then its owning specs and
+   knowledge.
 2. Work on a task branch in its own worktree, never in the destination
-   checkout; in a cloud session the harness-designated branch is the task
-   branch. Inspect status first and preserve unrelated changes: never stash,
+   checkout. Inspect status first and preserve unrelated changes: never stash,
    reset or rewrite them.
-3. Load the [domain skills](../index.md) the change touches and the references
-   it needs: [formatting](references/formatting.md), [Go](references/go.md),
-   [Ansible](references/ansible.md). A new or changed dependency follows the
+3. Load the [domain skills](../index.md) the change touches and, by changed
+   file, the references it needs: [formatting](references/formatting.md),
+   [Go](references/go.md), [Ansible](references/ansible.md),
+   [Python](references/python.md). A new or changed dependency follows the
    [dependency rule](../../../specs/architecture.md#dependency-selection-and-reuse).
+
+## Safety class
+
+A change is safety class when its item's Kind is `safety`, or when it changes a
+destructive effect, a privilege boundary, secret custody, an ownership mark or
+proof, or a durable store transition in any capability, or lifecycle or
+contextfs concurrency. It loads
+[security-safety](../security-safety/SKILL.md) and adds an independent review
+and `make race`, plus a race run of a changed concurrent package that target
+omits.
 
 ## Implement and verify
 
 - Keep implementation, specs, examples and tests of one observable change
-  together. Add a regression test for a defect. Test public contracts and effect
-  boundaries, not incidental implementation; size committed tests like their
-  neighbours, and do not keep scratch checks. Prefer targeted edits to rewrites.
-- Verify in [tiers](references/verification.md), cheapest first: a probe of
-  the changed behavior after each edit, and `make focus` before each
-  intermediate commit or handoff. Run the full gate once, before the commit
-  that integrates into main: `make check`, which CI runs, plus, for a safety
-  change (substrate, managed OS, container cluster, lifecycle and contextfs
-  code or their roles), `make race` and an independent review of the diff.
-- Record exact commands and results. Failed, skipped, flaky, unavailable and
+  together. Add a regression test for a defect. Test contracts and effect
+  boundaries, sized like their neighbours; keep no scratch checks. Prefer
+  targeted edits to rewrites.
+- Verify by the [tiers](references/verification.md). The commit that integrates
+  into main rests on `make check`, which CI runs, plus the safety additions.
+- A change to what an effect is moves its content digest; the Go and Ansible
+  references carry the check.
+- Record exact commands and results; failed, skipped, flaky, unavailable and
   unrun gates are not passes.
 - Before committing, review the complete diff and run `git diff --cached --check`.
 
@@ -44,9 +51,9 @@ It never authorizes a push, a release or product scope.
 - One commit per coherent change: a `type(domain): subject` Conventional Commit
   subject; a body stating what changed and why and every gate that ran with its
   result; a `Refs:` line naming the slice and its items.
-- Integrate through a pull request gated by CI. Follow-ups on an open pull
-  request are new commits. Local integration, parallel workers and cleanup are
-  in [git integration](references/git-integration.md); model, effort and
-  unattended-run guidance is in [agent operation](references/agent-operation.md).
-- Push only when the user or the harness requires it.
+  `scripts/check-commits BASE HEAD` runs the commit check CI runs.
+- Integrate by a [git integration](references/git-integration.md) variant:
+  local fast-forward by default (D168), a pull request when the owner or
+  harness asks. Push only when the owner or harness requires it. Model, effort
+  and unattended runs: [agent operation](references/agent-operation.md).
 - Report the outcome, commits, gates with results, limitations and follow-ups.

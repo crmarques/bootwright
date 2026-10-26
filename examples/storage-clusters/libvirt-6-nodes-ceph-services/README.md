@@ -45,6 +45,8 @@ procedure. Bind `ibm-registry` through standard input; never put credentials
 in YAML, process arguments or evidence. The SMB password is also contextStore
 material; RGW generates its S3 pair under produced-material custody.
 
+The tracked `storage/entitlement.yaml` sets `license.accept: true` as a placeholder. Accepting the IBM license is your explicit act: review its terms before you use your copy.
+
 ## Create the context
 
 The unchanged synthetic input has 45 files seen and 45 objects decoded. The acceptance log must retain the
@@ -65,6 +67,7 @@ adjusted counts too.
 ## Apply by stage
 
 ```sh
+./bin/bootwright plan
 ./bin/bootwright apply --stage controller
 ./bin/bootwright preflight controller --context ceph-services
 ./bin/bootwright apply --stage infra-components,substrates

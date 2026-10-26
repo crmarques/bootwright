@@ -52,7 +52,7 @@ setup: the setup receipt, the pending intent and the runtimes live in the
 [setup subtree](#the-setup-subtree). Unknown fields, duplicate keys,
 noncanonical records and every other version refuse, among them a version 2
 record an earlier build wrote; a store that holds one also holds registry
-version 5, which [refuses first](../contexts.md#format-and-restore-boundary)
+version 5, which [refuses first](../contexts.md#storage-locking-and-publication)
 with the fresh-install remedy. A record is proved canonical by re-encoding
 what was read and comparing it byte for byte, so a field added to any value
 this record contains must encode to nothing when it is unset. The host
@@ -78,31 +78,52 @@ under the
 Each entry contains the context name, capability kind, service name and a sorted
 unique key list, plus a shared marker present only on a shared claim; entries
 are ordered by context name then kind then service.
-Workspace stores and compares them without interpreting a key's meaning.
+Workspace stores them and, before it publishes a context's entries, applies
+the conflict relation each key class has under that contract (equal keys,
+a wildcard socket and a socket on its port, overlapping prefixes), which the
+controller prerequisites evaluate.
 Publishing an exclusive key another context holds refuses; a shared key is held
 by any number of contexts and a reader asks only whether any context holds it;
-a context replaces only its own entries, and its completed removal drops them. The record is absent when empty,
-so a store that never hosted a service is unchanged.
+a context replaces only its own entries, and only the release paths that
+contract lists drop them. The record is absent when empty, so a store that
+never hosted a service is unchanged.
 
 ## Bounds
 
 The state record is bounded to 4 MiB, with at most 4096 tool source
 identities, 4096 bindings and 256 reservations of at most 64 keys of 256 bytes
 each. Controller records allow nesting depth 16 and 32 fields per object;
-other durable records keep their own bounds. There are at most 16 tool areas,
-a bound of their own that nothing else counts toward, each named by the
-64-character content digest of the closure it holds. Their entries record their
-mode and physical directory identity. A controller stage whose new tool area
-finds all 16 held first retires every area no binding names; one that still
-finds all 16 held, each named by a binding or still being published, refuses
+other durable records keep their own bounds. An apply whose reservations would
+take the record past 256 entries refuses with `controller.conflict` before it
+publishes them, naming that bound, the entries it needs and those other
+contexts hold, with the remedy to take back a context this host no longer
+needs with `bootwright destroy --context <name>` or
+`bootwright context delete --name <name> --purge`.
+
+Not yet met: that apply refuses with `context.state`, naming the bound alone;
+tracked as [B832](../milestones/backlog.md#b832).
+
+There are at most 16 tool areas, a bound of their own that nothing else
+counts toward, each named by the 64-character content digest of the closure
+it holds. Their entries record their mode and physical directory identity. A
+controller stage whose new tool area finds all 16 held first retires every
+area no binding names; one that still finds all 16 held, each named by a binding or still being published, refuses
 with `controller.conflict`, naming that bound, with the remedy to delete a
 context this host no longer needs with
 `bootwright context delete --name <name> --purge`, which retires the tool area
 only it names, or to run this context's controller stage on another controller
 host (`TestAClientAreaAtTheBoundNamesItsRemedy`,
 `TestAClientAreaAtTheBoundRetiresUnnamedAreasFirst`). One whose tool sources
-would pass 4096 refuses the same way, saying that no command of this build
-frees a retained tool source. A tool area is bounded to 8 GiB total,
+would pass 4096 refuses with `controller.conflict`, saying that no command of
+this build frees a retained tool source, and names the two exits: run this
+context's controller stage on another controller host, or start this host
+afresh by destroying every environment and deleting every context on it, then,
+as root, removing `/var/lib/bootwright` and running `bootwright setup`.
+
+Not yet met: that refusal names only another controller host; tracked as
+[B832](../milestones/backlog.md#b832).
+
+A tool area is bounded to 8 GiB total,
 1 GiB per file, 32768 entries and depth 32. Symlinks, hard links, nested
 mounts, unsafe modes, unexpected entries and replacement refuse. Sealing
 verifies and syncs the complete tree; sealed contents cannot be rewritten.
@@ -205,11 +226,8 @@ and the `requirements.lock` its build installed from, which names each wheel's
 SHA-256. Locked wheels are cached at `cache/wheels/<sha256>/<filename>`, each
 verified for size and digest before it is renamed into place.
 
-After each setup that writes its receipt, setup keeps the record's current
-and previous runtimes and any a launch holds, retires every other one, and
-prunes `cache/wheels/` to the digests the kept runtimes' `requirements.lock`
-name, this build's locked wheels of the receipt's ABI and the installer
-([retention](../controller.md#publication-and-interrupted-setup)).
+Which runtimes and cached wheels a setup keeps and retires follows its
+[retention](../controller.md#publication-and-interrupted-setup).
 
 `runs/` keeps what setup's dnf printed, as
 [setup run output](../cli/output.md#setup-run-output) describes. A run is a

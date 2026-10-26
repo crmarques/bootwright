@@ -184,9 +184,9 @@ Check all Secrets and prepare the services:
 
 ```sh
 ./bin/bootwright secret check
+./bin/bootwright plan
 ./bin/bootwright apply --stage controller --authorize data-loss
 ./bin/bootwright preflight controller --context lab-baremetal
-./bin/bootwright plan
 ./bin/bootwright apply --stage infra-components --authorize data-loss
 ```
 

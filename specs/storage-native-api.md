@@ -8,7 +8,7 @@ input. M2b implements the common native path and strict MON/MGR/OSD admission;
 ingress and NFS records; the core request lists their services for core
 observation, and planning refuses an ingress until its auxiliary images can be
 selected.
-Release-qualified projection, additional families and protected leaf registries
+Complete native projection, additional families and protected leaf registries
 remain gated by [B472](milestones/m2.md#b472), [B474](milestones/m2.md#b474)
 and each [service item](storage-coverage.md#feature-matrix).
 Examples covering later families remain target documents. The [review](storage-api-review.md)
@@ -24,8 +24,8 @@ hostnames and sites. One native service path replaces daemon-specific helpers:
 DriveGroupSpec for OSDs.
 
 The [Tentacle ServiceSpec](https://docs.ceph.com/en/tentacle/cephadm/services/)
-is the comparison format; the selected IBM release's schema and support policy
-are authoritative. Native names and nesting are retained, including
+is the comparison format; the selected release's native schema is
+authoritative. Native names and nesting are retained, including
 `service_type`, `service_id`, `placement`, `networks`, `config`, `spec`,
 `extra_container_args`, `extra_entrypoint_args` and `custom_configs` where
 qualified. Bootwright fields remain camel case outside native payloads.
@@ -33,8 +33,9 @@ Keeping a field's format does not authorize every value or side effect.
 
 `services` is required and nonempty for the target managed Ceph arm. The final
 MON and MGR services are explicit. A data-bearing cluster also declares OSD
-services and the resources that use them. Provider-supported service counts
-and topology restrictions apply; no fixed lab size becomes an admission limit.
+services and the resources that use them. The native tools judge service
+counts and topology and report a refusal through `nativeError`; no fixed lab
+size becomes an admission limit.
 Service-list order does not order effects: resource/service dependencies do.
 
 An optional daemon family absent from the list is not requested. Bootstrap
@@ -53,7 +54,7 @@ to that authenticated host's loopback SSH endpoint. The inner native connection
 has no direct fallback, ambient agent, alternate credentials or arbitrary
 proxy command. Unknown destinations and missing, writable or changed bundles
 refuse. A transport qualification belongs to one immutable provider image;
-it cannot promote `native`, the default transport, for that image.
+it cannot promote `native` for that image.
 
 Bootwright owns the protected key/config/proxy bundle and read-only mounts on
 every eligible MGR. The cluster key belongs to the fleet user, which holds
@@ -115,8 +116,9 @@ prepared, exact initial MON/MGR seed, configured and mounted states. Its
 Bootwright custody proof never creates directories, records custody or settles
 relabels during observation.
 Attempt fences precede native effects; original bootstrap configuration and
-administrator keyring enter protected custody before consumption. Lost replies
-allow only exact-result observation and completion of missing receipts. A
+administrator keyring enter protected custody
+([native-side retention](secrets.md#native-side-retention)) before consumption.
+Lost replies allow only exact-result observation and completion of missing receipts. A
 missing result after an attempt, legacy incomplete ownership, changed scope or
 foreign daemon refuses, except Call Home initialization: its
 `orch enable-call-home --raise-automation-warning` only sets values and enables
@@ -744,7 +746,7 @@ the same closed pair used by native resource wrappers:
 
 | Field | Contract |
 | --- | --- |
-| `path` | Required nonempty JSON Pointer to one release-qualified confidential leaf, relative to the native document root. Exact member names, `~0`/`~1` escapes and qualified array indices only; no wildcards, append token, expressions or parent/root replacement. |
+| `path` | Required nonempty JSON Pointer to one confidential leaf of the target's qualified leaf record, relative to the native document root. Exact member names, `~0`/`~1` escapes and qualified array indices only; no wildcards, append token, expressions or parent/root replacement. |
 | `secretRef` | Required scalar reference to a declared `Secret` with a type accepted by that target leaf. No literal value, file source, arbitrary part selector, template or transformation expression. |
 
 The collection is a set keyed by path. Duplicate paths, parent/child overlap,

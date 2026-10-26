@@ -50,6 +50,8 @@ Use the [core entitlement procedure](../libvirt-3-nodes-ceph/README.md#ibm-entit
 Both clusters use the authored IBM 9.9.2.0 image and RPM coordinates. Never
 store keys, bootstrap tokens or private endpoint facts in this example.
 
+The tracked `storage/entitlement.yaml` sets `license.accept: true` as a placeholder. Accepting the IBM license is your explicit act: review its terms before you use your copy.
+
 ## Create the context
 
 ```sh

@@ -1,8 +1,10 @@
 # Environment and fleet defaults
 
 `Environment` owns fleet domains, sites, selected state, access/install
-defaults, controller selection and policy. Its name identifies the complete
-effective graph and lifecycle unit. Shared services are independent objects in
+defaults, controller selection and policy. Its name labels the complete
+effective graph and is not an identity; a
+[context](../contexts.md#identity-and-selection) owns the lifecycle identity.
+Shared services are independent objects in
 [infrastructure-services.md](infrastructure-services.md). [The compiler boundary](../api.md#compiler-boundary)
 applies to every declaration below.
 
@@ -201,7 +203,7 @@ The cluster-selection closure is authoritative and independent of file layout:
 | --- | --- |
 | Every selection | The selected `Environment`, its required controller Machine and that Machine's provider/provider-host closure, plus resource-selected `Entitlement`, `MachineImage`, `MachineInstallProfile`, `NetworkConfig`, `Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer`, `CustomPlaybook`, and `Secret` objects; every retained managed service also retains its placement Machine and that Machine's `InfraProvider` and provider-host Machine closure. |
 | One `ContainerCluster` | That root; its node Machines; the Machines' `InfraProvider` objects and any libvirt provider-host Machines; Machines hosting managed infrastructure services consumed by the root; bindings for the root plus their recursively expanded profiles and add-ons; and each `StorageExport` attached through a selected add-on's `storageExportAttachment` effect or named by a selected package's configuration, its referenced storage cluster, policy/pool/filesystem/gateway chain, and every `StorageNFSExport` on that retained storage cluster. |
-| One `StorageCluster` | That root and every `StoragePlacementPolicy`, `StoragePool`, `StorageRBDImage`, `StorageFilesystem`, `StorageSubvolume`, `StorageObjectGateway`, `StorageNFSExport`, `StorageSMBResource`, `StorageNVMeoFSubsystem`, and `StorageExport` naming it; its node, provider, provider-host, and consumed-service Machines; and each `ContainerCluster` attached to one of those exports through a `storageExportAttachment` effect or a package's configuration, together with that container root's bindings, recursively expanded profiles, and add-ons. |
+| One `StorageCluster` | That root and every storage child whose `clusterRef` names it, which is every `Storage*` kind except `StorageCluster`, `StorageExport` included; its node, provider, provider-host, and consumed-service Machines; and each `ContainerCluster` attached to one of those exports through a `storageExportAttachment` effect or a package's configuration, together with that container root's bindings, recursively expanded profiles, and add-ons. |
 
 Closures for all listed roots are unioned and then emitted in canonical API
 order. The rules apply until nothing more is retained. A `ContainerCluster`
@@ -210,15 +212,29 @@ Machines and its other attached exports and their chains included. A
 `StorageCluster` retained only through a `StorageExport` keeps its node
 Machines and their provider and provider-host closure, but not every object
 naming it and no other attached `ContainerCluster`. A cluster root retained
-this way is not excluded and produces no warning, even when an authored list
-omits it. A `Machine` or `InfraProvider` not reached by the rules above is
-excluded. A reference from an always-retained object to an excluded object is
-not an implicit retention edge; it is an unresolved-reference error that tells
-the author to make the selections consistent. Omission of both cluster lists
-skips this filtering and retains every resource-selected object.
+this way is not excluded, but when an authored list omits it `validate` warns,
+naming the list to extend and stating that the root is retained with its export
+chain only. A retained `StorageReplication` retains both its clusters as full
+roots, and selecting either end of the relationship retains it;
+this widens nothing else, so a `StorageCluster` retained only through a
+`StorageExport` still keeps its node closure alone. A `Machine` or
+`InfraProvider` not reached by the rules above is excluded; when no excluded
+cluster root accounts for it, `validate` warns, naming it and stating that no
+selection field retains it. A reference from any retained object to an excluded
+object is not an implicit retention edge unless a row above lists it; it is an
+unresolved-reference error that tells the author to make the selections
+consistent. Omission of both cluster lists skips this filtering and retains
+every resource-selected object.
 
 Not yet met: a package's configuration retains no export; tracked as
 [B760](../milestones/m4.md#b760).
+
+Not yet met: the closure follows no `StorageReplication` reference, so
+selecting the primary cluster retains the relationship without its peer and
+selecting only the peer retains no relationship; and `validate` warns neither
+for a cluster root retained only through an export nor for an excluded
+`Machine` or `InfraProvider`; tracked as
+[B812](../milestones/backlog.md#b812).
 
 ## Remote-machine access and install defaults
 
@@ -226,7 +242,9 @@ Not yet met: a package's configuration retains no export; tracked as
 `Secret`. It is required as soon as a selected `Machine` with
 `os.provided: false` sets `os.installProfileRef`. A managed-OS install authorizes its public half for the
 product-owned `bootwright` account and uses its private half for that account;
-an already provided machine keeps its own `Machine.spec.access`.
+an already provided machine keeps its own `Machine.spec.access`. The Secret is
+[effect material](../secrets.md#immutable-binding-and-contexts), because the
+install places its public half in that account.
 
 The fleet key must differ from every Machine access key and every
 `StorageCluster.spec.ceph.cephadm.clusterSSH.keyRef`. Each cluster SSH key must
@@ -238,8 +256,8 @@ Machine [refuses the collision](machines.md#os-lifecycle-and-substrate-invariant
 ## Kind defaults
 
 `spec.defaults` is a closed map keyed by exact, case-sensitive names from the
-27-kind catalog. Each value is a partial copy of that kind's `spec`, without
-an additional `spec` wrapper. For example:
+[kind catalog](../api.md#kind-catalog). Each value is a partial copy of that
+kind's `spec`, without an additional `spec` wrapper. For example:
 
 ```yaml
 spec:
@@ -285,7 +303,7 @@ Defaults obey these rules in order:
    `Secret.source` are whole values. Copy them only when absent; never append
    records, patch native payloads, or combine different key/source material.
    A valid explicit empty collection or source block wins completely.
-6. An authored discriminator or populated implementation arm selects the
+6. An authored discriminator or populated arm selects the
    variant, using that union's own arm-population rules. An explicitly unset
    value-shape arm, such as an empty or all-zero
    [replicated pool block](storage.md#replicated-protection), does not select
@@ -300,7 +318,8 @@ Defaults obey these rules in order:
    disabled authentication suppresses inherited OAuth configuration, and
    external management suppresses inherited managed service and Ceph configuration.
    This does not remove authored forbidden fields or repair arbitrary failed
-   prerequisites; those remain errors.
+   prerequisites; those remain errors. An Entitlement default never introduces
+   an arm that the authored `type` does not permit.
 7. Check required fields and every cross-field, reference, domain, and graph
    constraint on the resulting objects. Invalid explicit or inherited values
    fail; they never trigger another fallback or silently weaken constraints.
@@ -363,8 +382,8 @@ authored source or copy material, and a retired `file` source it supplies is
 `machineRef`, a scalar reference to one Machine in the resource-selected
 input. Kind defaults may supply the reference, but a conventional name,
 sole Machine, hostname, capability or local-access declaration never selects
-it implicitly. The former `controller.proxy` is unknown; controller egress
-belongs to the selected Machine's [proxy choice](machines.md#machine-proxy).
+it implicitly. Controller egress belongs to the selected Machine's
+[proxy choice](machines.md#machine-proxy).
 
 The referenced Machine must have effective `os.provided: true`,
 `access.local: true` and the declared `container-runtime` capability.
@@ -432,11 +451,9 @@ Admission checks these declarations without inspecting the invoking host,
 opening runtime state or moving execution. The
 [Controller contract](../controller.md) defines setup and verified host
 binding; [Architecture](../architecture.md#controller-host-and-local-services)
-owns local-effect boundaries. The former Environment fields
-`spec.proxy`, `spec.infraComponents`, `spec.registries`,
-`spec.componentImages`, and `spec.trustedCAs` remain unknown. Registry policy,
-image pins and service connection facts stay with their owning consumers and
-service objects.
+owns local-effect boundaries. Registry policy, image pins and service
+connection facts stay with their owning consumers and service objects; the
+[retired fields](../api.md#retired-fields) name each replacement.
 
 Additional installation trust belongs to each
 [ContainerCluster](container-clusters.md#additional-installation-trust). Kind
@@ -500,4 +517,4 @@ requires or consumes it.
 Proxy, mirror, Satellite and endpoint URLs verify TLS by default and contain no
 userinfo. Defaults never create Secret objects; Secrets and Entitlements are
 first-class kinds. Lifecycle authorization is command intent, never desired
-state; the retired `safety` block remains unknown.
+state.

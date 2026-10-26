@@ -18,7 +18,10 @@ per substrate arm, so a block resolves by kind and implementation together.
 
 ## Selection and refusal
 
-This contract realizes the libvirt and bare-metal arms. A provider host block
+This contract realizes the libvirt and bare-metal arms. The arm an
+`InfraProvider` declares is the selector: `libvirt` selects the implementation
+identities `substrate-host-libvirt-v1` and `machine-libvirt-v1`, and
+`baremetal` selects `machine-baremetal-v1`. A provider host block
 is planned for every libvirt `InfraProvider` in the selected graph, and a
 machine block for every Machine on any realized provider whose effective
 `os.provided` is `false`. Provided Machines are never realized. A vSphere or
@@ -34,8 +37,12 @@ interfaces the machine presents with the hardware addresses they report, and
 the block that realizes it. No consumer derives any of it again. Consumers
 dispatch on the frozen arm through the substrate's fixed port entry points, and
 an arm a consumer has no entry point for fails closed before anything is
-published, inserted or booted, so a substrate added later supplies those entry
-points to every consumer that dispatches on it.
+published, inserted or booted. A substrate added later supplies those entry
+points, and each consumer that dispatches on the arm, such as the
+[cluster installation](container-clusters.md#installation) and the
+[managed-OS installation](managed-os.md#installation), gains one row per entry
+point in its dispatch tables ([roles](architecture.md#roles)), a branch for
+the arm's identity channel, and any rule it keys on the arm.
 
 The KubeVirt and vSphere arms realize installer-provisioned Machines, those
 with `os.provided: false` and no install profile, as
@@ -61,12 +68,12 @@ controller, otherwise the SSH arm with its bound identity and host key. The
 controller arm claims the [host reservations](infrastructure-services.md#host-reservations)
 below; the SSH arm is coordinated by the context lease alone, and its emulated
 BMC's socket is compared only with its own context's sockets on that host. A bare-metal
-provider has no host: its Machines are reached at the controllers they
+provider has no host: its Machines are reached at the BMCs they
 declare, always from the controller Machine.
 
-A provider whose emulated BMC would listen on an address a controller endpoint
+A provider whose emulated BMC would listen on an address a BMC endpoint
 cannot name, such as a wildcard, refuses at admission
-([libvirt arm](api/machines.md#libvirt-arm)): every hosted Machine's controller
+([libvirt arm](api/machines.md#libvirt-arm)): every hosted Machine's BMC
 endpoint must be one address its consumers can name. Selection keeps the same
 refusal, before registration, for state that bypassed admission. A provider
 whose `certificateRef` names a generated `tlsCertificate` whose
@@ -134,8 +141,9 @@ bridge address, placed in the host firewall's trusted zone through explicit
 services, and carrying ownership metadata naming the
 context and attachment. An `external` attachment is proved present as a bridge
 device, a `/sys/class/net/<name>/bridge` directory rather than any interface of
-that name, and is never defined, changed or removed. On one host, no two providers declare a managed
-attachment of one name, because the context names the one network it defines
+that name, and is never defined, changed or removed; the fabric behind it is
+provided and only verified ([project](project.md#product-scope)). On one host, no two
+providers declare a managed attachment of one name, because the context names the one network it defines
 after it, and a bridge a managed attachment defines is named by no other
 attachment of that host, managed or external, of the same provider or another,
 because the bridge goes with the host block that defines it; and no two
@@ -152,6 +160,19 @@ network whose definition differs from the frozen request is redefined, and
 restarted while it runs another one. Each managed network is started before it
 is set to autostart, so a start that fails leaves no definition that starts
 with the host.
+
+Before it defines a managed network, the apply reads the host's addresses,
+routes, IPv4 and IPv6, and link names. A link of the managed bridge's name that
+no owned network of this context runs, or a route that no owned network of
+this context holds and that overlaps the managed prefix, identical or nested,
+refuses `lifecycle.state` before any network is defined, naming the link or the
+route and the attachment's `bridge` or address as the field to change. A read
+the host does not answer proves nothing and refuses the same way, because
+libvirt's own collision checks are partial and come only once a network starts.
+
+Not yet met: the apply compares a managed prefix and bridge only with the
+managed attachments Bootwright declares; tracked as
+[B816](milestones/backlog.md#b816).
 
 A managed network carries the MTU its attachment declares and one IPv4 or IPv6
 prefix; a Machine's NICs attach, each in declared order, to the attachment its
@@ -228,10 +249,17 @@ before it is set to autostart. A pool carries no ownership metadata, so a
 same-named pool targeting another directory is foreign and refuses, naming it,
 on apply and on destroy before any effect.
 
-The networks and pool this block owns are used by the Machines of its own
-context, so its quiescence is derived from theirs under the
-[removal gate](state-reconciliation.md#quiescence-before-removal) rather than
-observed on the host.
+The networks and pool this block owns are out of use only when the host shows
+it, under the
+[removal gate](state-reconciliation.md#quiescence-before-removal): before it
+stops anything, the removal refuses while the hypervisor does not answer which
+domains are plugged into a managed network or its bridge, or answers one that
+is not shut off, naming the network and each such domain as the apply's restart
+refusal does.
+
+Not yet met: the removal derives the quiescence of its networks and pool from
+this context's Machines and observes no domain on the host; tracked as
+[B567](milestones/backlog.md#b567).
 
 **Reservations.** `bridge:<name>` for every managed attachment, because a
 bridge name is host-global; `prefix:<masked prefix>` for every managed
@@ -246,6 +274,17 @@ keys and one readiness-unit key use 63 of the 64 keys one reservation
 holds ([controller record](contexts/controller-record.md#bounds)), and
 admission refuses more, naming the bound and `spec.networkAttachments`
 (`TestTheManagedAttachmentBoundKeepsTheHostReservationWithinItsKeys`).
+
+Each `external` attachment claims the shared key `bridge-use:<name>` for the
+bridge it attaches to, so a bridge another context defines is known to be in
+use. A removal that would release an exclusive `bridge:<name>` refuses
+`controller.conflict` while another context holds `bridge-use:<name>`, naming
+that context and `bootwright destroy --context <holder>`.
+
+Not yet met: an external attachment claims nothing, so a removal releases its
+managed bridge while another context's Machines attach to it, and the
+attachment bound does not count these keys; tracked as
+[B803](milestones/backlog.md#b803).
 
 **Evidence.** Completion requires the hypervisor present by package name, every
 driver daemon active and enabled to start with the host, the `uri` answering,
@@ -328,8 +367,9 @@ emulated TPM 2.0 when the profile declares `tpm`, a serial console, and
 ownership metadata naming the context and Machine. Provider media and machine
 disks occupy separate `providers` and `machines` subtrees, including when a
 provider and Machine share a name. X48 retires the former name-collision
-refusal with tests proving disjoint ownership and cleanup. Host requests use
-`substrate-host-libvirt-v4` and Machine requests use `machine-libvirt-v7`.
+refusal with tests proving disjoint ownership and cleanup. Host and Machine
+requests each carry a contract version, which `hostRequestVersion` and
+`machineRequestVersion` in `internal/substrate/libvirt/catalog.go` own.
 The root disk remains virtio-blk `vda`; unmarked data disks preserve successive
 virtio-blk targets `vdb` through `vdh`. Explicit `media: ssd` or `media: hdd`
 data disks instead use a virtio-SCSI controller, successive `sda` through `sdg`
@@ -363,12 +403,17 @@ root disk first and optical media second: an empty disk falls through to
 inserted installer media, and once an installer has written that disk the
 machine boots it again without anything having to change the domain between the
 two boots. That order holds for the domain as realized: after an eject, the
-emulated controller leaves the disk as the only bootable device until the
+emulated BMC leaves the disk as the only bootable device until the
 machine block redefines the domain. A same-name domain whose ownership
 metadata does not name this context and Machine, or whose UUID is not the
 frozen one, is foreign and refuses on apply and on destroy before any effect;
 an owned domain whose root disk size differs from the profile refuses rather
 than resizing.
+
+Not yet met: the domain's name, UUID and ownership metadata derive from the
+context and Machine names alone, so a domain an abandoned context of the same
+name left, or a same-named context of another controller defined on this host,
+reads as this context's; tracked as [B568](milestones/backlog.md#b568).
 
 **Emulated BMC.** Each realized Machine has its own management controller: one
 sushy-tools container, digest-pinned in the substrate catalog and qualified as
@@ -386,15 +431,15 @@ inserted media without verifying the artifact server's certificate. It stores
 that media as a volume in the provider's pool through its libvirt connection,
 so its unit mounts no pool directory: it mounts its configuration and password
 file and TLS certificate/key read-only and the host's libvirt socket directory.
-The controller
+The BMC
 endpoint is `https://<bindAddress>:<port>/redfish/v1/Systems/<uuid>`, with an
 IPv6 `bindAddress` bracketed (`https://[fd00::1]:8000/redfish/v1/Systems/<uuid>`),
-so it meets the controller address grammar of
+so it meets the BMC address grammar of
 [machines](api/machines.md#bmc-and-root-device-shape); the plan's listener impact
 prints the socket in the same form. The password file keeps the hash it
 holds while bcrypt's `checkpw` still verifies the bound password with it,
 because bcrypt salts every hash afresh: hashing the password again would
-rewrite the file and restart the controller on every replay.
+rewrite the file and restart the BMC on every replay.
 
 The pinned image is pulled only when the host does not already hold it, through
 the provider host Machine's normalized [proxy choice](api/machines.md#machine-proxy)
@@ -409,25 +454,33 @@ value as a quoted literal, so no value is ever read as code.
 `socket:<bindAddress>:<port>` for its listener, and `path:` for the Machine's
 disk directory. The socket key never brackets the address: it is the form a
 managed service's listener claims, so another context's managed service on the
-same address and port conflicts with the emulated BMC.
+same address and port conflicts with the emulated BMC. The block also claims,
+shared, the `bmc:` key of its BMC endpoint, the key a physical Machine that
+addresses that endpoint claims exclusively. Its removal refuses
+`controller.conflict` while another context holds that key exclusively, naming
+that context and `bootwright destroy --context <holder>`, and this Machine's
+own installation refuses at registration while another context holds it.
+
+Not yet met: an emulated BMC claims no `bmc:` key; tracked as
+[B803](milestones/backlog.md#b803).
 
 **Evidence.** Completion requires the domain defined with the frozen definition
 and ownership metadata, every disk present at its frozen size, the BMC unit
 active running the pinned image, and the ComputerSystem answering with the
 bound credential and a reported power state. Replay reports `completed` with no
 change when live state matches; the differences it converges are a missing
-disk, domain definition or controller unit, each realized again; a bound
+disk, domain definition or BMC unit, each realized again; a bound
 password the published hash no longer verifies, which is hashed again; and a
-running controller that started before its configuration, password file or unit
+running BMC that started before its configuration, password file or unit
 was last published, or whose start cannot be read, which is restarted, because
-the controller reads only what it started with. An apply stopped between
-publishing a file and restarting the controller is therefore completed by the
+the BMC reads only what it started with. An apply stopped between
+publishing a file and restarting the BMC is therefore completed by the
 next one. An owned domain whose root disk size differs refuses rather than
 resizing.
 A live diff observes the provider placement, the root and data disk sizes, each
-data disk's media, the domain state and the controller's power; vCPU, memory,
+data disk's media, the domain state and the BMC's power; vCPU, memory,
 interfaces and TPM are not observed. Disk sizes and media are rendered when the
-machine reads partial, such as a stopped controller or a missing disk; a running
+machine reads partial, such as a stopped BMC or a missing disk; a running
 machine whose disk differs from its frozen size reads unknown, with the size
 refusal as its reason. The [observable
 fields](state-reconciliation.md#observable-fields-by-implementation) table owns
@@ -438,27 +491,27 @@ deletes the disks this context owns and proves each absent. After the disks
 and the state it removes the context's directories beneath
 `/var/lib/libvirt/images/bootwright` and `/var/lib/bootwright-substrate` when
 each is empty, never recursively, and retains both prefixes. It proves
-nothing listens on the controller's socket before that reservation is released.
+nothing listens on the BMC's socket before that reservation is released.
 A disk is present while anything exists at its path, whatever its image
 reports. Because the deleted disks may hold an installed operating system, the
 block consumes `data-loss` on destroy, so the operator acknowledges the loss
 before the plan registers. Observation is read-only, and nothing present with
-no recorded before-state is positive no effect. The domain, its controller unit
+no recorded before-state is positive no effect. The domain, its BMC unit
 or one of its disks present without the whole is a positive partial realization
-the next attempt converges. A listener on the controller socket with none of
+the next attempt converges. A listener on the BMC socket with none of
 those present is not proved to be this Machine's and stays unknown. A same-name
 domain without this context's ownership is foreign and stays unknown. A
 removal's resolution reads the same observation for what the removal takes
-back, not for what the apply proves. None of the domain, its controller unit,
+back, not for what the apply proves. None of the domain, its BMC unit,
 its disks and a listener on its socket present is its completion. The whole
 machine is positive no effect: through a hypervisor that answered, the domain
-with this context's ownership, its controller unit active with its container,
+with this context's ownership, its BMC unit active with its container,
 and every frozen disk present. The rest of what the apply proves, the image the
-controller runs, a power state its ComputerSystem reports, the domain's UUID
+BMC runs, a power state its ComputerSystem reports, the domain's UUID
 and each disk's size, is nothing the removal takes back, so it plays no part: a
-controller on another image, a silent emulated BMC or a resized disk still
+BMC on another image, a silent emulated BMC or a resized disk still
 reads no effect, and so does a socket nothing listens on. The removal stops the
-controller unit first, so a unit that is not active may be its first effect:
+BMC unit first, so a unit that is not active may be its first effect:
 that, like any of the domain, unit, container or disks present without the
 whole, is a positive partial realization. The adapter's postcondition is the
 apply's, so it plays no part here either.
@@ -471,16 +524,16 @@ resolution log and restore that host. A same-name domain without this
 context's ownership is named with that host, and its remedy is to remove or
 rename it. A hypervisor that did not answer is named by the frozen libvirt URI
 on that host, and its remedy is to restore that connection. A listener on the
-controller socket with none of the domain, its controller unit and its disks
+BMC socket with none of the domain, its BMC unit and its disks
 present is named by that socket, and its remedy is to stop what listens there.
 A domain this context owns, through a hypervisor that answered, whose
 observation proves the adapter's postcondition but not the frozen request is
-named by the first difference: the controller image, the system the controller
+named by the first difference: the BMC image, the system the BMC
 exposes, a power state or a disk's size. Its remedy is to restore the machine
 to what its frozen request names. A removal's own resolution reads such a
-machine as no effect, but a removal that supersedes the apply resolves the
-apply's block by the apply's reading and refuses the same way until it is
-restored. Evidence that names another request or does not decode is left to the
+machine as no effect, and a removal that supersedes the apply, whose apply
+observation proves no completion, reads it by that check and takes it back
+([resolution outcomes](state-reconciliation.md#resolution-outcomes)). Evidence that names another request or does not decode is left to the
 general reason.
 
 **Hypervisor answer.** The observation and its evidence report whether the
@@ -496,7 +549,7 @@ Any other failure is no answer, and then an empty domain proves nothing: it is
 never positive no effect or positive absence, removal evidence requires the
 answer, and the inverse refuses before it stops the BMC unit. Evidence without
 the field reads as no answer. Evidence without the listener proves the
-controller's socket neither held nor free.
+BMC's socket neither held nor free.
 
 **Quiescence.** A Machine is quiescent only when the hypervisor reports its
 domain `shut off`, or answers that no domain is defined at all. Every other
@@ -537,16 +590,24 @@ re-derived by each consumer.
 exact ComputerSystem. The block reads that resource with the bound credential
 and records its reported `UUID`, `SerialNumber`, `Manufacturer` and `Model`;
 then reads the system's complete `EthernetInterfaces` collection and requires
-every MAC the Machine declares to appear in it. The collection must be present,
-non-empty and readable in full: a member that answers with an error, a
+the MACs it reports to equal the set the Machine declares, under the one
+MAC-set predicate of
+[physical disk safety](state-reconciliation.md#physical-disk-safety). The
+collection must be present, non-empty and readable in full: a member that answers with an error, a
 malformed body or no MAC leaves the proof unknown, never satisfied, because a
 partial inventory cannot show that this is the server the operator meant. A
-declared MAC the hardware does not report refuses. The refusal names each
-declared NIC the inventory lacks, by its declared name and address, and each
+declared MAC the hardware does not report refuses, and so does a reported MAC
+the Machine does not declare. The refusal names each
+declared NIC the inventory lacks, by its declared name and address, the number
+of reported addresses the Machine does not declare, and each
 member that proved nothing, by its position counted from zero, never a value
-the controller reported; the repeated proof before media is inserted names the
+the BMC reported; the repeated proof before media is inserted names the
 declared addresses. The power state is read and recorded but never changed
 here.
+
+Not yet met: the target proof and the repeated proof require only every
+declared MAC to appear in the inventory; tracked as
+[B802](milestones/backlog.md#b802).
 
 A reported `UUID` and `SerialNumber` are recorded without their surrounding
 space, and each must then be at most 128 characters, every one of them
@@ -555,7 +616,7 @@ Go `unicode.IsPrint` and Python `str.isprintable`, the rule the CLI's
 [safe display text](cli/output.md#json-output) escapes by. One that is
 longer, or holds any other character, a control, a space other than U+0020 or
 a format character such as a bidi override, a zero-width space or a
-byte-order mark, refuses `lifecycle.state` naming the field and the controller
+byte-order mark, refuses `lifecycle.state` naming the field and the BMC
 endpoint, never the value, because a pin carries that identity into every later
 comparison and refusal. The adapter that publishes the proof and the decoder
 that accepts it each apply the rule, and so does every reading of a recorded
@@ -570,24 +631,36 @@ with the ComputerSystem identity distinguishes it from another server that
 answers at the same endpoint after a re-cabling or a re-addressing.
 
 An installation and a cluster boot each repeat that proof immediately before
-they insert media: the controller is read again, a declaration with no NIC
-refuses because an empty set proves nothing, every declared MAC must be
-reported by a complete inventory, and the machine must be off. The repeated
-proof also compares the controller's answer with the identity this block pinned
+they insert media: the BMC is read again, a declaration with no NIC
+refuses because an empty set proves nothing, a complete inventory must report
+exactly the declared MAC set, and the machine must be off. The repeated
+proof also compares the BMC's answer with the identity this block pinned
 earlier in the same operation, under the same rule a
-[day-2 power operation](#identity-and-power-operations) applies: a `UUID` that
+[machine power command](#identity-and-power-operations) applies: a `UUID` that
 differs other than in letter case or surrounding space, or a `SerialNumber`
-that differs other than in surrounding space, refuses, naming the controller
+that differs other than in surrounding space, refuses, naming the BMC
 endpoint and the remedy but neither identity. A Machine with no pin is compared
 with nothing.
 
-**Claim.** The block claims `bmc:<host>:<port>/<system>` for the normalized
-endpoint, so two contexts cannot both drive one physical server. The claim
-serializes use; it is not ownership of the machine and never authorizes
-destroying it.
+**Claim.** The block claims `bmc:<host>:<port>/<system>` for its BMC
+endpoint, normalized for the key alone: the host as the address writes it, the
+port it names or else its scheme's default, and the system's path below
+`/redfish/v1/Systems`; the address itself is never rewritten. Once its proof
+records a `UUID`, the block also claims the exclusive `bmc-system:<UUID>` key,
+the `UUID` in lower case, in the same controller record and before any media is
+inserted, so a second spelling of one server's address refuses
+`controller.conflict` naming the context that holds it. A system that reports
+no `UUID` claims no identity key. Two contexts of one controller store
+therefore cannot both drive one physical server; contexts in different stores
+are not coordinated. The claim serializes use; it is not ownership of the
+machine and never authorizes destroying it.
 
-**Reservations.** `bmc:<host>:<port>/<system>` alone. A physical block owns no
-path, unit, socket or hypervisor object.
+Not yet met: the block claims no `bmc-system:` key; tracked as
+[B802](milestones/backlog.md#b802).
+
+**Reservations.** `bmc:<host>:<port>/<system>` and, once proved,
+`bmc-system:<UUID>`. A physical block owns no path, unit, socket or hypervisor
+object.
 
 **Evidence.** Completion requires the ComputerSystem answering with the bound
 credential, its recorded identity, every declared MAC observed, and a reported
@@ -600,14 +673,14 @@ converges are none: hardware is not converged, and a machine whose MAC set no
 longer matches fails naming what it lacks rather than adopting the new
 hardware. The adapter task that publishes a proof or an observation reads no
 bound material and is not `no_log`, so its refusal, which names fields, counts
-and the controller endpoint but never a reported value, is printed in the
+and the BMC endpoint but never a reported value, is printed in the
 attempt's [retained output](cli/output.md#private-operation-logs). The
 `UUID` and `SerialNumber` recorded by the apply attempt that proved the machine,
 or by the [resolution](state-reconciliation.md#resolution-outcomes) that proved
 it after an attempt whose outcome was not proved, are its pin while that apply
 is the context's current operation: the pre-boot proof above compares the
-controller's answer with them before any media is inserted, and the day-2 power
-operations below before any power request, and each refuses a machine that
+BMC's answer with them before any media is inserted, and the machine power
+commands below before any power request, and each refuses a machine that
 answers as a different system. A destroy ends the pin once
 it is the context's current operation and releases the claim when it completes;
 the next apply pins what its own proof finds, the MAC set still required.
@@ -664,7 +737,17 @@ for a NetworkAttachmentDefinition of type `bridge` that object in the
 provider's namespace. Every object carries the context's and Machine's
 ownership labels, and the block records each API-returned UID; a same-named
 object without them, or with another UID, is foreign and refuses. Objects are
-created, never applied over.
+created, never applied over. The labels carry the operation-and-block mark of
+[ownership receipts](add-ons.md#ownership-receipts) beside the context and
+Machine: a recorded UID proves ownership outright, and an object whose create
+reply was lost is this block's only when its mark names this operation and
+block and its `creationTimestamp` is not earlier than the operation's
+registration. Each VirtualMachine claims
+`kubevirt-vm:<server>/<namespace>/<name>`, so two contexts of one controller
+store never realize one VirtualMachine.
+
+Not yet met: nothing marks, adopts or reserves a KubeVirt object as this
+paragraph states; tracked as [B816](milestones/backlog.md#b816).
 
 Pushed media: `media_insert` creates an upload DataVolume of its own name,
 labelled with the media identity, waits until it is ready for upload, runs
@@ -716,7 +799,11 @@ so the node boots its installed disk whether or not the installer's EFI boot
 entry took effect (the installer writes it only on EFI firmware; an inference,
 in [knowledge](../.agents/knowledge/vsphere-agent-node-boot.md)); and it adds no TPM.
 The block records the managed-object reference and an ownership marker, and
-every later call addresses that reference, never a name.
+every later call addresses that reference, never a name. The marker names the
+context and the Machine, and the block records the vCenter's `instanceUuid`
+and the virtual machine's `instanceUuid`; every power, media and removal call
+compares them with the live object first, under
+[mutation safety](state-reconciliation.md#mutation-safety).
 
 Pushed media: `media_insert` uploads the image to
 `[<staging datastore>] <staging folder>/<context>/<cluster>/<machine>-<media identity>.iso`
@@ -747,7 +834,7 @@ media, insert and eject virtual media, set a one-time boot device, power on,
 power off. On the KubeVirt and vSphere arms the same operations go through the
 arm's own management API, behind the same entry points, and media is pushed
 rather than fetched: the run that holds the image transfers it to where the
-machine reads it, so no controller fetches anything and no artifact server
+machine reads it, so no BMC fetches anything and no artifact server
 publishes it. Each arm publishes the worst-case bound of every entry point and
 the share of a boot budget one node's boot takes, as constants its consumers
 sum. A power read reads the system
@@ -757,10 +844,10 @@ as not yet at the state it waits for, so one failure spends one attempt rather
 than ending the poll. A power request is not evidence; every operation polls the resource
 to its expected state within a bounded window and reports unknown when it does
 not arrive. A boot selection is read back like any other effect. A read that
-cannot reach a resource the controller reports, or that receives a body which
+cannot reach a resource the BMC reports, or that receives a body which
 is not a Redfish resource, fails rather than answering empty, and the target
 proof reports what it could not read as unobserved, which proves nothing; a
-controller that offers no virtual media reports none, and inserting into it
+BMC that offers no virtual media reports none, and inserting into it
 refuses.
 
 The per-arm port budgets live in `internal/substrate/machine_bounds.go`.
@@ -771,7 +858,7 @@ interface members and otherwise reports an incomplete inventory without
 reading a partial set. The physical pre-boot read budget is therefore 33
 minutes at the per-request timeout. The separate 30-minute boot phase budget
 can still expire on slow responses, leaving the attempt unknown; these bounds
-are execution ceilings, not a promise that a native controller completes.
+are execution ceilings, not a promise that a native BMC completes.
 
 Each call's worst case follows from the Redfish client's fixed bounds, and a
 consumer's run [deadline](architecture.md#the-adapter-result-protocol) allows
@@ -784,7 +871,7 @@ any other media before its first attach, three attaches with their polls and
 the release and pause between each two, and the security service a private
 delivery reads; an eject by 4 minutes 30 seconds; a boot selection by 2
 minutes 30 seconds; and a power
-operation, polling 60 times, by 3 minutes 30 seconds. A controller that needs
+operation, polling 60 times, by 3 minutes 30 seconds. A BMC that needs
 more requests to find its device takes longer, and one whose polled reads also
 run to their timeout can take up to the second bound the client documents; a
 run that reaches its deadline then leaves its attempt unknown.
@@ -793,10 +880,10 @@ Booting a machine from inserted media is one operation, `boot_media`, rather
 than a fixed sequence every consumer repeats, because how a boot is selected is
 the substrate's own answer. Its consumer says whether the installer ends by
 powering the machine off, rather than by rebooting into what it wrote. A
-physical controller consumes a one-time override and forgets it, so the
+physical BMC consumes a one-time override and forgets it, so the
 bare-metal arm sets one from the media and powers the machine on, and the
 machine returns to its disk by itself; it never powers an operator-owned
-machine off. An emulated controller has no one-time override: selecting a
+machine off. An emulated BMC has no one-time override: selecting a
 device rewrites the domain's persistent boot order, which then survives every
 reboot. The libvirt arm therefore powers its own machine off first, which
 narrows the window in which it was started after the pre-boot proof, selects
@@ -812,34 +899,50 @@ disk. The [cluster installation](container-clusters.md#installation) boots the
 media for an installer that reboots, and points each node at its disk when it
 releases the media.
 
-Day-2 power commands consume exactly these operations. `machine start`,
-`machine stop` and `machine restart` freeze one request naming the Machine's
-controller endpoint and the declaration whose credential answers it, then cross
-the same adapter boundary a lifecycle block does, under the context's shared
-lock. They register no operation and publish no ownership, because a power
-state is not desired state. Where the endpoint comes from is the only
-difference between the arms: a Machine that authors `hardware.management.bmc`
-is reached at that address from the controller, and a Machine whose provider
-emulates a controller is reached at its allocated port from the provider host,
-and only while the context owns the realization that controller belongs to.
+Machine power commands, admitted operator utilities
+([project](project.md#design-priorities-and-non-goals)), consume exactly these
+operations. `machine start`, `machine stop` and `machine restart` freeze one
+request naming the Machine's BMC endpoint and the declaration whose credential
+answers it, then cross the same adapter boundary a lifecycle block does, under
+the context's shared lock. They register no operation and publish no ownership, because a power
+state is not desired state. On the libvirt and bare-metal arms, where the
+endpoint comes from is the only difference: a Machine that authors
+`hardware.management.bmc` is reached at that address from the controller, and
+a Machine whose provider emulates a BMC is reached at its allocated port from
+the provider host, and only while the context owns the realization that BMC
+belongs to. On the KubeVirt and vSphere arms a power command goes through the
+arm's `power` and `state_read` [entry points](#adapter-boundary), never a BMC.
 A Machine on a bare-metal provider is held to its
 [pin](#physical-machine-realization) first: the operation reads the identity
-its controller reports and refuses, before it sends any power request, a `UUID`
+its BMC reports and refuses, before it sends any power request, a `UUID`
 that differs other than in letter case or surrounding space, or a
 `SerialNumber` that differs other than in surrounding space. A pinned value the
-controller no longer reports differs, a value the proof recorded empty is not
-compared, and a Machine with no pin is compared with nothing.
+BMC no longer reports differs, and a value the proof recorded empty is not
+compared. A Machine with no pin is proved by the full
+[target proof](#physical-machine-realization) before any power request: a
+complete inventory reporting exactly its declared MAC set; a Machine that
+declares no MAC, or whose proof does not hold, refuses. A power command naming
+the Environment's controller Machine refuses, and so does one whose BMC reports
+the controller host's own `UUID` or one of its MAC addresses, read locally and
+compared as a pin is, because no power command may stop the host that runs Bootwright.
 The [CLI journey](cli.md#machine-power-operations) owns the rest.
 
-Every controller leg carries the trust its declaration sets. The
+Not yet met: a Machine with no pin is compared with nothing, and nothing
+refuses a power command on the controller Machine or the controller host;
+tracked as [B802](milestones/backlog.md#b802).
+
+Not yet met: machine power commands run only the Redfish power role; tracked as
+[B809](milestones/backlog.md#b809).
+
+Every BMC leg carries the trust its declaration sets. The
 controller-to-BMC leg follows `bmc.tls.verify` and, when the Machine declares
 `bmc.tls.trustBundleRef`, verifies against that bundle alone and never against
-the system trust store beside it. A physical controller whose certificate an
+the system trust store beside it. A physical BMC whose certificate an
 internal authority issued is therefore verified against that authority, and an
 opt-out is endpoint-scoped, recorded in effective state and never a global
 default. A certificate the declared trust refuses fails the operation at once,
-as an answer rather than a controller that did not answer. The emulated
-controller serves HTTPS; all consumers pin the provider's serving certificate.
+as an answer rather than a BMC that did not answer. The emulated
+BMC serves HTTPS; all consumers pin the provider's serving certificate.
 Its private key is bound only for emulator apply. This does not expand the
 authored physical `caBundle` contract to accept a non-CA serving leaf; B446
 and B73 retain that rehearsal gate.
@@ -854,9 +957,9 @@ issuer. `disable-verification` turns
 that verification off before the insert when it reads on. `established` changes
 nothing on the device. A manager the system names that links a security
 service publishing `HttpsTransferCertVerification` publishes the switch that
-decides whether the controller verifies the server it fetches from (D121, which
+decides whether the BMC verifies the server it fetches from (D121, which
 amends D104): when any manager publishes it, every published switch decides
-alone and the device's `VerifyCertificate` is not consulted. Only a controller
+alone and the device's `VerifyCertificate` is not consulted. Only a BMC
 whose managers publish no such switch is decided by the device flag, where an
 absent flag reads as off. `import-certificate` then skips the device flag and
 writes only the certificate, and `disable-verification` refuses before any
@@ -866,7 +969,7 @@ does, `established` and `import-certificate` first read, and write nothing,
 that deciding setting, which must read `true`. Anything else refuses the insert
 before any write, naming the setting, an unreadable security service included
 because it never supplies proof, and the operator imports the artifact server's
-CA into the controller out of band when automatic import is unavailable, and
+CA into the BMC out of band when automatic import is unavailable, and
 turns its verification on out of band. Private
 material is never inserted under `disable-verification`. The B447 tests
 `test_private_delivery_accepts_the_manager_switch_with_a_false_readonly_device`,
@@ -904,10 +1007,10 @@ After import the exact authority's SHA256 must read back in one FileTransfer
 slot before media insertion. Eject removes only a slot proved to contain that
 authority and verifies its absence; event-subscription slots are untouched.
 The module returns the proved slot identity as bounded evidence. The account
-needs the controller's security-configuration privilege. HTTP 400 responses
+needs the BMC's security-configuration privilege. HTTP 400 responses
 whose registered message identifies a missing privilege remain privilege
 refusals during import, deletion and verification restoration. No trust mode
-falls back to another. The qualified wire contract is the public
+falls back to another. The qualified wire contract of this variant is the public
 [iBMC API description](https://www.xfusion.com/wp-content/uploads/2025/11/Server-V6-or-Later-iBMC-Redfish-API-Description-.pdf),
 sections 2.2.46, 2.2.49 and 2.2.50; physical behavior remains
 [B305](milestones/m1.md#b305)'s acceptance gate.
@@ -982,10 +1085,10 @@ controller-local scratch, so argument validation never echoes its capability.
 The state entry point returns normalized power and media classifications beside
 the native observation its existing consumers use; an unreadable probe remains
 unknown. A requested physical TPM proof accepts only an enabled TPM 2.0 in the
-controller's `TrustedModules` inventory and otherwise names `tpm-absent` before
+BMC's `TrustedModules` inventory and otherwise names `tpm-absent` before
 any image is inserted.
 
-The bare-metal entry points that reach the controller also take the
+The bare-metal entry points that reach the BMC also take the
 path of its trust-bundle material, empty when it declares none.
 
 The result channel belongs to the consumer, so `pre_boot` leaves the refusal
@@ -996,7 +1099,8 @@ its run fails, a cluster under the node's position in its frozen request. The
 operator then receives the installation's `lifecycle.state` diagnostic, whose
 object is the Machine, instead of the adapter's failure: `hardware-mismatch`,
 a physical machine whose declaration names no MAC, whose complete inventory
-lacks a declared MAC or reports no system identity, or whose inventory was not
+lacks a declared MAC, reports one it does not declare or reports no system
+identity, or whose inventory was not
 read in full, remedied by running the refusing apply's continuation once
 the machine reports the declared hardware in full or, to correct the
 declaration instead, by taking the context back with
@@ -1005,7 +1109,7 @@ declaration instead, by taking the context back with
 input with `bootwright context update --name <context> --input-dir <directory>`
 and running `bootwright apply --context <context>`; `identity-mismatch`, a
 physical machine answering as another system than its pin, remedied by the same
-destroy, correcting that address if it names another controller, the same
+destroy, correcting that address if it names another BMC, the same
 context update and apply, so the machine is proved again; and
 `machine-running`, on either arm, remedied by stopping it with
 `bootwright machine stop --context <context> --name <machine>`, then running
@@ -1014,7 +1118,7 @@ lifecycle hands the attempt, `bootwright apply --context <context>` with every
 `--authorize` token its frozen plan consumes, and the plain apply when the
 attempt carries none; the apply after a destroy plans anew and names its own
 (`TestEachPreBootRefusalNamesTheMachineWhatWasRefusedAndTheRemedy`). A read the
-controller did not answer names none, because the controller's own message in
+BMC did not answer names none, because the BMC's own message in
 the retained output is the reason.
 
 A Redfish client speaks to one endpoint and follows no redirect, uses no
@@ -1022,9 +1126,11 @@ ambient proxy or credential, bounds every request and response, and treats a
 request it issued as a request rather than an outcome. Firmware differs widely
 in where virtual media lives, whether an update needs the resource's current
 entity tag, and whether an insertion completes synchronously, so the client
-discovers what a controller offers and adapts to it, and records what it could
-not determine as unknown rather than assuming the common case. The one
-endpoint bounds every reference the controller returns, whether a member, an
+discovers what a BMC offers and adapts to it, and records what it could
+not determine as unknown rather than assuming the common case. That discovery
+reads only the resources a BMC advertises and is never keyed on a vendor or
+model name. The one
+endpoint bounds every reference the BMC returns, whether a member, an
 action target, an action's metadata, a task or a Location header: a reference
 naming another scheme, host or port, or carrying user information, is refused
 before any request is built, so it never receives the credential and nothing it
@@ -1032,8 +1138,8 @@ could answer is taken as evidence. The insert asks for exactly `Image`,
 `Inserted` and the `TransferProtocolType` its URL's scheme names. A device's
 echo matches when scheme, host without case, path and query are the requested
 ones and it names no port or the requested one; a different port refuses. An
-attach the controller reports failed, or after which the device never presents
-the image, fails naming the controller-side causes (route and DNS to the image
+attach the BMC reports failed, or after which the device never presents
+the image, fails naming the BMC-side causes (route and DNS to the image
 host from the BMC network, trust of the artifact server's certificate, TLS) and
 the artifact server unit's journal, which records each completed request
 without its path.

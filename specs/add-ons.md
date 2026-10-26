@@ -1,20 +1,22 @@
 # Add-ons
 
-An add-on is a package installed on a `ContainerCluster` that the context
-builds. [The add-on API](api/addons.md) owns admission of `ClusterAddon`,
-`ClusterAddonProfile` and `ClusterAddonBinding`; this page owns the boundary
-those declarations cross and the lifecycle of the built-in packages a binding
-selects. [Add-on coverage](add-on-coverage.md) lists each built-in package
-with its objects, configuration, readiness and acceptance.
+An add-on is one reusable `olm` or `manifestSet` declaration, a
+`ClusterAddon`; a built-in package is a registry entry compiled into the
+executable. A `ClusterAddonBinding` attaches either to a `ContainerCluster`
+that the context builds. [The add-on API](api/addons.md) owns admission of
+`ClusterAddon`, `ClusterAddonProfile` and `ClusterAddonBinding`; this page owns
+the boundary those declarations cross and the lifecycle of the built-in
+packages a binding selects. [Add-on coverage](add-on-coverage.md) lists each
+built-in package with its objects, configuration, readiness and acceptance.
 
 ## Trust boundary
 
-An authored add-on package is declarative data under the
+An authored add-on is declarative data under the
 [custom-code rule](security.md#custom-code). A built-in package's hooks are
 pure Go reviewed with the executable, and its only remote effects are the
 [cluster object adapter](#the-cluster-object-adapter)'s. Authors cannot
-select executable code, drivers, inventory, privileges, retry policy or
-lifecycle order. A step
+select executable code, [drivers](deferred/add-ons-design.md), inventory,
+privileges, retry policy or lifecycle order. A step
 that names a playbook, roles or collections is admitted as inert data and
 makes its package lifecycle-ineligible regardless of origin. The
 [compiler boundary](api.md#compiler-boundary) applies to declarations and
@@ -70,10 +72,13 @@ cluster's bindings. The capability graph spans the packages and authored
 add-ons that every binding of the cluster selects. Each package owns its OLM
 namespace, which no other package or Subscription shares.
 
-A package may be a last package: its instance runs after every other block
-that reaches its cluster's API, provides no capability, and is selected at
-most once per cluster. The GitOps package is one, so Argo CD starts on a
-cluster only after Bootwright's own objects there are complete.
+A package may be a last package: its instance runs after every other block of
+the `add-ons` stage that requires its cluster's installation block, the
+cluster's other instances and its cluster network block, provides no
+capability, and is selected at most once per cluster. The GitOps package is
+one, so Argo CD starts only after the objects of those blocks are complete. A
+block of another stage that reaches the cluster's API is not among them and is
+not waited for.
 
 A package's configuration may name a `StorageExport` it consumes. The
 export, its storage cluster and their chain join the consuming cluster's
@@ -192,15 +197,21 @@ context rename.
 The frozen request names every object and its desired digest, the SHA-256 of
 its canonical body, before any attempt runs. Completion evidence holds one
 receipt per owned object: its identity, the `uid` its creating response
-returned, its desired digest and whether it was created or found unchanged. A
+returned, its desired digest, whether it was created or found unchanged, and
+the basis of its ownership: `created`, `uid-matched` or `mark-recovered`. A
 present object is this block's own when its `uid` equals a receipt of the
 block, or, when the block holds no receipt for it, its owner annotation equals
 that object's mark and its server-set `metadata.creationTimestamp` is not
 earlier than the operation's registration, less the clock-skew allowance the
 program version fixes; any other present object is foreign and refuses,
 naming its kind, namespace and name. Only a recorded `uid` proves ownership
-outright; the mark decides only for an object whose receipt was lost with an
-interrupted or failed attempt.
+outright; the mark is a recovery rule for an object whose receipt was lost with
+an interrupted or failed attempt, not a proof, because every value it hashes is
+readable from the cluster. A `mark-recovered` receipt records the `uid` the
+read returned, and the completion evidence carries each basis.
+
+Not yet met: a receipt records no ownership basis; tracked as
+[B830](milestones/backlog.md#b830).
 
 ## The cluster object adapter
 
@@ -371,12 +382,16 @@ output, naming the placement.
 An observation is read-only and reads every program object, the OLM state and
 every check once: every object own and equal with every check holding is
 completion; every object absent is no effect; some own objects with the rest
-absent or not ready is a partial realization; a foreign object, a failed read
-or an installed CSV other than the expected one is unknown, whose remedy is to
-destroy and apply again. A continuation never re-renders: it runs the frozen
-program, whose comparisons report what is done `unchanged`.
-`bootwright diff --observe` reads the same observation and reports
-differences, never repairs them.
+absent, not ready or not equal to its declared body is a partial realization; a
+foreign object, a failed read or an installed CSV other than the expected one
+is unknown, whose remedy is to destroy and apply again. An own object that
+differs from its declared body, as when Argo CD or an operator changes a
+declared field, is that partial realization: the observation records which
+object differs and repairs nothing, and the first differing field is named
+only by the apply attempt that finds it. A continuation never re-renders: it
+runs the frozen program, whose comparisons report what is done `unchanged`.
+`bootwright diff --observe` reads the same observation and reports the block's
+realization, never repairs it and shows no field values for an instance.
 
 ## Retirement
 
@@ -388,10 +403,13 @@ nothing and contacts no cluster: its removal completes, and its removal check
 is answered, from its frozen request. A virtual cluster's objects leave with
 its nodes' disks; a physical cluster keeps running after its context is
 destroyed, with its add-on objects and placed Secrets, unmanaged, which the
-removal's description states and its impacts omit. An effect outside the
-cluster is never an add-on effect but a block of the domain that owns it,
-with its own inverse. Removing one instance from a running cluster is parked
-as [B769](milestones/backlog.md#b769).
+removal's description states and its impacts omit. A surviving cluster that
+consumes a `StorageExport` is a named impact of that export's removal, which
+refuses while the cluster survives
+([retirement condition](storage-resources.md#storageexport)), not of this one. An
+effect outside the cluster is never an add-on effect but a block of the domain
+that owns it, with its own inverse. Removing one instance from a running
+cluster is parked as [B769](milestones/backlog.md#b769).
 
 ## GitOps handoff evidence
 
@@ -399,7 +417,13 @@ An instance's completion evidence names its package, cluster and provided
 capabilities, every owned object by kind, namespace, name and `uid`, the
 installed CSV and each readiness result; it names no Secret value and no
 vendor payload. Handoff transfers no ownership: a GitOps source must exclude
-what the evidence lists. The GitOps package may create one
+what the evidence lists. The listed objects stay as applied: a change to one is
+a destroy followed by a fresh apply
+([D153](state-reconciliation.md#lifecycle-unit)), and approving an upgrade of
+an owned Subscription is outside Bootwright's scope
+([B106](milestones/backlog.md#b106)).
+[Project](project.md#lifecycle-and-handoff) defines the downstream day-2
+resources a GitOps source may control. The GitOps package may create one
 [bootstrap object](#the-gitops-bootstrap-object).
 [State reconciliation](state-reconciliation.md#bootstrap-completion-and-gitops-readiness)
 owns the complete-environment predicate.
@@ -429,13 +453,16 @@ namespace, or patches, adopts or deletes an Argo CD object it did not
 create. Argo CD applies every manifest in its path, even one another tool
 created: the operator's source must exclude every object the
 [handoff evidence](#gitops-handoff-evidence) lists, the bootstrap object
-included. A declared field Argo CD changes is reported by
-`bootwright diff --observe` and never repaired. Because the GitOps package
-is a last package, the object is created only after every other block that
-reaches its cluster is complete; Argo CD may then act on that cluster
+included. A declared field Argo CD changes makes the next observation a partial
+realization, which `bootwright diff --observe` reports and never repairs
+([observation](#observation-and-continuation)). Because the GitOps package
+is a last package, the object is created only after the other blocks it waits
+for are complete ([last package](#built-in-packages-and-selection)); Argo CD
+may then act on that cluster
 before the [handoff predicate](state-reconciliation.md#bootstrap-completion-and-gitops-readiness)
-holds for the whole environment, and still owns nothing Bootwright
-created. The object is retired with its cluster and keeps working on a
+holds for the whole environment, pending the owner's
+[Q60](milestones/m4.md#m4a-open-decisions) under D173, and still owns nothing
+Bootwright created. The object is retired with its cluster and keeps working on a
 physical cluster that outlives its context. Bootwright publishes no
 application or fleet GitOps content: it creates one pointer to content the
 operator owns.

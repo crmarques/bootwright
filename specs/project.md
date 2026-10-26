@@ -4,11 +4,12 @@ Bootwright is a declarative orchestrator for provisioning and bootstrapping a
 cloud platform from scratch until it is ready for GitOps tools to take over
 ongoing platform management.
 
-Users describe one complete environment: substrate layer, machines,
-infrastructure services, container and storage clusters, and bootstrap
-integrations. Bootwright validates and freezes that intent, orders dependencies,
-drives qualified native tools through controlled adapters, and verifies the
-selected outcomes to make provisioning repeatable and auditable.
+Users describe one complete environment: substrate layer, machines and their
+operating systems, infrastructure services, container and storage clusters,
+and bootstrap integrations. Bootwright validates and freezes that intent,
+orders dependencies, drives qualified native tools through controlled adapters,
+and verifies the selected outcomes to make provisioning repeatable and
+auditable.
 
 Users author desired facts and relationships, not an execution sequence.
 Lifecycle initiation, confirmation and irreversible authorization are explicit
@@ -20,6 +21,8 @@ The target platform families are:
 
 - bare metal through BMCs, libvirt, VMware vSphere and KubeVirt, including
   OpenShift Virtualization;
+- machine operating systems that Bootwright installs from installer media,
+  with entitlement use, first RHEL through Anaconda;
 - infrastructure services: artifact serving, load balancing, proxying, DNS,
   time synchronization and registries;
 - OpenShift and OKD container clusters;
@@ -30,6 +33,18 @@ The target platform families are:
 
 These platform families bound Bootwright's intended scope;
 [milestones](milestones.md) own what is delivered.
+
+Bootwright owns the provider-host virtual networks that a
+[Machine's network attachment](api/machines.md#machine-profiles-and-network-attachments)
+declares as managed, the network configuration it installs on machines and
+nodes, the secondary networks of a cluster, and the managed infrastructure
+services. It only verifies, and never changes, the physical fabric (switches,
+VLAN trunking and routing), an external bridge, the host firewall's
+configuration beyond the trusted-zone membership of a managed network's bridge,
+and an external DHCP or DNS service; an external attachment still names its
+existing bridge ([substrates](substrates.md#provider-host-realization)). DNS and
+artifact serving are each a managed service or an external endpoint, as the
+Environment selects.
 
 ## Lifecycle and handoff
 
@@ -46,11 +61,19 @@ treated as continuation.
 The [GitOps handoff gate](state-reconciliation.md#bootstrap-completion-and-gitops-readiness)
 requires durable completion, readiness, access and ownership evidence for the
 entire selected bootstrap scope. GitOps may then control downstream day-2
-resources, without co-managing Bootwright-owned resources. Handoff does not
-transfer, adopt or reclaim ownership. An optional
+resources, without co-managing Bootwright-owned resources. Downstream day-2
+resources are those that no owned-object evidence
+([add-ons](add-ons.md#gitops-handoff-evidence)) lists. Handoff does not
+transfer, adopt or reclaim ownership, so an owned object stays as applied and
+a change to it is a destroy followed by a fresh apply; upgrades and approvals
+of owned operator subscriptions stay outside Bootwright's scope
+([B106](milestones/backlog.md#b106)). An optional
 [GitOps bootstrap object](add-ons.md#the-gitops-bootstrap-object) hands one
-cluster to GitOps earlier, once every Bootwright block that reaches that
-cluster is complete, under the same ownership rule.
+cluster to GitOps earlier, once every other add-ons-stage block on that
+cluster is complete
+([last packages](add-ons.md#built-in-packages-and-selection)), under the same
+ownership rule; this early handoff is
+pending the owner's [Q60](milestones/m4.md#m4a-open-decisions) under D173.
 
 ## Implementation and extension model
 
@@ -101,5 +124,14 @@ remains limited to bootstrap, exact continuation and removal of recorded owned
 state. Selected day-2 operations may be added in the future when requested and
 explicitly defined.
 
-Bootwright is not a general workflow or configuration-management engine, an
-arbitrary-code runner, or a continuously reconciling controller.
+The admitted operator utilities are the exception: `machine start`, `stop` and
+`restart`; `rsh` and `exec` sessions on Machines and clusters; `machine trust`;
+`diff`; `status`; the `info` commands; `cluster oc` and `cluster kubectl`; and
+the `cluster kubeconfig`, `cluster keyring` and `secret show` disclosures. Each
+registers no lifecycle operation, publishes no ownership and never repairs
+drift ([commands](cli/commands.md#command-and-flag-catalog),
+[power operations](cli.md#machine-power-operations)).
+
+Bootwright is not a general workflow or configuration-management engine, a
+runner of operator-authored code inside a lifecycle operation, or a
+continuously reconciling control loop.

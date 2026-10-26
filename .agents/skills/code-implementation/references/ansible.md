@@ -5,7 +5,18 @@ playbooks, roles, and plugins; [security](../../../../specs/security.md) owns
 effect and secret boundaries; [source formatting](formatting.md) owns layout.
 Before editing a managed operation, resolve its frozen request, result/evidence,
 implementation identity, targets/versions, permitted effects, replay,
-cancellation, and secret path. Lifecycle policy remains in Go.
+cancellation, and secret path.
+[The responsibility boundary](../../../../specs/architecture.md#go-and-ansible-responsibility-boundary)
+says which logic belongs in a YAML task, a Python plugin or Go; Python follows
+[the Python reference](python.md).
+
+Before committing a change to a role, playbook or plugin, decide whether it
+alters what an effect is: the objects it creates, their names and places, the
+ownership mark, the host resources it claims or what its observation proves.
+If it does, move the implementation's version as the
+[Go reference](go.md#contract-versions-and-content-digests) says; an automation
+change that moves no content digest continues a live operation under another
+build.
 
 ## Implementation
 
@@ -17,7 +28,8 @@ cancellation, and secret path. Lifecycle policy remains in Go.
   product API. No production partial controls may bypass validation, evidence,
   cleanup, or lifecycle semantics. Keep role dependencies and task-file
   selection explicit rather than driven by input.
-- Use `meta/argument_specs.yml` for input entrypoints when supported; add
+- Use `meta/argument_specs.yml` for input entrypoints when supported, to the
+  depth [architecture](../../../../specs/architecture.md#playbooks) sets; add
   exact-type and semantic assertions before effects and prefix role-owned
   variables/results. Write `when`, `until`, `changed_when`, and `failed_when` as native
   Boolean expressions without Jinja delimiters. Never re-evaluate input/output

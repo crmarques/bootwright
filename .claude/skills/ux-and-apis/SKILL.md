@@ -1,6 +1,6 @@
 ---
 name: ux-and-apis
-description: Design or review Bootwright public schemas, CLI journeys, help, diagnostics, human and machine output, examples, and compatibility.
+description: Design or review Bootwright public schemas, API kinds and fields, CLI journeys, help, diagnostics, human and machine output, examples, and compatibility.
 ---
 
 The canonical skill is [ux-and-apis](../../../.agents/skills/ux-and-apis/SKILL.md), shared with

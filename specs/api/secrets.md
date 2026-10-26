@@ -23,10 +23,10 @@ reference resolves by `metadata.name` and must accept the declared type.
 
 ### Source union
 
-`spec.source` contains fields in the order `contextStore`, `file`, then
-`generated`. At most one arm may be present. An omitted source first receives
-any applicable Environment kind default; if it remains omitted, it selects
-context storage and stays omitted canonically. An authored `source: {}` blocks
+`spec.source` contains fields in the order `contextStore` then `generated`;
+the retired `file` arm is refused, never emitted. At most one arm may be
+present. An omitted source first receives any applicable Environment kind
+default; if it remains omitted, it selects context storage and stays omitted canonically. An authored `source: {}` blocks
 Environment source inheritance and explicitly selects context storage;
 normalization emits `source: {contextStore: {}}` so internal effective-state
 serialization preserves that choice. An authored `contextStore: {}` likewise
@@ -62,9 +62,11 @@ supplied by an [Environment kind default](environment.md#kind-defaults), with
 `api.field`, before it opens any path. The refusal of an authored arm, at
 `$.spec.source.file`, names the Secret and its remedy: declare
 `source: {contextStore: {}}` and load the files with
-[`secret set`](../secrets.md#acquisition-and-commands) and the flags of the
-declared type, as `bootwright secret set --name <n> --context <context>`
-followed by the type's flags. A name that is not a valid object name prints as
+`bootwright secret set --name <n> --context <context>` followed by the file
+flags of the declared type in the
+[set table](../secrets.md#acquisition-and-commands), each as `<flag> <path>`,
+an optional one in brackets, after `--username <username>` for a
+`usernamePassword` Secret. A name that is not a valid object name prints as
 `<name>`. `<context>` is the context the invocation reads: the one `validate`
 names, or the selected one when `validate` reads no file; the one a `secret`
 command acts on; and the one `context init` or `context update` names. Since
@@ -78,15 +80,7 @@ re-imported before `secret set` can load files. A rerun of an
 invocation also given a Context configuration file keeps it, as `--name
 <context> -f <file> --input-dir <dir>`, so following the remedy never drops
 that configuration.
-`validate -f`, which reads no context, prints the placeholder:
-
-| Secret type | Remedy after `bootwright secret set --name <n> --context <context>` |
-| --- | --- |
-| `opaque`, `token`, `dockerConfigJson` | `--value-file <path>` |
-| `usernamePassword` | `--username <username> --password-file <path>` |
-| `caBundle` | `--certificate-file <path>` |
-| `tlsCertificate` | `--certificate-file <path> --private-key-file <path>` |
-| `sshKeyPair` | `--private-key-file <path> [--public-key-file <path>]` |
+`validate -f`, which reads no context, prints the `<context>` placeholder.
 
 A kind default that supplies the arm is refused twice. The Environment is
 refused at `$.spec.defaults.Secret.source.file`, with the remedy to replace the
@@ -95,7 +89,7 @@ arm in that default with `source: {contextStore: {}}`, then run
 named as above, with the file flags
 of its type for each
 Secret that inherits it; when the default declares a type, the remedy names
-that type's flags from the table. Each Secret that inherits the arm is refused
+that type's file flags as above. Each Secret that inherits the arm is refused
 at `$.spec.source.file`, located at the default, with the remedy of every
 inherited field: override the field on that Secret or correct its Environment
 kind default. A version an earlier build froze from a file source
@@ -137,7 +131,11 @@ acquisition, encrypted custody and immutable bindings.
 `Entitlement` declares named vendor-controlled access for one product. Its
 secret fields are plain references to first-class `Secret` objects; the object
 contains no organization ID, activation key, password, certificate, or token
-bytes.
+bytes. Each such reference states the
+[class of bound Secret](../secrets.md#immutable-binding-and-contexts) it names.
+
+Not yet met: no Entitlement reference field names its class; tracked as
+[B805](../milestones/backlog.md#b805).
 
 `Entitlement.spec` emits fields in the order `type`, `rhsm`, `registry`, then
 `license`:
@@ -146,16 +144,23 @@ bytes.
 | --- | --- | --- | --- | --- |
 | `type` | string | yes | — | `redhat-rhel`, `redhat-ceph`, or `ibm-storage-ceph`. |
 | `rhsm` | object | conditional | — | Required for both Red Hat types; forbidden for `ibm-storage-ceph`. |
-| `registry` | object | conditional | product registry | Credentials required for `redhat-ceph` and `ibm-storage-ceph`. |
-| `license` | object | conditional | `accept: false` | `accept` must be `true` for `ibm-storage-ceph`. |
+| `registry` | object | conditional | product registry | Credentials required for `redhat-ceph` and `ibm-storage-ceph`; forbidden for `redhat-rhel`. |
+| `license` | object | conditional | `accept: false` | Only for `ibm-storage-ceph`, where `accept` must be `true`. |
 
-The required arm set is:
+Each type's arm set is closed:
 
-| `spec.type` | Required shape |
-| --- | --- |
-| `redhat-rhel` | `rhsm`; managed RHSM requires `organizationRef` and `activationKeyRef`. |
-| `redhat-ceph` | `rhsm` plus `registry.credentialsRef`. |
-| `ibm-storage-ceph` | `registry.credentialsRef` plus `license.accept: true`; `rhsm` is rejected. |
+| `spec.type` | Permitted arms | Required shape |
+| --- | --- | --- |
+| `redhat-rhel` | `rhsm` | `rhsm`; managed RHSM requires `organizationRef` and `activationKeyRef`. |
+| `redhat-ceph` | `rhsm`, `registry` | `rhsm` plus `registry.credentialsRef`. |
+| `ibm-storage-ceph` | `registry`, `license` | `registry.credentialsRef` plus `license.accept: true`. |
+
+An authored arm a type does not permit refuses with `api.field`, naming the
+type and the arms it permits.
+
+Not yet met: admission refuses only `rhsm` on `ibm-storage-ceph`, so `registry`
+or `license` on a Red Hat type is admitted and ignored; tracked as
+[B826](../milestones/backlog.md#b826).
 
 IBM Storage Ceph does not itself entitle the RHEL operating system. A
 `redhat-rhel` Entitlement is selected separately by the owning machine-install
@@ -190,7 +195,8 @@ install profile selects the Entitlement in `spec.subscription`, proving and
 removing only the consumer its installation created
 ([managed OS](../managed-os.md#registration)); `management: external` is a
 declaration and runs no registration. `satellite` and `connectToInsights: true`
-refuse at installation.
+are admitted and refuse before registration, as rows of the managed-OS
+installation's [refusal table](../managed-os.md#refusal-table).
 
 ### Registry and license
 

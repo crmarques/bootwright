@@ -8,6 +8,8 @@ The cluster's settings block enables the `nfs` manager module, and the service-u
 
 The budget, host prerequisites, `setup`, `preflight controller`, media imports and entitlement are the [three-node example's](../libvirt-3-nodes-ceph/README.md#initial-setup); this example authors the same release coordinates, guests and disks, and adds `nfs-utils` to the guests' packages so that `rhel-02` and `rhel-03` can act as NFS clients. Review [cluster.yaml](storage/cluster.yaml), which owns the native MON, MGR, OSD, `mds.files` and `nfs.shares` services, [filesystem.yaml](storage/filesystem.yaml) and [subvolume.yaml](storage/subvolume.yaml), which own the filesystem and the subvolume, and [nfs-export.yaml](storage/nfs-export.yaml), which owns the export.
 
+The tracked `storage/entitlement.yaml` sets `license.accept: true` as a placeholder. Accepting the IBM license is your explicit act: review its terms before you use your copy.
+
 ## Create the context and apply
 
 Replace `/path/to/adjusted/libvirt-3-nodes-ceph-nfs` with your completed copy.

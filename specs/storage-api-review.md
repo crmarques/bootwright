@@ -1,10 +1,8 @@
 # Ceph API review for M2a
 
 This page records the [M2a](milestones/m2.md#m2a) API and operator-journey
-review. It records the M2a baseline and approved target. M2b now implements
-common native service admission and minimal `StorageClient`;
-[storage admission](api/storage.md) states the current subset and gates.
-[Storage admission](api/storage.md) and `api/v1alpha1/storage.go` still own
+review. It records the M2a baseline and approved target.
+[Storage admission](api/storage.md) and `api/v1alpha1/storage.go` own
 accepted input. [Storage](storage.md) owns target lifecycle behavior;
 [coverage](storage-coverage.md) owns provider qualification.
 
@@ -12,12 +10,11 @@ accepted input. [Storage](storage.md) owns target lifecycle behavior;
 reviewed; the owner approved P1 and P2 in D133. The
 [native service contract](storage-native-api.md) and
 [resource contract](storage-resources.md) own the reconciled target.
-The admitted subset is stated where it lives: P1's core native-service
-subset, the `StorageClient` kind, `clusterSSH.transport` and `dataDisks` media
-are admitted ([storage](api/storage.md), [machines](api/machines.md)); every
-other field, kind or command here is target only. The remaining implementation
-stays in M2b to M2e. Examples are synthetic, partial where marked, and deliberately
-outside the runnable `examples/` tree.
+[Storage admission](api/storage.md) and [machines](api/machines.md) state
+which fields and kinds are admitted, and the
+[resource contract](storage-resources.md) which kinds are realized; this
+review restates neither. Examples are synthetic, partial where marked, and
+deliberately outside the runnable `examples/` tree.
 
 ## Design criteria
 
@@ -35,8 +32,8 @@ does not mean accepting unqualified features, secret bytes in public input,
 foreign hosts, unsafe container options or unbounded disk discovery.
 
 This review uses IBM 9.9.x and matching upstream Tentacle descriptions.
-The [release record](storage-coverage.md#release-qualification) distinguishes
-documentation evidence from exact entitled binary/schema qualification.
+The [release qualification](storage-coverage.md#release-qualification) records
+tested evidence; it approves no version.
 
 ## Existing API review
 
@@ -61,7 +58,7 @@ The table records decisions and gaps rather than duplicating every field.
 | StorageObjectGateway | Current kind combines an RGW daemon and public endpoint, with realm/zone names but no object resources. P1 separates daemon/ingress specifications; P2 defines realm/zone and user/bucket ownership. Avoid silently creating default pools or credentials. | [B477](milestones/m2.md#b477) |
 | StorageNFSExport | Current name actually owns one NFS service and an array of exports, with reduced client/FSAL fields. P1 owns daemons; P2 makes individual exports addressable and preserves native export JSON semantics. | [B478](milestones/m2.md#b478) |
 | StorageExport | Keep the existing Data Foundation handoff purpose. Do not turn it into a miscellaneous command bag. Its generated material needs a deliberate sensitive-output boundary; Secret commands cannot reveal produced material. | [B489](milestones/m2.md#b489) |
-| Missing service/resource families | RBD images, subvolumes, object users/buckets, client principals, gateway mappings, SMB manager resources and replication peers need explicit ownership. P2 supplies the model; each feature item supplies its exact release-qualified fields and mechanisms. | B81, B477, [B480](milestones/m2.md#b480) to [B483](milestones/m2.md#b483), B489, B492 |
+| Missing service/resource families | RBD images, subvolumes, object users/buckets, client principals, gateway mappings, SMB manager resources and replication peers need explicit ownership. P2 supplies the model; each feature item supplies its exact qualified fields and mechanisms. | B81, B477, [B480](milestones/m2.md#b480) to [B483](milestones/m2.md#b483), B489, B492 |
 
 ### Native evidence and deliberate exceptions
 
@@ -99,9 +96,8 @@ they must not also be independently declared as managed services/clients.
 
 ## P1: native service documents
 
-**Approved, D133; core subset admitted.** The core native-service subset is
-admitted ([storage](api/storage.md)); the family services stay target only.
-Replace the collection of daemon-specific helper
+**Approved, D133.** [Storage admission](api/storage.md) states which services
+are admitted. Replace the collection of daemon-specific helper
 shapes with complete native ServiceSpec documents in the existing
 `StorageCluster.spec.ceph.services` list. Preserve native snake case, nesting,
 types and PlacementSpec, including OSD DriveGroupSpec. Keep Bootwright's
@@ -224,17 +220,16 @@ because one native service path exposes concrete missing capabilities.
 
 ## P2: declarative resource graph
 
-**Approved, D133; `StorageClient` admitted.** The `StorageClient` kind is
-admitted ([storage](api/storage.md)); the other resources stay target only.
-Keep pools and filesystems as useful declarative
+**Approved, D133.** [Storage admission](api/storage.md) states which of
+these kinds are admitted. Keep pools and filesystems as useful declarative
 abstractions. Add independently referenceable resources where the native
 provider offers only imperative creation. Preserve native resource documents
 where the provider already offers a suitable declarative interface. Do not
 offer arbitrary native command lists as desired state.
 
-Today `StoragePool` can declare an RBD pool but cannot declare an owned image;
-`StorageFilesystem` has groups but no subvolume resource. These proposed
-documents show the added ownership and references:
+At review time `StoragePool` could declare an RBD pool but not an owned image,
+and `StorageFilesystem` had groups but no subvolume resource. These documents
+show the added ownership and references:
 
 ```yaml
 apiVersion: bootwright.io/v1alpha1
@@ -266,7 +261,8 @@ its metadata remains in a suitable replicated pool. A subvolume's group and
 layout resolve within its selected filesystem. Size is an integer number of
 bytes; the [resource target](storage-resources.md) specifies required image
 size, optional subvolume quota and explicit-zero behavior. These examples
-illustrate approved shapes; they are not admitted today.
+illustrate approved shapes; [storage admission](api/storage.md) and the
+[resource target](storage-resources.md) state which are admitted and realized.
 
 Current partial NFS input combines daemon placement and multiple exports:
 
@@ -355,7 +351,7 @@ authorization boundaries.
 | Block | Placement/pool → image → gateway namespace or LUN → authorized initiator/client → access material. Metadata/data-pool references and native image identity are explicit. | B81, B480, B481, B489 |
 | File | Pools → filesystem → group/subvolume → NFS export or SMB share → authenticated/restricted client. No overlapping protocol exposure that the provider forbids. | B492, B478, B482, B489 |
 | Object | Realm/zonegroup/zone and owned pool layout → RGW service → account/user → bucket and access policy → scoped access material. Native pool creation must have a named owner. | B477, B489 |
-| NVMe-oF and iSCSI | Native daemon spec plus typed gateway/group, listener, subsystem/target, image-backed namespace/LUN and initiator permissions. Do not synthesize untracked images or credentials. iSCSI remains conditional on IBM support. | B480, B481 |
+| NVMe-oF and iSCSI | Native daemon spec plus typed gateway/group, listener, subsystem/target, image-backed namespace/LUN and initiator permissions. Do not synthesize untracked images or credentials. iSCSI is refused: admission refuses `service_type: iscsi` (D176). | B480, B481 |
 | SMB | Native cluster/share/join-auth/usersgroups resources with declared filesystem dependencies and bound secrets; generated daemon ownership stays with the native manager. | B482 |
 | Replication peers | Directed relationships between declared clusters/resources, one owner of shared bootstrap material, explicit trust, credentials and initial synchronization. Any cross-context/external-peer arm needs a separate ownership contract before promotion. | B483 |
 | Access and handoff | Typed CephX, S3 and gateway principals with scoped resource access; generated material enters produced custody. Keep Data Foundation export distinct from general client access. | B489 |

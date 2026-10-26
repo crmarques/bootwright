@@ -94,6 +94,18 @@ cannot silently transfer an existing binding. Ordinary same-host reboot must
 remain distinguishable from relocation in the qualified identity
 implementation.
 
+A host whose [identity](controller.md#host-identity-and-shared-prerequisites)
+changed, because its machine-id, DMI product UUID or root filesystem UUID
+changed, strands every context bound to it. The refusal names its exits in
+order: run on the host the binding names, or restore those identity values on
+this one; otherwise `bootwright context delete --name <name> --purge
+--allow-orphans`, naming what it abandons. Destroying each context from the
+original host is the only exit that abandons nothing, so it precedes a planned
+change of any of those values.
+
+Not yet met: the refusal names only the host the state belongs to; tracked as
+[B832](milestones/backlog.md#b832).
+
 Workspace keeps that shared-host state, the Controller descriptor and record,
 the tool areas and the setup subtree with its receipt and runtimes, in the
 [controller record](contexts/controller-record.md).
@@ -160,7 +172,14 @@ over that revision still
 [settles](state-reconciliation.md#lifecycle-unit). Changed input over a
 completed apply warns, before the prompt, with `lifecycle.state` that apply
 refuses it until `bootwright destroy --context <name>` takes back what that
-apply owns. Before discovery, resolve the
+apply owns, and that importing the original files again does not undo the
+update: they become a new revision, which apply refuses the same way
+([B598](milestones/backlog.md#b598)).
+
+Not yet met: the warning does not say that importing the original files again
+leaves apply refusing; tracked as [B807](milestones/backlog.md#b807).
+
+Before discovery, resolve the
 state-root location read-only and reject a root within the input directory;
 revalidate containment through held handles at publication. Freeze every
 acquired YAML candidate and permitted marker, including streams excluded by
@@ -183,10 +202,11 @@ references or copy, inspect or expand the paths they name.
 
 ## Storage, locking and publication
 
-The registry writes private format version 5. Active records hold the name,
+The registry writes private format version 6. Active records hold the name,
 initialization/deletion mode, selected revision and its Environment directory,
 configured secret-store type and reserved directory device/inode. The
-Controller descriptor is an optional trailing member that confirmed setup adds.
+Controller [descriptor](contexts/controller-record.md#descriptor) is an
+optional trailing member that a host's first binding adds; setup never adds it.
 The 4096-name bound applies to active or reserved contexts, not past creations.
 
 A `registry.json` of version 5, which every build before the setup v2
@@ -247,7 +267,7 @@ first binding; its setup subtree exists after a confirmed setup:
 
 | Path | Purpose and retention |
 | --- | --- |
-| `registry.json` | One atomic map of context names to their selected inputs and status, plus the Controller descriptor once setup publishes it. |
+| `registry.json` | One atomic map of context names to their selected inputs and status, plus the Controller descriptor once a first binding publishes it. |
 | `media/` | Host-wide installer media under the [Managed OS media contract](managed-os.md#media-store): each image's exact bytes beside its canonical record, created by the first `media add`, shared read-only by every context and frozen through shared reservations rather than copied. An image is [acquired](#media-acquisition) into a private stage in this directory while no root lock is held, then published exclusively and atomically with its record; a pinned stage whose publication met another command's lock is kept beside its record for the command's repetition; deletion is guarded by the reservation record. |
 | `setup/` | Setup's own [subtree](contexts/controller-record.md#the-setup-subtree), independently versioned and outside the registry: its lock, its `bootwright.setup-state-v1` record with the pending intent and receipt, the published runtimes, the locked wheel cache and the newest setup runs. |
 | `contexts/<name>/context.yaml` | Canonical immutable Context configuration; keeps the authored configuration contract separate from runtime metadata. |
@@ -301,7 +321,7 @@ Manifest integrity failures never fall back to external input.
 
 | Record | Required fields in canonical order |
 | --- | --- |
-| Registry | `version` (5), `contexts`, then `controller` when setup has published it |
+| Registry | `version` (6), `contexts`, then `controller` once a first binding has published it |
 | Context record | `name`, `environmentDirectory`, `revision`, `mode`, `secretStoreType`, `directoryDevice`, `directoryInode` |
 | Reservation | `version` (3), `name` |
 | Input manifest | `version` (3), `context`, `revision`, `inputDirectory`, `environmentDirectory`, `files` |
@@ -328,9 +348,9 @@ retained beside it.
 
 | Root lock | Lease | Commands |
 | --- | --- | --- |
-| shared | none | Every read: `context list` and `current`, `plan`, `status`, `preflight controller`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, including the opening of each image `--checksums` then reads, the admission a `media add` or `media delete` without `--yes` reviews before its confirmation, the store check a `secret set` from standard input makes before it reads, SSH-trust and input reads, and the reads that precede `setup`, `apply` and `destroy`. |
-| exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `setup` (which scopes no context), `media delete`, the admission and publication of `media add`, and the SSH trust that `machine trust` or a confirmed first use records. |
-| none | none | The [acquisition](#media-acquisition) of `media add` between those two holds: its copy or download, or its re-read of a stage it adopts, its digest verification, and the record it retains beside a stage whose publication met another command's lock; the full read of each image by `media list --checksums`, through the descriptor its shared hold opened; the confirmation prompt of `media add` and `media delete`; and the [read of standard input](secrets.md#acquisition-and-commands) by `secret set --value-stdin` or `--password-stdin`, including its terminal prompt. |
+| shared | none | Every read: `context list` and `current`, `plan`, `status`, `preflight controller`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, including the opening of each image `--checksums` then reads, the admission a `media add` or `media delete` without `--yes` reviews before its confirmation, the store check a `secret set` from standard input makes before it reads, the plan a `context update` or `context delete` without `--yes` presents before its confirmation, SSH-trust and input reads, and the reads that precede `apply` and `destroy`. |
+| exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `media delete`, the admission and publication of `media add`, the SSH trust that `machine trust` or a confirmed first use records, and the one registry transaction in which `setup` creates a missing setup subtree. |
+| none | none | The [acquisition](#media-acquisition) of `media add` between those two holds: its copy or download, or its re-read of a stage it adopts, its digest verification, and the record it retains beside a stage whose publication met another command's lock; the full read of each image by `media list --checksums`, through the descriptor its shared hold opened; the confirmation prompt of `media add`, `media delete`, `context update` and `context delete`; the [read of standard input](secrets.md#acquisition-and-commands) by `secret set --value-stdin` or `--password-stdin`, including its terminal prompt; and every other part of `setup`, which holds only [`setup/lock`](contexts/controller-record.md#the-setup-subtree). |
 | exclusive | held | `context init`; a `context update` that imports input; `context delete` of a ready context; `secret set` (from standard input, only to write what it read), `generate` and `delete`, `secret encryption init` and `rotate`, and the Secret binding `apply` and `destroy` take before they execute; and the short shared-state publications of `apply` and `destroy`. |
 | none during effects | exclusive | The execution of `apply` and `destroy`, between short root transactions. |
 | shared during admission, none during effects | shared | [Bounded runs](cli/output.md#bounded-run-output), including Machine power; their lease excludes lifecycle mutation of the same context. |
@@ -341,8 +361,8 @@ lifecycle effects and bounded runs release the root lock after admission
 while retaining their context lease;
 `media add` releases the root lock while it acquires,
 `media list --checksums` releases its shared hold before it reads any image
-in full, neither `media add`
-nor `media delete` holds one while it prompts, and a `secret set` from
+in full, neither `media add`, `media delete`, `context update` nor
+`context delete` holds one while it prompts, and a `secret set` from
 standard input holds none while it reads, then takes the exclusive root lock
 and the lease to write and re-proves its
 [replacement decision](secrets.md#acquisition-and-commands) there. A command
@@ -351,7 +371,11 @@ remedy; no lock or lease is ever waited for or taken over. A lease is held
 only once its stage collection, layout verification and reservation check
 succeed; a lease that refuses is released at once. `setup`
 [selects no context](controller.md#the-setup-flow), so it
-takes no lease and collects no stage in a context's `state/` subtree.
+takes no lease and collects no stage in a context's `state/` subtree. Its
+reads take no root lock, and its run holds no exclusive root lock: it opens
+one exclusive registry transaction only to create the root and its setup
+subtree when that subtree is missing, then holds only `setup/lock`
+([controller](controller.md#host-identity-and-shared-prerequisites)).
 Revalidate target, identity and evidence under those locks. Read-only
 operations perform no repair, initialization or publication.
 
@@ -366,8 +390,10 @@ configuration or revision entry in a present directory is purged with
 `bootwright context delete --name <name> --purge`; and a replaced directory, a
 damaged reservation, a missing `contexts` container or an entry the store
 refuses to open, for its type, owner, permissions or link count or a kernel
-error, is resolved only by restoring the whole store from a matching backup,
-because the purge refuses each of them too. The purge of a context
+error, is resolved only by restoring the whole store from a
+[matching backup](#format-and-restore-boundary), because the purge refuses
+each of them too; no command performs that restore, so these refusals offer no
+supported exit until [B103](milestones/backlog.md#b103). The purge of a context
 verifies every other ready context and admits exactly that one: its
 transaction serves only the registry, that context's mutation state and host
 reservations, and the deletion of its record, so another damaged context still
@@ -450,9 +476,9 @@ Collection takes the corresponding lock, so no collected stage has a live
 writer: only a killed process,
 or a failure whose directory no longer verified, leaves one. Every command
 that opens a registry transaction (`context init`, `use`, `update` and
-`delete`, `setup`, and the execution of `apply` and `destroy`) therefore first
-removes the root's registry stages and the controller directory's stages and,
-when it takes the lease of a context whose directory identity the registry
+`delete`, `setup` when it creates its missing subtree, and the execution of
+`apply` and `destroy`) therefore first removes the root's registry stages and
+the controller directory's stages and, when it takes the lease of a context whose directory identity the registry
 records, the stages in that context's `state/` directory and in its operation,
 run and trust areas; every secret mutation first removes the stages in its
 context's `state/` directory; each does so before it verifies the layout. Only
@@ -503,9 +529,20 @@ All traversal uses held no-follow handles. Inside the root reject mount
 crossings, links, hardlinks, special files, wrong ownership/modes and path
 substitution. A listing reads the directory through the handle it holds, never
 a fresh resolution of its name, and refuses a directory that was replaced or
-moved while it was held. Every publication revalidates location. Supported local
-filesystems are ext4, XFS, Btrfs, tmpfs and overlayfs; Linux must provide
-`openat2`. Unsupported containment or durability primitives fail closed.
+moved while it was held. Every publication revalidates location. The
+production root `/var/lib/bootwright` must survive a reboot, because it holds
+the only ownership evidence of what its contexts realized: it is qualified on
+ext4, XFS and Btrfs. A production root on tmpfs or overlayfs, whose upper
+layer the kernel does not name, refuses `context.state` before any
+publication, naming the filesystem type and the remedy of placing
+`/var/lib/bootwright` on a persistent local filesystem, and the
+[setup dry run](controller.md#the-setup-flow)'s `state-root` check reports the
+same refusal. tmpfs and overlayfs serve only isolated test roots injected at
+composition. Linux must provide `openat2`. Unsupported containment or
+durability primitives fail closed.
+
+Not yet met: the store admits a production root on tmpfs or overlayfs; tracked
+as [B806](milestones/backlog.md#b806).
 
 Bounds apply before allocation/traversal: registry 8 MiB; manifest 4 MiB and
 32 MiB aggregate referenced manifests; paths 4096 bytes; mutation records
@@ -526,6 +563,7 @@ Secrets limits additionally bound their trees.
 | Encoded bytes in one stored lifecycle plan, including metadata | 6 MiB | `MaxPlanBytes` in `internal/reconciliation/operationstore/records.go` |
 | Active or reserved context names | 4096 | `maxContexts` in `internal/workspace/contextfs/store.go` |
 | Revisions per context | 4096 | `maxRevisions` in `internal/workspace/contextfs/store.go` |
+| Host [reservation](contexts/controller-record.md#record) entries the controller record holds | 256 | `maxControllerReservations` in `internal/workspace/contextfs/controller_records.go` |
 | Retained [controller bundle namespaces](contexts/controller-record.md#bounds), the tool areas | 16 | `maxControllerBundles` in `internal/workspace/contextfs/controller_records.go` |
 | Lifecycle operations one context retains | 1024 | `MaxOperations` in `internal/reconciliation/operationstore/records.go` |
 | Entries in one context's lifecycle operation area, and in each of its runs and SSH-trust areas | 8192 | `MaxEntries` in `internal/reconciliation/operationstore/records.go` |
@@ -572,10 +610,19 @@ while the removal of the last apply admitted still registers and completes
 (`TestTheOperationAreaAdmitsEveryRetainedOperation`,
 `TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheLine`). The free entries
 hold the index and the later attempts and resolutions of the current apply and
-of its removal, the only operations that write again. That removal therefore
-refuses at its registration only once the apply's own later attempts used them
-up, and it then leaves the apply's evidence, binding and effects as they were
-(`TestADestroyTheAreaCannotHoldRefusesAtItsRegistration`).
+of its removal, the only operations that write again. The removal's first
+pass, its one entry more, the bytes its registration writes and the opening
+record that restores a latched log fault are its reserve, which only that
+removal writes. An attempt, retry or resolution of the apply whose writes
+would cut into the reserve refuses `lifecycle.state` before its effect, naming
+`bootwright destroy --context <name>`, which is then that apply's only way on;
+a retry or resolution of the removal that would pass the bound refuses before
+its effect and leaves its block as it was.
+
+Not yet met: the apply's later attempts may use that reserve, and its removal
+then refuses at its registration, leaving the apply's evidence, binding and
+effects as they were (`TestADestroyTheAreaCannotHoldRefusesAtItsRegistration`);
+tracked as [B806](milestones/backlog.md#b806).
 
 The area's bytes are admitted the same way, as its byte bound counts them. A
 fresh apply needs 16 MiB of them free, which hold its records and logs and
@@ -587,9 +634,9 @@ and the outputs of one invocation share what is left. However much an adapter
 prints, only records and logs use them, so the removal of the last apply
 admitted registers and completes within the bound
 (`TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheByteBound`,
-`TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval`). That removal
-refuses at its registration, or stops part way through, only once the records
-and logs written since that apply was admitted used them up. A bounded run's
+`TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval`). Those bytes
+belong to the removal's reserve above, so the apply's later records and logs
+never use them. A bounded run's
 output lies in an area of its own, which holds no records, and only its own
 bound cuts it. A record or log write that would take the area past its entries
 or its 64 MiB refuses `context.state`, naming the lifecycle operation, bounded
@@ -646,7 +693,7 @@ Bootwright build may manage live environments from that root, so this build
 runs on another controller host or that build's environments are retired
 before its root is archived, and the root is never moved aside while that
 build's services run; a store this build created is restored whole from a
-matching backup.
+[matching backup](#format-and-restore-boundary).
 
 The root admits only the store's own published objects: `registry.json`, the
 `contexts` container, the `controller` subtree once the registry declares it,
@@ -757,6 +804,21 @@ writes when restoring older seal counters. An old snapshot cannot
 silently become current writable state. See the bounded restore outcome in
 [milestones](milestones.md).
 
+A **matching backup**, which every remedy that names a restore of the whole
+store or of a keyring means, is an image of the whole state root, taken while
+no command holds its root lock or any context lease, whose restoration keeps
+the device and inode identity of every object the registry and records bind.
+No command takes or restores one: until [B103](milestones/backlog.md#b103) a
+restore is the operator's own act outside every supported command, so a remedy
+that names a matching backup is not a supported exit. No new seal may be
+written to a keyring whose seal counters a restore rolled back.
+
+Not yet met: nothing establishes the fresh encryption key the rule above
+requires or detects rolled-back seal counters, so a keyring restored with older
+seal counters keeps sealing under its old key with its usage counted from the
+older value; tracked as [B816](milestones/backlog.md#b816) and
+[B103](milestones/backlog.md#b103).
+
 ## Permanent deletion
 
 The [Reconciliation guard](state-reconciliation.md#context-mutation-evidence)
@@ -764,8 +826,14 @@ owns positive disposal proof. Under the root lock and context lease, refuse
 live resources, incomplete operations, retained ownership, unknown/corrupt
 evidence, or any required recovery material. A default refusal over evidence
 that still attributes objects to the context names
-`bootwright status --context <name>` as their inventory, `destroy` as the way
-to remove them before deletion, and the acknowledged deletion.
+`bootwright status --context <name>` and `bootwright diff --context <name>` as
+their inventory, `destroy` as the way to remove them before deletion, and the
+acknowledged deletion. `status` lists only the objects the selected input
+declares ([B578](milestones/backlog.md#b578)), while `diff` also lists what
+the owning apply realized that the selected input no longer declares; the
+deletion plan and the orphan confirmation list, from readable evidence, every
+object the context's frozen operations realized, whether or not the selected
+input still declares it.
 
 Only the explicit orphan acknowledgement defined by that guard waives the
 disposal verdict. Over missing, corrupt or unsupported evidence in a present
@@ -783,8 +851,9 @@ without `--allow-orphans`, `status` and every lifecycle command with
 `contexts/<name>/state/mutation.json` and the store's answer, and gives the
 exit: remove that entry beneath the state root, which leaves the evidence
 missing, then `bootwright context delete --name <name> --purge
---allow-orphans`, or restore the whole store from a matching backup. The
-deletion never removes an entry it cannot verify as its own
+--allow-orphans`, or restore the whole store from a
+[matching backup](#format-and-restore-boundary). The deletion never removes an
+entry it cannot verify as its own
 (`TestUnsafeEvidenceIsRefusedNamingItsContextEntryAndExit`). Any other entry
 the deletion's walk cannot verify as its context's own, beneath `secrets/` or
 `desired-state/` among others, refuses `--purge`, with or without
@@ -794,7 +863,7 @@ count, its owner and mode, a name outside the context's layout, or the
 kernel's answer. Its exit is to remove that entry beneath the state root, then
 repeat `bootwright context delete --name <name> --purge`, adding
 `--allow-orphans` when the deletion abandons what the context owns, or to
-restore the whole store from a matching backup
+restore the whole store from a [matching backup](#format-and-restore-boundary)
 (`TestTheDeletionWalkNamesItsContextEntryAndExit`). A mount point the walk
 never crosses has the same exit except that it is unmounted, never removed,
 because its contents are not the context's
@@ -816,8 +885,9 @@ registry entry, and the result reports the abandonment. An acknowledged
 deletion abandons the objects rather than removing them: it is otherwise the
 same permanent local deletion, it needs `--purge` and ordinary confirmation
 like any other, its confirmation names the abandonment with
-`bootwright status --context <name>` as the inventory of the objects it
-abandons, or says they cannot be listed, its result reports it, and it has no
+`bootwright status --context <name>` and `bootwright diff --context <name>` as
+the inventory of the objects it abandons, or says they cannot be listed, its
+result reports it, and it has no
 remote resource effect. There is no recovery-only mode or
 archival. It still removes the keyring, and with it the
 [produced material](secrets.md#produced-material) no completed removal
@@ -829,14 +899,43 @@ lists them or the context's mutation evidence cannot be read; a lost context's
 keyring went with its directory, so its confirmation names none
 (`TestTheOrphanAcknowledgementAbandonsAContextWhoseEvidenceCannotBeRead`).
 
+An abandoned object keeps the identity its context's name gave it, so a
+context initialized again under that name, or a context of that name on
+another controller that shares a provider host, reads it as its own and may
+continue, reinstall or remove it, as
+[B568](milestones/backlog.md#b568) records, although a name never proves ownership under
+[mutation safety](state-reconciliation.md#mutation-safety). The orphan confirmation therefore
+says to remove the abandoned objects by hand before initializing the same name
+again, and never to reuse a context name across controllers that share a
+provider host; every exit that names an acknowledged deletion followed by
+`bootwright context init` of the same name carries the same warning. An
+acknowledged deletion also leaves in place each
+[installer work area](container-clusters.md#boot-media) its clusters'
+installations keep on their artifact server's placement Machine, which holds
+the material those installations were given, and the rest of the context's
+[native-side retention](secrets.md#native-side-retention) on the hosts it lives
+on. Its confirmation names those areas and that retention beside the custodied
+access.
+
 Deletion also drops what the controller record holds for the context: its
 [host binding](#controller-relationship-and-host-binding) and every host
-reservation it still holds, which a completed removal would have released and
-an abandoning deletion otherwise strands, because no context is left to release
-them. The result names the released reservation keys, so another context may
+[reservation](infrastructure-services.md#host-reservations) it still holds,
+which a completed removal would have released and an abandoning deletion
+otherwise strands, because no context is left to release them. The result names the released reservation keys, so another context may
 reserve them. It releases only the record's claims: an abandoned object that
 still holds such a resource on the host is left in place, as abandonment
-states.
+states. The orphan confirmation names the exclusive keys the deletion frees
+and warns that another context may then claim a resource an abandoned object
+still uses, such as the management controller of a powered-off Machine.
+
+Not yet met: the refusal, the orphan confirmation and the deletion plan name
+`status` alone as the inventory and list only what the selected input
+declares, and the orphan confirmation names neither the same-name hazard nor
+the exclusive keys it frees; tracked as [B803](milestones/backlog.md#b803).
+
+Not yet met: the orphan confirmation does not name the installer work areas
+or the native-side retention the deletion leaves; tracked as
+[B829](milestones/backlog.md#b829) and [B817](milestones/backlog.md#b817).
 
 After proof and ordinary confirmation, durably mark the exact context deleting
 before removing any file or claim. Remove only verified objects through bounded
@@ -874,20 +973,39 @@ diagnostics with empty stderr. No private paths, payloads or digests appear:
 a refusal naming damaged store state names its entry relative to the state
 root.
 
+`context list` also reports, for each context whose current operation is not
+finished, that operation's verb, its state and the build that registered it,
+as `<version> (<commit>)`, so an operator sees what to finish before
+installing another build. It never judges whether another build can continue
+the operation; only that build's plan preview does.
+
+Not yet met: `context list` reports no operation; tracked as
+[B832](milestones/backlog.md#b832).
+
 Fresh init and use need no confirmation. Init refuses an already-ready name
 and directs the user to update. Input update and deletion require
 [ordinary confirmation](cli.md#ordinary-confirmation) unless `--yes`;
 equivalent configuration-only update and an input update that keeps the
-selected revision do not. The prompt follows admission and safeguards while
-locks remain held, and a refused confirmation publishes nothing. An update's
-prompt follows its presented plan: the name, the admitted input directory, the
-files it copies, the files seen and the objects decoded on standard output,
-and every warning on standard error, the completed-apply warning above
-included, which its result then does not repeat. A deletion's prompt follows a
+selected revision do not. The prompt follows admission and safeguards, which
+a shared hold reads, and runs with no lock held; a refused confirmation
+publishes nothing. A confirmed update or deletion then takes the exclusive
+root lock and the lease and proves again everything its plan presented, and
+refuses with no write, naming the repetition of the command, when any of it
+changed meanwhile, as `media delete` does. With `--yes` the command takes the
+exclusive lock and the lease alone.
+
+Not yet met: `context update` and `context delete` hold the exclusive root
+lock and the lease across their prompt; tracked as
+[B806](milestones/backlog.md#b806).
+
+An update's prompt follows its presented plan: the name, the admitted input
+directory, the files it copies, the files seen and the objects decoded on
+standard output, and every warning on standard error, the completed-apply
+warning above included, which its result then does not repeat. A deletion's prompt follows a
 plan naming the context, its selected input revision, the keyring with every
 secret version it holds (or, for a lost context whose directory is gone, that
 its keyring already went with it) and the host reservations it removes, and what it
-abandons: nothing, the objects `bootwright status --context <name>` lists, or
+abandons: nothing, the objects the context's frozen operations realized, or
 objects that cannot be listed and why. A command that would prompt without a
 plan presenter refuses with `context.state` rather than ask.
 

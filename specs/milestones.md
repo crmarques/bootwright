@@ -12,24 +12,31 @@ listed commands return the [unavailable result](cli.md#recognized-but-unavailabl
 
 | ID | Milestone | Requires | Delivery | Next |
 | --- | --- | --- | --- | --- |
-| [M1](milestones/m1.md) | Foundations: substrates, infrastructure components and Machines | none | in progress | X55/X60 for M2c (D159) |
-| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | D156; applicable M1c/M1d/M1e | in progress | M2c in progress; matrix and operator gates remain |
+| [M1](milestones/m1.md) | Foundations: substrates, infrastructure services and Machines | none | in progress | operator gates; X129 and X132 definitions |
+| [M2](milestones/m2.md) | Full IBM Ceph 9.9.x: virtual, physical and stretch | D156; applicable M1c/M1d/M1e | in progress | M2c's X61 (B484); B483 blocked; operator gates |
 | [M3](milestones/m3.md) | Full OpenShift on libvirt+sushy, BMCs, KubeVirt, vSphere | M2; applicable M1c to M1g; B18/B23/B265 | in progress | M3b operator gate |
 | [M4](milestones/m4.md) | Cluster add-ons | M2, M3c | in progress | M4a accepted; M4b–e in-tree; live gates pending |
 | [M5](milestones/m5.md) | Retired: moved to M3e (D172) | none | not started | nothing |
 | [M6](milestones/m6.md) | Retired: moved to M4 (D173) | none | not started | nothing |
 | [M7](milestones/m7.md) | Standalone native files and commands | M4 | not started | after M4: B51 |
 
-[D158](milestones/backlog.md#decisions) reopens M1 as Foundations with
-[M1a to M1g](milestones/m1.md#submilestones). The accepted hardening baseline
-under [X98](milestones/delivered.md#x98--m1-owner-acceptance) and M2b under
-[X99](milestones/delivered.md#x99--operator-selected-ceph-artifacts-and-m2b-completion)
-remain delivered.
+- **Next for agents:** only an [active slice](#active-slices)'s open work or
+  an explicit request.
+- **Next for operator:** the operator gates and pending session clauses each
+  page names.
 
-- **Next for agents:** [M2c](milestones/m2.md#m2c) lanes and profiles,
-  integrated at their checkpoints (D168); operator gates remain.
-- **Next for operator:** review D159 to D173. Other provider and cluster
-  gates keep their acceptance.
+## Active slices
+
+Each row is a slice with an item `in progress` and the decision that
+authorized it; only a row whose State reads `in progress` is active.
+
+| Slice | Milestone | Authorized by | State |
+| --- | --- | --- | --- |
+| X61 | M2c | D159 | in progress |
+| X118 | M3c | D172 | in progress |
+| X123 | M3d | D174, D181 | in progress |
+| X130 | M3e | D181 | in progress |
+| X143 | M4c | D180 | in progress |
 
 ## Scope rules
 
@@ -37,9 +44,10 @@ remain delivered.
   or an explicitly requested slice or item, which authorizes only itself. A
   spec, milestone page, item or decision authorizes no implementation or
   effect.
-- A slice is **active** only while its Delivery is `in progress`, and only
-  active slices count toward the WIP limit of two: one product, safety or
-  defect slice and one enabling slice, at most one of them out of sequence.
+- A slice is **active** only while its [row](#active-slices) reads
+  `in progress`, and only active slices count toward the WIP limit of two: one
+  product, safety or defect slice and one enabling slice, at most one of them
+  out of sequence.
   Milestones are never active.
 - **In sequence** means the next planned slice of the first milestone in
   Status order that holds open items; when it has none, planning its next
@@ -98,11 +106,8 @@ remain delivered.
 ## Identifiers
 
 - **M\<n\>, milestone.** Sequence position; new milestones append. Exceptions:
-  D128's unfinished-scope renumbering, D131's M2, D172's
-  [M3](milestones/m3.md#submilestones) and D173's
-  [M4 submilestones](milestones/m4.md#submilestones), and D158's
-  [Foundations redefinition](milestones/m1.md#submilestones).
-  Other IDs and dated history stay fixed.
+  D128's renumbering and the submilestones of D131 (M2), D158 (M1), D172 (M3)
+  and D173 (M4). Other IDs and dated history stay fixed.
 - **B\<n\>, item.** One bounded outcome on exactly one milestone page, or
   parked in the backlog. The number encodes nothing and never changes: a new
   item takes one above the largest B under `specs/milestones/`, and a branch

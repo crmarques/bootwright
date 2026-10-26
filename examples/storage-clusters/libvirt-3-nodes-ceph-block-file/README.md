@@ -25,6 +25,8 @@ For the standby-replay variant, set `mds.standbyReplay: true` in `filesystem.yam
 
 Follow the three-node example's [IBM entitlement](../libvirt-3-nodes-ceph/README.md#ibm-entitlement) and [other releases](../libvirt-3-nodes-ceph/README.md#other-ibm-storage-ceph-releases) sections. This example authors the same release coordinates and entitlement, and the same rules apply when you select another release in your copy.
 
+The tracked `storage/entitlement.yaml` sets `license.accept: true` as a placeholder. Accepting the IBM license is your explicit act: review its terms before you use your copy.
+
 ## Create the context
 
 Replace `/path/to/adjusted/libvirt-3-nodes-ceph-block-file` with your completed copy. Record the files-seen and objects-decoded counts that `validate` prints.

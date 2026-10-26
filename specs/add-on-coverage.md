@@ -41,7 +41,7 @@ profile on that release only.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | nmstate | owned `v1 Namespace` `openshift-nmstate`; `operators.coreos.com/v1 OperatorGroup` `openshift-nmstate` targeting `[openshift-nmstate]`; `operators.coreos.com/v1alpha1 Subscription` `kubernetes-nmstate-operator` (package `kubernetes-nmstate-operator`, Manual, declared `startingCSV`); the one approved InstallPlan; `nmstate.io/v1 NMState` `nmstate` after `nmstates.nmstate.io` is `Established` | provides `nmstate`; requires none | `subscription` (source default `redhat-operators`); `timeout` (default `30m`) | `csvSucceeded`; `NMState` `nmstate` `Available` `True`; `Deployment` `nmstate-webhook` in `openshift-nmstate` `Available` `True` | retired with its cluster | [B735](milestones/m4.md#b735) | M4b | package qualification in-tree; addons-sno ([B755](milestones/m4.md#b755)); networking use on lab-networks ([B729](milestones/m3.md#b729)) |
 | metallb | owned `v1 Namespace` `metallb-system`; `operators.coreos.com/v1 OperatorGroup` `metallb-operator` with no `spec` (all namespaces); `operators.coreos.com/v1alpha1 Subscription` `metallb-operator-sub` (package `metallb-operator`, Manual, declared `startingCSV`); the one approved InstallPlan; `metallb.io/v1beta1 MetalLB` `metallb` after `metallbs.metallb.io` is `Established`; per pool, after `MetalLB` is `Available`, `metallb.io/v1beta1 IPAddressPool` `<name>` and `L2Advertisement` `<name>` (`ipAddressPools: [<name>]`, `interfaces` when declared) in `metallb-system` | provides `metallb`; requires none | `subscription` (source default `redhat-operators`); `timeout` (default `30m`); `pools[]` (`name`, `addresses`, `autoAssign` default `true`, optional `l2.interface`) admitted against the cluster's networks, node addresses, endpoints, next hops and held addresses; an interface pool needs the cluster's `routingViaHost: true` and `ipForwarding: Global` | `csvSucceeded`; `MetalLB` `metallb` `Available` `True` | retired with its cluster; on a physical cluster that keeps running, its pools keep answering their addresses, unmanaged | [B84](milestones/m4.md#b84), [B727](milestones/m4.md#b727) | M4c | package qualification in-tree; addons-lb ([B757](milestones/m4.md#b757)) for machine-network pools; lab-networks ([B729](milestones/m3.md#b729)) for an interface pool |
-| fdf | owned `v1 Namespace` `openshift-storage` (labelled for cluster monitoring); `operators.coreos.com/v1 OperatorGroup` `openshift-storage` targeting `[openshift-storage]`; optional owned CatalogSource in `openshift-marketplace`; `operators.coreos.com/v1alpha1 Subscription` `odf-operator` (package `odf-operator`, Manual, declared `startingCSV`); the first InstallPlan, approved under the operator-managed policy, because odf-operator approves its own later plans; after `storageclusters.ocs.openshift.io` is `Established`, the owned `Opaque` Secret `rook-ceph-external-cluster-details` (key `external_cluster_details`) placed from the export block's produced details, and `ocs.openshift.io/v1 StorageCluster` `ocs-external-storagecluster` with `spec.externalStorage.enable: true` | provides `dataFoundation`; requires none; requires the referenced StorageExport's block | `subscription` (`source` required: `isf-data-foundation-catalog` through an owned CatalogSource, or `redhat-operators` for Red Hat OpenShift Data Foundation); `storageExportRef` (required, one consumer per export); `defaultStorageClass` (default `false`); `timeout` (default `1h`); the Red Hat catalog serving the same package is expected, unverified | `csvSucceeded`; StorageCluster `status.phase` `Ready` and `ReconcileComplete` `True`; StorageClasses `ocs-external-storagecluster-ceph-rbd`, `ocs-external-storagecluster-cephfs`, `openshift-storage.noobaa.io` and, with a gateway, `ocs-external-storagecluster-ceph-rgw`; `NooBaa` `noobaa` `status.phase` `Ready`; never the `Available` condition | retired with its cluster; the export's principals leave with the Ceph cluster's owned virtual hosts | [B85](milestones/m4.md#b85) (Ceph side [B86](milestones/m4.md#b86), [B762](milestones/delivered.md#b762)) | M4d | package qualification in-tree; addons-df ([B761](milestones/m4.md#b761)) |
+| fdf | owned `v1 Namespace` `openshift-storage` (labelled for cluster monitoring); `operators.coreos.com/v1 OperatorGroup` `openshift-storage` targeting `[openshift-storage]`; optional owned CatalogSource in `openshift-marketplace`; `operators.coreos.com/v1alpha1 Subscription` `odf-operator` (package `odf-operator`, Manual, declared `startingCSV`); the first InstallPlan, approved under the operator-managed policy, because odf-operator approves its own later plans; after `storageclusters.ocs.openshift.io` is `Established`, the owned `Opaque` Secret `rook-ceph-external-cluster-details` (key `external_cluster_details`) placed from the export block's produced details, and `ocs.openshift.io/v1 StorageCluster` `ocs-external-storagecluster` with `spec.externalStorage.enable: true` | provides `dataFoundation`; requires none; requires the referenced StorageExport's block | `subscription` (`source` required: `isf-data-foundation-catalog` through an owned CatalogSource, or `redhat-operators` for Red Hat OpenShift Data Foundation); `storageExportRef` (required, one consumer per export); `defaultStorageClass` (default `false`); `timeout` (default `1h`); the Red Hat catalog serving the same package is expected, unverified | `csvSucceeded`; StorageCluster `status.phase` `Ready` and `ReconcileComplete` `True`; StorageClasses `ocs-external-storagecluster-ceph-rbd`, `ocs-external-storagecluster-cephfs`, `openshift-storage.noobaa.io` and, with a gateway, `ocs-external-storagecluster-ceph-rgw`; `NooBaa` `noobaa` `status.phase` `Ready`; never the `Available` condition | retired with its cluster; the export's principals leave when the export retires under its [retirement condition](storage-resources.md#storageexport), which requires this cluster to be removed by the same destroy on owned virtual Machines; otherwise the export's removal refuses | [B85](milestones/m4.md#b85) (Ceph side [B86](milestones/m4.md#b86), [B762](milestones/delivered.md#b762)) | M4d | package qualification in-tree; addons-df ([B761](milestones/m4.md#b761)) |
 | acm | owned `v1 Namespace` `open-cluster-management`; `operators.coreos.com/v1 OperatorGroup` `open-cluster-management` targeting `[open-cluster-management]`; `operators.coreos.com/v1alpha1 Subscription` `acm-operator-subscription` (package `advanced-cluster-management`, Manual, declared `startingCSV`); the one approved InstallPlan; `operator.open-cluster-management.io/v1 MultiClusterHub` `multiclusterhub` after `multiclusterhubs.operator.open-cluster-management.io` is `Established`, carrying the engine subscription annotation; the approved first InstallPlan of the hub-created Subscription `multicluster-engine` in `multicluster-engine`, a dependent | provides none; requires none | `subscription` (source default `redhat-operators`); `mce` (channel, startingCSV, source, sourceNamespace); `hub` (availabilityConfig, disableHubSelfManagement, nodeSelector, tolerations); `timeout` (default `45m`) | `csvSucceeded` for the hub operator; `csvSucceeded` for the engine at its declared CSV; `MultiClusterHub` `multiclusterhub` `status.phase` `Running` | retired with its cluster | [B91](milestones/m4.md#b91) | M4e | package qualification in-tree; addons-hub ([B766](milestones/m4.md#b766)) |
 | gitops | owned `v1 Namespace` `openshift-gitops-operator` labelled for cluster monitoring; `operators.coreos.com/v1 OperatorGroup` `openshift-gitops-operator` (all namespaces); `operators.coreos.com/v1alpha1 Subscription` `openshift-gitops-operator` (package `openshift-gitops-operator`, Manual, declared `startingCSV`); the one approved InstallPlan; with `bootstrap`: the owned placed `v1 Secret` `bootwright-bootstrap-repository`, `rbac.authorization.k8s.io/v1 ClusterRoleBinding` `bootwright-gitops-bootstrap` when `access` names a role, and `argoproj.io/v1alpha1 Application` `bootwright-bootstrap`, all in or for `openshift-gitops` | provides none; requires none; a last package | `subscription` (source default `redhat-operators`); `bootstrap` (repoURL, targetRevision, path, destinationNamespace (required), credentials, access.clusterRole, sync); `timeout` (default `20m`) | `csvSucceeded`; `ArgoCD` `openshift-gitops` `status.server` `Running`; then its `status.phase` `Available` | retired with its cluster; the bootstrap object keeps syncing on a physical cluster that outlives its context | [B92](milestones/m4.md#b92), [B765](milestones/m4.md#b765) | M4e | package qualification in-tree; addons-hub ([B766](milestones/m4.md#b766)) |
 | certmgr | owned namespace `cert-manager-operator`, its OperatorGroup and Subscription (package and group shape fixed by its definition); the one approved InstallPlan; operands in `cert-manager`, created by the operator | provides `certManager`; requires none | `subscription` (source default to be verified); `timeout` (default `20m`) | `csvSucceeded`; operand Deployments `Available`; `certificates.cert-manager.io` and `issuers.cert-manager.io` `Established` | retired with its cluster | [B767](milestones/m4.md#b767) | M4f | Needs definition; package qualification in-tree; addons-gitlab ([B768](milestones/m4.md#b768)) |
@@ -77,11 +77,11 @@ spec:
 
 The operator reads a channel's CSV from the PackageManifest
 `kubernetes-nmstate-operator` in `openshift-marketplace`
-(`status.channels[].currentCSV`); Bootwright chooses neither. The shipped 4.21
-CSV supports own-namespace, single-namespace and all-namespaces installation
-and declares disconnected support; its channels are `stable` and `alpha`. The
-cluster network block of M3d requires its instance; its probe host on a
-disconnected cluster is parked as [B775](milestones/backlog.md#b775).
+(`status.channels[].currentCSV`); Bootwright chooses neither. The shipped CSV's
+install modes and channels are evidence in
+[knowledge](../.agents/knowledge/olm-v0-exact-install.md). The cluster network
+block of M3d requires its instance; its probe host on a disconnected cluster is
+parked as [B775](milestones/backlog.md#b775).
 
 ### metallb
 
@@ -103,20 +103,15 @@ spec:
 ```
 
 The operator reads a channel's CSV from the PackageManifest
-`metallb-operator`. The shipped 4.21 CSV supports all namespaces only,
-declares webhooks and disconnected support, and suggests the namespace
-`metallb-system`; its operator accepts one `MetalLB` resource, named
-`metallb`. The 4.21 documentation adds `IPAddressPool` status, and the 4.22
-documentation adds advertisement `serviceSelectors` and a
-`ConfigurationState` resource; the package renders none of them. The
-documentation describes forwarding on a secondary interface with a sysctl
-`MachineConfig` in 4.20 and 4.21 and with an NNCP in 4.22; both procedures
-name host routing, and 4.20 and 4.21 also name cluster-wide
-`ipForwarding: Global`, which this package requires (Q34). Evidence by
-release where mechanics differ: none recorded; a specialization of forwarding
-would discriminate on the cluster's exact release, and only after a run shows
-`ipForwarding: Global` failing. The supported-platform list names bare metal,
-vSphere, IBM Z and IBM Power, not libvirt or KubeVirt guests; addons-lb and
+`metallb-operator`. Its operator accepts one `MetalLB` resource, named
+`metallb`, in the namespace `metallb-system`. Forwarding on a secondary
+interface needs host routing and the cluster-wide `ipForwarding: Global`, which
+this package requires (Q34). No specialization is registered; one of
+forwarding would discriminate on the cluster's exact release, and only after a
+run shows `ipForwarding: Global` failing. The per-release documentation, the
+status and advertisement resources the package renders none of, and the
+platforms the vendor lists are evidence in
+[knowledge](../.agents/knowledge/metallb-on-openshift.md); addons-lb and
 lab-networks are evidence on libvirt guests, never a support statement.
 
 ### fdf
@@ -143,10 +138,10 @@ spec:
 ```
 
 The operator chooses the catalog tag or digest, the channel and the CSV; the
-registry holds no pairing between them (D163). As evidence only, on 2026-10-20
-catalog `v4.22` held `stable-4.21` at 4.21.7 while catalog `v4.21` held it at
-4.21.13, and the operator reads the channel's CSV from the PackageManifest
-`odf-operator` in `openshift-marketplace` of the catalog it chose. IBM's catalog serves the package `odf-operator`;
+registry holds no pairing between them (D163), and the operator reads the
+channel's CSV from the PackageManifest `odf-operator` in `openshift-marketplace`
+of the catalog it chose
+([knowledge](../.agents/knowledge/fusion-data-foundation-catalog.md)). IBM's catalog serves the package `odf-operator`;
 naming `redhat-operators` as `subscription.source` is expected to install Red
 Hat OpenShift Data Foundation, but that `redhat-operators` serves the same
 package name, namespace and objects is unverified and is re-verified by
@@ -156,18 +151,17 @@ user `cp` and the IBM entitlement key, and the Red Hat registries the selected
 bundle's images name; Bootwright never merges a registry credential into a
 running cluster (Q33). v1 observed NooBaa failing with `x509` against a
 private RGW CA until the issuing CA was in the cluster-wide trusted bundle;
-the trust source in 4.20 to 4.22 is not established
+the trust source is not established for any release
 ([knowledge](../.agents/knowledge/data-foundation-external-mode.md#noobaa-and-the-rgw-certificate)).
 As a
 conservative Bootwright choice, not a native fact, `fdf` therefore admits a
 TLS object gateway only when the cluster selects an additional trust bundle
 under policy `Always` ([B195](milestones/delivered.md#b195)); a gateway certificate
 that already chains to a CA in cluster trust is refused too, and the operator
-adds its issuing CA, which changes nothing else. IBM documents installing Data Foundation through IBM Fusion;
-installing it through OLM alone is a choice the operator makes with IBM.
-Bootwright enables no console plugin ([B780](milestones/backlog.md#b780)).
-Evidence by release where mechanics differ: none recorded. Candidate
-discriminators, should a run show divergence: the ocs-operator bundle the
+adds its issuing CA, which changes nothing else. Installing Data Foundation through OLM alone, rather than through IBM Fusion,
+is a choice the operator makes. Bootwright enables no console plugin
+([B780](milestones/backlog.md#b780)). No specialization is registered.
+Candidate discriminators, should a run show divergence: the ocs-operator bundle the
 approved odf-operator CSV pulls in, whether the cluster serves a
 StorageSystem kind its console expects, the Ceph monitors' allowed ciphers,
 and the nodes' kernel version for `aes256k` keys.
@@ -192,19 +186,14 @@ spec:
 
 The operator reads both packages' channels and CSVs from the PackageManifests
 `advanced-cluster-management` and `multicluster-engine`; Bootwright chooses
-neither and registers no pairing. Release evidence: the hub source requests
-the engine channel `stable-2.10` (release-2.15), `stable-2.11` (release-2.16)
-and `stable-2.17` (release-2.17), and release-2.17 declares a required engine
-version 2.17.0; what a hub does with another engine minor is unobserved
-([B766](milestones/m4.md#b766)). Further evidence:
-the hub phases on 2.15 to 2.17 are Pending, Paused, Running, Installing,
-Updating, Uninstalling, UpdatingBlocked and Error; the 2.15, 2.16 and 2.17
-bundles declare a maximum OpenShift version of 4.21, 4.22 and 4.22 and the
-2.11 engine 4.22; 2.15 and 2.16 install only into their own namespace, 2.17
-also into a single namespace. A single-node hub needs the basic availability
-configuration. Later engine and hub upgrades are the operator's: the hub
-keeps the annotation's channel and manual approval until the operator edits
-it.
+neither and registers no pairing; what a hub does with an engine minor other
+than the one its source requests is unobserved
+([B766](milestones/m4.md#b766)). The hub source's engine channels, the hub
+phases, the bundles' maximum OpenShift versions and install modes are evidence
+in [knowledge](../.agents/knowledge/acm-hub-install.md). A single-node hub
+needs the basic availability configuration. Later engine and hub upgrades are
+the operator's: the hub keeps the annotation's channel and manual approval
+until the operator edits it.
 
 ### gitops
 
@@ -228,13 +217,12 @@ spec:
 ```
 
 The operator reads the channel's CSV from the PackageManifest
-`openshift-gitops-operator`. Release evidence: GitOps 1.18 documents
-OpenShift 4.14 and 4.16 to 4.20, 1.19 and 1.20 4.14 and 4.16 to 4.21, 1.21
-4.18 to 4.22, and the 1.22 table has no OpenShift column. The default
-instance's phase is `Available` only after its server Route is admitted with a
-host. Applications outside `openshift-gitops` are generally available since
-1.13 and ApplicationSets in any namespace since 1.22; both need the instance's
-source namespaces, which Bootwright leaves unset. The operator's source must
+`openshift-gitops-operator`
+([knowledge](../.agents/knowledge/openshift-gitops-and-argocd-handoff.md)). The
+default instance's phase is `Available` only after its server Route is admitted
+with a host. Applications and ApplicationSets outside `openshift-gitops` need
+the instance's source namespaces, which Bootwright leaves unset. The operator's
+source must
 exclude every object the handoff evidence lists
 ([the GitOps bootstrap object](add-ons.md#the-gitops-bootstrap-object)).
 
@@ -249,13 +237,13 @@ the shipped CSV.
 
 ### gitlab
 
-GitLab through the GitLab Operator ([B93](milestones/m4.md#b93)). GitLab calls
-installation through OLM experimental and does not support instances
-installed that way; its recommended routes are the operator's release
-manifest or its Helm chart. Bootwright installs through OLM with exact
-approval because that is the route its closed program supports; the release
-manifest is [B786](milestones/backlog.md#b786) (Q51). A binding selects it
-with:
+GitLab through the GitLab Operator ([B93](milestones/m4.md#b93)). Bootwright
+installs through OLM with exact approval because that is the route its closed
+program supports; the operator's release manifest is
+[B786](milestones/backlog.md#b786) (Q51), and the vendor's position on each
+route is evidence in
+[knowledge](../.agents/knowledge/gitlab-operator-on-openshift.md). A binding
+selects it with:
 
 ```yaml
 spec:
@@ -286,14 +274,14 @@ spec:
         storageClass: <a ReadWriteOnce StorageClass>
 ```
 
-The operator supplies outside the cluster: PostgreSQL 17 or 18
-(GitLab's stated range for 19.x, not a Bootwright rule) with the extensions
-GitLab lists (`amcheck`, `btree_gist`, `pg_trgm` and `plpgsql`) available and
-an empty database; standalone Redis 7.x or Valkey 7.2; an S3 endpoint with the buckets
-`gitlab-artifacts`, `git-lfs`, `gitlab-packages`, `gitlab-uploads`,
+The operator supplies outside the cluster: a PostgreSQL database with the
+extensions GitLab lists (`amcheck`, `btree_gist`, `pg_trgm` and `plpgsql`)
+available and empty; a standalone Redis or Valkey; an S3 endpoint with the
+buckets `gitlab-artifacts`, `git-lfs`, `gitlab-packages`, `gitlab-uploads`,
 `gitlab-terraform-state`, `gitlab-ci-secure-files` and the registry bucket,
-each distinct. GitLab documents Ceph RGW only as a community provider with
-path-style addressing. The `GitLab` resource `gitlab` in `gitlab-system`
+each distinct. The versions of each are the operator's choice (D163); GitLab's
+stated ranges and its position on Ceph RGW are evidence in
+[knowledge](../.agents/knowledge/gitlab-operator-on-openshift.md). The `GitLab` resource `gitlab` in `gitlab-system`
 carries the declared chart version and these values, and no others:
 
 | Value | Setting |
@@ -323,10 +311,10 @@ GitLab has no Git over SSH through Routes; clone and push use HTTPS
 outside the cluster and outside Bootwright: they keep GitLab's data after a
 destroy, while GitLab's Rails secret, generated in the cluster, does not
 survive a virtual cluster, so a fresh apply needs an empty database and empty
-buckets ([B793](milestones/backlog.md#b793)). Evidence by release, never a
-rule: the operator's support table lists OpenShift 4.22 and 4.21 as supported
-and 4.20 as deprecated; the 3.5.0 CSV declares a maximum OpenShift version of
-4.22; each operator release renders only the three chart versions it lists.
+buckets ([B793](milestones/backlog.md#b793)). Each operator release renders only
+the chart versions it lists, and the operator's OpenShift support table and its
+CSV's maximum OpenShift version are evidence, never a rule, in
+[knowledge](../.agents/knowledge/gitlab-operator-on-openshift.md).
 
 ## Acceptance profiles
 
@@ -360,7 +348,9 @@ operator provides, its packages and its operator gate.
   and catalog image chosen, each phase's duration, its interruption drills
   (each continued by repeating `apply` with every object `unchanged`),
   `bootwright diff --observe` reporting no drift, a settled apply that
-  contacts no cluster, and a fresh `destroy` completing by retirement.
+  contacts no cluster, and a fresh `destroy` completing by retirement. The
+  public row summarizes these as the ledger defines it; the fields it does not
+  carry stay in the private evidence archive.
 - **Versions.** When a slice moves a frozen request version, a row accepted on
   an earlier build is repeated, and a context an earlier build applied is
   destroyed with that build first. A package's rendering change moves only
@@ -396,9 +386,6 @@ operator provides, its packages and its operator gate.
   controller's identity and permissions, the GitLab operator's webhook
   certificate under OLM, and each operator leaving its package's declared
   fields unchanged.
-
-Not yet met: no operator row of M4 is accepted; tracked as
-[B755](milestones/m4.md#b755).
 
 ## Left out
 

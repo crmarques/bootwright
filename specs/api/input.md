@@ -77,12 +77,24 @@ not a partial operation flag. `validate` warns deterministically for excluded fi
 Bootwright objects and for excluded cluster roots. `render effective` has no
 success-warning channel.
 
+`validate` also warns deterministically for a skipped `secrets` directory that
+holds a `.yaml` or `.yml` file at any depth, naming the directory. The check
+walks the directory within the filesystem ceilings and reads no file. A reference to a Secret that no
+selected document declares names such a directory in its remedy when one
+exists.
+
+Not yet met: a skipped `secrets` directory holding YAML is silent, and the
+unresolved-Secret remedy does not name it; tracked as
+[B826](../milestones/backlog.md#b826).
+
 Non-YAML files are not desired-state documents. The five payload basenames
 above are exact, case-sensitive path-segment rules. A corresponding co-located
-Secret, playbook or add-on field must use its schema's reserved segment, and
-`resources` cannot select that root or a descendant. A lowercase YAML file
-elsewhere under an input root remains a desired-state candidate even if an
-object also names it as payload. The [compiler boundary](../api.md#compiler-boundary)
+playbook or add-on field must use its schema's reserved segment, and
+`resources` cannot select that root or a descendant. `secrets` stays reserved
+so that raw secret files kept beside the input are never read during
+discovery; a Secret descriptor placed under it is not a desired-state input.
+A lowercase YAML file elsewhere under an input root remains a desired-state
+candidate even if an object also names it as payload. The [compiler boundary](../api.md#compiler-boundary)
 forbids following payload references.
 
 ## Fixed input ceilings

@@ -26,6 +26,8 @@ Verify media checksums with the vendor before importing. Align synthetic address
 
 Follow the [core profile's IBM entitlement procedure](../libvirt-3-nodes-ceph/README.md#ibm-entitlement). This profile authors Ceph 9.9.2.0, image `v9.9.2-26947` and RHEL 9 packages `20.2.2-349.el9cp`; verify these coordinates with your entitlement before use. Red Hat media/CDN authorization is separate. Supply Secrets through protected files or standard input.
 
+The tracked `storage/entitlement.yaml` sets `license.accept: true` as a placeholder. Accepting the IBM license is your explicit act: review its terms before you use your copy.
+
 ## Create the context
 
 Validate the adjusted input; the unchanged fixture decodes 28 files seen and 28 objects decoded. Set all credentials before the first staged apply freezes intent.
@@ -47,6 +49,7 @@ Validate the adjusted input; the unchanged fixture decodes 28 files seen and 28 
 ## Apply by stage
 
 ```sh
+./bin/bootwright plan
 ./bin/bootwright apply --stage controller
 ./bin/bootwright apply --stage infra-components,substrates
 ./bin/bootwright apply --stage machines

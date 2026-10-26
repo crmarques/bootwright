@@ -35,6 +35,11 @@ The retired `run` and `onFailure` fields are unknown and rejected.
 ### Anchors and ordering
 
 `gates` and `follows` accept `fabric`, `machines`, `deps`, `base` or `add-ons`.
+They are legacy tokens: only `machines` and `add-ons` match a current
+[stage](../state-reconciliation.md#stages-and-the-pause-boundary), and a block
+depends on other blocks, never on a stage. The replacement that
+[B102](../milestones/backlog.md#b102) defines orders a playbook by its
+dependencies on blocks or API objects, never on a stage anchor.
 
 A `gates` declaration would complete before its anchor; `follows` would
 complete after it. Enabled playbooks at the same anchor would order by `order`

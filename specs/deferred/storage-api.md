@@ -6,7 +6,7 @@ qualification for standalone native files. Until then the [storage admission
 contract](../api/storage.md) owns the kinds, references, replicated protection
 and graph invariants, and the closed schema in `api/v1alpha1/storage.go` is
 authoritative for field names, types and shapes. The core cluster, placement
-policy, pool and client fields are realized for the pinned release
+policy, pool and client fields are realized
 ([X70](../milestones/delivered.md#x70--ceph-through-the-ordinary-staged-apply)),
 and [pool protection and erasure coding](../api/storage.md#pool-protection-and-erasure-coding)
 owns current policy and pool admission;
@@ -308,14 +308,15 @@ have been applied, the kind normalizer materializes deterministic API-owned
 defaults and normalizes these values:
 
 - `StorageCluster.spec.management: managed` and
-  `spec.ceph.distribution: oss`;
+  `spec.ceph.distribution: oss`
+  ([storage admission](../api/storage.md));
 - an OSS image version derived from an exact OSS release and canonical SHA-256
   checksum spelling, preserving release and package-coordinate spelling;
 - bootstrap `addressRef` from the cephadm default and the effective cluster
-  SSH user;
+  SSH user ([references](../api/storage.md#references));
 - composed storage-node FQDNs, corresponding placement/bootstrap/tiebreaker
-  tokens, Machine-derived sites, `mgmtGateway.dnsLabel: mgr`, stretch sites, a
-  tiebreaker with a node's site, and `ruleName: stretch-rule`;
+  tokens, Machine-derived sites, stretch sites, a tiebreaker with a node's
+  site, and `ruleName: stretch-rule`;
 - `StoragePool.spec.type: replicated`;
 - the sole CephFS data pool as `default: true`;
 - for a present object-gateway endpoint without `fqdn`, the FQDN

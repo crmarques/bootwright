@@ -1,7 +1,11 @@
 # Container clusters
 
 Container cluster owns the installation of an OpenShift or OKD cluster from
-declared intent, and the evidence that it completed. The
+declared intent, and the evidence that it completed. `spec.distribution.type`
+selects the distribution and `spec.install.method` the installation method, and
+the agent installation of OpenShift is the first implementation, the one this
+page specifies
+([implementation selection](architecture.md#implementation-selection)). The
 [kind schema](api/container-clusters.md) owns `ContainerCluster`;
 [substrates](substrates.md) own the Machines its nodes are bound to and the
 management controllers they are booted through;
@@ -48,19 +52,33 @@ installer input, because the agent installer has none for them; whether the
 installation applies them once it completes is
 [B716](milestones/m3.md#b716)'s open decision, and until then they are inert.
 
-The following admitted fields are preserved in effective state without changing
-an agent-install plan:
+The following admitted fields are preserved in effective state and never change
+an agent-install plan; each is inert or refuses at plan, as its row states:
 
 | Field | Meaning for the agent installer |
 | --- | --- |
 | `spec.distribution.release.channel` | Informational, including a channel derived from the version; release selection uses the exact version or image. |
 | `spec.install.endpoints.*.dnsName` | Inert; the installer derives every endpoint name from the cluster name and zone. Only `api-int`'s `dnsName` is read: admission refuses an API named certificate that carries it. |
-| `spec.install.endpoints.*.port` | Inert; the installer uses its native endpoint ports. |
-| `spec.install.endpoints.*.scheme` | Inert; the installer uses its native endpoint protocols. |
-| `spec.install.endpoints.*.prefixLength` | Inert; no installer input consumes it. |
-| `spec.install.endpoints.*.interfaceNetworks` | Inert; no installer input consumes it. |
+| `spec.install.endpoints.*.port` | Refused at plan when authored with a value other than the native endpoint port the installer uses. |
+| `spec.install.endpoints.*.scheme` | Refused at plan when authored with a value other than the native endpoint protocol the installer uses. |
+| `spec.install.endpoints.*.prefixLength` | Refused at plan when authored; no installer input consumes it. |
+| `spec.install.endpoints.*.interfaceNetworks` | Refused at plan when authored non-empty; no installer input consumes it. |
 | `spec.nodes[].labels` | Inert until the node-label decision above is resolved. |
 | `spec.nodes[].taints` | Inert until the node-taint decision above is resolved. |
+
+Each authored field of this table except `channel` and the four endpoint
+fields refused above makes `validate`, `plan` and `apply` report an
+`api.deferred` warning at its path, so an operator learns that it changes
+nothing. An authored endpoint `port`, `scheme`, `prefixLength` or
+`interfaceNetworks` that the installer does not use refuses at `plan`, naming
+the field, because the installation would not follow the declaration. Node
+`labels` and `taints` stay warnings until [B716](milestones/m3.md#b716) decides
+them.
+
+Not yet met: no inert field reports a warning and an authored endpoint `port`,
+`scheme`, `prefixLength` or `interfaceNetworks` plans without a refusal, so the
+refusal table has no row for them yet; tracked as
+[B807](milestones/backlog.md#b807).
 
 A multi-node cluster's platform follows who answers its endpoints: on
 `baremetal` the installer owns all three as virtual IPs its own VIP holders
@@ -168,9 +186,8 @@ installer's keepalived holds the VIPs on the nodes' shared layer 2, which a
 (4.22); a bridge NetworkAttachmentDefinition needs `macspoofchk` off.
 
 These rules are evidence of what the 4.20 to 4.22 agent installer accepts and
-does, not a support statement: Red Hat documents control-plane VMs on OpenShift
-Virtualization only as a 4.22 Technology Preview through KubeVirt Redfish, with
-workers elsewhere.
+does, not a support statement
+([knowledge](../.agents/knowledge/kubevirt-agent-node-boot.md)).
 
 Not yet met: a node on a KubeVirt provider still refuses as a node on an
 unrealized substrate; a nested host is refused by lifecycle selection. Admission checks the homogeneous arm,
@@ -202,7 +219,10 @@ the Machine declares, under its own name and with its declared type, and the
 node's own network configuration with its install address applied and the name
 servers it selects as its resolvers. The selected NTP servers become additional
 time sources. Each selected name or time server is written as a managed
-server's endpoint address or as an external server's declared `address`.
+server's endpoint address or as an external server's declared `address`. The
+installation accepts a time source that answers, from an upstream source or
+from its own clock ([time service readiness](infrastructure-services.md#managed-network-services)),
+and requires no synchronized time of it.
 
 The attempt writes `install-config.yaml`, with the bound material substituted,
 and `agent-config.yaml` in JSON's syntax, which is YAML whose every string is
@@ -332,9 +352,10 @@ Admission refuses a longer name at `metadata.name`.
 
 The block `cluster-media-<cluster>` produces the cluster's agent boot image. It
 requires the managed `ArtifactServer` its `agent.redfishVirtualMedia` selection
-names, because that is where the image is published, and nothing else: the name
-and time services the cluster selects are baked into the image as data rather
-than reached while it is built.
+names, because that is where the image is published, and the managed `Proxy`
+its installation proxy selects, whose address its install-config carries, and
+nothing else: the name and time services the cluster selects are baked into the
+image as data rather than reached while it is built.
 
 The image is built where the installer is, which is the controller: the
 [controller stage](controller.md#the-controller-stage) installs a context's
@@ -356,14 +377,24 @@ executable refuses the same way.
 on the artifact server's placement Machine,
 `/var/lib/bootwright-clusters/<context>/<cluster>/`, reserved by path and
 created `0700` because the installer retains inside it the material it was
-given. The attempt writes the frozen input files there, substitutes the bound
+given, which makes the area [native-side
+retention](secrets.md#native-side-retention). The attempt writes the frozen input files there, substitutes the bound
 material into them, and invokes the installer once. The installer consumes its
 inputs into its own asset state and writes beside the image the access the
 installation later needs, whose admin client certificate is the cluster's
 [identity](#installation), so the area outlives the attempt that created it, is
 never enumerated in evidence, progress output or a log, and is discarded and
 rebuilt rather than reused whenever the inputs it was built from are not the
-inputs frozen now, unless an installation has booted from it.
+inputs frozen now, unless an installation has booted from it. The build
+receipt also records the device and inode the registry holds for the context's
+directory. A build over an area whose receipt records another, as a recreated
+context of the same name finds one its predecessor left, refuses before any
+effect, naming the area, and the hand-over of a kept kubeconfig to custody
+takes nothing from such an area.
+
+Not yet met: the receipt records no directory identity and an area an earlier
+context left is reused or handed over; tracked as
+[B829](milestones/backlog.md#b829).
 
 **A work area an installation booted from is never rebuilt.** The area also
 holds the state the [installation](#installation) boots its nodes into and the
@@ -484,8 +515,9 @@ partial realization.
 The block `cluster-install-<cluster>` boots the nodes from that image and
 watches the cluster install. It depends on the media block, and requires every
 node `Machine` and the managed name and time services the cluster and its
-nodes select. An external one is used at its declared `address` and adds no
-requirement, because no block of this product realizes it.
+nodes select, and the managed `Proxy` its installation proxy selects. An
+external one is used at its declared `address` and adds no requirement,
+because no block of this product realizes it.
 
 **One installation at a time.** Every installation block of a context holds the
 exclusive key `container-cluster-install`, so a context installs one cluster at
@@ -844,11 +876,9 @@ records the identity, what answered, the release, whether the cluster reported
 its installation completed, the declared nodes still missing, the nodes still
 presenting media, which of them present this cluster's own image, and whether
 a wait of the apply restored the installer's kubeconfig; it records no
-credential and no path. A node presents its own image when the scheme, host
-and path of the image its controller reports equal those of the address the
-media block published, each compared exactly and never as a prefix, because a
-controller may echo an image back without its default port; any other image,
-including another attempt's under the same reserved path, is foreign.
+credential and no path. A node presents this cluster's own image as the rule
+under [each insert has its own token](#installation) defines it; any other
+image is foreign.
 
 **Replay.** A cluster already answering with this operation's identity, at the
 declared release, reporting its installation completed and holding every
@@ -976,7 +1006,8 @@ Every object is created through the
 [ownership receipts](add-ons.md#ownership-receipts), a foreign object of the
 same name refuses, a continuation reports equal objects unchanged and fails
 naming a difference, a settled apply reaches no cluster and
-`bootwright diff --observe` reports drift (D153), and the block's removal
+`bootwright diff --observe` reports drift as a partial realization
+([observation](add-ons.md#observation-and-continuation), D153), and the block's removal
 retires it with its cluster without contacting it: the cluster leaves with its
 disks, or keeps running on physical nodes. A condition reporting `Degraded`, a
 policy matching no node and a foreign attachment definition each fail the block

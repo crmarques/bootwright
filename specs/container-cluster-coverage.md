@@ -11,9 +11,6 @@ bootstrap, never an ongoing day-2 control plane
 any effect through the [refusal table](container-clusters.md#refusal-table),
 never silently omitted.
 
-Not yet met: the definition baseline awaits the owner's acceptance; tracked as
-[B473](milestones/m3.md#b473).
-
 ## Release evidence
 
 The operator authors an exact `distribution.release.version`, and the
@@ -48,10 +45,11 @@ day-2 worker flow ([B739](milestones/backlog.md#b739)).
 A cluster's nodes are all on one path; a mixed cluster is parked
 ([B747](milestones/backlog.md#b747)), and so is one virtual cluster across
 several libvirt hosts ([B743](milestones/backlog.md#b743)). On every path a
-VIP-bearing platform takes installer-owned endpoints only, because the 4.20 to
-4.22 agent installers forward no user-managed load balancer (the installer's
-development branch does); modelling an external load balancer only as `none`
-is Bootwright's choice, not a claim about every release.
+VIP-bearing platform takes installer-owned endpoints only, because the agent
+installer forwards no user-managed load balancer to the service that installs
+the cluster; modelling an external load balancer only as `none` is
+Bootwright's choice, not a claim about every release
+([knowledge](../.agents/knowledge/openshift-agent-vips-and-platforms.md)).
 
 | Topology | Shape | Item | Submilestone |
 | --- | --- | --- | --- |
@@ -108,7 +106,7 @@ Qualification names the tier and the run that proves the row.
 | Cluster network MTU and gateway mode | the `Network` `cluster` install-time manifest | [container clusters](container-clusters.md) | `spec.networking.ovnKubernetesConfig` | [B719](milestones/m3.md#b719) | M3d | in-tree goldens; lab-features |
 | TPM2 disk encryption | `diskEncryption` in `agent-cluster-install.yaml` after `agent create cluster-manifests` | [container clusters](container-clusters.md) | `spec.security.diskEncryption` | [B720](milestones/m3.md#b720) | M3d | in-tree; lab-features |
 | Installation proxy | install-config `proxy` | [container clusters](container-clusters.md) | `spec.install.proxy` | [B721](milestones/m3.md#b721) | M3d | in-tree; lab-features |
-| FIPS | `fips: true`, the installer the release publishes as FIPS-capable, on a controller whose `fips_enabled` reads 1 (the 4.22 refusal text and the documentation name a RHEL 9 host: evidence) | [container clusters](container-clusters.md) | `spec.security.fips` | [B722](milestones/m3.md#b722) | M3d | Implemented in-tree; lab-fips acceptance remains |
+| FIPS | `fips: true`, the installer the release publishes as FIPS-capable, on a controller whose `fips_enabled` reads 1 | [container clusters](container-clusters.md) | `spec.security.fips` | [B722](milestones/m3.md#b722) | M3d | Implemented in-tree; lab-fips acceptance remains |
 | Serving certificates | `APIServer`, `IngressController`, TLS Secrets | [container clusters](container-clusters.md) | `spec.install.servingCertificates` | [B723](milestones/m3.md#b723) | M3d | Needs definition (Q16); a probe run; lab-features serving-certificates row |
 | Registry mirrors | `imageDigestSources`, a mirror pull-secret entry | [container clusters](container-clusters.md) | `spec.install.registries` | [B724](milestones/m3.md#b724) | M3d | in-tree; lab-features |
 | Trust bundle policy | `additionalTrustBundlePolicy` | [installation trust](api/container-clusters.md#additional-installation-trust) | none yet | [B195](milestones/delivered.md#b195) | M3d | Needs definition (Q13) |
@@ -177,7 +175,8 @@ controller or host budget an operator provides.
   installed, each phase's duration, its interruption drills, a settled apply
   that changes nothing, the exported administrator kubeconfig read with an
   independently installed client, and a destroy that proves what it owns
-  absent.
+  absent. The public row summarizes these as the ledger defines it; the fields
+  it does not carry stay in the private evidence archive.
 - **Versions.** When a slice moves a frozen request version, a row accepted on
   an earlier build is repeated, and a context an earlier build applied is
   destroyed with that build first.
@@ -197,9 +196,6 @@ controller or host budget an operator provides.
   rendezvous host, and a physical node's Redfish `TrustedModules` fields
   (`InterfaceType`, `Status.State`), read as observed by the earlier
   implementation.
-
-Not yet met: no operator row of M3 is accepted; tracked as
-[B61](milestones/m3.md#b61).
 
 ## Left out
 

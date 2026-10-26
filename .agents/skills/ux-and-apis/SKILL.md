@@ -1,6 +1,6 @@
 ---
 name: ux-and-apis
-description: Design or review Bootwright public schemas, CLI journeys, help, diagnostics, human and machine output, examples, and compatibility.
+description: Design or review Bootwright public schemas, API kinds and fields, CLI journeys, help, diagnostics, human and machine output, examples, and compatibility.
 ---
 
 # UX And APIs
@@ -35,3 +35,23 @@ code, ordering and which bytes are contractual. Review compatibility of accepted
 input and emitted output together, and update specs, examples and executable
 tests in the same change. Use goldens for contractual bytes and semantic
 assertions otherwise.
+
+## Changing a kind or field
+
+1. Read the [grammar](../../../specs/api.md#public-authoring-grammar),
+   [defaults and effective state](../../../specs/api.md#defaults-normalization-and-effective-state)
+   and the owning kind page section, then the semantic owner section it links.
+2. Resolve omission, null, empty and zero, the default and its precedence, and
+   whether the field is shared intent or implementation-shaped
+   ([native fields](../../../specs/api.md#native-and-implementation-shaped-fields)).
+3. Make the field truthful: every admitted value is realized, refused at
+   `validate` or plan with a named diagnostic, or reported with the
+   `api.deferred` warning. Never admit a field that plan preserves but ignores.
+4. Change the type in `api/v1alpha1`, the kind page and its semantic owner
+   together, and decide whether adding the field moves any frozen request.
+5. Update the effective-output goldens golden-first, and every tracked example
+   the change makes invalid or newly expressible; keep runbooks runnable.
+6. A field that reaches a frozen request follows the contract check in the
+   [Go reference](../code-implementation/references/go.md#contract-versions-and-content-digests).
+7. Name in the report the downstream input charts the item lists; never edit
+   another repository in this change.

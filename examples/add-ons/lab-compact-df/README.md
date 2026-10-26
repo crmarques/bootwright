@@ -37,6 +37,9 @@ cp -R examples/add-ons/lab-compact-df/. "$df_input/"
 
 Customize this copy before initializing its context:
 
+- Review the IBM license terms before use: the tracked `storage/entitlement.yaml`
+  sets `license.accept: true` as a placeholder, and accepting the license is
+  your explicit act.
 - Replace controller `192.0.2.1` in its Machine, service binds and artifact
   certificate SANs together; adjust its FQDN and certificate DNS SANs together.
 - Select an unused guest prefix and bridge, replacing `198.51.100.0/24`,

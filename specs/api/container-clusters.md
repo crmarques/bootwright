@@ -62,11 +62,10 @@ spec:
 An authored image wins as the exact release payload. Declaration validity
 claims no renderer support for that release.
 
-The [topology](#topology) rules for `release.version` are the general rule
-unless a per-minor specialization names its major and minor. A version that
-names no numeric minor takes the general rule, and the installer judges the
-release (D162). A release pinned by image alone declares no minor, so only the
-release-independent topology rules apply to it, and
+The [topology](#topology) rules are the general rule, and the installer judges
+the release (D162). `release.version` keys no specialization. A release pinned
+by image alone declares no minor, so only the release-independent topology
+rules apply to it, and
 [selection](../container-clusters.md#selection-and-refusal) refuses it.
 
 ## Install selection
@@ -192,13 +191,17 @@ Every endpoint has this exact shape:
 | --- | --- | --- | --- | --- |
 | `address` | string | for `openshift` and `external` | — | IP literal owned by `openshift` or `external`; absent for load-balancer and node sources, which resolve it. Never in `::/96`; an IPv4-mapped address is admitted. |
 | `dnsName` | string | no | — | DNS subdomain naming the endpoint; inert for the agent installer apart from `api-int`'s named-certificate collision check, see [the inert fields](../container-clusters.md#selection-and-refusal). |
-| `port` | integer | no | consumer default | `1..65535` when set; inert for the agent installer, see [the inert fields](../container-clusters.md#selection-and-refusal). |
-| `scheme` | string | no | consumer default | `http` or `https`; inert for the agent installer, see [the inert fields](../container-clusters.md#selection-and-refusal). |
-| `prefixLength` | integer | no | — | Valid only with `address`; `1..32` for IPv4 or `1..128` for IPv6; inert for the agent installer. |
-| `interfaceNetworks` | array of strings | no | `[]` | Valid CIDRs narrowing the interface that carries an owned address; effective state masks host bits; inert for the agent installer. |
+| `port` | integer | no | consumer default | `1..65535` when set. The agent installer uses its native endpoint ports, so an authored value other than the native port refuses at plan on the agent path, see [the inert fields](../container-clusters.md#selection-and-refusal). |
+| `scheme` | string | no | consumer default | `http` or `https`. The agent installer uses its native protocols, so an authored value other than the native one refuses at plan on the agent path, see [the inert fields](../container-clusters.md#selection-and-refusal). |
+| `prefixLength` | integer | no | — | Valid only with `address`; `1..32` for IPv4 or `1..128` for IPv6. No agent-installer input consumes it, so an authored value refuses at plan on the agent path. |
+| `interfaceNetworks` | array of strings | no | `[]` | Valid CIDRs narrowing the interface that carries an owned address; effective state masks host bits. No agent-installer input consumes it, so an authored non-empty list refuses at plan on the agent path. |
 | `source.type` | string | no | `openshift` | `openshift`, `external`, `loadBalancer`, or `node`. |
 | `source.loadBalancerRef` | string | conditional | — | Global LoadBalancer; valid only for `loadBalancer`. |
 | `source.bindAddressRef` | string | conditional | sole bind address | LoadBalancer-local `bindAddresses[].name`; valid only for `loadBalancer`. |
+
+Not yet met: the agent path accepts an authored `port`, `scheme`, `prefixLength`
+or `interfaceNetworks` without a diagnostic and installs the cluster without
+it; tracked as [B807](../milestones/backlog.md#b807).
 
 `openshift` and `external` own an authored `address`, which every such slot
 requires: [resolution before boot](../container-clusters.md#installation)
@@ -244,16 +247,17 @@ equals no effective endpoint address of another selected ContainerCluster, no
 IP address a Machine declares other than the node a single-node cluster's
 `node` source names, no host address of a managed libvirt network attachment,
 no bind or endpoint address of a managed DNSServer, NTPServer, Proxy,
-ArtifactServer or Registry, no emulated controller's bind address, and no
+ArtifactServer or Registry, no emulated BMC's bind address, and no
 LoadBalancer bind address other than the one its own `loadBalancer` source
 selects; two clusters never select one LoadBalancer bind address. A wildcard
 bind claims no address here. Within one cluster `api-int` may equal `api`, and
 on platform `none` slots may share one external or load-balancer address. Each
 refusal is an `api.invariant` at the slot's address, or at its source when the
 address is resolved, naming the other holder. A managed libvirt network's
-prefix belongs to one context through its exclusive reservation, so no address
-in it is shared across contexts; on any other network Bootwright coordinates no
-address, as for node addresses.
+prefix belongs to one context through its exclusive reservation, so no other
+context's managed attachment shares an address in it; an external attachment
+claims no prefix, and on any other network Bootwright coordinates no address,
+as for node addresses.
 
 
 ## Credentials and certificates
@@ -433,7 +437,7 @@ Desired-state compilation accepts and preserves repeated authored taints. A
 native projection deduplicates by `key` plus `effect`; explicitly authoring the
 standard infra taint is therefore a no-op rather than an error.
 
-Every `machineRef` requires capability `openshift-node` and `os.provided: false`.
+Every `machineRef` requires the Machine capability `openshift-node` and `os.provided: false`.
 Network and root-device input comes only from that Machine. The common
 [graph invariants](../api.md#graph-validation) enforce unique node binding.
 
@@ -448,19 +452,25 @@ no `worker` or `infra` node, because the agent installer refuses compute
 replicas beside a single control-plane replica. Each of these refusals is an
 `api.invariant` at `spec.nodes`.
 
-The general rule applies to every release minor without a specialization
-(D162); the installer judges the release itself. A per-minor specialization
-replaces it only where an installer accepts a different roster.
+The general rule applies to every release, and the installer judges the release
+itself (D162). Where an installer first accepts a different roster, the
+difference is a version specialization whose condition reads the frozen
+installer artifact, never `release.version`
+([implementations and version variation](../architecture.md#implementations-and-version-variation)),
+so the refusal it changes fires at plan, not at admission.
 
 | Rule | Master counts | Read from `openshift/installer` |
 | --- | --- | --- |
 | general | 1, 3, 4, 5 | 4.21 [agent control plane](https://github.com/openshift/installer/blob/release-4.21/pkg/asset/agent/installconfig.go#L217-L232), [agent single node](https://github.com/openshift/installer/blob/release-4.21/pkg/asset/agent/installconfig.go#L234-L263), [install-config control plane](https://github.com/openshift/installer/blob/release-4.21/pkg/types/validation/installconfig.go#L758-L771); 4.22 [agent control plane](https://github.com/openshift/installer/blob/release-4.22/pkg/asset/agent/installconfig.go#L220-L305), [agent single node](https://github.com/openshift/installer/blob/release-4.22/pkg/asset/agent/installconfig.go#L307-L336), [install-config two nodes](https://github.com/openshift/installer/blob/release-4.22/pkg/types/validation/installconfig.go#L1731-L1753); 4.23 [agent control plane](https://github.com/openshift/installer/blob/release-4.23/pkg/asset/agent/installconfig.go#L220-L305), [agent single node](https://github.com/openshift/installer/blob/release-4.23/pkg/asset/agent/installconfig.go#L307-L336), [install-config two nodes](https://github.com/openshift/installer/blob/release-4.23/pkg/types/validation/installconfig.go#L1803-L1825) |
 
-There is no per-minor specialization. The rule is `generalTopology` in
-`internal/containercluster/topology.go`; a per-minor specialization, when an
-installer first differs, is a record there with its own row in this table and a
-row of the
+There is no specialization. The rule is `generalTopology` in
+`internal/containercluster/topology.go`; a specialization, when an installer
+first differs, is a record with its own row in this table and a row of the
 [version-specialization catalog](../../.agents/knowledge/version-specializations.md).
+
+Not yet met: `topologyFor` looks a rule up by the authored `release.version` in
+admission instead of reading the frozen installer artifact at plan; tracked as
+[B811](../milestones/backlog.md#b811).
 `TestTopologyTableMatchesSpec` keeps this table and the code one, and
 `TestDocsVersionSpecializationCatalogMatchesRegistries` keeps the code and the
 catalog one.

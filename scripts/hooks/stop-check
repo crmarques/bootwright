@@ -1,0 +1,31 @@
+#!/bin/sh
+# Advisory end-of-turn check, run by the agent runtime's Stop hook with the
+# hook's JSON input on stdin. It runs `make focus` in a task worktree whose
+# content changed since the last pass, and asks for one more turn (exit 2) only
+# when that fails. It never blocks twice in a row (stop_hook_active), never
+# runs in the primary checkout, and exits 0 whenever it cannot tell what to
+# check. A pass is cached in the worktree's Git directory as stop-check.ok.
+input=$(cat)
+case "$input" in
+*'"stop_hook_active":true'* | *'"stop_hook_active": true'*) exit 0 ;;
+esac
+gd=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null) || exit 0
+cd_=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0
+test "$gd" = "$cd_" && exit 0
+top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$top" || exit 0
+if git diff --quiet HEAD -- 2>/dev/null &&
+    test -z "$(git ls-files --others --exclude-standard)"; then
+    exit 0
+fi
+key=$({
+    git rev-parse HEAD
+    git diff HEAD --binary
+    git ls-files --others --exclude-standard
+    git ls-files --others --exclude-standard -z | xargs -0r git hash-object --
+} 2>/dev/null | git hash-object --stdin) || exit 0
+test "$key" = "$(cat "$gd/stop-check.ok" 2>/dev/null)" && exit 0
+make -n focus >/dev/null 2>&1 || exit 0
+make focus >&2 || exit 2
+printf '%s\n' "$key" >"$gd/stop-check.ok"
+exit 0

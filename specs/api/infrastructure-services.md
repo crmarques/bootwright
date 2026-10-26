@@ -19,10 +19,10 @@ ownership of the external service.
 | --- | --- | --- | --- |
 | `spec.management` | string | All services | Required `managed` or `external`. |
 | `spec.machineRef` | string | Managed services | Required global `Machine` placement reference; forbidden for external. |
-| `spec.implementation` | string | Managed Proxy, DNSServer, NTPServer, Registry, LoadBalancer | Required implementation listed below; forbidden for external and ArtifactServer. |
+| `spec.implementation` | string | Managed Proxy, DNSServer, NTPServer, Registry, LoadBalancer | Required implementation listed below; forbidden for external and ArtifactServer. With the kind it selects the lifecycle definition that realizes the service. |
 | `spec.image` | object | Managed container services | Optional image pins, forbidden for external. |
-| `spec.image.local` | string | With `image` | Local image reference. |
-| `spec.image.public` | string | With `image` | Public image reference. |
+| `spec.image.local` | string | With `image` | Digest-pinned image reference, used first when set. |
+| `spec.image.public` | string | With `image` | Digest-pinned image reference, used when `local` is absent. |
 
 A managed service plans one lifecycle block whose identity is its name behind
 a fixed prefix, and a block identity is at most 63 bytes. Validate therefore
@@ -36,10 +36,11 @@ external service plans no block and has no such limit.
 | `DNSServer` | `dns-<name>` | 59 |
 | `NTPServer` | `ntp-<name>` | 59 |
 
-An image block sets at least one reference. Each reference is pinned by content
-digest, `<repository>@sha256:<64 hex>`, whose digest normalizes to lowercase,
-because planning resolves no tag; validate refuses a tag at that reference, in
-kind defaults too. The selected image belongs to this service; fleet defaults
+An image block sets at least one reference. For every managed kind the image
+is `local`, else `public`, else the executable's compiled default. Each
+reference is pinned by content digest, `<repository>@sha256:<64 hex>`, whose
+digest normalizes to lowercase, because planning resolves no tag; validate
+refuses a tag at that reference, in kind defaults too. The selected image belongs to this service; fleet defaults
 can supply it through the corresponding kind entry.
 Image declarations neither select an executable adapter nor establish release
 support.
@@ -102,7 +103,10 @@ bound.
 
 Managed DNSServer additionally accepts optional `additionalIngressHosts[]`
 and `forwarders[]`; forwarders are IP resolver addresses. Managed NTPServer
-accepts optional `upstreamSources[]` containing IP or DNS NTP sources.
+accepts optional `upstreamSources[]` containing IP or DNS NTP sources. With
+none declared or none reachable it answers from its host's clock at a fixed
+local stratum, so its [readiness](../infrastructure-services.md#managed-network-services)
+proves that it answers, not that it is synchronized with an upstream source.
 
 External forms have these exact connection fields:
 
@@ -151,7 +155,9 @@ endpoint defaults are not inherited across an explicit management change.
 
 An external ArtifactServer instead requires non-empty `endpoints[]` with
 unique `name` and absolute HTTP(S) `url`. It forbids deployment, retention and
-TLS-serving configuration. The retired `tls.certificateRef` is rejected.
+TLS-serving configuration, and `spec.management: external` is refused at
+admission until a consumer reads one, because every consumer publishes into the
+server it selects. The retired `tls.certificateRef` is rejected.
 
 An `artifactServerEndpoint` consumer has required scalar `serverRef` to an
 ArtifactServer followed by required scalar `endpointRef` to one of its
@@ -175,6 +181,17 @@ endpoint selects it through `source.loadBalancerRef` and optional
 `source.bindAddressRef`. Omission of the local reference is valid only for a
 single bind address. [Container endpoints](container-clusters.md#endpoints)
 own address, topology and VIP constraints.
+
+No capability realizes a managed LoadBalancer or a managed Registry. Both are
+admitted, and a managed one refuses at plan as an unclaimed managed service
+([stages](../state-reconciliation.md#stages-and-the-pause-boundary)); declare
+`management: external` to use one.
+
+Not yet met: validate admits an external ArtifactServer that no consumer reads,
+and a managed Registry or LoadBalancer although nothing realizes it; tracked as
+[B827](../milestones/backlog.md#b827). A managed service's lifecycle definition
+is selected by its kind alone, not by its kind and `spec.implementation`;
+tracked as [B810](../milestones/backlog.md#b810).
 
 ## Consumer selections
 
@@ -246,9 +263,11 @@ endpoint rules as other hosts. Controller selection does not imply placement,
 create a service, or install its runtime.
 
 Reference resolution is not a readiness edge. An installation that selects a
-managed DNSServer or NTPServer waits for it; one that selects an external
-DNSServer or NTPServer uses its declared `address` and gains no readiness edge,
-because no block of this product realizes it. The runtime edges between a
+managed DNSServer, NTPServer or Proxy waits for it, as a container
+installation does for its Proxy
+([installation](../container-clusters.md#installation)); one that selects an
+external service uses its declared `address` or connection and gains no
+readiness edge, because no block of this product realizes it. The runtime edges between a
 service, its host and its consumers belong to
 [infrastructure services](../infrastructure-services.md#selection-and-refusal)
 and the [dependency DAG](../state-reconciliation.md#plan-and-execution).

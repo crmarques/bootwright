@@ -78,9 +78,9 @@ make build
 ./bin/bootwright context update --name libvirt-network-variants --input-dir "$variants_input" --yes
 ./bin/bootwright secret generate
 ./bin/bootwright secret check
+./bin/bootwright plan
 ./bin/bootwright apply --stage controller
 ./bin/bootwright preflight controller --context libvirt-network-variants
-./bin/bootwright plan
 ./bin/bootwright apply --stage infra-components
 ./bin/bootwright apply
 ./bin/bootwright status

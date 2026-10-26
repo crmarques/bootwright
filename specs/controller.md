@@ -389,6 +389,23 @@ selects the host's `nmstate` package for the installer's `nmstatectl gc`
 invocation; the `iputils` package serves the virtual-IP duplicate-address
 probe.
 
+Each target tool's SHA-256 comes from its publisher's own metadata, read over
+TLS to that publisher and never from a mirror
+([dependency versions](api/environment.md#dependency-versions)), and the
+adapter verifies the source against it before extraction. No publisher
+signature is verified for any tool, so that TLS and the publisher's metadata
+are the whole authenticity a source has, a named widening of
+[publisher authenticity](security.md#cryptography-and-supply-chain):
+
+| Tool | Release resolved from | SHA-256 from |
+| --- | --- | --- |
+| OpenShift `oc`, `kubectl` and installer | the declared release | `sha256sum.txt` beside the archive on `mirror.openshift.com` |
+| OKD `oc`, `kubectl` and installer | the declared release's GitHub release | the release asset's digest, else `sha256sum.txt` beside the archive |
+| standalone `kubectl` | the declared release, or `dl.k8s.io/release/stable.txt` for `latest` | `<archive>.sha256` on `dl.k8s.io` |
+| Helm | the `helm/helm` GitHub release | `<archive>.sha256sum` on `get.helm.sh` |
+| `govc` | the `vmware/govmomi` GitHub release | the release asset's digest, else the release's `checksums.txt` |
+| `virtctl` | the `kubevirt/kubevirt` GitHub release | the release asset's digest; a release without one refuses |
+
 A context that selects nothing beyond the host
 baseline contributes no block at all.
 
@@ -813,8 +830,14 @@ digest and the ABI, with the ABI and `ansible-core` release a refusal names
 ([dependency safety](state-reconciliation.md#dependency-safety-during-recovery)).
 An OS Python z-stream update, an OS release upgrade that keeps the ABI, and any
 rebuild with the same lock continue a live operation; a new lock or another
-ABI refuses its continuation, naming the build that registered it, whose
-runtime this host keeps, or the destroy that takes back what it owns.
+ABI refuses its continuation, naming the build that registered it, whose setup
+restores its runtime, fetching any wheel the cache no longer holds, or the
+destroy that takes back what it owns.
+
+Not yet met: that refusal says this host keeps the registering build's
+runtime, which [retention](#publication-and-interrupted-setup) or a
+setup-format discard may have retired; tracked as
+[B816](milestones/backlog.md#b816).
 
 No service port or container name is reserved by setup.
 [Infrastructure services](infrastructure-services.md#host-reservations) defines
@@ -841,12 +864,17 @@ removed.
 
 **An unknown outcome blocks every consumer.** A launch that finds the pending
 intent refuses `controller.state`, "a controller setup (`setup-000042`) was
-interrupted before it finished", with the remedy `run bootwright setup`.
-Setup itself re-inspects: its plan names the interrupted run and the step it
-stopped in and asks for confirmation, then installs only what is still missing
-and publishes a runtime only whole, so both effects are idempotent. No
-stranded, abandoned or canceled receipt exists, and no setup refuses an
-earlier one's route or executable.
+interrupted before it finished", with the remedy `run bootwright setup`, adding
+`--wheel-mirror` on a host that cannot reach the wheel origins, or, when a
+receipt names one, the setup of the build whose runtime it names. Setup itself
+re-inspects: its plan names the interrupted run and the step it stopped in and
+asks for confirmation, then installs only what is still missing and publishes
+a runtime only whole, so both effects are idempotent. No stranded, abandoned
+or canceled receipt exists, and no setup refuses an earlier one's route or
+executable.
+
+Not yet met: the remedy names only `run bootwright setup`; tracked as
+[B816](milestones/backlog.md#b816).
 
 **Format healing.** A setup record that cannot be read or carries another
 format, or a setup subtree holding an entry this build does not list, is
@@ -856,16 +884,17 @@ taking every runtime's lock first so it never removes one in use, and
 proceeds. Because the discard removes every runtime and the wheel cache, the
 plan treats them as absent: its `runtime` row counts every locked wheel as one
 to download, and setup fetches, builds and publishes the runtime before the
-receipt names it. A launch refuses `controller.state`, "the controller setup record
-was written by another Bootwright build", with the remedy `run bootwright
-setup`. A future setup-format change therefore never strands a context.
+receipt names it. A launch refuses `controller.state`, "the controller setup
+record was written by another Bootwright build", with the remedy `run
+bootwright setup`. A future setup-format change therefore never leaves setup
+unable to heal its own state, but the discard also removes the previous
+runtime: an operation registered under the discarded closure continues only
+through its registering build's setup, which fetches its wheels again and so
+needs network or `--wheel-mirror`, and which discards this build's subtree in
+turn, or through the removal that supersedes it.
 
-**Publication.** A runtime is published only whole: `runtime.json` written,
-one `syncfs` of the store filesystem, a rename that never replaces, and a
-synchronized parent. A concurrent publisher that loses discards its stage, and
-stages a killed run left are swept under `setup/lock`, however many there are.
-A launch holds a runtime only while its `runtime.json` names that runtime's
-digest.
+**Publication.** A runtime is published only whole, as the
+[setup subtree](contexts/controller-record.md#the-setup-subtree) defines.
 
 **Retention.** Setup's runs are bounded to the newest 8: opening a run removes
 the oldest beyond 7 first. The receipt names the current runtime and the
@@ -885,7 +914,8 @@ reports:
   entry is removed.
 
 The previous runtime keeps a live operation registered with the earlier lock
-continuable offline. A fault in retention never changes the setup's outcome or
+continuable offline until a later lock change or a setup-format discard
+retires it. A fault in retention never changes the setup's outcome or
 receipt: setup reports it as a `controller.runtime-retention` line and the next
 setup retries. A setup with nothing to do writes nothing and retires nothing.
 
@@ -897,12 +927,8 @@ elevated command with no deadline of its own, so a second operator signal is
 the only kill ([local privilege](cli.md#local-privilege-and-user-identity)).
 
 **The cut-over refusal.** A store a build before the setup v2 cut-over wrote
-holds registry version 5 and controller record version 2, which this build
-neither reads nor converts. Every access refuses with the fresh-install
-message and remedy [contexts](contexts.md#storage-locking-and-publication)
-states, which names the destroy and context deletion to run with the build
-that wrote it, and the removal of `/var/lib/bootwright` and
-`/var/lib/bootwright-staging` as root before this build's setup. Setup's first
+refuses every access with the fresh-install refusal
+[contexts](contexts.md#storage-locking-and-publication) owns; setup's first
 read refuses so, before any dnf preview, plan or confirmation.
 
 An input update may change a context's controller prerequisite intent, which
@@ -1025,7 +1051,11 @@ failures. A fake adapter proves this contract and never proves an executed
 dnf install. Collection syntax, pinned lint, sanity, unit and local
 integration checks qualify the shipped Ansible entrypoints as content; sanity
 also imports every module and module utility under a pinned interpreter of the
-oldest Python a managed host may run. Each release a build runs on is an
+oldest Python a managed host may run, which
+[development](../docs/development.md#lock-refresh-and-tested-hosts) records. A
+fixed worker the automation sends to a managed host as source, and an
+entrypoint it runs inside a container image, imports only the target
+interpreter's standard library. Each release a build runs on is an
 [acceptance ledger](../docs/acceptance.md#ledger) row, in place of a list of
 qualified releases.
 [Milestones](milestones.md#completion-and-verification) own the verification

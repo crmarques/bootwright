@@ -62,6 +62,9 @@ installation also remains refused by the
 
 ## Storage and add-ons
 
+The tracked `entitlements/ceph.yaml` sets `license.accept: true` as a
+placeholder; review the IBM license terms and accept them yourself in a copy.
+
 Storage children select `clusterRef` explicitly and reference their placement
 policies and pools. The cluster's native MON/MGR/OSD services use registered
 hostnames; the witness belongs to MON placement without OSD devices. The stretch

@@ -15,10 +15,14 @@ provider, NIC and address refs inside one machine, listener and endpoint refs
 inside one service, and attachment refs inside one provider. Loading order
 never chooses among duplicates.
 
+A field that references a Secret names its
+[class](../secrets.md#immutable-binding-and-contexts), effect material or
+access credential.
+
 ## InfraProvider
 
 `InfraProvider` declares substrate intent, not an adapter selection. Its
-spec contains exactly one implementation arm alongside optional
+spec contains exactly one substrate arm alongside optional
 `networkAttachments`. The arm name selects the substrate; `spec.type` is not
 accepted. Missing, multiple, or unknown arms fail validation, as do missing
 required fields inside the selected arm.
@@ -42,9 +46,9 @@ the provider selects, naming that limit.
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `spec.baremetal.boot.method` | string | no | `redfishVirtualMedia` | `redfishVirtualMedia`; the default materializes. Another value fails validation rather than naming a boot path no implementation performs. |
-| `spec.baremetal.defaults.bmc.credentialsRef` | string | no | — | Default `usernamePassword` `Secret` reference for a Machine that omits its own BMC credentials. |
+| `spec.baremetal.defaults.bmc.credentialsRef` | string | no | — | Default `usernamePassword` `Secret` reference for a Machine that omits its own BMC credentials. Access credential. |
 | `spec.baremetal.defaults.bmc.tls.verify` | boolean | no | `true` | Default for a machine BMC whose own `tls.verify` is absent. |
-| `spec.baremetal.defaults.bmc.tls.trustBundleRef` | string | no | — | Default `caBundle` `Secret` reference for a machine BMC that keeps verification; refused beside `tls.verify: false`. |
+| `spec.baremetal.defaults.bmc.tls.trustBundleRef` | string | no | — | Default `caBundle` `Secret` reference for a machine BMC that keeps verification; refused beside `tls.verify: false`. Access credential. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.trust` | string | no | `import-certificate` | `import-certificate` or `established`. `disable-verification` is refused here: it is a per-Machine exception and never a provider default. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | — | Refused: it is valid only with `disable-verification`, which a provider never defaults. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Valid only with `import-certificate`. |
@@ -66,7 +70,7 @@ rather than adding to it: it is the one anchor of the controller-to-BMC leg.
 A placement host reached over SSH verifies with its own interpreter, which may
 not accept a partial chain, so the bundle holds the issuing root rather than
 only an intermediate. A `caBundle` Secret holds CA certificates only
-([secrets](../secrets.md)), so a controller presenting a self-signed
+([secrets](../secrets.md)), so a BMC presenting a self-signed
 certificate that is not a CA cannot be anchored by one and keeps
 `tls.verify: false`.
 
@@ -74,15 +78,15 @@ certificate that is not a CA cannot be anchored by one and keeps
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `spec.libvirt.machineRef` | string | yes | — | Global `Machine` reference; the machine has capability `libvirt`. |
+| `spec.libvirt.machineRef` | string | yes | — | Global `Machine` reference; the machine has the Machine capability `libvirt`. |
 | `spec.libvirt.uri` | string | yes | — | `qemu:///system`. Effects run on `machineRef` and the emulated BMC mounts only that host's libvirt socket, so no other URI, remote or command transport is admitted. |
 | `spec.libvirt.bmcEmulationDefaults.enabled` | boolean | no | `true` | Current contract accepts only the enabled form. |
 | `spec.libvirt.bmcEmulationDefaults.protocol` | string | no | `redfish` | `redfish`. |
 | `spec.libvirt.bmcEmulationDefaults.emulator` | string | no | `sushy-tools` | `sushy-tools`. |
-| `spec.libvirt.bmcEmulationDefaults.bindAddress` | string | yes | — | Listener address; one unicast IP address, so that every hosted Machine's controller endpoint names it: not unspecified, multicast or `255.255.255.255`, and not an IPv6 link-local, zoned or IPv4-mapped address. Loopback is admitted, and an IPv6 address normalizes to the spelling Go's `netip` prints. |
+| `spec.libvirt.bmcEmulationDefaults.bindAddress` | string | yes | — | Listener address; one unicast IP address, so that every hosted Machine's BMC endpoint names it: not unspecified, multicast or `255.255.255.255`, and not an IPv6 link-local, zoned or IPv4-mapped address. Loopback is admitted, and an IPv6 address normalizes to the spelling Go's `netip` prints. |
 | `spec.libvirt.bmcEmulationDefaults.port` | integer | no | `8000` | `1..65535`; the first port of the contiguous range the provider's emulated BMCs listen on. |
-| `spec.libvirt.bmcEmulationDefaults.auth.credentialsRef` | string | yes | — | `usernamePassword` `Secret`; required while emulation is enabled. |
-| `spec.libvirt.bmcEmulationDefaults.certificateRef` | string | yes | — | Generated or stored `tlsCertificate` serving the emulated HTTPS controller; its SANs cover `bindAddress`, and admission refuses a generated one whose `ipAddresses` do not. Consumers pin its public certificate. Only emulator apply receives its private key. |
+| `spec.libvirt.bmcEmulationDefaults.auth.credentialsRef` | string | yes | — | `usernamePassword` `Secret`; required while emulation is enabled. Effect material: the emulator is given its password file. |
+| `spec.libvirt.bmcEmulationDefaults.certificateRef` | string | yes | — | Generated or stored `tlsCertificate` serving the emulated HTTPS BMC; its SANs cover `bindAddress`, and admission refuses a generated one whose `ipAddresses` do not. Consumers pin its public certificate. Only emulator apply receives its private key. Effect material. |
 | `spec.libvirt.machineProfiles` | array | no | `[]` | Provider-local set keyed by `name`; common profile shape below. |
 
 `bmcEmulationDefaults` is required and its defaults materialize. Only a
@@ -94,7 +98,7 @@ Machine that names the provider is not realized and claims no port. The range
 ends at or below `65535`, and the ranges of providers on the same host do not
 overlap. The retired `vMediaPort` is rejected: the emulator fetches
 media from the artifact server and opens no second listener.
-[Substrates](../substrates.md#machine-realization) owns the controller each
+[Substrates](../substrates.md#machine-realization) owns the management controller each
 Machine receives. A libvirt provider whose name a Machine realized on a libvirt
 provider also takes refuses at admission, because that Machine's disk directory
 would hold the provider's virtual-media pool
@@ -119,8 +123,7 @@ and [managed-OS installation](../managed-os.md#installation). Their field
 detail is recorded in [refused machine arms](../deferred/machine-arms.md),
 which [B87](../milestones/m1.md#b87) and [B99](../milestones/m1.md#b99) revive.
 A Machine's [`network.interfaceAttachments`](#network-configuration) is read by
-libvirt and KubeVirt Machines; until libvirt reads it, it refuses at admission
-on every realized substrate.
+libvirt and KubeVirt Machines.
 
 ### Machine profiles and network attachments
 
@@ -157,11 +160,25 @@ changing media requires a new realization rather than modifying an owned disk.
 | `baremetal` | none | Names a physical network a Machine may select; it configures nothing. VLAN and bond interfaces are declared in the Machine's NMState network; the attachment configures nothing for them. |
 | `libvirt` | required string `bridge`; optional string `management`; conditional string `address`; conditional string `forward`; optional integer `mtu` | `bridge` is 1 to 15 bytes of letters, digits, `_`, `.` or `-`, and neither `.` nor `..`; a `+` is refused because firewalld reads it as an interface wildcard and a managed network puts its bridge in zone `trusted` (`TestABridgeNameRefusesFirewalldsWildcard`). `management` is `managed` or `external` and defaults to `external`. `external` names an existing bridge and forbids `address` and `forward`. `managed` requires `address`, the host's IP with its prefix on a bridge Bootwright defines, and permits `forward`, `nat` or `none`, defaulting to `nat`; [substrates](../substrates.md#provider-host-realization) owns the network it defines. On one host, no two providers declare a managed attachment of one name, a bridge a managed attachment defines is named by no other attachment, of the same provider or another, and no two managed attachments, of one provider or two, declare overlapping prefixes, IPv4 or IPv6; each refuses at admission, naming both providers. A libvirt provider declares at most 20 managed attachments (its host reservation's key bound). |
 
+Only a managed libvirt attachment configures a network. A bare-metal
+attachment, an external bridge and the physical fabric behind them are named and
+verified, never changed ([product scope](../project.md#product-scope)).
+
 A libvirt attachment may declare integer `mtu` (576 to 65,536), the largest frame its network carries:
 a managed network is defined with it, and an external bridge is proved to carry
 it. A guest interface whose declared `mtu` exceeds its attachment's, or 1,500
 when the attachment declares none, refuses. A managed network's one prefix may
 be IPv4 or IPv6.
+
+An `external` attachment claims only the shared key `bridge-use:<name>`, never
+an exclusive reservation, so another context's managed attachment may define
+the same bridge. The removal of a managed network
+therefore refuses while another context's attachment uses its bridge
+([substrates](../substrates.md#provider-host-realization) owns the rule).
+
+Not yet met: an external attachment claims nothing and no removal checks
+another context's use of a bridge; tracked as
+[B803](../milestones/backlog.md#b803).
 
 ## Machine
 
@@ -179,20 +196,20 @@ refusal.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `spec.capabilities` | array of strings | no | `[]` | Unique values from `openshift-node`, `ceph-node`, `ceph-arbiter`, `container-runtime`, and `libvirt`; `ceph-arbiter` requires `ceph-node`. |
+| `spec.capabilities` | array of strings | no | `[]` | Unique Machine capability values from `openshift-node`, `ceph-node`, `ceph-arbiter`, `container-runtime`, and `libvirt`; `ceph-arbiter` requires `ceph-node`. |
 | `spec.placement.site` | string | conditional | — | `Environment.spec.sites[].name`; required only where a consumer needs site placement. |
 | `spec.substrate.providerRef` | string | conditional | — | Global `InfraProvider`; required whenever `os.provided: false`. |
 | `spec.substrate.profileRef` | string | conditional | — | Provider-local `machineProfiles[].name`; required for a virtual install machine and forbidden for bare metal. |
 | `spec.hardware.nics` | array | conditional | `[]` | Set keyed by `name`; required for a bare-metal install machine. |
 | `spec.hardware.nics[].name` | string | yes | — | Machine-local NIC name. |
 | `spec.hardware.nics[].macAddress` | string | conditional | — | EUI-48; required on every bare-metal install NIC; refused on a libvirt provider's Machine, whose MACs the provider derives. |
-| `spec.hardware.management.bmc` | object | conditional | — | Required for bare-metal install; refused on a libvirt provider's Machine, whose controller is its emulated BMC; exact shape below. |
+| `spec.hardware.management.bmc` | object | conditional | — | Required for bare-metal install; refused on a libvirt provider's Machine, whose management controller is its emulated BMC; exact shape below. |
 | `spec.os.provided` | boolean | yes | — | Selects the OS lifecycle with `installProfileRef`. |
 | `spec.os.installProfileRef` | string | conditional | — | Global `MachineInstallProfile`; valid only when `provided: false`. |
 | `spec.os.install.ntp` | array of selections | no | install-profile selections | NTPServer selections for a Bootwright-installed Machine; `[]` clears profile selections. |
 | `spec.hardware.eraseOnRemoval` | object | no | retain | Opt-in `method: logicalOverwrite` with explicit `targets`, each requiring `deviceName`, `wwn`, `serialNumber`, and exact `sizeBytes`; see [physical erase](../state-reconciliation.md#opt-in-physical-logical-overwrite). |
 | `spec.os.install.rootDeviceHints` | object | conditional | — | Exact root-device fields below; bare-metal install requires `deviceName` or `wwn`. |
-| `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` whose pair the installation delivers as this machine's SSH host key; required for a bare-metal Bootwright-installed Machine and forbidden on every other Machine. Unique across Machines and no other credential. |
+| `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` whose pair the installation delivers as this machine's SSH host key; required for a bare-metal Bootwright-installed Machine and forbidden on every other Machine. Unique across Machines and no other credential. Effect material. |
 | `spec.proxy` | choice object | no | profile choice or direct access | Lifecycle-dependent atomic Machine-owned selection below; emits immediately after `os`. |
 | `spec.network` | object | no | contacts normalized below | Network selection, named contacts/static assignments, attachments, and bindings below. |
 | `spec.access` | object | lifecycle-dependent | normalized as below | Local or SSH access plus optional root-login posture. |
@@ -252,7 +269,7 @@ the context, Machine and interface names, and realizes the Machine's management
 controller as its emulated BMC
 ([substrates](../substrates.md#machine-realization)). Each
 `hardware.nics[].macAddress` refuses with `api.invariant` at its own path, and
-an authored controller refuses once at `hardware.management.bmc`, however
+an authored BMC refuses once at `hardware.management.bmc`, however
 complete, and no other BMC rule applies to it. NIC names alone stay admitted,
 and such a Machine's MACs take no part in the graph-wide uniqueness check.
 
@@ -264,9 +281,9 @@ and such a Machine's MACs take no part in the graph-wide uniqueness check.
 | --- | --- | --- | --- | --- |
 | `address` | string | with the BMC block | — | Redfish endpoint naming one exact ComputerSystem, in the one canonical spelling below, on every Machine that authors it. |
 | `protocol` | string | no | `redfish` | `redfish`. |
-| `credentialsRef` | string | resolved with the BMC block | configured provider default | `usernamePassword` `Secret`; machine-local values take precedence. |
+| `credentialsRef` | string | resolved with the BMC block | configured provider default | `usernamePassword` `Secret`; machine-local values take precedence. Access credential. |
 | `tls.verify` | boolean | no | `true` | Whether the controller-to-BMC TLS leg is verified: against `tls.trustBundleRef` alone when it is set, and against the system trust store otherwise. |
-| `tls.trustBundleRef` | string | no | configured provider default | `caBundle` `Secret`; the one anchor of the controller-to-BMC leg. Refused beside `tls.verify: false`. |
+| `tls.trustBundleRef` | string | no | configured provider default | `caBundle` `Secret`; the one anchor of the controller-to-BMC leg. Refused beside `tls.verify: false`. Access credential. |
 | `virtualMedia.tls.trust` | string | no | `import-certificate` | How the BMC is made to trust the artifact server it fetches media from. `import-certificate` uses the device certificate collection or the qualified discovered SecurityService [media trust contract](../substrates.md#identity-and-power-operations); `established` changes nothing, because the BMC already trusts the server; `disable-verification` turns the device's verification off before the insert and is the per-Machine exception below. |
 | `virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Only with `disable-verification`; the eject turns verification back on. |
 | `virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Only with `import-certificate`; the eject deletes the imported certificate. |
@@ -278,7 +295,10 @@ authoritative manager switch refuses `disable-verification` before any write.
 
 `address` is what a destructive operation is aimed at, so it has one spelling:
 admission accepts only that spelling, and nothing rewrites it before the
-controller claim and every request are derived from it. It starts with exactly
+BMC reservation and every request are derived from it. The reservation key
+fills the scheme's default port when the address omits it, so two spellings of
+one endpoint name one reservation; the address itself is not rewritten. It
+starts with exactly
 `http://` or `https://`, is an absolute URL with no userinfo, query, fragment
 or percent-encoding, even an empty one, and every byte is printable ASCII other
 than space. Its host is a lowercase DNS name whose last label is not all
@@ -299,7 +319,7 @@ kind default of it, for a Machine or an InfraProvider, is refused at its
 `$.spec.defaults.<Kind>` path. A managed-OS installation that delivers private
 material refuses it before registration
 ([managed OS](../managed-os.md#installation)). Under `established` such an
-installation's insert first reads whether the controller verifies the artifact
+installation's insert first reads whether the BMC verifies the artifact
 server and refuses unless it does
 ([identity and power operations](../substrates.md#identity-and-power-operations)).
 
@@ -310,7 +330,8 @@ only from ASCII letters, digits, `.`, `_`, `-`, `/`, `:` and `+`, so
 whitespace, control characters, quotes, other shell metacharacters and `.` or
 `..` segments are refused, because the path reaches installer directives and
 shell words verbatim. `minSizeGigabytes` is non-negative. For a bare-metal
-install, `deviceName` or `wwn` is mandatory; predicate-only hints are not an
+install, `deviceName` or `wwn` is mandatory, and a Bootwright-installed Machine
+narrows `deviceName` to its by-id form below; predicate-only hints are not an
 adequate destructive target selector. On a Machine whose provider is `libvirt`,
 each of `wwn`, `hctl` and `serialNumber` refuses with `api.invariant` at its own
 path, because the disks that substrate creates carry no WWN, SCSI address or
@@ -321,6 +342,21 @@ every hint. Which hints an installation carries,
 and which it refuses, is the rule of the consumer that installs the Machine:
 [managed OS](../managed-os.md#installation) or the
 [cluster installer](../container-clusters.md#selection-and-refusal).
+
+A bare-metal Bootwright-installed Machine names its root disk by a durable
+identity: `deviceName` is `/dev/disk/by-id/wwn-0x` followed by 16 or 32
+lowercase hexadecimal digits, the form
+[managed physical hosts](../storage.md#devices-and-destructive-ownership) use
+for OSD paths. The installation erases that disk, and a kernel name such as
+`/dev/sda` moves with probe order, firmware and hot-added disks, so it refuses
+at `os.install.rootDeviceHints.deviceName`, naming the by-id form. The
+installation's `%pre` resolves the name and stops before any storage directive
+unless it is a whole block device
+([physical installation](../managed-os.md#physical-installation)).
+
+Not yet met: a bare-metal Bootwright-installed Machine's `deviceName` may be
+any kernel device path; tracked as
+[B802](../milestones/backlog.md#b802).
 
 ### Network configuration
 
@@ -470,6 +506,13 @@ default therefore fails for a fleet containing downstream-installer Machines.
 Use install-profile defaults to share Bootwright OS installation proxy policy
 without adding a proxy field to those downstream Machines.
 
+Machine and install-profile choices receive no derived `noProxy` entries: the
+entries are the authored ones, unlike
+[container installation](../container-clusters.md#installation-features), which
+states its derived set. A Machine choice carries controller acquisition and
+installed-system repository traffic, and the installation's own artifact
+endpoints are reached directly.
+
 Provided-machine proxy intent does not request an OS proxy reconfiguration or
 change ambient process trust. Each executable consumer defines how
 it uses this Machine-owned egress choice. The controller is identified only
@@ -503,10 +546,10 @@ installer-provisioned machine, omission means no Bootwright login.
 | `port` | integer | no | `22` | `1..65535` effective. |
 | `user` | string | no | none for operator identity: the client then logs in as the account it runs as, today the controller's root account in the elevated child; otherwise `root` | POSIX user name; required explicitly with password auth; `root` on a [lifecycle placement host](#addresses-and-access). |
 | `auth.operatorIdentity` | empty object | union | — | Offer the default identity files of the account the session client runs as, today the controller's root account, with no agent; another account needs `--ssh-user` with `--ssh-id-file`. Running the client under the invoking account is tracked as [B332](../milestones/backlog.md#b332). |
-| `auth.privateKeyRef` | string | union | — | `sshKeyPair` `Secret`. |
-| `auth.passwordRef` | string | union | — | `usernamePassword` `Secret`; requires authored `user`. |
-| `sudoPasswordRef` | string | no | — | `usernamePassword` `Secret`; refused on a [lifecycle placement host](#addresses-and-access), and no consumer escalates with it. |
-| `knownHostsRef` | string | no | [context-managed trust](../contexts.md#storage-locking-and-publication) | `opaque` `Secret` containing one exact OpenSSH `known_hosts` entry. |
+| `auth.privateKeyRef` | string | union | — | `sshKeyPair` `Secret`. Access credential. |
+| `auth.passwordRef` | string | union | — | `usernamePassword` `Secret`; requires authored `user`. Access credential. |
+| `sudoPasswordRef` | string | no | — | `usernamePassword` `Secret`; refused on a [lifecycle placement host](#addresses-and-access), and no consumer escalates with it. Access credential. |
+| `knownHostsRef` | string | no | [context-managed trust](../contexts.md#storage-locking-and-publication) | `opaque` `Secret` containing one exact OpenSSH `known_hosts` entry. Access credential. |
 
 Exactly one SSH `auth` arm is present. `access.rootLogin` is `keep` by default
 or `revoke`. `revoke` requires authored SSH access and a non-root replacement
@@ -671,7 +714,7 @@ separate cluster proxy and NTP choices and does not inherit Machine fields.
 | `localization.timezone` | string | no | `UTC` | Kickstart token. |
 | `localization.additionalLocales` | array of strings | no | `[]` | Unique Kickstart tokens. |
 | `ssh.passwordAuthentication` | boolean | no | `false` | `true` is refused until a password can be set, because `initialPassword` is refused. |
-| `ssh.initialPassword.secretRef` | string | no | — | `usernamePassword` `Secret`. |
+| `ssh.initialPassword.secretRef` | string | no | — | `usernamePassword` `Secret`. Effect material. |
 | `packages.install` | array of strings | no | `[]` | Unique entries, each a package name, glob or `@group`; no whitespace, quote or `#`, and no leading `%` or `-`. |
 | `packages.excludeDocs` | boolean | no | `false` | Exclude package documentation. |
 | `packages.installWeakDeps` | boolean | no | OS/package-manager default | Absence is distinct from `false`. |
@@ -715,7 +758,7 @@ performs ([managed OS](../managed-os.md#registration)).
 
 `security.diskEncryption` requires exactly `unlock.tpm2` and required
 `recoveryPassphraseRef` to an `opaque` or `token` Secret containing the recovery
-passphrase.
+passphrase, which is effect material.
 `tpm2.pcrIds` is a unique integer list in `0..23`; optional `pcrBank` is one of
 `sha1`, `sha256`, `sha384`, or `sha512`, defaults to `sha256` when PCRs are
 selected, and is invalid without `pcrIds`. A consuming virtual profile supplies

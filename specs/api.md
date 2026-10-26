@@ -107,7 +107,10 @@ is nearest to the key within at most two edits. Explicitly
 documented open native or implementation maps remain open only at those exact
 fields; their presence does not make a containing object extensible.
 Unsupported API versions, retired kinds, alternate spellings, aliases between
-schema generations, and translation fallbacks are rejected.
+schema generations, and translation fallbacks are rejected. A field, arm or
+kind the schema has removed is unknown like any other name; the
+[retired fields](#retired-fields) table names the replacement of each retired
+Environment path.
 
 Every refusal carries what the operator needs to correct it:
 
@@ -117,7 +120,8 @@ Every refusal carries what the operator needs to correct it:
   `metadata.name` is not a DNS label, its grammar refusal names the kind in its
   message and the document by its source location, and its remediation states
   the label grammar;
-- the path of the field it concerns;
+- the path of the field it concerns, in which a list index is the authored
+  position in the document, even for a list the schema later sorts;
 - the schema's expectation: the permitted values, the numeric bounds, the
   expected YAML type, noting that a quoted value is a string, the referenced
   kinds, or the accepted Secret types, each list bounded to 16 entries and a
@@ -128,6 +132,10 @@ Every refusal carries what the operator needs to correct it:
   identifier, a reference name that is a DNS label, a repeated entry's name
   that is a DNS label, and a Secret's declared type that is one of the Secret
   types.
+
+Not yet met: `ClusterAddonBinding` diagnostics index the normalized, sorted
+lists, not the authored positions; tracked as
+[B826](milestones/backlog.md#b826).
 
 Loading returns `filesSeen`, `objectsDecoded`, sorted diagnostics, and a state
 only when there are no errors. `filesSeen` counts every unique discovered YAML
@@ -180,7 +188,7 @@ Every document has exactly these top-level fields:
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
 | `apiVersion` | string | yes | Exactly `bootwright.io/v1alpha1`. |
-| `kind` | string | yes | One of the 33 registered kinds; case-sensitive. |
+| `kind` | string | yes | One of the registered kinds in the [kind catalog](#kind-catalog); case-sensitive. |
 | `metadata` | object | yes | Contains only `name` and optional `labels`. |
 | `metadata.name` | string | yes | DNS label matching `[a-z0-9]([-a-z0-9]*[a-z0-9])?`. |
 | `metadata.labels` | object | no | String-to-string map; keys emit lexically in effective state. |
@@ -214,6 +222,21 @@ The deliberate exceptions are:
 The object form `{name: ...}` is rejected for ordinary Bootwright references
 outside that explicitly documented data-pool record.
 
+Reference fields fall into these classes:
+
+| Class | Written | Resolves against |
+| --- | --- | --- |
+| Object | `*Ref` and `*Refs` | `metadata.name` in the schema's target kind. |
+| Nested | `addressRef`, a topology node name | One entry nested in its already selected owner, such as one address of the referenced Machine or one node of the cluster topology, never an object of its own. |
+| Endpoint selection | `{serverRef, endpointRef}` | The server object, then the endpoint named on it. |
+| Native service | `mdsServiceRef`, `serviceRef`, `serviceID` | One entry of the cluster's native service declarations, written `<service_type>.<service_id>`; the owning page fixes the form. |
+| External object | KubeVirt `networkRef` | The object form above. |
+
+Not yet met: the nested and native-service fields that are plain non-empty
+strings, such as `cephadm.bootstrap.node`, bypass the shared reference
+diagnostics and suppression rules; tracked as
+[B826](milestones/backlog.md#b826).
+
 ### Unions
 
 A discriminated union retains `type` when it identifies a meaningful domain
@@ -225,9 +248,9 @@ matching configuration arm. `StoragePool.spec` requires `erasure` configuration
 for that type, while a replicated pool may omit `replicated`, whose unset value
 shape [replicated protection](api/storage.md#replicated-protection) owns.
 
-A presence union carries no discriminator. Exactly one implementation arm
-selects `InfraProvider` and `ClusterAddon`; their former
-`type` fields are unknown. An implementation arm must satisfy its own required
+A presence union carries no discriminator. Exactly one arm
+selects `InfraProvider` and `ClusterAddon`; a `type` field on either is
+unknown. An arm must satisfy its own required
 fields after defaulting. Presence choices also cover provider attachments,
 machine-install backends and package sources, authentication, proxy choices,
 and `Secret.spec.source`. The owning field specifies whether an empty arm is a
@@ -235,12 +258,16 @@ valid selection and whether omission is invalid or selects a default. In
 particular, Secret source omission selects `contextStore`.
 
 `Entitlement.spec.type` is the one set-of-arms discriminator: each product type
-requires the `rhsm`, `registry`, and `license` arm set defined in
-[secrets.md](api/secrets.md). That page states any forbidden additional arm;
-required arms do not imply that every other arm is automatically rejected.
-An authored `ibm-storage-ceph` type, which forbids `rhsm`, never inherits
-`rhsm` from Entitlement kind defaults
+permits only the `rhsm`, `registry`, and `license` arms that
+[secrets.md](api/secrets.md) lists for it, requires some of them, and refuses
+any other arm. Entitlement kind defaults never introduce an arm the authored
+type does not permit: an authored `ibm-storage-ceph` type, for example, never
+inherits `rhsm`
 ([kind-default rule 6](api/environment.md#kind-defaults)).
+
+Not yet met: admission refuses only `rhsm` on `ibm-storage-ceph`, so an unused
+arm on any other type is admitted without meaning; tracked as
+[B826](milestones/backlog.md#b826).
 
 ### Collections, enablement, and reserved words
 
@@ -257,9 +284,47 @@ for kind-of-thing discriminators. The who-runs-it axis is always
 `management: managed|external`. Direct proxy access is the presence choice
 `direct: {}`; `none` is not a proxy-selection or management value.
 
+### Naming new names
+
+These rules govern every new kind, field, arm, enum value and reference.
+
+- A kind name is a PascalCase noun that says what one object is. It abbreviates
+  only an established acronym (DNS, NTP, RBD, NFS, SMB).
+- Fields and union arms are lowerCamel.
+- A new field whose value names a Bootwright object ends in `Ref`, and a list
+  of such names in `Refs`. A row for a value the native product owns says
+  "native value" or "native ID" and keeps the native spelling.
+- `management: managed|external` says who runs a shared service, `os.provided`
+  says only who installs the operating system, and an add-on's `provides` names
+  ordering tokens. The three are never synonyms.
+- A field with exactly one legal value enters `v1alpha1` only when a spec
+  sentence names its consumer or the planned variant.
+
+Not yet met: existing names that break these rules remain, among them the
+`bootstrap.credentials` Secret name of the gitops package without `Ref` and the
+mixed kebab and lowerCamel spellings of Bootwright-owned enum values, tracked as
+[B824](milestones/backlog.md#b824), and the fields that admit one value only,
+tracked as [B826](milestones/backlog.md#b826).
+
+### Retired fields
+
+| Retired Environment path | Use instead |
+| --- | --- |
+| `spec.controller.proxy` | The controller Machine's [proxy choice](api/machines.md#machine-proxy). |
+| `spec.proxy`, `spec.infraComponents`, `spec.registries`, `spec.componentImages`, `spec.trustedCAs` | The owning consumer or service object: registry policy, image pins and connection facts stay there, and installation trust belongs to each [ContainerCluster](api/container-clusters.md#additional-installation-trust). |
+| `spec.safety` | Nothing: lifecycle authorization is command intent, never desired state. |
+
+The unknown-field diagnostic for a listed path names its replacement. A retired
+path of another kind stays described on its owning page, which names its
+replacement.
+
+Not yet met: the unknown-field remedy does not yet consult this table; tracked
+as [B826](milestones/backlog.md#b826).
+
 ## Kind catalog
 
-The `v1alpha1` catalog contains exactly 33 authored kinds:
+The `v1alpha1` catalog contains exactly these authored kinds. No page states a
+count of kinds, and a new kind enters this table in the change that adds it:
 
 | Schema catalog group | Kinds | Architectural semantic owner |
 | --- | --- | --- |

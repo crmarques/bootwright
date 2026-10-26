@@ -16,8 +16,9 @@ admitted and realized. `StorageSMBResource` is admitted under its
 [field record](#storagesmbresource) and realized by its SMB block once its
 samba images are authored under `spec.ceph.images` of its StorageCluster
 ([refusal table](storage.md#refusal-table)). `StorageNVMeoFSubsystem` is
-realized under its [field record](#storagenvmeofsubsystem). Native effects
-remain artifact-gated. **Not yet met:** later P2
+realized under its [field record](#storagenvmeofsubsystem), and a managed
+`StorageExport` by its export block under its [field record](#storageexport).
+Native effects remain artifact-gated. **Not yet met:** later P2
 kinds and their qualified lifecycles. [Storage admission](api/storage.md)
 states current refusals.
 The target additions and migrations below belong to
@@ -84,8 +85,9 @@ Sets reject duplicate members and use deterministic canonical ordering;
 ordered native arrays retain order. Presence-sensitive zero is interpreted
 only by the owning field. Existing pool quota zero remains its documented
 unlimited value; the new image/subvolume sizes below do not reuse that meaning.
-Release support, numeric/native limits and graph capacity are checked before
-effects. No new field inherits an undocumented default from another resource.
+Numeric limits and graph capacity are checked before effects; the native
+tools judge their own limits and report a refusal through `nativeError`. No
+new field inherits an undocumented default from another resource.
 
 ## Retained resource owners
 
@@ -359,12 +361,13 @@ Admission refuses, before any effect:
   an erasure-coded `poolRef`, whose image header needs a replicated pool.
 
 Ownership: the worker writes its attempt record before `rbd create`. A
-lost reply is adopted only with that record and an image of exactly the frozen
-shape with no snapshot; otherwise the image refuses `foreign-rbd-image`. A
+[lost reply](state-reconciliation.md#mutation-safety) is adopted only with that
+record and an image of exactly the frozen shape with no snapshot; otherwise the image refuses `foreign-rbd-image`. A
 StorageRBDImage whose declared `sizeBytes`, `dataPoolRef` or `features` differ
 from the recorded ones, a native image whose ID differs from the recorded one,
 or a recorded image that is gone refuses `rbd-image-identity`; a native image
-that drifted from the frozen size, data pool or features is not ready.
+that [drifted](state-reconciliation.md#comparing-desired-and-real-state) from
+the frozen size, data pool or features is not ready.
 Bootwright never recreates, resizes, moves or re-features it. A trashed image has left the pool
 directory, so it never blocks a create.
 
@@ -670,8 +673,9 @@ resets the earmark
 ([volume.py](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/volumes/fs/volume.py#L249-L290)).
 It then sets the user metadata `bootwright-owner` to the operation ID
 ([fs-volumes.rst](https://github.com/ceph/ceph/blob/v20.2.1/doc/cephfs/fs-volumes.rst#L572-L575))
-and reads it back with `fs subvolume metadata ls`. A lost reply is adopted
-only with the attempt record and the frozen shape. Bootwright never runs
+and reads it back with `fs subvolume metadata ls`. A
+[lost reply](state-reconciliation.md#mutation-safety) is adopted only with the
+attempt record and the frozen shape. Bootwright never runs
 `fs subvolume rm`, `resize`, `snapshot`, `clone`, `authorize`, `evict`,
 `earmark`, `metadata get` or `fs volume`.
 
@@ -1170,6 +1174,7 @@ nodes that run it.
 | Direct RGW placement selects fewer daemons than eligible hosts | Planning requires an ingress VIP or a placement whose count covers its selected hosts. |
 | Disallowed key type, missing native prerequisite or mismatched owned identity | Realization refuses before creating credentials; correct the declared prerequisites or restore the original owned state. It does not change cipher policy or adopt foreign entities. |
 | Removing an export while its hosts survive, or with physical hosts | Removal refuses; export retirement requires every host to be an owned virtual Machine removed by the same destroy. |
+| Removing an export while a consuming container cluster survives the removal | Removal refuses before registration, naming the consuming cluster and the export; retirement also requires every container cluster whose `fdf` package names the export to be removed by the same destroy, its nodes owned virtual Machines that destroy stops and deletes. A surviving consumer waits for [B491](milestones/m2.md#b491)'s consumer quiescence. |
 
 The export block depends on the cluster, the pool, the filesystem, the
 gateway and the monitoring unit, is exclusive on its cluster, and runs on the
@@ -1205,8 +1210,9 @@ not isolated from each other: per-export principals give per-export removal,
 not isolation.
 
 Each CephX key is generated at the declared type and retained under client
-custody before its native add; a lost reply recaptures it and never
-regenerates. The RGW user is created by `radosgw-admin user create
+custody ([native-side retention](secrets.md#native-side-retention)) before its
+native add; a lost reply recaptures it and never regenerates. The RGW user is
+created by `radosgw-admin user create
 --uid=<minted> ... --gen-access-key --gen-secret`, never with
 `--access-key` or `--secret-key` on any argument list; its JSON reply is read
 privately and the key pair retained under client custody before the block
@@ -1250,9 +1256,20 @@ request, record, evidence, log, diagnostic or output. Observation compares
 each principal's key and capabilities privately and never writes.
 
 The export block retires with its cluster when every host is a
-Bootwright-owned virtual Machine the same destroy removes; otherwise its
-removal refuses with the cluster's other resources, and revoking one export
-while the cluster stays is [B491](milestones/m2.md#b491)'s.
+Bootwright-owned virtual Machine the same destroy removes and every container
+cluster whose `fdf` package names the export is removed by the same destroy,
+its nodes Bootwright-owned virtual Machines that destroy stops and deletes.
+Only then does the hosts' stop proof stand in for the consumer's quiescence;
+a consumer that survives the removal, such as a cluster on physical nodes,
+makes the removal refuse before registration, naming the consuming cluster and
+the export. Otherwise its removal refuses with the cluster's other resources,
+and revoking one export while the cluster stays is
+[B491](milestones/m2.md#b491)'s.
+
+Not yet met: the surviving-consumer refusal, the interim reading of D143
+clause 6 until the owner confirms it or chooses a named, acknowledged impact
+instead; destroy retires the export on its hosts' stop proof alone; tracked as
+[B804](milestones/backlog.md#b804).
 
 ### Attached gateway DNS
 
@@ -1318,8 +1335,9 @@ block reports, and becomes the block's produced material `object-user`, the
 canonical JSON `{"accessKey", "secretKey", "uid"}`; a retry reads it back and
 never rotates it. Bootwright retains any key of 1 to 128 visible ASCII
 characters other than `&`, `<` and `>`, which the canonical JSON escapes, and
-pins no build's key format. No command reveals the pair yet;
-[B489](milestones/m2.md#b489) owns access handoff.
+pins no build's key format. The pair is revealed only as
+[storage dashboard access](cli.md#storage-dashboard-access) defines;
+[B489](milestones/m2.md#b489) owns the rest of access handoff.
 
 Admission refuses, before any effect: a gateway of another cluster, the user ID
 `dashboard`, a name longer than 46 characters and a display name over 256 bytes,
@@ -1410,10 +1428,10 @@ provisioning rows remain required by the coverage matrix.
 | Object accounts/users, B477 | Native account/user identity scoped by gateway/realm and tenant where supported; explicit account relationship and principal purpose. Users without tenant or account are current as `StorageObjectUser` ([field record](#storageobjectuser-field-record)); accounts and tenants are not. | No implicit administrator or account adoption. Bound or generated keys enter custody once; retries do not rotate them. |
 | Object buckets/policies, B477 | Gateway scope, explicit owning principal/account, native bucket name and recorded native identity; policy principal/resource references resolve declared owners. Buckets of a `StorageObjectUser` with a native bucket policy are current as `StorageObjectBucket` ([field record](#storageobjectbucket-field-record)), whose policy is the native document with principals RGW resolves, not Bootwright; account-owned buckets and tenants are not. | Supported native policy documents retain their format. No ambient owner, untracked generated user or guessed tenant. Bucket deletion needs data-loss authorization and proved child ownership; foreign objects/dependents prevent unqualified cascade. |
 | CephX/client access, B80/B489 | `StorageClient` owns one principal with exactly one scope: an RBD pool with its derived data pools, a StorageFilesystem or a StorageSubvolume; B489 extends references to gateway resources and explicit access scope. | No default full administrator caps. Qualified caps derive from requested resource access or validated native capability syntax; unrestricted caps need an explicit privileged purpose. Manager-generated NFS/SMB principals are derived children, not duplicate resources. |
-| NVMe-oF gateway resources, B480 ([field record](#storagenvmeofsubsystem)) | Native service/group, subsystem NQN, listener address/transport, namespace ID and `StorageRBDImage` reference; initiator NQN/host authorization links to the subsystem. | No automatic unowned image creation or wildcard host access. Defaults and generated IDs are frozen/captured. Listener reachability, ANA/HA and release-supported security are qualified together. |
+| NVMe-oF gateway resources, B480 ([field record](#storagenvmeofsubsystem)) | Native service/group, subsystem NQN, listener address/transport, namespace ID and `StorageRBDImage` reference; initiator NQN/host authorization links to the subsystem. | No automatic unowned image creation or wildcard host access. Defaults and generated IDs are frozen/captured. Listener reachability, ANA/HA and the security modes the native tools accept are qualified together. |
 | iSCSI resources, B481 | Not realized: no iSCSI kind exists, and admission refuses `service_type: iscsi` at that field. | Refused before any effect; block access over the network uses NVMe-oF (B480). No NVMe field substitutes for an iSCSI one. |
 | Replication peers, B483 | Explicit source and destination cluster/resource references, protocol/replication mode, peer identity, endpoint trust and credential ownership. | Both endpoints are declared managed resources. One relationship owner coordinates bootstrap and removal; no ambient peer lookup, context crossing or foreign adoption. |
-| Access material/handoff, B489 | Declared principal/resource set, selected trust/endpoints and produced-material identity; managed `StorageExport` material (its produced schema, principals and custody) belongs to [B86](milestones/m4.md#b86), which reuses this boundary; `StorageExport` retains its own consumer shape. | Material is scoped, privately captured and withdrawn through custody. A StorageClient's keyring is revealed only through the [client keyring export](cli.md#client-keyring-export); no other reveal command exists. |
+| Access material/handoff, B489 | Declared principal/resource set, selected trust/endpoints and produced-material identity; managed `StorageExport` material (its produced schema, principals and custody) belongs to [B86](milestones/m4.md#b86), which reuses this boundary; `StorageExport` retains its own consumer shape. | Material is scoped, privately captured and withdrawn through custody. A StorageClient's keyring is revealed only through the [client keyring export](cli.md#client-keyring-export), and the dashboard password and object-user key pairs only through [storage dashboard access](cli.md#storage-dashboard-access); no other reveal command exists. |
 
 A native name in an imperative provider request is always projected from this
 declared identity/reference graph. These records also settle availability of
@@ -1489,8 +1507,7 @@ B474 and each consuming item must update schema, admission, effective state,
 diagnostics, documentation and migration examples together. The old combined
 NFS service/export shape and retired daemon helpers receive precise migration
 errors; files are not rewritten or silently interpreted through two competing
-models. New kinds other than minimal `StorageClient` remain unadmitted until
-that implementation delivers.
+models. The **Current** paragraph above states which kinds are realized.
 Provider-specific native leaves, type limits and unsupported combinations are
 closed promotion records, with tests for reference collision, foreign identity,
 secret non-disclosure, ambiguous create/remove, default handling and complete

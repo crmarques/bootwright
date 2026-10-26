@@ -6,7 +6,7 @@ completed. The [kind schemas](api/machines.md) own `MachineImage` and
 `MachineInstallProfile`; the [command catalog](cli/commands.md#setup-commands)
 owns the `media` invocations; [Workspace](contexts.md#storage-locking-and-publication)
 owns the store's layout and publication; [substrates](substrates.md) own the
-Machine being installed and the controller it is booted through.
+Machine being installed and the BMC it is booted through.
 
 ## Media store
 
@@ -156,10 +156,10 @@ accepted then. Every refusal names the Machine that selects the installation, wi
 reason and remedy the [refusal table](#refusal-table) states. A Machine whose
 installation delivers private material refuses
 `disable-verification` virtual-media trust before registration, ahead of its
-[unverified-controller refusal](#physical-installation), because a controller that
+[unverified-BMC-leg refusal](#physical-installation), because a BMC that
 fetches the installer without verifying the artifact server boots whatever
 image answers, and that installer is what receives the private material; its
-remedy is `import-certificate`, or `established` when the controller already
+remedy is `import-certificate`, or `established` when the BMC already
 trusts the server. `import-certificate` needs the installer image served over
 https and the certificate its server presents, and refuses naming the Machine
 without either. The trust is set by the installation's insert and settled by
@@ -167,12 +167,14 @@ its ejects after the installer's power-off
 ([virtual media](substrates.md#adapter-boundary)). A Machine
 declaring any root-device hint other than `deviceName` refuses before
 registration, naming each such field, because the Kickstart selects its disk
-by name alone and would ignore the others. The installation publishes
+by name alone and would ignore the others; on a bare-metal provider that name
+is the disk's by-id WWN path
+([physical installation](#physical-installation)). The installation publishes
 through artifact servers placed on the controller, where the installer image
 is built and the package tree extracted, so an image or tree server placed on
 any other Machine refuses before registration. A virtual Machine whose
 provider host is not the image server's placement Machine refuses too, naming
-both: its emulated controller uses verified HTTPS but fetches the image
+both: its emulated BMC uses verified HTTPS but fetches the image
 without verifying the server, which the
 [security spec](security.md#network-remote-systems-and-privilege) bounds to
 that one host. The network the Kickstart carries is one static IPv4 install
@@ -412,14 +414,14 @@ target. It fails closed, and no authorization relaxes it: `data-loss`
 acknowledges that an installation destroys data and never selects what to
 destroy. A machine found running refuses on either substrate, because the proof
 never powers a machine off to satisfy itself. The block then inserts the
-published image URL as the controller's virtual media and boots the Machine
+published image URL as the BMC's virtual media and boots the Machine
 from it through the substrate's
 [boot entry point](substrates.md#identity-and-power-operations), telling it that
 this installer powers the machine off when it is done. The power-off of a
 machine its substrate created, which narrows the window in which it was started
 after the proof, the media selection and the power-on, polled to on, happen
 inside that entry point; an operator-owned physical machine is never powered
-off through its controller by an installation; the restart of
+off through its BMC by an installation; the restart of
 [network convergence](#network-convergence) is the installed system's own
 power-off, asked over the pinned connection.
 Anaconda installs unattended and powers the machine off when it is done, which
@@ -437,14 +439,14 @@ seconds apart), its fleet account accepting the reported key (30 retries 10
 seconds apart), `networkApply` (24 retries 5 seconds apart),
 `networkReconnect` (12 retries 5 seconds apart) and `reboot` (60 retries 10
 seconds apart), which bounds each of the restart's two waits: 8,880 seconds of
-pauses in all, the restart's budget counted twice. A read the controller does not answer spends one
+pauses in all, the restart's budget counted twice. A read the BMC does not answer spends one
 retry of the installer wait rather than ending it. Every run of the block is
 bounded by a [deadline](architecture.md#the-adapter-result-protocol) derived
 from the budgets it froze: their pauses back to back, the network checkpoint's
 rollback time and 30 seconds, 330 seconds, one hour for the rest of
 the media work and each read's own time, and the
 [bound](substrates.md#identity-and-power-operations) of every call an apply
-makes to the machine's controller, 1 hour 17 minutes 20 seconds, which is 4 hours
+makes to the machine's BMC, 1 hour 17 minutes 20 seconds, which is 4 hours
 50 minutes 50 seconds for these budgets and within the runner's ceiling. A
 registering request adds 15 minutes for its
 [registration](#registration), 5 hours 5 minutes 50 seconds for these budgets. Those
@@ -458,7 +460,7 @@ physical target powers nothing off and is inspected where a virtual one's power
 is read, which stays within those bounds while the inspection reads at most six
 interfaces. A run that reaches its deadline is killed, and
 the attempt becomes unknown and is resolved from the marker, as after a
-cancellation. The controller's own polls, which the client bounds with fixed
+cancellation. The client's polls of the BMC, which it bounds with fixed
 counts, are not budgets: they are part of each call's bound. Nor is the single
 retry, one second later, of an observation's reachability check, which is part
 of the reads that hour allows for.
@@ -539,7 +541,7 @@ refuses `registration-unreachable` before any effect, naming `bootwright
 machine start`, and withdraws nothing.
 
 **Unknown resolution.** The observation that resolves an apply reads the
-marker through the identity operation, the power the controller reports and
+marker through the identity operation, the power the BMC reports and
 the published content's presence, and its evidence carries that power whatever
 else it found. A matching marker with the
 content present is positive completion; a powered-off Machine with no marker
@@ -567,13 +569,13 @@ second may be running the installer now. A private Machine, of a delivered key
 or an encrypted root disk, the network
 restart powered off before its disk boot is the one window that leaves nothing
 to read: the withdrawn private material and image, no marker over the unanswered
-identity read and a powered-off controller read are exactly what an apply that
+identity read and a powered-off BMC read are exactly what an apply that
 stopped before it published anything leaves, so it reads positive no effect.
 The next apply installs it again, as the interruption table below says; a
 Machine whose installer image stays published reads partial in the same window. A removal's resolution observes
 the published content, which the removal withdraws whatever the guest holds,
 and, for a registering request, the guest's registration through the identity
-channel and the worker's `inspect`; it never reads the controller. No content
+channel and the worker's `inspect`; it never reads the BMC. No content
 left and no registration of this installation left, which is an `absent` or
 `foreign` registration or a Machine holding another marker or none, is its
 completion; the whole completion, which content alone never proves, is
@@ -775,7 +777,7 @@ saved in NetworkManager, then run bootwright apply`, when the network changed on
 apply`, when the declared network does not hold across a restart. A connection that does not come back says `its state is
 unknown: repeat bootwright apply, and if <m> stays unreachable, restore its
 network from its console`. A failed connection, commit, marker write or
-power-off request, a power-off the controller never reports and a guest that
+power-off request, a power-off the BMC never reports and a guest that
 did not restart end with `repeat bootwright apply`.
 
 **Interruption.** The guest's state decides the next attempt's step:
@@ -961,13 +963,13 @@ substrate's pre-boot proof and before the media is inserted, with its first
 byte fetched through the listener the installer uses, so a replay, or an apply
 that finds the frozen marker, never publishes it. The completion withdraws it
 with the subtree before its inspection, the inverse removes it, and the next
-apply clears it after a failure. A virtual Machine's emulated controller
+apply clears it after a failure. A virtual Machine's emulated BMC
 fetches the private installer image without verifying the server and never
 proves a verified fetch, so its insert does not ask for the verified-fetch
 read-back a physical insert requires; that leg never leaves the provider host
 the artifact server is placed on, as the
 [security spec](security.md#network-remote-systems-and-privilege) bounds every
-emulated controller and the [refusal table](#refusal-table) enforces before
+emulated BMC and the [refusal table](#refusal-table) enforces before
 registration. In `%pre` no name service is configured yet, so the artifact
 server endpoint the installer image is published through must be an IP
 literal, and a profile selecting a hostname endpoint refuses before
@@ -1239,13 +1241,13 @@ real-hardware identity, interruption and cache/readback gates remain unrun.
 
 An installation that delivers private material hands its management
 controller the tokenized URL of the private installer image, so it refuses
-before registration, naming its Machine, unless its controller is addressed
+before registration, naming its Machine, unless its BMC is addressed
 over `https` with its certificate verified: `tls.verify` not opted out, and a
 `tls.trustBundleRef` naming the authority when the system trust store does not
 hold it. An operation that froze an installation with no single installer
-image publication, or a private publication over an unverified controller
-leg, refuses its apply at execution, naming the Machine and directing the
-operator to destroy the operation and plan again, while its destroy and
+image publication, or a private publication over an unverified
+controller-to-BMC leg, refuses its apply at execution, naming the Machine and
+directing the operator to destroy the operation and plan again, while its destroy and
 observation still run.
 
 This arm is proved in-tree only. The emulated rehearsal, B73's operator gate,
@@ -1266,22 +1268,34 @@ media takes back nothing from the machine. The separate opt-in
 [physical erase](#physical-removal) consumes `data-loss` on removal. The
 authorization acknowledges already-planned loss; it selects no target and
 relaxes no proof. Installation erasure is confined to the disk
-`rootDeviceHints.deviceName` names: an installation that names none, including
-one selecting by `wwn` alone, refuses before registration, and the Kickstart
-renderer refuses rather than clearing every disk. One declaring any other hint
-beside `deviceName` refuses before registration too, as the
+`rootDeviceHints.deviceName` names, and on a physical Machine that name is a
+durable identity: `/dev/disk/by-id/wwn-0x` followed by 16 or 32 lowercase
+hexadecimal digits, as the
+[root-device rule](api/machines.md#bmc-and-root-device-shape) states, because a
+kernel name such as `/dev/sda` follows probe order and can name another disk on
+the next boot. An installation that names no `deviceName`, including one
+selecting by `wwn` alone, or that names another form, refuses before
+registration, and the Kickstart renderer refuses rather than clearing every
+disk. One declaring any other hint refuses before registration too, as the
 [supported shape](#installation) states.
 
 **The target is proved inside the installer as well.** The controller-side
 proof above closes before the machine boots, and a machine can be re-cabled or
 re-addressed in between, so the derived Kickstart opens with a fail-closed
-`%pre` that repeats the identity check on the booted host: every declared MAC
-must be present on the machine that is running the installer, and the declared
-root device must resolve to a whole block device. The installation stops before
-any storage is touched when either fails. This narrows, but does not close, the
-interval between the controller's last proof and the installer's first write;
-what remains is recorded as a residual race rather than described as
-eliminated.
+`%pre` that repeats the identity check on the booted host: the machine that
+is running the installer must present exactly the declared MAC set, under the
+MAC-set predicate of
+[physical disk safety](state-reconciliation.md#physical-disk-safety), and the
+declared by-id path must resolve to a whole disk. The installation stops
+before any storage directive when either fails. This narrows, but does not
+close, the interval between the controller's last proof and the installer's
+first write; what remains is recorded as a residual race rather than described
+as eliminated.
+
+Not yet met: a physical installation admits any device path as `deviceName`,
+and `%pre` resolves whatever path it names and proves only that every declared
+MAC is present; tracked as
+[B802](milestones/backlog.md#b802).
 
 **The identity it will answer with is delivered, not discovered.** A physical
 Machine names an `sshKeyPair` Secret as the host key its installed system will
@@ -1298,7 +1312,7 @@ and the installer image beneath the artifact server's served root under the
 at a path whose final segment is an unguessable token minted by the attempt
 rather than frozen in the plan, and the Kickstart fetches the key once,
 verifying the artifact server's certificate against the bound public
-certificate rather than disabling verification. The controller's insert
+certificate rather than disabling verification. The insert
 carries the token URL, so the controller-to-BMC leg is `https` and verified,
 and the BMC-to-artifact leg refuses `disable-verification`. The first byte of
 the image, `identity` and `identity.pub` is fetched through the listener before
@@ -1310,14 +1324,14 @@ that only needed to exist for one boot does not outlive it. An attempt that
 fails leaves the subtree until the next apply clears it or a destroy removes
 it, and an observation reports it as unfinished work. The token never appears
 in the plan, the evidence, the progress output or any log, so the path is
-reconstructible only by the attempt that minted it; a media URL the controller
-reports is redacted before it reaches evidence, because a controller can echo
+reconstructible only by the attempt that minted it; a media URL the BMC
+reports is redacted before it reaches evidence, because a BMC can echo
 it with its host or port rewritten.
 
 An encrypting virtual installation uses the same subtree, token and proofs for
 its installer image and its `recovery`, the latter published inside the boot
-as [Root-disk encryption](#root-disk-encryption) states; its controller leg is
-bounded by the emulated-controller exception stated there rather than by the
+as [Root-disk encryption](#root-disk-encryption) states; its BMC leg is
+bounded by the emulated-BMC exception stated there rather than by the
 verified-fetch read-back.
 
 Physical FIPS and TPM2 root encryption use this private delivered-key path

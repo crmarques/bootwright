@@ -8,6 +8,8 @@ The gateway declares no pools, so apply creates the eight derived zone pools `ob
 
 The budget, host prerequisites, `setup`, `preflight controller`, media imports and entitlement are the [three-node example's](../libvirt-3-nodes-ceph/README.md#initial-setup); this example authors the same release coordinates, guests and disks. Review [cluster.yaml](storage/cluster.yaml), which owns the native MON, MGR, OSD and `rgw.objects` services and the TLS binding, [object-gateway.yaml](storage/object-gateway.yaml), which owns the gateway and its endpoint, and [rgw-objects-tls.yaml](secret-descriptors/rgw-objects-tls.yaml), the generated certificate. To serve a certificate from your own authority instead, replace its `source` and store it with `secret set --name rgw-objects-tls --certificate-file <path> --private-key-file <path>`; it must name the endpoint.
 
+The tracked `storage/entitlement.yaml` sets `license.accept: true` as a placeholder. Accepting the IBM license is your explicit act: review its terms before you use your copy.
+
 ## Create the context and apply
 
 Replace `/path/to/adjusted/libvirt-3-nodes-ceph-object` with your completed copy.

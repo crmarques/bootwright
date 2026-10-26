@@ -35,14 +35,19 @@ and must not become alternate homes for business rules. Generic policy buckets
 such as `common`, `utils`, `models`, `services`, `manager`, global `state`,
 global `render`, or global `workflow` are forbidden when they lack one semantic
 owner. Reuse follows demonstrated identical semantics; it is not a reason to
-merge contexts or create an abstraction before its first consumer.
+merge contexts or create an abstraction before its first consumer. A
+capability's first implementation is a real consumer of its selection seam:
+its registry entry, implementation identity, consumer-owned port and refusal
+of unbound selector values ([implementation
+selection](#implementation-selection)). What waits for a later consumer is a
+further implementation and any generality beyond that seam.
 
 ## Bounded contexts
 
 | Context | Owns | Does not own |
 | --- | --- | --- |
 | Desired state | Document discovery and provenance, strict decoding, API-to-domain translation, normalized catalog assembly, deterministic diagnostics, and canonical effective-state encoding. | Domain invariants belonging to the referenced platform contexts or any platform effect. |
-| Environment | Environment selection, shared defaults, complete graph closure, and cross-context reference semantics. | Policy internal to a selected machine, provider, cluster, storage service, or add-on. |
+| Environment | Environment selection, shared defaults, complete graph closure, and the [reference](api.md#references) and [graph validation](api.md#graph-validation) rules across contexts. | Policy internal to a selected machine, provider, cluster, storage service, or add-on. |
 | Workspace (CLI noun `context`) | Named root-owned contexts, separate Context configuration, per-user selection, and persistence boundaries for local runtime data. | Lifecycle policy, secret meaning, or arbitrary user filesystem content. |
 | Controller (CLI noun `controller`) | Local controller prerequisite inspection, setup, invoking-account verification, and sudo process supervision. | Managed-machine provisioning, cluster readiness, or lifecycle ordering. |
 | Secrets | Secret custody and materialization, immutable secret binding, and disclosure classification. | A consuming context's authorization or business decision. Entitlement semantics remain with the product context that consumes them. |
@@ -51,11 +56,20 @@ merge contexts or create an abstraction before its first consumer.
 | Machine | Machine identity, addresses, access posture, declared capabilities, and the relationship to a substrate and operating-system intent. | Provider mechanics, OS installer mechanics, or cluster membership policy. |
 | Managed OS | Installer media custody, machine images, install profiles, managed-OS entitlement use, installation intent, and OS completion evidence. | Substrate realization, storage-product entitlement policy, or higher-level cluster and storage orchestration. |
 | Infrastructure services | Shared placement, identity, endpoint, and ownership rules for artifact servers, load balancers, proxies, name resolution, time synchronization, and registries. Each service capability owns its specific policy and adapter. | Consumer cluster policy or one generic service workflow. |
-| Container cluster | OpenShift and OKD release, topology, installer intent, node binding, cluster access, and installation evidence. | Machine, substrate, shared-service, storage, or add-on ownership. |
-| Storage | Ceph cluster topology, placement, pools, filesystems, gateways, NFS services, exports, and storage completion evidence. | Machine OS installation or downstream cluster-add-on policy. |
-| Add-ons | The [add-on contract](add-ons.md): catalog packages, profiles, bindings, input expansion, package and driver resolution, ordering within the add-on boundary, cluster application, readiness, and add-on records. | Cluster installation, storage invariants, complete-environment state transitions, or a general workflow language. |
+| Container cluster | The container cluster family: release, topology, installer intent, node binding, cluster access, and installation evidence. Its current implementation installs OpenShift and OKD through the agent installer, selected by `spec.distribution.type` and `spec.install.method`. | Machine, substrate, shared-service, storage, or add-on ownership. |
+| Storage | The storage cluster family: topology, placement, pools, filesystems, gateways, NFS services, exports, and storage completion evidence. Its current implementation is Ceph, selected by `spec.type` and `spec.management`. | Machine OS installation or downstream cluster-add-on policy. |
+| Add-ons | The [add-on contract](add-ons.md): catalog packages, profiles, bindings, input expansion, package resolution and, for a custom package, [driver](deferred/add-ons-design.md#package-standard) resolution, ordering within the add-on boundary, cluster application, readiness, and add-on records. | Cluster installation, storage invariants, complete-environment state transitions, or a general workflow language. |
 | Native artifacts | Typed artifact manifests, canonical bytes, destination policy, and safe publication. The platform context that understands a native format owns its projection into that format. | Starting, adopting, or simulating a managed operation when an operator executes an artifact independently. |
-| State reconciliation (CLI verbs `plan`, `status`, `apply`, `destroy`) | Immutable plans, operation state, scheduling, leases, continuation, ownership evidence, and transition authorization for the complete environment. | Domain capability mechanics or vendor-specific effects. |
+| State reconciliation (CLI verbs `plan`, `status`, `diff`, `apply`, `destroy`) | Immutable plans, operation state, scheduling, leases, continuation, ownership evidence, and transition authorization for the complete environment. | Domain capability mechanics or vendor-specific effects. |
+
+Container cluster and Storage are families: an implementation is selected from
+validated input as [implementation selection](#implementation-selection)
+states, and the rules general to the family, and every context outside it,
+name no implementation. Not yet met: Environment selection, admission and
+compilation read Ceph and libvirt field paths, Environment inspection declares
+a Ceph-named evidence port, and general-flow packages hard-code kind lists and
+implementation identities; tracked as
+[B810](milestones/backlog.md#b810).
 
 Security constrains every context and effect boundary; it is not a component to
 which other contexts delegate safety. Public API kinds are boundary contracts,
@@ -388,8 +402,8 @@ allowlist, and the stub set, whose commands the CLI catalog leaves unavailable.
 4. `cmd/bootwright/wiring_<domain>.go` names the adapter package bound to each
    port.
 5. The pure rules for an API kind are in `internal/<context>/admission.go`.
-6. A lifecycle effect starts at its capability in `buildCapabilities`, and
-   `operationPlaybook` binds its playbooks, both in
+6. A lifecycle effect starts at its capability in `buildCapabilitiesWith`,
+   and `operationPlaybook` binds its playbooks, both in
    `cmd/bootwright/wiring_reconciliation.go`.
 
 Adding a command touches its spec in `commands_<domain>.go`, marked `available`
@@ -414,15 +428,59 @@ case, and implementing a stub removes it from `stubCapabilities`.
    exported type with methods that an adapter constructs as a value rather than
    receives as a service.
 4. In `cmd/bootwright/wiring_reconciliation.go`, add its `boundCapability` to
-   `buildCapabilities` in API kind order and bind each operation's playbook in
-   `operationPlaybook`; `TestBoundPlaybooksCoverExactlyTheOfferedCapabilities`
-   and `TestEveryBoundPlaybookExistsInTheEmbeddedCollection` fail until those
+   `buildCapabilitiesWith` in API kind order and bind each operation's
+   playbook in `operationPlaybook`;
+   `TestBoundPlaybooksCoverExactlyTheOfferedCapabilities` and
+   `TestEveryBoundPlaybookExistsInTheEmbeddedCollection` fail until those
    agree with each other and the collection.
 5. Add its playbooks, role and protocol plugin to the
    [collection](#ansible-collection-structure).
 6. Optionally implement `Projector`, add its row to the [observable-field
    table](state-reconciliation.md#observable-fields-by-implementation), and its
    `Test<Name>ObservableFieldTableMatchesProjector`.
+
+### Adding an implementation of an existing capability
+
+A second implementation of an existing kind, a new substrate arm or a new
+installation method touches only this list:
+
+1. Its package, `internal/<context>/<implementation>`, in the
+   lifecycle-capability shape, with its implementation identity in
+   `catalog.go` and the objects it claims in `selection.go`, keyed on the
+   selector its domain names ([implementation
+   selection](#implementation-selection)). A new identity reads
+   `<domain>-<implementation>-<capability>-v<N>`.
+2. Its `packageRoles`, `applicationDependencies` and `applicationValues`
+   entries, as steps 2 and 3 above.
+3. Its rows in its domain's supported-shape and refusal tables, and in the
+   observable-field table when it projects.
+4. Its `boundCapability` in `buildCapabilitiesWith` and its playbooks in
+   `operationPlaybook`, as step 4 above.
+5. Its role, playbooks and protocol plugin, named as the
+   [collection](#ansible-collection-structure) states. A substrate arm's role
+   provides the substrate's machine entry points, and each consumer dispatch
+   table gains one row per entry point it uses.
+6. Its tests, which run the shared contract suites of every port it
+   implements.
+
+It answers, from their owners, what it converges
+([converging an effect](state-reconciliation.md#converging-an-effect)), when
+an attempt is `unknown` rather than `failed`
+([attempts](state-reconciliation.md#attempts-and-unknown-outcomes)), how it
+continues and removes under a frozen contract
+([continuation and removal](state-reconciliation.md#continuation-and-removal)),
+what it retains before removal
+([quiescence](state-reconciliation.md#quiescence-before-removal)), the
+material it produces ([produced material](secrets.md#produced-material)) and
+its process and remote boundaries
+([process boundary](security.md#process-boundary)).
+
+An edit to another domain or to the general flow means a seam is missing. The
+seam lands in the same slice as its first consumer, as a separate reviewed
+step, and never as a branch on the new implementation. Not yet met: no shared
+suite exercises the `Capability` port's failure, unknown outcome,
+cancellation, replay and removal paths against every implementation; tracked
+as [B808](milestones/backlog.md#b808).
 
 ### Context admission and compilation
 
@@ -556,6 +614,15 @@ objects and the authorization they consume; Reconciliation resolves the former
 into block dependencies and checks the latter at registration, so no capability
 learns another's block identities.
 
+A consumer that needs a policy several implementations contribute, such as the
+retirement policies Managed OS installation and erasure honor, owns that port
+as a list composition aggregates from every bound implementation; it never
+receives one implementation's policy or block identity by name. Not yet met:
+composition binds Ceph's physical retirement policies into the Managed OS
+installation and erase capabilities, and the bare-metal block identity into
+erasure and Ceph's physical retirement; tracked as
+[B810](milestones/backlog.md#b810).
+
 Workspace owns the durable boundary: the lifecycle transaction, the operation
 area and the reservation record are Workspace primitives, and Reconciliation
 alone decides what they contain. Secret custody, controller host evidence and
@@ -659,13 +726,41 @@ host's own dnf (`internal/controller/hostdnf`, a `--assumeno` preview and an
 no Ansible role installs a host package. Native target CLI installation
 crosses the fixed Ansible `controller_prerequisites` role through
 [Controller ports](controller.md#egress-and-local-effects). A tool
-contacting a managed remote component belongs inside Ansible.
+contacting a managed remote component belongs inside Ansible. Go reaches a
+network endpoint only when it is no managed component, read-only, bounded and
+through the admitted egress route: the controller runtime's wheels
+(`controller/venvlocal`), target-tool publisher metadata
+(`controller/bundlelocal`) and installer media import
+(`managedos/medialocal`). Every contact with a managed component, apart from
+[Machine's direct SSH sessions](#named-exceptions), and every target-tool
+installation runs in an adapter.
 
 Operator-supplied automation and add-on package content are not internal
 adapters. A schema declaration or package origin grants no execution authority.
 [The custom-code rule](security.md#custom-code) permits a
 qualified Bootwright-owned driver to enter only a pinned embedded adapter;
 package-carried executable content remains ineligible.
+
+### Language responsibility
+
+New logic goes to the first row whose placement question it answers yes.
+
+| Language | Holds | Never | Placement question |
+| --- | --- | --- | --- |
+| Go | Everything Go owns above, including postcondition judgment, content digests, local runners and the controller's own dependencies. | Contacts a managed component, apart from Machine's direct SSH sessions, or interprets native output beyond an adapter's evidence. | Does it decide what happens, in what order, whether it is allowed, or what a result means? |
+| Ansible YAML | One capability's binding: entry-point validation, host targeting, privilege scope, fixed module calls, progress groups, and bounded remote effects and observation under a frozen request. | Chooses a workflow, provider or variant from authored data or gathered facts, orders work across domains, or runs a command through a shell. | Does it bind one fixed capability to hosts, privilege and modules? |
+| Python in the collection | Action plugins, modules and module utilities: protocol publication, native transport, bounded native-API clients, result normalization, evidence fields, shipped fixed workers, and the fixed, spec-owned procedure of one frozen request. | Chooses product workflow, dispatches on authored data, orders work across blocks, authorizes, writes operation state or judges a postcondition; starts a process outside its site's one bounded runner or encodes canonical JSON outside its site's one module; sends a remote command string outside the [process boundary](security.md#process-boundary). | Is it how one already-selected effect is reached and proved on its target? |
+| Shell | Pinned tool wrappers, completion shims and the installer-native sections Go emits. | Holds selection logic, parses repository content, or performs a product effect outside an emitted installer section. | Does it only fix an environment and run a pinned tool, or prove on the installer what its owning domain specifies? |
+| Rendered documents | Role templates and Go-emitted native documents: a deterministic projection of the frozen request. | Reads files, the network or secrets at render time, or branches to select a variant. | Is it the same bytes for the same request? |
+
+A Python site is where its code runs: the controller runtime for action
+plugins, a managed host for modules and shipped workers, and a native image
+for its scripts.
+[Python guidance](../.agents/skills/code-implementation/references/python.md)
+owns the idioms of each. Not yet met: collection modules repeat canonical JSON
+encoders and bounded process runners within one site, and no test maps each
+tracked source file under the collection's plugins and `scripts/` to a row of
+this table; tracked as [B818](milestones/backlog.md#b818).
 
 ## Ansible collection structure
 
@@ -677,9 +772,9 @@ needed paths:
 | --- | --- |
 | `ansible/ansible.cfg` | Controlled configuration. |
 | `ansible/collections/` | The embedded collection; the controller runtime's exact lock is `internal/controller/runtimelock/lock.json`. |
-| Collection `playbooks/<domain>/<operation>.yml` | One fixed application-port entrypoint; private fragments under its `tasks/`. |
-| Collection `roles/<domain>_<capability>[_<implementation>]/` | One local or remote capability adapter with only applicable standard role directories. |
-| Collection `plugins/` | Capability adapters, effect-free product translation/evidence normalization, or the adapter's output callback, which [prints nothing a `no_log` result raised](security.md#logs-output-and-diagnostics). |
+| Collection `playbooks/<domain>/<capability>_<operation>.yml` | One fixed application-port entrypoint, named for its capability and the Go port operation it binds; a substrate arm's capability carries the arm (`libvirt_machine`), and a capability with one operation, `controller/setup.yml` and `machine/power.yml`, is named for the capability alone; private fragments under its `tasks/`. |
+| Collection `roles/<domain>_[<implementation>_]<capability>/` | One local or remote capability adapter with only applicable standard role directories. |
+| Collection `plugins/` | Capability adapters, named for the implementation whose vocabulary they speak, effect-free product translation/evidence normalization, or the adapter's output callback, which [prints nothing a `no_log` result raised](security.md#logs-output-and-diagnostics). |
 | Collection `tests/unit/` | Collection-owned tests following `ansible-test` discovery. Their `conftest.py` installs the collection loader `ansible-test` would when no runner has, so plain pytest runs the same tests; the `units` suite of `scripts/ansible-check` runs them both ways. |
 
 The first consumer selects package-native or standard lock formats; Bootwright
@@ -696,9 +791,15 @@ collection needs a distinct ownership, dependency, and release boundary.
 Each thin entrypoint validates one port request, targets an explicit host
 group, composes allowlisted FQCNs or locked canonical role references, and
 normalizes one result/evidence set. The domain directory identifies its owner;
-the operation matches the Go capability. Playbooks do not choose workflows or
-providers from authored data or ambient facts, dynamically select another
-playbook, or coordinate independent domain operations.
+the file name joins the capability and the Go port operation it binds.
+Playbooks do not choose workflows or providers from authored data or ambient
+facts, dynamically select another playbook, or coordinate independent domain
+operations. Not yet met: the Ceph image and host apply operations bind
+`storage/image_resolve.yml` and `storage/host_prepare.yml`, some roles name
+the implementation after the capability or carry no domain, the arm-neutral
+`substrate_machine_protocol` plugin speaks libvirt's vocabulary, and no
+structural test holds role, plugin and playbook names to these rules;
+tracked as [B834](milestones/backlog.md#b834).
 
 A playbook imports its role's entry point by the key the role's argument
 specification declares, never by its task file's name, which ansible-core runs
@@ -708,7 +809,20 @@ point's first task, and a request the role does not admit refuses there:
 `test_the_first_task_of_every_playbook_validates_its_entry_points_arguments`
 and
 `test_a_request_the_role_does_not_admit_refuses_before_the_entry_points_first_task`
-hold every playbook to this.
+hold every playbook to this. An entry point's specification declares every
+variable the entry point reads; its nested mappings carry options down to the
+leaves the role reads, with `elements` for lists and `choices` for closed sets.
+Task assertions keep cross-field, format and runtime checks, and a bound Go
+freezes is either mirrored as a choice or named as checked only by an
+assertion. A later play of a multi-play playbook may import a role's internal
+task file only when its first play validated the request and material through
+a declared entry point and the later play reads only values derived from
+them; `containercluster/install_apply.yml` is the one such playbook. Not yet
+met: the entry-point test checks only the first play and counts the install
+playbook's plays rather than naming its permitted task files, no test refuses
+an entry point that reads an undeclared variable, and some roles declare
+nested members as bare mappings or read an undeclared variable; tracked as
+[B818](milestones/backlog.md#b818).
 
 Every `observe` entrypoint runs only the modules the read-only allowlist
 names, each for a stated reason; `TestEveryObservePlaybookRunsOnlyAllowedTasks`
@@ -724,7 +838,7 @@ inventory, or uncontrolled variables. Split private task files by concern;
 keep configuration bodies in files/templates. Native invocations have explicit
 arguments, change/failure semantics, bounds, and secret handling.
 
-Implementation variants may share a port only when success, failure, replay,
+Implementations of one capability may share a port only when success, failure, replay,
 ownership, and evidence semantics agree. A role never calls an unrelated domain
 role to hide orchestration.
 
@@ -736,7 +850,7 @@ implementation; they are not public capability interfaces. A replaceable role
 or plugin dependency must have its own declared request/result contract and be
 bound by the selected entrypoint, rather than discovered by a consumer role.
 Implementation changes affect these bindings and their locks, not consumers.
-Any required variant dispatch is an explicit allowlisted binding frozen by Go;
+Any required arm or implementation dispatch is an explicit allowlisted binding frozen by Go;
 authored variables, gathered facts, and arbitrary role/task/plugin names cannot
 select executable code. Do not use implicit role dependencies or shared mutable
 facts to communicate across capability boundaries.
@@ -745,15 +859,24 @@ A consumer of a realized Machine dispatches on the substrate arm or identity
 channel Go froze into its request, through that substrate role's entry points,
 and each dispatch ends in a terminal fail for a value it has no entry point
 for. The substrate owns the machine port as role entry points validated by
-their argument specs (decision D1), and consumers compose only those.
+their argument specs (decision D1), and consumers compose only those. Each
+consumer's dispatch table holds one row per arm for each entry point it uses,
+so an arm a consumer installs on adds a row to that table. Not yet met: the
+power role reads its arm from material values set after the request is
+digested, and an arm it does not list fails on an undefined key rather than a
+terminal fail; tracked as [B809](milestones/backlog.md#b809).
 
 ### Ansible collection plugins and results
 
 A Bootwright module or action validates a frozen request, invokes the required
 API, and normalizes its result within the consumer's effect and security
 boundary. Other plugins provide effect-free product translation or evidence
-normalization. Plugins contain no workflow or authorization policy and are
-tested with their consumer.
+normalization. Plugins contain no product workflow, cross-block ordering or
+authorization policy and are tested with their consumer. An adapter may
+sequence the fixed, spec-owned native steps of its one frozen request, such as
+rounds, retries, batches and per-target records, without choosing a variant
+from authored data or gathered facts beyond a
+[version specialization](#implementations-and-version-variation).
 
 Playbook stdout is not a product API. Go consumes the structured adapter result
 and presents product output under [cli.md](cli.md); external streams and
@@ -769,7 +892,7 @@ canonical JSON object (sorted keys, no insignificant whitespace, ASCII) on one
 line of at most 64 KiB with its newline, carrying exactly its phase's fields;
 an acknowledgement is the line `proceed`. The lifecycle runner
 (`reconciliation/ansiblerunner`) and the controller runner
-(`controller/ansiblelocal`, for `setup` and the controller stage) both go
+(`controller/ansiblelocal`, for the controller stage) both go
 through `internal/adapterprotocol`: its one decoder reads every record, and
 its one runner core starts, supervises, cancels and drains every adapter
 process, while each runner supplies its invocation and judges its records.
@@ -786,9 +909,10 @@ They accept these phases:
 | `refused` | controller | adapter → runner | `phase`, `reason`: `release-stamp`, an acquisition class with `source`, or `internal` | none | last, once, in place of `completed`: `release-stamp` while an `openshift-clients` tool is being installed; an acquisition class (`dns`, `certificate`, `timeout`, `unreachable`, `proxy`, `status`, `redirect`, `integrity`, `trust`, `storage`) naming the tool being installed; `internal`, with no `source`, after `loaded` | The run fails with the [release-stamp refusal](controller.md#the-controller-stage), or the diagnostic Go gives the [class](controller.md#the-controller-stage), naming the source's host, instead of the generic adapter failure, even when the adapter's failed exit is read first; `internal` keeps the generic failure. |
 | `refused` | lifecycle | adapter → runner | `phase`, `reason`: one the run's request names, `identity-mismatch` for a [pinned power run](cli.md#machine-power-operations) and each refusal of a [pre-boot proof](substrates.md#adapter-boundary) for an installation's apply; optionally `detail`: at most 160 letters, digits and `_.:@-` naming a closed cause, optionally with the code site that refused, or an exception type and code site, never a value | none | last, once, after `loaded`, in place of `completed` | The run fails with the diagnostic its caller gave that reason, its message followed by any `detail`, instead of the generic adapter failure, even when the adapter's failed exit is read first; the runner closes the acknowledgement channel and kills nothing, so the adapter is left to end on its own. |
 
-Ceph core, host and image calls explicitly opt into an additional `nativeError`
-on `refused` only. It has exactly `coordinate` (at most 512 UTF-8 bytes) and
-`cause` (at most 1024), both nonempty printable strings. The producer projects
+Ceph core, host, image, export, replication and SMB calls explicitly opt into
+an additional `nativeError` on `refused` only. It has exactly `coordinate` (at
+most 512 UTF-8 bytes) and `cause` (at most 1024), both nonempty printable
+strings. The producer projects
 native output through bounded credential redaction and the controller redacts
 again against its private material before publication. The runner validates
 shape and bounds and appends these values only for an opted-in call. Other
@@ -888,10 +1012,11 @@ through
 which owns the phase dispatch, the group statuses and outcomes, the digest
 check, the observation rule above and the shape of a refusal, and Go reads
 every record through `internal/adapterprotocol`. What the evidence contains,
-which refusals a capability names, and what proves its postcondition belong to
-each capability's plugin; progress groups stay in its role. Go decides what an
-outcome and its evidence mean; a plugin neither schedules work nor authorizes
-it.
+which refusals a capability names, and the evidence fields that make up its
+declared postcondition belong to each capability's plugin, which refuses a
+mutation whose evidence lacks them; progress groups stay in its role. Go alone
+decides whether evidence proves the postcondition and what an outcome means
+(D11, D99); a plugin neither schedules work nor authorizes it.
 
 An installation adapter's inventory may hold, beside the controller, one host
 per node it boots, each the controller itself over a local connection, so that
@@ -905,9 +1030,12 @@ catalog and session ports. Workspace supplies the held context persistence
 capability; core Secret services do not depend on a concrete store type.
 
 A variation that changes authored intent or a business invariant is an
-explicit typed variant in its owning domain. Vendor, substrate, component,
+explicit typed union arm in its owning domain. Vendor, substrate, component,
 transport, and release mechanics remain in a concrete adapter or renderer
-behind the capability port.
+behind the capability port. Discovering at runtime, inside an adapter, the
+resources a management controller advertises is capability discovery and
+adapter mechanics, not a version specialization, and is never keyed on a
+vendor or model name.
 
 Within one implementation, each component has one general flow, and a release
 difference in its mechanics is a version specialization (D162). Whatever the
@@ -922,24 +1050,46 @@ from the bytes of the operation's frozen, authenticated artifacts; a function
 of such bytes is a frozen input, not an ambient or gathered fact. Only when no
 artifact feature shows the difference may a condition use a proved coordinate,
 ordered by the component's own comparator. A release label or a tag never keys
-a specialization. A detector that cannot read or recognize its artifact
+a specialization, so facts are read at plan or apply from the frozen
+artifacts, never in admission: a per-minor installer difference is left to the
+general rule, where the installer judges, or detected from the frozen
+installer artifact. A detector that cannot read or recognize its artifact
 reports the fact unknown, and an unknown fact or an unparseable version
 matches nothing, so the general variant applies. Each registry's tests prove
 that no assignment of facts selects two variants at one seam. Variants are
 reviewed code at their call sites, and a record carries none. A variant may
 skip a step or a proof only when a fact positively proves the native mechanism
-absent. Seams never sit in trust, host-key, signature, redaction or credential
-code. A specialization never changes a block's intent, ordering, authorization
+absent. A seam may be a refusal seam: its variant adds a named refusal of an
+authored intent the selected build cannot realize as declared, before the
+block's own claim or effect. It never refuses a version or an artifact as
+such, and an unknown fact selects the general variant there too. Seams never
+sit in trust, host-key, signature, redaction or credential code. A specialization never changes a block's intent, ordering, authorization
 or ownership proofs, and never removes a trust refusal. Specialization
-identities never enter step intents or content digests. A specialization may
+identities never enter block intents or content digests. A specialization may
 ship without a version move only when the general flow cannot have completed
 the step on any build it matches. A specialization never encodes a version
 pairing or compatibility rule between components; Bootwright registers and
 enforces none, and choosing versions is the operator's responsibility (D163).
+A release difference that would change a block's request, evidence shape,
+plan, intent or ordering is not a specialization: it is a new implementation
+identity, selected by artifact facts or authored intent as
+[implementation selection](#implementation-selection) states, never by a
+version label. Each registry carries a marker the catalog test discovers, so a
+registry the catalog does not name fails. Not yet met: the catalog test reads
+two fixed registry paths, and the container-cluster topology registry's
+override hook is keyed by the authored release version, the shape that test
+expects; tracked as [B811](milestones/backlog.md#b811).
 
-Each implementation declares an immutable identity, capability, supported
-target and version constraints, content identity, and execution dependencies.
-An allowlisted registry resolves from explicit validated state:
+### Implementation selection
+
+Each implementation declares an immutable identity, capability, the selector
+values it claims, content identity, and execution dependencies. A constraint
+it declares is a predicate over facts detected from the selected artifacts or
+over an authored arm, used to select it or to prove a native mechanism present
+or absent; it is never a version number, range or matrix and never states a
+supported or forbidden pairing between components (D163). The capability
+resolver `buildCapabilitiesWith` builds is the allowlisted lifecycle registry,
+and it resolves from explicit validated state:
 
 - resolution is deterministic and produces exactly one implementation;
 - no match or more than one match fails before output publication or effects;
@@ -947,9 +1097,27 @@ An allowlisted registry resolves from explicit validated state:
   ambient or gathered facts;
 - accepting desired-state syntax does not imply implementation support; and
 - application and domain policy never branch on concrete implementation
-  identity to reproduce adapter mechanics.
+  identity.
 
-Supported matrices belong to the owning domain contract. When an operation is
+Each domain names, in its supported-shape section, the selector its
+implementations claim objects by: the InfraProvider arm, a ContainerCluster's
+`spec.distribution.type` and `spec.install.method`, a StorageCluster's
+`spec.type` and `spec.management`, or a service kind with its
+`spec.implementation`. Every selected object of a block family is claimed by
+exactly one bound implementation or refused by its domain's refusal table, and
+two bindings that claim one object refuse before registration, naming both
+implementations. Outside its owning implementation or substrate package,
+composition and its domain's admission refusals, production code reaches an
+arm's or an implementation's specifics only through a capability the owner
+publishes, such as a substrate-declared media delivery mode; an exact
+allowlist that only shrinks names any other use and its reason. Not yet met:
+each capability plans over the whole state and filters its own objects while
+the engine checks only that some binding claims each kind, and no fitness test
+rejects implementation-identity and arm constants, literals or arm field paths
+outside those packages; tracked as [B808](milestones/backlog.md#b808).
+
+Each domain contract names the facts and authored arms its implementations
+select on. When an operation is
 made immutable, each block freezes its selected implementation identity and
 content digest, and the operation freezes the Python and Ansible
 [execution closure](state-reconciliation.md#dependency-safety-during-recovery)
@@ -989,7 +1157,9 @@ and [security.md](security.md).
 ## Architecture verification
 
 Introduce executable fitness checks with the boundary's first implementation;
-reviewers retain semantic judgments that source checks cannot prove.
+reviewers retain semantic judgments that source checks cannot prove. A check
+holds a stated rule and never replaces it: the rule keeps its statement in its
+owning spec, which names the check.
 
 - Check every production Go package for inward dependencies, declared context
   ownership, and no direct adapter-to-adapter calls or domain vendor/I/O leaks.
@@ -1029,10 +1199,10 @@ reviewers retain semantic judgments that source checks cannot prove.
   the result as an unproved observation; every template
   renders the same bytes twice and its golden's; and every action plugin's
   `run()` is driven with what surrounds it stubbed. Go holds every request
-  this build sends, request version included, to the argument specification of
-  the role entry point that receives it: the capability contract suite for
-  each lifecycle operation, with the material mapping lent beside it, and the
-  power and controller tests for theirs;
+  this build sends, request version included, to what the argument
+  specification of the role entry point that receives it declares: the
+  capability contract suite for each lifecycle operation, with the material
+  mapping lent beside it, and the power and controller tests for theirs;
   `TestEveryEntryPointAdmitsTheMaterialAnSSHPlacementLends` holds each entry
   point's material mapping to the identity and host key an SSH placement
   lends, and `TestRoleVersionAssertionsMatchTheirArgumentSpecs` each role's

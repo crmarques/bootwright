@@ -18,7 +18,12 @@ Each is, or must become, an executable guard. Check every one a change touches.
 - A destructive physical path proves the exact target (system identity, complete
   MAC set, powered off) immediately before it inserts media, and again inside
   the installer. A root disk is named by a device path; an empty or wwn-only
-  selector refuses. Read [the disk-safety finding](../../knowledge/openshift-agent-disk-safety.md).
+  selector refuses. On bare metal a kernel name such as `/dev/sda` is no disk
+  identity: `deviceName` must be a `/dev/disk/by-id/wwn-0x...` path, and `%pre`
+  refuses before any storage directive unless it resolves to a whole disk
+  ([physical installation](../../../specs/managed-os.md#physical-installation);
+  enforced from [B802](../../../specs/milestones/backlog.md#b802)).
+  Read [the disk-safety finding](../../knowledge/openshift-agent-disk-safety.md).
 - Consumer roles dispatch on the frozen substrate and fail closed on an unknown
   arm, and a task named for a proof never mutates. The structural tests live in
   `ansible/collections/ansible_collections/bootwright/core/tests/unit/test_role_task_order.py`.

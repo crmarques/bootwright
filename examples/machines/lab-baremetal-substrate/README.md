@@ -1,7 +1,7 @@
 # Physical-install rehearsal substrate
 
-This input creates one empty libvirt guest and its CA-issued HTTPS Redfish
-controller. It installs no OS and owns no DNS, NTP or artifact service. A
+This input creates one empty libvirt guest and its CA-issued HTTPS Redfish BMC.
+It installs no OS and owns no DNS, NTP or artifact service. A
 separate [lab-baremetal](../lab-baremetal/README.md#rehearsing-it-without-hardware)
 context installs into that guest through the physical path. The operator
 rehearsal is unrun; offline tests qualify declaration, generation and trust.

@@ -3,13 +3,13 @@
 This page owns the M2 provider coverage requirements. [Storage](storage.md)
 owns lifecycle behavior, [storage admission](api/storage.md) owns public
 intent, and [M2](milestones/m2.md) owns delivery and sequencing. Each row below
-is required when supported by the frozen IBM release; an unqualified feature
-is refused before effects, never silently omitted.
+is a capability Bootwright realizes; a feature Bootwright does not realize is
+refused by name before effects, never silently omitted. Whether the selected
+versions can run a realized feature is the native tools' judgement, reported
+through `nativeError` (D157); Bootwright keeps no vendor support table.
 
-Not yet met: complete release qualification and native projection; tracked as
-[B472](milestones/m2.md#b472) and [B474](milestones/m2.md#b474). B476's accepted
-minimal run is recorded in
-[X94](milestones/delivered.md#x94--post-destroy-cluster-inspection).
+Not yet met: complete native projection and tested-journey records; tracked as
+[B472](milestones/m2.md#b472) and [B474](milestones/m2.md#b474).
 
 ## Release qualification
 
@@ -137,8 +137,9 @@ writing `ceph-pool-attempt-v2`, sets its profile without `--force`, and accepts
 the stored profile only as the passed keys plus the frozen per-plugin defaults;
 otherwise it refuses `foreign-profile`, `foreign-rule` or `native-output`.
 An RBD image writes `ceph-rbd-image-attempt-v1` before `rbd create` and adopts
-a same-name image only with that record and the frozen shape; otherwise it
-refuses `foreign-rbd-image` or `rbd-image-identity`. A CephFS filesystem writes
+a same-name image only with that record and the frozen shape with no snapshot;
+otherwise it refuses `foreign-rbd-image` or `rbd-image-identity`. A CephFS
+filesystem writes
 `ceph-filesystem-attempt-v1` before `ceph fs new` and a subvolume group
 `ceph-subvolume-group-attempt-v1` before `fs subvolumegroup create`; each adopts
 only with its record, and otherwise refuses `foreign-filesystem`,
@@ -147,24 +148,23 @@ only with its record, and otherwise refuses `foreign-filesystem`,
 `ceph-subvolume-attempt-v1` before `fs subvolume create` and adopts only with
 its record; otherwise it refuses `foreign-subvolume` or `subvolume-identity`.
 
-For every matrix row, the release record names the primary vendor source and
-revision/date, support status (supported, preview, deprecated or unsupported),
-Bootwright input owner, native projection, prerequisites, readiness probe,
-ownership/removal proof, tests and operator acceptance profiles. Supported
-rows have an implementation owner below. Preview or deprecated rows receive an
-explicit support decision before promotion. An unsupported row records its
-source and pre-effect refusal; changing a supported row to deferred requires
-an explicit scope decision. A newly discovered supported service gets a
-bounded item before the release gate closes.
+For every matrix row, B472's record names the Bootwright input owner, native
+projection, prerequisites, readiness probe, ownership/removal proof, tests and
+operator acceptance profiles, each with the source it came from. Each row has
+an implementation owner below. A feature Bootwright does not realize records
+its pre-effect refusal; moving a row to deferred requires an explicit scope
+decision. A newly realized service gets a bounded item before M2 completes.
 
 M2 supports every cluster size the selected native tools accept for the
-deployment mode (D130). B472 records provider minima, documented maxima,
-per-site and per-role counts, failure-domain rules and each feature's resource
-requirements. Lab profiles do not define an allowed-size list or a product
-ceiling. A provider recommendation is distinguished from a support requirement.
-Feature eligibility is evaluated against the declared cluster and the
-provider's requirements; an ineligible combination names the unmet requirement
-and the required change before effects.
+deployment mode (D130). B472 records the minima, maxima, per-site and per-role
+counts, failure-domain rules and resource needs the tested journeys observed,
+as evidence. Lab profiles do not define an allowed-size list or a product
+ceiling. Whether a declared cluster can carry a feature is the native tools'
+judgement, reported through `nativeError`; for a feature's own prerequisites,
+Bootwright adds a pre-effect refusal only for a feature it does not realize or
+a combination listed under
+[unsupported combinations](#unsupported-combinations). The cluster-size,
+capacity and other refusals the storage pages state stay in force.
 
 ## Feature matrix
 
@@ -183,7 +183,7 @@ The last column names the item that owns the implementation and its evidence.
 | NFS | NFS-Ganesha placement, supported CephFS/RGW exports, client restrictions and squash, ingress transport and VIP failover; native release decides backend/TLS support | [B478](milestones/m2.md#b478) |
 | Observability and management | Dashboard, Prometheus, Grafana, Alertmanager, node and Ceph exporters, log collection (Loki with Alloy or Promtail, each image authored under `ceph.images`) and SNMP gateway, management gateway, TLS, OAuth2/SSO and access roles, retention and health/alert checks; the prometheus manager module and `crash` are derived children with named owners (cephadm enables the module for a declared prometheus service; Bootwright's derived crash unit applies `crash` on every host) and are never authored; the direct dashboard certificate ([B682](milestones/backlog.md#b682)), local dashboard roles and users ([B683](milestones/backlog.md#b683)), the manager exporter without a Prometheus service ([B684](milestones/backlog.md#b684)) and cephadm-signed or selected certificate sources ([B685](milestones/backlog.md#b685)) are parked | [B479](milestones/m2.md#b479) |
 | NVMe-oF | Gateway groups and HA, listeners, subsystem/NQN identities, namespaces backed by owned RBD images, authorized clients and supported authentication/TLS, ANA and client failover | [B480](milestones/m2.md#b480) |
-| iSCSI | Refusal only: admission refuses `service_type: iscsi` before any effect as a gateway Bootwright does not realize; Bootwright records no vendor support status for it | [B481](milestones/delivered.md#x58--iscsi-refusal) |
+| iSCSI | Refusal only: admission refuses `service_type: iscsi` before any effect as a gateway Bootwright does not realize (D176) | [B481](milestones/delivered.md#x58--iscsi-refusal) |
 | SMB | Supported SMB cluster/domain/authentication modes, CephFS subvolumes and shares, HA/CTDB and client tests; AD is an explicitly declared external dependency | [B482](milestones/m2.md#b482) |
 | Multi-cluster services | RGW multisite and supported RBD/CephFS mirroring setup, peer identity/credentials, initial synchronization and bounded failover evidence over separate managed clusters | [B483](milestones/m2.md#b483) |
 | Host and security variants | Bond/VLAN install, final NMState network, OS registration, target FIPS and CephX policy, encrypted root disks, reboot access; distinguish these from encrypted OSDs and controller certification | [B74](milestones/m1.md#b74) to [B77](milestones/m1.md#b77), [B326](milestones/m1.md#b326), [B346](milestones/m1.md#b346), [B472](milestones/m2.md#b472), [B484](milestones/m2.md#b484), [B485](milestones/m2.md#b485) |
@@ -202,14 +202,14 @@ recovery action; a daemon-health pass alone never proves client continuity.
 
 ## Profiles and capacity
 
-Cluster size and role placement are parameterized within the provider's
-supported range. The profiles below sample that range for acceptance; they
+Cluster size and role placement are parameterized within the range the
+native tools accept. The profiles below sample that range for acceptance; they
 do not restrict supported initial cluster sizes. Coverage includes minimum
 supported shapes, representative larger shapes, feature-specific thresholds
 and documented upper boundaries. In-tree tests exercise boundaries and
 size-independent planning; operator rows identify the sizes actually run.
 B474/B79/B490 review input, request, evidence and inventory bounds, batching,
-concurrency and deadlines against the supported range. A conflicting
+concurrency and deadlines against that range. A conflicting
 Bootwright limit needs a bounded backlog item and qualification before M2
 completion; lab capacity does not justify a narrower product limit.
 I/O and concurrency stay bounded; qualified batching or pagination preserves
@@ -256,10 +256,11 @@ of four), with one README runbook. The catalog follows these rules:
   answered, both RAM totals are shown. Counts, roles, colocation, replica and
   quorum rules and CPU prerequisites are never relaxed under either option.
 - An NVMe-oF gateway host keeps IBM's figures: 4 vCPUs and 8 GB per gateway in
-  addition to its colocated OSD's 5 GB. Its provider host CPU is Intel 64, 6th
-  generation or later, with AVX-512, exposed under host-passthrough. An AMD
-  CPU with AVX-512 is not accepted until [B480](milestones/m2.md#b480) records
-  IBM's position.
+  addition to its colocated OSD's 5 GB. The profile's provider host CPU is
+  Intel 64, 6th generation or later, with AVX-512, exposed under
+  host-passthrough. That describes the tested host, not an admission gate:
+  Bootwright refuses no CPU vendor, and whether the gateway runs on a CPU is
+  the native tools' judgement.
 - Each profile reserves 4 GiB of controller memory, as the
   [three-node example](../examples/storage-clusters/libvirt-3-nodes-ceph/README.md) does.
 - A profile with more than three Ceph hosts in one cluster plans only after
@@ -417,9 +418,10 @@ per data site, with healthy `size=4,min_size=2`. Native degraded stretch may
 temporarily lower `min_size` to 1; recovery must restore 2. This qualified
 transition does not authorize weakening an authored profile to fit a lab.
 Bootwright's arbiter profile carries no OSD, MGR, MDS, gateway, ingress or
-monitoring workload. The release-specific flash, failure-domain,
-network/latency and capacity prerequisites are admission and live-preflight
-gates. The single-site lab policy is not reused as a stretch policy.
+monitoring workload. Flash, failure-domain, network/latency and capacity
+prerequisites of stretch mode are the native tools' judgement, reported
+through `nativeError`; Bootwright adds no release-specific gate for them. The
+single-site lab policy is not reused as a stretch policy.
 
 The same IBM page excludes EC pools and device-class rules in stretch mode.
 EC coverage belongs to the non-stretch profiles. A healthy MON quorum alone
@@ -428,12 +430,12 @@ recovery transitions and the actual client read/write result.
 
 [NVMe-oF in stretch](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=cluster-configuring-nvme-in-stretch)
 requires at least four Ceph nodes per data site. The NVMe-oF stretch acceptance
-profile meets that minimum and every other provider prerequisite; a smaller
-core-stretch profile cannot claim that row. M2 includes qualifying larger
-profiles for supported features that need them. Applying an undersized authored
-cluster refuses the incompatible feature and names the required change;
-Bootwright never silently resizes declared intent. Other gateways also need
-explicit release/topology qualification.
+profile meets that minimum and every other documented prerequisite; a smaller
+core-stretch profile cannot claim that row. M2 includes larger profiles for
+the realized features that need them. Whether an authored cluster is large
+enough for a feature is the native tools' judgement, reported through
+`nativeError`; Bootwright never silently resizes declared intent. Other
+gateways' stretch placement is tested by its own profile.
 
 [RGW multisite](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=gateway-multi-site-considerations)
 requires at least two independent Ceph clusters and is a different profile
@@ -562,6 +564,11 @@ before B484's exit.
 | U06 | EC CephFS metadata pool | [IBM EC overwrites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-coding-overwrites) | [B81](milestones/m2.md#b81), [B492](milestones/m2.md#b492) | admission `api.invariant` on StoragePool `$.spec.type` | tested | [U06.yaml](../cmd/bootwright/testdata/matrix/U06.yaml) |
 | U07 | `clusterSSH.transport: native`, or the transport omitted | [Release qualification](#release-qualification); [upstream ssh.py v20.2.1](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/ssh.py#L161) | [B79](milestones/m2.md#b79) (refusal), B595 (table) | [Ceph refusal table](storage.md#refusal-table): Incomplete or unsafe Ceph coordinates or transport | tested | [U07.yaml](../cmd/bootwright/testdata/matrix/U07.yaml) |
 | U09 | Replicated size above the OSD hosts that could carry the pool rule's declared device class | [upstream CRUSH device classes](https://docs.ceph.com/en/tentacle/rados/operations/crush-map/#device-classes) (rule semantics, not an IBM statement) | [B81](milestones/m2.md#b81) | admission `api.invariant` on StoragePlacementPolicy and StoragePool `$.spec.replicated.size` | tested | [U09.yaml](../cmd/bootwright/testdata/matrix/U09.yaml) |
+
+U07 records the refusal the code makes today. The
+[`clusterSSH.transport` field rule](api/storage.md) states what omission
+selects and which stage refuses `native`, with the gap
+([B807](milestones/backlog.md#b807)).
 
 ## Physical qualification
 

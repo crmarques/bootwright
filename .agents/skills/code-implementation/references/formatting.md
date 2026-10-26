@@ -1,7 +1,7 @@
 # Source Formatting
 
-This reference owns layout for tracked, human-authored Go, YAML, Ansible, YAML
-front matter, and matching inline examples. Product contracts own semantics.
+This reference owns layout for tracked, human-authored Go, YAML, Ansible,
+Python, shell, YAML front matter, and matching inline examples. Product contracts own semantics.
 Generated, vendored, locked, encrypted, and byte-exact fixture content follows
 its generator or byte contract; correct generated layout through the generator.
 [Effective YAML](../../../../specs/api.md#defaults-normalization-and-effective-state)
@@ -100,6 +100,22 @@ the first item attached to its parent key. Keep each task's action, arguments,
 conditions, registration, privilege, and other directives contiguous. Put
 `block`, `rescue`, and `always` last in that order, separated by one empty line.
 Variable and metadata files follow generic YAML grouping.
+
+## Python
+
+Follow PEP 8 as the collection's `ansible-test` sanity suite applies it. After a
+module's interpreter line and the file's docstring, if any, comes
+`from __future__ import annotations`; group standard-library imports before
+Ansible and collection imports. Separate top-level definitions by two empty lines and methods by one.
+Keep a function's phases visible without blanks at the body edges. Placement,
+interpreter and import rules are in the [Python reference](python.md).
+
+## Shell
+
+Write POSIX `sh` with `#!/bin/sh` and `set -eu` where the script's own control
+flow allows it, indented by four spaces. Quote every expansion, pass paths
+after `--` where the tool supports it, and keep logic out of shell as the
+[Python reference](python.md#repository-tools) says.
 
 ## Verification
 

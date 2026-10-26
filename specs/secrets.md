@@ -1,7 +1,8 @@
 # Context secret management
 
-Secrets owns runtime custody, materialization, generation, immutable binding and
-disclosure. Workspace owns context identity, private paths and atomic publication.
+Secrets owns runtime custody, materialization, generation, immutable binding,
+disclosure and the rule for native-side retention. Workspace owns context
+identity, private paths and atomic publication.
 The [Secret API](api/secrets.md) remains declarative. This contract covers local
 management without platform, entitlement or lifecycle effects.
 
@@ -57,15 +58,16 @@ lock and context lease. `set` is the only command that opens an operator path:
 bind, `check`, `show` and the bounded machine commands read only keyring
 versions.
 
-`set --name` accepts only a declared contextStore Secret and these exact flags:
+`set --name` accepts only a declared contextStore Secret and these exact flags,
+and stores the parts each type holds:
 
-| Type | Input |
-| --- | --- |
-| opaque, token, dockerConfigJson | One of `--value-file` or `--value-stdin` |
-| usernamePassword | `--username` and one of `--password-file` or `--password-stdin` |
-| caBundle | `--certificate-file` |
-| tlsCertificate | `--certificate-file` and `--private-key-file` |
-| sshKeyPair | `--private-key-file`, optional `--public-key-file` |
+| Type | Input | Parts |
+| --- | --- | --- |
+| opaque, token, dockerConfigJson | One of `--value-file` or `--value-stdin` | value |
+| usernamePassword | `--username` and one of `--password-file` or `--password-stdin` | username, password |
+| caBundle | `--certificate-file` | certificate |
+| tlsCertificate | `--certificate-file` and `--private-key-file` | certificate, private-key |
+| sshKeyPair | `--private-key-file`, optional `--public-key-file` | private-key, public-key |
 
 A flag set that does not fit the declared type, including an inapplicable flag
 supplied explicitly empty or false, refuses with `secret.input` naming the
@@ -130,10 +132,10 @@ no extra prompt. Generate reports by name the generated Secrets it changed and
 those it left unchanged. `check` validates all declarations and their current keyring
 material. `list` reads metadata only; an uninitialized store is empty.
 `info [--name <list>]` reuses that same metadata listing and adds no material
-read, availability check or reveal operation. Omission selects all rows;
-comma-separated names are trimmed, deduplicated and matched exactly. Unknown
-names or a separator-only list produce an empty selection; an explicitly empty
-scalar is a usage error. Selection copies the service result rather than
+read, availability check or reveal operation. The
+[CLI selection rule](cli.md#parsing-and-input-conventions) owns how `--name`
+selects rows and refuses an unknown name.
+Selection copies the service result rather than
 mutating its rows, parts or version pointers. Human info groups declared type
 and parts under Identity, and source, current ordinal and bound-version count
 under Custody; full detail also shows an available durable version identifier.
@@ -147,8 +149,7 @@ no current version changes nothing, asks nothing, and reports that nothing was
 deleted.
 
 `show --name --part` requires a part and uses only the current declared source.
-Parts are value for opaque/token/Docker JSON; username/password; certificate for
-CA; certificate/private-key for TLS; private-key/public-key for SSH. Generated
+Parts are those the [set table](#acquisition-and-commands) lists. Generated
 CA also retains explicitly revealable private-key; ordinary CA consumers receive
 only certificates. Show never reveals superseded/bound versions or falls back.
 Validate/authenticate the complete part before output. Default text mode emits
@@ -314,6 +315,18 @@ current declarations or replaced by other material; the lifecycle consumer
 [refuses](state-reconciliation.md#continuation-and-removal) the operation that
 names it.
 
+A bound Secret is of one of two classes. Effect material is placed in or
+derived into an effect, as a disk recovery passphrase, a delivered host key or
+a generated certificate is, so only its bound version proves the effect it
+created. An access credential is only presented to authenticate to an endpoint
+the operator owns, as a management controller's password or a provider's
+kubeconfig is, and no ownership proof rests on it. Each field that references
+a Secret names its class. Both classes follow the binding rule above: a
+continuation or removal presents the version its operation bound.
+
+Not yet met: no Secret reference field names its class; tracked as
+[B805](milestones/backlog.md#b805).
+
 "A Secret declaration's fingerprint drops its provenance and covers type,
 source and parameters only, and a stored version whose fingerprint equals the
 legacy one stays current" (D71). The legacy fingerprint is the one earlier
@@ -329,7 +342,8 @@ values stale/orphaned, never automatically import/generate/delete. Context delet
 verified keyring under [permanent deletion](contexts.md#permanent-deletion),
 including an orphan-acknowledged deletion, which abandons the context's realized
 objects but still removes its keyring. Recreating a name starts with a new
-keyring and never exposes prior material.
+keyring and never exposes prior keyring material;
+[native-side retention](#native-side-retention) lies outside the keyring.
 
 ## Produced material
 
@@ -343,18 +357,36 @@ publishes a block's outputs in one publication, and withdraws every entry of
 the context in one publication, through the secret area the
 [Workspace lends its transaction](contexts.md#storage-locking-and-publication)
 ([capture and withdrawal](state-reconciliation.md#produced-material-custody)).
-A recapture of equal bytes publishes nothing; different bytes replace the
-entry's version, and the block's entries of other names stay. An entry kept
-from a copy a removal would otherwise delete, its effect never proved, is
-marked unproved in the store's record; such a copy never replaces an entry the
-store holds, and a proved capture of the same entry clears the mark. A store never
-initialized refuses a capture with `secret.store.uninitialized` and holds
-nothing to withdraw. No secret command lists, checks, reveals, sets, generates,
-deletes or matches it to a declaration of the same name; `cluster kubeconfig`
-reveals an installation's entry under the [explicit sensitive-output
-boundary](cli.md#administrator-access-export), and `cluster keyring` reveals
-one StorageClient's entry in its native keyring form under the
-[client keyring export](cli.md#client-keyring-export). Its parts count in `materialParts`,
+A recapture of equal bytes publishes nothing; different bytes of the same
+effect identity replace the entry's version, and the block's entries of other
+names stay. A recapture keeps the identity of the effect it proved
+([produced material custody](state-reconciliation.md#produced-material-custody)).
+An entry kept from a copy a removal would otherwise delete, its effect never
+proved, is marked unproved in the store's record; such a copy never replaces an entry the
+store holds, and a proved capture of the same entry clears the mark. No other
+capture carries the mark, and only the mark makes a reveal warn
+`access.unproved`. A store never initialized refuses a capture with
+`secret.store.uninitialized` and holds nothing to withdraw. No secret command
+lists, checks, reveals, sets, generates, deletes or matches it to a declaration
+of the same name. Four outputs are revealed, each by its one command only:
+
+| Output (block kind) | Only command | Output field | Unproved copy |
+| --- | --- | --- | --- |
+| `kubeconfig` (an installation) | `cluster kubeconfig` under the [explicit sensitive-output boundary](cli.md#administrator-access-export) | the custodied bytes | revealed with one `access.unproved` warning |
+| `client` (a StorageClient) | `cluster keyring` under the [client keyring export](cli.md#client-keyring-export) | the native keyring form | revealed with one `access.unproved` warning |
+| `dashboard` (a managed StorageCluster) | `cluster info --secrets` under the [storage dashboard access](cli.md#storage-dashboard-access) boundary | `passwordValue` of `dashboard` | carries no mark; see the note below |
+| `object-user` (a StorageObjectUser) | `cluster info --secrets`, same boundary | `accessKey` and `secretKey` of each entry of `objectUsers` | refused `access.unavailable`, with no partial output |
+
+No other output is revealed: a storage export's `external-details` reach only
+the consuming cluster's [placed Secret](#material-placed-in-a-cluster). The
+`object-user` row records the reveal the code performs; whether that reveal
+stays is an open owner question of [B817](milestones/backlog.md#b817).
+
+Not yet met: `cluster info --secrets` also warns `access.unproved` for a
+dashboard whose evidence does not prove it reachable, though its password
+carries no mark; tracked as [B817](milestones/backlog.md#b817).
+
+Produced material's parts count in `materialParts`,
 rotation re-encrypts it with every other version, and it is removed with the
 keyring.
 
@@ -380,6 +412,36 @@ same Ceph cluster. A placed copy is readable by every principal its namespace gr
 repository credential, for example, is readable by Argo CD's components in
 their namespace, so a credential placed there should be one scoped to reading
 that repository.
+
+## Native-side retention
+
+Native-side retention is confidential material a lifecycle block keeps outside
+the keyring, beside the native effect that minted or consumed it, so that a lost
+reply recovers that material instead of minting it again. A Ceph object user's
+S3 key pair, a storage export's CephX keys and RGW key pair, an RBD mirroring
+bootstrap token, a Ceph cluster's original bootstrap configuration and
+administrator keyring, a physical erase's original-attempt custody and the
+material an installer keeps in its [work area](container-clusters.md#boot-media)
+are retained this way, each where its owning page places it.
+
+Each retained file is private under the
+[filesystem rules](security.md#filesystem-and-artifact-safety), lies beneath a
+path its owning block reserves on the host that runs the effect, and is reached
+through held descriptors. Its reservation and identity records hold scope and
+file metadata, never the material or its digest. The material reaches no
+request, record, evidence, diagnostic, argument or output; what a block answers
+from it enters custody as [produced material](#produced-material). Retention
+is not custody: keyring encryption, rotation, `secret` commands and
+`context delete --purge` never reach it. The owning block's inverse removes it
+with its effect, or it goes with the hosts it lives on. A deletion that
+abandons the context's objects leaves it on those hosts, and its confirmation
+names it. A context recreated under the same name never adopts retention an
+earlier context left.
+
+Not yet met: a context deletion's confirmation names no retention, and an
+installer work area, or the kubeconfig a removal hands over from it, is not
+refused when an earlier context of the same name left it; tracked as
+[B817](milestones/backlog.md#b817) and [B829](milestones/backlog.md#b829).
 
 ## Local keyring v4
 
@@ -507,8 +569,19 @@ failure never authorizes removal of referenced material or identity evidence.
 There is no conversion from an earlier keyring format. A `secrets/` subtree
 that is nonempty, holds no `store.json` this build can authenticate, and holds
 anything besides attributable initialization evidence and interrupted
-temporaries refuses with `secret.store.corrupt` before any session is acquired,
-and the remedy is a new context. A `store.json` that names a backend this
+temporaries refuses with `secret.store.corrupt` before any session is acquired.
+A lifecycle verb that meets it while reopening a binding reports a
+[lost binding](state-reconciliation.md#continuation-and-removal) instead; any
+other command's refusal names the same two exits: restore the keyring from a
+[complete backup](contexts.md#format-and-restore-boundary), or run
+`bootwright status --context <name>`, which lists the objects the context
+owns, then `bootwright context delete --name <name> --purge --allow-orphans`,
+which abandons them to be removed by hand, and create the context again.
+
+Not yet met: that refusal's remedy names `secret encryption init`; tracked as
+[B816](milestones/backlog.md#b816).
+
+A `store.json` that names a backend this
 build's catalog lacks, `local-keyring-v3` included, refuses every access,
 `secret encryption init` included, with `secret.store.implementation` before
 any session, naming that backend and the remedy: destroy the context's effects
@@ -517,8 +590,14 @@ with the Bootwright build that created it, then `bootwright context delete
 
 Threat exclusions remain root, the same OS identity, process memory and theft
 of the full store with its keys. Keys share the local filesystem custody
-boundary with ciphertext. Lost keys need a complete external backup; ordinary
-copy restoration follows the [restore boundary](contexts.md#format-and-restore-boundary).
+boundary with ciphertext, so local encryption defends one case: a copy of
+`store.json` and `parts/` without `keys/`, such as a partial backup or an
+attached diagnostic. Its authentication also detects corruption and
+substitution and binds the store to its context. Every other local account is
+kept out by the store's root-only modes alone, and a backup that holds `keys/`
+needs the protection of plaintext. Lost keys need a
+[complete backup](contexts.md#format-and-restore-boundary); ordinary copy
+restoration follows that restore boundary.
 There are no recovery slots, secure erase, automatic expiry, remote KMS,
 import/export or FIPS claims.
 

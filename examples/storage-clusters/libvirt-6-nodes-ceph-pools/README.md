@@ -42,6 +42,8 @@ Keep credentials and environment-specific acceptance records outside tracked
 example files. No package, registry or physical-host qualification has been
 run for this profile.
 
+The tracked `storage/entitlement.yaml` sets `license.accept: true` as a placeholder. Accepting the IBM license is your explicit act: review its terms before you use your copy.
+
 ## Create the context
 
 ```sh

@@ -296,7 +296,7 @@ refuses `lifecycle.lease` while an apply holds the root lock
   `min_size` drift rewritten unreported; decode errors dropped by image and
   tree observations; no unresolved reason for Ceph core and host; the image
   dependency wired two ways.
-- [B592](../../specs/milestones/backlog.md#b592) to
+- [B592](../../specs/milestones/delivered.md#x160--spec-audit-corrections-and-parked-remediation) (delivered by X160) and [B593](../../specs/milestones/backlog.md#b593) to
   [B595](../../specs/milestones/backlog.md#b595): stale CLI stage-selection
   text after D144 and D146; `RenderEffective` keeps no authored catalog, which
   no consumer needs while `diff` takes the compile port; the envelope shape

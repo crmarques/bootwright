@@ -8261,6 +8261,35 @@ proof, resolving the pending D135 review question. It removes no transport
 restriction and supplies no live qualification evidence. M2c's service and
 matrix acceptance and M2d/M2e's physical/stretch gates remain open.
 
+### X160 — Spec audit corrections and parked remediation
+
+**Item:** B592 (opened on 2026-10-14 by the X91 audit). **Kind:** enabling.
+**Owners:** Architecture and Agent guidance. Delivered on 2026-10-26 at the
+owner's request to apply the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md) to the specs and
+skills and to park the rest of its roadmap.
+
+The specs, glossary and skills now state what the code does where they had
+drifted, and state each recommended rule that needs no owner decision; a rule
+the code does not yet meet carries a Not yet met line naming its parked item,
+[B800](backlog.md#b800) to [B836](backlog.md#b836). The
+[remediation lanes and owner questions](backlog.md#audit-remediation-2026-10-26)
+order that work; no owner decision was taken and no safety refusal narrowed.
+The glossary moved to its own page. The agent harness gained the effect
+prohibition in AGENTS.md, ask rules for any path form of the binary, a guarded
+advisory Stop hook (`scripts/hooks/stop-check`), a Python reference and two
+provisional skills. B592's stale retry text in `specs/cli.md` now links the
+stage contract.
+
+Two audit claims did not hold and were not applied: M2c is not paused (D168
+merges finished slices and pauses nothing), and a physical Ceph cluster
+retires when each Machine's erase policy covers its disks, so only hosts
+without such a policy lack a retirement exit.
+
+**Guard tests:** the guidance checks skip the dated reports under `audits/`;
+`TestDocumentedBoundsMatchCode` now holds the controller record's reservation
+bound. The delivering commits record the gates that ran.
+
 ### X145 — Operator-managed first installation
 
 #### B759

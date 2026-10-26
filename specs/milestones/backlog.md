@@ -24,7 +24,7 @@ Alias cell.
 | [B100](#b100) | C2 (LoadBalancer) | product | Infrastructure services | One managed `LoadBalancer` lifecycle | No consumer; M4's MetalLB is an in-cluster add-on |
 | [B101](#b101) | C6 (rest) | product | CLI | One more view of evidence or access, or a dashboard | No milestone names a view or dashboard |
 | [B102](#b102) | C8 | product | Custom automation | One typed, invertible executable playbook journey | M4's packages are add-ons, not playbooks |
-| [B103](#b103) | C14 | safety | Workspace and Secrets | Explicit complete-store restore | No milestone needs backup and restore |
+| [B103](#b103) | C14; B836 split from it on 2026-10-26 | safety | Workspace and Secrets | Explicit complete-store restore | No milestone needs backup and restore |
 | [B104](#b104) | C15; B337 split from it on 2026-10-05 (D85) | safety | Secrets | Bounded lifetime allocation for secret reservations | D85: after B337 only applies and new versions consume the budget; waits on B103 |
 | [B105](#b105) | C19 | product | Secrets | One more secret-store implementation | `local-keyring` meets the current scope |
 | [B106](#b106) | M4 (day-2 surface) | product | Container cluster | The day-2 surface a completed cluster exposes | A product non-goal |
@@ -173,7 +173,6 @@ Alias cell.
 | [B589](#b589) | new, 2026-10-14 (X91 audit) | enabling | Storage | Ceph core and host blocks gain an unresolved reason | Found by the X91 audit; no milestone depends on it: diagnostics only |
 | [B590](#b590) | new, 2026-10-14 (X91 audit) | enabling | Storage | Ceph wires its image dependency one way | Found by the X91 audit; no milestone depends on it: the edges are correct today |
 | [B591](#b591) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | `status` and `Ownership` share one per-object derivation | Found by the X91 audit; no milestone depends on it: the two views disagree only for a released object |
-| [B592](#b592) | new, 2026-10-14 (X91 audit) | defect | CLI | The CLI spec's stage-selection text matches the retry rule | Found by the X91 audit; no milestone depends on it: stale contract text |
 | [B593](#b593) | new, 2026-10-14 (X91 audit) | enabling | Desired state | `RenderEffective` can keep the authored catalog and origins for a consumer that needs them | Found by the X91 audit; no consumer: `diff` takes the compile port |
 | [B594](#b594) | new, 2026-10-14 (X91 audit) | enabling | Desired state | One envelope shape definition serves the decoder and the encoder | Found by the X91 audit; no milestone depends on it: drift risk only |
 | [B595](#b595) | new, 2026-10-14 (X91 audit) | enabling | Storage | A Ceph refusal table test and a docs-check entry | Found by the X91 audit; no consumer until the first Ceph delta scenario |
@@ -272,6 +271,43 @@ Alias cell.
 | [B797](#b797) | new, 2026-10-21 (X56) | product | Storage | A StorageObjectBucket's declared policy changes after completion | A completed bucket refuses `object-bucket-identity` on a changed policy; a day-2 update is a state-contract change no milestone needs |
 | [B798](#b798) | new, 2026-10-23 (M3 verification) | defect | Verification tooling | The full Ansible unit gate selects its intended worker mode explicitly | Pre-existing tooling behavior outside the requested product change |
 | [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
+| [B800](#b800) | new, 2026-10-26 (spec audit P0-A) | enabling | Agent guidance and Verification tooling | A docs test maps every effectful catalog command to an ask rule | Audit roadmap work; implemented only on an explicit lane request |
+| [B801](#b801) | new, 2026-10-26 (spec audit P0-B) | enabling | Verification tooling and Milestones | Docs-check tests hold record versions, vendor-support phrases and active slices to their owners | Audit roadmap work; implemented only on an explicit lane request |
+| [B802](#b802) | new, 2026-10-26 (spec audit P0-C) | safety | Managed OS and Substrate | Physical installs, power commands and BMC claims act only on a proved target | Audit roadmap work; implemented only on an explicit lane request |
+| [B803](#b803) | new, 2026-10-26 (spec audit P0-D) | safety | Substrate and Workspace | Shared provider hosts claim bridges and emulated BMCs; deletion lists everything a context realized | Audit roadmap work; implemented only on an explicit lane request |
+| [B804](#b804) | new, 2026-10-26 (spec audit P0-E) | safety | Storage and State reconciliation | Export and cluster retirement refuses while a consuming cluster survives the removal | Audit roadmap work; implemented only on an explicit lane request |
+| [B805](#b805) | new, 2026-10-26 (spec audit P0-F) | safety | Secrets and State reconciliation | Secret references declare a class; a rotated access credential has a recorded removal exit | Audit roadmap work; implemented only on an explicit lane request |
+| [B806](#b806) | new, 2026-10-26 (spec audit P0-G) | safety | Workspace and State reconciliation | Durable production roots, a removal-only reserve, owner-checked sweeps, prompts outside the root lock | Audit roadmap work; implemented only on an explicit lane request |
+| [B807](#b807) | new, 2026-10-26 (spec audit P0-H) | safety | Desired state and Architecture | Inert fields report or refuse, one remote quoting function, truthful defaults and warnings | Audit roadmap work; implemented only on an explicit lane request |
+| [B808](#b808) | new, 2026-10-26 (spec audit P1-A) | enabling | Architecture | Engine claim check, implementation fitness test and a shared Capability-port contract suite | Audit roadmap work; implemented only on an explicit lane request |
+| [B809](#b809) | new, 2026-10-26 (spec audit P1-B) | enabling | Substrate and Architecture | One substrate-owned dispatcher replaces per-consumer arm tables, power commands included | Audit roadmap work; implemented only on an explicit lane request |
+| [B810](#b810) | new, 2026-10-26 (spec audit P1-C) | enabling | Architecture and Storage | Storage and cluster contexts split into neutral cores, implementations and fan-in ports | Audit roadmap work; implemented only on an explicit lane request |
+| [B811](#b811) | new, 2026-10-26 (spec audit P1-D) | enabling | Architecture | No release-keyed specialization registry; registries discovered by a marker | Audit roadmap work; implemented only on an explicit lane request |
+| [B812](#b812) | new, 2026-10-26 (spec audit P1-E) | defect | Desired state and State reconciliation | One reference-edge catalog checked against requirements, and complete selection closure | Audit roadmap work; implemented only on an explicit lane request |
+| [B813](#b813) | new, 2026-10-26 (spec audit P1-F) | safety | State reconciliation | Removal identity values read only from the frozen request, guarded by contract goldens | Audit roadmap work; implemented only on an explicit lane request |
+| [B814](#b814) | new, 2026-10-26 (spec audit P1-G) | enabling | Desired state | Owner API shape decisions for ContainerCluster, Storage, Machine and union rules | Audit roadmap work; implemented only on an explicit lane request |
+| [B815](#b815) | new, 2026-10-26 (spec audit P1-H) | enabling | Milestones | Portfolio separated from envelope; Requires state real dependencies; one clause queue | Audit roadmap work; implemented only on an explicit lane request |
+| [B816](#b816) | new, 2026-10-26 (spec audit P1-I) | safety | State reconciliation and Controller setup | Recovery refusals, partial-removal readings and host probes match the rules | Audit roadmap work; implemented only on an explicit lane request |
+| [B817](#b817) | new, 2026-10-26 (spec audit P1-J) | safety | Secrets and CLI | Bounded exec sessions, tool digest refusal test and settled custody reveals | Audit roadmap work; implemented only on an explicit lane request |
+| [B818](#b818) | new, 2026-10-26 (spec audit P1-K) | enabling | Architecture and Verification tooling | Language placement test, one Python runner and encoder, deeper role-spec checks | Audit roadmap work; implemented only on an explicit lane request |
+| [B819](#b819) | new, 2026-10-26 (spec audit P2-A) | enabling | Milestones and Agent guidance | Milestone page openings budgeted, waiver history in decisions, per-decision anchors | Audit roadmap work; implemented only on an explicit lane request |
+| [B820](#b820) | new, 2026-10-26 (spec audit P2-B) | enabling | Agent guidance and Verification tooling | Section-level index rows and docs gates for budgets, reachability and history links | Audit roadmap work; implemented only on an explicit lane request |
+| [B821](#b821) | new, 2026-10-26 (spec audit P2-C) | enabling | Storage and Workspace | Each storage kind's fields on one page; restated lifecycle rules reduced to links | Audit roadmap work; implemented only on an explicit lane request |
+| [B822](#b822) | new, 2026-10-26 (spec audit P2-D) | enabling | Agent guidance and Verification tooling | Wrapper parity test fails on gaps; focus reports flaky lanes and bounds lane time | Audit roadmap work; implemented only on an explicit lane request |
+| [B823](#b823) | new, 2026-10-26 (spec audit L1) | enabling | Architecture and State reconciliation | The State reconciliation context's display name settled by the owner | Audit roadmap work; implemented only on an explicit lane request |
+| [B824](#b824) | new, 2026-10-26 (spec audit L2) | enabling | Desired state and CLI | Code messages, names and catalog checks match the glossary and naming rules | Audit roadmap work; implemented only on an explicit lane request |
+| [B825](#b825) | new, 2026-10-26 (spec audit L3) | product | CLI | CLI diff, settled, remediation, flag spellings and stub catalog match cli specs | Audit roadmap work; implemented only on an explicit lane request |
+| [B826](#b826) | new, 2026-10-26 (spec audit L4) | defect | Desired state | Admission enforces closed Entitlement arms, authored indexes, retired names and reserved-directory warning | Audit roadmap work; implemented only on an explicit lane request |
+| [B827](#b827) | new, 2026-10-26 (spec audit L5) | defect | Desired state and Infrastructure services | Machine and service schemas drop dead fields; external ArtifactServer refuses | Audit roadmap work; implemented only on an explicit lane request |
+| [B828](#b828) | new, 2026-10-26 (spec audit L6) | enabling | Add-ons | Reserved CustomPlaybook and ClusterAddon step shapes settled; example notes its target | Audit roadmap work; implemented only on an explicit lane request |
+| [B829](#b829) | new, 2026-10-26 (spec audit L7) | safety | Secrets | Work-area incarnation check, pipelined material payloads and fixed producer identity | Audit roadmap work; implemented only on an explicit lane request |
+| [B830](#b830) | new, 2026-10-26 (spec audit L8) | safety | State reconciliation and Add-ons | Unknown-operation rows allow continuation; add-on receipts carry their ownership basis | Audit roadmap work; implemented only on an explicit lane request |
+| [B831](#b831) | new, 2026-10-26 (spec audit L9) | safety | Controller setup and CLI | Elevation re-executes a root-owned install by path and refuses foreign variables | Audit roadmap work; implemented only on an explicit lane request |
+| [B832](#b832) | new, 2026-10-26 (spec audit L10) | defect | Workspace and CLI | Controller-record refusals name real exits; context list shows unfinished operations | Audit roadmap work; implemented only on an explicit lane request |
+| [B833](#b833) | new, 2026-10-26 (spec audit L11) | enabling | Desired state | Examples drop defaulted values, gain an external-services scenario, distinct Environment names | Audit roadmap work; implemented only on an explicit lane request |
+| [B834](#b834) | new, 2026-10-26 (spec audit L12) | enabling | Architecture | Role, plugin and playbook names follow the stated patterns under structural tests | Audit roadmap work; implemented only on an explicit lane request |
+| [B835](#b835) | new, 2026-10-26 (spec audit L13) | safety | Storage and CLI | Plan and status show a StorageExport's realm-wide grant | Audit roadmap work; implemented only on an explicit lane request |
+| [B836](#b836) | split from B103 on 2026-10-26 (spec audit L10) | safety | Workspace and Controller setup | Contexts survive a controller host whose machine, DMI or root filesystem identity changed | No milestone relocates a controller; implemented only on an explicit request |
 
 ### B82
 
@@ -365,7 +401,8 @@ execution journeys of [B713](delivered.md#b713) and the produced input of
 [B64](delivered.md#b64) and a named journey. **Exit evidence:** a same-change API replacement of the
 [reserved shape](../deferred/custom-playbooks.md), immutable source and
 dependencies, exact targets, bounded secrets, authorization, continuation,
-failure injection and isolated-runner qualification.
+failure injection and isolated-runner qualification, and playbooks ordered by
+their dependencies on blocks or API objects, never on stage anchors.
 
 ### B103
 
@@ -373,7 +410,8 @@ Explicit complete-store restore with logical identity preservation. Copy
 restoration changes physical identities and may roll back seal reservations;
 [M1c](delivered.md#m1c--context-secret-management) converts no earlier keyring
 format and refuses it instead, and offers no backup or restore command.
-Controller relocation, left over from C16, waits here too. **Exit evidence:**
+Controller relocation, left over from C16, was split out as [B836](#b836) on
+2026-10-26. **Exit evidence:**
 coherent snapshot validation, authorized inode rebinding, a fresh key before
 writes after rollback, interruption and retry and wrong-store refusal tests;
 lifecycle recovery evidence preserved.
@@ -688,7 +726,7 @@ The custody and power confirmation ports keep `Confirm` and gain an optional `Co
 
 ### B389
 
-X41 moved dependency resolution under the staging parent `/var/lib/bootwright-staging`, with locked and swept stages and a refusal that names a noexec mount, while the controller runner's job and scratch parents stay under `/run` and `/var/tmp` (found in X41). [B19](delivered.md#x93--the-owner-run-of-2026-10-14)'s one runner may carry the move. **Exit evidence:** the controller runner's job and scratch under the staging port, with its sweep and noexec refusal tested.
+X41 moved dependency resolution under the staging parent `/var/lib/bootwright-staging`, with locked and swept stages and a refusal that names a noexec mount, while the controller runner's job and scratch parents stay under `/run` and `/var/tmp` (found in X41). [B19](delivered.md#x93--the-owner-run-of-2026-10-14)'s one runner may carry the move. The move also closes a local denial of service: the sweep counts every entry whose name matches `bootwright-run-scratch-` against its bound of 256 before any owner check (`internal/reconciliation/ansiblerunner/jobs_linux_amd64.go`, `matching`), so any local account that creates 257 such names in sticky `/var/tmp` makes every later lifecycle run refuse until root removes them; a root-owned 0700 parent, or a bound that counts only root-owned private directories, removes it. **Exit evidence:** the controller runner's job and scratch under the staging port, with its sweep and noexec refusal tested, and a test in which more than 256 foreign-owned matching entries sit in the old scratch parent and a lifecycle run still starts.
 
 ### B390
 
@@ -788,9 +826,16 @@ because admission refuses both first, so an admission that ever lets one
 through would fetch repositories directly instead of refusing; and the controller
 prerequisites argument spec types `nativeStaging` as raw because the role-spec
 test does not know `int`, so the integer check lives only in the Python frozen
-request and the role's tasks (found in X43). **Exit evidence:** each covered or
-removed by a test that fails when its guard is removed, and `nativeStaging`
-typed `int` with the role-spec test taught the type.
+request and the role's tasks (found in X43). Three more argument specifications
+leave what their entry points read undeclared or untyped:
+`managedos_install_anaconda` reads `bootwright_os_install_digest` without
+declaring it, `storage_ceph_core`'s nested request mappings carry no options
+for the members its tasks read, and `physical_erase` neither mirrors the erase
+method and target bounds Go freezes as choices nor names them as checked only
+by asserts. **Exit evidence:** each covered or removed by a test that fails
+when its guard is removed, `nativeStaging` typed `int` with the role-spec test
+taught the type, and those three specifications declaring what their entry
+points read.
 
 ### B432
 
@@ -1334,11 +1379,15 @@ shut off is plugged in), which also covers a continuation;
 `lifecycle.live` naming the attached domains, so the refusal comes before
 registration; the two spec sentences and the comment at `capability.go:558` say
 so. Under D142 and D145 the role guard continues a live operation and needs no
-destroy. A host-wide `bridge-use:` reservation, so that an external attachment
-conflicts with another context's managed bridge, is a separate item to record
-when this one is promoted. **Exit evidence:** a collection unit test that
+destroy. The host-wide `bridge-use:` reservation, so that an external
+attachment conflicts with another context's managed bridge, is tracked as
+[B803](#b803). **Open:** whether a shut-off domain defined on the
+network or bridge also refuses, since it cannot start once the bridge is gone.
+**Exit evidence:** a collection unit test that
 `destroy.yml` refuses on an unanswered listing and on a plugged-in domain that is
-not shut off, a capability test that `Quiescent` returns `lifecycle.live` naming
+not shut off, a destroy test with a shut-off foreign domain defined on the
+bridge that asserts the answer to the open question, a capability test that
+`Quiescent` returns `lifecycle.live` naming
 the attached domains, a lifecycle test that a continuation refuses the same way,
 and `make docs-check` over the amended spec sentences.
 
@@ -1501,8 +1550,16 @@ write adds, so exhaustion stops at a creating write (`StartAttempt` or
 `specs/contexts.md:531`; optionally admit an attempt's whole write set before its
 effect starts; give the bound its own diagnostic; derive `FirstPassEntries` from
 one declared list of record paths. Schedule it before any scenario adds a
-per-block record. **Exit evidence:** a test double that enforces the entry bound,
-a test that hits the bound mid-attempt and leaves the block resolvable, and the
+per-block record. The same fix reserves the removal's first pass, its
+registration bytes and its restoration write for the removal alone: an apply
+attempt, retry or resolution whose write set would cut into that reserve
+refuses `lifecycle.state` before its effect, naming
+`bootwright destroy --context <name>`, and the contexts spec no longer accepts
+a removal refused at its registration because the apply's own later attempts
+used the reserve. **Exit evidence:** a test double that enforces the entry bound,
+a test that hits the bound mid-attempt and leaves the block resolvable, a test
+that exhausts the area by repeated apply retries and shows the next apply
+refusing before an effect while the destroy registers and completes, and the
 amended contexts spec.
 
 ### B573
@@ -1606,7 +1663,10 @@ unrelated host edit, and the contract guard goldens.
 `:515-548`, `:673-689`). After `context update --input-dir` over a completed
 apply, which only warns (`specs/contexts.md:157-160`), an object the input no
 longer declares is not listed although `lifecycle.blocks` still lists its blocks
-and `apply` refuses. **Impact:** misleading output, no harm. `diff` already shows
+and `apply` refuses. **Impact:** a safety visibility gap: `status` is the
+inventory the [permanent deletion](../contexts.md#permanent-deletion) names
+for what an orphan-acknowledged deletion abandons, so that deletion can
+abandon a realized object the operator never saw listed. `diff` already shows
 the realized-only side. **Smallest fix:** build the rows from the union of
 declared and realized objects, mark the undeclared ones, and update
 `specs/cli/output.md:632`. **Exit evidence:** a `status` golden over a context
@@ -1777,15 +1837,6 @@ consumers in `internal/machine/access/hostkey.go:59` and
 no third fold. **Impact:** consistency risk between `status` and the Machine
 commands. **Smallest fix:** one per-object fold with a test that ties the two
 views together. **Exit evidence:** one fold and that test.
-
-### B592
-
-`specs/cli.md:531-535` still says "the one failed block" is retried and other
-ready blocks wait; D144 and D146 replaced that rule, and the code and
-`specs/state-reconciliation.md:865-874` agree with each other
-(`internal/reconciliation/lifecycle/scheduler.go:165-167`). **Impact:** stale
-contract text. **Smallest fix:** reword the CLI spec to the retry rule. **Exit
-evidence:** the reworded text and `make docs-check`.
 
 ### B593
 
@@ -2965,6 +3016,1653 @@ a focused reproduction that identifies the remaining lock holder. **Exit
 evidence:** parallel interruption/retry probes and a justified release fix,
 considering an explicit unlock before close without weakening exclusion or
 adding a retry that conceals a live owner.
+
+### B800
+
+**Owner:** Agent guidance and Verification tooling. **Kind:** enabling.
+**Requires:** none. **Definition:** Specified. Roadmap step P0-A of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F14-01,
+F14-02. AGENTS.md now carries the effect prohibition, the ask list matches any
+path form of the binary, and the Stop hook is the guarded
+`scripts/hooks/stop-check`; what is left is a check that keeps the ask list
+complete.
+
+**Specs:** AGENTS.md, `.agents/skills/index.md` and
+`.agents/skills/code-implementation/references/verification.md` (End-of-turn
+hook) state the rules; [the command catalog](../cli/commands.md) owns each
+command's Effects column.
+
+**Work:**
+
+- F14-01 (Medium): a test in `test/architecture/docs_test.go` reads the
+  catalog's Effects column and `.claude/settings.json`, and fails when a
+  command with a remote or host effect, or one that reveals a secret, has no
+  matching `ask` pattern, or when a pattern names no catalog command.
+- F14-02 (High): nothing left; the hook and its documentation are in place.
+- Optional, waits for [Q62](#audit-remediation-decisions): a Codex project hook calling the
+  same script through a narrow un-ignored `.codex/hooks.json`.
+
+**Exit evidence:** the new docs test fails when an `ask` pattern for `destroy`
+is removed and when a new effectful command is added to the catalog without a
+pattern; `make docs-check` and `make check` pass.
+
+### B801
+
+**Owner:** Verification tooling and Milestones. **Kind:** enabling.
+**Requires:** B800; owner decisions [Q63](#audit-remediation-decisions) and
+[Q64](#audit-remediation-decisions) for their parts. **Definition:** Specified. Roadmap
+step P0-B of the [2026-10-26 spec audit](../../audits/spec/2026-10-26.md);
+findings F13-01, F17-01, F17-03, V2-01, F15-02. The owning pages already tell
+the truth; this item adds the docs-check guards that keep them so and closes
+two milestone-page gaps.
+
+**Specs:** [contexts](../contexts.md) states registry version 6 and setup's
+lock use; the storage coverage family states no vendor-support condition;
+[milestones](../milestones.md) carries the Active slices table;
+[storage](../storage.md#cluster-execution-budget) carries the six-host Not
+yet met line (B79); `../api/storage.md` and `../storage-resources.md` state
+NVMe-oF and StorageExport realized.
+
+**Work:**
+
+- F13-01 (High): a `test/architecture` bounds test compares each version cell
+  of the contexts.md record table (Registry 6, Reservation 3, Input manifest
+  3, User selection 2, Media record 1) and the controller record version with
+  its constant in `internal/workspace/contexts/contracts.go`. Pre-existing
+  defect: the `ControllerDescriptor` doc comment there says only confirmed
+  setup may introduce the descriptor, against D152; correct it.
+- F17-01 (High): a docs-check lint refuses `IBM-supported`,
+  `provider-supported`, `release-qualified`, `support status` and
+  `Release support` in specs outside `milestones/backlog.md`,
+  `milestones/delivered.md` and decision-history rows, with a named allowlist
+  for the negative statements at `cli/output.md` and `milestones/m1.md`.
+  Restate [B484](m2.md#b484)'s exit as the finite list of Bootwright-realized
+  matrix rows. Reword the P4 profile row's AVX-512 "External dependencies"
+  cell in `../storage-coverage.md` as the tested host, together with the
+  `TestCephProfile*` tests that read the table.
+- F17-03 (High): `test/architecture/milestones_test.go` checks that every
+  Active slices row names a planned slice whose page holds an item
+  `in progress`, that every such slice has a row, and that Status Next cells
+  name only active or open work. Applying [Q63](#audit-remediation-decisions)'s answer to the scope
+  rule waits for the owner.
+- V2-01 (Medium), optional: a docs-check that every storage kind the specs
+  call realized or refused agrees with `lifecycle.Supported`.
+- Waits for [Q64](#audit-remediation-decisions): keep U03 and record its basis as a
+  replica-safety rule, or remove the admission check, its matrix row and
+  `cmd/bootwright/testdata/matrix/U03.yaml`.
+
+**Exit evidence:** each new test fails on a seeded mismatch (a changed version
+cell, a reintroduced phrase, a removed Active slices row); `make docs-check`
+and `make check` pass.
+
+### B802
+
+**Owner:** Managed OS and Substrate. **Kind:** safety. **Requires:** B801;
+owner decisions [Q65](#audit-remediation-decisions) and [Q66](#audit-remediation-decisions) for
+their parts. **Definition:** Specified. Roadmap step P0-C of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F10-01,
+F10-05, F10-02, R2-06-03, CX-R5, CX-X1. A physical installation erases only a
+disk named by its by-id WWN path, every physical proof uses one MAC-set
+equality, power commands never reach the controller host or an unproved
+target, and one BMC is one claim whatever its spelling.
+
+**Specs:** [physical installation](../managed-os.md#physical-installation),
+[root-device shape](../api/machines.md#bmc-and-root-device-shape),
+[physical disk safety](../state-reconciliation.md#physical-disk-safety),
+[controller-host protection](../state-reconciliation.md#controller-host-protection),
+[identity and power operations](../substrates.md#identity-and-power-operations),
+[physical machine realization](../substrates.md#physical-machine-realization),
+[machine power operations](../cli.md#machine-power-operations) and
+[host reservations](../infrastructure-services.md#host-reservations) state the
+rules; their Not yet met lines point here.
+
+**Work:**
+
+- F10-01 (High): baremetal admission in `internal/managedos/installation`
+  refuses a `deviceName` that is not `/dev/disk/by-id/wwn-0x` plus 16 or 32
+  lowercase hex digits, at `os.install.rootDeviceHints.deviceName`; the `%pre`
+  rendered by `kickstart.go` stops before any storage directive unless the path
+  resolves to a whole block device. Update the code-checked refusal-table row
+  "A physical Machine naming no root device" with the code
+  (`TestManagedOSRefusalTableMatchesUnsupported`). Tests: a `/dev/sdX`
+  `deviceName` on baremetal refuses at plan; a rendered `%pre` whose path
+  resolves to a partition or nothing stops before storage.
+- F10-05 (Medium): the controller-side target proof, the pre-boot proof
+  (`internal/substrate/preboot.go`, `target.go`) and `targetProofLines` use
+  set equality, a management controller's host interface excepted; the proof
+  records the complete reported set for the erase comparison. Tests: an extra
+  reported MAC refuses; a host-interface NIC does not.
+- F10-02 (Medium): `internal/machine/power` refuses the Environment's
+  controller Machine, refuses a reported UUID or MAC equal to the controller
+  host's own, runs the full target proof for an unpinned physical Machine and
+  refuses one declaring no MAC. One test per refusal.
+- R2-06-03 (Medium): the physical block publishes `bmc-system:<lowercase
+  UUID>` in the same controller record before any media insert and refuses
+  `controller.conflict` naming the holder. Test: a DNS name and an IP literal
+  for one BMC refuse the second context before media insertion.
+- Waits for [Q65](#audit-remediation-decisions): change the Resolution outcomes
+  clause, add the table row and capability field if B, and a negative test
+  that a forbidden, disconnected or malformed removal observation is never
+  `no-effect` and never admits a replacement registration
+  (`TestTransitionTablesMatchSpec` moves with the row).
+- Waits for [Q66](#audit-remediation-decisions): managed-os.md's unknown resolution and
+  interruption row, and the interruption test over installation proof,
+  material withdrawal, power-off and disk boot.
+- Follow-up, outside this exit: admit `wwn` and `serialNumber` beside
+  `deviceName` on baremetal and compare them in `%pre`, failing closed on a
+  mismatch or an unreadable attribute.
+
+**Exit evidence:** the named refusal tests above; the security-safety skill
+bullet matches managed-os.md; the CX-R5 and CX-X1 answers are recorded and
+applied with their tests; `make check` passes.
+
+### B803
+
+**Owner:** Substrate and Workspace. **Kind:** safety. **Requires:** B801;
+owner decision [Q67](#audit-remediation-decisions) for its part. **Definition:**
+Specified. Roadmap step P0-D of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F10-03,
+R2-06-01, R2-06-04, R2-06-02, V2-03. Contexts sharing a provider host claim
+the bridges and emulated BMCs they use, and a permanent deletion names every
+object its operations realized and the hazards it leaves.
+
+**Specs:** [mutation safety](../state-reconciliation.md#mutation-safety),
+[permanent deletion](../contexts.md#permanent-deletion),
+[host reservations](../infrastructure-services.md#host-reservations),
+[substrates](../substrates.md) (libvirt attachments, emulated BMC) and
+[machines](../api/machines.md) state the rules. The incarnation identity stays
+[B568](#b568); the live-domain destroy guard stays [B567](#b567).
+
+**Work:**
+
+- F10-03 (High), R2-06-02 (Low): the orphan confirmation, and every
+  retained-operation exit that names deletion then `init`, print the by-hand
+  removal of abandoned objects, the same-name and cross-controller warning
+  (D155) and the exclusive keys the deletion frees; a golden of each.
+- R2-06-01 (High): every external libvirt attachment publishes the shared key
+  `bridge-use:<name>` (`internal/substrate/libvirt/requests.go`); a removal
+  that would release an exclusive `bridge:<name>` refuses `controller.conflict`
+  naming the other context. The code-checked attachment-bound row counts the
+  new keys. Define and test a stale `bridge-use` left by an abandoned context.
+  Tests: a removal of a managed bridge another context uses refuses.
+- R2-06-04 (Low): the libvirt machine block claims its BMC endpoint's `bmc:`
+  key shared, with `ControllerReservationKey`'s normalization; its removal
+  refuses while another context holds that key exclusively, and its
+  installation refuses at registration. A test for each.
+- V2-03 (Medium): the deletion refusal, orphan confirmation and deletion plan
+  in `internal/workspace/contexts` list the objects the frozen operations
+  realized (or name `bootwright diff --context <name>`); goldens over a context
+  whose edited input dropped a realized object.
+- Waits for [Q67](#audit-remediation-decisions): under the tombstone answer, an
+  `abandoned/<name>` holder, a confirmed release command in
+  `../cli/commands.md`, and a test that a second context's `bmc:` claim
+  refuses until it is released.
+
+**Exit evidence:** the named tests and goldens; grep finds B568 in Mutation
+safety and Permanent deletion; `make check` passes.
+
+### B804
+
+**Owner:** Storage and State reconciliation. **Kind:** safety.
+**Requires:** owner decisions [Q68](#audit-remediation-decisions) and
+[Q69](#audit-remediation-decisions). **Definition:** Needs definition. Roadmap step
+P0-E of the [2026-10-26 spec audit](../../audits/spec/2026-10-26.md);
+findings R2-02-01, F10-04, CX-API04. Retiring a Ceph cluster or its exports
+with their hosts never strands a surviving consumer's storage.
+
+**Specs:** [StorageExport](../storage-resources.md#storageexport) and its
+[refusal table](../storage-resources.md#export-refusals) state the refusal
+(option A) with a Not yet met line;
+[removal and concurrency](../storage.md#removal-and-concurrency) and
+[add-ons](../add-ons.md) link it;
+[quiescence before removal](../state-reconciliation.md#quiescence-before-removal)
+is unchanged until the owner confirms. `../storage.md` names the safe-retry
+exceptions (B659, B662) and the physical exits; [B485](m2.md#b485) records the
+recovery limitation.
+
+**Work:**
+
+- R2-02-01 (High), F10-04 (Medium): in `internal/storage/ceph`
+  (`export.go`, `retirement.go`), export and core-cluster retirement planning
+  refuses before registration when a container cluster whose fdf package names
+  the export survives the removal, naming the cluster and the export; plan
+  flags the non-destroyable topology before the first apply. A planner test
+  destroys a context with virtual Ceph and a physical-node fdf consumer. Under
+  option B, an impact plus a distinct acknowledgement replaces the refusal
+  and its row. State-reconciliation.md takes the confirmed sentence.
+- CX-API04 (High): apply [Q69](#audit-remediation-decisions)'s answer to B485's
+  Requires or keep the recorded limitation.
+
+**Exit evidence:** the export refusal row "consumer cluster survives the
+removal" and the planner test that cites it; `make check` passes.
+
+### B805
+
+**Owner:** Secrets and State reconciliation. **Kind:** safety.
+**Requires:** owner decision [Q70](#audit-remediation-decisions) for the exit.
+**Definition:** Specified. Roadmap step P0-F of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); finding R2-04-01. A
+rotated BMC, KubeVirt, vCenter or registry credential no longer strands
+continuation and removal, while every ownership proof still runs.
+
+**Specs:** [immutable binding](../secrets.md#immutable-binding-and-contexts)
+names the two classes, effect material and access credential;
+[continuation and removal](../state-reconciliation.md#continuation-and-removal)
+keeps D37's two exits until the owner decides.
+
+**Work:**
+
+- R2-04-01 (High): each `*Ref` field to a Secret in `../api/` declares its
+  class (machines BMC credential, provider `kubeconfigRef`, vCenter, registry
+  `credentialsRef`, `recoveryPassphraseRef`, host keys); a docs test fails on
+  an unclassified field.
+- Waits for [Q70](#audit-remediation-decisions): the exit beside D37, named apart
+  from B181's bounded-run rebind, recorded as a new binding version in the
+  operation's evidence; continuation-and-removal and the managed-os and
+  substrates KubeVirt wording follow; the expired KubeVirt token case in
+  [M1](m1.md) is settled under the same rule.
+
+**Exit evidence:** a test rotates a bound BMC credential and proves destroy
+succeeds only through the chosen exit while the ownership proof still runs, and
+that an effect-material Secret refuses it; `make check` passes.
+
+### B806
+
+**Owner:** Workspace and State reconciliation. **Kind:** safety.
+**Requires:** B801. **Definition:** Specified. Roadmap step P0-G of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F09-02,
+F13-07, F11-07, F13-02. The store survives a reboot, its removal always has
+room to register, no other account blocks a run, and no prompt holds the root
+lock.
+
+**Specs:** [storage, locking and publication](../contexts.md#storage-locking-and-publication)
+and [command results](../contexts.md#command-results-and-confirmation) in
+contexts.md, and the sweep bound in [security](../security.md); their Not yet
+met lines point here.
+
+**Work:**
+
+- F09-02 (Medium): deliver [B572](#b572)'s removal-reserve clause with its
+  exhaustion test; replace or rename
+  `TestADestroyTheAreaCannotHoldRefusesAtItsRegistration`
+  (`internal/reconciliation/lifecycle`); revisit the B267 removal-refused exit
+  in contexts.md once the code meets the rule.
+- F13-07 (Medium): `localFilesystem` in
+  `internal/workspace/contextfs/files_linux_amd64.go` and the setup dry run's
+  state-root check refuse tmpfs and overlayfs for the production root, keeping
+  them for injected test roots; mark `delivered.md`'s old filesystem list
+  historical.
+- F11-07 (Medium): `matching()` in
+  `internal/reconciliation/ansiblerunner/jobs_linux_amd64.go` counts only
+  root-owned private run directories, or [B389](#b389)'s move to a root-owned
+  0700 parent lands; its foreign-entries test.
+- F13-02 (Medium): `context update` and `context delete` present from a
+  shared hold, prompt with no lock, then take the exclusive root lock and
+  lease and re-prove the plan, refusing with no write on any change. State in
+  contexts.md the block outcome when an in-operation root transaction cannot
+  take the root lock (failed with no effect run, unknown otherwise, produced
+  material kept under D124), keeping the no-wait rule unless the same change
+  specifies a bounded wait.
+
+**Exit evidence:** an apply-retry exhaustion test with a destroy that registers
+and completes; tests refusing a tmpfs and an overlayfs production root before
+first publication; more than 256 foreign matching entries and a run that still
+starts; a store changed between prompt and confirmation leaves no write; each
+cited from its clause; `make check` passes.
+
+### B807
+
+**Owner:** Desired state and Architecture. **Kind:** safety.
+**Requires:** none. **Definition:** Specified. Roadmap step P0-H of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F05-06,
+F08-01, F12-06, R2-05-11, V2-02. Admission reports or refuses what it will not
+honor, no default always refuses, and every remote command is quoted in one
+place.
+
+**Specs:** [container clusters](../container-clusters.md#selection-and-refusal)
+and [endpoints](../api/container-clusters.md#endpoints) state the warnings and
+refusals; [process boundary](../security.md#process-boundary) names the remote
+fixed worker; [contexts](../contexts.md) the update warning;
+`../api/storage.md` the `verified-tunnel` default.
+
+**Work:**
+
+- F05-06 (Medium): in `internal/containercluster/agentinstall`, an authored
+  endpoint `port` or `scheme` other than the native one, any `prefixLength`
+  and a non-empty `interfaceNetworks` refuse at plan at the field path;
+  `dnsName`, `labels` and `taints` report `api.deferred`. Add the refusal-table
+  rows with the code (`TestContainerClusterRefusalTableMatchesUnsupported`); a
+  test per field asserts code and path. [Q71](#audit-remediation-decisions) may
+  instead remove the four fields.
+- F08-01 (Medium): one `module_utils` function quotes every SSH remote command
+  (`ceph_core.py` `ssh_argv` and `managedos_registration.py` today); a
+  collection unit test lists every subprocess or ssh construction site under
+  `plugins/` and fails outside it, extending the `shell=True` check.
+- V2-02 (Medium): an omitted `ceph.cephadm.clusterSSH.transport` normalizes to
+  `verified-tunnel` (`internal/storage/ceph/requests.go`) and `validate`
+  refuses `native`; update storage.md's refusal row, matrix row U07 and its
+  fixture with the code.
+- F12-06 (Low): the context-update warning says restoring the original files
+  leaves apply refusing until [B598](#b598); its golden.
+- R2-05-11 (Low): add the license-review header to the four entitlement YAMLs
+  lacking it (`multidc-platform/entitlements/ceph.yaml` and the `host-variants`,
+  `observability` and `services` storage entitlements).
+
+**Exit evidence:** each finding's acceptance holds; a StorageCluster omitting
+the transport passes `validate` and `plan`; `make check` passes.
+
+### B808
+
+**Owner:** Architecture. **Kind:** enabling. **Requires:** B800 to B807
+(Phase 0). **Definition:** Specified. Roadmap step P1-A of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F06-01,
+F06-03, F06-04, F06-08, F06-12. The engine refuses an object that no bound
+implementation, or more than one, claims, and a fitness test keeps arm and
+implementation constants inside their owners.
+
+**Specs:** [architecture](../architecture.md#implementation-selection) states
+the per-domain selector and the double-claim refusal,
+[adding an implementation](../architecture.md#adding-an-implementation-of-an-existing-capability)
+holds the touch list, and the unqualified "policy never branches on
+implementation" rule; [state reconciliation](../state-reconciliation.md) makes
+the effect-bearing predicate domain-owned;
+[substrates](../substrates.md#selection-and-refusal) names its selector. The
+Not yet met lines there point here.
+
+**Work:**
+
+- F06-01 (Medium): an engine claim check that refuses, before registration,
+  an object claimed by two bindings with a diagnostic naming both
+  implementations, and an object claimed by none through its domain's refusal
+  table; a test with a synthetic overlapping binding.
+- F06-03 (Medium): a `test/architecture` rule rejecting `substrate.Arm*` and
+  implementation-identity constants, literals and arm field paths outside
+  `internal/substrate`, the owning implementation packages, `cmd/bootwright`
+  and admission files; an exact allowlist seeded from today's uses
+  (`agentinstall` pushed.go, `internal/cli/lifecycle_actions.go`, machine,
+  managed OS), each row naming the item that removes it, which only shrinks;
+  a fixture comparing `substrate.ArmKubeVirt` in a non-allowlisted
+  containercluster file fails; architecture.md names the test.
+- F06-04 (Medium): a shared contract suite for the lifecycle Capability port
+  (failure, unknown outcome, cancellation, replay, removal) run by every
+  implementation and one synthetic double.
+- F06-08 (Low): domain roots export the effect-bearing predicate,
+  `cmd/bootwright` injects it, `support.go` and `status.go` use it, and
+  `internal/reconciliation/lifecycle` imports no domain package;
+  `TestUnclaimedObjectTableMatchesTheEngine` still passes.
+- F06-12 (Low): record one heading convention (Selection, Implementations,
+  Refusal table) in the spec-writing guidance page, applied on each domain
+  page's next edit; a test fails when `substrate.Realized()` differs from the
+  arms the composition root binds.
+
+**Exit evidence:** the claim-check and fitness tests above pass and fail on
+their fixtures; the P1-A roadmap exit holds; `make check` passes.
+
+### B809
+
+**Owner:** Substrate and Architecture. **Kind:** enabling. **Requires:**
+B808. **Definition:** Specified. Roadmap step P1-B of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F18-03,
+F18-07, F07-07, F04-04, V2-13 (CX-X6 applied). Adding a substrate arm touches
+the substrate package and one dispatcher, not every consumer.
+
+**Specs:** [architecture](../architecture.md#roles) and
+[substrates](../substrates.md#selection-and-refusal) state today's per-arm
+touch set; the substrates day-2 power paragraph routes KubeVirt and vSphere
+power through the arm's entry points; m1.md B87 and B99 state the real touch
+set. The Not yet met lines there point here; once this lands, the substrates
+Selection paragraph returns to "no consumer changes".
+
+**Work:**
+
+- F18-03 (Medium): a substrate-owned dispatcher role taking the frozen target
+  and dispatching the eight entry points internally, consumers including only
+  it; capability facts on `substrate.Target` replacing `Arm*` checks in
+  managed OS, agent install, machine and containercluster; a fitness test
+  that no role outside `substrate_*` names `substrate_<arm>_machine` and no
+  Go package outside `internal/substrate` and admission reads `substrate.Arm*`;
+  reword the `internal/substrate/target.go` comment.
+- F18-07 (Low): `playbooks/machine/power.yml` and `power_read.yml` reach each
+  arm's power and state_read entry points through the dispatcher and call no
+  `redfish_*` module; rename `machine_power_redfish`,
+  `machine_power_read_redfish`, their request versions and the Go controller
+  type to arm-neutral names (pre-1.x, no converter); a fake arm reaches
+  machine start through its own entry points.
+- V2-13 (Low): the arm becomes a field of the frozen power `Request`, in
+  `Canonical()` and the digest; `MaterialValues` drops `substrate`; the role's
+  argument spec declares it with choices equal to the dispatch keys;
+  `power.yml` fails with a named message before the first per-arm lookup; a
+  collection unit test with an unlisted arm sees that message.
+- F07-07 (Low): `cmd/bootwright/wiring_preflight.go` holds only bindings (no
+  `libvirtAllocations` projection or admission body); one package declares
+  Passed, Failed, Unknown, Pending and ProbeTimeout; `boundaries_test.go` no
+  longer lists `infrastructureservices/dnsserver` under
+  `containercluster/preflight`.
+- F04-04 (Low): B87's definition states the KubeVirt interface `macAddress`
+  source and whether `hardware.nics` and `interfaceBinding` are admitted on
+  KubeVirt; `examples/container-clusters/lab-kubevirt` follows it.
+
+**Exit evidence:** a synthetic second arm compiles with no consumer edit;
+`machine stop` reaches KubeVirt through the substrate port in a test; the
+fitness and unit tests above pass; `make check` passes.
+
+### B810
+
+**Owner:** Architecture and Storage. **Kind:** enabling. **Requires:** B808.
+**Definition:** Specified. Roadmap step P1-C of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F06-07,
+F07-03, F18-04, F06-05, F17-06, F18-09, F18-10. The storage and container
+cluster contexts each get a neutral core and an implementation package, and
+general-flow code stops naming Ceph, libvirt or OpenShift.
+
+**Specs:** [architecture](../architecture.md#bounded-contexts) states family
+ownership with the current implementation and selector fields and the fan-in
+port rule in [lifecycle ports](../architecture.md#lifecycle-ports);
+storage.md and container-clusters.md name their selector;
+[infrastructure services](../infrastructure-services.md) and
+[its API](../api/infrastructure-services.md) state implementation-keyed
+dispatch and the storage-owned gateway record. The Not yet met lines there
+point here.
+
+**Work:**
+
+- F06-07 (Medium): replace `WithRetirementPolicies(ceph.PhysicalRetirementPolicies)`
+  on `installation.New`/`NewErase` with a fan-in aggregated from every bound
+  implementation; route `WithClaims(baremetal.BlockID)` on erase and Ceph
+  physical retirement through Reconciliation's API-object requirement
+  resolution; a composition test fails when a capability receives another
+  capability package's BlockID; storage.md (Physical retirement) and
+  managed-os.md name the port.
+- F07-03 (Medium): a pure per-kind member-machines accessor used by
+  environment selection, admission and compilation; the inspection
+  `CephEvidence`/`CephProof` port renamed neutral, with the Ceph adapter bound
+  in composition; an architecture test forbids `"ceph"` in non-test
+  `internal/environment` and `internal/desiredstate`; a fake second
+  StorageCluster arm passes selection and admission with no edit outside its
+  package.
+- F18-04 (Medium): kind facts (effect-bearing, managed-service, normalization
+  rank, reference fields) derived from the `api/v1alpha1` schema registry or
+  held by exhaustiveness tests; domain-published MachineBindings for
+  environment and compilation; CLI action labels from BlockDefinition
+  descriptions instead of literals in `internal/cli/lifecycle_actions.go`; a
+  fitness test forbidding implementation-identity literals and arm field
+  paths in `internal/reconciliation`, `internal/desiredstate`,
+  `internal/environment` and `internal/cli`.
+- F06-05 (Low): split each context into a family-neutral core and an
+  implementation package, introducing no abstraction beyond the seam.
+- F17-06 (Low): state the shared Versions and Evidence-not-approval clauses
+  once (milestones.md completion rules or docs/acceptance.md);
+  container-cluster-coverage.md and add-on-coverage.md link them and keep
+  only their additions; storage-coverage.md links them or says why they do not
+  apply to M2; coverage pages are named for their implementation.
+- F18-09 (Low): key `infra_managed_service` `vars/main.yml` by implementation
+  identity and filter managedservice `ManagedObjects` on `spec.implementation`;
+  a test with two Definitions of one kind plans each object exactly once.
+- F18-10 (Low): storage exposes one pure derivation of the attached gateway
+  records used by `dnsserver` and `AddonExportFacts`; `objectGatewayRef` is
+  read only under `internal/storage`, and `dnsserver` imports no storage or
+  containercluster package.
+
+**Exit evidence:** the P1-C roadmap exit (neutral cores, no Ceph policy into
+Managed OS except through a fan-in port, coverage pages named for their
+implementation); the tests above pass; `make check` passes.
+
+### B811
+
+**Owner:** Architecture. **Kind:** enabling. **Requires:** B808.
+**Definition:** Specified. Roadmap step P1-D of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F06-09,
+F06-11, V2-10 (F06-10, F17-08 and R2-02-04 applied). No specialization is keyed
+on an authored release label, and the catalog test finds every registry.
+
+**Specs:** [architecture](../architecture.md#implementations-and-version-variation)
+states that facts are read at plan or apply from frozen artifacts, the
+refusal-seam rule, the promotion rule and registry discovery by marker;
+api/container-clusters.md applies the general topology rule to every release;
+the version-specializations knowledge page links the rule. The Not yet met
+lines there point here.
+
+**Work:**
+
+- F06-09 (Medium): remove the string-keyed `topologyOverrides` shape and the
+  authored-version parameter of `topologyFor` in
+  `internal/containercluster/topology.go`, and the `topologyOverride` and
+  `topologyOverrideKey` expectations in
+  `test/architecture/version_specializations_test.go`; a future per-minor
+  topology refusal moves from admission `api.invariant` to plan, read from the
+  frozen installer artifact; `TestTopologyTableMatchesSpec` still passes.
+- F06-11 (Low): `TestDocsVersionSpecializationCatalogMatchesRegistries`
+  discovers registries by a marker or a scan for the Specialization
+  constructor instead of two fixed paths, and fails on a marker-bearing
+  registry missing from the catalog; a fixture registry outside the two paths
+  makes it fail.
+- V2-10 (Low): specs/deferred/add-ons-design.md stops saying "version
+  constraints" except as the fact predicate architecture.md defines.
+
+**Exit evidence:** grep finds no specialization keyed on `release.version`;
+the fixture registry test fails as intended; `make docs-check` and
+`make check` pass.
+
+### B812
+
+**Owner:** Desired state and State reconciliation. **Kind:** defect.
+**Requires:** none for the catalog, StorageReplication closure and warnings;
+owner decisions [Q72](#audit-remediation-decisions),
+[Q73](#audit-remediation-decisions), [Q74](#audit-remediation-decisions),
+[Q75](#audit-remediation-decisions) and open question 1 of [B732](m3.md#b732) for the rest.
+**Definition:** Specified. Roadmap step P1-E of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings R2-01-01,
+R2-01-02, R2-01-03, R2-01-04, R2-01-05, R2-01-06, R2-01-07, F03-08 (Sibling
+API-02 folded into R2-01-04). Plan edges follow one catalog a test holds to the
+code, and environment selection retains what an apply needs.
+
+**Specs:** [plan and execution](../state-reconciliation.md#plan-and-execution)
+states the reference-is-a-requirement default with external services exempt;
+container-clusters.md and api/infrastructure-services.md name the managed
+Proxy requirement; [selection](../api/environment.md#resource-and-cluster-selection)
+has the corrected StorageCluster closure row, StorageReplication retention,
+the generalized excluded-reference rule and the two validate warnings. The
+Not yet met lines there point here.
+
+**Work:**
+
+- R2-01-01 (Medium): a reference-edge catalog in state-reconciliation.md that
+  each domain page links (storage.md "Plan and prerequisites" included), and
+  a test that every requirement matches the edge catalog, failing when a capability
+  emits a requirement outside the catalog or omits one (a cluster install
+  without its managed Proxy requirement fails).
+- R2-01-04 (Medium): `internal/environment/selection.go` follows
+  StorageReplication `peerClusterRef`/`peerPoolRef` and retains both clusters
+  as full roots and the relationship when either end is selected; tests for
+  primary-only, peer-only, admission passing, and a StorageCluster retained
+  only through a StorageExport keeping only its node closure.
+- R2-01-05 (Medium): the per-object validate warning for an excluded Machine
+  or InfraProvider, with a test over a cluster plus a standalone managed
+  Machine and an authored `containerClusters` list.
+- R2-01-06 (Low): the omitted-root validate warning with a test; link or drop
+  "cross-context reference semantics" at architecture.md bounded contexts.
+- R2-01-03 (Low): a test of the generalized excluded-reference rule with a
+  cluster-retained referrer.
+- Waits for [Q72](#audit-remediation-decisions): remove `spec.resources` or
+  give it a tracked example and rationale; the excluded-reference refusal
+  names the selection field; R2-01-07's `gates`/`follows` become unknown or
+  object requirements.
+- Waits for [Q73](#audit-remediation-decisions) and
+  open question 1 of [B732](m3.md#b732): the hostClusterRef
+  closure row and its multidc selection test, and the hub-VM edges with their
+  inverted removal, as B732 exit evidence.
+- Waits for [Q74](#audit-remediation-decisions) and
+  [Q75](#audit-remediation-decisions): retention or refusal replacing the warnings.
+
+**Exit evidence:** the P1-E roadmap exit; the catalog test and the selection
+tests above pass; `make check` passes.
+
+### B813
+
+**Owner:** State reconciliation. **Kind:** safety. **Requires:** B801; owner
+decision [Q76](#audit-remediation-decisions) for the digest split.
+**Definition:** Specified. Roadmap step P1-F of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings R2-03-01,
+R2-03-02, R2-03-03, R2-03-05, R2-03-06. A removal under another build reads
+every identity-fixing value from the frozen request, and a guard catches a
+mark or proof change that leaves the content digest in place.
+
+**Specs:** [dependency safety](../state-reconciliation.md#dependency-safety-during-recovery)
+states that identity, place, mark and host-claim values travel in the frozen
+request, defines "effect pin" once and states the fail-closed backstop;
+[operation records](../state-reconciliation.md#operation-records) states the
+optional-member rule; the Go and Ansible code-implementation references
+carry the digest checklist item. The Not yet met lines there point here.
+
+**Work:**
+
+- R2-03-01 (Medium): a contract-guard or architecture test that removal
+  automation reads no host path, prefix or mark constant except through the
+  frozen request; each contract golden lists the identity and mark values its
+  request carries.
+- R2-03-02 (Medium): mark-format and proof-id sections in each contract
+  golden, so changing either without moving the digest fails
+  `TestEveryImplementationMovesItsContentDigestWithItsContract`; a recorded
+  reason for each transient classification; extend
+  `TestEveryAutomationVersionLiteralIsClassified` to quoted `bootwright.io`
+  label and annotation keys.
+- R2-03-03 (Medium): `scripts/check-commits` requires a
+  `Contract: unchanged | <moved implementation>` body line on commits touching
+  the collection's roles or plugins or a capability package.
+- R2-03-06 (Low): an effect-pins section in each contract golden.
+- R2-03-05 (Low): a reader refusing an unknown optional member names the
+  record's `build` when it decodes; a test.
+- Waits for [Q76](#audit-remediation-decisions): the effect-identity and
+  mechanism digest split with a `lifecycle.state` refusal before resolution;
+  whether the Ceph digest hashes pinned values instead of the
+  `selected-tunnel-image-v3` tag; the continuation-after-a-fix knowledge
+  advice on pin moves.
+
+**Exit evidence:** the P1-F roadmap exit; a dry-run commit touching a role
+without the Contract line is refused; the guard tests fail on their fixtures;
+`make docs-check` and `make check` pass.
+
+### B814
+
+**Owner:** Desired state. **Kind:** enabling. **Requires:** B808; owner
+decisions [Q77](#audit-remediation-decisions),
+[Q78](#audit-remediation-decisions), [Q79](#audit-remediation-decisions),
+[Q80](#audit-remediation-decisions), [Q81](#audit-remediation-decisions), [Q82](#audit-remediation-decisions),
+[Q83](#audit-remediation-decisions), [Q84](#audit-remediation-decisions),
+[Q85](#audit-remediation-decisions), [Q86](#audit-remediation-decisions),
+[Q87](#audit-remediation-decisions) and [Q88](#audit-remediation-decisions).
+**Definition:** Needs definition. Roadmap step P1-G of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F18-02,
+F05-03, F03-01, R2-05-01, F04-01, F04-02, F03-03, F05-07, F05-02, R2-05-04,
+V2-19. One owner decision record fixes the API shapes before B87 and B99
+revive arms and before M3 and M4 build further on the flat ContainerCluster;
+pre-1.x each reshape is a same-version edit with no converter (D142).
+
+**Specs:** unchanged pending the decisions (D132, D133);
+[api/storage](../api/storage.md) lists StorageReplication, nativeName and
+conditional mirroring (F05-02 applied); api/secrets.md places Satellite and
+Insights refusals before registration; examples/README.md names the KubeVirt
+planning refusal.
+
+**Work:**
+
+- Before deciding: run the operator-task check of audit section 5.7 on the
+  current and each candidate shape (one human operator, one agent reading only
+  `validate` and `render effective` JSON), and cite its results for the chosen
+  and rejected shapes in the decision record.
+- After the decisions: write the union, derivation, name and classification
+  rules into [api.md](../api.md#unions) and its kind pages; reshape the
+  schemas, admission, normalization, examples and goldens in one slice per
+  [Q87](#audit-remediation-decisions); add the architecture test rejecting a
+  discriminator whose value equals a sibling arm; add the retired-path
+  refusals naming each replacement.
+- F05-02 (Medium): a repocheck test comparing the api/storage.md Kinds table
+  with the registered Storage kinds (shared with F02-04 in B824).
+- R2-05-04 (Medium): per [Q88](#audit-remediation-decisions), rename or
+  re-describe the example, README sizing, golden, coverage row and the B731
+  note together.
+
+**Exit evidence:** one recorded owner decision covers every question above
+and cites the 5.7 results; the P1-G roadmap exit holds; after the reshape,
+`make check` passes.
+
+### B815
+
+**Owner:** Milestones. **Kind:** enabling. **Requires:** B801; owner decisions
+[Q89](#audit-remediation-decisions), [Q90](#audit-remediation-decisions),
+[Q91](#audit-remediation-decisions) and [Q60](m4.md#m4a-open-decisions).
+**Definition:** Needs definition. Roadmap step P1-H of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F01-01,
+F17-02, F01-02, F17-04, F01-04. Milestones complete on the committed
+portfolio, Requires lines state real dependencies, and session-taken clauses
+sit in one review queue.
+
+**Specs:** [lifecycle and handoff](../project.md#lifecycle-and-handoff)
+defines downstream day-2 resources and the frozen post-handoff stance;
+state-reconciliation.md readiness links it; project.md marks the early
+per-cluster handoff pending Q60.
+
+**Work:**
+
+- F01-02 (Medium): link project.md#lifecycle-and-handoff from add-ons.md
+  GitOps handoff evidence; add the relinquish-verb and named-owner options to
+  B106 as a note.
+- F01-04 (Low): add the pending-Q60 marker to add-ons.md's GitOps bootstrap
+  object; when Q60 is answered, remove all three markers together and record
+  the answer as a decision.
+- Waits for [Q89](#audit-remediation-decisions): split project.md Product scope
+  into two labelled lists, each committed entry linking its milestone.
+- Waits for [Q90](#audit-remediation-decisions): per-submilestone Requires cells
+  on m1 to m4, M3d's M4 prerequisites in the Status Requires cell, the waiver
+  citation corrected to D174.
+- Waits for [Q91](#audit-remediation-decisions): one scope rule in milestones.md and
+  one open-clause list, trimmed to the page's byte budget.
+
+**Exit evidence:** the P1-H roadmap exit; `make docs-check` passes.
+
+### B816
+
+**Owner:** State reconciliation and Controller setup. **Kind:** safety.
+**Requires:** B800 to B807 (Phase 0); owner decisions
+[Q92](#audit-remediation-decisions), [Q93](#audit-remediation-decisions),
+[Q94](#audit-remediation-decisions), [Q95](#audit-remediation-decisions) and
+[Q96](#audit-remediation-decisions) for their parts only. **Definition:** Specified.
+Roadmap step P1-I of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F09-01,
+F09-03, F12-01, F12-02, F13-03, F13-04, F13-05, V2-05, V2-20, R2-02-03,
+R2-06-05, R2-06-06, CX-R6 (F09-04, F12-03 and CX-R4 applied). Every recovery
+refusal names an exit the host can keep, and partial removals read unknown.
+
+**Specs:** [continuation and removal](../state-reconciliation.md#continuation-and-removal),
+[the controller runtime](../controller.md#the-controller-runtime),
+[format and restore](../contexts.md#format-and-restore-boundary),
+secrets.md, cli.md, cli/output.md and
+[substrates](../substrates.md#kubevirt-machine-realization) carry the rules;
+their Not yet met lines point here.
+
+**Work:**
+
+- F09-03 (Medium): the completed-apply refusal names `deletionExit` in
+  `internal/reconciliation/lifecycle`, and `status.go` `offered()` returns the
+  deletion as for a completed destroy; a status golden over a completed apply
+  with a lost block record names `context delete --purge --allow-orphans`.
+- F12-02 (Medium): `diff.go` `recordedSide` and `status.go` `removedStatus`
+  read an object unknown when some but not all of its removal blocks are done;
+  diff and status goldens over a destroy paused at the online-cleanup boundary.
+- F13-03 (Medium): the `secret.store.corrupt` remedy in
+  `internal/secrets/secretstore/access.go` names D37's two exits with the
+  context name; a text test.
+- F13-04 (Medium): the pending-intent refusal and golden name both exits; in
+  this item's named slice, a setup failure that began no dnf transaction
+  clears the pending intent, with a test of a failed wheel fetch followed by
+  a successful launch of the receipt's runtime.
+- F13-05, V2-05 (Medium, Low): `execution.go`'s closure refusal and golden
+  name the registering build's setup (network or `--wheel-mirror`) and the
+  superseding removal.
+- V2-20 (Medium): a lifecycle test drives a completed apply with a latched log
+  fault through a settled apply (log reopened, flag cleared, handoff ready),
+  and a test that `status` never clears it.
+- R2-06-05 (Medium): `substrate_libvirt_host` probes addresses, IPv4 and IPv6
+  routes and link names before `net-define`; collection unit tests refuse an
+  overlapping route and an existing link of the bridge's name.
+- R2-02-03 (Medium): with B87, marks, lost-reply adoption and the
+  `kubevirt-vm:` key, and a fake-API test of lost-reply adoption and a foreign
+  same-labelled object.
+- CX-R6 (Medium): a test that `diff --observe` with a missing runtime and a
+  held `setup/lock` waits then rebuilds, refuses naming `bootwright setup`
+  without the wheel, and `status` never rebuilds, unless one exists.
+- Waits for [Q92](#audit-remediation-decisions), [Q93](#audit-remediation-decisions),
+  [Q94](#audit-remediation-decisions), [Q95](#audit-remediation-decisions),
+  [Q96](#audit-remediation-decisions): the chosen rule, its state-machine or status
+  reason, and its test.
+
+**Exit evidence:** the P1-I roadmap exit (F09-01 stays open until the owner
+reopens D38); the goldens and tests above pass; `make check` passes.
+
+### B817
+
+**Owner:** Secrets and CLI. **Kind:** safety. **Requires:** B805; owner
+decisions [Q97](#audit-remediation-decisions), [Q98](#audit-remediation-decisions),
+[Q99](#audit-remediation-decisions), [Q100](#audit-remediation-decisions) and
+[Q101](#audit-remediation-decisions) for their parts. **Definition:** Specified.
+Roadmap step P1-J of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings CX-R9,
+F11-01, F11-02, F11-03, F11-08, R2-04-02, R2-04-03, R2-04-04. Remote trust,
+tool authenticity and custody reveals each have one stated rule the code
+follows.
+
+**Specs:** [remote principals](../security.md#remote-principals),
+[supply chain](../security.md#cryptography-and-supply-chain) with the
+controller.md tool checksum table,
+[direct SSH sessions](../security.md#direct-ssh-sessions),
+[produced material](../secrets.md#produced-material),
+[native-side retention](../secrets.md#native-side-retention) and the cli.md
+exec bound; their Not yet met lines point here.
+
+**Work:**
+
+- CX-R9 (Medium): `internal/machine/access/several.go` bounds sessions by
+  `lifecycle.MaxRunningBlocks` or a named constant, starts them in canonical
+  order and stops admissions on cancellation; a test at the graph maximum and
+  a cancellation test; commands.md rows and help say "concurrently".
+- F11-01 (Medium): the state-reconciliation mutation-safety positive-proof
+  bullet links security.md#remote-principals.
+- F11-02 (Medium): a test refusing a source whose digest disagrees with the
+  publisher-fetched checksum (or cite
+  `TestFrozenToolRejectsVersionRouteAndChecksumSubstitution` if it covers it).
+- R2-04-03 (Medium): the orphan-acknowledged context deletion confirmation
+  names the native-side retention it abandons (contexts.md and code);
+  storage.md, storage-resources.md and storage-native-api.md link
+  secrets.md#native-side-retention and keep only domain facts.
+- Waits for [Q97](#audit-remediation-decisions): fingerprint arguments with a
+  substituted-key test, or the TOFU exception in security.md.
+- Waits for [Q98](#audit-remediation-decisions) and [Q99](#audit-remediation-decisions): the argv
+  rule and any new input flag.
+- Waits for [Q100](#audit-remediation-decisions): secrets.md lists every reveal once and
+  storage-resources.md and storage.md link it, or cli.md marks the reveal Not
+  yet met under B489.
+- Waits for [Q101](#audit-remediation-decisions): `access.unproved` only for a
+  custody-marked copy, in `internal/environment/inspection/service.go` and
+  `internal/cli/output_cluster.go`, with a test.
+
+**Exit evidence:** the P1-J roadmap exit; the tests above pass;
+`make check` passes.
+
+### B818
+
+**Owner:** Architecture and Verification tooling. **Kind:** enabling.
+**Requires:** none. **Definition:** Specified. Roadmap step P1-K of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F08-06,
+F08-07, F08-10, V2-14, V2-15 (F08-02, F08-03, F08-04, F08-05, F08-08, F08-09
+applied). Each tracked source file maps to one language row, and Python and
+role-spec rules have tests.
+
+**Specs:** [language responsibility](../architecture.md#language-responsibility)
+holds the language table with a Python row,
+[playbooks](../architecture.md#playbooks) the multi-play exception and the
+argument-spec depth rule; the code-implementation python.md, formatting.md
+and ansible.md references carry the procedures. The Not yet met lines there
+point here.
+
+**Work:**
+
+- F08-06 (Medium), extending B461: one canonical-JSON module and one bounded
+  process runner per Python site with a declared exception list (request
+  signing); a pylint `ansible-bad-function` gate with an allowlist; shared
+  golden vectors read by Go and Python tests where Go compares digests.
+- F08-07 (Medium): a `test/architecture` test mapping each tracked source
+  under the collection plugins and `scripts/` to a language row, failing on an
+  unmapped file.
+- F08-10 (Low): `make docs-check` selects its tests by a naming convention or
+  a list one Go test owns instead of the regex in the Makefile; optionally
+  move quick-test's selection behind a tested launcher.
+- V2-14 (Low): `test_playbook_entry_points.py` checks every `import_role` and
+  `include_role` in every play, failing on a `tasks_from` neither declared nor
+  in the allowlist (`containercluster/install_apply.yml` with its eight task
+  files), replacing the bare `9 if ... else 1` count.
+- V2-15 (Low): the role-spec test fails on an entry point reading an
+  undeclared `bootwright_*` variable; it lands with B431's three instances
+  fixed or as an exact shrinking allowlist naming B431.
+
+**Exit evidence:** the P1-K roadmap exit; `./scripts/ansible-check --suite
+units`, `make docs-check` and `make check` pass.
+
+### B819
+
+**Owner:** Milestones and Agent guidance. **Kind:** enabling. **Requires:**
+B801, B815; owner decision [Q102](#audit-remediation-decisions) for the move only.
+**Definition:** Specified. Roadmap step P2-A of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F15-01,
+F15-04, F15-06, F15-09, F15-10, V2-12. A slice task reads a bounded milestone
+card instead of a history-laden page, and each decision link opens its own
+entry.
+
+**Specs:** [AGENTS.md](../../AGENTS.md) and code-implementation already
+mandate only the page opening, the Planned slices row, the item row and its
+`### B<n>` section. [Milestones](../milestones.md) Identifiers still places the
+log in this page and defines no Q or OD prefix. The coverage pages' Not yet
+met lines no longer carry delivery state.
+
+**Work:**
+
+- F15-01 (Medium): move each dated waiver narrative out of the Requires
+  paragraphs of [m1](m1.md) to [m4](m4.md) into its D entry; give each page
+  opening (before `## Submilestones`) an entry in `docsByteBudgets`
+  (`test/architecture/docs_test.go`) of at most 16 KB; have
+  [specs/index.md](../index.md) name the row and section, not the page.
+- F15-04: `notYetMetParagraph` rejects a link into `milestones/delivered.md`,
+  with seeded fixture cases beside
+  `TestDocsNotYetMetMatcherRejectsBadParagraphs`.
+- F15-06: one Identifiers bullet defining every prefix used under
+  `specs/milestones/` (Q, OD and any other in use) with existing numbers fixed;
+  one open-decision table header with a Status column naming the answering D;
+  reconcile m4.md's open-decision rows with D174; a milestone check fails on an
+  unknown header or an answered row without a D link. milestones.md has about
+  57 bytes of budget left: trim or restate the budget.
+- F15-09: reduce [B688](m2.md#b688) to a one-line outcome naming what D170
+  accepted plus a link to `../storage.md#cluster-execution-budget`; its
+  Original findings narrative moves to the decision or delivered record.
+- F15-10, V2-12: give each decision an `#d<n>` anchor and a leading status
+  token (owner, session-pending, accepted-by D<n>, superseded-by D<n>);
+  retarget every `[D<n>]` link in `specs/` and `.agents/` (security.md's D152
+  and D108 included); docs-check fails when a D link targets the section
+  anchor or a missing one, and when entries leave numeric order.
+- Waits for [Q102](#audit-remediation-decisions): moving the log to its own page and
+  retargeting the links that name `backlog.md#decisions`.
+
+**Exit evidence:** every milestone opening within its budget under
+`TestDocsStayWithinByteBudgets`; no Requires paragraph holds a dated waiver
+narrative; grep for `backlog.md#decisions` inside a `[D<n>]` link returns
+nothing; the new checks fail on seeded violations; Task A's mandatory reading
+re-measured below 20k tokens; `make docs-check`.
+
+### B820
+
+**Owner:** Agent guidance and Verification tooling. **Kind:** enabling.
+**Requires:** B819. **Definition:** Specified. Roadmap step P2-B of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F15-08,
+F15-03, F15-07, F16-03, F17-07, R2-02-05. Agents reach the owning section of a
+large domain from the index, and the docs gates bound what they read.
+
+**Specs:** the glossary moved to [glossary.md](../glossary.md), shrinking
+[specs/index.md](../index.md) to about 3.6 of 4.0 KB.
+[storage-api-review.md](../storage-api-review.md) no longer claims admitted
+subsets and points at [api/storage.md](../api/storage.md).
+[cli/commands.md](../cli/commands.md) holds the help content rule. Both
+coverage pages say their public ledger row summarizes locally retained fields.
+
+**Work:**
+
+- F15-08 (Medium): docs gates in `test/architecture/docs_test.go` for
+  per-section byte budgets, reachability of every `specs/*.md` from the index,
+  and a ratcheted ban on `delivered.md` links and X ids in normative pages,
+  each with a seeded-violation fixture test.
+- F15-03: move `storage-api-review.md` into milestones history or index it as
+  history, retargeting the links from m2.md, backlog.md,
+  [storage-resources.md](../storage-resources.md) and
+  [storage-native-api.md](../storage-native-api.md).
+- F15-07: split [managed-os.md](../managed-os.md) `## Installation` into named
+  `###` leaves keeping existing anchors; section-level index rows for the six
+  largest domains (managed OS, state reconciliation, storage, CLI, contexts,
+  substrates), restating the index budget in `docsByteBudgets` as needed; a
+  section-budget ratchet with named, dated exceptions.
+- F16-03: [delivered](delivered.md)'s help-contract record links the
+  commands.md help section; optionally the structured help result gains
+  `examples` and `available` ([cli/output.md](../cli/output.md)) with a golden.
+- R2-02-05: a Qualification section in [substrates.md](../substrates.md), one
+  row per realized arm and management-controller family (its B item, operator
+  gate, ledger row or `unrun`; no versions or host identities), and an index
+  row routing "which substrates and controllers are qualified" to it.
+- F17-07 rides with the first M3b and M4b acceptance baselines: `Container
+  cluster row` and `Add-on row` templates in
+  [docs/acceptance.md](../../docs/acceptance.md), linked from each coverage
+  page's Rows rule.
+
+**Exit evidence:** each new gate fails on its seeded violation and passes on
+main; no level-2 spec section above the budget except named exceptions; the
+review page is history or gone from `specs/`; the index routes the named
+sections; `make docs-check`.
+
+### B821
+
+**Owner:** Storage and Workspace. **Kind:** enabling. **Requires:** B801,
+B814. **Definition:** Specified. Roadmap step P2-C of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F05-08,
+F13-09, F17-05. Each storage kind's field record lives on one page, and the
+lifecycle pages state each rule once; D133's split stays.
+
+**Specs:** [api/storage.md](../api/storage.md) now states `ceph.distribution`
+(oss, redhat, ibm; default oss) and that core Ceph realizes only ibm.
+[deferred/storage-api.md](../deferred/storage-api.md) lost its retired
+normalization entry. The version-5 cut-over is stated once, in
+[contexts.md](../contexts.md#storage-locking-and-publication).
+
+**Work:**
+
+- F05-08 (Medium): give each storage kind one field-record page and reduce
+  api/storage.md to its Kinds table, references and cross-kind invariants,
+  moving field tables between it, [storage-resources.md](../storage-resources.md)
+  and the deferred page; add the plan-time `lifecycle.unsupported` refusal for
+  a non-ibm distribution (`internal/storage/ceph/requests.go`) as a row of
+  [storage.md](../storage.md)'s code-checked refusal table with its test.
+- F17-05: delete the adoption and attempt-record clauses restated in
+  [storage-coverage.md](../storage-coverage.md) (about lines 128-148) and
+  link storage.md; keep one RBD adoption statement.
+- F13-09: [docs/operator-guide.md](../../docs/operator-guide.md) links the
+  contexts anchor instead of quoting the version-5 message; optionally move
+  media acquisition to a `contexts/` subpage.
+
+**Exit evidence:** for each storage kind, `grep -l` finds its field table on
+exactly one page; the attempt-record names and `foreign-*` refusal codes occur
+in one spec section each; storage-coverage.md holds no adoption or probe-proof
+rule; the distribution refusal row passes the refusal-table test;
+`make docs-check`.
+
+### B822
+
+**Owner:** Agent guidance and Verification tooling. **Kind:** enabling.
+**Requires:** B800, B813, B818; owner decision
+[Q103](#audit-remediation-decisions) for its AGENTS.md sentence. **Definition:**
+Specified. Roadmap step P2-D of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F14-03,
+F14-04, F14-05, F14-06, F14-07, F14-09, F14-11, F14-12, V2-11, CX-G4, CX-G5.
+The skill-portfolio tooling enforces what the skills now state.
+
+**Specs:** the skills already lead with local fast-forward (D168), define one
+safety class, own the verification tiers in one reference and keep no model
+routing table. The [skill index](../../.agents/skills/index.md) and
+[verification.md](../../.agents/skills/code-implementation/references/verification.md)
+carry the two Not yet met lines that point here.
+
+**Work:**
+
+- F14-12: `TestDocsSkillsAreDiscoverable` (`test/architecture/docs_test.go`)
+  fails on a canonical skill with no `.claude/skills/<name>/SKILL.md` wrapper
+  (replacing its `continue`) and on a wrapper with no canonical skill; drop the
+  skill index's Not yet met sentence.
+- V2-11: `scripts/tools/focus.py` reports a failure that passes only on the
+  serial rerun as FLAKY, with flagged output and a distinct non-zero exit, and
+  bounds each parallel lane with a timeout that prints its reproduce command;
+  `focus_test.py` cases for both; drop verification.md's Not yet met line.
+- F14-09: optional: replace the vendor model names in
+  [m4](m4.md)'s routing notes with the routine or complex tag.
+- F14-11: optional: reduce `docs/development.md` tier rows to command
+  descriptions linking verification.md.
+- Waits for [Q103](#audit-remediation-decisions): the carve-out sentence in
+  AGENTS.md (about 230 bytes against a budget with 1 byte left, so trim or
+  restate the budget), and code-implementation step 1 links it instead of
+  restating the ban.
+- Outside the repository, for the owner only: a local-only override in the
+  primary checkout defers to AGENTS.md (F14-04), and any vendor routing table
+  lives in a user-level file (F14-09).
+
+**Exit evidence:** deleting a wrapper or adding an unmatched one fails the
+test; focus_test.py proves FLAKY reporting and the lane timeout; grep under
+`.agents/skills` finds no model product name; `make docs-check`.
+
+### B823
+
+**Owner:** Architecture and State reconciliation. **Kind:** enabling.
+**Requires:** owner decision [Q104](#audit-remediation-decisions).
+**Definition:** Needs definition. Batch L1 of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); finding F01-10. The
+context named State reconciliation either keeps its name or takes a display
+name that no longer contradicts its no-reconciliation contract.
+
+**Specs:** [state-reconciliation.md](../state-reconciliation.md) now
+disclaims reconciliation of changed desired state or of drift, and
+[architecture.md](../architecture.md)'s context row lists `diff`.
+[project.md](../project.md) states the scope, operator utilities and
+networking boundary; the other L1 findings need nothing more.
+
+**Work:**
+
+- Waits for [Q104](#audit-remediation-decisions): when the owner renames,
+  the architecture.md row label, the state-reconciliation.md H1 and the
+  [specs/index.md](../index.md) link text change in one edit, the file path
+  stays, and every inbound link to the H1 anchor (found with grep) is
+  retargeted. When the owner keeps the name, the item closes with no edit.
+
+**Exit evidence:** after a rename, grep finds no link to the old H1 anchor;
+`make docs-check`.
+
+### B824
+
+**Owner:** Desired state and CLI. **Kind:** enabling. **Requires:** owner
+decisions [Q105](#audit-remediation-decisions), [Q106](#audit-remediation-decisions) and
+[Q107](#audit-remediation-decisions) for their parts. **Definition:** Specified.
+Batch L2 of the [2026-10-26 spec audit](../../audits/spec/2026-10-26.md);
+findings F02-01, F02-02, F02-03, F02-04, F02-05, F02-06, F02-07, F02-09,
+F02-12, F05-05, F12-05. Code messages and checked catalogs use the terms the
+glossary defines.
+
+**Specs:** [glossary.md](../glossary.md) defines controller and BMC,
+implementation and arm, substrate, provider, infrastructure service and the
+three capabilities. [api.md](../api.md) states the naming rules, has no kind
+count and carries a Not yet met line for the names that break them.
+[api/addons.md](../api/addons.md) already names `bootstrap.credentialsRef`,
+[cli.md](../cli.md) names `diff --observe` on the settled line, and
+[cli/output.md](../cli/output.md) defines the plan result members.
+
+**Work:**
+
+- F02-01 (Medium): reword the refusal and diagnostic strings that call a BMC
+  "controller" (`internal/machine/power/service.go`, the pin refusal, the
+  emulated-BMC endpoint refusal of [substrates.md](../substrates.md) and the
+  three [managed-os.md](../managed-os.md) refusal rows about controller legs)
+  with their Unsupported tables, goldens and spec rows together.
+- F02-04 (Medium): a docs-check test that every `v1alpha1.Kinds()` entry has
+  an api.md catalog row, a canonical-order entry and a row in its owner page's
+  Kinds table.
+- F02-06: the add-ons refusal message says "authored add-on", with goldens and
+  the [add-ons.md](../add-ons.md) row.
+- F02-09: rename `bootstrap.credentials` to `bootstrap.credentialsRef` in
+  `internal/addons/packages/gitops.go`, its remedy, goldens and
+  `examples/add-ons/lab-compact-hub`; a schema test that a field resolving to
+  a Bootwright object ends in `Ref` or `Refs`.
+- F02-12: qualify bare "capability" in substrates.md and architecture.md
+  where two senses meet.
+- F12-05: `settledNote` in `internal/cli/output_reconciliation.go` matches
+  cli.md's settled line and names `bootwright diff --observe`; goldens.
+- F02-03: document or drop the `groups` member of the JSON `blocks[]`, which
+  output.md says no JSON result carries.
+- Waits for [Q105](#audit-remediation-decisions): renaming Bootwright-owned enum values to
+  the chosen casing (add-on tokens `dataFoundation` and `certManager`
+  included) and the schema test holding them to it.
+- Waits for [Q106](#audit-remediation-decisions): renaming `infra-components` in
+  `catalog.go`, plan goldens, completion and example directories, and stating
+  which kinds `preflight infra` checks.
+- Waits for [Q107](#audit-remediation-decisions): renaming StorageExport and
+  `fdf.storageExportRef` across `api/v1alpha1`, the Ceph and add-on packages,
+  examples, api.md's union list and the storage pages.
+
+**Exit evidence:** grep of the swept pages and message goldens shows BMC
+meanings only as BMC or management controller; adding a kind without a row
+fails docs-check; the Ref-suffix test passes; api.md's Not yet met line and
+cli.md's settled Not yet met line are removed; `make check`.
+
+### B825
+
+**Owner:** CLI. **Kind:** product. **Requires:** owner decisions
+[Q109](#audit-remediation-decisions) and [Q108](#audit-remediation-decisions) for their parts only.
+**Definition:** Specified. Batch L3 of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F12-07,
+F12-09, F16-01, F16-04, F16-05, F16-06, F16-07, F16-08, F16-11, V2-04. The
+CLI's code matches cli.md, cli/output.md and cli/commands.md, and the catalog
+says which commands run.
+
+**Specs:** [cli.md](../cli.md) narrows the `diff` Input line, states the
+`status` candidate rule and maps receipt tokens to commands.
+[cli/output.md](../cli/output.md) requires remediation on every error
+diagnostic but `cli.usage`. [cli/commands.md](../cli/commands.md) states the
+three flag-spelling rules and lists seven unavailable commands: `preflight
+infra`, `clusters`, `all` and `add-ons`, `render` with a path flag, `render
+installer` ([B52](m7.md#b52)) and `render storage` ([B55](m7.md#b55)); the
+first five are tracked here.
+
+**Work:**
+
+- F12-09: `internal/cli/output_diff.go` builds the Input line as cli.md
+  states, with diff goldens for a non-empty Build line, a lost block record,
+  incomplete controller setup and a completed apply holding a non-done block.
+- F16-06: an emitter test fails when an error diagnostic other than
+  `cli.usage` has no remediation; fix the emitters it finds, among them
+  `cli.not-implemented`.
+- F16-07: `machine trust --machines` becomes `--name` (keeping the empty and
+  comma-only rules) and `machine list --silent` becomes `--short`, with no
+  alias, in the catalog, parsing and help goldens; update cli.md and
+  [contexts.md](../contexts.md) uses; a catalog test asserts the three rules.
+- F16-04: a `status` parity test derives each candidate from the verb's own
+  decision and refusal functions, asserting every `nextSteps` entry passes
+  and every passing candidate appears.
+- F16-01: a docs-check ties the unavailable list to
+  `cmd/bootwright/wiring_stubs.go`. Running the five stub commands here
+  needs a definition of each (`preflight add-ons` is [B770](#b770)).
+- Waits for [Q109](#audit-remediation-decisions): an opt-in `diff --exit-code` with its
+  commands.md row, exit-status row and the `ok`/`exitCode` rule.
+- Waits for [Q108](#audit-remediation-decisions): only if the owner widens `status`,
+  read-only Secret and media readiness rows and their `nextSteps` remedies,
+  as a separate item.
+
+**Exit evidence:** the Not yet met lines of cli.md (diff Input),
+cli/output.md (remediation) and cli/commands.md (flag renames) are removed;
+the parity, emitter, catalog and stub docs-check tests pass; `make check`.
+
+### B826
+
+**Owner:** Desired state. **Kind:** defect. **Requires:** owner decisions
+[Q110](#audit-remediation-decisions) and [Q111](#audit-remediation-decisions) for their parts only.
+**Definition:** Specified. Batch L4 of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F03-02,
+F03-04, F03-05, F03-06, F03-07, F03-09, R2-05-05, R2-05-09. Admission enforces
+the grammar rules [api.md](../api.md) now states.
+
+**Specs:** api.md states the single-value field rule, the reference-class
+table, the Retired fields table, the closed Entitlement discriminator and
+authored list indexes, each with a Not yet met line here;
+[api/input.md](../api/input.md) states the `secrets` directory warning;
+[api/secrets.md](../api/secrets.md) lists the permitted arms per type;
+[api/storage.md](../api/storage.md) documents the Ceph nested references and
+the required `callHome`.
+
+**Work:**
+
+- F03-02 (Medium): validate warns, naming only the directory, when a skipped
+  `secrets` directory holds YAML (a bounded walk within the entry ceilings,
+  no file read), and the unresolved-Secret remedy names it; the code row in
+  [cli/output.md](../cli/output.md); fixture tests.
+- F03-04: remove `bmcEmulationDefaults.enabled`, `.protocol` and `.emulator`,
+  `install.method` and `baremetal.boot.method` from `api/v1alpha1`, the
+  schema, examples and goldens, and their rows in
+  [api/machines.md](../api/machines.md) and
+  [api/container-clusters.md](../api/container-clusters.md); service
+  `implementation` stays required, `lifecycle.rescue` stays (D29).
+- R2-05-05: `entitlementSchema` refuses `registry` on redhat-rhel and
+  `license` on either Red Hat type with `api.field` naming the permitted
+  arms; kind defaults never introduce them; the `license.accept: false`
+  default applies to ibm-storage-ceph only.
+- R2-05-09: ClusterAddonBinding diagnostics report authored indexes
+  (`internal/addons/admission.go`).
+- F03-07: a schema test that a `Ref` field is a reference shape and a
+  reference shape has the suffix; `cephadm.addressRef`, `bootstrap.node` and
+  `bootstrap.addressRef` become typed nested references.
+- F03-09: the unknown-field remedy names the replacement from data in
+  `api/v1alpha1` backing api.md's Retired fields table.
+- Waits for [Q110](#audit-remediation-decisions): `render effective --origins` and
+  any `schema` or `explain` command.
+- Waits for [Q111](#audit-remediation-decisions): api.md's enablement sentence, and
+  presence blocks for `fips` and `firewall` if chosen.
+
+**Exit evidence:** tests: YAML under `secrets/` warns; `registry` on
+redhat-rhel and `license` on redhat-ceph refuse; an Environment default of
+`license.accept: true` admits a redhat-rhel Entitlement with no license arm;
+an out-of-order `addonConfigs` fault reports index 1; a retired path names its
+replacement; the five fields are absent from schemas and examples; api.md's
+Not yet met lines removed; `make check`.
+
+### B827
+
+**Owner:** Desired state and Infrastructure services. **Kind:** defect.
+**Requires:** B826 for the removed libvirt fields; owner decisions
+[Q112](#audit-remediation-decisions), [Q113](#audit-remediation-decisions) and
+[Q114](#audit-remediation-decisions) for their parts. **Definition:** Specified. Batch L5
+of the [2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings
+CX-X3, F04-05, F04-06, F04-07, F04-08, F04-09, F04-10, F04-11, F18-06,
+R2-02-06, R2-02-07. Machine and service schemas admit only what a consumer
+reads.
+
+**Specs:** [api/infrastructure-services.md](../api/infrastructure-services.md)
+states that an external ArtifactServer refuses, that managed Registry and
+LoadBalancer refuse at plan, and the `image.local` and `image.public`
+precedence. [infrastructure-services.md](../infrastructure-services.md) and
+the consumers state NTP's local-stratum fallback and that they accept any
+answering source. [deferred/machine-arms.md](../deferred/machine-arms.md)
+gives vSphere node networking to the cluster.
+
+**Work:**
+
+- F04-07: admission refuses `ArtifactServer.spec.management: external` with a
+  named refusal at `$.spec.management`, with a test.
+- F18-06: remove `spec.vsphere.nodeNetworking` and its topology rule from
+  `api/v1alpha1/machines.go` admission, then the rows in machine-arms.md;
+  [B99](m1.md#b99)'s definition records the move.
+- F04-05: admit `hardware.rootDevice` independently of `installProfileRef`
+  and keep `os.install` for Bootwright-installed facts, updating
+  [api/machines.md](../api/machines.md) with the schema and examples.
+- F04-09: in the lab-rhel and lab-baremetal examples, omit `attachmentRef`
+  on bare metal or where it equals the default, drop Machine NTP lists equal
+  to the profile's and fqdn values equal to the derived one, keeping one
+  commented example of each override.
+- R2-02-06: the unclaimed-service remedy in
+  [state-reconciliation.md](../state-reconciliation.md)'s code-checked table
+  names `management: external` for Registry and LoadBalancer.
+- Waits for [Q112](#audit-remediation-decisions): optional libvirt `uri` with a
+  materialized default, a renamed `bmcEmulationDefaults`, optional
+  `implementation`.
+- Waits for [Q113](#audit-remediation-decisions): one image reference per managed
+  service, if chosen.
+- Waits for [Q114](#audit-remediation-decisions): one stated name limit and a prefix
+  length test, if chosen.
+
+**Exit evidence:** an external ArtifactServer and a vSphere `nodeNetworking`
+refuse at validate; rootDevice is admitted without an install profile; the
+examples validate; the api/infrastructure-services.md and machine-arms.md Not
+yet met lines are removed; `make check`.
+
+### B828
+
+**Owner:** Add-ons. **Kind:** enabling. **Requires:** owner decision
+[Q115](#audit-remediation-decisions). **Definition:** Specified. Batch L6 of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F05-04,
+F05-09. The reserved add-on and playbook shapes stop reading as working
+features.
+
+**Specs:** [api/addons.md](../api/addons.md) states that authored
+Subscription defaults are not the package Subscription rules and that no
+authored add-on runs, with a Not yet met line naming [B90](m4.md#b90) and this
+item.
+
+**Work:**
+
+- F05-04: the full-platform nmstate ClusterAddon example notes that it
+  targets B90. Aligning `spec.olm.subscription` with the package Subscription
+  block belongs to B90 when it revives authored add-ons.
+- Waits for [Q115](#audit-remediation-decisions): one admission refusal for an
+  authored CustomPlaybook naming B102 (and for `ClusterAddon.spec.steps`
+  naming B90 if chosen), editing [project.md](../project.md), api.md's
+  compiler boundary, [api/custom-playbooks.md](../api/custom-playbooks.md)
+  and [security.md](../security.md) together, and removing the normalization
+  and ordering code; the lexical rules stay in
+  [deferred/custom-playbooks.md](../deferred/custom-playbooks.md).
+
+**Exit evidence:** the example carries the note; after a refusal decision,
+an authored CustomPlaybook yields one admission diagnostic naming B102;
+`make check`.
+
+### B829
+
+**Owner:** Secrets. **Kind:** safety. **Requires:** B817; owner decision
+[Q116](#audit-remediation-decisions) for its part. **Definition:** Specified. Batch L7 of
+the [2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings
+R2-05-07, F11-09, F11-11, R2-04-05, R2-04-06, R2-04-07, R2-04-08, F16-10,
+V2-08. Material leaves custody only by the paths
+[security.md](../security.md) names.
+
+**Specs:** security.md names the lent-file adapter channel and the pipelined
+module-payload hop; [secrets.md](../secrets.md),
+[contexts.md](../contexts.md) and
+[container-clusters.md](../container-clusters.md) state the installer work
+area's incarnation check; [state-reconciliation.md](../state-reconciliation.md)
+states that a recapture keeps the producer identity. Each has a Not yet met
+line here.
+
+**Work:**
+
+- R2-04-06: the media build receipt records the context directory's
+  registry device and inode; a media build or the D124 kubeconfig hand-over
+  over an area another incarnation built refuses before any effect, naming the
+  area; the orphan confirmation names the work areas it abandons.
+- R2-04-07: set pipelining for remote-placed tasks (beside
+  `ANSIBLE_REMOTE_TEMP` in `internal/adapterprotocol/process_linux_amd64.go`
+  or in `ansible/ansible.cfg`), with a structural test asserting it.
+- R2-04-08: custody publication compares the recaptured producer identity
+  (cluster authority, principal) and refuses `lifecycle.state` on a mismatch.
+- R2-04-05: the `registry_pull_secret` filter EXAMPLES consume lent files
+  inline instead of through `set_fact`; a runner or contract test that no
+  `MaterialValues` entry equals bound material bytes.
+- Waits for [Q116](#audit-remediation-decisions): a per-user selector on `cluster info
+  --secrets` and the matching [B489](m2.md#b489) amendment.
+
+**Exit evidence:** tests: the hand-over never captures a kubeconfig from an
+area the current context did not build; a recreated context refuses an
+earlier incarnation's area; a replaced custody entry with another identity
+refuses between attempts; the pipelining assertion passes; the Not yet met
+lines are removed; `make check`.
+
+### B830
+
+**Owner:** State reconciliation and Add-ons. **Kind:** safety. **Requires:**
+B816; owner decisions [Q117](#audit-remediation-decisions) and
+[Q118](#audit-remediation-decisions) for their parts. **Definition:** Specified.
+Batch L8 of the [2026-10-26 spec audit](../../audits/spec/2026-10-26.md);
+findings CX-RULEplanbytes, F09-05, F09-06, F09-07, F09-08, F10-06, F10-07,
+F10-08, F12-04. Recovery rows, ownership evidence and authorization say what
+the code does.
+
+**Specs:** [state-reconciliation.md](../state-reconciliation.md) states the
+6 MiB plan bound, all three stop causes and drops commit-anchored clauses;
+[cli.md](../cli.md) no longer claims a repeated command is bound to the
+reviewed plan; [add-ons.md](../add-ons.md) names the ownership basis per
+receipt (Not yet met here) and the narrowed GitOps wait set;
+[substrates.md](../substrates.md) names the vSphere identity fields.
+
+**Work:**
+
+- F09-05: change the `apply unknown` and `destroy unknown` rows and their
+  literals in `internal/reconciliation/lifecycle/transitions_spec_test.go`
+  together, to continue by resolving every unproved block first and then
+  retrying what resolution leaves failed (D146), keeping the fresh-destroy
+  alternative on the apply row only.
+- F09-06: state once that each write records the precedence over the durable
+  block records or running (re-read after a start or resolution publication
+  that reports failure), drop the attempt-count and lag special cases, and add
+  a store test injecting a start publication that lands and then errors;
+  coordinate with [B569](#b569) and [B575](#b575).
+- F10-08: `clusterobjects.Receipt` gains the basis (created, uid-matched,
+  mark-recovered), with the program and evidence versions moving, golden and
+  parity tests, and the evidence projection carrying it.
+- F10-07: B99's definition lists the vSphere marker and identity fields.
+- F12-04: [project.md](../project.md)'s handoff paragraph states the same
+  wait set as add-ons.md.
+- Waits for [Q117](#audit-remediation-decisions): the digest value form of
+  `--authorize data-loss`, if chosen.
+- Waits for [Q118](#audit-remediation-decisions): widening the wait set to every
+  block that reaches the cluster, if chosen.
+
+**Exit evidence:** `TestTransitionTablesMatchSpec` passes with the new rows;
+the failed-start publication test passes; receipts carry the basis in
+goldens; add-ons.md's Not yet met line is removed; `make check`.
+
+### B831
+
+**Owner:** Controller setup and CLI. **Kind:** safety. **Requires:** none.
+**Definition:** Specified.
+Batch L9 of the [2026-10-26 spec audit](../../audits/spec/2026-10-26.md);
+findings F11-04, F11-05, F11-10, F11-12. A sudoers rule naming the installed
+binary admits only that binary, and the elevated child accepts no foreign
+variable.
+
+**Specs:** [security.md](../security.md) now requires re-execution by the
+proved root-owned absolute path, procfs only for the invoking account's own
+build output, and a child that refuses variables outside the route set; it
+and [cli.md](../cli.md) carry Not yet met lines here. F11-05, F11-10 and
+F11-12 are stated and need no code.
+
+**Work:**
+
+- F11-04: `internal/controller/privilege` re-executes by the absolute path
+  when the file and every ancestor are root-owned, passing the file identity
+  (device and inode, or digest) for the child to check, and keeps procfs only
+  for the invoking account's own build output; the elevated child refuses any
+  caller-set variable outside `controller.ProxyEnvironmentNames`; tests for
+  both; the sudoers rule in [docs/operator-guide.md](../../docs/operator-guide.md)
+  names the installed path, and cli.md's `SUDO_COMMAND` and `/proc/self/exe`
+  passages follow the new rule.
+- F11-05, optional: operation.json records the invoking account's UID and
+  name, with a test that it survives elevation.
+
+**Exit evidence:** a privilege test proves a root-owned install re-executes by
+path and the child refuses a foreign variable; the two Not yet met lines are
+removed; `make check` and `make race`.
+
+### B832
+
+**Owner:** Workspace and CLI. **Kind:** defect. **Requires:** none.
+**Definition:** Specified. Batch L10 of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F13-06,
+F13-08, R2-06-07, R2-06-08, V2-06. Controller-record refusals name the exits
+that exist, and `context list` shows each unfinished operation's build.
+
+**Specs:** [contexts.md](../contexts.md) states the host-mismatch exits, the
+256-reservation bound and the unfinished-operation report;
+[contexts/controller-record.md](../contexts/controller-record.md) states the
+4096-tool-source and 256-reservation refusals;
+[infrastructure-services.md](../infrastructure-services.md) lists every
+release path and the reservation refusal; [cli/output.md](../cli/output.md)
+defines the `unfinished` member. Each has a Not yet met line here.
+
+**Work:**
+
+- F13-06: the host-mismatch refusal and its golden list the exits in order;
+  the operator guide warns before a planned identity change. The
+  root-confirmed identity rebind is [B836](#b836).
+- F13-08: `toolSourcesRemedy` (`internal/workspace/contextfs/controller_records.go`)
+  names the fresh-store exit, with a test.
+- R2-06-08: publication under the root lock refuses `controller.conflict`
+  before registration, naming the bound, the entries needed and those other
+  contexts hold, with the destroy or `context delete --purge` remedy and a
+  named test (the bounds row is already held by `TestDocumentedBoundsMatchCode`).
+- V2-06: `context list` human and JSON output carry `unfinished` (id, verb,
+  state, build as `<version> (<commit>)`), with a test asserting the
+  registering build; the upgrade step in
+  [docs/operator-guide.md](../../docs/operator-guide.md) then reads the build
+  from `context list` instead of each context's `status`.
+
+**Exit evidence:** the mismatch, tool-source and reservation tests and
+goldens; `TestDocumentedBoundsMatchCode`; the context list test; the Not yet
+met lines removed; `make check`.
+
+### B833
+
+**Owner:** Desired state. **Kind:** enabling. **Requires:** none.
+**Definition:** Specified. Batch L11 of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F05-10,
+R2-05-03, R2-05-10, R2-05-08, F16-09. Examples teach the minimal input and
+the external-service shapes.
+
+**Specs:** [api/environment.md](../api/environment.md) says the Environment
+name labels the effective graph and is no identity. examples/README.md and
+the runbooks already show `plan` before the first `apply` and state outcomes
+only.
+
+**Work:**
+
+- F05-10: in the storage and container-cluster examples, omit or comment
+  values equal to their normalized default (lab-compact's `pullSecretRef` and
+  `nodeSSH`), and reference `ssd-hosts` from a pool or note that it only
+  creates a rule.
+- R2-05-03: one runnable scenario declaring external NTPServer, DNSServer and
+  Proxy consumed by a MachineInstallProfile and the controller Machine's proxy
+  choice, using Environment `spec.defaults`, compiled by the golden test,
+  listed in examples/README.md, its README linking the api/environment.md
+  controller refusal table; no managed variant before [B439](#b439).
+- R2-05-10: the reused Environment names in the lab-sno and libvirt Ceph
+  example families become distinct, with a test that example Environment
+  names are distinct.
+
+**Exit evidence:** examples validate and compile in the golden test; the
+distinct-name test passes; no authored value equals its default without a
+comment; every StoragePlacementPolicy is referenced or noted; `make check`.
+
+### B834
+
+**Owner:** Architecture. **Kind:** enabling. **Requires:** none.
+**Definition:** Specified. Batch L12 of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F07-08,
+F07-10, V2-16, V2-17, V2-18. Collection names and code comments follow the
+patterns [architecture.md](../architecture.md) now states.
+
+**Specs:** architecture.md states the role pattern
+`roles/<domain>_[<implementation>_]<capability>/`, the playbook pattern
+`playbooks/<domain>/<capability>_<operation>.yml`, the six Ceph `nativeError`
+opt-ins and cites `buildCapabilitiesWith`, with a Not yet met line here.
+[substrates.md](../substrates.md) quotes no request version.
+
+**Work:**
+
+- F07-08: rename `substrate_machine_protocol` to
+  `substrate_libvirt_machine_protocol`; a collection structural test checks
+  role and action-plugin names against the pattern with a shrinking allowlist
+  of existing misfits.
+- V2-18: rename `storage/image_resolve.yml` to `image_apply.yml` and
+  `storage/host_prepare.yml` to `host_apply.yml` with their Go bindings; a
+  test walks `operationPlaybook` and fails on a path off the pattern or an
+  operation that differs from the bound one.
+- F07-10: the comment in `cmd/bootwright/wiring_reconciliation.go` calls the
+  static list the allowlisted registry.
+- V2-16: the spec-writing guidance states that specs quote no internal
+  request or format version; [managed-os.md](../managed-os.md)'s
+  `os-install-anaconda-v16`, `os-package-tree-v1` and
+  `os-package-tree-evidence-v1` become code references.
+- V2-17, optional: a docs-check comparing the named opt-in set with the
+  `NativeErrors: true` sites.
+
+**Exit evidence:** both structural tests pass and fail on a seeded misfit;
+the moved playbooks and contract digests pass
+`TestEveryImplementationMovesItsContentDigestWithItsContract`;
+architecture.md's Not yet met line is removed; `make check`.
+
+### B835
+
+**Owner:** Storage and CLI. **Kind:** safety. **Requires:** none.
+**Definition:** Specified. Batch L13 of the
+[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings V2-07,
+V2-09. The operator sees a StorageExport's trust extent before and after
+apply.
+
+**Specs:** [cli/output.md](../cli/output.md) requires plan and the resource
+rows to state what a StorageExport with an object gateway or filesystem
+grants, linking [storage-resources.md](../storage-resources.md); Not yet met
+here. V2-07 is stated in
+[state-reconciliation.md](../state-reconciliation.md) and
+[storage.md](../storage.md), and [B491](m2.md#b491)'s exit evidence carries
+its removal test.
+
+**Work:**
+
+- V2-09: render the grant clause (realm-wide RGW users, buckets and keys,
+  every filesystem path, no isolation between exports) in the plan step
+  description and in the `cluster info` and `status` resource rows
+  (`exportScopeText` in `internal/storage/ceph/inspection.go`).
+
+**Exit evidence:** goldens over a StorageExport with a gateway and one with a
+filesystem show the grant in plan and status; output.md's Not yet met line is
+removed; `make check`.
+
+### B836
+
+**Owner:** Workspace and Controller setup. **Kind:** safety. **Requires:** none.
+**Definition:** Needs definition. Split from [B103](#b103) on 2026-10-26 for
+finding F13-06 of the [2026-10-26 spec audit](../../audits/spec/2026-10-26.md),
+because it is operability rather than backup. A change of the controller's
+machine-id, DMI product UUID or root filesystem UUID strands every context:
+the host-mismatch refusal leaves the original host or its restored identity
+values, a destroy run from the original host before the change, or the
+orphan-acknowledged deletion ([B832](#b832) makes the refusal name them).
+Outcome: an explicit, root-confirmed rebind that proves the new host holds the
+same root store and rewrites the recorded host identity once, keeping every
+binding and reservation. The mechanism and its command are part of the
+definition. **Exit evidence:** a rebind test over a changed identity tuple that
+keeps bindings and reservations, a refusal for a different store, interruption
+and retry tests, and the operator guide's identity-change section naming the
+command.
+
+## Audit remediation (2026-10-26)
+
+The [2026-10-26 spec audit](../../audits/spec/2026-10-26.md) ordered its
+recommendations into a roadmap (its section 14). Slice X160 corrected the
+specs and skills where no owner decision or code was needed; every remaining
+recommendation is parked above as [B800](#b800) to [B836](#b836), one item per
+roadmap step or batch, and the Not yet met lines in the specs point to them.
+Like every parked item, these authorize nothing: a lane, an item or a set of
+lanes runs on an explicit request, which attaches its items to a slice.
+
+### Audit remediation lanes
+
+A lane is an ordered sequence of items that touch the same code; lanes marked
+as not concurrent edit shared packages. An item's parts that wait for an owner
+decision stay open while its other parts land.
+
+| Lane | Items in order | Starts after | Not concurrently with | Owner decisions |
+| --- | --- | --- | --- | --- |
+| A Harness and guards | [B800](#b800), [B801](#b801), [B822](#b822) | B822 after B813 and B818 | none | Q62, Q63, Q64, Q103 |
+| B Physical targets and shared hosts | [B802](#b802), [B803](#b803) | B801 | D, E, G, I | Q65, Q66, Q67 |
+| C Storage retirement | [B804](#b804), [B835](#b835) | none | F, G | Q68, Q69 |
+| D Credentials and trust | [B805](#b805), [B817](#b817), [B829](#b829), [B831](#b831) | none | B | Q70, Q97, Q98, Q99, Q100, Q101, Q116 |
+| E Store durability and controller records | [B806](#b806), [B836](#b836), [B832](#b832) | B801 | B, J | none |
+| F Truthful admission | [B807](#b807) | none | C, I | Q71 |
+| G Extension architecture | [B808](#b808), [B811](#b811), [B809](#b809), [B810](#b810), [B812](#b812) | B800 to B807 | B, C, I, J, K | Q72, Q73, Q74, Q75 |
+| H Cross-build continuation | [B813](#b813) | B801 | none | Q76 |
+| I API shape and grammar | [B814](#b814), [B826](#b826), [B827](#b827), [B828](#b828), [B824](#b824), [B821](#b821) | B808 | B, F, G | Q77, Q78, Q79, Q80, Q81, Q82, Q83, Q84, Q85, Q86, Q87, Q88, Q105, Q106, Q107, Q110, Q111, Q112, Q113, Q114, Q115 |
+| J Reconciliation rules | [B816](#b816), [B830](#b830) | B800 to B807 | E, G | Q92, Q93, Q94, Q95, Q96, Q117, Q118 |
+| K Language and adapter contracts | [B818](#b818), [B834](#b834) | none | G | none |
+| L Corpus structure | [B815](#b815), [B819](#b819), [B820](#b820) | B801 | none | Q89, Q90, Q91, Q102 |
+| M CLI and examples | [B825](#b825), [B833](#b833), [B823](#b823) | none | none | Q104, Q108, Q109 |
+
+### Audit remediation decisions
+
+Questions for the owner, numbered after M4a's Q61. An answer becomes a dated
+decision under [Decisions](#decisions) and is applied by the item it blocks.
+
+| Q | Question | Options | Recommendation | Blocks |
+| --- | --- | --- | --- | --- |
+| Q62 | Should a Codex project hook call scripts/hooks/stop-check, which needs a narrow .codex/hooks.json un-ignored in the tracked tree? | (a: add it) Codex sessions get the same advisory end-of-turn focus check; .gitignore gains one exception.; (b: leave .codex/ untracked) Only Claude Code runs the hook; Codex users configure their own. | The report (10.4) leaves it to the owner without a recommendation; non-blocking for B800's docs test. | [B800](#b800) |
+| Q63 | How should the WIP limit of two active slices (D158) be reconciled with the five slices now in progress (X61, X118, X123, X130, X143), where X130 (M3e, D181) has no recorded exception? | (a: keep the limit and per-decision exceptions) Record an exception for X130 or pause one slice; the scope rule stays as written.; (b: a limit per program or milestone) Rewrite the scope rule to count active slices per program; the standing exceptions in D134, D143, D159, D172 and D173 retire.; (c: retire the WIP limit) Delete the limit and its exceptions; the Active slices table alone governs authorization. | The audit leaves the WIP limit to the owner (P0-B exit); it suggests a rule current practice satisfies, such as a per-program limit, but does not choose. | [B801](#b801) |
+| Q64 | Does matrix row U03 (replicated size equal to the OSD-host count refused, citing IBM's colocation page) stay as an admission refusal under D159 clause 15? | (a: keep) U03 stays tested, recorded as a native replica-safety rule (three replicas need four hosts) rather than a support statement.; (b: remove) Admission stops refusing size equal to host count; the U03 row, fixture and admission check are removed by a code change. | The report routes this to the owner without a recommendation; its basis may be a replica-safety rule rather than a vendor table. | [B801](#b801) |
+| Q65 | How does a removal observation that cannot tell its postcondition from an unreadable target resolve (state-reconciliation.md Resolution outcomes, against security.md's unknown-stays-unknown rule)? | (a: delete the clause) An unreadable removal observation stays unknown and only an operator resolution moves it; smallest edit, more manual resolutions, teardown can strand.; (b: typed inconclusive result) A new effect state distinct from no-effect permits one retry only for a capability declaring the removal idempotent, with ownership proved from durable records and a re-read before any effect; one table row, one capability field, one test, and one sentence in security.md. | The report gives both without choosing (14.8); section 8.B3 calls B the smallest correction that keeps replay-safe teardown. Either way the negative test is the same. | [B802](#b802) |
+| Q66 | How is a private Machine that the network restart powered off before (or after) its disk boot read on recovery (managed-os.md 'the one window', currently 'positive no effect')? | (a: relabel) Read the window as a positive partial realization of this operation's own installation, retried by the same frozen request behind the boot proof, and name the cases it covers including power-off after disk boot.; (b: durable intent) Record durably before power-off that installation was proved and disk boot is intended; recovery takes the disk-boot identity path or stays unknown, never re-running the installer. | The report records no choice; it calls the relabel the smallest fix, while durable intent removes the reinstall. | [B802](#b802) |
+| Q67 | Should an orphan-acknowledged context deletion keep its exclusive host keys as an abandoned/<name> tombstone instead of releasing them at once (amending D38)? | (a: keep D38) Keys release at the deletion; the orphan confirmation names the keys it frees and the reinstall hazard (spec applied, code in B803).; (b: tombstone) Exclusive entries become an abandoned/<name> holder that refuses conflicting claims until a new confirmed 'bootwright controller release --abandoned <name>'; shared media entries still drop at once. | Arbiter and lanes: A's warning now; B only if the owner reopens D38. | [B803](#b803) |
+| Q68 | Confirm the D143 clause 6 reading: does retiring a Ceph cluster (or StorageExport) with its virtual hosts require that no consumer of its exports survives the removal? | (a: refuse) Removal refuses before registration naming the surviving consumer and export until B491; a mixed context (virtual Ceph, physical OpenShift) has no full destroy until then (the specs state this refusal as the interim safe reading).; (b: named impact plus acknowledgement) Removal proceeds after an acknowledgement naming the surviving consumer, whose PVs and Secrets then point at deleted storage. | Roadmap P0-E and R2-02-01 recommend A with a plan-time topology flag; F10-04's refuter and calibrator prefer B as smaller. | [B804](#b804) |
+| Q69 | Should B659, B662 and B491 become prerequisites of M2d's B485 exit, or does B485 close with the physical recovery limitation recorded? | (a: prerequisites) B485 Requires gains B659, B662 and B491; M2d cannot complete until interrupted physical deployments have exits, which first needs their protocol decisions.; (b: record the limitation) B485 may close with the physical profile documented as an incomplete recovery profile (text applied now); the exits stay parked. | The audit (14.8) offers both and keeps the recovery protocols as owner decisions; it does not choose. | [B804](#b804) |
+| Q70 | Should continuation and removal be able to present the current version of a rotated access credential (BMC/Redfish, KubeVirt kubeconfigRef, vCenter, registry login) instead of the bound one, and through which recorded gate? | (a: explicit recorded rebind exit) A third exit beside D37 for access credentials only, gated by a flag or the --authorize token model and recorded as a new binding version; ownership proofs still run and effect-material Secrets refuse it.; (b: keep today's rule) Removal always presents the bound version; a rotated credential strands destroy, leaving restore-keyring or --purge --allow-orphans. | The report recommends A, gated by the --authorize model and named apart from B181's bounded-run rebind, keeping D37 and D85; the owner decides the flag. | [B805](#b805) |
+| Q71 | Refuse the four inert ContainerCluster endpoint fields (port, scheme, prefixLength, interfaceNetworks) at plan on the agent path, or remove them from the schema until a consumer exists? | (a: refuse at plan) Fields stay admitted; an authored non-native value refuses at its path with a refusal row per field (spec states this).; (b: remove the fields) The endpoint shape loses the four fields; no refusal rows; examples and goldens change. | Refuse at plan now (roadmap P0-H); removal stays an owner option. Non-blocking: B807 implements A unless the owner chooses B first. | [B807](#b807) |
+| Q72 | Which mechanism scopes an Environment: the source directory, spec.resources and cluster lists all narrow scope today? | (a) Remove spec.resources; the Environment directory is the scope and cluster lists are the only narrowing, documented with an example.; (b) Keep spec.resources and drop cluster lists, which makes the hostClusterRef retention edge moot.; (c) Keep both, with one tracked example using spec.resources and a one-sentence rationale in environment.md. | Decide together with hostclusterref-retention-edge; the report's first option is (a), and the lanes expect cluster lists to stay. Either way the excluded-reference refusal names the selection field. | [B812](#b812) |
+| Q73 | If cluster lists stay, does selecting a nested cluster retain its KubeVirt provider's hostClusterRef ContainerCluster as a root with its own closure? | (a) Add the closure row, effective when B732 lifts the KubeVirt refusal, with a multidc selection test as B732 exit evidence.; (b) Moot because cluster lists are dropped (environment-scope-mechanism b). | a if cluster lists stay; record the selection test as B732 exit evidence either way. | [B812](#b812) |
+| Q74 | Does an authored cluster list retain Bootwright-installed Machines (and their provider closure) that are nodes or hosts of no declared cluster, instead of only warning? | (a) Retain them as roots; the validate warning covers only what stays excluded.; (b) Warn only, as the spec states today. | a (calibrator), decided with environment-scope-mechanism; the warning stands until then. | [B812](#b812) |
+| Q75 | When an attachment reaches a cluster root that an authored list omits, does validate warn, refuse, or retain the full closure? | (a) Deterministic validate warning naming the list to extend (spec today).; (b) Validate error naming the list to extend, since a completed apply's selection cannot change (D153).; (c) Retain the full closure of the omitted root. | b (calibrator); the warning is the interim minimum. | [B812](#b812) |
+| Q76 | Does a removal under another build compare an effect-identity part of the content digest with the build in hand (amending D145(4))? | (a) Keep D145(4): removals compare no digest and rely on identity values travelling in the frozen request (stated in the spec now).; (b) Split the digest into effect-identity and mechanism parts; a removal refuses lifecycle.state before resolution on an effect-identity mismatch, naming the registering build and the deletion exit. | a now (calibrator, smallest); b presented to the owner as an amendment of D145(4). | [B813](#b813) |
+| Q77 | How does a non-OpenShift distribution enter ContainerCluster, and does B748's OKD arm follow the same path? | (a) A distribution-neutral envelope (nodes with neutral roles, endpoints, networks, proxy/NTP/registry, trust) plus a presence union of distribution arms starting with spec.openshift; node binding reads a distribution-declared node capability; role master becomes control-plane and endpoint source.type openshift becomes installer (section 4.3).; (b) One kind per distribution family, with the generic touch points each new kind implies listed.; (c) Confirm OpenShift and OKD only in project.md and defer the question. | Record one decision now, linked from api/container-clusters.md, stating node binding and B748 alignment; the report's scenario analysis favors a, which is cheapest before 1.x. M3/M4 keep the flat shape until decided. | [B814](#b814) |
+| Q78 | How are the Ceph-only Storage* child kinds bound to Ceph? | (a) Rename the children to Ceph* (CephPool, CephClient, CephRBDImage and the rest), keeping StorageCluster neutral; revisits D133's naming baseline and touches examples and goldens.; (b) Keep the names; api/storage.md states they are the Ceph arm's kinds, admission refuses a child whose cluster's type is not ceph, a new storage type brings its own kinds, and StorageExport is classified. | b (verifiers and calibrator); a only as an explicit owner decision revisiting D133, which the report prefers while renames are cheap. | [B814](#b814) |
+| Q79 | Does Machine carry substrate facts in a per-substrate arm mirroring the InfraProvider arm? | (a) Full arm: spec.substrate {providerRef, baremetal/libvirt/kubevirt/vsphere} with admission requiring the arm to match the provider.; (b) Narrow arm: NIC names and neutral root hints stay top level; only bmc, MACs, wwn/hctl/serial admissibility, profileRef, failureDomainRef, template and interfaceAttachments move into arms.; (c) Keep the flat shape and derive per-substrate admissibility from one substrate-arm registry table. | b, decided before B87/B99 revive the arms; D44 and D94 hold under every option. | [B814](#b814) |
+| Q80 | Are the Machine.capabilities role tokens (openshift-node, ceph-node, ceph-arbiter) dropped and container-runtime and libvirt derived from placements? | (a) Drop the three roles and derive the prerequisites at once; remove the field or keep the remainder as hostPrerequisites (section 4.3).; (b) Staged: first state the ceph-node rule in the storage API spec (or drop it) and drop ceph-arbiter; then derive container-runtime and libvirt and remove the roles, keeping an authored path for the controller Machine.; (c) Keep the field and its role tokens. | b; step one needs no shape change beyond removing a value nothing reads; update controller.md and the environment.md controller refusal table. | [B814](#b814) |
+| Q81 | Which single testable rule decides between a presence arm and a type, method or implementation enum, and which current idioms change? | (a) State the rule, drop StorageCluster.spec.type, fold install.method into install.agent presence and make the service implementation an arm; an architecture test enforces it.; (b) Same rule, but StorageCluster gets an engine arm usable for external management before type goes, and the service implementation stays an enum.; (c) Keep the four idioms and only state the criterion. | b, recorded with current and proposed examples; the rule then goes into api.md#unions with its architecture test. | [B814](#b814) |
+| Q82 | Does api.md state that a value with exactly one valid derivation is derived, not authored and compared (bindAddress, generated SANs, node fqdn)? | (a) State the principle; fold bindAddress into B333; derive generated-certificate SANs from consumer endpoints; derive node fqdn.; (b) As a, but node fqdn keeps its explicit optional override and only examples stop authoring derived values.; (c) Keep authored-and-compared copies and only document the collision trap. | b; pre-1.x no-compatibility removes B333's digest-window reason; reread ADR 0035/0036 before touching fqdn. | [B814](#b814) |
+| Q83 | Which single-valued storage references become derived: mdsServiceRef, the SMB share cluster_id, and SMB resourceRefs versus the native refs? | (a) mdsServiceRef dropped or optional (mds.<name>), cluster_id optional from smbClusterRef, one of resourceRefs or native refs derived from the other; a disagreeing authored value still refuses at its field.; (b) mdsServiceRef optional, not dropped; native refs stay the authored home (D133) and resourceRefs become optional, derived by native ID.; (c) Keep every value authored and agreement-checked. | b; the 6-node services example must validate with the leaves removed. | [B814](#b814) |
+| Q84 | Where does an admitted but unrealized declaration refuse by default, and what single criterion allows an admission-time refusal? | (a) api.md#compiler-boundary names plan-time lifecycle.unsupported as the default and one criterion for admission-time api.invariant (no build has any consumer, as rescue under D29); kind pages link it.; (b) Leave the refusal point per field. | a. | [B814](#b814) |
+| Q85 | Does validate warn, with a stable diagnostic code in text and -o json output, for every admitted but unrealized declaration, backed by one api.md table held to the lifecycle.unsupported set by a test? | (a) Add the warning code and the code-checked table (a new public diagnostic).; (b) No warning; the plan-time refusal is the only signal. | a as revision 2 of the report asks, taken as a separate UX decision from unrealized-refusal-point. | [B814](#b814) |
+| Q86 | Which single rule replaces the StorageCluster name limits that vary with declared services (44, 39, 37, 26)? | (a) One unconditional metadata.name limit (26 or less) on the API page; the per-service caps link to it.; (b) One block-identity rule: an identity over 63 characters replaces its overflowing segment with a fixed-length hash token, so public limits stop depending on internal prefixes. | b (report); either way no name limit depends on declared services, and each kind gets one name rule. | [B814](#b814) |
+| Q87 | Do the section 4.3 before-1.0 renames that hang on these shape decisions (Ceph*, hostPrerequisites, control-plane, installer) land in one coordinated slice with the reshapes and the L2 renames? | (a) One batched slice per surface with retired-path refusals naming each replacement, landed while few live contexts exist.; (b) Each rename lands with its own shape change, as separate slices.; (c) Keep the current names. | a (report 5.6); every moved request or block identity stops D142 continuation, so affected live operations complete or are destroyed first. | [B814](#b814), [B824](#b824) |
+| Q88 | Is the tracked lab-kubevirt example the external-endpoint profile (lab-kubevirt-external) or the first-ranked baremetal-VIP profile of Q19? | (a) Rename the example, golden and README to lab-kubevirt-external, reconcile its sizing with the coverage row, and fix the B731 note.; (b) Change the coverage row to match the tracked example. | a; it matches Q19 (a) and pre-empts no answer. | [B814](#b814) |
+| Q89 | Is project.md Product scope split into a committed portfolio and an extension envelope that gates no milestone until promoted? | (a) Two labelled lists, each committed entry linking its milestone; no milestone page changes.; (b) a plus moving family-only arms (M1f vSphere, M3f) out of their gating milestones; amends D158 and the D172 Q1 reading.; (c) Keep one list; every family item keeps gating its milestone. | a now; b as a separate owner option; an envelope-only arm needs owner promotion, never a session clause. | [B815](#b815) |
+| Q90 | Do milestone Requires state only real dependencies per submilestone, and may portfolio submilestones complete without family arms? | (a) Per-submilestone Requires cells on m1 to m4 with true prerequisites, cross-milestone items included; completion rules unchanged.; (b) a plus a portfolio or family tag so a milestone can be done on its portfolio submilestones; supersedes D158's all-items clause.; (c) a plus moving M1f, M3f (and optionally M4e, M4f) to a later milestone; amends D158, D172, D173. | a, correcting the waiver citation to D174; b or c only as an owner decision superseding D158. | [B815](#b815) |
+| Q91 | How do session-taken clauses pending the owner's review bind, and where are they tracked? | (a) One scope rule: a waiver quotes the owner's explicit request, pending clauses bind until overturned and an overturned clause reopens its work; one open-clause list.; (b) Pending clauses authorize nothing until the owner confirms them. | a; milestones.md is at its byte budget, so the rule needs equal trimming. | [B815](#b815) |
+| Q92 | Does a fresh destroy accept a scoped, acknowledged abandonment of one block that stays unknown, so one unreachable target no longer blocks the whole removal (reopening D38)? | (a) Keep D38: the removal stays refused and the orphan-acknowledged deletion is the only exit.; (b) Record that block abandoned, keep it, its plan ancestors and host reservations, and remove the rest in inverted order; needs B568 so its markers stay guarded. | No recommendation in the report: it is a request to reopen D38, and roadmap 14.6 holds the work until the owner does. | [B816](#b816) |
+| Q93 | Which exit does a completed apply holding a lost block record get? | (a) The existing purge-with-orphans deletion, named in the refusal and status; abandons the apply's host effects (spec today).; (b) A destroy over the completed apply covers its whole frozen plan, resolving non-done blocks by observation first. | a; b only as an owner item. | [B816](#b816) |
+| Q94 | Does handoff readiness cover the selected input revision or the revision the apply froze? | (a) Add a predicate condition and status reason: the selected revision is not the one the apply froze, and diff shows what changed.; (b) Readiness covers the frozen scope; project.md says so and status prints the frozen revision beside ready. | a (calibrator), mirroring the settlement scope. | [B816](#b816) |
+| Q95 | Does retention pin the runtime and wheels of every non-terminal operation so its continuation survives more than one lock change or a setup-format discard offline? | (a) Wording only: current-plus-previous retention stays and refusals name the registering build's setup with network or --wheel-mirror (spec today).; (b) A host-wide pin list under setup/lock written at registration, honoured by retention and format healing, dropped at finalization or deletion. | a now; b parked as an owner option under D152 clauses 8 and 9. | [B816](#b816) |
+| Q96 | Are SSH-placed host claims published in the controller record, qualified by the SSH host token, so two contexts of one store targeting one SSH host conflict? | (a) Widen B247: every SSH-placed key gains an ssh/<address>:<port>/ qualifier with the controller conflict and release rules, best effort per declared address; controller-record schema moves pre-1.x.; (b) Keep B247 narrow and carry cross-context SSH coordination in a new parked item.; (c) Keep the limitation documented; contexts on one SSH host stay uncoordinated. | a, decided with B247; do not edit delivered history. | [B816](#b816) |
+| Q97 | How does machine trust under --yes or structured output reconcile with the explicit host-key confirmation rule? | (a) Add --expect <machine>=SHA256:<fp> and make --replace take one; an add or replace whose fingerprint is not named refuses (new public flag syntax).; (b) security.md names --yes enrollment as an operator-accepted trust-on-first-use exception; no code change. | The roadmap P1-J exit chooses a; the calibrator preferred b with a as hardening. a adds a public flag, so the owner decides. | [B817](#b817) |
+| Q98 | Is a usernamePassword Secret's username secret? | (a) Declare it non-secret identity metadata in security.md and secrets.md; cli.md stops treating --username as hidden.; (b) Add a file or stdin input for the username (new public flag). | a (calibrator); D72/D73 keep usernames on the flag without deciding they are non-secret. | [B817](#b817) |
+| Q99 | May a query-signed media URL travel on argv for media add --from-url? | (a) Take the URL from a file or stdin (for example --from-url-file) and state that a signed query is a credential (new public flag).; (b) Record a named exception in security.md for a query-signed URL on argv. | a or b (calibrator); refusing queries is rejected because managed OS intends signed URLs. | [B817](#b817) |
+| Q100 | Is the cluster info --secrets reveal of StorageObjectUser S3 keys (objectUsers) a current, authorized reveal? | (a) Current: secrets.md lists it, and storage-resources.md and storage.md link the reveal instead of saying no command reveals the pair.; (b) Not authorized: cli.md marks it Not yet met under B489 and the code stops revealing it. | a (calibrator): delivered under B489's in-tree handoff, but D143 clause 7 authorizes only the dashboard password, so the owner confirms. | [B817](#b817) |
+| Q101 | What does cluster info --secrets emit for a dashboard password whose apply never proved the dashboard reachable? | (a) No warning: dashboard.status unproved and its reason convey it.; (b) A distinct registered warning code such as access.unreachable. | a, the smaller change; either way access.unproved keeps only the D124 custody meaning. | [B817](#b817) |
+| Q102 | Does the decision log stay in backlog.md (with per-decision anchors and status tokens) or move to its own page? | (a) Keep the log in backlog.md#decisions and add #d<n> anchors, status tokens and an order check.; (b) Move the log to specs/milestones/decisions.md, retarget every backlog.md#decisions link and amend milestones.md's D<n> bullet. | a: the smallest change; anchors and status tokens need no move. | [B819](#b819) |
+| Q103 | May a pre-existing defect that blocks the authorized outcome or its gates be fixed inside the slice? | (a) AGENTS.md admits the fix in its own commit after the defect is recorded as an item the Refs line names; other defects are reported.; (b) Keep the unqualified ban; a blocking defect stops the slice until the owner authorizes its item. | a, as the report drafts it; its only precedent (D152 clause 13) still awaits the owner's review. | [B822](#b822) |
+| Q104 | Does the State reconciliation context keep its display name, given its contract disclaims reconciliation? | (a) Rename the display name (architecture row, H1, index link text), keeping the file path and retargeting inbound anchors.; (b) Keep the name; the disclaimer now applied in state-reconciliation.md is the whole change. | b is smallest; a if the owner wants the name fixed before 1.0. | [B823](#b823) |
+| Q105 | Which single casing do Bootwright-owned enum values use, and are Secret type names an exception? | (a) lowerCamel: renames the kebab outliers (container-runtime, import-certificate, install-only, read-only, verified-tunnel).; (b) kebab-case: renames redfishVirtualMedia, loadBalancer, logicalOverwrite, dataFoundation, certManager and the Secret types.; (c) State the rule per page and leave existing values unchanged. | The convention with the smaller rename count, likely lowerCamel; native spellings exempt; decide Secret types as an explicit exception. | [B824](#b824) |
+| Q106 | Is the --stage token infra-components renamed to match 'infrastructure services'? | (a) Rename it (for example infrastructure-services) in the CLI, plan goldens, completion, examples and specs.; (b) Keep the token; the glossary entry defines it. | a, cheap before 1.0, together with stating what preflight infra checks. | [B824](#b824) |
+| Q107 | Is StorageExport (a per-consumer Data Foundation attachment) renamed, and does its shape change? | (a) Rename to StorageAttachment or StorageConsumer with per-protocol arms, drop spec.type, move external details to StorageCluster's external arm (B107).; (b) Rename the kind and fdf.storageExportRef only; keep spec.type unless api.md's union list is amended.; (c) Keep the name with the clarification now in api/storage.md. | b at least, keeping the D173 decomposition; ask with B814's storage naming questions. | [B824](#b824) |
+| Q108 | Should status add Secret and media readiness hints to nextSteps? | (a) Add read-only rows for missing or stale Secrets and missing media, with remedies before plan or apply, as a separate item.; (b) Keep status as now narrowed; operators use secret check and media list. | b now; a only as its own UX item. | [B825](#b825) |
+| Q109 | Accept an opt-in bootwright diff --exit-code (exit 3 on any differing or unknown object, default unchanged)? | (a) Add the flag, its commands.md row, an exit-status row and an amended ok/exitCode rule.; (b) No flag; document a stable JSON summary field as the drift signal. | b costs nothing; a is the common convention and needs acceptance as a new public flag under D153 clause 2. | [B825](#b825) |
+| Q110 | Which schema-discovery commands or flags does the CLI gain? | (a) render effective --origins marks each leaf authored, defaults.<Kind>, built-in or derived, with a golden.; (b) a plus bootwright schema --format json-schema as an advisory export.; (c) a and b plus bootwright explain with per-field docs in Go, a second owner of field meaning.; (d) Defer all. | a first; b optional; c only if the owner wants Go as the single source of field docs. | [B826](#b826) |
+| Q111 | Is a plain enabled boolean allowed for a featureless switch, or do presence blocks replace them? | (a) api.md allows a plain boolean when the feature has no settings and omission equals the stated default (fips, firewall); no schema change.; (b) Presence blocks only: fips: {} and firewall: {} replace the booleans in schema, examples and goldens. | a. | [B826](#b826) |
+| Q112 | Which one-value mechanics of the libvirt arm and managed services stop being authored, and is managed-service implementation optional? | (a) libvirt uri becomes optional with a materialized default and bmcEmulationDefaults is renamed; implementation stays required.; (b) As a, and implementation becomes optional with a materialized default while a kind has one implementation. | a: explicit implementation selection stays, unless the owner prefers b. | [B827](#b827) |
+| Q113 | Do managed services keep image.local and image.public with the stated precedence, or collapse to one image reference? | (a) Keep both; the precedence now stated is the contract, no schema change.; (b) One image reference; schema, admission, kind defaults, examples and goldens change, mirroring left to registry policy (B69). | a now; b only together with the registry-policy design. | [B827](#b827) |
+| Q114 | Does the API adopt one public name limit for all kinds, or keep per-kind limits derived from block prefixes? | (a) One 47-byte limit stated once, new block prefixes at most 16 bytes with a test; tightens Machine, InfraProvider, Proxy, DNS, NTP and export names.; (b) Hash long names into block identities; one rule without shortening names, less readable run trees.; (c) Keep per-kind limits in one api.md table linked from each kind. | a with an architecture test on prefix length; ask with B814's V2-19 name-limit question. | [B827](#b827) |
+| Q115 | Are the reserved CustomPlaybook shape and ClusterAddon.spec.steps refused at admission instead of validated? | (a) Refuse an authored CustomPlaybook naming B102; lexical rules stay in the deferred page; normalization code removed.; (b) a plus refuse ClusterAddon.spec.steps naming B90, letting B90 redefine steps.; (c) Keep validating both reserved shapes. | a; b only if the owner agrees B90 may redefine steps. | [B828](#b828) |
+| Q116 | Do object-user S3 keys leave cluster info --secrets for a per-user selector? | (a) Add --object-user <u> emitting only that user's keys; --secrets alone reveals only the dashboard password; B489 amended.; (b) A new raw single-credential export command for object users.; (c) Keep the current reveal and document the handoff risk. | a, a new public flag closing B489's sensitive-output gate; ask with B817's R2-04-02. | [B829](#b829) |
+| Q117 | Is --authorize data-loss bound to the reviewed consuming steps when --yes or non-interactive input suppresses review? | (a) Require --authorize data-loss=<digest of consuming blocks and targets> under --yes; a stale digest refuses before registration.; (b) Keep the bare token; the cli.md wording fix already applied is the whole change. | b unless the owner wants hardening; a changes a public flag form under D153 clause 2. | [B830](#b830) |
+| Q118 | Does the last GitOps package wait for every block that reaches its cluster's API, or only the add-ons-stage blocks requiring the installation? | (a) Widen to every block reaching the cluster, whatever its stage; planning edges change and need a cycle check.; (b) Keep the narrowed set now stated, naming the excluded cross-stage blocks. | b now; settle with the pending Q48 and Q60 answers. | [B830](#b830) |
 
 ## Retired
 

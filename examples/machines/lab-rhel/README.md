@@ -132,17 +132,19 @@ applying the lab.
 ./bin/bootwright context init --name lab-rhel --input-dir "$lab_rhel_input"
 ./bin/bootwright secret generate
 ./bin/bootwright secret check
+./bin/bootwright plan
 ./bin/bootwright apply --stage controller
 ./bin/bootwright preflight controller --context lab-rhel
-./bin/bootwright plan
 ./bin/bootwright apply --stage infra-components
 ```
 
 `context init` selects the new context and freezes the input copy.
 Reuse an existing context with `context use --name lab-rhel` instead of
-initializing it again. The controller apply prepares context prerequisites and
-pauses. `plan` previews the remaining blocks; a stage gates which blocks can
-start, without removing their dependencies.
+initializing it again. `plan` previews every block before anything runs; a
+stage gates which blocks can start, without removing their dependencies. The
+controller apply prepares context prerequisites and pauses, and while that
+operation is paused `context update` refuses until it completes or is
+destroyed, so review the full plan first.
 
 After the service apply, substitute the customized controller address in
 these independent checks:

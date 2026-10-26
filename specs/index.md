@@ -1,13 +1,15 @@
 # Specification Index
 
 Start with [project intent](project.md) when scope matters. Read the
-[milestones](milestones.md) status and the milestone page of the authorized
-slice or item, then open only the owning section below. A specified capability
-is not necessarily implemented or authorized.
+[milestones](milestones.md) Status and Scope rules and the parts of the
+authorized milestone page that [AGENTS.md](../AGENTS.md) names, then open only
+the owning section below. A specified capability is not necessarily
+implemented or authorized.
 
 | Read when the task touches | Owner |
 | --- | --- |
 | Product purpose, scope and non-goals | [project](project.md) |
+| What a term means: context, controller, BMC, substrate, binding, profile, capability, implementation, evidence, receipt | [glossary](glossary.md) |
 | Boundaries, package shapes, Go/Ansible split, dependencies, fitness checks | [architecture](architecture.md) |
 | Where a command's code lives | `internal/cli/catalog.go`, `cmd/bootwright/wiring_<domain>.go` and each package's `contracts.go` ([finding code](architecture.md#go-package-structure)) |
 | Desired-state grammar, compilation, defaults | [api](api.md); input discovery and ceilings: [input](api/input.md) |
@@ -39,22 +41,3 @@ Delivery state lives in milestones, observed lessons in
 [knowledge](../.agents/knowledge/index.md), and working procedure in skills. Add
 detail with its first requested feature or a demonstrated ambiguity; design for
 an unpromoted feature lives under `deferred/`.
-
-## Glossary
-
-- **Context**: a named, durable Bootwright workspace holding frozen input,
-  secrets and lifecycle state ([contexts](contexts.md)). It is not a Go
-  `context.Context` and not a bounded context of the architecture.
-- **Controller**: the host that runs Bootwright. A **management controller** is
-  a server's out-of-band Redfish endpoint, physical or emulated.
-- **Realized target**: what a substrate derives for a Machine: the management
-  controller it boots through, its identity channel, whether it is physical and
-  the block that realizes it ([substrates](substrates.md#selection-and-refusal)).
-- **Reservation**: a host-wide claim, such as a socket, BMC, media or machine,
-  that refuses a conflicting context
-  ([host reservations](infrastructure-services.md#host-reservations)).
-- **Runtime** and **binding**: setup publishes the controller runtime a lock
-  and interpreter name; a context binds the controller host it uses; an
-  operation binds the exact secret material it froze ([secrets](secrets.md)).
-- **Acceptance**: an operator-run gate recorded in the
-  [ledger](../docs/acceptance.md); in-tree gates are tests.

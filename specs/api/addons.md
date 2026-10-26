@@ -1,11 +1,13 @@
 # Cluster add-ons, profiles, and bindings
 
 This page owns `ClusterAddon`, `ClusterAddonProfile`, and
-`ClusterAddonBinding`. An add-on is one reusable `olm` or `manifestSet`
-declaration. Profiles compose add-ons and other profiles. Bindings attach the
-expanded set and any [built-in packages](#built-in-packages) to one
-`ContainerCluster`, supplying scalar input values to authored add-ons and
-typed configuration to packages.
+`ClusterAddonBinding`. An authored add-on, a `ClusterAddon`, is one reusable
+`olm` or `manifestSet` declaration ([shared definition](../add-ons.md)); a
+[built-in package](#built-in-packages) is an add-on compiled into the executable
+and selected by name. Profiles compose
+authored add-ons and other profiles. Bindings attach the expanded set and any
+built-in packages to one `ContainerCluster`, supplying scalar input values to
+authored add-ons and typed configuration to packages.
 
 [The add-on boundary](../add-ons.md) owns what these declarations may never
 grant, the [add-on lifecycle](../add-ons.md#built-in-packages-and-selection)
@@ -26,22 +28,24 @@ their kind-specific validation and built-in defaults.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `spec.provides` | array of strings | no | `[]` | Set of capability tokens. |
-| `spec.requires` | array of strings | no | `[]` | Set of capability tokens. |
+| `spec.provides` | array of strings | no | `[]` | Set of add-on capability tokens. |
+| `spec.requires` | array of strings | no | `[]` | Set of add-on capability tokens. |
 | `spec.inputs` | array of objects | no | `[]` | Accepted inputs, keyed by unique `name`. |
 | `spec.olm` | object | conditional | — | Exactly one of `olm` and `manifestSet` is present. |
 | `spec.manifestSet` | object | conditional | — | Exactly one of `olm` and `manifestSet` is present. |
 | `spec.readiness` | object | no | — | Timeout and readiness checks. |
 | `spec.steps` | array of objects | no | `[]` | Ordered step declarations, admitted and [inert](#steps). |
 
-The implementation arm selects the add-on variant. Missing, multiple, or
+The arm selects the add-on. Missing, multiple, or
 unknown arms are invalid; the selected arm must satisfy its required fields.
 `spec.type` and `spec.accepts` are unknown fields, not compatibility aliases.
 
-Capability tokens match `^[A-Za-z0-9][A-Za-z0-9._-]*$` and are unique in each
-list. `provides` and `requires` are not closed enums. The names `kubevirt`,
-`dataFoundation`, `metallb` and `nmstate` have defined downstream meanings, but
-all valid tokens participate in dependency ordering. A built-in package
+Add-on capability tokens match `^[A-Za-z0-9][A-Za-z0-9._-]*$` and are unique
+in each list. They name what an add-on or package provides to a cluster, not a
+Machine capability or a lifecycle capability. `provides` and `requires` are not
+closed enums. The names `kubevirt`, `dataFoundation`, `metallb` and `nmstate`
+have defined downstream meanings, but all valid tokens participate in
+dependency ordering. A built-in package
 provides `metallb` when it answers `LoadBalancer` Service addresses
 ([package metallb](#package-metallb)); a package or add-on that needs such an
 address requires it. An add-on with any `provides` value requires at least one
@@ -110,6 +114,17 @@ records what a custom-package lifecycle would add.
 | `subscription.sourceNamespace` | string | yes after normalization | `openshift-marketplace` | CatalogSource namespace. |
 | `subscription.installPlanApproval` | string | yes after normalization | `Automatic` | `Automatic` or `Manual`. |
 | `customResources` | array of objects | no | `[]` | Raw Kubernetes resources preserved as structured maps. |
+
+The authored `subscription` defaults above (`installPlanApproval`
+`Automatic`, an optional `startingCSV`) are not the rules of the package
+[Subscription](#subscription), which requires `startingCSV` and approves only
+that CSV. No authored add-on runs, because the
+[lifecycle](../add-ons.md#refusal-table) refuses every binding that selects one.
+
+Not yet met: the authored defaults are not aligned with the package
+Subscription block, which the custom-package lifecycle of
+[B90](../milestones/m4.md#b90) requires before any authored add-on runs;
+tracked as [B828](../milestones/backlog.md#b828).
 
 Omitting `operatorGroup` requests no group. `operatorGroup: {}` requests the
 namespace-named group targeting that namespace. An explicit `targetNamespaces`
@@ -209,7 +224,7 @@ rejected. These remain generic named lists: input names and values are not
 add-on-specific schema fields. Input order does not define installation order.
 
 Only one binding may apply a given add-on to a given cluster after profile
-expansion. A selected add-on's required capabilities must be provided by
+expansion. A selected add-on's required capability tokens must be provided by
 another selected add-on; the resulting `requires`/`provides` graph must be
 acyclic. Config entries never select otherwise absent add-ons.
 
@@ -222,8 +237,13 @@ the cluster's bindings select.
 Add-on and package diagnostics follow the style of every other kind: a
 lowercase message with no final period that names what it concerns, an
 indexed field, and a remedy. Each fault is reported once, as its own
-diagnostic, so several faults of one binding never merge. Indexes are those
-of the normalized, sorted lists.
+diagnostic, so several faults of one binding never merge. Indexes are the
+authored positions in the document, as
+[the refusal rule](../api.md#yaml-streams-and-decoding) states for every list.
+
+Not yet met: the binding diagnostics index the normalized, sorted
+`addonConfigs` and `inputs` lists; tracked as
+[B826](../milestones/backlog.md#b826).
 
 | Fault | Code | Field | Message | Remedy |
 | --- | --- | --- | --- | --- |
@@ -257,7 +277,7 @@ duration of at most `5h50m` that defaults to the package's readiness
 timeout. A package's own rules check its configuration against the bound
 `ContainerCluster` and the effective catalog, never a live system.
 
-Registry construction proves that every provided capability has a reader or a
+Registry construction proves that every provided capability token has a reader or a
 defined downstream meaning. `NewRegistryWithExamples` accepts explicit
 configuration examples to prove conditional `RequiresFor` readers;
 `NewRegistry` supplies none. These examples establish registry conformance,
@@ -427,7 +447,7 @@ Red Hat OpenShift GitOps with its default Argo CD instance, a
 | `bootstrap.targetRevision` | string | yes, in the block | — | Branch, tag or commit; non-empty, no whitespace. |
 | `bootstrap.path` | string | yes, in the block | — | Relative path in the repository, `.` for its root; no leading `/` and no `..` segment. |
 | `bootstrap.destinationNamespace` | string | yes, in the block | — | DNS label; the namespace for manifests that name none. Naming `openshift-gitops` lets the repository's unscoped manifests write Argo CD's own namespace, including the placed repository Secret. |
-| `bootstrap.credentials` | string | no | — | Name of a Secret of type `usernamePassword` read by Argo CD for the repository. |
+| `bootstrap.credentialsRef` | string | no | — | Name of a Secret of type `usernamePassword` read by Argo CD for the repository. |
 | `bootstrap.access.clusterRole` | string | no | — | Name of a ClusterRole granted to the default instance's application controller. |
 | `bootstrap.sync.automated` | boolean | no | `true` | Argo CD synchronizes automatically. |
 | `bootstrap.sync.prune` | boolean | no | `false` | Automated sync deletes what leaves the repository. |
@@ -437,11 +457,15 @@ Red Hat OpenShift GitOps with its default Argo CD instance, a
 | Fault | Code | Field | Message | Remedy |
 | --- | --- | --- | --- | --- |
 | The repository URL is not usable | `api.field` | `$.spec.packages.gitops.bootstrap.repoURL` | `bootstrap repoURL of package gitops is not an https URL with a host and no query or fragment` | `set the https URL of the repository` |
-| The repository URL carries credentials | `api.field` | `$.spec.packages.gitops.bootstrap.repoURL` | `bootstrap repoURL of package gitops carries user information` | `remove the user information and name a usernamePassword Secret in bootstrap.credentials` |
+| The repository URL carries credentials | `api.field` | `$.spec.packages.gitops.bootstrap.repoURL` | `bootstrap repoURL of package gitops carries user information` | `remove the user information and name a usernamePassword Secret in bootstrap.credentialsRef` |
 | The path leaves the repository | `api.field` | `$.spec.packages.gitops.bootstrap.path` | `bootstrap path <path> of package gitops leaves the repository` | `set a relative path without .. segments` |
 | Prune or self-heal without automation | `api.invariant` | `$.spec.packages.gitops.bootstrap.sync` | `bootstrap sync prune and selfHeal of package gitops need sync.automated` | `set sync.automated to true, or remove prune and selfHeal` |
 
 Diagnostics never echo a repository URL, which could hold credentials.
+
+Not yet met: the schema, the diagnostic remedy and the tracked examples still
+spell the field `bootstrap.credentials`; tracked as
+[B824](../milestones/backlog.md#b824).
 
 ### Package certmgr
 

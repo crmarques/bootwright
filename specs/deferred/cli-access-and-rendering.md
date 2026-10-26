@@ -80,11 +80,6 @@ to their context-owned artifact roots.
 renderability, dependency selection, and the checks that can be answered
 without process or network access.
 
-`--trust-on-first-use=true` permits bounded retrieval and presentation of an
-unknown SSH host key from the exact authorized endpoint. It never accepts,
-persists, or uses the key. The preflight fails `trust.identity` and names the
-exact `machine trust` request needed for explicit enrollment.
-
 ## Multi-machine group results
 
 No slice currently revives this detail. The current
@@ -143,4 +138,3 @@ with their first emission:
 | Code | Meaning |
 | --- | --- |
 | `render.publish` | A requested artifact could not be safely rendered or published. |
-| `preflight.unknown` | Required readiness could not be positively determined. |

@@ -49,7 +49,25 @@ performs none of those operations.
 The tables list local flags; inherited global flags and `-h`/`--help` are not
 repeated. “Local” means the command may create or update Bootwright-owned local
 state but contacts no managed target. “Observe” permits bounded read-only
-process or network access. “Mutate” permits only the named, planned effects.
+process or network access, and one local write: the store-internal
+[cache-only rebuild](../controller.md#the-controller-runtime) of this build's
+controller runtime when its directory is missing, for the commands whose cell
+names it. That rebuild waits for `setup/lock`, uses no network and changes no
+setup record. “Mutate” permits only the named, planned effects.
+
+The Effects column is the only owner of what a command may do. Another page
+describes a command's effects only by projecting its cell and defines no other
+class. A page that means the commands that run no process and open no network
+connection names those whose cell reads “none” or “read local state”.
+
+Selectors and flags that play one role share one spelling. `--name <list>`
+selects instances of the command's own noun, a plural `--<noun>s <list>` filters
+by a related noun, and `--short` is the one flag that prints names only.
+
+Not yet met: `machine trust` still selects with `--machines` and `machine list`
+prints names only with `--silent`; they take `--name` and `--short`, with no
+alias, and `machine trust --name` keeps the empty and comma-only rules of
+`--machines`; tracked as [B825](../milestones/backlog.md#b825).
 
 ### Setup commands
 
@@ -60,7 +78,7 @@ process or network access. “Mutate” permits only the named, planned effects.
 | `bootwright context use` | required `--name <name>` | selected-current-context summary | local current-context update |
 | `bootwright context list` | none | contexts in canonical name order | read local state |
 | `bootwright context current` | `--short` false | current context details, or only its name with `--short` | read local state |
-| `bootwright context delete` | required `--name <name>` and `--purge`; `--allow-orphans` and `--yes` false | permanent local deletion summary, saying whether it abandoned objects, which its confirmation names with `bootwright status --context <name>` as their inventory or says cannot be listed, and the host reservation keys it released | guarded removal under [permanent deletion](../contexts.md#permanent-deletion); never resource mutation |
+| `bootwright context delete` | required `--name <name>` and `--purge`; `--allow-orphans` and `--yes` false | permanent local deletion summary, saying whether it abandoned objects, which its confirmation names by the inventory [permanent deletion](../contexts.md#permanent-deletion) defines or says cannot be listed, and the host reservation keys it released | guarded removal under [permanent deletion](../contexts.md#permanent-deletion); never resource mutation |
 | `bootwright add-ons list` | none | built-in packages, their capabilities, OLM package, default source and configuration members | read executable registry |
 | `bootwright secret set` | required `--name`; type-specific `--value-file`, `--value-stdin`, `--username`, `--password-file`, `--password-stdin`, `--certificate-file`, `--private-key-file`, `--public-key-file` under [Secrets](../secrets.md); `--yes` false | stored identity and parts, never values | local confidential write |
 | `bootwright secret generate` | optional `--name`; `--renew` false | changed and unchanged Secret names | atomic selected generated-material batch |
@@ -94,7 +112,7 @@ The three `media` commands follow the host-wide
 | `bootwright preflight add-ons` | `--clusters <list>` default all ContainerClusters | add-on prerequisite checks | bounded observation |
 | `bootwright preflight all` | `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | all controller, infrastructure, cluster, storage, and add-on checks | observe unless `--dry-run` |
 | `bootwright plan` | `--stage <list>` default all stages | next legal full-context plan or exact continuation point, with the steps each block waits for, how wide the plan is and how many blocks this build starts at a time, and the blocks a stage selection would start | none |
-| `bootwright status` | none | context readiness, lifecycle state, and next safe commands | read local state |
+| `bootwright status` | none | controller setup readiness, lifecycle state, and next safe commands; it checks neither Secret material nor media, which `secret check` and `media list` report | read local state |
 | `bootwright diff` | `--observe` false | each object's desired state beside what the context's apply realized, from its records or, with `--observe`, read live, as a [comparison](../cli.md#desired-and-realized-state-comparison) | read local state; with `--observe`, a bounded read-only observation of each block the context's apply realized, on the host that block froze, after the store-internal [cache-only rebuild](../controller.md#the-controller-runtime) of this build's runtime when its directory is missing |
 | `bootwright render` | `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--clusters <list>` default all; `--sensitive` false | whole external-tool artifact manifest, or render help when neither path flag is supplied | local artifact writes only |
 | `bootwright render effective` | none | normalized effective desired state and object counts | none |
@@ -103,16 +121,26 @@ The three `media` commands follow the host-wide
 | `bootwright apply` | repeatable `--authorize <token>[,<token>...]`; `--stage <list>` default all stages; `--yes` false | completed full apply, a pause at the selected stage boundary, exact continued state, or a settled result when the declared state is already realized | complete planned mutation, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) |
 | `bootwright destroy` | repeatable `--authorize <token>[,<token>...]`; repeatable `--unregistered <machine>[,<machine>...]`; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond completing an operation's interrupted finalization (its record, releases and evidence) or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
 
+Not yet met: `preflight infra`, `preflight clusters`, `preflight all`,
+`preflight add-ons`, `render` with a path flag, `render installer` and `render
+storage` run no use case and answer `cli.not-implemented`, so their flag
+contracts are intent; `render installer` is tracked as
+[B52](../milestones/m7.md#b52), `render storage` as
+[B55](../milestones/m7.md#b55) and the others as
+[B825](../milestones/backlog.md#b825). `render effective`, `preflight
+controller`, `preflight container-cluster` and `preflight storage-cluster` are
+available.
+
 ### Resource, access, and general commands
 
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
-| `bootwright machine list` | `--clusters <list>` default all; `--power-status` false; `--silent` false | Machines with their declared contact and addresses and the evidence-backed lifecycle position each reached, their controller-reported power with `--power-status`, or sorted names with `--silent` | read local state; with `--power-status`, read each machine's power through its management controller |
+| `bootwright machine list` | `--clusters <list>` default all; `--power-status` false; `--silent` false | Machines with their declared contact and addresses and the evidence-backed lifecycle position each reached, their management-controller-reported power with `--power-status`, or sorted names with `--silent` | read local state; with `--power-status`, read each machine's power through its management controller |
 | `bootwright machine info` | `--name <list>` default all; an unknown name refuses | selected machine placement, contact, addresses, and recorded lifecycle evidence | read local inventory only; no host or power contact |
 | `bootwright machine rsh` | required `--name <machine>` | an interactive SSH session on the exact Machine as its resolved identity; the client's exit status is the result | read state, open the session's credential for its duration, read or record host trust, run one pinned SSH client |
 | `bootwright machine exec` | required `--name <list>` and `<command>...` | the exact argument vector runs on the Machine, or on every listed Machine at once with [each line prefixed by its Machine](../cli.md#machine-ssh-sessions); the remote command's exit status is the result, the highest of them for several | same |
 | `bootwright machine trust` | `--machines <list>` default all; `--replace <list>` default none; `--dry-run` false; `--yes` false | exact host-key trust plan, and the recorded result unless dry-run | bounded SSH host-key observation of the selected Machines; context trust-store write unless dry-run |
-| `bootwright machine start` | required `--name <list>` | the power state each Machine's management controller proved once the operation settled | bounded power operation through that controller, one concurrent [batch](../cli.md#machine-power-operations) for several Machines |
+| `bootwright machine start` | required `--name <list>` | the power state each Machine's management controller proved once the operation settled | bounded power operation through that management controller, one concurrent [batch](../cli.md#machine-power-operations) for several Machines |
 | `bootwright machine stop` | required `--name <list>`; `--force` false; `--yes` false | same, after the operating system is asked to shut down | same |
 | `bootwright machine restart` | required `--name <list>`; `--force` false; `--yes` false | same, after a proved stop and a proved start | same |
 | `bootwright setup` | `--dry-run` false; `--yes` false; `--wheel-mirror <file:///dir or https://base>` default none; `--download-only` false; `--dest-dir <dir>` default none | [context-independent controller prerequisite plan or completed setup](../controller.md#the-setup-flow); with `--dry-run --output json`, the plan and every locked wheel; with `--download-only`, the [files written for an offline host](../controller.md#offline-and-mirrored-wheels) | host packages through the host's own dnf after its verbatim preview, and the controller runtime from locked wheels over the [context-free route](../controller.md#the-context-free-acquisition-route), or from `--wheel-mirror`; a ready host makes no request and no change; dry-run only lists requirement names; `--download-only` requires `--dest-dir`, conflicts with `--dry-run`, never elevates, reads no setup state and writes only the directory |
@@ -162,6 +190,20 @@ Ceph sessions are specified.
 Not yet met: `cluster oc` and `cluster kubectl` hand off nothing and sessions on
 an OpenShift/OKD ContainerCluster do not open; tracked as
 [B101](../milestones/backlog.md#b101).
+
+### Help content
+
+Every available command's help carries at least one example and names the
+values of each enum flag, and the refusal of an enum value lists them. A command
+that is recognized but unavailable says so in its own help, and an unavailable
+cluster command offers no execution example. The root listing marks a command
+group unavailable only when neither it nor any command under it is available, so
+`render` is unmarked while `render effective` works. A usage refusal for a flag
+that belongs to another command names only a descendant's flag. Goldens hold the
+root help and the help of every command (`TestHelpGolden`,
+`TestHelpMarksUnavailableCommands`,
+`TestAGroupWithAnAvailableSubcommandIsNotListedUnavailable`,
+`TestScalarEnumRefusalListsAllowedValues`).
 
 ### Access help
 
@@ -351,7 +393,10 @@ It grants no confirmation authority either.
 A changed SSH host key always fails. `machine trust --replace` is the only
 interface for a deliberately changed key, and every replacement name must also
 be in that command's selected Machine set. The preflight `--trust-on-first-use`
-flag's meaning is [deferred](../deferred/cli-access-and-rendering.md#preflight).
+flag permits bounded anonymous retrieval and presentation of an unknown SSH host
+key from the exact authorized endpoint, as the
+[storage preflight result](output.md#json-output) shows; it never accepts,
+persists or uses the key.
 
 `--sensitive` authorizes materialization, not disclosure in normal output. It
 applies only to the render rows that list it. Sensitive installer artifacts use

@@ -20,15 +20,20 @@ reference covers the mechanics.
 
 ## Integration variants
 
-- **Pull request (default).** Push the task branch when the user or harness asks,
-  open or update the pull request, and keep CI green. Later fixes are new
-  commits on the same branch; do not rewrite pushed history.
+- **Local fast-forward (default).** Under
+  [D168](../../../../specs/milestones/backlog.md#decisions) a slice that passed
+  its checkpoint and is feature complete integrates into local main as soon as
+  it is done, without asking. Rebase the task branch onto the destination tip,
+  rerun `make check` and any safety additions, and advance the destination by
+  fast-forward only. If the destination has
+  unrelated uncommitted changes or cannot move safely, keep the tested task
+  branch and report the blocker; never bypass it with a merge. This applies
+  with or without a remote; pushing still waits for the owner.
+- **Pull request.** When the owner or harness asks for one, push the task
+  branch, open or update the pull request, and keep CI green. Later fixes are
+  new commits on the same branch; do not rewrite pushed history.
 - **Cloud session.** The harness-designated branch is the task branch and its
   instructions decide when to push.
-- **Local, no remote.** Rebase the task branch onto the destination tip, rerun
-  the affected gates, and advance the destination by fast-forward only. If the
-  destination has unrelated uncommitted changes or cannot move safely, keep the
-  tested task branch and report the blocker; never bypass it with a merge.
 
 Amend only a commit you created for this same change that has not been pushed
 or shared and that no unrelated commit follows; otherwise make a new commit.

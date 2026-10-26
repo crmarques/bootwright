@@ -1,7 +1,8 @@
 # Go Engineering
 
 [Architecture](../../../../specs/architecture.md) owns package and runtime
-boundaries; [security](../../../../specs/security.md) owns trust requirements;
+boundaries and [which language holds which logic](../../../../specs/architecture.md#go-and-ansible-responsibility-boundary);
+[security](../../../../specs/security.md) owns trust requirements;
 [source formatting](formatting.md) owns layout. This reference adds Go-specific
 implementation and verification guidance.
 
@@ -111,3 +112,22 @@ write in `internal/reconciliation/lifecycle/kill_harness_test.go`. The
 harnesses' ledgers and the suite's known deviations are exact lists under
 [architecture verification](../../../../specs/architecture.md#architecture-verification),
 so they only shrink: an entry leaves with the fix that makes it pass.
+
+## Contract versions and content digests
+
+[Continuation and removal](../../../../specs/state-reconciliation.md#continuation-and-removal)
+owns when a capability's content digest moves. Before committing a change to a
+capability's request, evidence, observation or ownership code:
+
+- Decide whether it alters what an effect is: the objects it creates, their
+  names and places, the ownership mark, the host resources it claims or what
+  its observation proves. If it does, move the implementation's version, which
+  moves its content digest, and say so in the commit body.
+- `TestEveryImplementationMovesItsContentDigestWithItsContract` in
+  `cmd/bootwright/contract_versions_test.go` fails when a Go request or evidence
+  schema, or a persisted format version the collection quotes, changes with the
+  digest unmoved. It cannot see a change of meaning under an unmoved version.
+- `TestEveryAutomationVersionLiteralIsClassified` in the same file requires a
+  new or renamed quoted version literal in the collection to be classified.
+- A moved version still refuses a record of the old one by name (D142): add no
+  converter and no older reader.

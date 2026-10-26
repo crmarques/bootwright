@@ -9,8 +9,9 @@ this page defines no accepted input, compatibility rule, or delivery state.
 ## Current infrastructure-service shape
 
 The earlier generic infrastructure-service decision below has been superseded.
-The current desired-state catalog contains 27 kinds: `Proxy`, `DNSServer`,
-`NTPServer`, `ArtifactServer`, `Registry`, and `LoadBalancer` replace
+The [kind catalog](../../specs/api.md#kind-catalog) owns the current kinds and
+their number. In that update `Proxy`, `DNSServer`,
+`NTPServer`, `ArtifactServer`, `Registry`, and `LoadBalancer` replaced
 `InfraComponent`. Each declares managed deployment or external access through
 its own `management` field. Direct consumer references replace Environment
 catalog aliases. Environment now requires an explicit controller Machine;

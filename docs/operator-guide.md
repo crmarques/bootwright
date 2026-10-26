@@ -315,6 +315,14 @@ real-hardware test runs this build on a separate RHEL controller, in a subnet
 the BMC network reaches on the artifact ports
 ([D109](../specs/milestones/backlog.md#decisions)).
 
+### Changing the controller host's identity
+
+Changing the controller's machine-id, DMI product UUID or root filesystem UUID
+strands every context bound to it: the next command refuses with the host
+mismatch. Destroy each context from this host before such a change. The
+[host binding](../specs/contexts.md#controller-relationship-and-host-binding)
+names the other exits.
+
 ## Network exposure
 
 Bootwright binds the listeners the graph declares and leaves the host firewall
@@ -382,7 +390,7 @@ same sockets and the same guest bridge.
 | --- | --- | --- |
 | [lab-rhel](../examples/machines/lab-rhel/README.md#run-it) | One RHEL guest installed through an emulated Redfish BMC, machine list and power reads, exec/rsh sessions, drift observation, replay, restart and safe removal; extended acceptance checks are below | [B72](../specs/milestones/delivered.md#x38--the-real-host-run-of-2026-10-05) operator gate, accepted; M1's extended checks follow [D59](../specs/milestones/backlog.md#decisions) |
 | [lab-sno](../examples/container-clusters/lab-sno/README.md#run-it) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
-| [lab-baremetal](../examples/machines/lab-baremetal/README.md#run-it) | One physical Machine claimed, proved and installed through its own Redfish controller, its installer image and host key published privately; the [separate rehearsal substrate](../examples/machines/lab-baremetal-substrate/README.md) supplies a generated CA-issued emulator leaf, [B496](../specs/milestones/m1.md#b496) | [B73](../specs/milestones/m1.md#b73) operator gate, not run |
+| [lab-baremetal](../examples/machines/lab-baremetal/README.md#run-it) | One physical Machine claimed, proved and installed through its own Redfish BMC, its installer image and host key published privately; the [separate rehearsal substrate](../examples/machines/lab-baremetal-substrate/README.md) supplies a generated CA-issued emulator leaf, [B496](../specs/milestones/m1.md#b496) | [B73](../specs/milestones/m1.md#b73) operator gate, not run |
 
 Run each block from the repository root, one line at a time, and keep the
 sequence exactly as run: the ledger records it. After each operation, `status`
@@ -460,6 +468,12 @@ prepared", and the remedy `run bootwright setup`
 A build from before the setup v2 cut-over cannot read this build's store, and
 this build cannot read its store: crossing it is the
 [fresh install](#a-host-an-earlier-bootwright-build-manages).
+
+Before installing a new build, take stock of every context: `bootwright context
+list` names them, and `bootwright status --context <name>` names, in its
+Lifecycle section, the operation a context has not finished and the build that
+registered it. Finish each one under that build, or note it, because the new
+build continues an operation only as the paragraph on another build below says.
 
 An operation left incomplete by the previous build that the new one cannot
 continue, as the paragraph on another build below says, is removed instead: a

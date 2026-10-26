@@ -105,12 +105,21 @@ A reservation key is one of:
 | `unit:<name>` | One host service-manager unit and its container name. |
 | `path:<absolute path>` | One owned directory tree. |
 | `bridge:<name>` | One host bridge, whichever network defines it. |
+| `bridge-use:<name>` | A shared claim that an external libvirt attachment uses one host bridge. It conflicts with nothing at acquisition, and a removal that would release the exclusive `bridge:<name>` refuses `controller.conflict` while another context holds it, naming that context. |
 | `libvirt-network:<name>` | One libvirt network definition. |
 | `libvirt-pool:<name>` | One libvirt storage pool definition. |
 | `prefix:<masked prefix>` | One managed libvirt network's routed prefix, IPv4 or IPv6, written masked (`prefix:198.51.100.0/24`); it conflicts with every held prefix it overlaps, identical or nested, because the host routes each to its own bridge. |
 | `libvirt-domain:<name>` | One libvirt domain definition. |
-| `bmc:<host>:<port>/<system>` | One [physical machine](substrates.md#physical-machine-realization), named by its normalized management-controller endpoint and exact ComputerSystem, so two contexts never drive one server. The claim serializes use; it is never ownership of the machine and authorizes nothing about it. |
+| `kubevirt-vm:<server>/<namespace>/<name>` | One KubeVirt VirtualMachine, by the host cluster's API server, namespace and name. |
+| `bmc:<host>:<port>/<system>` | One [physical machine](substrates.md#physical-machine-realization), named by its management-controller endpoint, normalized for the key alone as that page states (the port it names or else its scheme's default), and exact ComputerSystem, so two contexts of one controller store never drive one server. The claim serializes use; it is never ownership of the machine and authorizes nothing about it. An [emulated BMC's](substrates.md#machine-realization) machine block holds the same key shared: it conflicts with nothing at acquisition, and its release refuses `controller.conflict` while another context holds the key exclusively. |
+| `bmc-system:<UUID>` | The same physical machine, named by the `UUID` its proof records in lower case, claimed once the proof records it and before any media is inserted, so a second spelling of one server's address refuses. A system that reports no `UUID` claims no such key. |
 | `media:<filename.iso>` | A shared claim on one image of the [media store](managed-os.md#media-store); it conflicts with nothing and blocks only that image's deletion or replacement while any context holds it. |
+
+Not yet met: the physical block claims no `bmc-system:` key; tracked as
+[B802](milestones/backlog.md#b802). An external libvirt attachment claims no
+`bridge-use:` key and an emulated BMC claims no `bmc:` key; tracked as
+[B803](milestones/backlog.md#b803). No KubeVirt VirtualMachine claims a
+`kubevirt-vm:` key; tracked as [B816](milestones/backlog.md#b816).
 
 A `socket:` key writes an IPv6 address unbracketed, the one form every
 capability claims, while a plan's listener impact names the socket as an
@@ -135,18 +144,39 @@ table](#refusal-table))
 `TestTheReservationSocketBoundKeepsAClaimWithinItsKeys`,
 `TestTheArtifactSocketBoundKeepsAClaimWithinItsKeys`).
 
-Every key is exclusive except the class marked shared. Reservations are
-published under the root lock before the operation's first effect and released
-by a completed destroy, or by a destroy that finds them held by no operation
-because the registration that published them was
-[interrupted](state-reconciliation.md#lifecycle-unit). A requested exclusive
+A controller record holds at most 256 reservations ([controller
+record](contexts/controller-record.md#bounds)). An apply whose
+reservations would pass that bound refuses before registration with
+`controller.conflict`, naming the bound and the count it needs, and its remedy
+is `bootwright destroy --context <name>` or `bootwright context delete
+--name <name> --purge` of a context this host no longer needs.
+
+Not yet met: the bound is a stored-record check that fails the store, not a
+named refusal before registration; tracked as
+[B832](milestones/backlog.md#b832).
+
+Every key is exclusive except the classes marked shared. Each key class has
+one conflict relation, stated in the table above, which Workspace applies when
+it publishes a context's entries through the controller prerequisites port
+([controller record](contexts/controller-record.md#record)). Reservations are
+published under the root lock before the operation's first effect. Only the
+holding context releases them, by one of these paths:
+
+| Release path | Proof |
+| --- | --- |
+| A completed destroy | Its finalization, after every block's absence evidence, releases the context's keys with its Secret bindings. |
+| A destroy settling an interrupted registration | It finds the keys held by no operation, because the registration that published them was [interrupted](state-reconciliation.md#lifecycle-unit). |
+| The context's own next apply | It replaces the context's keys, or finishes the removal they sit beside. |
+| The [permanent deletion](contexts.md#permanent-deletion) that abandons the context's objects, under the orphan acknowledgement | The acknowledgement waives the disposal verdict. The deletion drops every key the context still holds while the objects those keys protected stay on the host, so another context may then claim the same keys. |
+
+A requested exclusive
 claim that conflicts with claims another context holds refuses with one
 `controller.conflict` diagnostic per held claim it conflicts with. Each names the holding context; the held key
 for `socket:`, `bridge:` and `prefix:` keys, and only the class for any other,
 so no private path prints; the holder's object; and this context's object. Its
-remedy is `bootwright destroy --context <holder>`, because only a completed
-destroy releases a key, or the field of this context's declaration that
-chooses the key (`TestEachConflictingHeldClaimIsItsOwnDiagnostic`). A
+remedy is `bootwright destroy --context <holder>`, which releases the keys the
+holder still holds, or the field of this context's declaration that chooses
+the key (`TestEachConflictingHeldClaimIsItsOwnDiagnostic`). A
 context's own keys are replaced by its own apply. An interrupted apply leaves
 its reservation in place, and the same context's next apply replaces it.
 Continuing the holder, even to completion, keeps its keys held, so another
@@ -231,8 +261,10 @@ plan, never by appending to a frozen one.
 **Implementation.** One container image runs an HTTP server under the host
 service manager with host networking, so declared bind addresses and ports are
 the real sockets. The image is `spec.image.local`, else `spec.image.public`,
-else the executable's compiled default. An authored reference is pinned by
-content digest at [admission](api/infrastructure-services.md#management-and-placement)
+else the executable's compiled default; `local` and `public` are two
+references the operator may hold at two places, the executable compares neither
+with the other, and an unset one falls through to the next. An authored
+reference is pinned by content digest at [admission](api/infrastructure-services.md#management-and-placement)
 and the compiled default is one, so a tag never reaches a plan.
 Image acquisition uses the placement Machine's normalized
 [proxy choice](api/machines.md#machine-proxy) and no ambient proxy variable;
@@ -320,8 +352,14 @@ restarted, because the service reads only what it started with, while one that
 started after them all is not; and any owned unit, container or content root
 that is missing, which is created again. An apply stopped between publishing a
 file and restarting the service is therefore completed by its next attempt.
-Everything it owns carries the context in its name, so a same-name object it
-did not create cannot occur without a reservation conflict refusing first.
+Everything it owns carries the context in its name, so a same-name object
+another live context created cannot occur without a reservation conflict
+refusing first. An object an abandoned context of the same name left on the
+host reads as this context's, because no native identity yet distinguishes the
+two.
+
+Not yet met: a context incarnation enters no ownership marker; tracked as
+[B803](milestones/backlog.md#b803) and [B568](milestones/backlog.md#b568).
 
 **Inverse.** Destroy stops the service, removes the unit definition, resets
 the failed state systemd still lists the unit in, as a unit whose daemon exited
@@ -471,11 +509,17 @@ run, the configuration derived for it, and the answer readiness proves. Their
 plan blocks belong to the
 [`infra-components` stage](state-reconciliation.md#stages-and-the-pause-boundary).
 
-One role realizes all three kinds, keyed by the request's frozen kind: it
-selects the daemon configuration and unit templates for that kind from a fixed
-table, and every task is shared. The three kinds freeze one request version, so
+One role realizes all three kinds, keyed by the request's frozen
+implementation identity: it selects the daemon configuration and unit
+templates for that implementation from a fixed table, and every task is shared.
+Validation admits one implementation per kind, so each kind selects exactly one
+row, and the selection plans only the objects whose `spec.implementation`
+matches its definition. The three kinds freeze one request version, so
 a request an earlier build froze for one kind refuses by naming its version,
 and its remedy is to destroy the context with the build that applied it.
+
+Not yet met: the role's table and the selection are keyed by kind alone;
+tracked as [B810](milestones/backlog.md#b810).
 
 **Implementation.** One container image per kind, selected, pinned and acquired
 exactly as the [artifact server's](#managed-artifact-serving) is. The unit
@@ -519,6 +563,10 @@ to the world.
 A `DNSServer` with no authored forwarder answers only its own records rather
 than reaching an ambient upstream. A managed `NTPServer` serves time without
 disciplining its host's clock, so it coexists with the host's own time service.
+Whenever no declared upstream source is synchronized, it answers from its
+host's clock at local stratum 10, so a service with no declared or reachable
+upstream still answers
+([knowledge](../.agents/knowledge/managed-network-service-runtime.md)).
 
 A selected `ContainerCluster` contributes the three names its own installation
 polls and its consumers reach it at, each answering the address its endpoint
@@ -535,7 +583,12 @@ Machine uses and the installer that polls the cluster agree by construction.
 A retained StorageExport with an attached object gateway also contributes its
 endpoint record through [the export DNS contract](storage-resources.md#attached-gateway-dns).
 The declaration owns the contribution and this service owns its publication and
-inverse, using the same frozen-record and content ownership as other names.
+inverse, using the same frozen-record and content ownership as other names. The
+storage domain owns the derivation of that record from the export's attached
+gateway, and this service reads no storage field path.
+
+Not yet met: this service reads the export's gateway reference itself; tracked
+as [B810](milestones/backlog.md#b810).
 
 **Readiness.** Completion requires a positive answer on every address the
 service serves: the declared bind address, or every declared endpoint address
@@ -545,7 +598,9 @@ admission now refuses, never proves presence, so everything present reads as a
 partial realization (`TestPresenceRequiresEveryDeclaredAnswer`). A proxy
 answers a bounded HTTP request with a well-formed status line; a resolver answers one of its own records over
 both UDP and TCP; a time service returns a server-mode reply, whose stratum may
-show it unsynchronized without being a failure. An address that never answers
+show it unsynchronized without being a failure. Readiness therefore proves that
+the service answers, not that it is synchronized to an upstream source, and a
+consumer of a time service accepts a responding source of either kind. An address that never answers
 within the bounded readiness window is unknown, not failure, and is reported
 with its cause as [an unproved listener](#managed-artifact-serving) is.
 

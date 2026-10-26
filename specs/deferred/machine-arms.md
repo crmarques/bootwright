@@ -30,15 +30,21 @@ arms for OpenShift nodes; the realization contracts they need are stated in
 | `spec.vsphere.failureDomains[].zone` | string | yes | Non-empty zone tag. |
 | `spec.vsphere.failureDomains[].server` | string | yes | Resolves to `vcenters[].server`. |
 | `spec.vsphere.failureDomains[].topology` | object | yes | Required `datacenter`, `computeCluster`, `datastore`, and non-empty `networks`; optional `folder` and `resourcePool`. |
-| `spec.vsphere.nodeNetworking.external.networkSubnetCidr` | array of strings | no | Valid external network CIDRs; effective state masks host bits. The final YAML word is exactly `Cidr`. |
-| `spec.vsphere.nodeNetworking.internal.networkSubnetCidr` | array of strings | no | Valid internal network CIDRs; effective state masks host bits. |
 | `spec.vsphere.isoStaging.datastore` | string | conditional | Defaults to the selected failure domain's `topology.datastore`; at least one of `datastore` or `folder` is present when `isoStaging` is set. |
 | `spec.vsphere.isoStaging.folder` | string | conditional | Defaults to `bootwright-vmedia`; same presence rule for an authored `isoStaging` block. |
 | `spec.vsphere.machineProfiles` | array | no | Provider-local set keyed by `name`; [common profile shape](../api/machines.md#machine-profiles-and-network-attachments). |
 
-A failure domain with more than one topology network requires
-`nodeNetworking`. A machine profile must set `failureDomainRef` when more than
-one failure domain exists; with one domain the reference is implicit.
+A machine profile must set `failureDomainRef` when more than one failure
+domain exists; with one domain the reference is implicit.
+
+Node networking has one owner, the cluster's
+`spec.install.platform.vsphere.nodeNetworking`
+([platform union](../api/container-clusters.md#platform-union-and-derivation)),
+so this arm carries no `nodeNetworking` field and no rule that requires it.
+
+Not yet met: the closed schema still admits `spec.vsphere.nodeNetworking` and
+requires it for a failure domain with more than one topology network; tracked
+as [B827](../milestones/backlog.md#b827).
 
 ### KubeVirt arm
 
@@ -80,18 +86,20 @@ the native resource's scope.
 
 ## Machine fields
 
-A vSphere-authored MAC is in the
-manual assignment range `00:50:56:00:00:00` through
-`00:50:56:3f:ff:ff`.
+Each virtual arm states where an interface's MAC comes from. A libvirt
+interface's MAC is derived by the provider and never authored
+([machine realization](../substrates.md#machine-realization)). A vSphere MAC
+is authored in the manual assignment range `00:50:56:00:00:00` through
+`00:50:56:3f:ff:ff`, or else derived in that range from the context, Machine
+and interface names
+([vSphere machine realization](../substrates.md#vsphere-machine-realization)).
+A KubeVirt interface carries a pinned `macAddress`
+([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization))
+whose source, authored or derived, B87's definition settles.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `interfaceAttachments` | array | conditional | `[]` | KubeVirt-only set of `{interface, attachmentRef}`; mutually exclusive with `attachmentRef`. |
-
-`interfaceAttachments` is the KubeVirt alternative for
-per-interface networks: interface names are unique, every effective physical
-interface is covered exactly once, and each `attachmentRef` resolves to a
-KubeVirt arm in the selected provider.
+| `interfaceAttachments` | array | conditional | `[]` | Per-interface attachments, on libvirt as on KubeVirt, as [network configuration](../api/machines.md#network-configuration) states; on a KubeVirt Machine each `attachmentRef` resolves to a KubeVirt arm of its provider. |
 
 ## Template-clone installer arm
 

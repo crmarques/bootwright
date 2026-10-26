@@ -63,6 +63,10 @@ Missing or uncertain history cannot authorize that cleanup.
 
 ## Prepare and install
 
+Review the IBM license terms before use: the tracked `storage/entitlement.yaml`
+sets `license.accept: true` as a placeholder, and accepting the license is your
+explicit act.
+
 Complete the controller setup, media import and BMC/media trust preparation in
 the [physical installation runbook](../../machines/lab-baremetal/README.md#run-it).
 Set `physical_ceph_input` to your customized private input directory. Review

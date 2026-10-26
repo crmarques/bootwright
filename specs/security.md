@@ -10,7 +10,11 @@ diagnostic.
 
 Treat authored YAML, native-shaped maps, payload files, paths, environment
 variables, tool streams, remote facts, network responses, dependency content,
-and persisted state not written and authenticated by Bootwright as untrusted.
+and persisted state Bootwright did not write as untrusted. Bootwright's own
+state is trusted when it was published in the root-only store through held
+verified handles, under the
+[controller host's attacker model](#the-controller-hosts-attacker-model), and
+keyring state also when its MAC verifies ([local keyring](secrets.md#local-keyring-v4)).
 Parse once into closed typed structures, normalize once, and pass only those
 values across ports. Unknown fields, duplicate meanings, implicit coercions,
 and adapter-invented defaults are errors. A strict JSON document ends with its
@@ -23,12 +27,18 @@ and reference count, string and collection length, decoded payload size,
 diagnostic count, log and subprocess
 output, target concurrency, redirects, retries, and wall-clock duration. Limit
 failures are explicit and deterministic; partial input is never accepted as
-complete. Enforce limits before proportional allocation or work except for
+complete. The sessions of several Machines that `machine exec` and `cluster exec`
+run are bounded by the target-concurrency limit of
+[machine SSH sessions](cli.md#machine-ssh-sessions); no boundary runs
+unbounded fan-out. Enforce limits before proportional allocation or work except for
 the explicitly qualified desired-state
 [per-document parser boundary](api/input.md#parser-boundary): verified source-byte
 limits precede parsing, while representation limits follow composition of one
 document. Cancellation stops admission of new work and releases bounded
 resources at the owning boundary's documented cancellation points.
+
+Not yet met: the sessions of several Machines start with no bound; tracked as
+[B817](milestones/backlog.md#b817).
 
 Validation must distinguish absence, known value, and unknown result. A failed
 or ambiguous probe is unknown, never proof that a machine, object, credential,
@@ -39,7 +49,9 @@ path, or effect is absent.
 On the controller host the attacker is an unprivileged local account, and any
 network adversary between the host and the publishers it acquires from. Root,
 and anything only root can write, is trusted; the operator's sudo rule is
-treated as granting everything it permits. Every file the controller executes
+treated as granting everything it permits. Every account it admits may act on
+every context of the host: Bootwright keeps no authority between those
+accounts. Every file the controller executes
 or loads, the re-executed Bootwright binary, the interpreter, its standard
 library and `lib-dynload`, the controller runtime, `rpm` and `dnf` included, is
 therefore admitted only when it and every directory above it are owned by root
@@ -67,6 +79,27 @@ here once:
   outside the host's FIPS-validated modules
   ([D108](milestones/backlog.md#decisions) as D152 amends it); a
   FIPS-qualified runtime stays parked as [B331](milestones/backlog.md#b331).
+
+### Remote principals
+
+Each remote principal is reached only over the verified channel
+[network, remote systems, and privilege](#network-remote-systems-and-privilege)
+requires, and is trusted only for what it asserts about its own resources. Its
+report of identity, readiness or positive absence proves those resources and
+nothing about another principal's. Its compromise is outside what Bootwright
+defends: at most it misreports or strands its own resources and discloses the
+material lent to it.
+
+| Principal | Trusted to assert | Receives |
+| --- | --- | --- |
+| Managed host, as its pinned host key | Its installed identity and the objects it holds | The fleet SSH identity and the material its blocks lend or place |
+| Management controller | Its system's identity, power and virtual-media state | Its credential and the private virtual-media URLs it fetches |
+| Provider host or API | The objects it hosts | Its access credential and the images pushed to it |
+| Cluster API server | Its own objects' state and readiness | The administrator kubeconfig's access and every Secret placed in it |
+| Registry, mirror or publisher | Nothing beyond bytes a digest or publisher metadata verifies | Its registry credential |
+
+Native tool output is no principal: it is untrusted input decoded under the
+[process boundary](#process-boundary).
 
 ## Sensitive material
 
@@ -101,10 +134,26 @@ owns publication, record bounds, locked reads and corruption refusal; its
 manifest freezes authored input only, and source paths never authorize payload
 access during admission or inspection.
 
-Secret materialization requires an explicit context-scoped authority and must
-not fall back to ambient credentials. Secret bytes stay in bounded memory, an
-inherited descriptor or standard input, or an operation-scoped `0600` file
-beneath a `0700` directory. A managed-OS registration's organization and
+Secret materialization takes the selected context's keyring as its only
+authority, which is no access control between the accounts the sudo rule
+admits, and must not fall back to ambient credentials. Secret bytes stay in
+bounded memory, an inherited descriptor or standard input, or an
+operation-scoped `0600` file beneath a `0700` directory.
+
+A lifecycle adapter receives each secret part only as a lent file. The
+material values its request carries beside those files are non-secret, such as
+names, public keys, certificates and fingerprints. A task reads a lent file
+only inside the module argument or template that consumes it, under `no_log`,
+and no fact or registered result keeps its bytes. A task placed on a remote
+host that receives material runs with pipelining, so the module payload that
+carries it crosses the connection's standard input and no remote temporary
+file; a file transfer to a remote host carries no material.
+
+Not yet met: the adapter enables no pipelining, and no test holds material
+values or remote file transfers free of material; tracked as
+[B829](milestones/backlog.md#b829).
+
+A managed-OS registration's organization and
 activation key are read from their lent material files by the controller
 module that opens the guest connection; they cross that pinned SSH session
 only on the standard input of a fixed root worker and reach the subscription
@@ -131,8 +180,10 @@ to the secret type; weak fallback randomness is forbidden.
 The [Secrets runtime contract](secrets.md) qualifies local key custody,
 cryptography, rotation, material input and sensitive reveal.
 
-Read-only commands create no cache, temporary file, state record, output path,
-or log; [the output contract](cli/output.md#private-operation-logs) lists them.
+A command whose [catalog](cli/commands.md#command-and-flag-catalog) Effects
+cell reads `none` or `read local state` creates no cache, temporary file, state
+record, output path, or log; [the output contract](cli/output.md#private-operation-logs)
+lists them.
 
 API discovery rejects a symlink root and discovered YAML symlinks, never
 descends through a symlink, and excludes the exact directory classes and
@@ -148,9 +199,14 @@ All managed writes remain beneath an explicitly selected and verified root.
 Components are validated single path segments; traversal, absolute
 substitution, links, special files, alternate streams, and unexpected mount or
 device crossings are rejected. Directories use mode `0700` and private files
-use `0600`, with a restrictive creation mask; the one executable-file exception
-is [Workspace's](contexts/controller-record.md#location-and-file-modes)
-a tool area's published executables. Temporary and final files are
+use `0600`, with a restrictive creation mask, with two exceptions. A tool
+area's published executables are
+[Workspace's](contexts/controller-record.md#location-and-file-modes)
+executable-file exception. A
+[private consumer publication](infrastructure-services.md#private-consumer-publication)
+serves `0640` `root:root` files beneath `0711` directories, because the
+artifact server's workers read them as group `root`; its confidentiality
+assumes no interactive account holds group `root`. Temporary and final files are
 created exclusively, written through held handles, bounded, flushed where
 durability is required, and atomically published without overwriting unrelated
 content. Parent directory durability is established when the owning state
@@ -177,6 +233,19 @@ spelling of each proxy variable to the same value, so a spelling the request
 did not set cannot supply a route of its own. A privileged re-execution carries
 only the [context-free route](controller.md#the-context-free-acquisition-route)
 its invoker already admitted.
+
+A remote fixed worker, which a module starts over an SSH session of its own,
+is a named exception to the no-shell rule: the protocol carries its command as
+one string, which the remote account's shell interprets. It is admitted only
+in one shape: an absolute remote interpreter run through `sudo -n`, code
+shipped with the selected automation and never authored, data only on the
+worker's standard input, every token of the command string a literal or a
+closed validated token joined by one shared quoting function, and worker output
+read only through its bounded protocol.
+
+Not yet met: two modules each quote their own remote command, and no test
+holds every SSH remote command to one function; tracked as
+[B807](milestones/backlog.md#b807).
 
 A runner hands Ansible every value as data, never as a template. ansible-core
 loads an `--extra-vars @file` document as trusted template text, so each runner
@@ -268,8 +337,10 @@ entries with the runner's exact names that are private directories owned by
 root, reaches each through its held parent, decides on the opened handle,
 which must be the entry listed, follows no link, crosses no filesystem and
 fails closed when it cannot remove one, or when a parent holds more run
-directories or a tree more depth or entries than its bounds allow, and reads
-no more than 4 KiB of a held job's record. Only a job's own processes hold
+directories of its own or a tree more depth or entries than its bounds allow,
+and reads no more than 4 KiB of a held job's record. An entry another account
+owns neither counts toward the run-directory bound nor stops a run.
+Only a job's own processes hold
 its lock exclusively. A sweep takes it shared, which it can only once none of
 them runs and which keeps it so, and removes the job only while it also holds
 the job directory's own lock exclusively, which keeps every other sweep from
@@ -298,6 +369,10 @@ holder exists, so a sweep never reads one half written, and another context's
 job a sweep finds mid-claim or mid-removal neither refuses nor goes
 (`TestASweepBesideAnotherContextsClaimsAndReleasesNeverRefuses`).
 
+Not yet met: the sweep counts every entry carrying a run directory's name
+before it proves the owner, so another account's entries in `/var/tmp` stop
+every run; tracked as [B806](milestones/backlog.md#b806).
+
 The process that runs a Bootwright-owned operation cancels it on SIGHUP exactly
 as on SIGINT and SIGTERM, so a closed terminal or a lost session interrupts the
 operation instead of ending the process past its cleanup. A process started
@@ -312,10 +387,10 @@ deterministic, inspectable artifacts with fixed command structure and safe
 argument encoding; they do not use `eval`, inline secrets, or execute as part
 of generation.
 
-One child receives a proxy route: the installer process of a cluster's image
-build, which reaches the release payload through the controller Machine's proxy
-choice, given as `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` from its frozen
-request, never from the environment.
+The installer process of a cluster's image build receives its route under the
+same rule: it reaches the release payload through the controller Machine's
+proxy choice, given as `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` from its
+frozen request, never from the environment.
 
 Not yet met: the image build runs direct; tracked as
 [B721](milestones/m3.md#b721).
@@ -332,7 +407,20 @@ writable by group or others. A root-owned sticky directory such as `/tmp` is
 exempt, because its sticky bit stops another account from replacing an entry
 it does not own; a sticky directory another account owns still refuses. The
 remedy installs the binary to a root-owned path; the
-[CLI boundary](cli.md#local-privilege-and-user-identity) owns the report. No password enters Bootwright
+[CLI boundary](cli.md#local-privilege-and-user-identity) owns the report.
+A file that passes with root owning it and every directory above it is
+re-executed by that absolute path, so a sudoers rule can name the installed
+binary, and the child confirms it is the file the supervisor proved before it
+acts; only the invoking account's own build output is re-executed through
+`/proc/<pid>/exe`. The elevated child refuses a variable the caller set
+outside the [route vocabulary](controller.md#the-context-free-acquisition-route)
+before it acts, so a `SETENV` tag admits nothing more.
+
+Not yet met: every re-execution goes through `/proc/<pid>/exe`, which a
+sudoers rule naming the binary never matches, and the elevated child refuses
+no other variable; tracked as [B831](milestones/backlog.md#b831).
+
+No password enters Bootwright
 memory, argv, environment, durable state or output. Per-user selection is
 non-authoritative input under [context identity](contexts.md#identity-and-selection),
 validated against the root registry and never written by root followed by
@@ -360,8 +448,9 @@ either the selected Machine's declared proxy choice, or, for the
 the named variables the invoking environment set. That route is admitted
 against the declared endpoint and bypass grammar before it is used, carries no
 credential, and selects transport alone. When the admitted route is a proxy,
-the host's `dnf` receives it as `https_proxy` and `no_proxy` and nothing else
-ambient, and a `proxy=` in the host's dnf configuration wins over it; dnf's own
+the host's `dnf` receives it under the [process boundary](#process-boundary)
+rule, as `https_proxy` and `no_proxy` and nothing else ambient, and a `proxy=`
+in the host's dnf configuration wins over it; dnf's own
 configuration owns its repositories, mirrors, signing keys and `gpgcheck`, and
 Bootwright never passes `--allowerasing`, `--nogpgcheck`, `--repofrompath`,
 `--enablerepo` or `--releasever` ([host packages](controller.md#host-packages)).
@@ -511,6 +600,11 @@ explicit interactive confirmation of the displayed fingerprint, and a changed
 key is superseded only by an explicit re-trust. A host-key observation offers
 no credential, proves nothing by itself, and is never the source of a record.
 
+Not yet met: [host-key trust](cli.md#host-key-trust) under `--yes` or a
+structured format records or, with `--replace`, re-trusts an observed key that
+no person compared and no fingerprint the operator supplied; tracked as
+[B817](milestones/backlog.md#b817).
+
 Session material — the private key, the pinned host key and the client
 configuration — stays in anonymous mode-0600 files held by the launcher until
 the client exits. The client reopens the launcher's actual descriptors through
@@ -570,8 +664,15 @@ from a cache that verified each one, so no setup resolves, discovers or checks
 for a newer version and the upgrade is a new build. Host packages are the
 exception: the host's `dnf` resolves them under its own signature policy
 ([W2](#the-controller-hosts-attacker-model)), and the evidence records each
-provider's NEVRA and repository. A frozen operation never substitutes an update
-silently; recovery follows
+provider's NEVRA and repository. Target tools are a named widening of
+publisher authenticity: a [target tool's](controller.md#the-controller-stage)
+SHA-256 is its publisher's own release metadata, the release's asset digest or
+the publisher's checksum file, read over verified HTTPS from the publisher even
+when a mirror serves the bytes. No publisher signature is verified, so a
+publisher compromised at the first acquisition is trusted from then
+on: the digest and size that acquisition records pin every later use. A tool
+whose publisher offers no such metadata refuses. A frozen operation never
+substitutes an update silently; recovery follows
 [state reconciliation](state-reconciliation.md#dependency-safety-during-recovery).
 
 ## Logs, output, and diagnostics
@@ -621,15 +722,17 @@ memory dump, request body, or provider response.
 
 ## Custom code
 
-Authored [add-on packages](add-ons.md) are declarative data consumed by
-qualified Bootwright-owned drivers; built-in packages are reviewed Go code
-whose program the same adapter runs. Built-in and custom origins have the
+Authored add-ons, [`ClusterAddon`](api/addons.md) declarations, are
+declarative data that only qualified Bootwright-owned code consumes; built-in
+[add-on packages](add-ons.md) are reviewed Go code whose program the
+[cluster object adapter](add-ons.md#the-cluster-object-adapter) runs. Built-in
+and custom origins have the
 same integrity, isolation, and negative-proof requirements, and custom
 packages gain the built-in lifecycle only with
 [B90](milestones/m4.md#b90). Neither grants process, adapter, target, effect,
 inventory, endpoint, dependency, credential, or privilege authority.
 Package-carried executable content is never loaded or run;
-a driver may enter only its pinned embedded adapter and locked dependency
+that code may enter only its pinned embedded adapter and locked dependency
 closure under [architecture](architecture.md#go-and-ansible-responsibility-boundary).
 
 A built-in add-on package is Go code reviewed with the executable: its
@@ -691,7 +794,7 @@ require qualified real-system tests, recorded in the
 | Time, retry, concurrency, memory, disk, log and process-output limits hold, including cancellation and process-tree reaping. | `TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps`, `TestGuardedCommandDiesAndIsReapedAfterParentExit`, `TestAKilledInvocationTakesItsAdapter`, `TestStoppingAnAdapterEndsItsTreeBeyondItsGroup`, `TestThreadChurnNeverSignalsARunningAdapter`, `TestAnAdapterStillRunningRefusesTheNextRun`, `TestAStaleRunDirectoryIsRemovedWithItsSecretFiles`, `TestHangupCancelsTheOperationLikeTerminate`, `TestAnIgnoredHangupLeavesTheOperationRunning`, `TestHangupIsRelayedToThePrivilegedOperation`, `TestRunnerReapsAnUnauthorizedChildOnCancellation`, `TestLifecycleConcurrencyBound`, `TestOperationBoundaryPreservesOrdinaryCancellationAndDeadline`, `TestABoundedRunCancelledInsideItsCallKeepsNoMaterial`, `TestABoundedConsumerCancelledInsideItsCallKeepsNoMaterial`, `TestABoundedConsumerCancelledWhileReadingRunsNothing`, and the collection's `test_the_read_is_bounded_in_time_however_slowly_the_answer_arrives` and `test_the_read_is_bounded_in_size` | B17, B23 |
 | Dependency integrity, lock agreement and native-schema compatibility hold, and runtime-tool substitution or drift refuses. | `TestFrozenToolRejectsVersionRouteAndChecksumSubstitution`, `TestTheLockCarriesOneAnsibleCoreEverywhere`, `TestEveryLockedURLIsOnFilesPythonhosted`, `TestAWheelWithAnotherHashIsRefused`, `TestDecodeRefusesPackagesItsClosuresDoNotSelect`, `TestEveryCapabilityHonoursTheCapabilityContract`, `TestThePowerRolesAdmitTheRequestsThisBuildSends`, `TestTheRoleAdmitsEveryRequestThisBuildSends`, `TestRoleVersionAssertionsMatchTheirArgumentSpecs` | none |
 | Mutation crash points, lease conflict, replay, partial success, rollback, evidence loss and required-log write failure leave a recoverable context. | `TestCrashReleasesLocksAndLeavesCompleteSelection`, `TestLifecyclePublicationCheckpointsFireAndFailClosed`, `TestMutationGuardLayoutAndLeases`, `TestAPartlyRealizedBlockWhoseRetryFailsIsConvergedByRepeatingTheOperation`, `TestRequiredLogFaultStopsTheOperation`, `TestARestorationWhoseClearFailsStartsNothing`, `TestAJourneyKilledAtAnyWriteLeavesAUsableStoreAndConvergesOnRetry`, `TestAnUnknownDestroyBlockResolvesByWhatItsRemovalProves`, `TestAnInterruptedRemovalFinalizationIsCompletedByTheNextDestroy`, `TestARemovalWhoseBindingReleaseFailsReportsIncompleteFinalization`, `TestAnInterruptedApplyFinalizationIsCompletedByTheRepeatedApply`, `TestARunningOperationWhoseBlocksAreAllDoneIsFinalized`, `TestAFreshApplyOverAnUnfinalizedRemovalFinishesItFirst`, `TestNoFinalizationOverContradictedRecords`, `TestAReservationHeldBesideACompletedRemovalIsReleasedByTheNextDestroy`, `TestAFinalizationRefusesWhenTheContextChangedBeforeIt`, `TestEvidenceProtectsTheContextBeforeItBindsOrReserves`, `TestAFreshApplyClaimsItsOperationBeforeItBinds`, `TestAFailedEvidencePublicationBindsNothing`, `TestConcurrentFreshAppliesThatBothFailLeaveNothingRaised`, `TestABindingListingThatFailsBlocksNothing`, `TestARegistrationThatProvablyFailedRestoresTheEvidence`, `TestAFailedRegistrationWithReservationsKeepsItsEvidence`, `TestARegistrationThatMayHaveHappenedKeepsItsBinding`, `TestAContinuationProjectsBeforeItsFirstEffect`, `TestTheNextRegistrationReleasesBindingsNoOperationNames`, `TestADestroyReleasesWhatAnInterruptedRegistrationLeft`, `TestAnApplyWhoseBindingAnUnclaimedReleaseTookRefuses`, `TestAnApplyRefusesWhenAnotherClaimRaisedTheEvidenceAgain`, `TestAnApplyOverACompletedDestroyRefusesWhenAFinalizationTookItsBinding`, `TestADestroyOverUnindexedRecordsRefuses`, `TestARemovalRaisesItsEvidenceBeforeItRegisters`, `TestAnApplyInterruptedBeforeItRegistersGivesBackWhatItRaised`, `TestAFailedRestorationIsReportedBesideItsCause`, `TestADestroyReleaseRefusesWhenAnOperationRegisteredBeforeIt`, `TestARemovalWhosePublicationFailedCollectsNothing`, `TestAClaimedOperationRegistersIntoItsDirectory`, `TestAnUnknownOperationWhoseBlocksAreAllDoneIsFinalizedByItsOwnVerb`, `TestAFreshApplyWhoseClaimFailedRestoresTheEvidenceItsDirectoryMayHold`, `TestAnUnclaimedReleaseCollectsOnlyTheBindingsItReadFirst`, `TestAFinalizationCollectsOnlyTheBindingsItReadFirst`, `TestAnIncompleteApplyWithoutAContradictionIsStillRemovable`, `TestAnInitializationResumesOverATornStageAtEveryStagedWrite`, `TestAnInitializationRefusesAStageThatParsesButAttributesNothing`, `TestAContextInitRetryResumesOverATornKeyringStage`, `TestTheKillHarnessReachesTheCustodyPublications`, `TestAFailedPublicationLeavesTheAttemptUnknown`, `TestADestroyAfterAFailedPublicationCapturesBeforeAnyInverse`, `TestAnAgentInstallWhosePublicationFailedIsCapturedBeforeItsRemoval`, `TestACancelledPublicationLeavesItUnknown`, `TestAStoppedDestroyKeepsTheAccess`, `TestAFinalizationWithdrawsWhatAnInterruptedRemovalLeft` | none |
-| Read-only commands perform no writes, payload reads, processes, network access, secret lookup or generation. | `TestImmutableInputAndReadOnlyLifecycleBoundary`, `TestALifecycleInspectionRunsNothing`, `TestPlanPreviewsWithoutWritingAnything`, `TestStubServicesRemainStubs`, `TestReadsNeverCollectAStage` | none |
+| A command whose [catalog](cli/commands.md#command-and-flag-catalog) Effects cell reads `none` or `read local state` performs no writes, payload reads, processes, network access, secret lookup or generation. | `TestImmutableInputAndReadOnlyLifecycleBoundary`, `TestALifecycleInspectionRunsNothing`, `TestPlanPreviewsWithoutWritingAnything`, `TestStubServicesRemainStubs`, `TestReadsNeverCollectAStage` | none |
 | Rejected operations perform no effect. | `TestCancellationBeforeAnyEffectRegistersNothing`, `TestDeclinedConfirmationRegistersNothing`, `TestUnsupportedObjectsRefuseBeforeRegistration`, `TestInvalidAdmissionAndUnavailableRoutesDoNotWrite`, `TestADestroyOverAnIncompleteApplyWithAContradictedBlockRefuses`, `TestARepeatedApplyOverACompletedApplyWithABlockNotDoneRefuses`, `TestATransitionRefusesWhenItsFrozenPlanChangedBeforeMutation`, `TestATransitionRefusesWhenTheOperationRecordChangedBeforeMutation`, `TestAContinuationRefusesWhenABlockWasRetriedBeforeMutation`, `TestAFrozenPlanThatIsNotItsOperationsRefuses`, `TestARepeatedMaterialRefusesBeforeAnyJobExists`, `TestAnUnsafeMaterialNameOrValueRefusesBeforeAnyJobExists`, `TestAFrozenPlacementOffTheControllerRefusesEveryVerb` | none |
 | A failed security check cannot be bypassed by confirmation, retry or adapter behavior. | `TestMissingSafeguardsCannotBeReplacedByConfirmationFlags`, `TestOrphanAcknowledgementClaimsNothingAndReplacesNoOtherSafeguard`, `TestDestroyOverAnInterruptedApplyIsStillGated` | none |
 | Package content cannot select code, and configuration selects code only through the declared catalog, channel and CSV; neither can carry Secret bytes into a request, adopt a foreign object or force a field conflict, and a placed Secret's value reaches no record or output. | `TestDeclaredSecretPlacementLendsOnlyMappedPartsGolden`; the collection's cluster object adapter tests | [B751](milestones/delivered.md#b751), [B753](milestones/m4.md#b753) |

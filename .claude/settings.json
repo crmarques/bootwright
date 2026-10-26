@@ -8,6 +8,7 @@
       "Bash(./scripts/go env *)",
       "Bash(./scripts/ansible-check *)",
       "Bash(./scripts/quick-test)",
+      "Bash(make focus)",
       "Bash(make quick)",
       "Bash(make docs-check)",
       "Bash(make fmt-check)",
@@ -15,6 +16,8 @@
       "Bash(make test)",
       "Bash(make build)",
       "Bash(make check-offline)",
+      "Bash(make check)",
+      "Bash(make race)",
       "Bash(git status *)",
       "Bash(git diff *)",
       "Bash(git log *)",
@@ -24,12 +27,24 @@
       "Bash(git push *)",
       "Bash(git clean *)",
       "Bash(git rebase *)",
-      "Bash(./bin/bootwright apply *)",
-      "Bash(./bin/bootwright destroy *)",
-      "Bash(bootwright apply *)",
-      "Bash(bootwright destroy *)",
+      "Bash(*bootwright apply*)",
+      "Bash(*bootwright destroy*)",
+      "Bash(*bootwright setup*)",
+      "Bash(*bootwright media add*)",
+      "Bash(*bootwright machine start*)",
+      "Bash(*bootwright machine stop*)",
+      "Bash(*bootwright machine restart*)",
+      "Bash(*bootwright machine trust*)",
+      "Bash(*bootwright machine rsh*)",
+      "Bash(*bootwright machine exec*)",
+      "Bash(*bootwright cluster rsh*)",
+      "Bash(*bootwright cluster exec*)",
+      "Bash(*bootwright cluster kubeconfig*)",
+      "Bash(*bootwright cluster keyring*)",
+      "Bash(*bootwright secret show*)",
+      "Bash(*bootwright cluster info*--secrets*)",
       "Bash(sudo *)",
-      "Bash(ansible-playbook *)"
+      "Bash(*ansible-playbook*)"
     ],
     "deny": [
       "Bash(git push --force *)",
@@ -44,9 +59,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "git diff --quiet HEAD -- 2>/dev/null && test -z \"$(git ls-files --others --exclude-standard)\" || make quick >&2",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/stop-check",
             "timeout": 300,
-            "statusMessage": "make quick"
+            "statusMessage": "stop-check: make focus"
           }
         ]
       }

@@ -34,6 +34,8 @@ example instructions. Keep credential values in local Secret sources; do not
 record them in acceptance output. Confirm entitlement for both Ceph and the
 selected gateway image.
 
+The tracked `storage/entitlement.yaml` sets `license.accept: true` as a placeholder. Accepting the IBM license is your explicit act: review its terms before you use your copy.
+
 ## Create the context
 
 ```sh

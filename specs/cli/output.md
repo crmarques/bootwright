@@ -132,7 +132,7 @@ re-verification an interrupted add needs) and publication as two steps;
 verified match, the computed mismatching digest, or the read failure.
 An acquisition names its actual source and reports the bytes written when it
 settles. `machine list --power-status` reports one read check per host through
-which its selected controllers are reached, with that role's groups as its
+which its selected management controllers are reached, with that role's groups as its
 sub-steps; it settles with the proved number of machines read or a failure.
 
 One row belongs to each running step; sub-steps update that row and never settle
@@ -258,6 +258,37 @@ Successful result objects have stable top-level fields:
 | `cluster list` | `context`, `clusters` |
 | `cluster info` | `context`, `clusters`, `storage` |
 
+A `contexts` entry of `context list` whose context holds an operation that has
+not completed also carries `unfinished`, with the operation's `id`, `verb` and
+`state` and `build`, the build that registered it as `<version> (<commit>)`, or
+`devel (<commit>)` for one stamped with no version; `build` is omitted when the
+record names no executable. The member is omitted when the context holds no such
+operation. The listing says nothing of whether another build can continue the
+operation, which only that build's `plan` reports in its `Build` field.
+
+Not yet met: `context list` reports no unfinished operation or registering
+build; tracked as [B832](../milestones/backlog.md#b832).
+
+A step is one frozen block as a preview or result presents it, numbered by its
+place in plan order. In a `plan`, `apply` or `destroy` result, `steps` lists the
+frozen blocks in plan order, each with `id`, `description`, `kind`, `object`,
+`stage`, `impacts`, `state`, `selection`, `waitsOn`, `after` (the places of the
+steps it waits for), `wave` (the earliest round it can start in, counted from
+one) and `consumes` (the authorizations its consequence needs). `blocks` lists
+what an `apply` or `destroy` reached for those blocks: `id`, `description`,
+`stage`, `state`, `outcome`, `attempts` and, for an unproved block, `unresolved`.
+`stages` names the stages the plan holds; `waves`, `widest`, `bound`, `startable`
+and `deferred` are the counts of the `Concurrency` and selection fields below;
+`continuation` and `finalizes` say whether a preview continues an operation or
+only completes its finalization; `stops` and `stopsAfterOnline` name the
+Machines of `Stop first` and `Stop after online cleanup`; `anotherBuild` carries
+`registeredBy` and the `steps` places this build runs; `settled` says the result
+performed no work and `recovered` names what it first completed; and `next` is
+the command of the `Next` field.
+
+Not yet met: each `blocks` entry also carries a `groups` member; tracked as
+[B824](../milestones/backlog.md#b824).
+
 YAML mode encodes the same tagged CLI-owned envelope and result DTO, using
 JSON field names and preserving integer values, array order, explicit nulls and
 omissions. It writes exactly one document and one final LF, with no progress or
@@ -279,7 +310,10 @@ JSON retains the complete report when checks fail. Uninstalled guests remain
 pending without remote probes; dry-run performs no live capacity or guest
 probe. Installed guest probes use established verified Machine access and a
 bounded read-only command set. Anonymous key observation under
-`--trust-on-first-use` neither enrolls nor accepts a key.
+`--trust-on-first-use` neither enrolls nor accepts a key: a host whose key the
+context does not trust reports its `host.trust` check `unknown` with the
+observed fingerprint and the `machine trust` request that enrolls it, and
+without the flag the check names no fingerprint.
 
 A `setup --dry-run --output json` that the host or the state root refuses
 writes the same fields with `ok` `false` and the refusal in `diagnostics`,
@@ -357,9 +391,15 @@ A diagnostic object orders its fields as follows:
 presents as explicit severity and subject groups; a warning never changes the
 exit status.
 `source`, `object`, `field`, and `remediation` are omitted when unavailable and
-are never `null`. A present source orders `path`, `document`, `line`, and
+are never `null`, except that every `error` diagnostic other than `cli.usage`
+carries `remediation`. When the remedy is a Bootwright command, `remediation` is
+exactly that command, with `--context` for a context-backed one. A present source orders `path`, `document`, `line`, and
 `column`; positive coordinates are one-based and `0` means unavailable.
 Sensitive explicit-result bytes never appear in this structure.
+
+Not yet met: some `error` diagnostics other than `cli.usage` carry no
+`remediation`, and no test holds every emitter to the rule; tracked as
+[B825](../milestones/backlog.md#b825).
 
 Safe display text preserves printable UTF-8 and escapes backslash, control
 characters, ESC, newline, and invalid UTF-8 bytes with deterministic `\\`,
@@ -385,7 +425,7 @@ Each `machines` entry of `machine list` orders its fields as follows:
 `contact`, `provider` and `power` are strings, each omitted when the Machine has
 none. An absent `power` means no reading was taken, which `powerRead` reports,
 or no management controller answers for the Machine, and is distinct from
-`unknown`, a controller that was asked and gave no usable answer. What the
+`unknown`, a management controller that was asked and gave no usable answer. What the
 contact, the addresses, the lifecycle position and the power reading mean is
 owned by [resource inspection](../cli.md#resource-inspection-and-explicit-access).
 When the width holds them, the human table shows the same columns, `NAME`,
@@ -504,7 +544,7 @@ A managed Ceph StorageCluster entry adds these fields, in this order, after its
 | `cephCommand` | The exact prefix that runs the Ceph CLI as the administrator through `cluster exec`: `bootwright cluster exec --context <context> --name <cluster> --node <adminNode> -- sudo -n ceph --conf /var/lib/bootwright/ceph/<fsid>/ceph.conf --keyring /var/lib/bootwright/ceph/<fsid>/ceph.client.admin.keyring`. The operator appends the Ceph arguments. |
 | `status` | `ready`, or `unavailable` with a `reason` and the remedy `bootwright apply --context <context> --stage clusters` when the evidence above is missing; an unavailable entry omits the fields that evidence would carry. |
 | `dashboard` | `{status, user, urls, certificateSHA256}`: `status` is `ready`, or `unproved` with a `reason` when the apply could not reach the dashboard; `user` is the administrator account; `urls` and `certificateSHA256` are those the apply proved. |
-| `resources` | `[{kind, name, status, scope}]`: the rows `status` reports under this cluster, in the same order with the same `status`, on a ready and an unavailable entry alike. `scope` is a one-line redacted statement of the object in the spellings below, built from the request the current operation froze for it; it is omitted when no request of this build froze the object. For StorageObjectGateway it is the gateway request, not the zone pools that object also freezes. StorageExport, which no capability realizes, takes it from its declaration. No `scope` carries a key, password, Secret reference or other Secret material. |
+| `resources` | `[{kind, name, status, scope}]`: the rows `status` reports under this cluster, in the same order with the same `status`, on a ready and an unavailable entry alike. `scope` is a one-line redacted statement of the object in the spellings below, built from the request the current operation froze for it; it is omitted when no request of this build froze the object. For StorageObjectGateway it is the gateway request, not the zone pools that object also freezes. StorageExport takes it from its declaration, which holds references only. No `scope` carries a key, password, Secret reference or other Secret material. |
 | `endpoints` | `[{service, urls, certificateSHA256, issuer, status, reason}]`: one row for each management gateway, NFS service and object gateway request the current operation froze for this cluster, ordered by `service`; always an array, empty on an unavailable entry. `service` is `mgmt-gateway`, `nfs.<service_id>` or `rgw.<service_id>`. Each URL derives from the frozen request and spells an IPv6 host in brackets. The management gateway is `https://<virtual_ip>:<port>/`, or `https://<host>:<port>/` for each placement host when it declares no virtual IP. An NFS service behind an ingress is `nfs://<ingress virtual IP>:<port>/`, the port being the NFS `port` behind a keepalive-only ingress and otherwise the ingress `frontend_port`, default 2049; without an ingress it is the NFS `virtual_ip`, else each placement host, at the NFS `port`, default 2049. An object gateway is `https` when its terminating document, the ingress when one fronts it and otherwise the rgw service, sets `ssl`, else `http`, at the ingress `frontend_port`, else `rgw_frontend_port`, else 443 or 80, on its endpoint FQDN, else the ingress virtual IP, else each placement host. `status` is `ready` when the apply evidence of that block in the current operation, for the same frozen request, proves the endpoint ready (a management or object gateway also reached by that apply's probe from the cluster's bootstrap host; no connect from the controller is made or implied), else `unproved` with a `reason`; an NFS service without an ingress is always `unproved`, because the apply proves an NFS address only through the virtual IP of an ingress in front of it. `certificateSHA256` is the SHA-256 fingerprint of the leaf certificate that probe observed, present only on a `ready` TLS endpoint. `issuer` is `bound` when the request binds a stored certificate and `cephadm` when cephadm signs it, and is omitted for a plaintext endpoint. No endpoint carries Secret material. |
 
 | Kind | `scope` |
@@ -521,6 +561,16 @@ A managed Ceph StorageCluster entry adds these fields, in this order, after its
 | StorageNFSExport | `export <native.pseudo> on nfs.<serviceID>`, cephadm's service name |
 | StorageSMBResource | `smb cluster <cluster_id>, <auth_mode>`, `share <share_id> on smb cluster <cluster_id>`, `join auth <auth_id>` or `users and groups <users_groups_id>`, by `native.resource_type` |
 | StorageExport | `export of pool <rbdPoolRef>, filesystem <filesystemRef>`, then `, object gateway <objectGatewayRef>` when set; `export` without `dataFoundation` |
+
+A StorageExport that sets an object gateway or a filesystem also states, in
+`plan` and in these resource rows, what it grants: consumer administrators hold
+every RGW user, bucket and key of the gateway's realm and every path of the
+filesystem, and exports that share a cluster, filesystem or gateway are not
+isolated from each other
+([trust extent](../storage-resources.md#storageexport)).
+
+Not yet met: the StorageExport row and `plan` show the scope alone, with no
+statement of the grant; tracked as [B835](../milestones/backlog.md#b835).
 
 `--secrets --name <cluster>` adds `passwordValue` to `dashboard`, the only
 field that carries a secret. Its contract, refusals and warning are the
@@ -676,7 +726,7 @@ probe. Its result orders these fields:
 | `secrets` | `declared`, the Secret objects the selected input declares, and `bindings`, the Secret bindings the current operation's record holds: one per operation however many Secrets it covers, and 0 beside no operation and once a completed removal finalized, which its pristine evidence proves without reading the keyring. |
 | `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. |
 | `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, `anotherBuild` (boolean: the build in hand is not the one that registered the operation, by the rule of [another build](../state-reconciliation.md#dependency-safety-during-recovery)), ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe paths relative to the state root, in the order and form the envelope's [`logs`](#private-operation-logs) list them. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does, which for a block no resolution observed is the exact command, with `--context` and the frozen plan's `--authorize` tokens, that observes it, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
-| `handoff` | `{ready, reasons}` derived from the [handoff predicate](../state-reconciliation.md#bootstrap-completion-and-gitops-readiness), with a boolean `ready` and ordered reason strings; `reasons` is `[]` when ready. Human output has a Handoff section with `ready`, or `not ready` followed by each reason. A completed apply with a latched log fault offers the settled apply in `nextSteps` to restore that boundary. |
+| `handoff` | `{ready, reasons}` derived from the [handoff predicate](../state-reconciliation.md#bootstrap-completion-and-gitops-readiness), with a boolean `ready` and ordered reason strings; `reasons` is `[]` when ready. Human output has a Handoff section with `ready`, or `not ready` followed by each reason. A completed apply with a latched log fault over unchanged input offers the settled apply in `nextSteps` as the invocation that [restores](../state-reconciliation.md#converging-an-effect) that boundary. |
 | `contradictions` | Ordered strings naming what the context's durable records contradict, each worded as the [refusal](../state-reconciliation.md#continuation-and-removal) over those records names it, and last an operation whose continuation or removal reopens a frozen Secret binding the context's keyring no longer lists, or whose keyring listing fails reporting the material corrupt or undecryptable; empty when nothing does. |
 
 The cluster, resource and shared rows share one realization vocabulary. Each
@@ -698,11 +748,13 @@ Under an apply, an unproved block decides first, then a failed one, then one
 not started. Under a removal, a removal block that is unproved or failed
 decides the same way, and an object of a completed removal whose block record
 does not read done, which only a lost record leaves, reads `unknown`, as the
-contradiction status lists for that block says. Otherwise any removal block
-proved gone makes the object `pending`, and so does a removal that names fewer
-of its blocks than the apply it removes owned, because an earlier attempt took
-the rest back. An object whose removal has not started reads what the nearest
-removal it replaces did to it: `unknown` when that removal left a block of it
+contradiction status lists for that block says. Otherwise a removal makes the
+object `pending` only when every block of it the removal names is proved gone,
+and a removal that names fewer of its blocks than the apply it removes owned
+does too, because an earlier attempt took the rest back. An object with some of
+those blocks proved gone and the others not yet run reads `unknown`: nothing
+proves what the removal did to the object as a whole. An object whose removal
+has not started reads what the nearest removal it replaces did to it: `unknown` when that removal left a block of it
 unproved, `failed` when one failed, `pending` when one was proved gone; and
 otherwise what the apply proved. A replacement an earlier build recorded, which
 names no removal it replaces, reads `unknown` for such an object when it names
@@ -712,6 +764,10 @@ reads `pending`. An object no operation names keeps what its declaration gives
 it: `unsupported` for the reasons above, else `pending`. Human `status`
 presents them as `[SKIPPED]`, `[PENDING]`, `[OK]`, `[FAIL]` and `[UNKNOWN]`,
 and any other value as `[UNKNOWN]`.
+
+Not yet met: a removal block proved gone makes its object `pending` although
+other removal blocks of the object have not run; tracked as
+[B816](../milestones/backlog.md#b816).
 
 Rows sort by their documented key: checks in the order above, blocks in frozen
 order, contradictions in the order their refusal names them, resources in API
