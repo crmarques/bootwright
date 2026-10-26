@@ -3,6 +3,7 @@ package ansiblerunner
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -75,6 +76,25 @@ func inventory(placement machineref.Placement, interpreter string, paths map[str
 	return map[string]any{"all": map[string]any{"children": map[string]any{
 		"bootwright_target": map[string]any{"hosts": map[string]any{placement.Machine: host}},
 	}}}
+}
+
+func phaseInventory(request lifecycle.RunRequest, paths map[string]string) (map[string]any, error) {
+	value := inventory(request.Placement, request.Launch.Shim, paths)
+	if request.NodeCount == 0 {
+		return value, nil
+	}
+	if !request.Placement.Local() || request.NodeCount < 0 || request.NodeCount > 512 || request.Parallelism < 1 || request.Parallelism > 16 {
+		return nil, failure("lifecycle.state", "per-node inventory requires bounded controller-local phases", "plan the operation again")
+	}
+	hosts := map[string]any{}
+	for index := 0; index < request.NodeCount; index++ {
+		hosts[fmt.Sprintf("bootwright_node_%03d", index)] = map[string]any{
+			"ansible_connection": "local", "ansible_host": "localhost", "ansible_python_interpreter": request.Launch.Shim,
+			"bootwright_node_index": index, "bootwright_controller_host": request.Placement.Machine,
+		}
+	}
+	value["all"].(map[string]any)["children"].(map[string]any)["bootwright_nodes"] = map[string]any{"hosts": hosts}
+	return value, nil
 }
 
 // variables carries the frozen request and the paths its material was written

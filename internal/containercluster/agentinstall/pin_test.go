@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // pinsByName answers each Machine's pin from a table, and records what each
@@ -47,6 +48,14 @@ func mixedRun(t *testing.T, operation string, capability InstallCapability) (map
 		{Machine: "metal-01", Name: "master-0", Physical: true, Substrate: "baremetal"},
 		request.Nodes[0],
 		{Machine: "metal-03", Name: "master-2", Physical: true, Substrate: "baremetal"},
+	}
+	for index := range request.Nodes {
+		bounds, ok := substrate.MachineBoundsFor(request.Nodes[index].Substrate)
+		if !ok {
+			t.Fatal("mixed fixture has an unrealized substrate")
+		}
+		request.Nodes[index].ControllerKind = bounds.ControllerKind
+		request.Nodes[index].StateReadSeconds = int(bounds.StateRead.Seconds())
 	}
 	execution.Proved = []lifecycle.BlockEvidence{
 		{Kind: "Machine", Object: "metal-01", Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: json.RawMessage(`{}`)},

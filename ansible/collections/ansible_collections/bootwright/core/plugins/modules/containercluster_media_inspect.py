@@ -39,6 +39,10 @@ import json
 import os
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.bootwright.core.plugins.module_utils.containercluster_publication import (
+    LayoutError,
+    prove_push,
+)
 
 # IMAGE is the name the attempt publishes the image under, inside the
 # unguessable directory it minted. RECEIPT is what that attempt recorded about
@@ -90,10 +94,12 @@ def receipt(path):
 def observe(request):
     """What this block has published and what its work area holds."""
     work = request["workRoot"]
+    image = (prove_push(request) if request.get("deliveryKind", "fetch") == "push"
+             else published(request["image"]["path"]) is not None)
     recorded = receipt(os.path.join(work, RECEIPT))
     return {
         "booted": os.path.lexists(os.path.join(work, MARKER)),
-        "image": published(request["image"]["path"]) is not None,
+        "image": image,
         "inputs": str(recorded.get("inputs") or ""),
         "installer": str(recorded.get("installer") or ""),
         "work": os.path.isdir(work),
@@ -105,7 +111,11 @@ def main():
         argument_spec={"request": {"type": "dict", "required": True}},
         supports_check_mode=True,
     )
-    module.exit_json(changed=False, observation=observe(module.params["request"]))
+    try:
+        observation = observe(module.params["request"])
+    except (LayoutError, OSError, ValueError, KeyError, TypeError):
+        module.fail_json(msg="the private work area for pushed boot media could not be proved")
+    module.exit_json(changed=False, observation=observation)
 
 
 if __name__ == "__main__":

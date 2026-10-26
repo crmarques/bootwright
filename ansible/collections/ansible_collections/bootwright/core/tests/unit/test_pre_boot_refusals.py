@@ -75,8 +75,10 @@ def prove(arm, registered, **variables):
     read registered: the facts it left, and whether every check held."""
     facts = {}
     for task in proof(arm):
-        assert "when" not in task and "loop" not in task, task["name"]
+        assert "loop" not in task, task["name"]
         rendering = Templar(loader=LOADER, variables=dict(variables, **facts, **{REGISTERED[arm]: registered}))
+        if not rendering.evaluate_conditional(task.get("when", True)):
+            continue
         if SET_FACT in task:
             facts.update({name: rendering.template(value) for name, value in task[SET_FACT].items()})
         elif ASSERT in task:
@@ -146,11 +148,15 @@ def test_a_proof_of_a_machine_its_substrate_created_names_only_a_running_one(reg
 # (TestEachArmsPreBootEntryPointNamesExactlyTheseRefusals), and the protocol of
 # each consumer names exactly the union.
 def test_each_proof_names_each_refusal_once_and_clears_it_around_its_checks():
-    assert named("baremetal") == ["", "hardware-mismatch", "identity-mismatch", "machine-running", ""]
+    assert named("baremetal") == ["", "hardware-mismatch", "identity-mismatch", "machine-running", "tpm-absent", ""]
     assert named("libvirt") == ["", "machine-running", ""]
     union = set(named("baremetal")) | set(named("libvirt"))
+    lifecycle = {
+        managedos_protocol: {"foreign-installation"},
+        cluster_protocol: {"media-missing", "private-delivery", "controller-read", "media-insert", "media-eject", "node-unreachable"},
+    }
     for protocol in (managedos_protocol, cluster_protocol):
-        assert set(protocol.REFUSALS) == union - {""}
+        assert set(protocol.REFUSALS) == (union - {""}) | lifecycle[protocol]
         assert "refused" in protocol.PHASES
 
 
@@ -192,10 +198,10 @@ def managed_os():
 
 def cluster():
     tasks = loaded(ROLES / "containercluster_install_agent" / "tasks" / "boot.yml")
-    rescue = rescue_of(tasks, lambda task: (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "pre_boot"
-                       and task["ansible.builtin.include_role"]["name"].endswith("baremetal_machine"),
-                       "include the bare-metal proof")
-    return naming(rescue, CLUSTER_PROTOCOL)
+    rescue = rescue_of(tasks, lambda task: (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "pre_boot",
+                       "include the pre-boot proof")
+    assert FAIL in rescue[-1] and "when" not in rescue[-1]
+    return next(task for task in rescue if "containercluster_install_agent_lifecycle_refusal" in task.get(SET_FACT, {}))
 
 
 # Only the fact of the target's own substrate is read, a fact the proof cleared
@@ -223,5 +229,18 @@ def test_the_managed_os_apply_names_the_refusal_its_targets_proof_left(arm, fact
 def test_the_cluster_boot_names_the_refusal_under_the_nodes_position(arm, facts, refusal):
     variables = dict(facts, containercluster_install_agent_index=2,
                      containercluster_install_agent_node={"machine": "metal-03", "substrate": arm})
-    found = names(cluster(), CLUSTER_PROTOCOL, variables)
+    kept = names(cluster(), SET_FACT, variables)
+    phase = loaded(ROLES / "containercluster_install_agent/tasks/phase_failures.yml")
+    naming_task = next(task for task in phase if CLUSTER_PROTOCOL in task)
+    host = {"bootwright_node_index": 2, **(kept or {})}
+    found = names(naming_task, CLUSTER_PROTOCOL, {"phase_host": "node2", "hostvars": {"node2": host}})
     assert found == (None if refusal is None else {"phase": "refused", "reason": refusal, "node": 2})
+
+
+@pytest.mark.parametrize("usable,held", [(False, False), (True, True)])
+def test_encrypted_physical_installation_requires_positive_tpm_proof(usable, held):
+    result = inspected()
+    result["tpm_usable"] = usable
+    facts, accepted = prove("baremetal", result, **PHYSICAL, substrate_baremetal_machine_target_require_tpm=True)
+    assert accepted is held
+    assert facts[FACTS["baremetal"]] == ("" if held else "tpm-absent")

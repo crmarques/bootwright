@@ -59,9 +59,9 @@ type RunView interface {
 	OpenRun(ctx context.Context, identity string) error
 }
 
-// Transaction adds the publications an operation performs. Each holds the root
-// lock and the context lease for the whole callback, so reservations,
-// controller evidence and operation records stay coherent while effects run.
+// Transaction adds the publications an operation performs. The context lease
+// lasts for the callback; shared reservations and controller publications take
+// short root locks and revalidate the operation's admitted snapshot.
 type Transaction interface {
 	View
 	PublishEvidence(context.Context, []byte) error

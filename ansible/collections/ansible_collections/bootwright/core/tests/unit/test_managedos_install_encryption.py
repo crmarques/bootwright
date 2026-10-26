@@ -177,8 +177,8 @@ def test_recovery_is_published_inside_the_boot_block_before_insert():
     refused = only(boot, named("Refuse a substrate this installation has no pre-boot binding for"), "pre-boot refusal")
     proved = [index for index, task in enumerate(boot) if (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "pre_boot"]
     published = only(boot, included("private_recovery.yml"), "publish the recovery passphrase")
-    inserted = only(boot, lambda task: (task.get("bootwright.core.redfish_boot") or {}).get("operation") == "insert", "insert")
-    assert len(proved) == 2 and max(proved) < refused < published < inserted
+    inserted = only(boot, lambda task: (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "media_insert", "insert")
+    assert len(proved) == 1 and max(proved) < refused < published < inserted
     assert published == refused + 1
 
 
@@ -351,7 +351,11 @@ def test_completion_evidence_carries_the_proved_root_encryption(name):
 
 def test_a_virtual_private_insert_skips_the_verified_fetch_read_back():
     boot = flattened("boot.yml")
-    insert = boot[only(boot, named("Insert the published installer image as virtual media"), "insert")]["bootwright.core.redfish_boot"]
-    assert render(insert["private_delivery"], "delivered-key") is True
-    assert render(insert["private_delivery"]) is False
-    assert render(insert["private_delivery"], "public") is False
+    insert = boot[only(boot, named("Insert the published installer image as virtual media"), "insert")]
+    assert insert["ansible.builtin.include_role"]["tasks_from"] == "media_insert"
+    for shape, expected in (("delivered-key", True), ("encrypting", False), ("public", False)):
+        arguments = render(insert["vars"]["bootwright_machine_port"], shape,
+                           managedos_install_anaconda_port_access={},
+                           managedos_install_anaconda_media_trust={"trust": "defaultCA"},
+                           bootwright_run_scratch="/var/tmp/bootwright-run-scratch-1-1")
+        assert arguments["private"] is expected

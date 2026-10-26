@@ -1,0 +1,13 @@
+---
+- name: Eject through the node's substrate
+  ansible.builtin.include_tasks: port.yml
+  vars:
+    containercluster_install_agent_port_operation: media_eject
+
+- name: Keep the ordered eject answer
+  ansible.builtin.set_fact:
+    containercluster_install_agent_ejected:
+      results: >-
+        {{ containercluster_install_agent_ejected.results +
+           [containercluster_install_agent_port_result | combine({'containercluster_install_agent_node': containercluster_install_agent_node})] }}
+  no_log: true

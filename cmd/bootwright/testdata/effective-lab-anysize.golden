@@ -1,0 +1,688 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: lab-anysize
+spec:
+  domains:
+    base: lab.example.test
+    machines: lab.example.test
+    clusters: lab.example.test
+    containerClusters: lab.example.test
+    storageClusters: lab.example.test
+  controller:
+    machineRef: controller
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: anysize-01
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: master
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+  network:
+    configRef: lab-guests
+    interfaceAttachments:
+      - interface: enp1s0
+        attachmentRef: lab-guests
+      - interface: enp2s0
+        attachmentRef: lab-guests
+      - interface: enp3s0
+        attachmentRef: lab-secondary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: anysize-01.lab.example.test
+      - name: ip
+        address: 198.51.100.21/24
+        interface: bond0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: anysize-02
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: master
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+  network:
+    configRef: lab-guests
+    interfaceAttachments:
+      - interface: enp1s0
+        attachmentRef: lab-guests
+      - interface: enp2s0
+        attachmentRef: lab-guests
+      - interface: enp3s0
+        attachmentRef: lab-secondary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: anysize-02.lab.example.test
+      - name: ip
+        address: 198.51.100.22/24
+        interface: bond0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: anysize-03
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: master
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+  network:
+    configRef: lab-guests
+    interfaceAttachments:
+      - interface: enp1s0
+        attachmentRef: lab-guests
+      - interface: enp2s0
+        attachmentRef: lab-guests
+      - interface: enp3s0
+        attachmentRef: lab-secondary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: anysize-03.lab.example.test
+      - name: ip
+        address: 198.51.100.23/24
+        interface: bond0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: anysize-04
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: compute
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+  network:
+    configRef: lab-guests
+    interfaceAttachments:
+      - interface: enp1s0
+        attachmentRef: lab-guests
+      - interface: enp2s0
+        attachmentRef: lab-guests
+      - interface: enp3s0
+        attachmentRef: lab-secondary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: anysize-04.lab.example.test
+      - name: ip
+        address: 198.51.100.24/24
+        interface: bond0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: anysize-05
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: compute
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+  network:
+    configRef: lab-guests
+    interfaceAttachments:
+      - interface: enp1s0
+        attachmentRef: lab-guests
+      - interface: enp2s0
+        attachmentRef: lab-guests
+      - interface: enp3s0
+        attachmentRef: lab-secondary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: anysize-05.lab.example.test
+      - name: ip
+        address: 198.51.100.25/24
+        interface: bond0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: anysize-06
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: compute
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+  network:
+    configRef: lab-guests
+    interfaceAttachments:
+      - interface: enp1s0
+        attachmentRef: lab-guests
+      - interface: enp2s0
+        attachmentRef: lab-guests
+      - interface: enp3s0
+        attachmentRef: lab-secondary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: anysize-06.lab.example.test
+      - name: ip
+        address: 198.51.100.26/24
+        interface: bond0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: anysize-07
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: compute
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+  network:
+    configRef: lab-guests
+    interfaceAttachments:
+      - interface: enp1s0
+        attachmentRef: lab-guests
+      - interface: enp2s0
+        attachmentRef: lab-guests
+      - interface: enp3s0
+        attachmentRef: lab-secondary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: anysize-07.lab.example.test
+      - name: ip
+        address: 198.51.100.27/24
+        interface: bond0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: anysize-08
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: compute
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+  network:
+    configRef: lab-guests
+    interfaceAttachments:
+      - interface: enp1s0
+        attachmentRef: lab-guests
+      - interface: enp2s0
+        attachmentRef: lab-guests
+      - interface: enp3s0
+        attachmentRef: lab-secondary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: anysize-08.lab.example.test
+      - name: ip
+        address: 198.51.100.28/24
+        interface: bond0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: anysize-09
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: compute
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+  network:
+    configRef: lab-guests
+    interfaceAttachments:
+      - interface: enp1s0
+        attachmentRef: lab-guests
+      - interface: enp2s0
+        attachmentRef: lab-guests
+      - interface: enp3s0
+        attachmentRef: lab-secondary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: anysize-09.lab.example.test
+      - name: ip
+        address: 198.51.100.29/24
+        interface: bond0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: anysize-10
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-libvirt
+    profileRef: compute
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/vda
+  network:
+    configRef: lab-guests
+    interfaceAttachments:
+      - interface: enp1s0
+        attachmentRef: lab-guests
+      - interface: enp2s0
+        attachmentRef: lab-guests
+      - interface: enp3s0
+        attachmentRef: lab-secondary
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: anysize-10.lab.example.test
+      - name: ip
+        address: 198.51.100.30/24
+        interface: bond0
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: controller
+spec:
+  capabilities:
+    - container-runtime
+    - libvirt
+  os:
+    provided: true
+  proxy:
+    direct: {}
+  network:
+    addresses:
+      - name: fqdn
+        address: controller.lab.example.test
+      - name: ip
+        address: 192.0.2.1
+  access:
+    local: true
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: lab-guests
+spec:
+  machineNetwork:
+    - cidr: 198.51.100.0/24
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+  nmstate:
+    dns-resolver:
+      config:
+        search:
+          - lab.example.test
+    interfaces:
+      - ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        name: enp1s0
+        state: up
+        type: ethernet
+      - ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        name: enp2s0
+        state: up
+        type: ethernet
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        link-aggregation:
+          mode: active-backup
+          port:
+            - enp1s0
+            - enp2s0
+        mtu: 1500
+        name: bond0
+        state: up
+        type: bond
+      - ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: enp3s0
+        state: up
+        type: ethernet
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          metric: 100
+          next-hop-address: 198.51.100.1
+          next-hop-interface: bond0
+          table-id: 254
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt
+spec:
+  libvirt:
+    machineRef: controller
+    uri: qemu:///system
+    capacityReserve:
+      cpu: 4
+      memoryMiB: 8192
+      diskGiB: 40
+    bmcEmulationDefaults:
+      enabled: true
+      protocol: redfish
+      emulator: sushy-tools
+      bindAddress: 127.0.0.1
+      certificateRef: lab-bmc-tls
+      port: 8000
+      auth:
+        credentialsRef: lab-bmc-credentials
+    machineProfiles:
+      - name: master
+        cpu: 8
+        memoryMiB: 16384
+        diskGiB: 120
+        tpm: {}
+      - name: compute
+        cpu: 4
+        memoryMiB: 8192
+        diskGiB: 120
+        tpm: {}
+  networkAttachments:
+    - name: lab-guests
+      libvirt:
+        bridge: virbr-lab
+        management: managed
+        address: 198.51.100.1/24
+        forward: nat
+    - name: lab-secondary
+      libvirt:
+        bridge: virbr-secondary
+        management: managed
+        address: 203.0.113.1/24
+        forward: none
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Proxy
+metadata:
+  name: lab-proxy
+spec:
+  management: managed
+  machineRef: controller
+  implementation: squid
+  bindAddress: 192.0.2.1
+  port: 3128
+  endpoints:
+    - name: ip
+      addressRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: lab-dns
+spec:
+  management: managed
+  machineRef: controller
+  implementation: dnsmasq
+  bindAddress: 192.0.2.1
+  port: 53
+  endpoints:
+    - name: ip
+      addressRef: ip
+  forwarders:
+    - 192.0.2.53
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NTPServer
+metadata:
+  name: lab-ntp
+spec:
+  management: managed
+  machineRef: controller
+  implementation: chrony
+  bindAddress: 192.0.2.1
+  port: 123
+  endpoints:
+    - name: ip
+      addressRef: ip
+  upstreamSources:
+    - 192.0.2.123
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ArtifactServer
+metadata:
+  name: lab-artifacts
+spec:
+  management: managed
+  machineRef: controller
+  bindAddress: 192.0.2.1
+  retention: persistent
+  tls:
+    secretRef: artifact-server-tls
+    minVersion: TLSv1.2
+  listeners:
+    - name: https
+      protocol: https
+      port: 8443
+    - name: http
+      protocol: http
+      port: 8080
+  endpoints:
+    - name: ip-https
+      listenerRef: https
+      addressRef: ip
+    - name: ip-http
+      listenerRef: http
+      addressRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: anysize
+spec:
+  distribution:
+    type: openshift
+    release:
+      version: 4.21.15
+      channel: stable-4.21
+  install:
+    method: agent
+    mode: connected
+    platform:
+      type: baremetal
+      baremetal:
+        provisioningNetwork: disabled
+    proxy:
+      direct: {}
+    ntp:
+      - serverRef: lab-ntp
+        endpointRef: ip
+    endpoints:
+      api:
+        address: 198.51.100.10
+        interfaceNetworks: []
+        source:
+          type: openshift
+      api-int:
+        address: 198.51.100.10
+        source:
+          type: openshift
+      ingress:
+        address: 198.51.100.11
+        interfaceNetworks: []
+        source:
+          type: openshift
+    agent:
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+    pullSecretRef: openshift-pull-secret
+    nodeSSH:
+      keyPairRef: anysize-cluster-admin-ssh-key
+    additionalTrustBundleRefs: []
+  networking:
+    clusterNetwork:
+      - cidr: 10.128.0.0/14
+        hostPrefix: 23
+    serviceNetwork:
+      - 172.30.0.0/16
+  nodes:
+    - name: master-0
+      fqdn: master-0.anysize.lab.example.test
+      role: master
+      machineRef: anysize-01
+    - name: master-1
+      fqdn: master-1.anysize.lab.example.test
+      role: master
+      machineRef: anysize-02
+    - name: master-2
+      fqdn: master-2.anysize.lab.example.test
+      role: master
+      machineRef: anysize-03
+    - name: worker-0
+      fqdn: worker-0.anysize.lab.example.test
+      role: worker
+      machineRef: anysize-04
+    - name: worker-1
+      fqdn: worker-1.anysize.lab.example.test
+      role: worker
+      machineRef: anysize-05
+    - name: worker-2
+      fqdn: worker-2.anysize.lab.example.test
+      role: worker
+      machineRef: anysize-06
+    - name: worker-3
+      fqdn: worker-3.anysize.lab.example.test
+      role: worker
+      machineRef: anysize-07
+    - name: worker-4
+      fqdn: worker-4.anysize.lab.example.test
+      role: worker
+      machineRef: anysize-08
+    - name: worker-5
+      fqdn: worker-5.anysize.lab.example.test
+      role: worker
+      machineRef: anysize-09
+    - name: infra-0
+      fqdn: infra-0.anysize.lab.example.test
+      role: infra
+      machineRef: anysize-10
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: anysize-cluster-admin-ssh-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: anysize-cluster-admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: artifact-server-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: controller.lab.example.test
+      dnsNames:
+        - controller.lab.example.test
+      ipAddresses:
+        - 192.0.2.1
+      validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-credentials
+spec:
+  type: usernamePassword
+  source:
+    generated:
+      username: admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: localhost
+      dnsNames:
+        - localhost
+      ipAddresses:
+        - 127.0.0.1
+      validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: openshift-pull-secret
+spec:
+  type: dockerConfigJson
+  source:
+    contextStore: {}

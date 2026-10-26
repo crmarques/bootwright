@@ -58,6 +58,7 @@ func eachPreBootRefusal(t *testing.T, continuation string) {
 					"if it names another controller and import that input with bootwright context update --name lab-b --input-dir <directory>, "+
 					"then run bootwright apply --context lab-b, so the machine is proved again"),
 			RefusalMachineRunning: running,
+			RefusalTPMAbsent:      refusal("Machine/metal-01 does not positively report an enabled TPM 2.0, so no encrypted installer was booted", "enable a supported TPM 2.0 on Machine/metal-01, then run "+next),
 		},
 		ArmVSphere: nil,
 		"":         nil,

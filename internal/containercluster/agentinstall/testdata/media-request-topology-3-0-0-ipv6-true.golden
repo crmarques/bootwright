@@ -1,0 +1,247 @@
+{
+  "agentConfig": {
+    "additionalNTPSources": [
+      "192.0.2.1"
+    ],
+    "apiVersion": "v1beta1",
+    "hosts": [
+      {
+        "hostname": "master-0",
+        "interfaces": [
+          {
+            "macAddress": "52:54:00:b9:31:5b",
+            "name": "enp1s0"
+          }
+        ],
+        "networkConfig": {
+          "dns-resolver": {
+            "config": {
+              "server": [
+                "192.0.2.1"
+              ]
+            }
+          },
+          "interfaces": [
+            {
+              "ipv6": {
+                "address": [
+                  {
+                    "ip": "2001:db8:1::64",
+                    "prefix-length": 64
+                  }
+                ],
+                "autoconf": false,
+                "dhcp": false,
+                "enabled": true
+              },
+              "mac-address": "52:54:00:b9:31:5b",
+              "name": "enp1s0",
+              "state": "up",
+              "type": "ethernet"
+            }
+          ],
+          "routes": {
+            "config": [
+              {
+                "destination": "::/0",
+                "next-hop-address": "2001:db8:1::1",
+                "next-hop-interface": "enp1s0",
+                "table-id": 254
+              }
+            ]
+          }
+        },
+        "role": "master",
+        "rootDeviceHints": {
+          "deviceName": "/dev/vda"
+        }
+      },
+      {
+        "hostname": "master-1",
+        "interfaces": [
+          {
+            "macAddress": "52:54:00:07:56:b8",
+            "name": "enp1s0"
+          }
+        ],
+        "networkConfig": {
+          "dns-resolver": {
+            "config": {
+              "server": [
+                "192.0.2.1"
+              ]
+            }
+          },
+          "interfaces": [
+            {
+              "ipv6": {
+                "address": [
+                  {
+                    "ip": "2001:db8:1::65",
+                    "prefix-length": 64
+                  }
+                ],
+                "autoconf": false,
+                "dhcp": false,
+                "enabled": true
+              },
+              "mac-address": "52:54:00:07:56:b8",
+              "name": "enp1s0",
+              "state": "up",
+              "type": "ethernet"
+            }
+          ],
+          "routes": {
+            "config": [
+              {
+                "destination": "::/0",
+                "next-hop-address": "2001:db8:1::1",
+                "next-hop-interface": "enp1s0",
+                "table-id": 254
+              }
+            ]
+          }
+        },
+        "role": "master",
+        "rootDeviceHints": {
+          "deviceName": "/dev/vda"
+        }
+      },
+      {
+        "hostname": "master-2",
+        "interfaces": [
+          {
+            "macAddress": "52:54:00:e5:76:94",
+            "name": "enp1s0"
+          }
+        ],
+        "networkConfig": {
+          "dns-resolver": {
+            "config": {
+              "server": [
+                "192.0.2.1"
+              ]
+            }
+          },
+          "interfaces": [
+            {
+              "ipv6": {
+                "address": [
+                  {
+                    "ip": "2001:db8:1::66",
+                    "prefix-length": 64
+                  }
+                ],
+                "autoconf": false,
+                "dhcp": false,
+                "enabled": true
+              },
+              "mac-address": "52:54:00:e5:76:94",
+              "name": "enp1s0",
+              "state": "up",
+              "type": "ethernet"
+            }
+          ],
+          "routes": {
+            "config": [
+              {
+                "destination": "::/0",
+                "next-hop-address": "2001:db8:1::1",
+                "next-hop-interface": "enp1s0",
+                "table-id": 254
+              }
+            ]
+          }
+        },
+        "role": "master",
+        "rootDeviceHints": {
+          "deviceName": "/dev/vda"
+        }
+      }
+    ],
+    "kind": "AgentConfig",
+    "metadata": {
+      "name": "ocp"
+    },
+    "rendezvousIP": "2001:db8:1::64"
+  },
+  "budgets": {
+    "buildSeconds": 1800
+  },
+  "deliveryKind": "fetch",
+  "identity": {
+    "block": "cluster-media-ocp",
+    "cluster": "ocp",
+    "context": "lab"
+  },
+  "image": {
+    "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/clusters/ocp",
+    "url": "https://192.0.2.1:8443/private/clusters/ocp"
+  },
+  "installConfig": {
+    "apiVersion": "v1",
+    "baseDomain": "lab.example.test",
+    "compute": [
+      {
+        "name": "worker",
+        "replicas": 0
+      }
+    ],
+    "controlPlane": {
+      "name": "master",
+      "replicas": 3
+    },
+    "metadata": {
+      "name": "ocp"
+    },
+    "networking": {
+      "clusterNetwork": [
+        {
+          "cidr": "2001:db8:2::/48",
+          "hostPrefix": 64
+        }
+      ],
+      "machineNetwork": [
+        {
+          "cidr": "2001:db8:1::0/64"
+        }
+      ],
+      "networkType": "OVNKubernetes",
+      "serviceNetwork": [
+        "2001:db8:3::/112"
+      ]
+    },
+    "platform": {
+      "baremetal": {
+        "apiVIPs": [
+          "2001:db8:1::a"
+        ],
+        "ingressVIPs": [
+          "2001:db8:1::b"
+        ],
+        "provisioningNetwork": "Disabled"
+      }
+    },
+    "pullSecret": "",
+    "sshKey": ""
+  },
+  "manifests": [],
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "pullSecretRef": "openshift-pull-secret",
+  "release": {
+    "distribution": "openshift",
+    "version": "4.21.15"
+  },
+  "sshKeyRef": "sno-cluster-admin-ssh-key",
+  "tlsCertificateRef": "artifact-server-tls",
+  "tool": {
+    "compatibility": "openshift",
+    "kind": "openshift-install",
+    "version": "4.21.15"
+  },
+  "version": "cluster-media-agent-v9",
+  "workRoot": "/var/lib/bootwright-clusters/lab/ocp"
+}

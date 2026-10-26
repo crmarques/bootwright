@@ -199,11 +199,11 @@ func (c clusterCapabilities) Keep(ctx context.Context, execution lifecycle.Execu
 func keptMediaRequest() agentinstall.MediaRequest {
 	install := installedRequest()
 	return agentinstall.MediaRequest{
-		AgentConfig: map[string]any{}, Budgets: agentinstall.MediaBudgets{BuildSeconds: 900},
+		AgentConfig: map[string]any{}, DeliveryKind: "fetch", Budgets: agentinstall.MediaBudgets{BuildSeconds: 900},
 		Identity: agentinstall.Identity{Block: agentinstall.MediaBlockID(installedCluster), Cluster: installedCluster, Context: lifecycle.JourneyContext},
 		Image:    install.Image, InstallConfig: map[string]any{}, Placement: install.Placement,
 		PullSecretRef: "lab-pull-secret", Release: install.Release, SSHKeyRef: "lab-cluster-key",
-		TLSCertificateRef: "lab-artifact-tls", Tool: install.Tool, Version: "cluster-media-agent-v7", WorkRoot: install.WorkRoot,
+		TLSCertificateRef: "lab-artifact-tls", Tool: install.Tool, Version: "cluster-media-agent-v9", WorkRoot: install.WorkRoot,
 	}
 }
 

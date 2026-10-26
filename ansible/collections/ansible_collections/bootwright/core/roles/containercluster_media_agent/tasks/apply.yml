@@ -2,8 +2,14 @@
 - name: Validate the frozen boot-media request
   ansible.builtin.assert:
     that:
-      - bootwright_cluster_media_request.version == 'cluster-media-agent-v7'
-      - bootwright_cluster_media_request.image.path.startswith('/var/lib/bootwright-services/')
+      - bootwright_cluster_media_request.version == 'cluster-media-agent-v9'
+      - bootwright_cluster_media_request.deliveryKind in ['fetch', 'push']
+      - >-
+        (bootwright_cluster_media_request.deliveryKind == 'fetch'
+         and bootwright_cluster_media_request.image.path.startswith('/var/lib/bootwright-services/'))
+        or (bootwright_cluster_media_request.deliveryKind == 'push'
+            and bootwright_cluster_media_request.image.path == bootwright_cluster_media_request.workRoot ~ '/agent.iso'
+            and bootwright_cluster_media_request.image.url == '')
       - bootwright_cluster_media_request.workRoot.startswith('/var/lib/bootwright-clusters/')
       - bootwright_cluster_media_digest is match('[0-9a-f]{64}')
     quiet: true
@@ -114,6 +120,7 @@
   no_log: true
 
 - name: Report boot image publication
+  when: bootwright_cluster_media_request.deliveryKind == 'fetch'
   bootwright.core.containercluster_media_protocol:
     phase: group
     group: publish-image
@@ -126,6 +133,7 @@
   register: containercluster_media_agent_after
 
 - name: Report boot image publication completion
+  when: bootwright_cluster_media_request.deliveryKind == 'fetch'
   bootwright.core.containercluster_media_protocol:
     phase: group
     group: publish-image

@@ -270,3 +270,22 @@ func TestTargetToolsReadPackageCapabilityFromInstanceSelection(t *testing.T) {
 		t.Fatalf("package tools: %+v %v", tools, err)
 	}
 }
+
+func TestFIPSAndOrdinaryClustersKeepDistinctInstallerTools(t *testing.T) {
+	objects := selectionObjects()
+	for _, fips := range []bool{false, true} {
+		spec := api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("4.21.10"), "distribution", "release", "version").WithPath(api.BoolValue(fips), "security", "fips", "enabled")
+		objects = append(objects, api.NewObject(api.ContainerCluster, fmt.Sprintf("cluster-%t", fips), api.Value{}, spec))
+	}
+	tools, err := controller.SelectTools(api.NewCatalog(objects))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"openshift-install", "openshift-install-fips"} {
+		if !slices.ContainsFunc(tools, func(r controller.ToolRequest) bool {
+			return r.Kind == kind && r.Version == "4.21.10" && r.Compatibility == "openshift"
+		}) {
+			t.Fatalf("missing %s in %v", kind, tools)
+		}
+	}
+}

@@ -55,6 +55,7 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils.containercluster_publication import (
     LayoutError,
     prove,
+    prove_push,
 )
 
 EFFECT = {"publish": "published", "remove": "removed"}
@@ -70,7 +71,9 @@ def main():
     )
     operation = module.params["operation"]
     try:
-        present = prove(module.params["request"]["image"]["path"], removal=operation == "remove")
+        request = module.params["request"]
+        present = (prove_push(request) if request.get("deliveryKind", "fetch") == "push"
+                   else prove(request["image"]["path"], removal=operation == "remove"))
     except LayoutError as error:
         module.fail_json(msg="the boot image of this cluster cannot be %s safely: %s. Nothing was %s; fix that "
                              "directory and repeat the operation" % (EFFECT[operation], error, EFFECT[operation]))

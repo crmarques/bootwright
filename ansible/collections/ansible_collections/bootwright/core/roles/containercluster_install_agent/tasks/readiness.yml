@@ -8,12 +8,17 @@
     timeout: >-
       {{ [(containercluster_install_agent_boot_deadline | int)
           - (((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)), 1] | max }}
-  loop: '{{ bootwright_cluster_install_request.nodes }}'
+  loop: '{{ containercluster_install_agent_readiness_nodes | default(bootwright_cluster_install_request.nodes) }}'
   loop_control:
     label: '{{ item.machine }}'
   register: containercluster_install_agent_ssh_ready
   failed_when: false
   changed_when: false
+
+- name: Retain an unreachable node as a typed refusal
+  ansible.builtin.set_fact:
+    containercluster_install_agent_lifecycle_refusal: node-unreachable
+  when: containercluster_install_agent_ssh_ready.results | selectattr('msg', 'defined') | list | length > 0
 
 - name: Fail with the nodes that never answered within the boot budget
   ansible.builtin.fail:
@@ -33,7 +38,7 @@
     timeout: >-
       {{ [(containercluster_install_agent_boot_deadline | int)
           - (((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)), 1] | max }}
-  loop: '{{ bootwright_cluster_install_request.nodes }}'
+  loop: '{{ containercluster_install_agent_readiness_nodes | default(bootwright_cluster_install_request.nodes) }}'
   loop_control:
     label: '{{ item.machine }}'
   register: containercluster_install_agent_rendezvous_ready
@@ -42,6 +47,11 @@
   when:
     - item.address == bootwright_cluster_install_request.rendezvous
     - item.machine not in (containercluster_install_agent_state.powered | intersect(containercluster_install_agent_state.ownMedia))
+
+- name: Retain an unreachable rendezvous service as a typed refusal
+  ansible.builtin.set_fact:
+    containercluster_install_agent_lifecycle_refusal: node-unreachable
+  when: containercluster_install_agent_rendezvous_ready.results | selectattr('msg', 'defined') | list | length > 0
 
 - name: Fail with the rendezvous host that never answered within the boot budget
   ansible.builtin.fail:

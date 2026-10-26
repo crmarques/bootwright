@@ -46,6 +46,7 @@ func TestContainerClusterRefusalTableMatchesUnsupported(t *testing.T) {
 	installed = installed.WithSpec(installed.Spec().WithPath(api.StringValue("rhel-9-8"), "os", "installProfileRef"))
 	unrealized := guest("sno-01", "198.51.100.21/24")
 	unrealized = unrealized.WithSpec(unrealized.Spec().WithPath(api.StringValue("vc"), "substrate", "providerRef"))
+	nestedKubevirt := api.NewObject(api.InfraProvider, "vc", api.Value{}, api.MapValue(field("kubevirt", api.MapValue(text("hostClusterRef", "host")))))
 	vsphere := api.NewObject(api.InfraProvider, "vc", api.Value{}, api.MapValue(field("vsphere", api.MapValue())))
 	multiNode := api.NewCatalog(append(base(),
 		guest("ocp-01", "198.51.100.31/24"), guest("ocp-02", "198.51.100.32/24"), guest("ocp-03", "198.51.100.33/24"),
@@ -59,7 +60,6 @@ func TestContainerClusterRefusalTableMatchesUnsupported(t *testing.T) {
 			node("master-2", "master", "ocp-03", "master-2.ocp.lab.example.test"))))
 	onSNOCluster := map[string]string{"<cluster>": "ContainerCluster/sno"}
 	onNode := map[string]string{"<cluster>": "ContainerCluster/sno", "<machine>": "Machine/sno-01"}
-	onProvider := map[string]string{"<cluster>": "ContainerCluster/sno", "<provider>": "InfraProvider/lab-libvirt"}
 
 	networkCase := func(change func(api.Value) api.Value) refusalCase {
 		n := guest("sno-01", "198.51.100.21/24")
@@ -97,35 +97,30 @@ func TestContainerClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		"A disconnected cluster": {sno(func(spec api.Value) api.Value {
 			return spec.WithPath(api.StringValue("disconnected"), "install", "mode")
 		}), "ContainerCluster/sno", onSNOCluster},
-		"A FIPS cluster": {sno(func(spec api.Value) api.Value {
-			return spec.With("security", api.MapValue(field("fips", api.MapValue(field("enabled", api.BoolValue(true))))))
-		}), "ContainerCluster/sno", onSNOCluster},
-		"An installation proxy": {sno(func(spec api.Value) api.Value {
-			return spec.WithPath(api.MapValue(text("proxyRef", "lab-proxy")), "install", "proxy")
-		}), "ContainerCluster/sno", onSNOCluster},
-		"Disk encryption": {sno(func(spec api.Value) api.Value {
-			return spec.With("security", api.MapValue(field("diskEncryption", api.MapValue(
-				field("unlock", api.MapValue(field("tpm2", api.MapValue())))))))
-		}), "ContainerCluster/sno", onSNOCluster},
+
 		"Serving certificates": {sno(func(spec api.Value) api.Value {
 			return spec.WithPath(api.MapValue(text("defaultCertificateRef", "ingress-tls")), "install", "servingCertificates", "ingress")
 		}), "ContainerCluster/sno", onSNOCluster},
-		"A registry policy": {sno(func(spec api.Value) api.Value {
-			return spec.WithPath(api.MapValue(field("mirror", api.MapValue(text("registryRef", "mirror")))), "install", "registries")
-		}), "ContainerCluster/sno", onSNOCluster},
+
 		"Several nodes on another platform": {multiNode, "ContainerCluster/ocp", map[string]string{"<cluster>": "ContainerCluster/ocp"}},
-		"More nodes than the run ceiling fits": {largeCatalog(10), "ContainerCluster/ocp",
-			map[string]string{"<cluster>": "ContainerCluster/ocp", "<nodes>": "10", "<deadline>": "6h10m0s"}},
+		"More nodes than the run ceiling fits": {largeCatalog(29), "ContainerCluster/ocp",
+			map[string]string{"<cluster>": "ContainerCluster/ocp", "<nodes>": "29", "<deadline>": "6h18m0s"}},
 		"A node with an install profile":    {onSNO(installed), "ContainerCluster/sno", onNode},
 		"A node on an unrealized substrate": {onSNO(unrealized, vsphere), "ContainerCluster/sno", onSNOCluster},
+		"A KubeVirt node on a nested host":  {onSNO(unrealized, nestedKubevirt), "ContainerCluster/sno", map[string]string{"<provider>": "InfraProvider/vc"}},
 		"A node whose emulated controller port does not allocate": {
-			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20/24")), "ContainerCluster/sno", onProvider,
+			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20/24")), "ContainerCluster/sno", map[string]string{"<provider>": "InfraProvider/lab-libvirt", "<node>": "master-0", "<machine>": "Machine/sno-01"},
 		},
 		"A node's provider with no emulated controller credential": {
-			singleNodeOnProvider(noControllerCredential), "ContainerCluster/sno", onProvider,
+			singleNodeOnProvider(noControllerCredential), "ContainerCluster/sno", map[string]string{"<provider>": "InfraProvider/lab-libvirt", "<node>": "master-0", "<machine>": "Machine/sno-01"},
 		},
-		"A physical node": {physicalCatalog(), "ContainerCluster/metal",
-			map[string]string{"<cluster>": "ContainerCluster/metal", "<machine>": "Machine/metal-01"}},
+		"A physical node with an HTTP controller": {physicalWithController(func(v api.Value) api.Value {
+			return v.With("address", api.StringValue("http://bmc.example.test/redfish/v1/Systems/1"))
+		}), "ContainerCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},
+		"A physical node with unverified controller TLS": {physicalWithController(func(v api.Value) api.Value { return v.WithPath(api.BoolValue(false), "tls", "verify") }), "ContainerCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},
+		"A physical node with unverified media TLS": {physicalWithController(func(v api.Value) api.Value {
+			return v.WithPath(api.StringValue("disable-verification"), "virtualMedia", "tls", "trust")
+		}), "ContainerCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},
 		"A root device the installer cannot name": {singleNodeWith(text("deviceName", "/dev/mapper/root")), "ContainerCluster/sno", onNode},
 		"A root device size the frozen input cannot carry": {
 			singleNodeWith(text("deviceName", "/dev/vda"), number("minSizeGigabytes", "9007199254740992")), "ContainerCluster/sno", onNode,

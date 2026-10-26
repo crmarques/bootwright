@@ -2,10 +2,13 @@
 
 import pathlib
 
+from ansible_collections.bootwright.core.tests.unit.install_phase_tasks import apply_tasks as phased_tasks
+
 from ansible.parsing.dataloader import DataLoader
 from ansible.playbook.helpers import load_list_of_blocks
 from ansible.playbook.play import Play
 from ansible.template import Templar
+from ansible.vars.manager import VariableManager
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / 'roles' / 'containercluster_install_agent'
 LOADER = DataLoader()
@@ -16,6 +19,8 @@ OTHER = 'insert-' + 'b' * 64
 
 
 def tasks(file):
+    if file == 'apply.yml':
+        return phased_tasks(LOADER, ROLE)
     return LOADER.load_from_file(str(ROLE / 'tasks' / file), trusted_as_template=True)
 
 
@@ -64,13 +69,13 @@ def guard_holds(task, scope):
 
 def test_apply_sweeps_right_after_reading_its_nodes_and_before_any_boot():
     apply = tasks('apply.yml')
-    read = position(apply, lambda t: t.get('ansible.builtin.import_tasks') == 'state.yml')
+    read = position(apply, lambda t: t.get('ansible.builtin.import_tasks') == 'collect_state.yml')
     first = apply[read + 1]
     assert first.get(MODULE, {}).get('operation') == 'sweep' and first['no_log'] is True
     assert reports_its_refusal(apply, read + 1) is apply[read + 2]
     assert first[MODULE]['source'] == '{{ containercluster_install_agent_before.observation.url }}'
     assert read + 1 < position(apply, lambda t: '.bootwright-booted' in str(t.get('ansible.builtin.copy', {})))
-    assert read + 1 < position(apply, lambda t: t.get('ansible.builtin.include_tasks') == 'boot.yml')
+    assert read + 1 < position(apply, lambda t: t.get('ansible.builtin.import_tasks') == 'boot.yml')
     scope = {'containercluster_install_agent_controllers': controllers(BASE + TOKEN + '/agent.iso', '')}
     assert evaluate(first, scope) == [BASE + TOKEN + '/agent.iso', '']
     for url, runs in [('', False), (BASE + 'abcdef/agent.iso', True)]:
@@ -79,10 +84,10 @@ def test_apply_sweeps_right_after_reading_its_nodes_and_before_any_boot():
 
 def test_apply_sweeps_once_every_node_released_its_media():
     apply = tasks('apply.yml')
-    release = position(apply, lambda t: t.get('ansible.builtin.include_tasks') == 'release.yml')
+    release = position(apply, lambda t: t.get('ansible.builtin.import_tasks') == 'release.yml')
     later = [index for index, task in enumerate(apply) if index > release and task in sweeps(apply)]
     assert len(later) == 1
-    reread = position(apply[release:], lambda t: t.get('ansible.builtin.import_tasks') == 'state.yml') + release
+    reread = position(apply[release:], lambda t: t.get('ansible.builtin.import_tasks') == 'collect_state.yml') + release
     assert later[0] == reread + 1
     reports_its_refusal(apply, later[0])
     scope = {'containercluster_install_agent_controllers': controllers('', '')}
@@ -110,15 +115,15 @@ def test_destroy_sweeps_after_its_ejects_keeping_only_unejected_media():
 def failed_insert_tasks():
     boot = list(walk(tasks('boot.yml')))
     rescue = next(t for t in boot if 'rescue' in t and 'timeout' in t)['rescue']
-    read = position(rescue, lambda t: 'bootwright.core.redfish_system_read' in t)
+    read = position(rescue, lambda t: t.get('vars', {}).get('containercluster_install_agent_port_operation') == 'state_read')
     return rescue, read
 
 
 def test_a_failed_insert_reads_its_controller_and_retires_its_link_when_not_presented():
     rescue, read = failed_insert_tasks()
     assert position(rescue, lambda t: (t.get('when') or '') == 'ansible_failed_result.timedout is defined') < read
-    assert rescue[read]['bootwright.core.redfish_system_read']['media'] is True
-    remove = rescue[read + 2]
+    assert rescue[read]['ansible.builtin.include_tasks']['file'] == 'port.yml'
+    remove = next(task for task in rescue[read:] if task.get(MODULE, {}).get('operation') == 'remove')
     assert remove[MODULE]['operation'] == 'remove'
     assert remove[MODULE]['image'] == '{{ containercluster_install_agent_token.url }}'
     token = {'url': BASE + TOKEN + '/agent.iso'}
@@ -144,7 +149,7 @@ def test_a_read_after_a_failed_insert_runs_only_after_one():
 
 def compiled_rescue():
     play = Play.load({'hosts': 'localhost', 'gather_facts': False, 'tasks': []}, loader=LOADER)
-    blocks = load_list_of_blocks(tasks('boot.yml'), play=play, loader=LOADER)
+    blocks = load_list_of_blocks(tasks('boot.yml'), play=play, loader=LOADER, variable_manager=VariableManager(loader=LOADER))
     pending = list(blocks)
     while pending:
         block = pending.pop()
@@ -158,12 +163,11 @@ def compiled_rescue():
 
 def test_the_read_after_a_failed_insert_takes_its_own_timeout_not_what_the_boot_budget_left():
     rescue = compiled_rescue()
-    read = next(task for task in rescue if task.action == 'bootwright.core.redfish_system_read')
+    read = next(task for task in rescue if task.action == 'ansible.builtin.include_tasks' and task.args.get('_raw_params') == 'port.yml')
     report = next(task for task in rescue if task.name == 'Report the boot the boot phase\'s budget stopped')
-    spent = {'containercluster_install_agent_boot_deadline': 0}
+    spent = {'containercluster_install_agent_boot_deadline': 0, 'containercluster_install_agent_node': {'stateReadSeconds': 120}}
     assert int(Templar(loader=LOADER, variables=spent).template(report.timeout)) == 1
-    assert read.timeout == 150
-    assert int(Templar(loader=LOADER, variables=spent).template(read.timeout)) == 150
+    assert int(Templar(loader=LOADER, variables=spent).template(read.args['apply']['timeout'])) == 150
 
 
 def test_observation_never_sweeps_or_removes_a_link():

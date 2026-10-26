@@ -71,7 +71,7 @@ LOOPED = re.compile(r"\{\{\s*item\.([a-z_]+)\s*\}\}")
 
 # The private publications the walk must reach; finding fewer passes vacuously.
 PUBLISHED = {
-    ("containercluster_media_agent/tasks/build.yml", "Keep the published image readable only by the serving process"),
+    ("containercluster_media_agent/tasks/publish.yml", "Keep the published image readable only by the serving process"),
     ("managedos_install_anaconda/tasks/private.yml", "Publish the host key pair this installation delivers"),
     ("managedos_install_anaconda/tasks/apply.yml", "Keep the built installer image readable only by the serving process"),
 }
@@ -225,7 +225,8 @@ def test_the_permission_rule_refuses_what_the_worker_cannot_read_or_others_can()
 
 
 def build_tasks():
-    return load(ROLES / "containercluster_media_agent" / "tasks" / "build.yml")
+    role = ROLES / "containercluster_media_agent" / "tasks"
+    return load(role / "publish.yml") + load(role / "build.yml")
 
 
 def position(tasks, description, predicate):
@@ -289,7 +290,7 @@ def templar(role, variables):
 
 
 def trusted_build_task(description, predicate):
-    tasks = [task for task in trusted(MEDIA / "tasks" / "build.yml") if isinstance(task, dict)]
+    tasks = [task for task in trusted(MEDIA / "tasks" / "publish.yml") if isinstance(task, dict)]
     return tasks[position(tasks, description, predicate)]
 
 

@@ -346,18 +346,19 @@
       when: managedos_install_anaconda_guest.rc | default(1) | int not in [0, 255]
 
     - name: Wait for the machine to power off
-      bootwright.core.redfish_system_read:
-        endpoint: '{{ managedos_install_anaconda_endpoint }}'
-        user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
-        password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
-        verify: '{{ managedos_install_anaconda_verify }}'
-        ca_data: '{{ managedos_install_anaconda_ca_data }}'
-        media: false
-      register: managedos_install_anaconda_powered_off
-      retries: '{{ bootwright_os_install_request.budgets.reboot.attempts | int }}'
-      delay: '{{ bootwright_os_install_request.budgets.reboot.delaySeconds | int }}'
-      until: (managedos_install_anaconda_powered_off.power | default('')) == 'Off'
-      failed_when: false
+      ansible.builtin.include_role:
+        name: "{{ managedos_install_anaconda_state_read[bootwright_os_install_request.target.substrate] }}"
+        tasks_from: state_read
+      vars:
+        bootwright_machine_port: >-
+          {{ managedos_install_anaconda_port_access | combine({'media': false,
+             'retries': bootwright_os_install_request.budgets.reboot.attempts | int,
+             'delay': bootwright_os_install_request.budgets.reboot.delaySeconds | int,
+             'expected_power': 'Off'}) }}
+
+    - name: Retain the machine port answer
+      ansible.builtin.set_fact:
+        managedos_install_anaconda_powered_off: "{{ vars[managedos_install_anaconda_port_result[bootwright_os_install_request.target.substrate]] }}"
       no_log: true
 
     # ansible-core keeps nothing of a failure under no_log but that it failed,
@@ -379,29 +380,17 @@
 
     - name: Boot the installed disk of a machine this substrate created
       ansible.builtin.include_role:
-        name: bootwright.core.substrate_libvirt_machine
+        name: "{{ managedos_install_anaconda_boot_disk[bootwright_os_install_request.target.substrate] }}"
         tasks_from: boot_disk
       vars:
-        substrate_libvirt_machine_disk_endpoint: '{{ managedos_install_anaconda_endpoint }}'
-        substrate_libvirt_machine_disk_verify: '{{ managedos_install_anaconda_verify }}'
-        substrate_libvirt_machine_disk_ca: '{{ managedos_install_anaconda_controller_ca }}'
-        substrate_libvirt_machine_disk_user: '{{ bootwright_os_install_material.controllerUser }}'
-        substrate_libvirt_machine_disk_password: '{{ bootwright_os_install_material.controllerPassword }}'
-        substrate_libvirt_machine_disk_power_on: true
-      when: bootwright_os_install_request.target.substrate == 'libvirt'
-
-    - name: Boot the installed disk of an operator-owned machine
-      ansible.builtin.include_role:
-        name: bootwright.core.substrate_baremetal_machine
-        tasks_from: boot_disk
-      vars:
-        substrate_baremetal_machine_disk_endpoint: '{{ managedos_install_anaconda_endpoint }}'
-        substrate_baremetal_machine_disk_verify: '{{ managedos_install_anaconda_verify }}'
-        substrate_baremetal_machine_disk_ca: '{{ managedos_install_anaconda_controller_ca }}'
-        substrate_baremetal_machine_disk_user: '{{ bootwright_os_install_material.controllerUser }}'
-        substrate_baremetal_machine_disk_password: '{{ bootwright_os_install_material.controllerPassword }}'
-        substrate_baremetal_machine_disk_power_on: true
-      when: bootwright_os_install_request.target.substrate == 'baremetal'
+        bootwright_machine_port:
+          endpoint: '{{ managedos_install_anaconda_endpoint }}'
+          verify: '{{ managedos_install_anaconda_verify }}'
+          ca: '{{ managedos_install_anaconda_controller_ca }}'
+          user: '{{ bootwright_os_install_material.controllerUser }}'
+          password: '{{ bootwright_os_install_material.controllerPassword }}'
+          power_on: true
+      when: bootwright_os_install_request.target.substrate in managedos_install_anaconda_boot_disk
 
     # apply.yml refuses such a substrate before its first effect, which leaves
     # this unreachable from there.
@@ -412,7 +401,7 @@
           {{ bootwright_os_install_request.target.substrate }}, which this installation has
           no boot_disk binding for, so its installed disk was not booted after the network
           change; plan the installation again with this release
-      when: bootwright_os_install_request.target.substrate not in ['libvirt', 'baremetal']
+      when: bootwright_os_install_request.target.substrate not in managedos_install_anaconda_boot_disk
 
     - name: Wait for the restarted machine to answer on the key it reported
       ansible.builtin.include_tasks: guest.yml

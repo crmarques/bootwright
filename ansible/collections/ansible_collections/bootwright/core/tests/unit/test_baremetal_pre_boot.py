@@ -90,8 +90,7 @@ def declared():
 def include(role):
     """A consumer's bare-metal pre-boot include, by its role and the tasks_from stem."""
     return one([task for task in walk(loaded(role / "tasks" / "boot.yml"))
-                if (task.get(INCLUDE) or {}).get("name") == "bootwright.core.substrate_baremetal_machine"
-                and pathlib.PurePosixPath(str(task[INCLUDE].get("tasks_from", ""))).stem == "pre_boot"],
+                if (task.get(INCLUDE) or {}).get("tasks_from") == "pre_boot"],
                "include the bare-metal pre-boot proof")
 
 
@@ -135,9 +134,10 @@ def cluster(tmp_path, pins, hardware):
             "name": "master-1", "physical": True, "substrate": "baremetal"}
     variables = dict(LOADER.load_from_file(str(CLUSTER / "defaults" / "main.yml"), trusted_as_template=True))
     variables.update(written(tmp_path, {"bootwright_cluster_install_material": material}))
-    variables.update(one([task for task in loaded(CLUSTER / "tasks" / "apply.yml")
-                          if task.get("ansible.builtin.include_tasks") == "boot.yml"], "boot each node")["vars"])
-    variables.update({"containercluster_install_agent_node": node, "containercluster_install_agent_index": 1})
+    variables.update({"containercluster_install_agent_node": node, "containercluster_install_agent_index": 1,
+                      "containercluster_install_agent_user": material["controllerUserNode1"],
+                      "containercluster_install_agent_password": material["controllerPasswordNode1"],
+                      "containercluster_install_agent_ca": ""})
     variables.update(include(CLUSTER)["vars"])
     return variables
 
@@ -242,12 +242,12 @@ def test_the_refusal_names_the_controller_and_the_remedy_and_no_identity(tmp_pat
 
 
 def test_the_managed_os_hands_its_proof_the_pin_or_nothing(tmp_path):
-    arguments = include(MANAGED_OS)["vars"]
+    arguments = include(MANAGED_OS)["vars"]["bootwright_machine_port"]
     for pins, want in (
             ({"pinnedUUIDBase64": encoded(UUID), "pinnedSerialBase64": encoded(SERIAL)}, (encoded(UUID), encoded(SERIAL))),
             ({}, ("", ""))):
         rendering = Templar(loader=LOADER, variables=managed_os(tmp_path, pins, DECLARED))
-        assert tuple(rendering.template(arguments[name]) for name in PINS) == want
+        assert tuple(rendering.template(arguments[name]) for name in ("pinned_uuid_base64", "pinned_serial_base64")) == want
 
 
 # The repeated proof names what it lacks from the declaration and the client's

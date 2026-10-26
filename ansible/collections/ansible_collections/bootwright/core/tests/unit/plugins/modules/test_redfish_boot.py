@@ -2081,3 +2081,43 @@ def test_restore_preserves_a_privilege_message_after_a_generic_first_message(mon
     firmware.script("PATCH", firmware.system + DEVICE, (400, body, {}))
     with pytest.raises(ControllerError, match="privilege"):
         connect(monkeypatch, firmware).eject(restore_verification=True)
+
+
+@pytest.mark.parametrize("kind", ["managers", "candidates"])
+def test_media_discovery_refuses_unbounded_inventory_without_writes(monkeypatch, kind):
+    firmware = emulator()
+    system = firmware.resources[firmware.system](firmware)
+    if kind == "managers":
+        system["Links"]["ManagedBy"] = [{"@odata.id": "/redfish/v1/Managers/" + str(i)} for i in range(5)]
+    else:
+        view = system["VirtualMedia"]["@odata.id"]
+        firmware.resources[view] = {"Members": [{"@odata.id": view + "/" + str(i)} for i in range(9)]}
+    firmware.resources[firmware.system] = system
+    client = connect(monkeypatch, firmware)
+    with pytest.raises(ControllerError, match="exceeds"):
+        client.inserted()
+    assert not writes(firmware)
+    assert len(gets(firmware)) <= 2 + 2 * redfish_control.MAX_MEDIA_MANAGERS
+
+
+@pytest.mark.parametrize("modules,expected", [
+    (None, False), ([], False), ({"InterfaceType": "TPM2_0"}, False),
+    ([{"InterfaceType": "TPM2_0"}], False),
+    ([{"InterfaceType": "TPM1_2", "Status": {"State": "Enabled"}}], False),
+    ([{"InterfaceType": "TPM2_0", "Status": {"State": "Disabled"}}], False),
+    ([{"InterfaceType": "TPM2_0", "Status": {"State": "Enabled"}}], True),
+])
+def test_encrypted_install_requires_positive_enabled_tpm2(modules, expected):
+    assert redfish_system_inspect.usable_tpm({"TrustedModules": modules}) is expected
+
+
+def test_hardware_inventory_over_bound_never_proves_a_partial_machine(monkeypatch):
+    firmware = emulator()
+    system = firmware.resources[firmware.system](firmware)
+    collection = system["EthernetInterfaces"]["@odata.id"]
+    firmware.resources[collection] = {"Members": [{"@odata.id": collection + "/" + str(i)} for i in range(65)]}
+    observation = redfish_system_inspect.observe(connect(monkeypatch, firmware))
+    assert observation["addresses"] == []
+    assert "exceeds 64" in observation["failures"][0]
+    assert len(gets(firmware)) == 2
+    assert not writes(firmware)

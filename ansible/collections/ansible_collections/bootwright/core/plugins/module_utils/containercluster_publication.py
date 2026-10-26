@@ -174,3 +174,48 @@ def prove(path, removal=False):
         return True
     finally:
         os.close(fd)
+
+
+def prove_push(request):
+    """Prove the private work area and regular image used for pushed delivery.
+
+    Missing directories are safe to create. Every existing ancestor is root
+    owned and cannot be redirected by another account; the image and receipt
+    themselves never follow links. The native installer alone fills this area.
+    """
+    work = request['workRoot']
+    parts = work.split('/')
+    if (not work.startswith('/') or any(part in ('.', '..') for part in parts)
+            or request['image']['path'] != work + '/agent.iso'
+            or request['image'].get('url')):
+        raise ValueError('invalid pushed image path')
+    fd = os.open('/', DIRECTORY)
+    current = ''
+    try:
+        trusted(fd, '/')
+        for part in filter(None, parts):
+            current += '/' + part
+            try:
+                child = os.open(part, DIRECTORY, dir_fd=fd)
+            except FileNotFoundError:
+                return False
+            except OSError as error:
+                raise LayoutError(current, 'is not a plain directory for pushed media') from error
+            os.close(fd)
+            fd = child
+            trusted(fd, current)
+        if os.fstat(fd).st_mode & 0o077:
+            raise LayoutError(work, 'is not private to root for pushed media')
+        image = False
+        for name in ('agent.iso', 'bootwright-media.json'):
+            try:
+                info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != OWNER or info.st_mode & 0o077:
+                raise LayoutError(work, 'holds an unsafe image or receipt for pushed media')
+            if name == 'agent.iso':
+                image = info.st_size > 0
+        return image
+    finally:
+        os.close(fd)

@@ -10,16 +10,17 @@
   no_log: true
 
 - name: Bring the machine to off through its management controller
-  bootwright.core.redfish_boot:
-    endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
-    verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'
-    ca_data: '{{ machine_power_redfish_ca_data }}'
-    operation: "{{ 'power-off' if bootwright_machine_power_request.force else 'shutdown' }}"
-    attempts: '{{ machine_power_redfish_attempts }}'
-  register: machine_power_redfish_stopped
-  failed_when: false
+  ansible.builtin.include_role:
+    name: "{{ machine_power_redfish_power[bootwright_machine_power_material.substrate] }}"
+    tasks_from: power
+  vars:
+    bootwright_machine_port: >-
+      {{ machine_power_redfish_access | combine({'power': 'off', 'force': bootwright_machine_power_request.force,
+         'attempts': machine_power_redfish_attempts}) }}
+
+- name: Retain the machine port answer
+  ansible.builtin.set_fact:
+    machine_power_redfish_stopped: "{{ vars[machine_power_redfish_port_result[bootwright_machine_power_material.substrate]] }}"
   no_log: true
 
 # ansible-core keeps nothing of a failure under no_log but that it failed, so

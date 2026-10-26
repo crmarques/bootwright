@@ -1,0 +1,20 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-metal
+
+spec:
+  baremetal:
+    boot:
+      method: redfishVirtualMedia
+
+    defaults:
+      bmc:
+        credentialsRef: lab-bmc-credentials
+
+        tls:
+          trustBundleRef: lab-bmc-ca
+
+  networkAttachments:
+    - name: lab-metal
+      baremetal: {}

@@ -39,7 +39,7 @@ def custody_copy(entries):
 
 
 def test_apply_and_observe_copy_the_kubeconfig_privately_once_completion_is_proved():
-    for name in ("apply.yml", "observe.yml"):
+    for name in ("finish.yml", "observe.yml"):
         entries = tasks(name)
         index = custody_copy(entries)
         task = entries[index]
@@ -54,7 +54,7 @@ def test_apply_and_observe_copy_the_kubeconfig_privately_once_completion_is_prov
         }, name
         assert task["no_log"] is True, name
         assert task["when"] == GATE, name
-        last_read = max(i for i, entry in enumerate(entries) if entry.get("ansible.builtin.import_tasks") == "state.yml")
+        last_read = max(i for i, entry in enumerate(entries) if entry.get("ansible.builtin.import_tasks") in ("state.yml", "collect_state.yml"))
         publish = position(entries, lambda entry: (entry.get("bootwright.core.containercluster_install_protocol") or {}).get("phase") == "completed")
         assert last_read < index < publish, name
 

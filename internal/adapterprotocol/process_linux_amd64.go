@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -93,6 +94,9 @@ func compose(invocation Invocation) *exec.Cmd {
 		filepath.Join(collection, "plugins/module_utils/controller_supervisor.py"))
 	if invocation.Lifecycle {
 		arguments = append(arguments, "--lifecycle")
+	}
+	if invocation.Forks > 1 {
+		arguments = append(arguments, "--forks", strconv.Itoa(invocation.Forks))
 	}
 	arguments = append(arguments, "-i", invocation.Inventory, "--extra-vars", "@"+invocation.Variables,
 		filepath.Join(collection, "playbooks", invocation.Playbook))

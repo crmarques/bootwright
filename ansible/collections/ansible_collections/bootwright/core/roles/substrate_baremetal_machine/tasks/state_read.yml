@@ -1,0 +1,58 @@
+---
+- name: Clear the previous machine port answer
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_port_refusal: ''
+  no_log: true
+
+- name: Read power and the presented media
+  bootwright.core.redfish_system_read:
+    endpoint: '{{ bootwright_machine_port.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_machine_port.user) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_machine_port.password) }}'
+    verify: '{{ bootwright_machine_port.verify }}'
+    ca_data: >-
+      {{ lookup('ansible.builtin.file', bootwright_machine_port.ca)
+         if bootwright_machine_port.ca | default('') | length > 0 else '' }}
+    media: '{{ bootwright_machine_port.media | default(true) }}'
+  register: substrate_baremetal_machine_port_result
+  retries: '{{ bootwright_machine_port.retries | default(1) }}'
+  delay: '{{ bootwright_machine_port.delay | default(0) }}'
+  until: >-
+    bootwright_machine_port.expected_power | default('') | length == 0
+    or (substrate_baremetal_machine_port_result.power | default('')) == bootwright_machine_port.expected_power
+  failed_when: false
+  no_log: true
+
+- name: Read the machine identity when the consumer holds a pin
+  bootwright.core.redfish_system_inspect:
+    endpoint: '{{ bootwright_machine_port.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_machine_port.user) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_machine_port.password) }}'
+    verify: '{{ bootwright_machine_port.verify }}'
+    ca_data: >-
+      {{ lookup('ansible.builtin.file', bootwright_machine_port.ca)
+         if bootwright_machine_port.ca | default('') | length > 0 else '' }}
+  register: substrate_baremetal_machine_port_identity
+  failed_when: false
+  when: bootwright_machine_port.inspect | default(false)
+  no_log: true
+
+- name: Retain the identity answer
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_port_result: '{{ substrate_baremetal_machine_port_result | combine(substrate_baremetal_machine_port_identity) }}'
+  when: bootwright_machine_port.inspect | default(false)
+  no_log: true
+
+- name: Publish the machine port refusal
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_port_refusal: '{{ substrate_baremetal_machine_port_result.msg | default("") }}'
+  no_log: true
+
+- name: Normalize the machine state without assuming an unanswered probe is empty
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_port_result: >-
+      {{ substrate_baremetal_machine_port_result | combine(substrate_baremetal_machine_port_result | bootwright.core.machine_port_state(
+         lookup('ansible.builtin.file', bootwright_machine_port.image_url_file)
+         if bootwright_machine_port.image_url_file | default('') | length > 0 else '',
+         bootwright_machine_port.media | default(true))) }}
+  no_log: true

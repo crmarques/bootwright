@@ -27,6 +27,12 @@ validate or import that directory, rather than its category or all of
 | `storage-clusters/` | [libvirt-6-nodes-ceph-services](storage-clusters/libvirt-6-nodes-ceph-services/README.md) | P2: six storage guests and an independent client allocation, CephFS layouts, TLS RGW ingress, multi-active NFS and clustered SMB; operator qualification unrun. |
 | `container-clusters/` | [lab-sno](container-clusters/lab-sno/README.md) | Install single-node OpenShift on a libvirt guest. |
 | `container-clusters/` | [lab-compact](container-clusters/lab-compact/README.md) | Install compact OpenShift on three libvirt masters with installer-owned virtual IPs. |
+| `container-clusters/` | [lab-anysize](container-clusters/lab-anysize/README.md) | Prepare the bonded ten-node OpenShift acceptance topology. |
+| `container-clusters/` | [lab-features](container-clusters/lab-features/README.md) | Prepare TPM2 encryption, proxy and external mirror acceptance. |
+| `container-clusters/` | [lab-features-ipv6](container-clusters/lab-features-ipv6/README.md) | Prepare the IPv6-only installation-feature variant. |
+| `container-clusters/` | [lab-networks](container-clusters/lab-networks/README.md) | Prepare localnet secondary networking and two MetalLB pool paths. |
+| `container-clusters/` | [lab-kubevirt](container-clusters/lab-kubevirt/README.md) | Prepare three OpenShift masters on an existing virtualization host with external endpoints and private pushed media; runtime qualification remains open. |
+| `container-clusters/` | [lab-physical](container-clusters/lab-physical/README.md) | Prepare five physical OpenShift targets with verified private media delivery. |
 | `add-ons/` | [lab-sno-nmstate](add-ons/lab-sno-nmstate/README.md) | Install the Kubernetes NMState Operator on single-node OpenShift. |
 | `add-ons/` | [lab-sno-metallb](add-ons/lab-sno-metallb/README.md) | Install MetalLB and an eight-address layer 2 pool on single-node OpenShift. |
 | `add-ons/` | [lab-compact-hub](add-ons/lab-compact-hub/README.md) | Install pinned ACM and OpenShift GitOps with a bootstrap Application on a compact cluster. |

@@ -60,6 +60,35 @@ argument_specs:
   pre_boot:
     short_description: Prove the exact physical machine is off before media is inserted.
     options:
+      bootwright_machine_port:
+        type: dict
+        options:
+          endpoint:
+            type: str
+            required: true
+          ca:
+            type: path
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: path
+            required: true
+          verify:
+            type: bool
+            required: true
+          expected:
+            type: list
+            elements: str
+          pinned_uuid_base64:
+            type: str
+          pinned_serial_base64:
+            type: str
+          require_tpm:
+            type: bool
+      substrate_baremetal_machine_target_require_tpm:
+        type: bool
       substrate_baremetal_machine_target_endpoint:
         type: str
         required: true
@@ -93,6 +122,27 @@ argument_specs:
   boot_media:
     short_description: Boot an operator-owned machine once from the media inserted in its controller.
     options:
+      bootwright_machine_port:
+        type: dict
+        options:
+          endpoint:
+            type: str
+            required: true
+          ca:
+            type: path
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: path
+            required: true
+          verify:
+            type: bool
+            required: true
+          installer_powers_off:
+            type: bool
+            required: true
       substrate_baremetal_machine_boot_endpoint:
         type: str
         required: true
@@ -114,6 +164,27 @@ argument_specs:
   boot_disk:
     short_description: Point an operator-owned machine at its installed disk.
     options:
+      bootwright_machine_port:
+        type: dict
+        options:
+          endpoint:
+            type: str
+            required: true
+          ca:
+            type: path
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: path
+            required: true
+          verify:
+            type: bool
+            required: true
+          power_on:
+            type: bool
+            required: true
       substrate_baremetal_machine_disk_endpoint:
         type: str
         required: true
@@ -160,3 +231,142 @@ argument_specs:
         type: int
       substrate_baremetal_machine_identity_delay:
         type: int
+
+  state_read:
+    short_description: Execute the bounded machine state read port.
+    options:
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: path
+            required: true
+          ca:
+            type: path
+          verify:
+            type: bool
+            required: true
+          media_identity:
+            type: str
+          media:
+            type: bool
+          image_url_file:
+            type: path
+          retries:
+            type: int
+          delay:
+            type: int
+          inspect:
+            type: bool
+          expected_power:
+            type: str
+            choices: ['On', 'Off']
+
+  media_insert:
+    short_description: Execute the bounded machine media insert port.
+    options:
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: path
+            required: true
+          ca:
+            type: path
+          verify:
+            type: bool
+            required: true
+          media_identity:
+            type: str
+          image_url_file:
+            type: path
+            required: true
+          image_path:
+            type: path
+          private:
+            type: bool
+            required: true
+          trust:
+            type: str
+            required: true
+            choices: [established, import-certificate, disable-verification]
+          certificate:
+            type: path
+
+  media_eject:
+    short_description: Execute the bounded machine media eject port.
+    options:
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: path
+            required: true
+          ca:
+            type: path
+          verify:
+            type: bool
+            required: true
+          media_identity:
+            type: str
+          restore_verification:
+            type: bool
+            required: true
+          remove_certificate:
+            type: bool
+            required: true
+          certificate:
+            type: path
+
+  power:
+    short_description: Execute the bounded machine power port.
+    options:
+      bootwright_machine_port:
+        type: dict
+        required: true
+        options:
+          endpoint:
+            type: str
+            required: true
+          user:
+            type: path
+            required: true
+          password:
+            type: path
+            required: true
+          ca:
+            type: path
+          verify:
+            type: bool
+            required: true
+          media_identity:
+            type: str
+          power:
+            type: str
+            required: true
+            choices: ['on', 'off', restart]
+          force:
+            type: bool
+          attempts:
+            type: int

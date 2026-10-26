@@ -263,7 +263,7 @@ port, versioned outside every effect content digest (B600 to B605);
 equality compares projected canonical forms, not `Value.Equal`
 (`api/v1alpha1/value.go:131`); secrets render as references; every read
 refuses `lifecycle.lease` while an apply holds the root lock
-([B18](../../specs/milestones/m1.md#b18)).
+([B18](../../specs/milestones/delivered.md#b18)).
 
 ### Minor
 

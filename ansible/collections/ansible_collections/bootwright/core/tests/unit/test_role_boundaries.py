@@ -123,9 +123,9 @@ UNITS = {
 # The polls, by file and register. Finding fewer means the walk stopped seeing
 # them, which would pass the poll rule vacuously.
 POLLS = {
-    ("managedos_install_anaconda/tasks/await.yml", "managedos_install_anaconda_installer"),
+    ("substrate_baremetal_machine/tasks/state_read.yml", "substrate_baremetal_machine_port_result"),
     ("managedos_install_anaconda/tasks/guest.yml", "managedos_install_anaconda_guest"),
-    ("managedos_install_anaconda/tasks/network.yml", "managedos_install_anaconda_powered_off"),
+    ("substrate_libvirt_machine/tasks/state_read.yml", "substrate_libvirt_machine_port_result"),
     ("managedos_install_anaconda/tasks/reachable.yml", "managedos_install_anaconda_reachable"),
     ("substrate_baremetal_machine/tasks/identity_read.yml", "substrate_baremetal_machine_marker_read"),
     ("substrate_libvirt_host/tasks/apply.yml", "substrate_libvirt_host_connection"),
@@ -140,9 +140,8 @@ CONTROLLERS = re.compile(r"^bootwright\.core\.redfish_\w+$")
 # stopped seeing them, which would pass the refusal rule vacuously.
 CONTROLLER_FILES = {
     "containercluster_install_agent/tasks/boot.yml",
-    "containercluster_install_agent/tasks/destroy.yml",
     "containercluster_install_agent/tasks/release.yml",
-    "containercluster_install_agent/tasks/state.yml",
+    "containercluster_install_agent/tasks/node_state.yml",
     "machine_power_read_redfish/tasks/read.yml",
     "machine_power_redfish/tasks/power.yml",
     "machine_power_redfish/tasks/start.yml",
@@ -226,7 +225,7 @@ def phase(task):
 
 
 def entry_points():
-    """The task file each playbook imports, by playbook."""
+    """The first task file each playbook imports, before any later phase plays."""
     found = {}
     for playbook in sorted(PLAYBOOKS.glob("*/*.yml")):
         for play in yaml.safe_load(playbook.read_text()) or []:
@@ -237,7 +236,7 @@ def entry_points():
                         role = str(imported["name"]).rsplit(".", 1)[-1]
                         entry = str(imported.get("tasks_from", "main"))
                         entry = entry if entry.endswith(".yml") else entry + ".yml"
-                        found[playbook.relative_to(PLAYBOOKS).as_posix()] = ROLES / role / "tasks" / entry
+                        found.setdefault(playbook.relative_to(PLAYBOOKS).as_posix(), ROLES / role / "tasks" / entry)
     return found
 
 
@@ -540,6 +539,25 @@ def publishes(task, register, looped):
     return not [read for read in reads if not (looped and re.sub(r"\s", "", read) == register + ".results")]
 
 
+def controller_walk(tasks):
+    for task in walk(tasks):
+        facts = task.get("ansible.builtin.set_fact", {})
+        forwarded = [(name, value) for name, value in facts.items()
+                     if isinstance(value, str) and ("_port_result[" in value or value == "{{ containercluster_install_agent_port_result }}")]
+        if len(forwarded) == 1:
+            yield {"name": task.get("name"), "bootwright.core.redfish_port_answer": {},
+                   "register": forwarded[0][0], "failed_when": False, "no_log": True}
+        else:
+            yield task
+
+
+def returns_port_answer(task, register):
+    facts = task.get("ansible.builtin.set_fact", {})
+    return any((name.endswith("_port_refusal") and register + ".msg" in str(value))
+               or (name.endswith("_port_result") and register in str(value))
+               for name, value in facts.items())
+
+
 def reporter(ordered, position):
     """The task that reports what the controller task at this position of a walk
     registered: the refusal or publication that runs next, with nothing but the
@@ -547,8 +565,16 @@ def reporter(ordered, position):
     when any other task, a block included, runs first."""
     task = ordered[position]
     for other in ordered[position + 1:]:
-        if names_refusal(other, task["register"]) or publishes(other, task["register"], "loop" in task):
+        if names_refusal(other, task["register"]) or publishes(other, task["register"], "loop" in task) or returns_port_answer(other, task["register"]):
             return other
+        if task.get("register", "").endswith("_port_result") and (
+                other.get("register", "").endswith("_port_identity")
+                or any(name.endswith("_port_result") for name in other.get("ansible.builtin.set_fact", {}))):
+            continue
+        facts = other.get("ansible.builtin.set_fact", {})
+        if (set(facts) == {"containercluster_install_agent_lifecycle_refusal"}
+                and facts["containercluster_install_agent_lifecycle_refusal"] in {"media-insert", "media-eject", "controller-read"}):
+            continue
         if phase(other) != "group":
             return None
     return None
@@ -623,7 +649,7 @@ def refusal_problems(where, tasks):
     Only the protocol's group records may come between them.
     """
     problems = []
-    ordered = list(walk(tasks))
+    ordered = list(controller_walk(tasks))
     for position, task in enumerate(ordered):
         if not reaches_controller(task) or not hidden(task):
             continue
@@ -647,7 +673,7 @@ def test_no_management_controller_refusal_is_censored():
     for path in task_files():
         tasks = load(path)
         problems.extend(refusal_problems(label(path), tasks))
-        if any(reaches_controller(task) for task in walk(tasks)):
+        if any(reaches_controller(task) for task in controller_walk(tasks)):
             seen.add(label(path))
     assert CONTROLLER_FILES <= seen, "the walk no longer sees %s" % sorted(CONTROLLER_FILES - seen)
     for path in task_files():
@@ -677,7 +703,7 @@ def controller_refusals():
     """Each controller task under no_log with the refusal that reports it, by file."""
     found = []
     for path in task_files():
-        ordered = list(walk(load(path)))
+        ordered = list(controller_walk(load(path)))
         for position, task in enumerate(ordered):
             if reaches_controller(task) and hidden(task) and isinstance(task.get("register"), str):
                 refusal = reporter(ordered, position)

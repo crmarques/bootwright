@@ -26,3 +26,22 @@ machine_power_redfish_answers_as_pinned: >-
      and ((bootwright_machine_power_material.pinnedSerialBase64 | default('') | length == 0)
       or ((machine_power_redfish_identity.observation.serial | default('') | trim)
           == (bootwright_machine_power_material.pinnedSerialBase64 | b64decode | trim))) }}
+
+machine_power_redfish_state_read:
+  libvirt: bootwright.core.substrate_libvirt_machine
+  baremetal: bootwright.core.substrate_baremetal_machine
+
+machine_power_redfish_power:
+  libvirt: bootwright.core.substrate_libvirt_machine
+  baremetal: bootwright.core.substrate_baremetal_machine
+
+machine_power_redfish_port_result:
+  libvirt: substrate_libvirt_machine_port_result
+  baremetal: substrate_baremetal_machine_port_result
+
+machine_power_redfish_access:
+  endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
+  user: '{{ bootwright_machine_power_material.controllerUser }}'
+  password: '{{ bootwright_machine_power_material.controllerPassword }}'
+  ca: "{{ bootwright_machine_power_material.controllerCA | default('') }}"
+  verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'

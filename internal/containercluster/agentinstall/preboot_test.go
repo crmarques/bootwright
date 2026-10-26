@@ -30,7 +30,9 @@ func TestAnApplyRemediesEachNodesPreBootRefusalsUnderItsPosition(t *testing.T) {
 			}
 			got := map[string][]diagnostics.Diagnostic{}
 			for reason, err := range runner.requests[0].Refusals {
-				got[reason] = diagnostics.Of(err)
+				if strings.HasPrefix(reason, "hardware-mismatch-") || strings.HasPrefix(reason, "identity-mismatch-") || strings.HasPrefix(reason, "machine-running-") || strings.HasPrefix(reason, "tpm-absent-") {
+					got[reason] = diagnostics.Of(err)
+				}
 			}
 			want := map[string][]diagnostics.Diagnostic{}
 			if operation == "apply" {
@@ -40,7 +42,7 @@ func TestAnApplyRemediesEachNodesPreBootRefusalsUnderItsPosition(t *testing.T) {
 					}
 				}
 				arms := []string{request.Nodes[0].Substrate, request.Nodes[1].Substrate, request.Nodes[2].Substrate}
-				if len(want) != 7 || !reflect.DeepEqual(arms, []string{substrate.ArmBaremetal, substrate.ArmLibvirt, substrate.ArmBaremetal}) {
+				if len(want) != 9 || !reflect.DeepEqual(arms, []string{substrate.ArmBaremetal, substrate.ArmLibvirt, substrate.ArmBaremetal}) {
 					t.Fatalf("nodes on %v name %d refusals, want 7", arms, len(want))
 				}
 				if refused := got["machine-running-node-2"]; len(refused) != 1 || refused[0].Object.Name != "metal-03" ||

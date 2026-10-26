@@ -319,8 +319,8 @@ Two advisory locks guard the store, and neither is ever waited for:
 
 - the host-wide **root lock** on the verified, never-replaced root inode,
   shared for a read and exclusive for any command that may publish; and
-- a context's **lease**, an exclusive lock on that context's directory, taken
-  only while the exclusive root lock is held.
+- a context's **lease**, exclusive for mutation and shared for a bounded run,
+  acquired on that context's directory while the root lock is held.
 
 A media stage's own lock marks a live [acquisition](#media-acquisition) or the
 add adopting a retained stage, and guards only that stage and the record
@@ -328,13 +328,17 @@ retained beside it.
 
 | Root lock | Lease | Commands |
 | --- | --- | --- |
-| shared | none | Every read: `context list` and `current`, `plan`, `status`, `preflight controller`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, including the opening of each image `--checksums` then reads, the admission a `media add` or `media delete` without `--yes` reviews before its confirmation, the store check a `secret set` from standard input makes before it reads, SSH-trust and input reads, [bounded runs](cli/output.md#bounded-run-output), and the reads that precede `setup`, `apply` and `destroy`. |
+| shared | none | Every read: `context list` and `current`, `plan`, `status`, `preflight controller`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, including the opening of each image `--checksums` then reads, the admission a `media add` or `media delete` without `--yes` reviews before its confirmation, the store check a `secret set` from standard input makes before it reads, SSH-trust and input reads, and the reads that precede `setup`, `apply` and `destroy`. |
 | exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `setup` (which scopes no context), `media delete`, the admission and publication of `media add`, and the SSH trust that `machine trust` or a confirmed first use records. |
 | none | none | The [acquisition](#media-acquisition) of `media add` between those two holds: its copy or download, or its re-read of a stage it adopts, its digest verification, and the record it retains beside a stage whose publication met another command's lock; the full read of each image by `media list --checksums`, through the descriptor its shared hold opened; the confirmation prompt of `media add` and `media delete`; and the [read of standard input](secrets.md#acquisition-and-commands) by `secret set --value-stdin` or `--password-stdin`, including its terminal prompt. |
-| exclusive | held | `context init`; a `context update` that imports input; `context delete` of a ready context; `secret set` (from standard input, only to write what it read), `generate` and `delete`, `secret encryption init` and `rotate`, and the Secret binding `apply` and `destroy` take before they execute; and the execution of `apply` and `destroy`. |
+| exclusive | held | `context init`; a `context update` that imports input; `context delete` of a ready context; `secret set` (from standard input, only to write what it read), `generate` and `delete`, `secret encryption init` and `rotate`, and the Secret binding `apply` and `destroy` take before they execute; and the short shared-state publications of `apply` and `destroy`. |
+| none during effects | exclusive | The execution of `apply` and `destroy`, between short root transactions. |
+| shared during admission, none during effects | shared | [Bounded runs](cli/output.md#bounded-run-output), including Machine power; their lease excludes lifecycle mutation of the same context. |
 
 A read holds its lock until all stored input or secret-session files have been
 consumed, and a mutator holds its locks until it finishes, except that
+lifecycle effects and bounded runs release the root lock after admission
+while retaining their context lease;
 `media add` releases the root lock while it acquires,
 `media list --checksums` releases its shared hold before it reads any image
 in full, neither `media add`
@@ -370,16 +374,19 @@ reservations, and the deletion of its record, so another damaged context still
 refuses, named. Isolating a damaged context from the rest of the store is
 [B325](milestones/backlog.md#b325).
 
-A lifecycle operation holds the exclusive root lock and the selected context's
-lease for its entire execution, because its host reservations, controller
-evidence and operation records must stay coherent while its effects run. Every
-other store command, a read included, therefore refuses while one runs; only
-the lock-free [acquisition](#media-acquisition) of a `media add`, or a media
-confirmation, admitted earlier continues, and each refuses at its next
-exclusive hold, a pinned `media add` keeping its stage for the command's
-repetition.
-Narrowing that boundary to the lease alone is
-[B18](milestones/m1.md#b18). Within it, Workspace
+A lifecycle operation snapshots its selected context and controller under the
+exclusive root lock, then retains the context's exclusive lease throughout its
+effects. Readers and other contexts may proceed. Context identity, inputs and
+mutation evidence remain scoped to that lease; short root transactions refresh
+the registry and shared controller state before reservation, binding, secret
+or tool publication. Another context's bindings and reservations are preserved;
+changes to this operation's own binding, reservations, host identity or retained
+dependency sources refuse. Bundle reads take short shared root locks and retain
+shared directory leases; publication holds an exclusive bundle lease until
+sealing. Retirement refuses while any reader holds the bundle, and a later
+retry completes it. Bounded runs retain a shared context lease, excluding a
+lifecycle mutation of that context while allowing independent contexts to run.
+Within this boundary, Workspace
 supplies the operation area, the mutation-evidence replacement primitive and
 the reservation publication; Reconciliation owns what they contain and when
 they advance. It also lends a transaction-scoped secrets area, re-proving the
@@ -437,9 +444,10 @@ removes a directory only once it is empty, and a record only while it is the
 file that held exactly the bytes its caller expects, and each removal is
 durable when it returns; an entry already absent counts as removed.
 
-Every writer of a stage in the root, the controller directory or a context's
-`state/` subtree holds the root lock for its whole command, so under the
-exclusive root lock no stage there has a live writer: only a killed process,
+Registry and controller record writers hold the exclusive root lock during
+publication; context `state/` writers hold the context's exclusive lease.
+Collection takes the corresponding lock, so no collected stage has a live
+writer: only a killed process,
 or a failure whose directory no longer verified, leaves one. Every command
 that opens a registry transaction (`context init`, `use`, `update` and
 `delete`, `setup`, and the execution of `apply` and `destroy`) therefore first
@@ -507,6 +515,15 @@ Secrets limits additionally bound their trees.
 
 | Operator-visible bound | Value | Go constant |
 | --- | --- | --- |
+| Blocks in one lifecycle plan | 256 | `MaxBlocks` in `internal/reconciliation/plan.go` |
+| Groups in one lifecycle block | 32 | `MaxGroups` in `internal/reconciliation/plan.go` |
+| Machines in one lifecycle group | 512 | `MaxMachines` in `internal/reconciliation/plan.go` |
+| Impacts in one lifecycle block | 128 | `MaxImpacts` in `internal/reconciliation/plan.go` |
+| Exclusive resources in one lifecycle block | 8 | `MaxExclusive` in `internal/reconciliation/plan.go` |
+| Characters in a lifecycle identifier | 63 | `maxIdentifier` in `internal/reconciliation/plan.go` |
+| Bytes in one canonical lifecycle request | 256 KiB | `MaxRequestBytes` in `internal/reconciliation/plan.go` |
+| Canonical request bytes in one lifecycle plan | 4 MiB | `MaxPlanRequestBytes` in `internal/reconciliation/plan.go` |
+| Encoded bytes in one stored lifecycle plan, including metadata | 6 MiB | `MaxPlanBytes` in `internal/reconciliation/operationstore/records.go` |
 | Active or reserved context names | 4096 | `maxContexts` in `internal/workspace/contextfs/store.go` |
 | Revisions per context | 4096 | `maxRevisions` in `internal/workspace/contextfs/store.go` |
 | Retained [controller bundle namespaces](contexts/controller-record.md#bounds), the tool areas | 16 | `maxControllerBundles` in `internal/workspace/contextfs/controller_records.go` |

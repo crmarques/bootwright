@@ -116,7 +116,11 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if outputs != nil {
 		values[request.Variable+"_output"] = outputs
 	}
-	if err := writeJSON(job, inventoryName, inventory(request.Placement, request.Launch.Shim, paths)); err != nil {
+	phaseHosts, err := phaseInventory(request, paths)
+	if err != nil {
+		return lifecycle.RunResult{}, err
+	}
+	if err := writeJSON(job, inventoryName, phaseHosts); err != nil {
 		return lifecycle.RunResult{}, err
 	}
 	if err := writeVariables(job, values); err != nil {
@@ -275,7 +279,7 @@ func (r Runner) execute(ctx context.Context, job, scratch string, lock *os.File,
 		Automation: automation.path, AutomationLock: automation.lock, Playbook: playbook,
 		Inventory: filepath.Join(job, inventoryName), Variables: filepath.Join(job, requestName),
 		LocalTemp: filepath.Join(job, localTemp), RemoteTemp: filepath.Join(job, remoteTemp), Scratch: scratch,
-		Lifecycle: true, Lock: lock, Output: request.Output, StopOnBreach: true,
+		Forks: request.Parallelism, Lifecycle: true, Lock: lock, Output: request.Output, StopOnBreach: true,
 		Admission: adapterprotocol.Lifecycle, Command: r.command,
 	}, judge)
 	return judge.result(ctx, ending)

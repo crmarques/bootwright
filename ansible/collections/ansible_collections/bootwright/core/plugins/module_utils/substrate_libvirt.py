@@ -178,6 +178,7 @@ def same_address(element, host, prefix):
         return (
             ipaddress.ip_address(element.get("address") or "") == ipaddress.ip_address(host)
             and int(element.get("prefix") or "") == int(prefix)
+            and element.get("family", "ipv4") == ("ipv6" if ipaddress.ip_address(host).version == 6 else "ipv4")
         )
     except ValueError:
         return False
@@ -198,6 +199,9 @@ def carries_definition(root, network, context):
     if bridge is None or bridge.get("name") != network.get("bridge"):
         return False
     if any(bridge.get(name) != value for name, value in NETWORK_BRIDGE.items()):
+        return False
+    mtu = root.find("./mtu")
+    if network.get("mtu") and (mtu is None or mtu.get("size") != str(network["mtu"])):
         return False
     forward = root.find("./forward")
     if (forward.get("mode") if forward is not None else "none") != str(network.get("forward") or "none"):
@@ -347,6 +351,15 @@ def bridge_present(name):
     torvalds/linux.git), which no other kind of interface carries.
     """
     return os.path.isdir("/sys/class/net/" + str(name) + "/bridge")
+
+
+def bridge_mtu(name):
+    """Read the kernel's bridge MTU; an unreadable value proves nothing."""
+    try:
+        with open("/sys/class/net/" + str(name) + "/mtu", encoding="ascii") as source:
+            return int(source.read(32).strip())
+    except (OSError, ValueError):
+        return 0
 
 
 def pool_target(runner, uri, name):
@@ -627,6 +640,8 @@ def observe_host(runner, request):
     context = str((request.get("identity") or {}).get("context") or "")
     for network in request.get("networks") or []:
         entry = {"name": network["name"], "managed": bool(network["managed"]), "bridge": bridge_present(network["bridge"])}
+        if network.get("mtu"):
+            entry["mtu"] = bridge_mtu(network["bridge"])
         entry["answered"], entry["definition"], entry["state"], entry["owned"], entry["uuid"] = False, False, "", False, ""
         entry["autostart"] = False
         if entry["managed"] and answers:

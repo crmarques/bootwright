@@ -1,0 +1,85 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: networks
+
+spec:
+  distribution:
+    type: openshift
+
+    release:
+      version: 4.21.15
+
+  install:
+    method: agent
+    mode: connected
+
+    endpoints:
+      api:
+        address: 198.51.100.10
+
+        source:
+          type: openshift
+
+      ingress:
+        address: 198.51.100.11
+
+        source:
+          type: openshift
+
+    agent:
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+
+    pullSecretRef: openshift-pull-secret
+
+    nodeSSH:
+      keyPairRef: networks-cluster-admin-ssh-key
+
+    ntp:
+      - serverRef: lab-ntp
+        endpointRef: ip
+
+  nodes:
+    - name: master-0
+      role: master
+      machineRef: networks-01
+
+    - name: master-1
+      role: master
+      machineRef: networks-02
+
+    - name: master-2
+      role: master
+      machineRef: networks-03
+
+    - name: worker-0
+      role: worker
+      machineRef: networks-04
+
+    - name: worker-1
+      role: worker
+      machineRef: networks-05
+
+  networking:
+    ovnKubernetesConfig:
+      gatewayConfig:
+        routingViaHost: true
+        ipForwarding: Global
+
+    secondaryNetworks:
+      - name: workloads
+        topology: Localnet
+
+        uplink:
+          bridge: br-workloads
+          interface: enp2s0
+
+        ipam:
+          mode: Disabled
+
+        namespaceSelector:
+          matchLabels:
+            network.example.test/workloads: enabled

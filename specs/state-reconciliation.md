@@ -763,11 +763,6 @@ removal's fit the bytes it keeps free; the
 [operator-visible bounds](contexts.md#storage-locking-and-publication) list
 them. A plan past any bound refuses before registration, naming the bound.
 
-Not yet met: impacts are bounded at 64 and requests at 64 KiB, with no plan
-total and no specified bound, and the operator-visible bounds table of
-`contexts.md` lists none of these bounds; tracked as
-[B715](milestones/m3.md#b715).
-
 A definition may name host resources its block *will not share* while it runs.
 Two blocks that name one resource never run at the same time, however
 independent the graph says they are, because the graph orders what one block

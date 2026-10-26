@@ -351,3 +351,40 @@ func TestOpenShiftToolRequestsRequireTheSharedExactReleaseGrammar(t *testing.T) 
 		}
 	}
 }
+
+func TestFIPSInstallerUsesVerifiedExactReleaseArchiveAndRetainedIdentity(t *testing.T) {
+	for _, mirror := range []string{"", "https://mirror.example.test/tools"} {
+		request := controller.ToolRequest{Kind: "openshift-install-fips", Version: "4.21.10", Compatibility: "openshift", Mirror: mirror}
+		base := "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.21.10/"
+		if mirror != "" {
+			base = mirror + "/4.21.10/"
+		}
+		digest := strings.Repeat("c", 64)
+		resolver := &ToolCatalog{metadata: func(_ context.Context, method, endpoint string, _ int64, _ prerequisites.SetupEgress) (toolMetadata, error) {
+			if method == http.MethodHead && endpoint == "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.21.10/openshift-install-rhel9-amd64.tar.gz" {
+				return toolMetadata{size: 4096}, nil
+			}
+			if method == http.MethodGet && endpoint == "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.21.10/sha256sum.txt" {
+				return toolMetadata{data: []byte(digest + "  openshift-install-rhel9-amd64.tar.gz\n")}, nil
+			}
+			t.Fatalf("unexpected request %s %s", method, endpoint)
+			return toolMetadata{}, nil
+		}}
+		resolved, err := resolver.Resolve(t.Context(), []controller.ToolRequest{request}, prerequisites.SetupEgress{})
+		if err != nil || len(resolved) != 1 {
+			t.Fatal(resolved, err)
+		}
+		if resolved[0].Source.URL != base+"openshift-install-rhel9-amd64.tar.gz" || resolved[0].Source.SHA256 != digest || len(resolved[0].Files) != 1 || resolved[0].Files[0].Member != "openshift-install-fips" {
+			t.Fatal(resolved)
+		}
+		kept, complete, err := (&ToolCatalog{}).Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{resolved[0].Source})
+		if err != nil || !complete || !reflect.DeepEqual(kept, resolved) {
+			t.Fatal(kept, complete, err)
+		}
+	}
+	for _, request := range []controller.ToolRequest{{Kind: "openshift-install-fips", Version: "latest", Compatibility: "openshift"}, {Kind: "openshift-install-fips", Version: "4.21.10", Compatibility: "okd"}} {
+		if _, err := toolRequests([]controller.ToolRequest{request}, stagedMirror); err == nil {
+			t.Fatal("unqualified FIPS acquisition admitted", request)
+		}
+	}
+}

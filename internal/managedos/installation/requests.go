@@ -218,7 +218,7 @@ func (r Request) fips() bool { return slices.Contains(r.InstallerArguments, fips
 // Deadline bounds every run of this request: its budgets back to back, and
 // the margin for everything else an apply does.
 func (r Request) Deadline() time.Duration {
-	deadline := r.Budgets.total() + time.Duration(r.Network.CheckpointSeconds)*time.Second + networkRollbackGrace + mediaMargin
+	deadline := r.Budgets.total() + time.Duration(r.Network.CheckpointSeconds)*time.Second + networkRollbackGrace + machineMediaMargin(r.Target.Substrate)
 	if r.Registration != nil {
 		deadline += registrationBound
 	}

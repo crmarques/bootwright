@@ -1,11 +1,14 @@
 implementation: cluster-install-agent-v1
-content-digest: 372d784b0b67afa9412c5a10dbf33e4bb142de571104f9a9afc2b956974db06f
+content-digest: 7a7e35e4139dd28fd0a14ecdcd3412b34e8281e55418595444e102f1fe337fe4
 automation-formats: none
 request-schema:
   budgets struct agentinstall.InstallBudgets
   budgets.bootSeconds int
   budgets.bootstrapSeconds int
+  budgets.fanOut int
   budgets.installSeconds int
+  budgets.roundMarginSeconds int
+  deliveryKind string
   endpoints []struct agentinstall.Endpoint
   endpoints[].address string
   endpoints[].name string
@@ -16,6 +19,7 @@ request-schema:
   image struct agentinstall.Publication
   image.path string
   image.url string
+  imageIdentity string omitempty
   nodes []struct agentinstall.Node
   nodes[].address string
   nodes[].controller struct agentinstall.Controller
@@ -27,6 +31,7 @@ request-schema:
   nodes[].controller.virtualMedia.removeCertificate bool
   nodes[].controller.virtualMedia.restoreVerification bool
   nodes[].controller.virtualMedia.trust string
+  nodes[].controllerKind string
   nodes[].hardware *struct agentinstall.Hardware omitempty
   nodes[].hardware.interfaces []struct agentinstall.Interface
   nodes[].hardware.interfaces[].macAddress string
@@ -34,6 +39,8 @@ request-schema:
   nodes[].machine string
   nodes[].name string
   nodes[].physical bool
+  nodes[].requireTPM bool omitempty
+  nodes[].stateReadSeconds int
   nodes[].substrate string
   placement struct machine.Placement
   placement.address string omitempty

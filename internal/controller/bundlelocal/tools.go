@@ -164,8 +164,8 @@ func toolRequests(requests []controller.ToolRequest, mirrorAdmitted func(string)
 			if request.Compatibility != "" {
 				return nil, bundleFailure("generic tool request has unqualified compatibility metadata")
 			}
-		case "openshift-clients", "openshift-install":
-			if !api.ValidLexical("cluster-release", request.Version) || request.Compatibility != "openshift" && request.Compatibility != "okd" {
+		case "openshift-clients", "openshift-install", "openshift-install-fips":
+			if !api.ValidLexical("cluster-release", request.Version) || request.Compatibility != "openshift" && request.Compatibility != "okd" || request.Kind == "openshift-install-fips" && request.Compatibility != "openshift" {
 				return nil, bundleFailure("installer and client tools require the exact target distribution release")
 			}
 		case "virtctl":
@@ -250,12 +250,15 @@ func sourceURL(request controller.ToolRequest, version string) (string, string, 
 			return "", "", bundleFailure("virtctl source must identify the upstream KubeVirt publisher")
 		}
 		base, filename = "https://github.com/kubevirt/kubevirt/releases/download/"+withV(version), "virtctl-"+withV(version)+"-linux-amd64"
-	case "openshift-clients", "openshift-install":
+	case "openshift-clients", "openshift-install", "openshift-install-fips":
 		name := "openshift-install"
 		if request.Kind == "openshift-clients" {
 			name = "openshift-client"
 		}
 		filename = name + "-linux-" + version + ".tar.gz"
+		if request.Kind == "openshift-install-fips" {
+			filename = "openshift-install-rhel9-amd64.tar.gz"
+		}
 		base = "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/" + version
 		if request.Compatibility == "okd" {
 			base = "https://github.com/okd-project/okd/releases/download/" + version
@@ -406,7 +409,7 @@ func (c *ToolCatalog) resolveVersion(ctx context.Context, request controller.Too
 		repository = "vmware/govmomi"
 	case "virtctl":
 		repository = "kubevirt/kubevirt"
-	case "openshift-clients", "openshift-install":
+	case "openshift-clients", "openshift-install", "openshift-install-fips":
 		if request.Compatibility == "okd" {
 			repository = okdPrimaryRepository
 		}
@@ -451,7 +454,7 @@ func (c *ToolCatalog) publisherChecksum(ctx context.Context, kind, version, publ
 		checksumURL = publisher + ".sha256sum"
 	case "kubectl":
 		checksumURL = publisher + ".sha256"
-	case "openshift-clients", "openshift-install":
+	case "openshift-clients", "openshift-install", "openshift-install-fips":
 		checksumURL = publisher[:strings.LastIndex(publisher, "/")+1] + "sha256sum.txt"
 	case "govc":
 		checksumURL = "https://github.com/vmware/govmomi/releases/download/" + withV(version) + "/checksums.txt"

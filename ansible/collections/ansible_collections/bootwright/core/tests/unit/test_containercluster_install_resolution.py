@@ -27,6 +27,7 @@ tests/unit/plugins/modules, so these checks live here.
 from __future__ import annotations
 
 import pathlib
+from ansible_collections.bootwright.core.tests.unit.install_phase_tasks import apply_tasks
 import re
 
 import pytest
@@ -256,10 +257,9 @@ def test_every_failing_name_is_named_in_the_order_resolved():
 
 
 def test_the_refusal_is_proved_before_any_node_is_booted():
-    apply = [task for task in LOADER.load_from_file(str(ROLE / "tasks" / "apply.yml"), trusted_as_template=True)
-             if isinstance(task, dict)]
+    apply = apply_tasks(LOADER, ROLE)
     resolved = [index for index, task in enumerate(apply) if task.get("ansible.builtin.import_tasks") == "resolve.yml"]
-    booted = [index for index, task in enumerate(apply) if task.get("ansible.builtin.include_tasks") == "boot.yml"]
+    booted = [index for index, task in enumerate(apply) if task.get("ansible.builtin.import_tasks") == "boot.yml"]
     assert len(resolved) == 1 and len(booted) == 1
     assert resolved[0] < booted[0]
     assert not {"when", "failed_when", "ignore_errors"} & set(apply[resolved[0]])

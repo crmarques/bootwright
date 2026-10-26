@@ -48,6 +48,10 @@ options:
       - Empty verifies against the system trust store. Refused beside I(verify=false).
     type: str
     default: ""
+  require_tpm:
+    description: Require a positive read of an enabled TPM 2.0 before installation.
+    type: bool
+    default: false
 author:
   - Bootwright contributors (@crmarques)
 """
@@ -61,6 +65,10 @@ EXAMPLES = r"""
 """
 
 RETURN = r"""
+tpm_usable:
+  description: Whether the requested TPM check positively proved an enabled TPM 2.0.
+  returned: success
+  type: bool
 observation:
   description: The identity, addresses and power state the controller reported.
   returned: always
@@ -79,6 +87,7 @@ def main():
             "password": {"type": "str", "required": True, "no_log": True},
             "verify": {"type": "bool", "default": True},
             "ca_data": {"type": "str", "default": ""},
+            "require_tpm": {"type": "bool", "default": False},
         },
         supports_check_mode=True,
     )
@@ -88,10 +97,20 @@ def main():
             verify=bool(module.params["verify"]), ca_data=module.params["ca_data"] or "",
         )
         observation = observe(client)
+        tpm = usable_tpm(client.system()) if module.params.get("require_tpm", False) else False
     except redfish_control.ControllerError as failure:
         module.fail_json(msg="the management controller could not be inspected: %s" % failure)
     else:
-        module.exit_json(changed=False, observation=observation)
+        module.exit_json(changed=False, observation=observation, tpm_usable=tpm)
+
+
+def usable_tpm(system):
+    """Only a positive enabled TPM 2.0 declaration proves installer suitability."""
+    modules = system.get("TrustedModules")
+    return isinstance(modules, list) and any(
+        isinstance(item, dict) and item.get("InterfaceType") == "TPM2_0"
+        and isinstance(item.get("Status"), dict) and item["Status"].get("State") == "Enabled"
+        for item in modules)
 
 
 def observe(client):

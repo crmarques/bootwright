@@ -149,33 +149,26 @@ func TestInstallPlanWaitsForItsMediaAndItsNodes(t *testing.T) {
 	}
 }
 
-// Installing a cluster of virtual nodes acknowledges no loss, because each
-// node's disks are created by its realization and removed by its inverse.
-// Installing onto operator-owned hardware would be the moment its content is
-// lost, and that installation is not yet qualified, so a cluster of physical
-// nodes plans nothing for either verb.
-func TestAVirtualInstallationConsumesNothingAndAPhysicalOneRefuses(t *testing.T) {
+// Physical installation consumes authorization to erase each node's existing
+// contents. Removal only releases media and retains the installed disks.
+func TestPhysicalInstallationConsumesAuthorizationAndRemovalRetainsDisks(t *testing.T) {
 	virtual := installPlan(t, singleNodeCatalog(), reconciliation.Apply)
 	if len(virtual.Definitions[0].Consumes) != 0 {
-		t.Fatalf("a virtual cluster consumes %v", virtual.Definitions[0].Consumes)
+		t.Fatalf("virtual consumes %v", virtual.Definitions[0].Consumes)
 	}
-	// A removal takes back the media it opened and nothing the machines hold,
-	// so it acknowledges nothing of its own.
-	removal := installPlan(t, singleNodeCatalog(), reconciliation.Destroy)
-	if len(removal.Definitions[0].Consumes) != 0 {
-		t.Fatalf("a removal consumes %v", removal.Definitions[0].Consumes)
+	physical := installPlan(t, physicalCatalog(), reconciliation.Apply)
+	if len(physical.Definitions[0].Consumes) != 1 {
+		t.Fatalf("physical consumes %v", physical.Definitions[0].Consumes)
 	}
-	catalog := physicalCatalog()
-	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
-		_, err := NewInstall(nil).Plan(context.Background(), lifecycle.PlanInput{
-			Verb: verb, State: compilation.NewState(catalog, catalog, nil),
-			Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext},
-		})
-		if err == nil {
-			t.Fatalf("a physical cluster planned a %s", verb)
+	for _, catalog := range []api.Catalog{singleNodeCatalog(), physicalCatalog()} {
+		removal := installPlan(t, catalog, reconciliation.Destroy)
+		if len(removal.Definitions[0].Consumes) != 0 {
+			t.Fatalf("removal consumes %v", removal.Definitions[0].Consumes)
 		}
-		if code := refusalCode(t, err); code != "lifecycle.unsupported" {
-			t.Fatalf("refusal = %s", code)
+		for _, impact := range removal.Definitions[0].Impacts {
+			if !strings.HasPrefix(impact, "eject-") {
+				t.Fatalf("retaining destroy: %s", impact)
+			}
 		}
 	}
 }
@@ -270,9 +263,10 @@ func TestAbsentClientsRefuseBeforeBooting(t *testing.T) {
 // in its frozen request. Its apply refuses before the adapter boots anything,
 // naming the node, while its destroy and its observation still run, because
 // they boot nothing and are how the operator leaves that operation.
-func TestAFrozenPhysicalNodeRefusesOnlyItsApply(t *testing.T) {
+func TestAnUnsafeFrozenPhysicalNodeRefusesOnlyItsApply(t *testing.T) {
 	execution, request := installExecution(t, singleNodeCatalog(), testDigest)
 	request.Nodes[0].Physical = true
+	request.Nodes[0].Controller.TLSVerify = false
 	canonical, err := request.Canonical()
 	if err != nil {
 		t.Fatal(err)
@@ -288,10 +282,10 @@ func TestAFrozenPhysicalNodeRefusesOnlyItsApply(t *testing.T) {
 	}
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
-		reported[0].Message != "this operation froze Machine/sno-01 as a physical node of ContainerCluster/sno, which this executable refuses" {
+		reported[0].Message != "Machine/sno-01 of ContainerCluster/sno: a physical node's private boot image requires a controller connection that verifies its certificate" {
 		t.Fatalf("refusal = %#v", reported)
 	}
-	if reported[0].Remediation != "run bootwright destroy --context lab-b to end this operation, then plan it again under this executable" {
+	if reported[0].Remediation != "run bootwright destroy --context lab-b to end this operation, then correct the node's transport trust and plan it again" {
 		t.Fatalf("remediation = %q", reported[0].Remediation)
 	}
 	if len(runner.requests) != 0 {

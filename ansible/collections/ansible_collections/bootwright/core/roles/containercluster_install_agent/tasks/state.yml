@@ -2,27 +2,22 @@
 - name: Read the cluster completion state
   ansible.builtin.import_tasks: cluster_state.yml
 
-- name: Read each node through its own management controller
-  bootwright.core.redfish_system_read:
-    endpoint: '{{ item.controller.endpoint }}'
-    user: >-
-      {{ lookup("ansible.builtin.file",
-         bootwright_cluster_install_material['controllerUserNode' ~ loop_index]) }}
-    password: >-
-      {{ lookup("ansible.builtin.file",
-         bootwright_cluster_install_material['controllerPasswordNode' ~ loop_index]) }}
-    verify: '{{ item.controller.tlsVerify }}'
-    ca_data: >-
-      {{ lookup("ansible.builtin.file", bootwright_cluster_install_material['controllerCANode' ~ loop_index])
-         if item.controller.trustBundleRef | default('') else omit }}
-    media: true
+- name: Start the controller observations
+  ansible.builtin.set_fact:
+    containercluster_install_agent_controllers:
+      results: []
+  no_log: true
+
+- name: Read every node through its substrate port
+  ansible.builtin.include_tasks: state_node_serial.yml
   loop: '{{ bootwright_cluster_install_request.nodes }}'
   loop_control:
-    label: '{{ item.machine }}'
-    index_var: loop_index
-  register: containercluster_install_agent_controllers
-  failed_when: false
-  no_log: true
+    loop_var: containercluster_install_agent_node
+    index_var: containercluster_install_agent_index
+  vars:
+    containercluster_install_agent_user: "{{ bootwright_cluster_install_material['controllerUserNode' ~ containercluster_install_agent_index] }}"
+    containercluster_install_agent_password: "{{ bootwright_cluster_install_material['controllerPasswordNode' ~ containercluster_install_agent_index] }}"
+    containercluster_install_agent_ca: "{{ bootwright_cluster_install_material['controllerCANode' ~ containercluster_install_agent_index] | default('') }}"
 
 # ansible-core keeps nothing of a failure under no_log but that it failed, so
 # each controller's own refusal is reported here, where no credential is.

@@ -257,3 +257,43 @@ managedos_install_anaconda_network_recovery: >-
   ~ ' off from its management controller so the next apply installs it again')
   if bootwright_os_install_request.target.substrate == 'baremetal'
   else 'run bootwright destroy, which erases the Machines this context installed' }}
+
+# Fixed machine-port bindings; desired state selects only an arm key.
+managedos_install_anaconda_state_read:
+  libvirt: bootwright.core.substrate_libvirt_machine
+  baremetal: bootwright.core.substrate_baremetal_machine
+
+managedos_install_anaconda_media_insert:
+  libvirt: bootwright.core.substrate_libvirt_machine
+  baremetal: bootwright.core.substrate_baremetal_machine
+
+managedos_install_anaconda_media_eject:
+  libvirt: bootwright.core.substrate_libvirt_machine
+  baremetal: bootwright.core.substrate_baremetal_machine
+
+managedos_install_anaconda_port_result:
+  libvirt: substrate_libvirt_machine_port_result
+  baremetal: substrate_baremetal_machine_port_result
+
+managedos_install_anaconda_port_access:
+  endpoint: '{{ managedos_install_anaconda_endpoint }}'
+  user: '{{ bootwright_os_install_material.controllerUser }}'
+  password: '{{ bootwright_os_install_material.controllerPassword }}'
+  ca: '{{ managedos_install_anaconda_controller_ca }}'
+  verify: '{{ managedos_install_anaconda_verify }}'
+
+managedos_install_anaconda_pre_boot:
+  libvirt: bootwright.core.substrate_libvirt_machine
+  baremetal: bootwright.core.substrate_baremetal_machine
+
+managedos_install_anaconda_boot_media_bindings:
+  libvirt: bootwright.core.substrate_libvirt_machine
+  baremetal: bootwright.core.substrate_baremetal_machine
+
+managedos_install_anaconda_boot_disk:
+  libvirt: bootwright.core.substrate_libvirt_machine
+  baremetal: bootwright.core.substrate_baremetal_machine
+
+managedos_install_anaconda_identity_read:
+  libvirt: bootwright.core.substrate_libvirt_machine
+  baremetal: bootwright.core.substrate_baremetal_machine

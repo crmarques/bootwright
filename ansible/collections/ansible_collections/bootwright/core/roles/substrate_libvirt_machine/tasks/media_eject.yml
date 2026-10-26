@@ -1,0 +1,29 @@
+---
+- name: Clear the previous machine port answer
+  ansible.builtin.set_fact:
+    substrate_libvirt_machine_port_refusal: ''
+  no_log: true
+
+- name: Release media and settle its trust
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_machine_port.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_machine_port.user) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_machine_port.password) }}'
+    verify: '{{ bootwright_machine_port.verify }}'
+    ca_data: >-
+      {{ lookup('ansible.builtin.file', bootwright_machine_port.ca)
+         if bootwright_machine_port.ca | default('') | length > 0 else '' }}
+    operation: eject
+    restore_verification: '{{ bootwright_machine_port.restore_verification | default(false) }}'
+    remove_certificate: '{{ bootwright_machine_port.remove_certificate | default(false) }}'
+    certificate: >-
+      {{ lookup('ansible.builtin.file', bootwright_machine_port.certificate)
+         if bootwright_machine_port.certificate | default('') | length > 0 else '' }}
+  register: substrate_libvirt_machine_port_result
+  failed_when: false
+  no_log: true
+
+- name: Publish the machine port refusal
+  ansible.builtin.set_fact:
+    substrate_libvirt_machine_port_refusal: '{{ substrate_libvirt_machine_port_result.msg | default("") }}'
+  no_log: true

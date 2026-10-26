@@ -63,8 +63,12 @@ def indexed(predicate, description):
     return one([index for index, task in enumerate(tasks()) if predicate(task)], description)
 
 
+def is_identity_read(task):
+    return (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "state_read" and "inspect" in str(task.get("vars", {}))
+
+
 def reading():
-    return tasks()[indexed(lambda task: INSPECT in task, "read the reported identity")]
+    return tasks()[indexed(is_identity_read, "read the reported identity")]
 
 
 def compares(task):
@@ -129,26 +133,29 @@ def accepts(variables):
 
 def test_the_identity_is_read_and_compared_before_any_power_request():
     loaded = tasks()
-    read = indexed(lambda task: INSPECT in task, "read the reported identity")
+    read = indexed(is_identity_read, "read the reported identity")
     stopped = indexed(lambda task: ASSERT in task and IDENTITY + ".msg" in json.dumps(task[ASSERT]),
                       "stop at a read the controller did not answer")
     compared = indexed(compares, "compare the pin")
-    before = indexed(lambda task: task.get("register") == "machine_power_redfish_before", "read the power state")
+    before = indexed(lambda task: "machine_power_redfish_before" in task.get("ansible.builtin.set_fact", {}), "read the power state")
     includes = [index for index, task in enumerate(loaded) if any(action in task for action in INCLUDES)]
     assert len(includes) == 2, "the walk no longer sees both power task files included"
     assert before < read < stopped < compared < min(includes)
-    assert loaded[read]["register"] == IDENTITY and loaded[read]["no_log"] is True
-    arguments = loaded[read][INSPECT]
-    assert (arguments["endpoint"], arguments["verify"]) == (
-        "{{ bootwright_machine_power_request.controller.endpoint }}",
-        "{{ bootwright_machine_power_request.controller.tlsVerify }}")
+    arguments = loaded[read]["vars"]["bootwright_machine_port"]
+    assert "machine_power_redfish_access" in arguments and "'inspect': true" in arguments
+    retained = loaded[read + 1]
+    assert IDENTITY in retained["ansible.builtin.set_fact"] and retained["no_log"] is True
+    assert retained["when"] == loaded[read]["when"]
     assert loaded[compared][ASSERT]["quiet"] is True
     assert "no_log" not in loaded[compared]
     assert loaded[read]["when"] == loaded[compared]["when"]
     # The read tolerates its own failure only so that the controller's message
     # reaches the output uncensored: the step after it refuses there, so a read
     # that failed is never compared as an empty identity.
-    assert loaded[read]["failed_when"] is False and "ignore_errors" not in loaded[read]
+    native = LOADER.load_from_file(str(ROLE.parent / "substrate_baremetal_machine/tasks/state_read.yml"))
+    inspect = one([task for task in native if INSPECT in task], "inspect via state_read")
+    assert inspect["failed_when"] is False and inspect["no_log"] is True
+    assert "ignore_errors" not in loaded[read]
     assert loaded[stopped][ASSERT]["that"] == [IDENTITY + ".msg is not defined"]
     assert not {"failed_when", "ignore_errors", "no_log", "when"} & set(loaded[stopped])
     assert not {"failed_when", "ignore_errors"} & set(loaded[compared])
@@ -206,7 +213,7 @@ def test_the_runner_is_told_of_the_refusal_before_the_run_fails():
     read the controller did not answer stops the run first, so its empty
     identity is never named as another system."""
     loaded = tasks()
-    read = indexed(lambda task: INSPECT in task, "read the reported identity")
+    read = indexed(is_identity_read, "read the reported identity")
     stopped = indexed(lambda task: ASSERT in task and IDENTITY + ".msg" in json.dumps(task[ASSERT]),
                       "stop at a read the controller did not answer")
     named = indexed(lambda task: (task.get(PROTOCOL) or {}).get("phase") == "refused", "name the refusal")

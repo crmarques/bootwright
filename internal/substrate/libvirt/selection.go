@@ -110,6 +110,9 @@ func networksFor(provider api.Object, contextName string) ([]Network, error) {
 			return nil, refusal("lifecycle.state", "the attachment name is not a safe host identifier", "rename the "+name+" attachment")
 		}
 		network := Network{Bridge: arm.Get("bridge").Text(), Name: substrate.NetworkName(contextName, name)}
+		if mtu, ok := arm.Get("mtu").Int64(); ok {
+			network.MTU = int(mtu)
+		}
 		if network.Bridge == "" {
 			return nil, refusal("api.required", "a libvirt attachment declares no bridge", "set networkAttachments[].libvirt.bridge")
 		}
@@ -248,28 +251,36 @@ func disksFor(profile api.Value, identity, contextName, machine string) ([]Disk,
 	return disks, nil
 }
 
-// interfacesFor wires every effective physical interface to the one attachment
-// the Machine selects, because that is what the attachment reference means.
+// interfacesFor preserves the declared NIC order and resolves each selected
+// attachment independently. Admission proves an authored map covers all NICs.
 func interfacesFor(catalog api.Catalog, provider, machine api.Object, contextName string) ([]Interface, error) {
 	network := machine.Spec().Get("network")
-	reference := network.Get("attachmentRef").Text()
-	attachment, found := findNamed(provider.Spec().Get("networkAttachments"), "name", reference)
-	if !found {
-		return nil, refusal("api.reference", "the Machine's attachment does not resolve on its provider", "correct spec.network.attachmentRef on "+machine.Identity())
-	}
-	bridge := attachment.Get("libvirt", "bridge").Text()
-	defined := ""
-	if attachment.Get("libvirt", "management").Text() == "managed" {
-		defined = substrate.NetworkName(contextName, reference)
-	}
 	names, err := substrate.EthernetInterfaces(catalog, machine)
 	if err != nil {
 		return nil, err
 	}
 	interfaces := make([]Interface, 0, len(names))
 	for _, name := range names {
+		reference := network.Get("attachmentRef").Text()
+		if network.Has("interfaceAttachments") {
+			entry, found := findNamed(network.Get("interfaceAttachments"), "interface", name)
+			if !found {
+				return nil, refusal("api.reference", "the Machine's per-interface attachment map does not cover "+name, "correct spec.network.interfaceAttachments on "+machine.Identity())
+			}
+			reference = entry.Get("attachmentRef").Text()
+		}
+		attachment, found := findNamed(provider.Spec().Get("networkAttachments"), "name", reference)
+		if !found || !attachment.Has("libvirt") {
+			return nil, refusal("api.reference", "the Machine's attachment does not resolve on its provider", "correct spec.network.attachmentRef or spec.network.interfaceAttachments on "+machine.Identity())
+		}
+		arm := attachment.Get("libvirt")
+		defined := ""
+		if arm.Get("management").Text() == "managed" {
+			defined = substrate.NetworkName(contextName, reference)
+		}
+		mtu, _ := arm.Get("mtu").Int64()
 		interfaces = append(interfaces, Interface{
-			Bridge: bridge, MACAddress: substrate.InterfaceMAC(contextName, machine.Name(), name), Name: name, Network: defined,
+			Bridge: arm.Get("bridge").Text(), MACAddress: substrate.InterfaceMAC(contextName, machine.Name(), name), Name: name, Network: defined, MTU: int(mtu),
 		})
 	}
 	return interfaces, nil

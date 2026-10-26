@@ -61,7 +61,7 @@ MEDIA = ROLES / "containercluster_media_agent"
 LOADER = DataLoader()
 
 # Distinct values, so each phase is proved to read its own budget.
-INSTALL_BUDGETS = {"bootSeconds": 311, "bootstrapSeconds": 4703, "installSeconds": 5903}
+INSTALL_BUDGETS = {"bootSeconds": 311, "bootstrapSeconds": 4703, "fanOut": 4, "installSeconds": 5903, "roundMarginSeconds": 83}
 MEDIA_BUDGETS = {"buildSeconds": 1709}
 INSTALL_REQUEST = {"budgets": INSTALL_BUDGETS, "identity": {"cluster": "sno", "context": "lab"},
                    "workRoot": "/var/lib/bootwright-clusters/lab/sno"}
@@ -163,13 +163,16 @@ def test_every_budget_a_request_freezes_is_read_by_its_role():
         expected = set(INSTALL_BUDGETS if block == "install" else MEDIA_BUDGETS)
         assert all(declared == expected for declared in budgets.values()), budgets
         text = "".join(path.read_text() for path in sorted((role / "tasks").glob("*.yml")))
-        for name in expected:
+        if block == "install":
+            text += (ROLES.parent / "playbooks/containercluster/install_apply.yml").read_text()
+        for name in expected - {"roundMarginSeconds"}:
             assert "bootwright_cluster_%s_request.budgets.%s" % (block, name) in text, name
+        # roundMarginSeconds bounds the invocation supervisor in Go, never a role task.
 
 
 def test_each_wait_reads_its_own_phases_budget():
     for milestone, budget in (("bootstrap-complete", "bootstrapSeconds"), ("install-complete", "installSeconds")):
-        wait = found(INSTALL, "apply.yml", lambda task, milestone=milestone: (task.get("vars") or {}).get(
+        wait = found(INSTALL, "waits.yml", lambda task, milestone=milestone: (task.get("vars") or {}).get(
             "containercluster_install_agent_milestone") == milestone)
         assert wait["ansible.builtin.include_tasks"] == "wait.yml"
         assert int(scope(INSTALL).template(wait["vars"]["containercluster_install_agent_budget"])) == INSTALL_BUDGETS[budget]
@@ -751,11 +754,17 @@ def test_the_image_is_built_under_timeout_with_the_budget_its_request_froze():
     assert builds == [build()]
     command = argv(build())
     block = found(MEDIA, "build.yml", lambda task: build() in (task.get("block") or []))
-    rendering = scope(MEDIA, **block["vars"])
+    rendering = scope(MEDIA, containercluster_media_agent_started=1000,
+                      containercluster_media_agent_build_now=1017, **block["vars"])
+    remaining = next(task["ansible.builtin.set_fact"]["containercluster_media_agent_build_remaining"]
+                     for task in block["block"] if "containercluster_media_agent_build_remaining" in task.get("ansible.builtin.set_fact", {}))
+    value = int(rendering.template(remaining))
+    assert value == MEDIA_BUDGETS["buildSeconds"] - 17
+    rendering = scope(MEDIA, containercluster_media_agent_build_remaining=value, **block["vars"])
     assert command[0] == "/usr/bin/timeout"
     grace = rendering.template(command[1])
     assert grace.startswith("--kill-after=") and 0 < int(grace[len("--kill-after="):-1]) <= 60
-    assert rendering.template(command[2]) == "%ds" % MEDIA_BUDGETS["buildSeconds"]
+    assert rendering.template(command[2]) == "%ds" % (MEDIA_BUDGETS["buildSeconds"] - 17)
     assert command[3] == "{{ containercluster_media_agent_installer }}"
 
 
@@ -796,16 +805,20 @@ def bounded():
 
 
 def test_the_boot_phase_deadline_is_set_once_before_the_first_node():
-    apply = trusted(INSTALL / "tasks" / "apply.yml")
-    setting = [index for index, task in enumerate(apply)
+    prepare = trusted(INSTALL / "tasks" / "prepare_boot.yml")
+    setting = [index for index, task in enumerate(prepare)
                if "containercluster_install_agent_boot_deadline" in (task.get("ansible.builtin.set_fact") or {})]
-    booting = [index for index, task in enumerate(apply) if task.get("ansible.builtin.include_tasks") == "boot.yml"]
-    marking = [index for index, task in enumerate(apply)
+    marking = [index for index, task in enumerate(prepare)
                if str((task.get("ansible.builtin.copy") or {}).get("dest", "")).endswith("/.bootwright-booted")]
-    assert len(setting) == len(booting) == len(marking) == 1
-    assert marking[0] < setting[0] < booting[0]
-    assert "loop" in apply[booting[0]] and "loop" not in apply[setting[0]]
-    deadline = apply[setting[0]]["ansible.builtin.set_fact"]["containercluster_install_agent_boot_deadline"]
+    assert len(setting) == len(marking) == 1 and marking[0] < setting[0]
+    assert "loop" not in prepare[setting[0]]
+    plays = trusted(ROLES.parent / "playbooks/containercluster/install_apply.yml")
+    phases = [play["tasks"][0]["ansible.builtin.import_role"]["tasks_from"] for play in plays]
+    assert phases.index("prepare_boot") < phases.index("node_boot")
+    boot = plays[phases.index("node_boot")]
+    assert boot["hosts"] == "bootwright_nodes"
+    assert "hostvars[bootwright_controller_host]" in boot["vars"]["containercluster_install_agent_boot_deadline"]
+    deadline = prepare[setting[0]]["ansible.builtin.set_fact"]["containercluster_install_agent_boot_deadline"]
     rendered = int(scope(INSTALL).template(deadline))
     assert now() + INSTALL_BUDGETS["bootSeconds"] - 2 <= rendered <= now() + INSTALL_BUDGETS["bootSeconds"]
     assert "containercluster_install_agent_boot_deadline:" not in (INSTALL / "tasks" / "boot.yml").read_text()
@@ -813,10 +826,14 @@ def test_the_boot_phase_deadline_is_set_once_before_the_first_node():
 
 def test_every_boot_step_runs_under_what_the_boot_phase_has_left():
     steps = [task for task in walk(bounded()["block"])
-             if "bootwright.core.redfish_boot" in task or "ansible.builtin.include_role" in task]
+             if (task.get("ansible.builtin.include_tasks") == "port.yml"
+                 and task.get("vars", {}).get("containercluster_install_agent_port_operation") == "media_insert")
+             or "ansible.builtin.include_role" in task]
     effects = [task for task in walk(skip()["block"])
-               if "bootwright.core.redfish_boot" in task or "ansible.builtin.include_role" in task]
-    assert steps == effects and len(steps) == 5
+               if (task.get("ansible.builtin.include_tasks") == "port.yml"
+                   and task.get("vars", {}).get("containercluster_install_agent_port_operation") == "media_insert")
+               or "ansible.builtin.include_role" in task]
+    assert steps == effects and len(steps) == 3
     assert bounded() in skip()["block"]
     # ansible-core reads a timeout of 0 as none at all (_alarm_timeout.py:
     # `if not timeout: return`), so a step reached at or past the deadline
@@ -828,7 +845,7 @@ def test_every_boot_step_runs_under_what_the_boot_phase_has_left():
     # (test_containercluster_pre_boot.py), after the budget, which it never is.
     rescue = bounded()["rescue"]
     stopped, named, other = rescue[0], rescue[-2], rescue[-1]
-    assert named["bootwright.core.containercluster_install_protocol"]["phase"] == "refused"
+    assert "containercluster_install_agent_lifecycle_refusal" in named["ansible.builtin.set_fact"]
     rendering = scope(INSTALL, containercluster_install_agent_node={"machine": "sno-01"},
                       ansible_failed_result={"failed": True, "timedout": {"period": 12}})
     assert rendering.evaluate_conditional(stopped["when"])
@@ -874,7 +891,7 @@ def test_every_budget_clock_counts_true_seconds_across_a_daylight_saving_change(
     deadline = int(scope(INSTALL, now=clock, containercluster_install_agent_budget=5400).template(
         wait["ansible.builtin.set_fact"]["containercluster_install_agent_deadline"]))
     assert deadline == start + 5400
-    boot = found(INSTALL, "apply.yml",
+    boot = found(INSTALL, "prepare_boot.yml",
                  lambda task: "containercluster_install_agent_boot_deadline" in (task.get("ansible.builtin.set_fact") or {}))
     assert int(scope(INSTALL, now=clock).template(
         boot["ansible.builtin.set_fact"]["containercluster_install_agent_boot_deadline"])) == start + INSTALL_BUDGETS["bootSeconds"]

@@ -269,7 +269,7 @@ func TestTheProbeVerifiesTheListenerAgainstTheBoundServingCertificate(t *testing
 	if len(bound) != 1 || bound[0] != want {
 		t.Fatalf("the serving certificate Secret reaches the adapter as %+v", bound)
 	}
-	const path = "collections/ansible_collections/bootwright/core/roles/containercluster_media_agent/tasks/build.yml"
+	const path = "collections/ansible_collections/bootwright/core/roles/containercluster_media_agent/tasks/publish.yml"
 	var tasks []map[string]any
 	if err := yaml.Unmarshal(ansible.Assets()[path], &tasks); err != nil {
 		t.Fatalf("%s: %v", path, err)
@@ -281,7 +281,7 @@ func TestTheProbeVerifiesTheListenerAgainstTheBoundServingCertificate(t *testing
 		}
 	}
 	if len(probes) != 1 {
-		t.Fatalf("build.yml holds %d fetches through the listener", len(probes))
+		t.Fatalf("publish.yml holds %d fetches through the listener", len(probes))
 	}
 	authority := "{{ " + mediaVariablePrefix + "_material." + want.Variable + " }}"
 	if probes[0]["ca_path"] != authority || probes[0]["validate_certs"] != true {

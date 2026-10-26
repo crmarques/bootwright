@@ -1,0 +1,40 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: lab-guests
+
+spec:
+  machineNetwork:
+    - cidr: 2001:db8:2::/64
+
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+
+  nmstate:
+    interfaces:
+      - name: enp1s0
+        type: ethernet
+        state: up
+        mtu: 1500
+
+        ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: true
+          dhcp: false
+          autoconf: false
+
+    dns-resolver:
+      config:
+        search:
+          - lab.example.test
+
+    routes:
+      config:
+        - destination: ::/0
+          next-hop-address: 2001:db8:2::1
+          next-hop-interface: enp1s0
+          table-id: 254
+          metric: 100

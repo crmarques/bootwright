@@ -157,7 +157,7 @@ func TestAbsentAndIgnoredEthernetInterfacesAreNotRealized(t *testing.T) {
 	}
 }
 
-func TestTheDefaultGatewayIsTheFirstNonAbsentIPv4DefaultRouteWithAnIPv4NextHop(t *testing.T) {
+func TestTheDefaultGatewayIsTheFirstNonAbsentDefaultRouteWithMatchingNextHopFamily(t *testing.T) {
 	absent := text("state", "absent")
 	for name, test := range map[string]struct {
 		routes []api.Value
@@ -167,10 +167,10 @@ func TestTheDefaultGatewayIsTheFirstNonAbsentIPv4DefaultRouteWithAnIPv4NextHop(t
 			route(text("destination", "0.0.0.0/0"), text("next-hop-address", "198.51.100.1"), absent),
 			route(text("destination", "0.0.0.0/0"), text("next-hop-address", "198.51.100.2")),
 		}, "198.51.100.2"},
-		"an IPv6 default route is skipped": {[]api.Value{
+		"an IPv6 default route is retained": {[]api.Value{
 			route(text("destination", "::/0"), text("next-hop-address", "2001:db8::1")),
 			route(text("destination", "0.0.0.0/0"), text("next-hop-address", "198.51.100.3")),
-		}, "198.51.100.3"},
+		}, "2001:db8::1"},
 		"a default route without a next hop is skipped": {[]api.Value{
 			route(text("destination", "0.0.0.0/0")),
 			route(text("destination", "0.0.0.0/0"), text("next-hop-address", "198.51.100.4")),

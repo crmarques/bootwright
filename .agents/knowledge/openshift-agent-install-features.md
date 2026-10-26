@@ -30,10 +30,39 @@ read at master, not per release.
 - A documented bypass exists. It downgrades the check to a warning and marks the
   install configuration (R6:C6). Bootwright never sets it.
 - The FIPS-capable binary is extracted from the release payload or downloaded
-  from the client mirror (R6:C7); whether the rhel9 archive's binary carries
-  the `fipscapable` build is unverified, and RV confirmed only that the archive
-  is on the mirror in stable-4.20 and stable-4.22. With `fips: true` an `ssh-ed25519` key is
+  from the client mirror (R6:C7). With `fips: true` an `ssh-ed25519` key is
   rejected, and `ssh-rsa` or an ECDSA key is accepted (R6:C8).
+
+### Public artifact verification, 2026-10-23
+
+The official exact-release checksum lists for
+[4.20.0](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.20.0/sha256sum.txt),
+[4.21.0](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.21.0/sha256sum.txt),
+[4.21.10](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.21.10/sha256sum.txt)
+and [4.22.0](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.22.0/sha256sum.txt)
+name `openshift-install-rhel9-amd64.tar.gz`. These observations establish exact
+release availability, not availability for every version or mirror.
+
+The downloaded 4.21.10 archive matched its published SHA-256,
+`b4034fc964b266045858603e40a309f655ae4fe477dc77855b57e3c4072d5981`.
+Its only tar member is `openshift-install-fips`. Read-only Go build metadata
+inspection (`./scripts/go version -m` on the extracted file) reported
+`-tags=baremetal,fipscapable,release,strictfipsruntime`, `CGO_ENABLED=1`,
+`GOOS=linux`, `GOARCH=amd64` and installer revision
+`dbc7727dfd8bec0bf5c26a103ff30bda012d48b7`. The executable was not run.
+The [upstream bare-metal build recipe](https://github.com/openshift/installer/blob/080653d812dc25b2c624ff2a5b4108046276b0b2/images/baremetal/Dockerfile.ci)
+and [build script](https://github.com/openshift/installer/blob/080653d812dc25b2c624ff2a5b4108046276b0b2/hack/build.sh)
+at the inspected public release-4.21 snapshot explain the FIPS-capable build
+and CGO dependency; they are not the downstream artifact revision. This verifies artifact
+identity and build capability; it proves neither runtime compatibility with
+a particular host nor a FIPS installation or certification.
+
+Bootwright selects a separate exact-release `openshift-install-fips` tool for
+FIPS clusters, verifies its RHEL 9 archive against publisher checksums, and
+requires a positive host FIPS observation before planning or apply admission.
+The bound administration key is checked at media apply. These independent
+checks do not qualify execution on a real FIPS-enabled host; that acceptance
+row remains [B722](../../specs/milestones/m3.md#b722).
 
 ## Disk encryption
 

@@ -1736,10 +1736,11 @@ func checkpointReplay(ctx context.Context, area prerequisites.BundleArea, direct
 func checkpointClientMode(ctx context.Context, store *Store) (string, uint64, error) {
 	mode, inode := "", uint64(0)
 	err := checkpointMutateLifecycle(ctx, store, func(tx lifecycle.Transaction) error {
-		transaction, ok := tx.(*lifecycleTransaction)
+		leased, ok := tx.(*leasedLifecycle)
 		if !ok {
 			return errors.New("the lifecycle transaction is not this store's")
 		}
+		transaction := leased.lifecycleTransaction
 		for _, reservation := range transaction.stored.bundles {
 			if reservation.ID == clientClosure {
 				mode, inode = reservation.Mode, reservation.DirectoryInode

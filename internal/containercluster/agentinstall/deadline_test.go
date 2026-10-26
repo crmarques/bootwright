@@ -155,7 +155,7 @@ func TestTheDeadlineFollowsTheBudgetsTheRequestFroze(t *testing.T) {
 			}
 		}
 	}
-	install.Budgets = InstallBudgets{BootSeconds: 4111, BootstrapSeconds: 6007, InstallSeconds: 8123}
+	install.Budgets = InstallBudgets{BootSeconds: 4111, BootstrapSeconds: 6007, InstallSeconds: 8123, FanOut: 4, RoundMarginSeconds: 660}
 	for name, field := range map[string]func(*InstallBudgets) *int{
 		"nothing":          nil,
 		"bootSeconds":      func(b *InstallBudgets) *int { return &b.BootSeconds },
@@ -167,7 +167,7 @@ func TestTheDeadlineFollowsTheBudgetsTheRequestFroze(t *testing.T) {
 			*field(&frozen.Budgets) += 7
 		}
 		seconds := frozen.Budgets.BootSeconds + frozen.Budgets.BootstrapSeconds + frozen.Budgets.InstallSeconds
-		want := time.Duration(seconds)*time.Second + installMargin + 3*nodeMargin
+		want := time.Duration(seconds)*time.Second + installMargin + nodeMargin
 		for _, operation := range runs {
 			if got := installRunDeadline(t, frozen, operation); got != want {
 				t.Errorf("install %s with %s moved runs under %s, want %s for %+v", operation, name, got, want, frozen.Budgets)
@@ -176,7 +176,7 @@ func TestTheDeadlineFollowsTheBudgetsTheRequestFroze(t *testing.T) {
 	}
 	one := install
 	one.Nodes = one.Nodes[:1]
-	if got, want := installRunDeadline(t, one, "apply"), installRunDeadline(t, install, "apply")-2*nodeMargin; got != want {
+	if got, want := installRunDeadline(t, one, "apply"), installRunDeadline(t, install, "apply"); got != want {
 		t.Errorf("an installation of one node runs under %s, want %s: each node adds %s", got, want, nodeMargin)
 	}
 }
@@ -391,39 +391,31 @@ func nodeCalls(t *testing.T, role, file string, tasks []map[string]any, scope ca
 // fails here until the margin moves with it; a poll's own requests count as
 // answered at once, as the bounds state.
 func TestTheNodeMarginIsTheBoundOfEveryControllerCallTheRoleMakesForANode(t *testing.T) {
-	largest, costliest := time.Duration(0), ""
-	for _, operation := range operations {
-		calls := map[string][]controllerCall{}
-		file := operation + ".yml"
-		nodeCalls(t, installRole, file, roleTasks(t, installRole, file), callScope{}, calls)
-		for bound := range calls {
-			made := calls[""]
-			if bound != "" {
-				made = slices.Concat(made, calls[bound])
-			}
-			total := time.Duration(0)
-			for _, call := range made {
-				total += call.bound
-			}
-			if total > largest {
-				largest, costliest = total, fmt.Sprintf("%s on %q: %v", operation, bound, made)
-			}
+	for _, arm := range substrate.Realized() {
+		bounds, ok := substrate.MachineBoundsFor(arm)
+		if !ok {
+			t.Fatalf("no bounds for %s", arm)
+		}
+		if bounds.NodeMargin < 2*bounds.StateRead+bounds.MediaEject+substrate.ControllerBootSelectionBound {
+			t.Fatalf("%s round margin omits a node phase", arm)
 		}
 	}
-	if nodeMargin != largest {
-		t.Fatalf("each node adds %s, but its controller calls outside the boot phase may take %s (%s)", nodeMargin, largest, costliest)
-	}
-	if nodeMargin != 11*time.Minute {
-		t.Errorf("each node adds %s, want the 11m0s the specification states", nodeMargin)
+	for file, operation := range map[string]string{"node_state.yml": "state_read", "release.yml": "media_eject"} {
+		found := false
+		for _, task := range roleTasks(t, installRole, file) {
+			data, _ := yaml.Marshal(task)
+			if strings.Contains(string(data), "containercluster_install_agent_port_operation: "+operation) {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("%s no longer invokes %s; revisit the round margin", file, operation)
+		}
 	}
 }
 
-// The boot budget grows with the nodes a cluster boots, 300 seconds each and
-// never less than 900, so a cluster of up to three nodes freezes the 900 it
-// always did, and each node also adds its margin to the deadline. Nine nodes
-// fit within the runner's ceiling, and ten refuse before registration, naming
-// the deadline they would need and how many nodes fit. These are the figures
-// the specification states.
+// The boot budget and deadline grow only when a new four-node round starts.
+// Twenty-eight emulated nodes fit; the next round refuses before registration.
 func TestTheBootBudgetAndTheDeadlineGrowWithTheNodes(t *testing.T) {
 	for _, test := range []struct {
 		nodes    int
@@ -431,9 +423,9 @@ func TestTheBootBudgetAndTheDeadlineGrowWithTheNodes(t *testing.T) {
 		deadline time.Duration
 	}{
 		{1, 900, 3*time.Hour + 56*time.Minute},
-		{3, 900, 4*time.Hour + 18*time.Minute},
-		{4, 1200, 4*time.Hour + 34*time.Minute},
-		{9, 2700, 5*time.Hour + 54*time.Minute},
+		{4, 900, 3*time.Hour + 56*time.Minute},
+		{5, 1200, 4*time.Hour + 12*time.Minute},
+		{28, 4200, 5*time.Hour + 57*time.Minute},
 	} {
 		_, install, _ := onlyRequests(t, largeCatalog(test.nodes))
 		if len(install.Nodes) != test.nodes || install.Budgets.BootSeconds != test.boot {
@@ -444,15 +436,15 @@ func TestTheBootBudgetAndTheDeadlineGrowWithTheNodes(t *testing.T) {
 			t.Errorf("a cluster of %d nodes installs under %s, want %s", test.nodes, got, test.deadline)
 		}
 	}
-	_, _, _, err := Requests(largeCatalog(10), "controller", testContext)
+	_, _, _, err := Requests(largeCatalog(29), "controller", testContext)
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" {
-		t.Fatalf("a cluster of 10 nodes refuses with %#v", reported)
+		t.Fatalf("a cluster of 29 nodes refuses with %#v", reported)
 	}
-	if want := "installing 10 nodes needs a run deadline of 6h10m0s, past the 6h0m0s every adapter run is held to"; reported[0].Message != want {
+	if want := "installing 29 nodes needs a run deadline of 6h18m0s, past the 6h0m0s every adapter run is held to"; reported[0].Message != want {
 		t.Errorf("refusal = %q, want %q", reported[0].Message, want)
 	}
-	if want := "declare at most 9 nodes on ContainerCluster/ocp"; reported[0].Remediation != want {
+	if want := "declare at most 28 nodes on ContainerCluster/ocp"; reported[0].Remediation != want {
 		t.Errorf("remediation = %q, want %q", reported[0].Remediation, want)
 	}
 }
@@ -476,7 +468,7 @@ func largeCatalog(count int) api.Catalog {
 		), nodes...)))
 }
 
-// Each node adds to the installation's deadline, and the runner cuts every run
+// Each round adds to the installation's deadline, and the runner cuts every run
 // short at its ceiling rather than honoring a longer deadline. The largest
 // cluster whose deadline fits is planned, and one node more refuses before
 // registration, naming the deadline, the ceiling and how many nodes fit,
@@ -488,7 +480,7 @@ func TestAClusterWhoseDeadlinePassesTheCeilingRefusesBeforeRegistration(t *testi
 	deadlineOf := func(nodes int) time.Duration { return installDeadline(installBudgets(nodes), nodes) }
 	largest := 0
 	for ; largest < most && deadlineOf(largest+1) <= lifecycle.MaxDeadline; largest++ {
-		if deadlineOf(largest+1) <= deadlineOf(largest) {
+		if deadlineOf(largest+1) < deadlineOf(largest) {
 			t.Fatalf("a cluster of %d nodes has a deadline of %s, no longer than one of %d nodes: each node must add to it",
 				largest+1, deadlineOf(largest+1), largest)
 		}

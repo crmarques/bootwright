@@ -34,14 +34,19 @@
 - name: Refuse a target this installation has no boot or identity binding for
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.target.substrate in ['libvirt', 'baremetal']
+      - bootwright_os_install_request.target.substrate in managedos_install_anaconda_pre_boot
+      - bootwright_os_install_request.target.substrate in managedos_install_anaconda_boot_media_bindings
+      - bootwright_os_install_request.target.substrate in managedos_install_anaconda_boot_disk
+      - bootwright_os_install_request.target.substrate in managedos_install_anaconda_identity_read
+      - bootwright_os_install_request.target.substrate in managedos_install_anaconda_state_read
+      - bootwright_os_install_request.target.substrate in managedos_install_anaconda_media_insert
+      - bootwright_os_install_request.target.substrate in managedos_install_anaconda_media_eject
       - bootwright_os_install_request.target.channel in ['guest-agent', 'delivered-key']
     fail_msg: >-
       Machine {{ bootwright_os_install_request.identity.object }} names substrate
       {{ bootwright_os_install_request.target.substrate }} and identity channel
       {{ bootwright_os_install_request.target.channel }}, but this installation
-      binds only the libvirt and baremetal substrates and the guest-agent and
-      delivered-key channels, so nothing was published or booted; plan the
+      lacks one of the required machine port or identity channel bindings, so nothing was published or booted; plan the
       installation again with this release
     quiet: true
 
@@ -431,15 +436,27 @@
     - name: Read what the machine already holds, so a replay boots nothing
       ansible.builtin.include_tasks: identity.yml
 
+    - name: Classify a positively answered foreign installation marker
+      ansible.builtin.set_fact:
+        managedos_install_anaconda_foreign: >-
+          {{ (managedos_install_anaconda_answered | default(false))
+             and (managedos_install_anaconda_marker | default('') | length > 0)
+             and managedos_install_anaconda_marker != bootwright_os_install_material.marker }}
+      no_log: true
+
+    - name: Name the foreign installation refusal to the runner
+      bootwright.core.managedos_install_protocol:
+        phase: refused
+        reason: foreign-installation
+      no_log: true
+      when: managedos_install_anaconda_foreign | bool
+
     - name: Refuse a machine that answers with another installation
       ansible.builtin.assert:
         that:
-          - not (managedos_install_anaconda_answered | default(false))
-            or managedos_install_anaconda_marker | default('') | length == 0
-            or managedos_install_anaconda_marker == bootwright_os_install_material.marker
-        fail_msg: the machine holds another installation, and there is no reinstall path
+          - not (managedos_install_anaconda_foreign | bool)
+        fail_msg: The machine holds another installation, and there is no reinstall path.
         quiet: true
-      no_log: true
 
     # ansible-core finalizes a set_fact when it runs, so this freezes what the
     # first identity read answered. The default it reads is re-evaluated at every
@@ -531,18 +548,18 @@
       no_log: true
 
     - name: Eject any installer media still inserted and read the machine's power
-      bootwright.core.redfish_boot:
-        endpoint: '{{ managedos_install_anaconda_endpoint }}'
-        user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
-        password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
-        verify: '{{ managedos_install_anaconda_verify }}'
-        ca_data: '{{ managedos_install_anaconda_ca_data }}'
-        operation: eject
-        restore_verification: '{{ managedos_install_anaconda_media_trust.restoreVerification }}'
-        remove_certificate: '{{ managedos_install_anaconda_media_trust.removeCertificate }}'
-        certificate: '{{ managedos_install_anaconda_certificate }}'
-      register: managedos_install_anaconda_ejected
-      failed_when: false
+      ansible.builtin.include_role:
+        name: "{{ managedos_install_anaconda_media_eject[bootwright_os_install_request.target.substrate] }}"
+        tasks_from: media_eject
+      vars:
+        bootwright_machine_port: >-
+          {{ managedos_install_anaconda_port_access | combine({'restore_verification': managedos_install_anaconda_media_trust.restoreVerification,
+             'remove_certificate': managedos_install_anaconda_media_trust.removeCertificate,
+             'certificate': bootwright_os_install_material.artifactCertificate | default('')}) }}
+
+    - name: Retain the machine port answer
+      ansible.builtin.set_fact:
+        managedos_install_anaconda_ejected: "{{ vars[managedos_install_anaconda_port_result[bootwright_os_install_request.target.substrate]] }}"
       no_log: true
 
     # ansible-core keeps nothing of a failure under no_log but that it failed, so

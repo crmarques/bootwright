@@ -1,0 +1,64 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: physical
+
+spec:
+  distribution:
+    type: openshift
+
+    release:
+      version: 4.21.15
+
+  install:
+    method: agent
+    mode: connected
+
+    endpoints:
+      api:
+        address: 198.51.100.10
+
+        source:
+          type: openshift
+
+      ingress:
+        address: 198.51.100.11
+
+        source:
+          type: openshift
+
+    agent:
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+
+    pullSecretRef: openshift-pull-secret
+
+    nodeSSH:
+      keyPairRef: physical-cluster-admin-ssh-key
+
+    ntp:
+      - serverRef: lab-ntp
+        endpointRef: ip
+
+  nodes:
+    - name: master-0
+      role: master
+      machineRef: physical-01
+
+    - name: master-1
+      role: master
+      machineRef: physical-02
+
+    - name: master-2
+      role: master
+      machineRef: physical-03
+
+    - name: worker-0
+      role: worker
+      machineRef: physical-04
+
+    - name: worker-1
+      role: worker
+      machineRef: physical-05

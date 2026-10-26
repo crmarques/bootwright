@@ -1,0 +1,102 @@
+---
+- name: Refuse failed node boots after every sibling finished
+  ansible.builtin.import_tasks: phase_failures.yml
+
+- name: Report node boot completion
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: boot-machines
+    status: ok
+  no_log: true
+
+- name: Report the bootstrap wait
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: wait-bootstrap
+    status: running
+  no_log: true
+
+- name: Wait for the bootstrap control plane to hand over
+  ansible.builtin.include_tasks: wait.yml
+  vars:
+    containercluster_install_agent_milestone: bootstrap-complete
+    containercluster_install_agent_budget: >-
+      {{ bootwright_cluster_install_request.budgets.bootstrapSeconds }}
+  when: not (containercluster_install_agent_settled | bool)
+
+- name: Report the bootstrap wait completion
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: wait-bootstrap
+    status: ok
+  no_log: true
+
+- name: Report the installation wait
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: wait-install
+    status: running
+  no_log: true
+
+- name: Wait for the cluster to finish installing
+  ansible.builtin.include_tasks: wait.yml
+  vars:
+    containercluster_install_agent_milestone: install-complete
+    containercluster_install_agent_budget: >-
+      {{ bootwright_cluster_install_request.budgets.installSeconds }}
+  when: not (containercluster_install_agent_settled | bool)
+
+- name: Report the installation wait completion
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: wait-install
+    status: ok
+  no_log: true
+
+- name: Read completion before releasing any installation media
+  ansible.builtin.import_tasks: cluster_state.yml
+
+# A read that failed proves nothing about which nodes the cluster holds: the
+# nodes read then counts every declared node missing. Only a read in which
+# every request was answered, the cluster with this build's identity, can show
+# the rendezvous host absent and so name it stranded.
+- name: Refuse media release until every declared node completed installation
+  ansible.builtin.fail:
+    msg: >-
+      {% if containercluster_install_agent_unread | bool -%}
+      cluster {{ bootwright_cluster_install_request.identity.cluster }} could not
+      be read with this build's identity after its installation wait, so nothing
+      proved which declared nodes completed installation. No installation media
+      was released. Repeat the apply to read the cluster again.
+      {%- else -%}
+      cluster {{ bootwright_cluster_install_request.identity.cluster }} has not
+      proved installation complete; missing declared nodes:
+      {{ containercluster_install_agent_state.missing | sort | join(', ') or 'none' }}.
+      {{ ('Rendezvous host ' ~ containercluster_install_agent_rendezvous ~
+          ' still runs the bootstrap control plane from the live image; '
+          ~ 'assisted recovery after a host error never pivots it. Destroy this context and perform a fresh apply.')
+         if containercluster_install_agent_rendezvous in containercluster_install_agent_state.missing
+         else 'Keep the installation media attached and inspect the cluster before repeating the apply.' }}
+      No installation media was released.
+      {%- endif %}
+  vars:
+    containercluster_install_agent_rendezvous: >-
+      {{ (bootwright_cluster_install_request.nodes | selectattr('address', 'equalto', bootwright_cluster_install_request.rendezvous)
+          | map(attribute='name') | sort | first) | default('') }}
+    containercluster_install_agent_unread: >-
+      {{ [containercluster_install_agent_cluster, containercluster_install_agent_release,
+          containercluster_install_agent_completion, containercluster_install_agent_nodes]
+         | map(attribute='rc', default=1) | reject('equalto', 0) | list | length > 0
+         or containercluster_install_agent_state.cluster != containercluster_install_agent_before.observation.identity }}
+  when: >-
+    containercluster_install_agent_state.completed is not sameas true
+    or containercluster_install_agent_state.missing | length > 0
+    or containercluster_install_agent_state.cluster != containercluster_install_agent_before.observation.identity
+    or containercluster_install_agent_state.release != bootwright_cluster_install_request.release.version
+
+- name: Report media release
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: release-media
+    status: running
+  no_log: true

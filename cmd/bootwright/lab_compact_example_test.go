@@ -74,7 +74,7 @@ func TestLabCompactExamplePlansThreeMastersAndInstallerVIPsGolden(t *testing.T) 
 			}
 		case agentinstall.InstallImplementation:
 			request, err := agentinstall.DecodeInstallRequest(block.Request)
-			if err != nil || request.Deadline() != 4*time.Hour+18*time.Minute {
+			if err != nil || request.Deadline() != 3*time.Hour+56*time.Minute {
 				t.Fatal("compact deadline changed", request.Deadline(), err)
 			}
 			deadline = request.Deadline()

@@ -54,9 +54,9 @@ def playbooks():
 
 
 def imported(playbook):
-    """The one role and entry point a playbook's one play imports."""
+    """The first role entry point, before the fixed node-phase plays."""
     plays = yaml.safe_load((PLAYBOOKS / playbook).read_text())
-    assert len(plays) == 1, "%s is not one play" % playbook
+    assert len(plays) == (9 if playbook == "containercluster/install_apply.yml" else 1), "%s has an unexpected phase count" % playbook
     found = [task[name] for task in plays[0]["tasks"] for name in ROLE_IMPORTS if name in task]
     assert len(found) == 1, "%s imports %d roles" % (playbook, len(found))
     return found[0]["name"].rsplit(".", 1)[-1], str(found[0].get("tasks_from", "main"))
@@ -83,7 +83,7 @@ def first_task(playbook):
     loader = DataLoader()
     plays = Playbook.load(str(PLAYBOOKS / playbook), variable_manager=VariableManager(loader=loader),
                           loader=loader).get_plays()
-    assert len(plays) == 1, "%s is not one play" % playbook
+    assert len(plays) == (9 if playbook == "containercluster/install_apply.yml" else 1), "%s has an unexpected phase count" % playbook
     return next(task for task in reached(plays[0].compile()) if task.action != "meta")
 
 

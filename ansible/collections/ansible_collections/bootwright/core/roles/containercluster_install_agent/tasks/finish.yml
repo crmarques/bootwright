@@ -1,0 +1,59 @@
+---
+- name: Collect the final node reads
+  ansible.builtin.import_tasks: collect_state.yml
+
+# Every node released its media above, so a link a replaced insert left is
+# retired with the release, keeping only what a controller still presents.
+- name: Retire every insert link no released node presents
+  bootwright.core.containercluster_media_token:
+    request: '{{ bootwright_cluster_install_request }}'
+    source: '{{ containercluster_install_agent_before.observation.url }}'
+    presented: >-
+      {{ containercluster_install_agent_controllers.results | default([])
+         | map(attribute='media', default='') | list }}
+    operation: sweep
+  when: containercluster_install_agent_before.observation.url | default('') | length > 0
+  register: containercluster_install_agent_swept
+  failed_when: false
+  no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed,
+# so the sweep's own refusal, which carries counts and never a URL or
+# token, is reported here.
+- name: Stop at a refusal of the sweep after the release
+  ansible.builtin.fail:
+    msg: >-
+      retiring the insert links no management controller presents failed:
+      {{ (containercluster_install_agent_swept.msg | string | bootwright.core.printable)[:512] }}
+  when: containercluster_install_agent_swept.msg is defined
+
+# The runner reads this copy back and removes it with the job; the engine keeps
+# it in the context's custody before it records this block done.
+- name: Offer the administrator access of the proved installation for custody
+  ansible.builtin.copy:
+    src: '{{ containercluster_install_agent_kubeconfig }}'
+    dest: '{{ bootwright_cluster_install_output.kubeconfig }}'
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - bootwright_cluster_install_output is defined
+    - (containercluster_install_agent_before.observation.identity | default('')) | length > 0
+    - containercluster_install_agent_state.cluster == containercluster_install_agent_before.observation.identity
+    - containercluster_install_agent_state.completed is sameas true
+  no_log: true
+
+- name: Publish bounded installation completion evidence
+  bootwright.core.containercluster_install_protocol:
+    phase: completed
+    outcome: >-
+      {{ 'unchanged' if containercluster_install_agent_settled | bool else 'changed' }}
+    digest: '{{ bootwright_cluster_install_digest }}'
+    identity: '{{ containercluster_install_agent_before.observation.identity }}'
+    state: '{{ containercluster_install_agent_state }}'
+    vips_not_probed: '{{ containercluster_install_agent_vips_not_probed | default([]) }}'
+    # Whether a wait of this apply put the kept copy back in place of the
+    # installer's own kubeconfig (wait_attempt.yml).
+    restored: '{{ containercluster_install_agent_restored | default(false) }}'
+  no_log: true

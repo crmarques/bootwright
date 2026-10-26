@@ -1,0 +1,93 @@
+{
+  "agentConfig": {
+    "apiVersion": "v1beta1",
+    "hosts": [
+      {
+        "hostname": "master-0",
+        "interfaces": [
+          {
+            "macAddress": "02:00:00:00:01:00",
+            "name": "enp1s0"
+          }
+        ],
+        "networkConfig": {
+          "interfaces": [
+            {
+              "ipv4": {
+                "address": [
+                  {
+                    "ip": "198.51.100.100",
+                    "prefix-length": 24
+                  }
+                ],
+                "dhcp": false,
+                "enabled": true
+              },
+              "ipv6": {
+                "enabled": false
+              },
+              "mac-address": "02:00:00:00:01:00",
+              "name": "enp1s0",
+              "state": "up",
+              "type": "ethernet"
+            }
+          ],
+          "routes": {
+            "config": [
+              {
+                "destination": "0.0.0.0/0",
+                "next-hop-address": "198.51.100.1",
+                "next-hop-interface": "enp1s0",
+                "table-id": 254
+              }
+            ]
+          }
+        },
+        "role": "master"
+      }
+    ],
+    "kind": "AgentConfig",
+    "metadata": {
+      "name": "ocp"
+    },
+    "rendezvousIP": "198.51.100.100"
+  },
+  "installConfig": {
+    "apiVersion": "v1",
+    "baseDomain": "lab.example.test",
+    "compute": [
+      {
+        "name": "worker",
+        "replicas": 0
+      }
+    ],
+    "controlPlane": {
+      "name": "master",
+      "replicas": 1
+    },
+    "metadata": {
+      "name": "ocp"
+    },
+    "networking": {
+      "clusterNetwork": [
+        {
+          "cidr": "10.128.0.0/14",
+          "hostPrefix": 23
+        }
+      ],
+      "machineNetwork": [
+        {
+          "cidr": "198.51.100.0/24"
+        }
+      ],
+      "serviceNetwork": [
+        "172.30.0.0/16"
+      ]
+    },
+    "platform": {
+      "none": {}
+    },
+    "pullSecret": "",
+    "sshKey": ""
+  }
+}

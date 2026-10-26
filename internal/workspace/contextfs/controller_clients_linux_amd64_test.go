@@ -45,7 +45,7 @@ func clientReservation(t *testing.T, store *Store, id string) controllerBundleRe
 	ctx := context.Background()
 	var found controllerBundleReservation
 	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
-		transaction := tx.(*lifecycleTransaction)
+		transaction := tx.(*leasedLifecycle).lifecycleTransaction
 		index := slices.IndexFunc(transaction.stored.bundles, func(item controllerBundleReservation) bool { return item.ID == id })
 		if index >= 0 {
 			found = transaction.stored.bundles[index]

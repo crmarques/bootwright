@@ -5,16 +5,14 @@
 # pointed at its installed disk through the substrate that realized it, which
 # powers nothing on: the node is running the cluster. That dispatch ends in a
 # terminal fail for a substrate with neither entry point.
-- name: Eject the media this node installed from
-  bootwright.core.redfish_boot:
-    endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", containercluster_install_agent_user) }}'
-    password: '{{ lookup("ansible.builtin.file", containercluster_install_agent_password) }}'
-    verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-    ca_data: '{{ lookup("ansible.builtin.file", containercluster_install_agent_ca) if containercluster_install_agent_ca else omit }}'
-    operation: eject
-  register: containercluster_install_agent_released
-  failed_when: false
+- name: Eject through the selected substrate machine port
+  ansible.builtin.include_tasks: port.yml
+  vars:
+    containercluster_install_agent_port_operation: media_eject
+
+- name: Retain the media release answer
+  ansible.builtin.set_fact:
+    containercluster_install_agent_released: '{{ containercluster_install_agent_port_result }}'
   no_log: true
 
 # ansible-core keeps nothing of a failure under no_log but that it failed, so
@@ -40,33 +38,18 @@
   when: containercluster_install_agent_before.observation.url | default('') | length > 0
   no_log: true
 
-- name: Point a machine this substrate created at its installed disk
+- name: Point the node at its installed disk through its substrate
   ansible.builtin.include_role:
-    name: bootwright.core.substrate_libvirt_machine
+    name: '{{ containercluster_install_agent_boot_disk_bindings[containercluster_install_agent_node.substrate] }}'
     tasks_from: boot_disk
   vars:
-    substrate_libvirt_machine_disk_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-    substrate_libvirt_machine_disk_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-    substrate_libvirt_machine_disk_ca: '{{ containercluster_install_agent_ca }}'
-    substrate_libvirt_machine_disk_user: '{{ containercluster_install_agent_user }}'
-    substrate_libvirt_machine_disk_password: '{{ containercluster_install_agent_password }}'
-    substrate_libvirt_machine_disk_power_on: false
-  when: containercluster_install_agent_node.substrate == 'libvirt'
-
-- name: Point an operator-owned machine at its installed disk
-  ansible.builtin.include_role:
-    name: bootwright.core.substrate_baremetal_machine
-    tasks_from: boot_disk
-  vars:
-    substrate_baremetal_machine_disk_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-    substrate_baremetal_machine_disk_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-    substrate_baremetal_machine_disk_user: '{{ containercluster_install_agent_user }}'
-    substrate_baremetal_machine_disk_password: '{{ containercluster_install_agent_password }}'
-    # A cluster node's controller is reached through no bundle until physical
-    # nodes are delivered (B67); agentinstall refuses physical nodes today.
-    substrate_baremetal_machine_disk_ca: ''
-    substrate_baremetal_machine_disk_power_on: false
-  when: containercluster_install_agent_node.substrate == 'baremetal'
+    bootwright_machine_port:
+      endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+      verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+      ca: '{{ containercluster_install_agent_ca }}'
+      user: '{{ containercluster_install_agent_user }}'
+      password: '{{ containercluster_install_agent_password }}'
+      power_on: false
 
 # A substrate with no disk-boot entry point reaches this refusal only after the
 # eject above. That is acceptable only because apply.yml refuses such a node
@@ -79,4 +62,4 @@
       installation has no boot_disk binding for, so Machine
       {{ containercluster_install_agent_node.machine }} was not pointed at its
       installed disk; plan the installation again with this release
-  when: containercluster_install_agent_node.substrate not in ['libvirt', 'baremetal']
+  when: containercluster_install_agent_node.substrate not in containercluster_install_agent_boot_disk_bindings

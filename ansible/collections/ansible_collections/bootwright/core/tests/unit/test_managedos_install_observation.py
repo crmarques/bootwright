@@ -87,7 +87,7 @@ def machine_reads(scoped="not (managedos_install_anaconda_observes_removal | boo
     """The tasks of one scope that read the machine rather than the published content."""
     found = [task for task in tasks() if scoped in task["when"]]
     found = [task for task in found
-             if READ in task
+             if (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "state_read"
              or task.get("ansible.builtin.include_tasks") in (
                  "identity.yml", "reachable.yml", "network_observe.yml", "host_security.yml", "registration_observe.yml")
              or (task.get("bootwright.core.lifecycle_scratch") or {}).get("state", "present") == "present" and "bootwright.core.lifecycle_scratch" in task]

@@ -1,0 +1,38 @@
+---
+- name: Stage the pushed image at its frozen path
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mv
+      - --no-target-directory
+      - '{{ containercluster_media_agent_products.files[0].path }}'
+      - '{{ containercluster_media_agent_push_image }}'
+  when: not (containercluster_media_agent_published | bool)
+  changed_when: true
+  no_log: true
+
+- name: Keep pushed media readable only by the controller
+  ansible.builtin.file:
+    path: '{{ containercluster_media_agent_push_image }}'
+    owner: root
+    group: root
+    mode: '0600'
+  register: containercluster_media_agent_served
+  no_log: true
+
+- name: Read the image staged for pushed delivery
+  ansible.builtin.stat:
+    path: '{{ containercluster_media_agent_push_image }}'
+    follow: false
+    get_checksum: false
+  register: containercluster_media_agent_staged
+  no_log: true
+
+- name: Refuse pushed media without a complete regular image
+  ansible.builtin.assert:
+    that:
+      - containercluster_media_agent_staged.stat.isreg | default(false)
+      - containercluster_media_agent_staged.stat.size | default(0) | int > 0
+      - containercluster_media_agent_staged.stat.uid | default(-1) | int == 0
+      - containercluster_media_agent_staged.stat.mode | default('') == '0600'
+    fail_msg: the controller work area holds no private regular image for pushed delivery
+    quiet: true

@@ -2,7 +2,7 @@
 - name: Validate the frozen provider host request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v5'
+      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v6'
       - bootwright_substrate_host_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_substrate_host_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_substrate_host_request.poolPath == '/var/lib/libvirt/images/bootwright/'
@@ -173,6 +173,23 @@
   loop_control:
     label: '{{ item.name }}'
   when: not item.managed
+
+- name: Prove each external bridge carries its declared MTU before effects
+  ansible.builtin.assert:
+    that:
+      - >-
+        (substrate_libvirt_host_running.observation.networks
+         | selectattr('name', 'equalto', item.name) | first).mtu | default(0) == item.mtu
+    fail_msg: >-
+      external attachment {{ item.name }} requires MTU {{ item.mtu }};
+      configure that MTU on bridge {{ item.bridge }}, then repeat the apply
+    quiet: true
+  loop: '{{ bootwright_substrate_host_request.networks }}'
+  loop_control:
+    label: '{{ item.name }}'
+  when:
+    - not item.managed
+    - item.mtu | default(0) > 0
 
 # A network that runs another definition than the frozen one is converged only
 # by restarting it, and stopping a network cuts off every domain plugged into

@@ -12,6 +12,7 @@
           "trust": "import-certificate"
         }
       },
+      "controllerKind": "physical",
       "hardware": {
         "interfaces": [
           {
@@ -23,6 +24,7 @@
       "machine": "metal-01",
       "name": "master-0",
       "physical": true,
+      "stateReadSeconds": 600,
       "substrate": "baremetal"
     },
     {
@@ -37,6 +39,7 @@
           "trust": "import-certificate"
         }
       },
+      "controllerKind": "physical",
       "hardware": {
         "interfaces": [
           {
@@ -48,6 +51,7 @@
       "machine": "metal-02",
       "name": "master-1",
       "physical": true,
+      "stateReadSeconds": 600,
       "substrate": "baremetal"
     },
     {
@@ -62,6 +66,7 @@
           "trust": "import-certificate"
         }
       },
+      "controllerKind": "physical",
       "hardware": {
         "interfaces": [
           {
@@ -73,6 +78,7 @@
       "machine": "metal-03",
       "name": "master-2",
       "physical": true,
+      "stateReadSeconds": 600,
       "substrate": "baremetal"
     }
   ]

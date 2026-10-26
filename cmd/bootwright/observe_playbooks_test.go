@@ -86,6 +86,14 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 	add("physical_erase", "observe.yml", observeCollection+"physical_erase_protocol", "publishes loaded or read-only completion, never a durable effect preparation", func(params, _ map[string]any) bool {
 		return params["phase"] == "loaded" || params["phase"] == "completed" && params["observed"] == true
 	})
+	for _, role := range []string{"substrate_libvirt_machine", "substrate_baremetal_machine"} {
+		for _, module := range []string{"ansible.builtin.set_fact", observeCollection + "redfish_system_read", observeCollection + "redfish_system_inspect"} {
+			add(role, "state_read.yml", module, "reads controller state and retains answers in memory", read)
+		}
+	}
+	add("containercluster_install_agent", "state_node_serial.yml", "ansible.builtin.set_fact", "retains a node read in memory", read)
+	add("containercluster_install_agent", "port.yml", "ansible.builtin.assert", "validates the fixed substrate binding", read)
+	add("containercluster_install_agent", "port.yml", "ansible.builtin.set_fact", "retains the port answer in memory", read)
 	addObserveReads(add, read)
 	addObserveScratch(add, read)
 	return allow
@@ -97,7 +105,6 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("containercluster_install_agent", "cluster_state.yml", "ansible.builtin.command", "runs oc get against the cluster with a request timeout", read)
 	add("containercluster_install_agent", "cluster_state.yml", "ansible.builtin.set_fact", "resolves the cluster answers in memory", read)
 	add("containercluster_install_agent", "state.yml", observeCollection+"containercluster_media_token", "compares image device and inode without changing publication", observeRegistrationInspect)
-	add("containercluster_install_agent", "state.yml", observeCollection+"redfish_system_read", "reads each node's power and media from its controller", read)
 	add("containercluster_install_agent", "state.yml", "ansible.builtin.fail", "names a controller that did not answer", read)
 	add("containercluster_install_agent", "state.yml", "ansible.builtin.set_fact", "resolves the answers in memory", read)
 	add("containercluster_media_agent", "observe.yml", observeCollection+"containercluster_media_inspect", "reads what the media block published", read)
@@ -106,7 +113,6 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("infra_artifact_server_nginx", "observe.yml", observeCollection+"artifact_server_inspect", "reads the served unit, container and content", read)
 	add("infra_managed_service", "observe.yml", observeCollection+"infra_service_inspect", "reads the managed service's unit, container and answers", read)
 	add("managedos_install_anaconda", "observe.yml", observeCollection+"managedos_install_inspect", "reads the published installation content", read)
-	add("managedos_install_anaconda", "observe.yml", observeCollection+"redfish_system_read", "reads the machine's power and media from its controller", read)
 	add("managedos_install_anaconda", "observe.yml", "ansible.builtin.set_fact", "names, in memory, a removal's read of a machine holding nothing of this installation", read)
 	add("managedos_install_anaconda", "work.yml", "ansible.builtin.stat", "reads a work-area ancestor without following links", read)
 	add("managedos_install_anaconda", "work.yml", "ansible.builtin.assert", "refuses an ancestor that is not private to root", read)
@@ -203,11 +209,12 @@ func observeUnder(field, prefix string) func(map[string]any, map[string]any) boo
 }
 
 type observeWalk struct {
-	assets  map[string][]byte
-	allow   map[observeTaskKey]observeAllowance
-	used    map[observeTaskKey]bool
-	visited map[string]bool
-	errs    []string
+	assets        map[string][]byte
+	allow         map[observeTaskKey]observeAllowance
+	used          map[observeTaskKey]bool
+	portOperation string
+	visited       map[string]bool
+	errs          []string
 }
 
 func (w *observeWalk) reportf(format string, args ...any) {
@@ -251,10 +258,10 @@ func (w *observeWalk) role(key, role, entry string) {
 
 func (w *observeWalk) file(key, role, file string) {
 	path := observeRoleRoot + role + "/tasks/" + file
-	if w.visited[path] {
+	if w.visited[path+"/"+w.portOperation] {
 		return
 	}
-	w.visited[path] = true
+	w.visited[path+"/"+w.portOperation] = true
 	data, ok := w.assets[path]
 	if !ok {
 		w.reportf("%s: %s/tasks/%s is not in the embedded collection", key, role, file)
@@ -300,12 +307,23 @@ func (w *observeWalk) task(key, role, file string, task map[string]any) {
 	module := modules[0]
 	switch {
 	case slices.Contains(observeImports, module):
+		previous := w.portOperation
+		if vars, ok := task["vars"].(map[string]any); ok {
+			if operation, ok := vars["containercluster_install_agent_port_operation"].(string); ok {
+				w.portOperation = operation
+			}
+		}
 		w.include(key, role, file, task[module])
+		w.portOperation = previous
 	case slices.Contains(observeRoles, module):
 		params := observeParams(task, module)
 		name, _ := params["name"].(string)
 		entry, _ := params["tasks_from"].(string)
-		w.role(key, name, entry)
+		if strings.Contains(name, "{{") {
+			w.fixedReadRoles(key, role, name, entry)
+		} else {
+			w.role(key, name, entry)
+		}
 	default:
 		w.module(key, observeTaskKey{role, file, module}, task)
 	}
@@ -431,5 +449,65 @@ func TestPhysicalEraseObservationRefusesEffectPhases(t *testing.T) {
 		return strings.Contains(problem, `physical_erase_protocol ("Prepare a receipt") outside its constraint`)
 	}) {
 		t.Fatalf("write handshake was admitted: %v", problems)
+	}
+}
+
+func (w *observeWalk) fixedReadRoles(key, role, name, entry string) {
+	mapping := ""
+	nested := false
+	switch {
+	case role == "containercluster_install_agent" && name == "{{ containercluster_install_agent_ports[containercluster_install_agent_node.substrate].role }}" && entry == "{{ containercluster_install_agent_port_operation }}" && w.portOperation == "state_read":
+		mapping, entry, nested = "containercluster_install_agent_ports", "state_read", true
+	case role == "managedos_install_anaconda" && name == "{{ managedos_install_anaconda_state_read[bootwright_os_install_request.target.substrate] }}" && entry == "state_read":
+		mapping = "managedos_install_anaconda_state_read"
+	default:
+		w.reportf("%s: unresolved dynamic role %q entry %q", key, name, entry)
+		return
+	}
+	var defaults map[string]any
+	if err := yaml.Unmarshal(w.assets[observeRoleRoot+role+"/defaults/main.yml"], &defaults); err != nil {
+		w.reportf("%s: invalid dispatch defaults: %v", key, err)
+		return
+	}
+	bindings, ok := defaults[mapping].(map[string]any)
+	if !ok || len(bindings) == 0 {
+		w.reportf("%s: no fixed dispatch map %s", key, mapping)
+		return
+	}
+	for arm, value := range bindings {
+		if nested {
+			fields, ok := value.(map[string]any)
+			if !ok {
+				w.reportf("%s: invalid binding %s", key, arm)
+				continue
+			}
+			value = fields["role"]
+		}
+		qualified, ok := value.(string)
+		if !ok || strings.Contains(qualified, "{{") {
+			w.reportf("%s: nonliteral binding %s", key, arm)
+			continue
+		}
+		w.role(key, qualified, entry)
+	}
+}
+
+func TestObserveDispatchRefusesMutationAndUnresolvedBindings(t *testing.T) {
+	for _, test := range []struct{ path, before, after string }{
+		{"containercluster_install_agent/tasks/state_node_serial.yml", "containercluster_install_agent_port_operation: state_read", "containercluster_install_agent_port_operation: media_insert"},
+		{"managedos_install_anaconda/defaults/main.yml", "bootwright.core.substrate_libvirt_machine", "{{ untrusted_role }}"},
+		{"substrate_baremetal_machine/tasks/state_read.yml", "bootwright.core.redfish_system_read:", "bootwright.core.redfish_power:"},
+	} {
+		assets := maps.Clone(ansible.Assets())
+		path := observeRoleRoot + test.path
+		original := string(assets[path])
+		changed := strings.ReplaceAll(original, test.before, test.after)
+		if changed == original {
+			t.Fatalf("mutation did not alter %s", path)
+		}
+		assets[path] = []byte(changed)
+		if problems := walkObservePlaybooks(assets); len(problems) == 0 {
+			t.Fatalf("unsafe dispatch admitted: %s", test.path)
+		}
 	}
 }

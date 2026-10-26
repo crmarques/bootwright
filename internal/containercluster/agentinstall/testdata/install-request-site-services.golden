@@ -2,8 +2,11 @@
   "budgets": {
     "bootSeconds": 900,
     "bootstrapSeconds": 5400,
-    "installSeconds": 5400
+    "fanOut": 4,
+    "installSeconds": 5400,
+    "roundMarginSeconds": 660
   },
+  "deliveryKind": "fetch",
   "endpoints": [
     {
       "address": "198.51.100.21",
@@ -41,9 +44,11 @@
           "trust": "established"
         }
       },
+      "controllerKind": "emulated",
       "machine": "sno-01",
       "name": "master-0",
       "physical": false,
+      "stateReadSeconds": 120,
       "substrate": "libvirt"
     }
   ],
@@ -66,7 +71,7 @@
     "kind": "openshift-install",
     "version": "4.21.15"
   },
-  "version": "cluster-install-agent-v5",
+  "version": "cluster-install-agent-v7",
   "vips": [],
   "workRoot": "/var/lib/bootwright-clusters/lab/sno"
 }

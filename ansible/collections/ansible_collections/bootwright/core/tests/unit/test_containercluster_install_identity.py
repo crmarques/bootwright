@@ -13,6 +13,8 @@ import hashlib
 import os
 import pathlib
 
+from ansible_collections.bootwright.core.tests.unit.install_phase_tasks import apply_tasks as phased_tasks
+
 import pytest
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
@@ -81,7 +83,7 @@ def trusted(path):
 
 
 def one(name, predicate):
-    tasks = [task for task in trusted(ROLE / "tasks" / name) if predicate(task)]
+    tasks = [task for task in (apply_tasks() if name == "apply.yml" else trusted(ROLE / "tasks" / name)) if predicate(task)]
     assert len(tasks) == 1
     return tasks[0]
 
@@ -312,7 +314,7 @@ INSPECT = "bootwright.core.containercluster_install_inspect"
 
 
 def apply_tasks():
-    return trusted(ROLE / "tasks" / "apply.yml")
+    return phased_tasks(LOADER, ROLE)
 
 
 def only(entries, predicate):
@@ -348,10 +350,10 @@ def test_the_apply_keeps_its_kubeconfig_and_refuses_without_one_before_its_first
     entries = apply_tasks()
     kept = only(entries, lambda task: task.get("register") == "containercluster_install_agent_before")
     refusal = only(entries, lambda task: task.get("name") == "Refuse an installation with no whole kubeconfig to read its cluster through")
-    first_read = min(i for i, task in enumerate(entries) if task.get("ansible.builtin.import_tasks") == "state.yml")
+    first_read = min(i for i, task in enumerate(entries) if task.get("ansible.builtin.import_tasks") in ("cluster_state.yml", "collect_state.yml"))
     mark = only(entries, lambda task: str((task.get("ansible.builtin.copy") or {}).get("dest", "")).endswith(
         "/.bootwright-booted"))
-    boot = only(entries, lambda task: task.get("ansible.builtin.include_tasks") == "boot.yml")
+    boot = only(entries, lambda task: task.get("ansible.builtin.import_tasks") == "boot.yml")
     assert entries[kept][INSPECT]["keep"] is True
     assert kept < refusal < first_read < mark < boot
     assert refused({"identity": IDENTITY})[0] is False
@@ -378,7 +380,7 @@ def test_the_rewrite_the_waits_leave_is_kept_before_the_final_read_and_the_custo
     keeps = [index for index, task in enumerate(entries) if (task.get(INSPECT) or {}).get("keep") is True]
     wait = only(entries, lambda task: task.get("ansible.builtin.include_tasks") == "wait.yml"
                 and "install-complete" in str(task.get("vars")))
-    last_read = max(i for i, task in enumerate(entries) if task.get("ansible.builtin.import_tasks") == "state.yml")
+    last_read = max(i for i, task in enumerate(entries) if task.get("ansible.builtin.import_tasks") in ("cluster_state.yml", "collect_state.yml"))
     custody = only(entries, lambda task: "bootwright_cluster_install_output" in str(task.get("ansible.builtin.copy", "")))
     assert len(keeps) == 2
     assert wait < keeps[1] < last_read < custody
@@ -433,7 +435,7 @@ def test_media_release_is_gated_by_a_fresh_read_after_the_installation_wait():
     entries = apply_tasks()
     gate = only(entries, lambda task: task.get("name") ==
                 "Refuse media release until every declared node completed installation")
-    release = only(entries, lambda task: task.get("ansible.builtin.include_tasks") == "release.yml")
+    release = only(entries, lambda task: task.get("ansible.builtin.import_tasks") == "release.yml")
     wait = only(entries, lambda task: task.get("ansible.builtin.include_tasks") == "wait.yml"
                 and task.get("vars", {}).get("containercluster_install_agent_milestone") == "install-complete")
     assert wait < gate < release

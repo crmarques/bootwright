@@ -46,6 +46,7 @@ func TestAnApplyRemediesItsTargetsPreBootRefusalsByName(t *testing.T) {
 						!strings.HasSuffix(running[0].Remediation, ", then run bootwright apply --context lab-b --authorize data-loss") {
 						t.Fatalf("the %s running refusal names %#v, not the apply's continuation", arm, running)
 					}
+					want["foreign-installation"] = diagnostics.Of(foreignInstallation("lab-b", request))
 					for reason, err := range mediaRefusals("lab-b", request) {
 						want[reason] = diagnostics.Of(err)
 					}

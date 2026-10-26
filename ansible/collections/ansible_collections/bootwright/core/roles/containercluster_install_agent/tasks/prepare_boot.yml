@@ -1,0 +1,81 @@
+---
+- name: Collect the initial node reads
+  ansible.builtin.import_tasks: collect_state.yml
+
+# An insert that failed, one a timeout or an interruption stopped, and one a
+# later insert replaced each leave a link no controller presents, and a
+# controller may have journaled it. Every link no controller presents now is
+# retired here, before this attempt boots anything.
+- name: Retire every insert link no management controller presents
+  bootwright.core.containercluster_media_token:
+    request: '{{ bootwright_cluster_install_request }}'
+    source: '{{ containercluster_install_agent_before.observation.url }}'
+    presented: >-
+      {{ containercluster_install_agent_controllers.results | default([])
+         | map(attribute='media', default='') | list }}
+    operation: sweep
+  when: containercluster_install_agent_before.observation.url | default('') | length > 0
+  register: containercluster_install_agent_swept
+  failed_when: false
+  no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed,
+# so the sweep's own refusal, which carries counts and never a URL or
+# token, is reported here.
+- name: Stop at a refusal of the sweep before any boot
+  ansible.builtin.fail:
+    msg: >-
+      retiring the insert links no management controller presents failed:
+      {{ (containercluster_install_agent_swept.msg | string | bootwright.core.printable)[:512] }}
+  when: containercluster_install_agent_swept.msg is defined
+
+# Decided once, before any effect. Every later guard reads this fact rather
+# than the live state, which this attempt is about to change. A cluster that
+# answers with this build's identity, at the declared release and whole, may
+# still be installing: an attempt interrupted during the installation wait
+# leaves exactly that. Only the cluster's own report that its installation
+# completed lets a retry skip the waits and release the media.
+- name: Decide whether this cluster is already installed
+  ansible.builtin.set_fact:
+    containercluster_install_agent_settled: >-
+      {{ (containercluster_install_agent_before.observation.identity | default('')) | length > 0
+         and containercluster_install_agent_state.cluster == containercluster_install_agent_before.observation.identity
+         and containercluster_install_agent_state.release == bootwright_cluster_install_request.release.version
+         and containercluster_install_agent_state.missing | length == 0
+         and containercluster_install_agent_state.completed is sameas true }}
+  changed_when: false
+
+- name: Report node boot
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: boot-machines
+    status: running
+  no_log: true
+
+# The work area the image was built in holds the state these nodes install from
+# and the installer's own copy of the administrator access to the cluster they
+# install, the only one until this block proves the installation complete, and
+# the media block's rebuild starts by discarding it. It is marked before any node is
+# handed the image, and whether or not this attempt boots one, so a rebuild
+# refuses from then on. The mark leaves only with the area itself, in the media
+# block's inverse, which the removal plan starts after this block's own.
+- name: Prove virtual IP freedom before marking or booting the image
+  ansible.builtin.import_tasks: preboot_vips.yml
+  when: not (containercluster_install_agent_settled | bool)
+
+- name: Mark the work area as one this cluster's nodes boot from
+  ansible.builtin.copy:
+    content: ''
+    dest: '{{ containercluster_install_agent_work }}/.bootwright-booted'
+    owner: root
+    group: root
+    mode: '0600'
+
+# One budget bounds booting every node, so its deadline is set once, here, and
+# each node boots within what is left of it (boot.yml).
+- name: Set the moment the boot phase's budget is spent
+  ansible.builtin.set_fact:
+    containercluster_install_agent_boot_deadline: >-
+      {{ (((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int)) + (bootwright_cluster_install_request.budgets.bootSeconds | int) }}
+  changed_when: false
+  when: not (containercluster_install_agent_settled | bool)

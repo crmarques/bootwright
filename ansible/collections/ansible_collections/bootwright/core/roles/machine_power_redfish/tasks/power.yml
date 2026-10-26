@@ -24,15 +24,16 @@
   no_log: true
 
 - name: Read the state the management controller reports
-  bootwright.core.redfish_system_read:
-    endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
-    verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'
-    ca_data: '{{ machine_power_redfish_ca_data }}'
-    media: false
-  register: machine_power_redfish_before
-  failed_when: false
+  ansible.builtin.include_role:
+    name: "{{ machine_power_redfish_state_read[bootwright_machine_power_material.substrate] }}"
+    tasks_from: state_read
+  vars:
+    bootwright_machine_port: >-
+      {{ machine_power_redfish_access | combine({'media': false}) }}
+
+- name: Retain the machine port answer
+  ansible.builtin.set_fact:
+    machine_power_redfish_before: "{{ vars[machine_power_redfish_port_result[bootwright_machine_power_material.substrate]] }}"
   no_log: true
 
 # ansible-core keeps nothing of a failure under no_log but that it failed, so
@@ -61,14 +62,19 @@
 # read, so it arrives base64-encoded and is decoded only inside the comparison,
 # where a decoded value is data and never a template.
 - name: Read the identity the management controller reports
-  bootwright.core.redfish_system_inspect:
-    endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
-    verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'
-    ca_data: '{{ machine_power_redfish_ca_data }}'
-  register: machine_power_redfish_identity
-  failed_when: false
+  ansible.builtin.include_role:
+    name: "{{ machine_power_redfish_state_read[bootwright_machine_power_material.substrate] }}"
+    tasks_from: state_read
+  vars:
+    bootwright_machine_port: >-
+      {{ machine_power_redfish_access | combine({'media': false, 'inspect': true}) }}
+  when: >-
+    (bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length > 0)
+    or (bootwright_machine_power_material.pinnedSerialBase64 | default('') | length > 0)
+
+- name: Retain the machine port answer
+  ansible.builtin.set_fact:
+    machine_power_redfish_identity: "{{ vars[machine_power_redfish_port_result[bootwright_machine_power_material.substrate]] }}"
   when: >-
     (bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length > 0)
     or (bootwright_machine_power_material.pinnedSerialBase64 | default('') | length > 0)
@@ -136,15 +142,16 @@
   when: bootwright_machine_power_request.verb in ['start', 'restart']
 
 - name: Read the state the operation settled at
-  bootwright.core.redfish_system_read:
-    endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerUser) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_machine_power_material.controllerPassword) }}'
-    verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'
-    ca_data: '{{ machine_power_redfish_ca_data }}'
-    media: false
-  register: machine_power_redfish_after
-  failed_when: false
+  ansible.builtin.include_role:
+    name: "{{ machine_power_redfish_state_read[bootwright_machine_power_material.substrate] }}"
+    tasks_from: state_read
+  vars:
+    bootwright_machine_port: >-
+      {{ machine_power_redfish_access | combine({'media': false}) }}
+
+- name: Retain the machine port answer
+  ansible.builtin.set_fact:
+    machine_power_redfish_after: "{{ vars[machine_power_redfish_port_result[bootwright_machine_power_material.substrate]] }}"
   no_log: true
 
 - name: Stop at a settled read the management controller did not answer

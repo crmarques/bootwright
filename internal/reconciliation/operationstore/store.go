@@ -123,7 +123,7 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 	}
 	encodedPlan, err := encode(plan, MaxPlanBytes)
 	if err != nil {
-		return err
+		return recordError("lifecycle plan exceeds its encoded plan limit")
 	}
 	encoded, err := encode(operation, MaxOperationBytes)
 	if err != nil {

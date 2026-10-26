@@ -13,14 +13,15 @@ import (
 )
 
 const (
-	MaxBlocks       = 256
-	MaxGroups       = 32
-	MaxMachines     = 512
-	MaxImpacts      = 64
-	MaxExclusive    = 8
-	MaxRequestBytes = 64 << 10
-	maxDescription  = 200
-	maxIdentifier   = 63
+	MaxBlocks           = 256
+	MaxGroups           = 32
+	MaxMachines         = 512
+	MaxImpacts          = 128
+	MaxExclusive        = 8
+	MaxRequestBytes     = 256 << 10
+	MaxPlanRequestBytes = 4 << 20
+	maxDescription      = 200
+	maxIdentifier       = 63
 )
 
 type Verb string
@@ -92,6 +93,13 @@ func NewPlan(verb Verb, definitions []BlockDefinition) (Plan, error) {
 	}
 	if len(definitions) > MaxBlocks {
 		return Plan{}, planError("lifecycle plan exceeds its block limit")
+	}
+	requestBytes := 0
+	for _, definition := range definitions {
+		requestBytes += len(definition.Request)
+		if requestBytes > MaxPlanRequestBytes {
+			return Plan{}, planError("lifecycle plan exceeds its 4 MiB aggregate request limit")
+		}
 	}
 	resolved, err := resolveRequirements(definitions)
 	if err != nil {
@@ -368,8 +376,14 @@ func validateDefinition(definition BlockDefinition) error {
 	if !validDigest(definition.ContentDigest) {
 		return planError("lifecycle block requires its implementation content digest")
 	}
-	if len(definition.Dependencies) > MaxBlocks || len(definition.Impacts) > MaxImpacts || len(definition.Groups) > MaxGroups {
-		return planError("lifecycle block exceeds its collection limits")
+	if len(definition.Dependencies) > MaxBlocks {
+		return planError("lifecycle block exceeds its dependency limit")
+	}
+	if len(definition.Impacts) > MaxImpacts {
+		return planError("lifecycle block exceeds its impact limit")
+	}
+	if len(definition.Groups) > MaxGroups {
+		return planError("lifecycle block exceeds its group limit")
 	}
 	if len(definition.Exclusive) > MaxExclusive || !uniqueSorted(definition.Exclusive) {
 		return planError("lifecycle block exclusive resources must be bounded, unique and ordered")

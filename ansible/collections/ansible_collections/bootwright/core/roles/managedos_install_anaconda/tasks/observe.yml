@@ -144,17 +144,19 @@
       when: managedos_install_anaconda_removal_scratch_ready is succeeded
 
 - name: Read the power state and media its controller reports
-  bootwright.core.redfish_system_read:
-    endpoint: '{{ managedos_install_anaconda_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
-    verify: '{{ managedos_install_anaconda_verify }}'
-    ca_data: '{{ managedos_install_anaconda_ca_data }}'
-    media: true
-  register: managedos_install_anaconda_controller
-  failed_when: false
+  ansible.builtin.include_role:
+    name: "{{ managedos_install_anaconda_state_read[bootwright_os_install_request.target.substrate] }}"
+    tasks_from: state_read
+  vars:
+    bootwright_machine_port: >-
+      {{ managedos_install_anaconda_port_access | combine({'media': true}) }}
   when: not (managedos_install_anaconda_observes_removal | bool)
+
+- name: Retain the machine port answer
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_controller: "{{ vars[managedos_install_anaconda_port_result[bootwright_os_install_request.target.substrate]] }}"
   no_log: true
+  when: not (managedos_install_anaconda_observes_removal | bool)
 
 # Always the presence form, which carries the power the controller reported:
 # a powered-off machine holding no marker with nothing published is how an

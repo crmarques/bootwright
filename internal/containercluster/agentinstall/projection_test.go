@@ -305,21 +305,9 @@ func TestUnsupportedNamesEveryClusterThisContractCannotInstall(t *testing.T) {
 		"disconnected": func(spec api.Value) api.Value {
 			return spec.WithPath(api.StringValue("disconnected"), "install", "mode")
 		},
-		"fips": func(spec api.Value) api.Value {
-			return spec.With("security", api.MapValue(field("fips", api.MapValue(field("enabled", api.BoolValue(true))))))
-		},
-		"disk encryption": func(spec api.Value) api.Value {
-			return spec.With("security", api.MapValue(field("diskEncryption", api.MapValue(
-				field("unlock", api.MapValue(field("tpm2", api.MapValue())))))))
-		},
-		"registry policy": func(spec api.Value) api.Value {
-			return spec.WithPath(api.MapValue(field("mirror", api.MapValue(text("registryRef", "mirror")))), "install", "registries")
-		},
+
 		"serving certificates": func(spec api.Value) api.Value {
 			return spec.WithPath(api.MapValue(text("defaultCertificateRef", "ingress-tls")), "install", "servingCertificates", "ingress")
-		},
-		"proxied installation": func(spec api.Value) api.Value {
-			return spec.WithPath(api.MapValue(text("proxyRef", "lab-proxy")), "install", "proxy")
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -357,11 +345,6 @@ func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.
 		reason      string
 		remediation string
 	}{
-		"physical nodes": {
-			physicalCatalog(), "ContainerCluster/metal",
-			"physical cluster nodes are not supported until an emulated rehearsal qualifies them",
-			"Machine/metal-01 is physical; declare ContainerCluster/metal on virtual nodes",
-		},
 		"installed node": {
 			api.NewCatalog(append(base(), installed, cluster("sno",
 				installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
@@ -372,12 +355,12 @@ func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.
 		},
 		"controller port past the port space": {
 			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20/24")), "ContainerCluster/sno",
-			"the Machine's emulated controller port does not allocate",
+			"node master-0 (Machine/sno-01): the Machine's emulated controller port does not allocate",
 			"correct spec.libvirt.bmcEmulationDefaults.port on InfraProvider/lab-libvirt",
 		},
 		"no controller credential": {
 			singleNodeOnProvider(noControllerCredential), "ContainerCluster/sno",
-			"the provider declares no emulated controller credential",
+			"node master-0 (Machine/sno-01): the provider declares no emulated controller credential",
 			"set spec.libvirt.bmcEmulationDefaults.auth.credentialsRef on InfraProvider/lab-libvirt",
 		},
 	} {

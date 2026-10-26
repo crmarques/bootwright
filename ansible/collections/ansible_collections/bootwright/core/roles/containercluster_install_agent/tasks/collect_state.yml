@@ -1,0 +1,52 @@
+---
+- name: Refuse failed node reads after every sibling finished
+  ansible.builtin.import_tasks: phase_failures.yml
+
+- name: Start the ordered node observations
+  ansible.builtin.set_fact:
+    containercluster_install_agent_controllers:
+      results: []
+    containercluster_install_agent_media_identity:
+      results: []
+  no_log: true
+
+- name: Collect observations in declared node order
+  ansible.builtin.set_fact:
+    containercluster_install_agent_controllers:
+      results: >-
+        {{ containercluster_install_agent_controllers.results +
+           [hostvars['bootwright_node_%03d' | format(node_index)].containercluster_install_agent_node_read
+            | combine({'item': node})] }}
+    containercluster_install_agent_media_identity:
+      results: >-
+        {{ containercluster_install_agent_media_identity.results +
+           [hostvars['bootwright_node_%03d' | format(node_index)].containercluster_install_agent_node_identity
+            | combine({'item': {'item': node}})] }}
+  loop: '{{ bootwright_cluster_install_request.nodes }}'
+  loop_control:
+    loop_var: node
+    index_var: node_index
+  no_log: true
+
+- name: Resolve what the cluster and its nodes answered
+  ansible.builtin.set_fact:
+    containercluster_install_agent_state:
+      cluster: '{{ containercluster_install_agent_state.cluster }}'
+      release: '{{ containercluster_install_agent_state.release }}'
+      completed: '{{ containercluster_install_agent_state.completed }}'
+      missing: '{{ containercluster_install_agent_state.missing }}'
+      media: >-
+        {{ containercluster_install_agent_presenting | map(attribute='item.machine') | list }}
+      ownMedia: >-
+        {{ containercluster_install_agent_media_identity.results | default([])
+           | selectattr('own', 'defined') | selectattr('own', 'equalto', true)
+           | map(attribute='item.item.machine') | list }}
+      powered: >-
+        {{ containercluster_install_agent_controllers.results | default([])
+           | selectattr('power', 'defined') | selectattr('power', 'equalto', 'On')
+           | map(attribute='item.machine') | list }}
+  vars:
+    containercluster_install_agent_presenting: >-
+      {{ containercluster_install_agent_controllers.results | default([])
+         | selectattr('media', 'defined') | selectattr('media', 'ne', '') | list }}
+  changed_when: false

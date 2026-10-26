@@ -1,0 +1,10 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Registry
+metadata:
+  name: lab-mirror
+
+spec:
+  management: external
+  url: mirror.example.test
+  credentialsRef: mirror-credentials
+  trustBundleRef: mirror-ca

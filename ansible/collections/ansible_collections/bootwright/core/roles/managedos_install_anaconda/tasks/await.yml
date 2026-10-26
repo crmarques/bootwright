@@ -9,18 +9,19 @@
 # installed disk is then booted through the substrate's disk-boot entry point,
 # selected by the frozen request's own substrate.
 - name: Wait for the installer to power the machine off when it is done
-  bootwright.core.redfish_system_read:
-    endpoint: '{{ managedos_install_anaconda_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
-    verify: '{{ managedos_install_anaconda_verify }}'
-    ca_data: '{{ managedos_install_anaconda_ca_data }}'
-    media: false
-  register: managedos_install_anaconda_installer
-  retries: '{{ bootwright_os_install_request.budgets.installer.attempts | int }}'
-  delay: '{{ bootwright_os_install_request.budgets.installer.delaySeconds | int }}'
-  until: (managedos_install_anaconda_installer.power | default('')) == 'Off'
-  failed_when: false
+  ansible.builtin.include_role:
+    name: "{{ managedos_install_anaconda_state_read[bootwright_os_install_request.target.substrate] }}"
+    tasks_from: state_read
+  vars:
+    bootwright_machine_port: >-
+      {{ managedos_install_anaconda_port_access | combine({'media': false,
+         'retries': bootwright_os_install_request.budgets.installer.attempts | int,
+         'delay': bootwright_os_install_request.budgets.installer.delaySeconds | int,
+         'expected_power': 'Off'}) }}
+
+- name: Retain the machine port answer
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_installer: "{{ vars[managedos_install_anaconda_port_result[bootwright_os_install_request.target.substrate]] }}"
   no_log: true
 
 # ansible-core keeps nothing of a failure under no_log but that it failed, so
@@ -41,18 +42,18 @@
     quiet: true
 
 - name: Eject the installer image now that the installation is written
-  bootwright.core.redfish_boot:
-    endpoint: '{{ managedos_install_anaconda_endpoint }}'
-    user: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerUser) }}'
-    password: '{{ lookup("ansible.builtin.file", bootwright_os_install_material.controllerPassword) }}'
-    verify: '{{ managedos_install_anaconda_verify }}'
-    ca_data: '{{ managedos_install_anaconda_ca_data }}'
-    operation: eject
-    restore_verification: '{{ managedos_install_anaconda_media_trust.restoreVerification }}'
-    remove_certificate: '{{ managedos_install_anaconda_media_trust.removeCertificate }}'
-    certificate: '{{ managedos_install_anaconda_certificate }}'
-  register: managedos_install_anaconda_released
-  failed_when: false
+  ansible.builtin.include_role:
+    name: "{{ managedos_install_anaconda_media_eject[bootwright_os_install_request.target.substrate] }}"
+    tasks_from: media_eject
+  vars:
+    bootwright_machine_port: >-
+      {{ managedos_install_anaconda_port_access | combine({'restore_verification': managedos_install_anaconda_media_trust.restoreVerification,
+         'remove_certificate': managedos_install_anaconda_media_trust.removeCertificate,
+         'certificate': bootwright_os_install_material.artifactCertificate | default('')}) }}
+
+- name: Retain the machine port answer
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_released: "{{ vars[managedos_install_anaconda_port_result[bootwright_os_install_request.target.substrate]] }}"
   no_log: true
 
 - name: Stop at an eject the management controller did not complete
@@ -67,29 +68,17 @@
 
 - name: Boot the installed disk of a machine this substrate created
   ansible.builtin.include_role:
-    name: bootwright.core.substrate_libvirt_machine
+    name: "{{ managedos_install_anaconda_boot_disk[bootwright_os_install_request.target.substrate] }}"
     tasks_from: boot_disk
   vars:
-    substrate_libvirt_machine_disk_endpoint: '{{ managedos_install_anaconda_endpoint }}'
-    substrate_libvirt_machine_disk_verify: '{{ managedos_install_anaconda_verify }}'
-    substrate_libvirt_machine_disk_ca: '{{ managedos_install_anaconda_controller_ca }}'
-    substrate_libvirt_machine_disk_user: '{{ bootwright_os_install_material.controllerUser }}'
-    substrate_libvirt_machine_disk_password: '{{ bootwright_os_install_material.controllerPassword }}'
-    substrate_libvirt_machine_disk_power_on: true
-  when: bootwright_os_install_request.target.substrate == 'libvirt'
-
-- name: Boot the installed disk of an operator-owned machine
-  ansible.builtin.include_role:
-    name: bootwright.core.substrate_baremetal_machine
-    tasks_from: boot_disk
-  vars:
-    substrate_baremetal_machine_disk_endpoint: '{{ managedos_install_anaconda_endpoint }}'
-    substrate_baremetal_machine_disk_verify: '{{ managedos_install_anaconda_verify }}'
-    substrate_baremetal_machine_disk_ca: '{{ managedos_install_anaconda_controller_ca }}'
-    substrate_baremetal_machine_disk_user: '{{ bootwright_os_install_material.controllerUser }}'
-    substrate_baremetal_machine_disk_password: '{{ bootwright_os_install_material.controllerPassword }}'
-    substrate_baremetal_machine_disk_power_on: true
-  when: bootwright_os_install_request.target.substrate == 'baremetal'
+    bootwright_machine_port:
+      endpoint: '{{ managedos_install_anaconda_endpoint }}'
+      verify: '{{ managedos_install_anaconda_verify }}'
+      ca: '{{ managedos_install_anaconda_controller_ca }}'
+      user: '{{ bootwright_os_install_material.controllerUser }}'
+      password: '{{ bootwright_os_install_material.controllerPassword }}'
+      power_on: true
+  when: bootwright_os_install_request.target.substrate in managedos_install_anaconda_boot_disk
 
 # A substrate with no disk-boot entry point reaches this refusal only after the
 # installer wait and the eject above. That is acceptable only because apply.yml
@@ -102,4 +91,4 @@
       {{ bootwright_os_install_request.target.substrate }}, which this
       installation has no boot_disk binding for, so its installed disk was not
       booted; plan the installation again with this release
-  when: bootwright_os_install_request.target.substrate not in ['libvirt', 'baremetal']
+  when: bootwright_os_install_request.target.substrate not in managedos_install_anaconda_boot_disk

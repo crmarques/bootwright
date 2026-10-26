@@ -85,3 +85,9 @@ func TestTheLifecycleRecordRefusesEachNonCanonicalEncodingInItsOwnWords(t *testi
 		}
 	}
 }
+
+func TestPlanAndRemovalRecordEnvelopesFitTheReservedBytes(t *testing.T) {
+	if needed := 2*MaxPlanBytes + 2*MaxOperationBytes + MaxIndexBytes; needed > ReservedBytes {
+		t.Fatalf("apply and removal record envelopes need %d bytes, reserve holds %d", needed, ReservedBytes)
+	}
+}

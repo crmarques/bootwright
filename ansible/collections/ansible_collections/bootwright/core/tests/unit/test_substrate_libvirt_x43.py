@@ -210,7 +210,7 @@ def test_a_destroy_removes_each_empty_parent_never_recursively():
     ]
     validate = index_of(tasks, lambda task: task.get("name") == "Validate the frozen provider host request", "validates the request")
     base = {"bootwright_substrate_host_digest": "0" * 64}
-    request = dict(REQUEST, version="substrate-host-libvirt-v5")
+    request = dict(REQUEST, version="substrate-host-libvirt-v6")
     assert holds(tasks[validate], dict(base, bootwright_substrate_host_request=request))
     shallow = dict(request, poolPath="/var/lib/libvirt/images/bootwright/lab/vmedia")
     assert not holds(tasks[validate], dict(base, bootwright_substrate_host_request=shallow))
@@ -390,8 +390,8 @@ def test_a_machine_destroy_removes_each_empty_context_parent():
             assert evaluate(parent["failed_when"], {parent["register"]: result}) is failed, (removal, result)
     validate = named(tasks, "Validate the frozen machine request")
     base = {"bootwright_substrate_machine_digest": "0" * 64}
-    assert holds(tasks[validate], dict(base, bootwright_substrate_machine_request=dict(MACHINE, version="machine-libvirt-v7")))
-    shallow = dict(MACHINE, version="machine-libvirt-v7", directory="/var/lib/libvirt/images/bootwright/rhel-01")
+    assert holds(tasks[validate], dict(base, bootwright_substrate_machine_request=dict(MACHINE, version="machine-libvirt-v8")))
+    shallow = dict(MACHINE, version="machine-libvirt-v8", directory="/var/lib/libvirt/images/bootwright/rhel-01")
     assert not holds(tasks[validate], dict(base, bootwright_substrate_machine_request=shallow))
 
 
@@ -400,3 +400,18 @@ def test_the_not_shut_off_refusal_names_its_context():
     guard = tasks[named(tasks, "Refuse to remove a machine that is not shut off")]
     message = Templar(loader=LOADER, variables=machine_variables()).template(guard["ansible.builtin.assert"]["fail_msg"])
     assert "bootwright machine stop --context lab --name rhel-01" in message
+
+
+@pytest.mark.parametrize("value,expected", [("9000\n", 9000), ("unknown", 0)])
+def test_external_bridge_mtu_is_read_without_mutation(monkeypatch, value, expected):
+    import io
+
+    asked = []
+
+    def read(path, **_kwargs):
+        asked.append(path)
+        return io.StringIO(value)
+
+    monkeypatch.setattr("builtins.open", read)
+    assert substrate_libvirt.bridge_mtu("br-storage") == expected
+    assert asked == ["/sys/class/net/br-storage/mtu"]

@@ -264,7 +264,7 @@ def test_anything_short_of_that_is_not_completed(rc, stdout):
 
 
 def settled(completed):
-    decide = one("apply.yml", lambda task: "containercluster_install_agent_settled" in (
+    decide = one("prepare_boot.yml", lambda task: "containercluster_install_agent_settled" in (
         task.get("ansible.builtin.set_fact") or {}))
     return Templar(loader=LOADER, variables={
         "bootwright_cluster_install_request": {"release": {"version": RELEASE}},
@@ -426,14 +426,14 @@ def test_every_boot_effect_sits_under_the_skip():
     boot = tasks("boot.yml")
     skip = boot_skip()
     assert boot[-1] == skip
-    assert all("ansible.builtin.assert" in task for task in boot[:-1])
-    inside = [task for task in beneath(skip["block"])
-              if "bootwright.core.redfish_boot" in task or "ansible.builtin.include_role" in task]
-    assert [task.get("bootwright.core.redfish_boot", {}).get("operation") for task in inside] == [
-        None, None, "insert", None, None]
-    assert [(task.get("ansible.builtin.include_role") or {}).get("name") for task in inside] == [
-        "bootwright.core.substrate_libvirt_machine", "bootwright.core.substrate_baremetal_machine",
-        None, "bootwright.core.substrate_libvirt_machine", "bootwright.core.substrate_baremetal_machine"]
+    assert len(boot[:-1]) == 2
+    assert boot[0]["ansible.builtin.set_fact"] == {"containercluster_install_agent_lifecycle_refusal": "media-missing"}
+    assert "ansible.builtin.assert" in boot[1]
+    inside = list(beneath(skip["block"]))
+    roles = [task['ansible.builtin.include_role']['tasks_from'] for task in inside if 'ansible.builtin.include_role' in task]
+    assert roles == ['pre_boot', 'boot_media']
+    inserts = [task for task in inside if task.get('vars', {}).get('containercluster_install_agent_port_operation') == 'media_insert']
+    assert len(inserts) == 1 and inserts[0]['ansible.builtin.include_tasks'] == 'port.yml'
 
 
 def boots(powered, own, media=None):
@@ -485,9 +485,14 @@ def scoped(observes):
 def reads(observes):
     """Which of the state read's reads run under one observation scope."""
     templar = Templar(loader=LOADER, variables=scoped(observes))
-    return {task["register"]: templar.evaluate_conditional(task["when"]) if "when" in task else True
-            for task in tasks("cluster_state.yml") + tasks("state.yml") if "register" in task and
-            task.get("register") != "containercluster_install_agent_media_identity"}
+    result = {task["register"]: templar.evaluate_conditional(task["when"]) if "when" in task else True
+              for task in tasks("cluster_state.yml") + tasks("state.yml") if "register" in task and
+              task.get("register") != "containercluster_install_agent_media_identity"}
+    node_read = one("state.yml", lambda task: task.get("ansible.builtin.include_tasks") == "state_node_serial.yml")
+    assert node_read["loop"] == "{{ bootwright_cluster_install_request.nodes }}"
+    assert "when" not in node_read
+    result["containercluster_install_agent_controllers"] = True
+    return result
 
 
 @pytest.mark.parametrize("observes", [None, ""], ids=["unscoped", "empty"])

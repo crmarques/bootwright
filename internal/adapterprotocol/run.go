@@ -20,6 +20,7 @@ type Invocation struct {
 	Automation     string
 	AutomationLock *os.File
 	Playbook       string
+	Forks          int
 	Inventory      string
 	Variables      string
 	LocalTemp      string

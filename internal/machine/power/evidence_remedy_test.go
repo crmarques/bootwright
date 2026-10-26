@@ -55,7 +55,7 @@ func TestPowerEvidenceRemediesNameTheExactCommand(t *testing.T) {
 	}
 	runtime := lifecycle.Runtime{Context: lifecycle.ContextIdentity{Name: "lab"}}
 	frozen := Request{Identity: Identity{Context: "lab", Object: "guest"}, Verb: Stop}
-	if got, want := invocation(runtime, frozen, nil, "digest", machine.HardwareIdentity{}, nil).Repeat, powerCommand("lab", frozen); got != want {
+	if got, want := invocation(runtime, frozen, nil, "digest", machine.HardwareIdentity{}, nil, "baremetal").Repeat, powerCommand("lab", frozen); got != want {
 		t.Fatalf("the power run repeats %q, want %q", got, want)
 	}
 	if got, want := readInvocation(runtime, ReadSurvey{}, nil, "digest", nil).Repeat, "bootwright machine list --context lab --power-status"; got != want {

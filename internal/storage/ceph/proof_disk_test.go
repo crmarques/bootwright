@@ -16,7 +16,7 @@ func originalDiskProof(t *testing.T, host Host) lifecycle.BlockEvidence {
 	t.Helper()
 	disk := host.Devices[0]
 	request := libvirt.MachineRequest{
-		Version: "machine-libvirt-v7", Identity: libvirt.Identity{Context: "original", Object: host.Machine},
+		Version: "machine-libvirt-v8", Identity: libvirt.Identity{Context: "original", Object: host.Machine},
 		Domain: "owned-" + host.Machine, UUID: "12345678-1234-5678-1234-123456789abc",
 		Controller: libvirt.Controller{Image: "registry.example.test/emulator@sha256:" + strings.Repeat("a", 64)},
 		Disks:      []libvirt.Disk{{Name: "root", Target: "vda", SizeGiB: 60}, {Name: "data", Target: "vdb", Serial: disk.Serial, SizeGiB: int(disk.SizeBytes >> 30)}},

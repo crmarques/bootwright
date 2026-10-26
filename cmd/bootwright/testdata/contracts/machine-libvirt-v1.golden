@@ -1,5 +1,5 @@
 implementation: machine-libvirt-v1
-content-digest: 277527efdc1a2631169bf78895ad03c7f8b93c5dbc4bd4fd1415392432893398
+content-digest: a790938872a1e3b634f1726dc33410572e231aee1e83e1f8bc1d64a1a704b8bf
 automation-formats: https://bootwright.io/substrate/v1
 request-schema:
   controller struct libvirt.Controller
@@ -32,6 +32,7 @@ request-schema:
   interfaces []struct libvirt.Interface
   interfaces[].bridge string
   interfaces[].macAddress string
+  interfaces[].mtu int omitempty
   interfaces[].name string
   interfaces[].network string
   memoryMiB int

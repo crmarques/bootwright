@@ -6,6 +6,7 @@ import (
 
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // Identity names the block, context and cluster one request belongs to.
@@ -62,8 +63,9 @@ type VirtualMedia struct {
 // to boot, the controller to boot it through, and the address it answers at
 // once it is installed.
 type Node struct {
-	Address    string     `json:"address"`
-	Controller Controller `json:"controller"`
+	Address        string     `json:"address"`
+	Controller     Controller `json:"controller"`
+	ControllerKind string     `json:"controllerKind"`
 	// Hardware is what a physical node proves about itself before its boot
 	// erases what it holds. A node its substrate created carries none.
 	Hardware *Hardware `json:"hardware,omitempty"`
@@ -71,8 +73,10 @@ type Node struct {
 	Name     string    `json:"name"`
 	// Physical is operator-owned hardware: the installation erases what it
 	// already held, so the block consumes that authorization on apply.
-	Physical  bool   `json:"physical"`
-	Substrate string `json:"substrate"`
+	Physical         bool   `json:"physical"`
+	RequireTPM       bool   `json:"requireTPM,omitempty"`
+	StateReadSeconds int    `json:"stateReadSeconds"`
+	Substrate        string `json:"substrate"`
 }
 
 // Hardware is the complete set of NICs a physical node must report, in the
@@ -96,12 +100,7 @@ type Endpoint struct {
 	Name    string `json:"name"`
 }
 
-// MediaRequest is the complete frozen intent for one cluster's boot image. It
-// carries the installer inputs as data rather than as text, so the adapter
-// writes them and the plan digest covers exactly what they say. It carries no
-// secret value: the pull secret, the cluster key, the serving certificate and
-// each trust bundle are named as declarations and reach the adapter at
-// execution.
+// InstallManifest is one typed document passed to the native installer.
 type InstallManifest struct {
 	APIVersion string         `json:"apiVersion"`
 	Content    map[string]any `json:"content"`
@@ -110,19 +109,27 @@ type InstallManifest struct {
 	Name       string         `json:"name"`
 }
 
+// MediaRequest freezes the installer inputs as data and names secret
+// declarations whose material is lent only at execution. Fetch delivery owns
+// a private publication; push delivery owns a file in the controller work area.
 type MediaRequest struct {
 	AgentConfig map[string]any `json:"agentConfig"`
 	// Budgets bound the build in wall-clock time, and the run's deadline is
 	// derived from them.
-	Budgets       MediaBudgets         `json:"budgets"`
-	Identity      Identity             `json:"identity"`
-	Image         Publication          `json:"image"`
-	InstallConfig map[string]any       `json:"installConfig"`
-	Manifests     []InstallManifest    `json:"manifests"`
-	Placement     machineref.Placement `json:"placement"`
-	PullSecretRef string               `json:"pullSecretRef"`
-	Release       Release              `json:"release"`
-	SSHKeyRef     string               `json:"sshKeyRef"`
+	Budgets        MediaBudgets         `json:"budgets"`
+	BuildEgress    map[string]string    `json:"buildEgress,omitempty"`
+	DeliveryKind   string               `json:"deliveryKind"`
+	DiskEncryption *DiskEncryption      `json:"diskEncryption,omitempty"`
+	Identity       Identity             `json:"identity"`
+	Image          Publication          `json:"image"`
+	InstallConfig  map[string]any       `json:"installConfig"`
+	InstallProxy   *InstallProxy        `json:"installProxy,omitempty"`
+	Manifests      []InstallManifest    `json:"manifests"`
+	Placement      machineref.Placement `json:"placement"`
+	PullSecretRef  string               `json:"pullSecretRef"`
+	RegistryMirror *RegistryMirror      `json:"registryMirror,omitempty"`
+	Release        Release              `json:"release"`
+	SSHKeyRef      string               `json:"sshKeyRef"`
 	// TLSCertificateRef names the selected server's serving certificate, which
 	// the fetch proving the publication verifies the listener against. Only its
 	// certificate part reaches the adapter, at execution.
@@ -142,10 +149,14 @@ type VIP struct {
 
 // InstallRequest freezes the nodes, publication, endpoint probes and phase budgets.
 type InstallRequest struct {
-	Budgets           InstallBudgets       `json:"budgets"`
-	Endpoints         []Endpoint           `json:"endpoints"`
-	Identity          Identity             `json:"identity"`
-	Image             Publication          `json:"image"`
+	Budgets      InstallBudgets `json:"budgets"`
+	DeliveryKind string         `json:"deliveryKind"`
+	Endpoints    []Endpoint     `json:"endpoints"`
+	Identity     Identity       `json:"identity"`
+	Image        Publication    `json:"image"`
+	// ImageIdentity is the media block's request digest for pushed delivery,
+	// used to recognize this installation's media, rather than a file checksum.
+	ImageIdentity     string               `json:"imageIdentity,omitempty"`
 	Nodes             []Node               `json:"nodes"`
 	Placement         machineref.Placement `json:"placement"`
 	PublicationRoot   Publication          `json:"publicationRoot"`
@@ -173,28 +184,36 @@ type MediaBudgets struct {
 // while the cluster keeps converging, so a give-up it can resume from is
 // re-invoked while the budget lasts.
 type InstallBudgets struct {
-	BootSeconds      int `json:"bootSeconds"`
-	BootstrapSeconds int `json:"bootstrapSeconds"`
-	InstallSeconds   int `json:"installSeconds"`
+	BootSeconds        int `json:"bootSeconds"`
+	BootstrapSeconds   int `json:"bootstrapSeconds"`
+	FanOut             int `json:"fanOut"`
+	InstallSeconds     int `json:"installSeconds"`
+	RoundMarginSeconds int `json:"roundMarginSeconds"`
 }
 
 // mediaBudgets is what every media request this build plans freezes, until a
 // later contract admits declaring it.
 var mediaBudgets = MediaBudgets{BuildSeconds: 1800}
 
-const (
-	bootSecondsPerNode = 300
-	minBootSeconds     = 900
-)
+const minBootSeconds = 900
 
-// installBudgets is what every install request of that many nodes freezes,
-// until a later contract admits declaring them. One boot budget bounds booting
-// every node, so it grows with them: bootSecondsPerNode each, and never less
-// than minBootSeconds, which is what a cluster of up to three nodes freezes.
-func installBudgets(nodes int) InstallBudgets {
-	return InstallBudgets{
-		BootSeconds: max(minBootSeconds, nodes*bootSecondsPerNode), BootstrapSeconds: 5400, InstallSeconds: 5400,
+func installBudgets(nodes int, arms ...string) InstallBudgets {
+	if len(arms) == 0 {
+		arms = []string{substrate.ArmLibvirt}
 	}
+	fanout, allowance, margin := 16, time.Duration(0), time.Duration(0)
+	for _, arm := range arms {
+		bounds, ok := substrate.MachineBoundsFor(arm)
+		if !ok {
+			continue
+		}
+		fanout = min(fanout, bounds.Fanout)
+		allowance = max(allowance, bounds.BootAllowance)
+		margin = max(margin, bounds.NodeMargin)
+	}
+	rounds := (nodes + fanout - 1) / fanout
+	return InstallBudgets{FanOut: fanout, RoundMarginSeconds: int(margin / time.Second),
+		BootSeconds: max(minBootSeconds, rounds*int(allowance/time.Second)), BootstrapSeconds: 5400, InstallSeconds: 5400}
 }
 
 func seconds(count int) time.Duration { return time.Duration(count) * time.Second }
@@ -214,7 +233,8 @@ func (r InstallRequest) Deadline() time.Duration {
 
 func installDeadline(budgets InstallBudgets, nodes int) time.Duration {
 	phases := seconds(budgets.BootSeconds) + seconds(budgets.BootstrapSeconds) + seconds(budgets.InstallSeconds)
-	return phases + installMargin + time.Duration(nodes)*nodeMargin
+	rounds := (nodes + max(budgets.FanOut, 1) - 1) / max(budgets.FanOut, 1)
+	return phases + installMargin + seconds(rounds*budgets.RoundMarginSeconds)
 }
 
 func (r MediaRequest) Canonical() ([]byte, error) {
@@ -228,6 +248,9 @@ func (r InstallRequest) Canonical() ([]byte, error) {
 func DecodeMediaRequest(data []byte) (MediaRequest, error) {
 	request, err := reconciliation.ThawVersion[MediaRequest](data, "cluster media", mediaRequestVersion)
 	if err != nil {
+		return MediaRequest{}, err
+	}
+	if err := validateDelivery(request.DeliveryKind, request.Image, request.WorkRoot); err != nil {
 		return MediaRequest{}, err
 	}
 	if err := validateInstallManifests(request.Manifests); err != nil {
@@ -244,8 +267,19 @@ func DecodeInstallRequest(data []byte) (InstallRequest, error) {
 	if err != nil {
 		return InstallRequest{}, err
 	}
+	if err := validateDelivery(request.DeliveryKind, request.Image, request.WorkRoot); err != nil {
+		return InstallRequest{}, err
+	}
 	if err := onTheController(request.Placement, "cluster install"); err != nil {
 		return InstallRequest{}, err
+	}
+	if request.Budgets.FanOut < 1 || request.Budgets.FanOut > 16 || request.Budgets.RoundMarginSeconds <= 0 {
+		return InstallRequest{}, refusal("lifecycle.state", "the frozen installation has no bounded node rounds", "plan the installation again")
+	}
+	for _, node := range request.Nodes {
+		if node.StateReadSeconds <= 0 || node.StateReadSeconds > 3600 || (node.ControllerKind != "emulated" && node.ControllerKind != "physical") {
+			return InstallRequest{}, refusal("lifecycle.state", "the frozen installation node has no bounded controller kind", "plan the installation again")
+		}
 	}
 	return request, nil
 }
@@ -266,7 +300,10 @@ func onTheController(placement machineref.Placement, subject string) error {
 // before its first effect: the private subtree it publishes into and the work
 // area the installer keeps its state in.
 func (r MediaRequest) ReservationKeys() []string {
-	keys := []string{"path:" + r.Image.Path, "path:" + r.WorkRoot}
+	keys := []string{"path:" + r.WorkRoot}
+	if r.DeliveryKind != "push" {
+		keys = append(keys, "path:"+r.Image.Path)
+	}
 	slices.Sort(keys)
 	return slices.Compact(keys)
 }
@@ -275,6 +312,12 @@ func (r MediaRequest) ReservationKeys() []string {
 // bound, so the operation freezes them before it registers.
 func (r MediaRequest) SecretReferences() []string {
 	references := append(r.Placement.SecretReferences(), r.PullSecretRef, r.SSHKeyRef, r.TLSCertificateRef)
+	if r.InstallProxy != nil {
+		references = append(references, r.InstallProxy.CredentialsRef)
+	}
+	if r.RegistryMirror != nil {
+		references = append(references, r.RegistryMirror.CredentialsRef)
+	}
 	return sortedUnique(append(references, r.TrustBundleRefs...))
 }
 
@@ -310,4 +353,14 @@ func sortedUnique(values []string) []string {
 	}
 	slices.Sort(out)
 	return slices.Compact(out)
+}
+
+func validateDelivery(kind string, image Publication, workRoot string) error {
+	if kind != "fetch" && kind != "push" {
+		return refusal("lifecycle.state", "the frozen media delivery kind is unknown", "plan the installation again")
+	}
+	if kind == "push" && (image.URL != "" || image.Path != workRoot+"/"+ImageFile) {
+		return refusal("lifecycle.state", "pushed media must name only the image in its controller work area", "plan the installation again")
+	}
+	return nil
 }

@@ -53,12 +53,18 @@
       <mac address="{{ interface.macAddress }}"/>
       <source network="{{ interface.network }}"/>
       <model type="virtio"/>
+{% if interface.mtu | default(0) %}
+      <mtu size="{{ interface.mtu }}"/>
+{% endif %}
     </interface>
 {% else %}
     <interface type="bridge">
       <mac address="{{ interface.macAddress }}"/>
       <source bridge="{{ interface.bridge | e }}"/>
       <model type="virtio"/>
+{% if interface.mtu | default(0) %}
+      <mtu size="{{ interface.mtu }}"/>
+{% endif %}
     </interface>
 {% endif %}
 {% endfor %}

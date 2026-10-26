@@ -56,7 +56,14 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 		if (kind != "openshift" && kind != "okd") || !api.ValidLexical("cluster-release", version) {
 			return nil, selectionFailure(cluster, "controller.unsupported", "$.spec.distribution.release", "target tools require an exact supported release version; declare release.version for a cluster pinned to a release image")
 		}
-		for _, tool := range []string{"openshift-clients", "openshift-install"} {
+		installer := "openshift-install"
+		if cluster.Spec().Get("security", "fips", "enabled").Bool() {
+			if kind != "openshift" {
+				return nil, selectionFailure(cluster, "controller.unsupported", "$.spec.security.fips", "FIPS installer acquisition requires the OpenShift publisher")
+			}
+			installer = "openshift-install-fips"
+		}
+		for _, tool := range []string{"openshift-clients", installer} {
 			result = append(result, ToolRequest{Kind: tool, Version: version, Compatibility: kind, Mirror: downloads.Get("openshiftClientsMirror").Text()})
 		}
 		result = append(result, ToolRequest{Kind: "helm", Version: versions["helm"], Mirror: downloads.Get("helmMirror").Text()})

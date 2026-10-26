@@ -1,10 +1,15 @@
 implementation: cluster-media-agent-v1
-content-digest: 9575283e825ffeebe4ce26c7002a6efadec1899d2bb7251ab88e3518a57b2fe5
+content-digest: 6641773dca8bea0eee1770ac1810f2511110dd7c8f4ae1d43c6d2a04424ac733
 automation-formats: none
 request-schema:
   agentConfig opaque
   budgets struct agentinstall.MediaBudgets
   budgets.buildSeconds int
+  buildEgress map[string]string omitempty
+  deliveryKind string
+  diskEncryption *struct agentinstall.DiskEncryption omitempty
+  diskEncryption.enableOn string
+  diskEncryption.mode string
   identity struct agentinstall.Identity
   identity.block string
   identity.cluster string
@@ -13,6 +18,11 @@ request-schema:
   image.path string
   image.url string
   installConfig opaque
+  installProxy *struct agentinstall.InstallProxy omitempty
+  installProxy.credentialsRef string omitempty
+  installProxy.httpProxy string
+  installProxy.httpsProxy string
+  installProxy.noProxy string
   manifests []struct agentinstall.InstallManifest
   manifests[].apiVersion string
   manifests[].content opaque
@@ -28,6 +38,10 @@ request-schema:
   placement.privateKeyRef string omitempty
   placement.user string omitempty
   pullSecretRef string
+  registryMirror *struct agentinstall.RegistryMirror omitempty
+  registryMirror.credentialsRef string omitempty
+  registryMirror.credentialsType string omitempty
+  registryMirror.host string
   release struct agentinstall.Release
   release.distribution string
   release.version string

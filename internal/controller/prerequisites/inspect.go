@@ -308,6 +308,14 @@ func (s Service) settleHost(ctx context.Context, current *inspection, settle fun
 	}
 	settle(readiness("installed-host", "verified local identity", true, HostScope))
 	inspector, reports := s.host.(FIPSInspector)
+	if RequiresClusterFIPS(current.catalog) {
+		if err := CheckClusterFIPS(ctx, inspector, current.catalog); err != nil {
+			settle(unverified("fips-mode", "enabled for the selected FIPS cluster", HostScope))
+			return err
+		}
+		settle(Check{ID: "fips-mode", Required: "enabled for the selected FIPS cluster", Observed: fipsEnabled, Status: "ready", Scope: HostScope})
+		return nil
+	}
 	if !reports {
 		return nil
 	}

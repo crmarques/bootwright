@@ -16,6 +16,7 @@ import (
 // target is one resolved Machine: its frozen request and its pin, if any.
 type target struct {
 	frozen Request
+	arm    string
 	pin    machine.HardwareIdentity
 }
 
@@ -67,7 +68,20 @@ func (s Service) resolveOne(ctx context.Context, catalog api.Catalog, contextNam
 	if err := refuseTemplateValues(contextName, command, frozen); err != nil {
 		return target{}, err
 	}
-	resolved := target{frozen: frozen}
+	object, _ := catalog.Find(api.Machine, name)
+	controllerMachine, err := lifecycle.ControllerMachine(catalog)
+	if err != nil {
+		return target{}, err
+	}
+	managed, err := managedTarget(catalog, object, contextName, controllerMachine)
+	if err != nil {
+		return target{}, err
+	}
+	arm := managed.Substrate
+	if arm == "" && managed.Physical {
+		arm = "baremetal"
+	}
+	resolved := target{frozen: frozen, arm: arm}
 	if physical {
 		proved, found, err := s.identities.ProvedIdentity(ctx, contextName, frozen.Identity.Object)
 		if err != nil {

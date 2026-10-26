@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/crmarques/bootwright/internal/controller"
@@ -62,7 +63,8 @@ func retainedReader(root *directory, record contexts.Record, inputs desiredstate
 
 // lifecycleRun is the view one bounded operation outside the lifecycle holds.
 // It adds the area its adapter output is retained in and nothing else: it
-// publishes no evidence, takes no lease and registers no operation. held are
+// publishes no evidence and registers no operation. Its shared context lease
+// excludes lifecycle mutation. held are
 // the run directories it opened, each held shared until its callback returns.
 type lifecycleRun struct {
 	*lifecycleView
@@ -78,6 +80,7 @@ type lifecycleTransaction struct {
 	lifecycleView
 	base    *transaction
 	stored  controllerStored
+	current atomic.Pointer[controllerStored]
 	context *directory
 	areas   openedBundles
 	// record is the context record the transaction was admitted over, which
@@ -221,6 +224,12 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 	if record.DirectoryInode != 0 && (dir.identity.Ino != record.DirectoryInode || uint64(dir.identity.Dev) != record.DirectoryDevice) {
 		return state("context directory was replaced")
 	}
+	if bounded {
+		if err := lockShared(dir); err != nil {
+			return err
+		}
+		defer syscall.Flock(int(dir.file.Fd()), syscall.LOCK_UN)
+	}
 	inputs, err := readSnapshot(ctx, root, record)
 	if err != nil {
 		return safeError(err)
@@ -235,33 +244,13 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 		active = false
 		areas.closeAll()
 	}()
-	// A bounded run executes inside the controller's approved bundle, so it
-	// needs the same opener a mutation has. An inspection runs nothing and is
-	// offered none.
+	live := func() bool { return active }
 	if bounded {
-		guard := func(call context.Context) error {
-			actual, err := readControllerStored(call, root, registry)
-			if err != nil || !bytes.Equal(actual.data, stored.data) || actual.data != nil && !sameFile(actual.identity, stored.identity) {
-				return state("controller evidence changed during the run")
-			}
-			return nil
-		}
-		controllerView.OpenBundle = func(call context.Context, id string) (prerequisites.BundleArea, error) {
-			if !active {
-				return nil, state("bounded lifecycle run capability has closed")
-			}
-			if err := guard(call); err != nil {
-				return nil, err
-			}
-			area, err := openControllerBundle(call, s, root, registry, stored, id, func() bool { return active }, false, guard)
-			if err != nil || area == nil {
-				return nil, err
-			}
-			areas.keep(area)
-			return area, nil
+		if err := s.prepareBoundedController(ctx, root, registry, record, stored, &controllerView, live, &areas); err != nil {
+			return err
 		}
 	}
-	live := func() bool { return active }
+
 	view := &lifecycleView{
 		identity:   lifecycle.ContextIdentity{Name: record.Name, Revision: record.Revision, Mode: string(record.Mode)},
 		inputs:     inputs,
@@ -271,6 +260,11 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 		revision:   retainedReader(root, record, inputs, live),
 	}
 	runs := &operationArea{store: s, subtree: runsSubtree, context: dir, name: record.Name, active: live, readOnly: !bounded}
+	if bounded {
+		if err := syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN); err != nil {
+			return err
+		}
+	}
 	return safeError(callback(view, runs))
 }
 
@@ -302,9 +296,7 @@ func (s *Store) retiredOperations(ctx context.Context, dir *directory, name stri
 	return nil
 }
 
-// MutateLifecycle holds the exclusive root lock and the context lease for the
-// whole callback, so host reservations, controller evidence and operation
-// records cannot disagree while effects run.
+// MutateLifecycle snapshots under the root lock, then holds only its context lease during effects.
 func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(lifecycle.Transaction) error) error {
 	if callback == nil {
 		return state("lifecycle mutation callback is missing")
@@ -349,38 +341,18 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 			active = false
 			tx.areas.closeAll()
 		}()
+		leased := &leasedLifecycle{lifecycleTransaction: tx}
+		tx.current.Store(&stored)
 		tx.active = func() bool { return active }
-		tx.guard = func(call context.Context) error {
-			if !active {
-				return state("lifecycle controller capability has closed")
-			}
-			if err := t.available(call); err != nil {
-				return err
-			}
-			actual, err := readControllerStored(call, t.root, t.registry)
-			if err != nil || !bytes.Equal(actual.data, tx.stored.data) || actual.data != nil && !sameFile(actual.identity, tx.stored.identity) {
-				return state("controller evidence changed during the operation")
-			}
-			return nil
-		}
-		// A block runs inside the controller's approved bundle, so the operation
-		// needs the same read-only opener setup uses. Without it no effect can
-		// execute at all.
-		tx.controller.OpenBundle = func(call context.Context, id string) (prerequisites.BundleArea, error) {
-			if err := tx.guard(call); err != nil {
-				return nil, err
-			}
-			area, err := openControllerBundle(call, s, t.root, t.registry, tx.stored, id, tx.active, false, tx.guard)
-			if err != nil || area == nil {
-				return nil, err
-			}
-			tx.areas.keep(area)
-			return area, nil
-		}
+		leased.prepareControllerAccess()
+
 		// Every publication this transaction performs is independently atomic
 		// and verified, so it needs no registry commit: a lifecycle operation
 		// changes no context record.
-		return callback(tx)
+		if err := syscall.Flock(int(t.root.file.Fd()), syscall.LOCK_UN); err != nil {
+			return err
+		}
+		return callback(leased)
 	})
 	if errors.Is(err, contexts.ErrNoContexts) {
 		return contexts.AbsentContext(name)

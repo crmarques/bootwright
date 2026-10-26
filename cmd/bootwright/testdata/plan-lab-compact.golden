@@ -12,7 +12,7 @@
     ]
   },
   {
-    "deadline": "4h18m0s",
+    "deadline": "3h56m0s",
     "dependencies": [
       "cluster-media-compact",
       "dns-lab-dns",

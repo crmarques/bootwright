@@ -208,8 +208,12 @@ ends, not the process. The adapter's supervisor, a child subreaper, arms the
 same signal for itself and then re-checks that its original parent still
 lives, because a parent that died first sends none. On that signal it kills
 every descendant, including an Ansible worker that moved into a session of its
-own, then its process group and itself; its `ansible-playbook` child is killed
-by the supervisor's death. Cancellation, a deadline and a protocol refusal end
+own, then its process group and itself. Its `ansible-playbook` child is also
+an orphan-reaping subreaper: before Ansible loads, it installs a dedicated
+parent-death handler, arms `SIGUSR2` and re-checks the supervisor's identity.
+When the supervisor is killed outright, the surviving child kills and reaps
+its own descendants, including session-isolated workers, then ends its group.
+The dedicated signal is separate from Ansible's `SIGTERM`/`SIGINT` handlers. Cancellation, a deadline and a protocol refusal end
 the tree the same way: the runner sends the adapter that signal, then kills its
 process group once the adapter is reaped or the 5-second drain passes,
 whichever comes first. A group kill alone never reaches a worker in a session
@@ -222,11 +226,6 @@ transaction's acknowledgement is delivered, nothing is signaled or killed: it
 runs to its end, and the adapter stops at its next acknowledgement, which fails
 once the invocation's ends of the channels close.
 
-Not yet met: a supervisor killed on its own, as by the out-of-memory killer,
-runs no handler, so its `ansible-playbook` child dies with it but an Ansible
-worker in a session of its own runs on; tracked as
-[B23](milestones/m1.md#b23).
-
 Each lifecycle adapter invocation owns a job directory `bootwright-run-<n>`
 beneath `/run` and a scratch directory `bootwright-run-scratch-<n>-<m>` beneath
 `/var/tmp` that carries its job's `<n>`. Before it writes anything else into
@@ -238,8 +237,7 @@ implementation, operation, Machine and request digest. A run that names no
 valid context, or whose record a sweep could not read back, refuses before any
 job exists. The adapter inherits the lock, and so do the `ansible-playbook`
 child its supervisor forks and every Ansible worker, so the lock is free only
-once none of them runs, and the worker that a supervisor killed on its own
-leaves running still holds it. A run refuses with `lifecycle.adapter-running`,
+once none of them runs; a worker still being stopped keeps holding it. A run refuses with `lifecycle.adapter-running`,
 and starts nothing, only while a job of its own context holds its lock, except
 for its own live sibling adapters. That exemption requires the private
 [invocation scope](state-reconciliation.md#stages-and-the-pause-boundary)

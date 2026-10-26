@@ -100,6 +100,12 @@ type Interface struct {
 	MACAddress string
 }
 
+// DeliveryFetch serves an image for the machine to fetch; DeliveryPush uploads it.
+const (
+	DeliveryFetch = "fetch"
+	DeliveryPush  = "push"
+)
+
 // Target is everything a consumer of a realized Machine needs, derived once
 // from the substrate its provider declares. It answers which controller boots
 // the machine, which channel proves what it holds, whether it is operator-owned
@@ -110,6 +116,7 @@ type Interface struct {
 // resolved because deriving it is application work over a Machine's access
 // declaration, which this domain does not own.
 type Target struct {
+	Delivery  string
 	Provider  string
 	Substrate string
 	// Physical is an operator-owned machine that exists before Bootwright and
@@ -155,7 +162,7 @@ func TargetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 		return Target{}, refusal("lifecycle.state", "this executable does not realize the substrate of "+provider.Identity(),
 			"place "+machine.Identity()+" on a libvirt or bare-metal provider")
 	}
-	target := Target{Provider: provider.Name(), Substrate: arm}
+	target := Target{Provider: provider.Name(), Substrate: arm, Delivery: DeliveryFetch}
 	if arm == ArmBaremetal {
 		return physicalTarget(catalog, provider, machine, controllerMachine, target)
 	}
@@ -175,7 +182,7 @@ func authoredTarget(catalog api.Catalog, machine api.Object, controllerMachine s
 		return Target{}, refusal("api.reference", "the Environment's controller Machine is not in the selected graph",
 			"declare it or correct spec.controller.machineRef")
 	}
-	return Target{Physical: true, Controller: controller, PlacementMachine: host}, nil
+	return Target{Physical: true, Delivery: DeliveryFetch, Controller: controller, PlacementMachine: host}, nil
 }
 
 // authoredController reads the management controller a Machine declares. It is

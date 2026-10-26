@@ -16,6 +16,12 @@ argument_specs:
               bootstrapSeconds:
                 type: int
                 required: true
+              fanOut:
+                type: int
+                required: true
+              roundMarginSeconds:
+                type: int
+                required: true
               installSeconds:
                 type: int
                 required: true
@@ -23,6 +29,13 @@ argument_specs:
             type: list
             elements: dict
             required: true
+          deliveryKind:
+            type: str
+            required: true
+            choices: [fetch, push]
+          imageIdentity:
+            type: str
+            required: false
           identity:
             type: dict
             required: true
@@ -58,7 +71,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [cluster-install-agent-v5]
+            choices: [cluster-install-agent-v7]
           workRoot:
             type: str
             required: true

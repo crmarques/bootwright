@@ -134,6 +134,15 @@ func openControllerBundle(ctx context.Context, store *Store, root *directory, re
 		area.close()
 		return nil, err
 	}
+	if writable {
+		err = lock(dir)
+	} else {
+		err = lockShared(dir)
+	}
+	if err != nil {
+		area.close()
+		return nil, err
+	}
 	area.dir = dir
 	if err := area.available(ctx, false); err != nil {
 		area.close()

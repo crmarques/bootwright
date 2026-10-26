@@ -101,6 +101,9 @@ func installRequires(needs Requirements) []reconciliation.ObjectRef {
 	for _, name := range needs.NTPServers {
 		references = append(references, reconciliation.ObjectRef{Kind: "NTPServer", Object: name})
 	}
+	for _, name := range needs.Proxies {
+		references = append(references, reconciliation.ObjectRef{Kind: "Proxy", Object: name})
+	}
 	return references
 }
 
@@ -340,19 +343,15 @@ func (c InstallCapability) prepare(ctx context.Context, execution lifecycle.Exec
 	return request, nil
 }
 
-// refusedContinuation says why this executable does not apply a request an
-// earlier executable froze, or nothing when it would plan that request itself.
-// Planning refuses a physical node before registration, but an operation
-// registered before that refusal still carries one, and an apply boots exactly
-// the nodes that were frozen. A destroy and an observation are never refused:
-// the one ejects media and the other reads. The removal it names is the one of
-// the context the operation runs in.
+// refusedContinuation applies the same private-delivery boundary to frozen
+// physical requests that admission applies to newly planned ones.
 func refusedContinuation(contextName string, request InstallRequest) error {
 	for _, node := range request.Nodes {
 		if node.Physical {
-			return refusal("lifecycle.state", "this operation froze Machine/"+node.Machine+" as a physical node of ContainerCluster/"+
-				request.Identity.Cluster+", which this executable refuses",
-				"run bootwright destroy --context "+contextName+" to end this operation, then plan it again under this executable")
+			if reason, _ := privateControllerRefusal(node.Machine, node.Controller); reason != "" {
+				return refusal("lifecycle.state", "Machine/"+node.Machine+" of ContainerCluster/"+request.Identity.Cluster+": "+reason,
+					"run bootwright destroy --context "+contextName+" to end this operation, then correct the node's transport trust and plan it again")
+			}
 		}
 	}
 	return nil
@@ -379,20 +378,24 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 		{"oc", Tool{Compatibility: request.Release.Distribution, Kind: clientTool, Version: request.Release.Version}},
 	} {
 		executable, tool := selected.executable, selected.tool
-		path, err := ToolPath(ctx, execution, tool, executable)
+		nativeExecutable := executable
+		if executable == installerTool {
+			nativeExecutable = tool.Kind
+		}
+		path, err := ToolPath(ctx, execution, tool, nativeExecutable)
 		if err != nil {
 			return lifecycle.RunResult{}, err
 		}
 		values[strings.ReplaceAll(executable, "-", "")] = path
 	}
-	var refusals map[string]error
+	refusals := runtimeRefusals(execution.Context, execution.Continuation, request)
 	if operation == "apply" {
 		pins, err := c.pinValues(execution, request)
 		if err != nil {
 			return lifecycle.RunResult{}, err
 		}
 		maps.Copy(values, pins)
-		refusals = preBootRefusals(execution.Context, execution.Continuation, request)
+		maps.Copy(refusals, preBootRefusals(execution.Context, execution.Continuation, request))
 	}
 	// The attempt adds the placement's identity and host key. The serving
 	// certificate and each node's own credentials are lent here.
@@ -423,6 +426,7 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 		Implementation: InstallImplementation, Operation: operation, Variable: installVariablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
 		Outputs: outputs, Refusals: refusals, Deadline: request.Deadline(),
+		NodeCount: len(request.Nodes), Parallelism: request.Budgets.FanOut,
 	}))
 }
 

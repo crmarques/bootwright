@@ -34,7 +34,10 @@ takes 21 s across workers instead of 86 s serially. It is not equivalent:
   sees its handler run late and fails in parallel only, intermittently.
 
 The narrowed units suite therefore runs one file serially and reruns every
-parallel failure serially; the gate stays serial.
+parallel failure serially. A 2026-10-23 full run showed the locked ansible-test
+translates `--num-workers 0` to `-n auto`, so its own unit phase still starts
+workers; the subsequent plain pytest loop is serial. The mismatch is recorded
+as [B798](../../specs/milestones/backlog.md#b798), with no failure waived.
 
 ## Selection traps
 

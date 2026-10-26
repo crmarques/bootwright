@@ -455,8 +455,8 @@ func TestControllerReadAndMutationShareRootCoordination(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = store.MutateLifecycle(ctx, "example", func(lifecycle.Transaction) error {
-		if err := store.ReadController(ctx, "", func(prerequisites.StorageView) error { t.Fatal("reader acquired held exclusive root"); return nil }); err == nil {
-			t.Fatal("concurrent reader was accepted")
+		if err := store.ReadController(ctx, "", func(prerequisites.StorageView) error { return nil }); err != nil {
+			t.Fatal("reader blocked during lifecycle effects", err)
 		}
 		return nil
 	})

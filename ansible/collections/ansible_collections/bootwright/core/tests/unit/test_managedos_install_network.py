@@ -143,14 +143,18 @@ def test_restart_boots_the_installed_disk_through_the_substrate():
         assert not any("reboot" in str(word) for word in words), name
     disks = [index for index, task in enumerate(tasks)
              if (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "boot_disk"]
-    assert len(disks) == 2
-    for index, role in zip(disks, ("libvirt", "baremetal")):
-        include = tasks[index]
-        assert include["ansible.builtin.include_role"]["name"] == "bootwright.core.substrate_%s_machine" % role
-        assert include["vars"]["substrate_%s_machine_disk_power_on" % role] is True
-        assert include["when"] == "bootwright_os_install_request.target.substrate == '%s'" % role
-    refusal = tasks[disks[-1] + 1]
-    assert refusal["when"] == "bootwright_os_install_request.target.substrate not in ['libvirt', 'baremetal']"
+    assert len(disks) == 1
+    include = tasks[disks[0]]
+    assert include["vars"]["bootwright_machine_port"]["power_on"] is True
+    for arm in ("libvirt", "baremetal"):
+        variables = dict(defaults(), bootwright_os_install_request={"target": {"substrate": arm}})
+        templar = Templar(loader=LOADER, variables=variables)
+        assert templar.template(include["ansible.builtin.include_role"]["name"]) == "bootwright.core.substrate_%s_machine" % arm
+        assert templar.evaluate_conditional(include["when"])
+    refusal = tasks[disks[0] + 1]
+    for arm in ("libvirt", "baremetal", "unknown"):
+        templar = Templar(loader=LOADER, variables=dict(defaults(), bootwright_os_install_request={"target": {"substrate": arm}}))
+        assert templar.evaluate_conditional(refusal["when"]) is (arm == "unknown")
     assert refusal[FAIL]["msg"].strip().endswith(REPLAN)
 
 
@@ -509,7 +513,7 @@ class Guest:
             self.step(task)
 
     def step(self, task):
-        templar = Templar(loader=LOADER, variables=self.scope)
+        templar = Templar(loader=LOADER, variables=dict(self.scope, vars=self.scope))
         if task.get(INCLUDE) == "guest.yml":
             command = task["vars"][GUEST].rsplit("managedos_install_anaconda_network_", 1)[-1].strip(" }")
             self.ran.append(command)
@@ -530,8 +534,9 @@ class Guest:
         elif COMPARE in task:
             self.scope[task["register"]] = {"matched": self.matched,
                                             "differences": [] if self.matched else ["bond0 is down, declared up"]}
-        elif REDFISH in task:
-            self.scope[task["register"]] = {"power": self.power}
+        elif (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "state_read":
+            result = self.scope["managedos_install_anaconda_port_result"]["libvirt"]
+            self.scope[result] = {"power": self.power}
         elif "ansible.builtin.pause" in task:
             self.ran.append("pause")
         else:

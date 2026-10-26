@@ -1,0 +1,138 @@
+{
+  "budgets": {
+    "bootSeconds": 1800,
+    "bootstrapSeconds": 5400,
+    "fanOut": 16,
+    "installSeconds": 5400,
+    "roundMarginSeconds": 2520
+  },
+  "deliveryKind": "fetch",
+  "endpoints": [
+    {
+      "address": "198.51.100.20",
+      "name": "api-int.metal.lab.example.test"
+    },
+    {
+      "address": "198.51.100.20",
+      "name": "api.metal.lab.example.test"
+    },
+    {
+      "address": "198.51.100.21",
+      "name": "console-openshift-console.apps.metal.lab.example.test"
+    }
+  ],
+  "identity": {
+    "block": "cluster-install-metal",
+    "cluster": "metal",
+    "context": "lab"
+  },
+  "image": {
+    "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/clusters/metal",
+    "url": "https://192.0.2.1:8443/private/clusters/metal"
+  },
+  "nodes": [
+    {
+      "address": "198.51.100.41",
+      "controller": {
+        "credentialsRef": "metal-bmc",
+        "endpoint": "https://metal-01-bmc.lab.example.test/redfish/v1/Systems/1",
+        "tlsVerify": true,
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": false,
+          "trust": "import-certificate"
+        }
+      },
+      "controllerKind": "physical",
+      "hardware": {
+        "interfaces": [
+          {
+            "macAddress": "aa:bb:cc:dd:ee:01",
+            "name": "enp1s0"
+          }
+        ]
+      },
+      "machine": "metal-01",
+      "name": "master-0",
+      "physical": true,
+      "stateReadSeconds": 600,
+      "substrate": "baremetal"
+    },
+    {
+      "address": "198.51.100.42",
+      "controller": {
+        "credentialsRef": "metal-bmc",
+        "endpoint": "https://metal-02-bmc.lab.example.test/redfish/v1/Systems/1",
+        "tlsVerify": true,
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": false,
+          "trust": "import-certificate"
+        }
+      },
+      "controllerKind": "physical",
+      "hardware": {
+        "interfaces": [
+          {
+            "macAddress": "aa:bb:cc:dd:ee:02",
+            "name": "enp1s0"
+          }
+        ]
+      },
+      "machine": "metal-02",
+      "name": "master-1",
+      "physical": true,
+      "stateReadSeconds": 600,
+      "substrate": "baremetal"
+    },
+    {
+      "address": "198.51.100.43",
+      "controller": {
+        "credentialsRef": "metal-bmc",
+        "endpoint": "https://metal-03-bmc.lab.example.test/redfish/v1/Systems/1",
+        "tlsVerify": true,
+        "virtualMedia": {
+          "removeCertificate": false,
+          "restoreVerification": false,
+          "trust": "import-certificate"
+        }
+      },
+      "controllerKind": "physical",
+      "hardware": {
+        "interfaces": [
+          {
+            "macAddress": "aa:bb:cc:dd:ee:03",
+            "name": "enp1s0"
+          }
+        ]
+      },
+      "machine": "metal-03",
+      "name": "master-2",
+      "physical": true,
+      "stateReadSeconds": 600,
+      "substrate": "baremetal"
+    }
+  ],
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "publicationRoot": {
+    "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/clusters/metal",
+    "url": "https://192.0.2.1:8443/private/clusters/metal"
+  },
+  "release": {
+    "distribution": "openshift",
+    "version": "4.21.15"
+  },
+  "rendezvous": "198.51.100.41",
+  "tlsCertificateRef": "artifact-server-tls",
+  "tool": {
+    "compatibility": "openshift",
+    "kind": "openshift-install",
+    "version": "4.21.15"
+  },
+  "version": "cluster-install-agent-v7",
+  "vips": [],
+  "workRoot": "/var/lib/bootwright-clusters/lab/metal"
+}

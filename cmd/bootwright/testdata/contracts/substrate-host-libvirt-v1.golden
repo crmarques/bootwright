@@ -1,5 +1,5 @@
 implementation: substrate-host-libvirt-v1
-content-digest: 0ac0fc232da50bcdccea54e861e38e7df4cf7d4a3c6ef43853ba5fc739426e16
+content-digest: ba58cf950116c1701f45c0f90878f7a6ca765ed66b27f3c47e83bdc5526dddbf
 automation-formats: https://bootwright.io/substrate/v1
 request-schema:
   firewallReadyUnit string
@@ -12,6 +12,7 @@ request-schema:
   networks[].bridge string
   networks[].forward string omitempty
   networks[].managed bool
+  networks[].mtu int omitempty
   networks[].name string
   packages []string
   placement struct machine.Placement
@@ -46,6 +47,7 @@ evidence-schema:
   networks[].bridge bool
   networks[].definition bool
   networks[].managed bool
+  networks[].mtu int omitempty
   networks[].name string
   networks[].owned bool
   networks[].state string

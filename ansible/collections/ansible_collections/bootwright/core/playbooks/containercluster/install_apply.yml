@@ -1,5 +1,5 @@
 ---
-- name: Install one container cluster
+- name: Prepare installation
   hosts: bootwright_target
   gather_facts: false
   any_errors_fatal: true
@@ -7,7 +7,211 @@
   strategy: ansible.builtin.linear
 
   tasks:
-    - name: Execute the cluster installation apply capability
+    - name: Execute prepare installation
       ansible.builtin.import_role:
         name: bootwright.core.containercluster_install_agent
         tasks_from: apply
+
+- name: Read initial nodes
+  hosts: bootwright_nodes
+  gather_facts: false
+  any_errors_fatal: false
+  serial: '{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}'
+  strategy: ansible.builtin.linear
+  throttle: '{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}'
+
+  vars:
+    containercluster_install_agent_index: '{{ bootwright_node_index }}'
+    containercluster_install_agent_node: '{{ bootwright_cluster_install_request.nodes[bootwright_node_index | int] }}'
+    containercluster_install_agent_user: "{{ bootwright_cluster_install_material['controllerUserNode' ~ bootwright_node_index] }}"
+    containercluster_install_agent_password: "{{ bootwright_cluster_install_material['controllerPasswordNode' ~ bootwright_node_index] }}"
+    containercluster_install_agent_ca: "{{ bootwright_cluster_install_material['controllerCANode' ~ bootwright_node_index] | default('') }}"
+    containercluster_install_agent_before: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_before }}'
+    containercluster_install_agent_state: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_state }}'
+    containercluster_install_agent_settled: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_settled | default(false) }}'
+    containercluster_install_agent_boot_deadline: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_boot_deadline | default(0) }}'
+    containercluster_install_agent_controllers: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_controllers | default({}) }}'
+    containercluster_install_agent_url: '{{ containercluster_install_agent_before.observation.url | default("") }}'
+
+  tasks:
+    - name: Execute read initial nodes
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: node_state
+
+  post_tasks:
+    - name: Stop after the failed round once every sibling finished
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: phase_failures
+      vars:
+        containercluster_install_agent_phase_hosts: '{{ ansible_play_batch }}'
+      delegate_to: '{{ bootwright_controller_host }}'
+      when: inventory_hostname == ansible_play_batch[0]
+      any_errors_fatal: true
+
+- name: Prepare boot
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute prepare boot
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: prepare_boot
+
+- name: Boot node rounds
+  hosts: bootwright_nodes
+  gather_facts: false
+  any_errors_fatal: false
+  serial: '{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}'
+  strategy: ansible.builtin.linear
+  throttle: '{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}'
+
+  vars:
+    containercluster_install_agent_index: '{{ bootwright_node_index }}'
+    containercluster_install_agent_node: '{{ bootwright_cluster_install_request.nodes[bootwright_node_index | int] }}'
+    containercluster_install_agent_user: "{{ bootwright_cluster_install_material['controllerUserNode' ~ bootwright_node_index] }}"
+    containercluster_install_agent_password: "{{ bootwright_cluster_install_material['controllerPasswordNode' ~ bootwright_node_index] }}"
+    containercluster_install_agent_ca: "{{ bootwright_cluster_install_material['controllerCANode' ~ bootwright_node_index] | default('') }}"
+    containercluster_install_agent_before: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_before }}'
+    containercluster_install_agent_state: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_state }}'
+    containercluster_install_agent_settled: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_settled | default(false) }}'
+    containercluster_install_agent_boot_deadline: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_boot_deadline | default(0) }}'
+    containercluster_install_agent_controllers: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_controllers | default({}) }}'
+    containercluster_install_agent_url: '{{ containercluster_install_agent_before.observation.url | default("") }}'
+
+  tasks:
+    - name: Execute boot node rounds
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: node_boot
+
+  post_tasks:
+    - name: Stop after the failed round once every sibling finished
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: phase_failures
+      vars:
+        containercluster_install_agent_phase_hosts: '{{ ansible_play_batch }}'
+      delegate_to: '{{ bootwright_controller_host }}'
+      when: inventory_hostname == ansible_play_batch[0]
+      any_errors_fatal: true
+
+- name: Wait for completion
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute wait for completion
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: waits
+
+- name: Release node rounds
+  hosts: bootwright_nodes
+  gather_facts: false
+  any_errors_fatal: false
+  serial: '{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}'
+  strategy: ansible.builtin.linear
+  throttle: '{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}'
+
+  vars:
+    containercluster_install_agent_index: '{{ bootwright_node_index }}'
+    containercluster_install_agent_node: '{{ bootwright_cluster_install_request.nodes[bootwright_node_index | int] }}'
+    containercluster_install_agent_user: "{{ bootwright_cluster_install_material['controllerUserNode' ~ bootwright_node_index] }}"
+    containercluster_install_agent_password: "{{ bootwright_cluster_install_material['controllerPasswordNode' ~ bootwright_node_index] }}"
+    containercluster_install_agent_ca: "{{ bootwright_cluster_install_material['controllerCANode' ~ bootwright_node_index] | default('') }}"
+    containercluster_install_agent_before: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_before }}'
+    containercluster_install_agent_state: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_state }}'
+    containercluster_install_agent_settled: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_settled | default(false) }}'
+    containercluster_install_agent_boot_deadline: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_boot_deadline | default(0) }}'
+    containercluster_install_agent_controllers: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_controllers | default({}) }}'
+    containercluster_install_agent_url: '{{ containercluster_install_agent_before.observation.url | default("") }}'
+
+  tasks:
+    - name: Execute release node rounds
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: node_release
+
+  post_tasks:
+    - name: Stop after the failed round once every sibling finished
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: phase_failures
+      vars:
+        containercluster_install_agent_phase_hosts: '{{ ansible_play_batch }}'
+      delegate_to: '{{ bootwright_controller_host }}'
+      when: inventory_hostname == ansible_play_batch[0]
+      any_errors_fatal: true
+
+- name: Read released cluster
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute read released cluster
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: after_release
+
+- name: Read released nodes
+  hosts: bootwright_nodes
+  gather_facts: false
+  any_errors_fatal: false
+  serial: '{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}'
+  strategy: ansible.builtin.linear
+  throttle: '{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}'
+
+  vars:
+    containercluster_install_agent_index: '{{ bootwright_node_index }}'
+    containercluster_install_agent_node: '{{ bootwright_cluster_install_request.nodes[bootwright_node_index | int] }}'
+    containercluster_install_agent_user: "{{ bootwright_cluster_install_material['controllerUserNode' ~ bootwright_node_index] }}"
+    containercluster_install_agent_password: "{{ bootwright_cluster_install_material['controllerPasswordNode' ~ bootwright_node_index] }}"
+    containercluster_install_agent_ca: "{{ bootwright_cluster_install_material['controllerCANode' ~ bootwright_node_index] | default('') }}"
+    containercluster_install_agent_before: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_before }}'
+    containercluster_install_agent_state: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_state }}'
+    containercluster_install_agent_settled: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_settled | default(false) }}'
+    containercluster_install_agent_boot_deadline: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_boot_deadline | default(0) }}'
+    containercluster_install_agent_controllers: '{{ hostvars[bootwright_controller_host].containercluster_install_agent_controllers | default({}) }}'
+    containercluster_install_agent_url: '{{ containercluster_install_agent_before.observation.url | default("") }}'
+
+  tasks:
+    - name: Execute read released nodes
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: node_state
+
+  post_tasks:
+    - name: Stop after the failed round once every sibling finished
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: phase_failures
+      vars:
+        containercluster_install_agent_phase_hosts: '{{ ansible_play_batch }}'
+      delegate_to: '{{ bootwright_controller_host }}'
+      when: inventory_hostname == ansible_play_batch[0]
+      any_errors_fatal: true
+
+- name: Finish installation
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute finish installation
+      ansible.builtin.import_role:
+        name: bootwright.core.containercluster_install_agent
+        tasks_from: finish

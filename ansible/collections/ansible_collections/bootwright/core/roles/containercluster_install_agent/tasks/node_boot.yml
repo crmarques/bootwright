@@ -1,0 +1,33 @@
+---
+- name: Reset this node phase failure
+  ansible.builtin.set_fact:
+    containercluster_install_agent_phase_failed: true
+    containercluster_install_agent_lifecycle_refusal: ""
+
+- name: Run the node boot while siblings finish
+  when: not (containercluster_install_agent_settled | bool)
+  block:
+    - name: Run this node's boot
+      ansible.builtin.import_tasks: boot.yml
+
+    - name: Prove this node is ready within the boot budget
+      ansible.builtin.import_tasks: readiness.yml
+      vars:
+        containercluster_install_agent_readiness_nodes: '{{ [containercluster_install_agent_node] }}'
+      when: >-
+        containercluster_install_agent_node.machine not in
+        (containercluster_install_agent_state.powered | intersect(containercluster_install_agent_state.ownMedia))
+
+    - name: Mark this node phase complete only after its final step
+      ansible.builtin.set_fact:
+        containercluster_install_agent_phase_failed: false
+
+  rescue:
+    - name: Keep this node failure while siblings finish
+      ansible.builtin.set_fact:
+        containercluster_install_agent_phase_failed: true
+
+- name: Mark an already settled node phase complete
+  ansible.builtin.set_fact:
+    containercluster_install_agent_phase_failed: false
+  when: containercluster_install_agent_settled | bool

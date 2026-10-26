@@ -1,0 +1,48 @@
+---
+- name: Refuse a node without a substrate port binding
+  ansible.builtin.assert:
+    that:
+      - containercluster_install_agent_node.substrate in containercluster_install_agent_ports
+      - containercluster_install_agent_port_operation in ['state_read', 'media_insert', 'media_eject', 'power']
+    quiet: true
+    fail_msg: The declared node has no substrate machine port binding; plan again with this release.
+
+- name: Invoke the selected substrate machine port
+  ansible.builtin.include_role:
+    name: '{{ containercluster_install_agent_ports[containercluster_install_agent_node.substrate].role }}'
+    tasks_from: '{{ containercluster_install_agent_port_operation }}'
+  vars:
+    bootwright_machine_port: >-
+      {{ containercluster_install_agent_port_access
+         | combine(containercluster_install_agent_port_arguments[containercluster_install_agent_port_operation]) }}
+    containercluster_install_agent_port_access:
+      endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+      user: '{{ containercluster_install_agent_user }}'
+      password: '{{ containercluster_install_agent_password }}'
+      ca: '{{ containercluster_install_agent_ca }}'
+      verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+
+    containercluster_install_agent_port_arguments:
+      state_read:
+        media: true
+
+      media_insert:
+        image_url_file: '{{ bootwright_run_scratch }}/cluster-insert-{{ containercluster_install_agent_index }}'
+        private: '{{ containercluster_install_agent_node.physical }}'
+        trust: '{{ containercluster_install_agent_node.controller.virtualMedia.trust }}'
+        certificate: '{{ bootwright_cluster_install_material.artifactCertificate | default("") }}'
+
+      media_eject:
+        certificate: '{{ bootwright_cluster_install_material.artifactCertificate | default("") }}'
+        restore_verification: '{{ containercluster_install_agent_node.controller.virtualMedia.restoreVerification }}'
+        remove_certificate: '{{ containercluster_install_agent_node.controller.virtualMedia.removeCertificate }}'
+
+      power:
+        power: 'off'
+
+- name: Retain the substrate port answer for this node
+  ansible.builtin.set_fact:
+    containercluster_install_agent_port_result: >-
+      {{ lookup('ansible.builtin.vars',
+         containercluster_install_agent_ports[containercluster_install_agent_node.substrate].result) }}
+  no_log: true

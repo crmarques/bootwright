@@ -4,6 +4,8 @@ import json
 import os
 import pathlib
 
+from ansible_collections.bootwright.core.tests.unit.install_phase_tasks import apply_tasks as phased_tasks
+
 import pytest
 from ansible.parsing.dataloader import DataLoader
 from ansible.module_utils.testing import patch_module_args
@@ -20,6 +22,8 @@ RESERVED = ('public', 'private', 'clusters', 'cluster')
 
 
 def tasks(file):
+    if file == 'apply.yml':
+        return phased_tasks(LOADER, ROLE)
     return LOADER.load_from_file(str(ROLE / 'tasks' / file), trusted_as_template=True)
 
 
@@ -66,7 +70,7 @@ def test_boot_publishes_then_proves_the_listener_then_inserts():
     publish = only(steps, lambda t: t.get(MODULE, {}).get('operation') == 'publish')
     probe = only(steps, lambda t: 'ansible.builtin.uri' in t)
     gate = only(steps, lambda t: 'ansible.builtin.assert' in t and 'token_probe' in str(t['ansible.builtin.assert']['that']))
-    insert = only(steps, lambda t: t.get('bootwright.core.redfish_boot', {}).get('operation') == 'insert')
+    insert = only(steps, lambda t: t.get('vars', {}).get('containercluster_install_agent_port_operation') == 'media_insert')
     assert publish['register'] == 'containercluster_install_agent_token'
     assert publish[MODULE]['source'] == '{{ containercluster_install_agent_url }}'
     assert index(steps, publish) < index(steps, probe) < index(steps, gate) < index(steps, insert)
@@ -100,10 +104,14 @@ def test_the_insert_serves_the_per_insert_token_never_the_cluster_wide_publicati
     scope = {'containercluster_install_agent_token': {'url': 'https://192.0.2.1/private/c/insert-aa/agent.iso'},
              'containercluster_install_agent_url': 'https://192.0.2.1/private/c/abcdef/agent.iso'}
     steps = list(flat(tasks('boot.yml')))
-    insert = only(steps, lambda t: t.get('bootwright.core.redfish_boot', {}).get('operation') == 'insert')
-    assert insert['bootwright.core.redfish_boot']['image'] == TOKEN_URL
-    assert render(insert['bootwright.core.redfish_boot']['image'], scope) == scope['containercluster_install_agent_token']['url']
-    assert render(insert['bootwright.core.redfish_boot']['image'], scope) != scope['containercluster_install_agent_url']
+    insert = only(steps, lambda t: t.get('vars', {}).get('containercluster_install_agent_port_operation') == 'media_insert')
+    material = only(steps, lambda t: t.get('ansible.builtin.copy', {}).get('content') == TOKEN_URL)
+    assert index(steps, material) < index(steps, insert)
+    assert material['ansible.builtin.copy']['mode'] == '0600'
+    assert render(material['ansible.builtin.copy']['content'], scope) == scope['containercluster_install_agent_token']['url']
+    port = only(tasks('port.yml'), lambda t: 'ansible.builtin.include_role' in t)
+    arguments = port['vars']['containercluster_install_agent_port_arguments']['media_insert']
+    assert arguments['image_url_file'] == material['ansible.builtin.copy']['dest']
     removals = [t for t in steps if t.get(MODULE, {}).get('operation') == 'remove']
     assert len(removals) == 2
     for removal in removals:
@@ -114,10 +122,11 @@ def test_the_insert_serves_the_per_insert_token_never_the_cluster_wide_publicati
 
 def test_release_retires_the_token_only_after_an_eject_that_reported_no_failure():
     release = tasks('release.yml')
-    eject = only(release, lambda t: t.get('bootwright.core.redfish_boot', {}).get('operation') == 'eject')
+    eject = only(release, lambda t: t.get('vars', {}).get('containercluster_install_agent_port_operation') == 'media_eject')
     gate = only(release, lambda t: 'ansible.builtin.assert' in t and 'released' in str(t['ansible.builtin.assert']['that']))
     retire = only(release, lambda t: t.get(MODULE, {}).get('operation') == 'remove')
-    assert eject['register'] == 'containercluster_install_agent_released'
+    retained = release[index(release, eject) + 1]['ansible.builtin.set_fact']
+    assert retained['containercluster_install_agent_released'] == '{{ containercluster_install_agent_port_result }}'
     assert index(release, eject) < index(release, gate) < index(release, retire)
     assert not {'ignore_errors', 'rescue', 'block'} & (set(gate) | set(eject) | set(retire))
     for released, passes in [({'changed': True}, True), ({'msg': 'HTTP 503'}, False)]:
@@ -177,7 +186,7 @@ def test_the_ownership_read_calls_an_insert_link_own_and_any_other_file_foreign(
         assert set(arguments) == {'request', 'source', 'image', 'operation'}
         results.append(dict(token.operate(**arguments), item=controller))
     assert [result['own'] for result in results] == [False, True, True, False]
-    resolve = only(state, lambda t: 'ansible.builtin.set_fact' in t)
+    resolve = only(state, lambda t: 'containercluster_install_agent_state' in t.get('ansible.builtin.set_fact', {}))
     facts = resolve['ansible.builtin.set_fact']['containercluster_install_agent_state']
     scope = {'containercluster_install_agent_media_identity': {'results': results},
              'containercluster_install_agent_controllers': {'results': controllers},

@@ -1,0 +1,28 @@
+---
+- name: Refuse failed node releases after every sibling finished
+  ansible.builtin.import_tasks: phase_failures.yml
+
+- name: Report media release completion
+  bootwright.core.containercluster_install_protocol:
+    phase: group
+    group: release-media
+    status: ok
+  no_log: true
+
+# The installation wait rewrites the installer's file, prepending the router CA
+# to its certificate authority. The kept copy follows that rewrite only when it
+# is whole, within the bound and names the same identity, so the access offered
+# for custody below carries it, while a file the rewrite cut short or grew past
+# the bound leaves the copy as it was.
+- name: Keep the kubeconfig the installer's waits left while it is whole
+  bootwright.core.containercluster_install_inspect:
+    request: '{{ bootwright_cluster_install_request }}'
+    keep: true
+  no_log: true
+
+# The identity is the admin client certificate the image was built with, so
+# the observation taken before any effect already names it, and the read back
+# below answers with it only when the installed cluster accepts that
+# certificate.
+- name: Read cluster state after release
+  ansible.builtin.import_tasks: cluster_state.yml

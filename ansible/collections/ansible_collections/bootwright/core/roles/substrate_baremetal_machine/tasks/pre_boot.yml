@@ -22,6 +22,7 @@
     ca_data: >-
       {{ lookup('ansible.builtin.file', substrate_baremetal_machine_target_ca)
          if substrate_baremetal_machine_target_ca | length > 0 else '' }}
+    require_tpm: '{{ substrate_baremetal_machine_target_require_tpm | default(false) }}'
   register: substrate_baremetal_machine_target
   failed_when: false
   no_log: true
@@ -102,6 +103,19 @@
       this machine is running, and an installation erases its disk; stop it
       explicitly before installing over it
     quiet: true
+
+- name: Name the TPM check as the refusal this proof makes
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_refusal: tpm-absent
+  when: substrate_baremetal_machine_target_require_tpm | default(false)
+
+- name: Require a positively reported enabled TPM 2.0 before encrypted installation
+  ansible.builtin.assert:
+    that:
+      - substrate_baremetal_machine_target.tpm_usable | default(false) | bool
+    fail_msg: The controller did not positively report an enabled TPM 2.0; enable it before encrypted installation.
+    quiet: true
+  when: substrate_baremetal_machine_target_require_tpm | default(false)
 
 - name: Clear the refusal now that the machine is proved
   ansible.builtin.set_fact:

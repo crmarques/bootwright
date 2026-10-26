@@ -73,7 +73,10 @@ type RunRequest struct {
 	Digest         string
 	Canonical      []byte
 	Placement      machineref.Placement
-	Materials      []MaterialFile
+	// NodeCount creates controller-local inventory aliases for bounded per-node phases.
+	NodeCount   int
+	Parallelism int
+	Materials   []MaterialFile
 	// MaterialValues are non-secret values the adapter needs beside the
 	// material paths, such as a certificate fingerprint a probe compares.
 	MaterialValues map[string]string
@@ -131,6 +134,8 @@ type Invocation struct {
 	Variable       string
 	Canonical      []byte
 	Placement      machineref.Placement
+	NodeCount      int
+	Parallelism    int
 	Materials      []MaterialFile
 	Values         map[string]string
 	Outputs        []OutputFile
@@ -169,16 +174,17 @@ func RunFor(execution Execution, invocation Invocation) RunRequest {
 		}
 	}
 	return RunRequest{
-		Context:           execution.Context,
-		Repeat:            execution.Continuation,
-		Block:             execution.Block.ID,
-		Description:       execution.Block.Description,
-		Implementation:    invocation.Implementation,
-		Operation:         invocation.Operation,
-		Variable:          invocation.Variable,
-		Digest:            execution.Block.RequestDigest,
-		Canonical:         invocation.Canonical,
-		Placement:         invocation.Placement,
+		Context:        execution.Context,
+		Repeat:         execution.Continuation,
+		Block:          execution.Block.ID,
+		Description:    execution.Block.Description,
+		Implementation: invocation.Implementation,
+		Operation:      invocation.Operation,
+		Variable:       invocation.Variable,
+		Digest:         execution.Block.RequestDigest,
+		Canonical:      invocation.Canonical,
+		Placement:      invocation.Placement,
+		NodeCount:      invocation.NodeCount, Parallelism: invocation.Parallelism,
 		Materials:         materials,
 		MaterialValues:    invocation.Values,
 		Outputs:           slices.Clone(invocation.Outputs),

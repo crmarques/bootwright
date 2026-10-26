@@ -1,0 +1,25 @@
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-kubevirt
+
+spec:
+  kubevirt:
+    kubeconfigRef: host-kubeconfig
+    namespace: bootwright-guests
+    storageClassRef: guest-block-storage
+
+    machineProfiles:
+      - name: kubevirt
+        cpu: 6
+        memoryMiB: 16384
+        diskGiB: 120
+
+  networkAttachments:
+    - name: lab-guests
+      kubevirt:
+        networkRef:
+          apiGroup: k8s.cni.cncf.io
+          kind: NetworkAttachmentDefinition
+          namespace: bootwright-guests
+          name: guest-l2

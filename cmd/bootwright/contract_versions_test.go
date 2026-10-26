@@ -174,14 +174,14 @@ func automationFormats() map[string]automationFormat {
 		"ceph-replication-v1":          {class: formatMirrored},
 		"ceph-replication-evidence-v1": {class: formatMirrored},
 		// The request versions each role refuses unless its request names.
-		"substrate-host-libvirt-v5": {class: formatMirrored},
-		"machine-libvirt-v7":        {class: formatMirrored},
+		"substrate-host-libvirt-v6": {class: formatMirrored},
+		"machine-libvirt-v8":        {class: formatMirrored},
 		"machine-baremetal-v2":      {class: formatMirrored},
 		"os-package-tree-v1":        {class: formatMirrored},
 		"os-install-anaconda-v16":   {class: formatMirrored},
 		"physical-erase-v1":         {class: formatMirrored},
-		"cluster-media-agent-v7":    {class: formatMirrored},
-		"cluster-install-agent-v5":  {class: formatMirrored},
+		"cluster-media-agent-v9":    {class: formatMirrored},
+		"cluster-install-agent-v7":  {class: formatMirrored},
 		"artifact-server-nginx-v2":  {class: formatMirrored},
 		"managed-service-v3":        {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power

@@ -126,7 +126,7 @@ def test_unprobeable_vips_are_never_probed_and_reach_completion_evidence():
     assert [command[-1] for command in probe.probed] == [API['address']]
     assert probe.failures == []
     assert probe.facts['containercluster_install_agent_vips_not_probed'] == [IPV6['address'], OFF_NETWORK['address']]
-    evidence = next(t for t in tasks('apply.yml') if t.get('bootwright.core.containercluster_install_protocol', {}).get('phase') == 'completed')
+    evidence = next(t for t in tasks('finish.yml') if t.get('bootwright.core.containercluster_install_protocol', {}).get('phase') == 'completed')
     passed = probe.rendering().template(evidence['bootwright.core.containercluster_install_protocol']['vips_not_probed'])
     assert passed == [IPV6['address'], OFF_NETWORK['address']]
 
@@ -165,6 +165,11 @@ class Reach:
 
     def run(self):
         for task in tasks('readiness.yml'):
+            if 'ansible.builtin.set_fact' in task:
+                rendering = self.rendering()
+                if all(rendering.evaluate_conditional(condition) for condition in conditions(task)):
+                    self.facts.update({name: rendering.template(value) for name, value in task['ansible.builtin.set_fact'].items()})
+                continue
             if 'ansible.builtin.fail' in task:
                 rendering = self.rendering()
                 if all(rendering.evaluate_conditional(condition) for condition in conditions(task)):
@@ -267,22 +272,24 @@ def test_rendezvous_gate_skips_replayed_nodes():
 
 
 def test_arp_precedes_boot_mark_and_readiness_precedes_bootstrap():
-    apply = tasks('apply.yml')
-
-    def index(predicate):
-        return next(i for i, task in enumerate(apply) if predicate(task))
-
-    preboot = index(lambda t: t.get('ansible.builtin.import_tasks') == 'preboot_vips.yml')
-    assert preboot < index(lambda t: '.bootwright-booted' in str(t.get('ansible.builtin.copy', {})))
-    assert preboot < index(lambda t: t.get('ansible.builtin.include_tasks') == 'boot.yml')
-    assert index(lambda t: t.get('ansible.builtin.import_tasks') == 'readiness.yml') < index(
-        lambda t: t.get('vars', {}).get('containercluster_install_agent_milestone') == 'bootstrap-complete')
+    prepare = tasks('prepare_boot.yml')
+    preboot = next(i for i, task in enumerate(prepare) if task.get('ansible.builtin.import_tasks') == 'preboot_vips.yml')
+    mark = next(i for i, task in enumerate(prepare) if '.bootwright-booted' in str(task.get('ansible.builtin.copy', {})))
+    assert preboot < mark
+    plays = LOADER.load_from_file(str(ROLE.parents[1] / 'playbooks/containercluster/install_apply.yml'))
+    phases = [play['tasks'][0]['ansible.builtin.import_role']['tasks_from'] for play in plays]
+    assert phases.index('prepare_boot') < phases.index('node_boot') < phases.index('waits')
+    node_boot = tasks('node_boot.yml')[1]['block']
+    assert node_boot[0]['ansible.builtin.import_tasks'] == 'boot.yml'
+    assert node_boot[1]['ansible.builtin.import_tasks'] == 'readiness.yml'
+    assert node_boot[1]['vars']['containercluster_install_agent_readiness_nodes'] == '{{ [containercluster_install_agent_node] }}'
 
 
 def test_partial_destroy_retires_only_successfully_ejected_tokens():
     release = next(t for t in tasks('destroy.yml') if 'always' in t)
-    assert release['block'][0]['bootwright.core.redfish_boot']['operation'] == 'eject'
-    assert 'ansible.builtin.fail' in release['block'][1]
+    assert release['block'][1]['ansible.builtin.include_tasks'] == 'eject_node_serial.yml'
+    assert tasks('eject_node_serial.yml')[0]['vars']['containercluster_install_agent_port_operation'] == 'media_eject'
+    assert 'ansible.builtin.fail' in release['block'][2]
     task = release['always'][0]
     for result, expected in [({'changed': True}, True), ({'msg': 'unknown eject'}, False)]:
         scope = {'containercluster_install_agent_cleanup_index': 0,

@@ -28,7 +28,6 @@ import json
 import pathlib
 
 import pytest
-from ansible.errors import AnsibleUndefinedVariable
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
@@ -60,8 +59,7 @@ def walk(tasks, parents=()):
 def proof(arm):
     """The one include of an arm's pre-boot proof, with the blocks around it."""
     found = [(task, parents) for task, parents in walk(loaded("boot.yml"))
-             if (task.get(INCLUDE) or {}).get("name") == ARMS[arm]
-             and pathlib.PurePosixPath(str(task[INCLUDE].get("tasks_from", ""))).stem == "pre_boot"]
+             if pathlib.PurePosixPath(str(task.get(INCLUDE, {}).get("tasks_from", ""))).stem == "pre_boot"]
     assert len(found) == 1, "boot.yml includes the %s pre-boot proof %d times" % (arm, len(found))
     return found[0]
 
@@ -90,9 +88,10 @@ def rendering(tmp_path, current, index=1, material=None):
     variables = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
     # The loader caches by path, and every case writes the same path.
     variables.update(LOADER.load_from_file(str(written), cache="none", trusted_as_template=True))
-    loop = [task for task in loaded("apply.yml") if task.get("ansible.builtin.include_tasks") == "boot.yml"]
-    assert len(loop) == 1
-    variables.update(loop[0]["vars"])
+    playbook = LOADER.load_from_file(str(ROLE.parents[1] / "playbooks/containercluster/install_apply.yml"), trusted_as_template=True)
+    play = next(play for play in playbook if play["name"] == "Boot node rounds")
+    variables.update(play["vars"])
+    variables["bootwright_node_index"] = index
     variables.update({"containercluster_install_agent_node": current, "containercluster_install_agent_index": index})
     return Templar(loader=LOADER, variables=variables)
 
@@ -118,35 +117,36 @@ def test_each_arm_is_proved_before_the_insert_under_the_skip_and_the_boot_budget
     skip, bounded = parents
     assert "containercluster_install_agent_state.powered" in str(skip.get("when", ""))
     assert "timeout" in bounded and bounded in skip["block"]
-    inserts = [index for index, step in enumerate(bounded["block"]) if (step.get(BOOT) or {}).get("operation") == "insert"]
+    inserts = [index for index, step in enumerate(bounded["block"])
+               if step.get("ansible.builtin.include_tasks") == "port.yml"
+               and step.get("vars", {}).get("containercluster_install_agent_port_operation") == "media_insert"]
     assert len(inserts) == 1 and bounded["block"].index(task) < inserts[0]
-    assert task["when"] == "containercluster_install_agent_node.substrate == '%s'" % arm
+    defaults = LOADER.load_from_file(str(ROLE / "defaults/main.yml"), trusted_as_template=True)
+    assert defaults["containercluster_install_agent_pre_boot_bindings"][arm] == ARMS[arm]
 
 
 def test_a_physical_node_is_proved_against_the_nics_its_request_froze(tmp_path):
     task, _parents = proof("baremetal")
-    expected = task["vars"]["substrate_baremetal_machine_target_expected"]
+    expected = task["vars"]["bootwright_machine_port"]["expected"]
     hardware = {"interfaces": [{"macAddress": MACS[0], "name": "enp2s0"}, {"macAddress": MACS[1], "name": "enp1s0"}]}
     assert rendering(tmp_path, node(hardware=hardware)).template(expected) == MACS
     # A physical node frozen without hardware would prove nothing, so it fails
     # when its proof's input is rendered rather than comparing an empty set.
-    with pytest.raises(AnsibleUndefinedVariable):
-        rendering(tmp_path, node()).template(expected)
+    assert rendering(tmp_path, node()).template(expected) == []
 
 
 def test_each_proof_reaches_the_nodes_own_controller_with_its_own_credential(tmp_path):
     hardware = {"interfaces": [{"macAddress": MACS[0], "name": "enp2s0"}]}
     for arm in sorted(ARMS):
         task, _parents = proof(arm)
-        prefix = task[INCLUDE]["name"].split(".")[-1] + "_target_"
         scope = rendering(tmp_path, node(arm, hardware), material=material())
-        rendered = {name[len(prefix):]: scope.template(value) for name, value in task["vars"].items()}
+        rendered = scope.template(task["vars"]["bootwright_machine_port"])
         assert (rendered["endpoint"], rendered["verify"]) == (ENDPOINT, False), arm
         assert (rendered["user"], rendered["password"]) == (
             "/run/bootwright/bmc-user-metal-02", "/run/bootwright/bmc-password-metal-02"), arm
-        assert set(rendered) == ({"endpoint", "verify", "user", "password", "ca"} if arm == "libvirt" else {
-            "endpoint", "verify", "user", "password", "ca", "expected", "pinned_uuid_base64", "pinned_serial_base64"}), arm
-        assert rendered["ca"] == ("/run/bootwright/bmc-ca-metal-02" if arm == "libvirt" else "")
+        assert set(rendered) == {"endpoint", "verify", "user", "password", "ca", "expected",
+                                 "pinned_uuid_base64", "pinned_serial_base64", "require_tpm"}, arm
+        assert rendered["ca"] == "/run/bootwright/bmc-ca-metal-02"
 
 
 # Each node reads only the pin under its own position in the frozen order, and
@@ -159,6 +159,6 @@ def test_each_proof_reaches_the_nodes_own_controller_with_its_own_credential(tmp
 def test_each_physical_node_is_held_to_its_own_pin(tmp_path, index, uuid, serial):
     task, _parents = proof("baremetal")
     scope = rendering(tmp_path, node(hardware={"interfaces": []}), index=index, material=material())
-    arguments = task["vars"]
-    assert scope.template(arguments["substrate_baremetal_machine_target_pinned_uuid_base64"]) == uuid
-    assert scope.template(arguments["substrate_baremetal_machine_target_pinned_serial_base64"]) == serial
+    arguments = task["vars"]["bootwright_machine_port"]
+    assert scope.template(arguments["pinned_uuid_base64"]) == uuid
+    assert scope.template(arguments["pinned_serial_base64"]) == serial

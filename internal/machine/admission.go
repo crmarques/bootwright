@@ -692,8 +692,8 @@ func validateAttachments(o, provider api.Object, native api.Value) []api.Issue {
 	}
 	check(network.Get("attachmentRef"), "$.spec.network.attachmentRef")
 	if network.Has("interfaceAttachments") {
-		if variant != substrate.ArmKubeVirt {
-			issues = appendIssues(issues, invariant("$.spec.network.interfaceAttachments", "per-interface attachments require KubeVirt", "replace spec.network.interfaceAttachments with spec.network.attachmentRef"))
+		if variant != substrate.ArmKubeVirt && variant != substrate.ArmLibvirt {
+			issues = appendIssues(issues, invariant("$.spec.network.interfaceAttachments", "per-interface attachments require libvirt or KubeVirt", "replace spec.network.interfaceAttachments with spec.network.attachmentRef"))
 		}
 		seen := map[string]bool{}
 		for i, entry := range network.Get("interfaceAttachments").Items() {
@@ -716,6 +716,9 @@ func validateAttachments(o, provider api.Object, native api.Value) []api.Issue {
 				issues = appendIssues(issues, invariant("$.spec.network.interfaceAttachments", "per-interface attachments must cover every physical interface", "add a spec.network.interfaceAttachments entry for every available physical ethernet interface"))
 			}
 		}
+	}
+	if variant == substrate.ArmLibvirt {
+		issues = appendIssues(issues, validateLibvirtAttachmentMTUs(o, provider, native)...)
 	}
 	return issues
 }

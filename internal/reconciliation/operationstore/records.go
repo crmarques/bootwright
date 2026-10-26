@@ -18,7 +18,7 @@ import (
 const (
 	MaxIndexBytes     = 256 << 10
 	MaxOperationBytes = 1 << 20
-	MaxPlanBytes      = 1 << 20
+	MaxPlanBytes      = 6 << 20
 	MaxAttemptBytes   = 64 << 10
 	MaxOperations     = 1024
 	MaxBindings       = 64

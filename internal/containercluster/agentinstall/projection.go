@@ -60,6 +60,9 @@ func installConfig(catalog api.Catalog, cluster api.Object, nodes []nodeProjecti
 		"pullSecret": placeholderPullToken,
 		"sshKey":     placeholderPullToken,
 	}
+	if cluster.Spec().Get("security", "fips", "enabled").Bool() {
+		config["fips"] = true
+	}
 	if len(cluster.Spec().Get("install", "additionalTrustBundleRefs").Strings()) != 0 {
 		config["additionalTrustBundle"] = placeholderPullToken
 	}
@@ -68,6 +71,17 @@ func installConfig(catalog api.Catalog, cluster api.Object, nodes []nodeProjecti
 			return nil, refusalAt("api.invariant", "$.spec.install.additionalTrustBundlePolicy", "additionalTrustBundlePolicy requires additional trust bundles", "select at least one caBundle Secret in install.additionalTrustBundleRefs, or remove additionalTrustBundlePolicy")
 		}
 		config["additionalTrustBundlePolicy"] = policy.Text()
+	}
+	if sources := cluster.Spec().Get("install", "registries", "imageDigestSources"); sources.Present() {
+		config["imageDigestSources"] = nativeValue(sources)
+	}
+
+	proxy, _, err := installationProxy(catalog, cluster)
+	if err != nil {
+		return nil, err
+	}
+	if proxy != nil {
+		config["proxy"] = map[string]any{"httpProxy": proxy.HTTPProxy, "httpsProxy": proxy.HTTPSProxy, "noProxy": proxy.NoProxy}
 	}
 	return config, nil
 }
@@ -293,6 +307,11 @@ func networkConfig(catalog api.Catalog, node api.Object, interfaces []substrate.
 			entry, ok := item.(map[string]any)
 			if !ok {
 				continue
+			}
+			if ipv6, ok := entry["ipv6"].(map[string]any); ok {
+				if addresses, ok := ipv6["address"].([]any); ok && len(addresses) > 0 {
+					ipv6["enabled"], ipv6["dhcp"], ipv6["autoconf"] = true, false, false
+				}
 			}
 			name, _ := entry["name"].(string)
 			if entry["type"] == "ethernet" {

@@ -158,15 +158,6 @@ prefix; a Machine's NICs attach, each in declared order, to the attachment its
 interface map names
 ([machines](api/machines.md#machine-profiles-and-network-attachments)).
 
-Not yet met: a Machine's NICs all attach to one network; tracked as
-[B701](milestones/m1.md#b701).
-
-Not yet met: attachments declare no MTU; tracked as
-[B702](milestones/m1.md#b702).
-
-Not yet met: a managed network's prefix is written without a family; tracked
-as [B703](milestones/m1.md#b703).
-
 **Firewall readiness.** A provider with a managed network requires firewalld
 already enabled and running; it never enables or reconfigures the host firewall.
 It owns one readiness unit named
@@ -772,8 +763,15 @@ proof reports what it could not read as unobserved, which proves nothing; a
 controller that offers no virtual media reports none, and inserting into it
 refuses.
 
-Not yet met: consumers call the Redfish modules directly and sum the Redfish
-bounds alone; tracked as [B704](milestones/m1.md#b704).
+The per-arm port budgets live in `internal/substrate/machine_bounds.go`.
+Physical virtual-media discovery admits at most four distinct managers and
+eight distinct device candidates; an inventory over either bound refuses
+without reporting media absent. Hardware inspection admits at most 64
+interface members and otherwise reports an incomplete inventory without
+reading a partial set. The physical pre-boot read budget is therefore 33
+minutes at the per-request timeout. The separate 30-minute boot phase budget
+can still expire on slow responses, leaving the attempt unknown; these bounds
+are execution ceilings, not a promise that a native controller completes.
 
 Each call's worst case follows from the Redfish client's fixed bounds, and a
 consumer's run [deadline](architecture.md#the-adapter-result-protocol) allows
@@ -979,11 +977,16 @@ they are named entry points of a role rather than free variables, the
 binding is allowlisted and frozen: authored data can never select which of
 them runs. An input is a value or the path of a material file, never secret
 bytes, because the validation is not hidden from output and echoes a value it
-refuses. The bare-metal entry points that reach the controller also take the
-path of its trust-bundle material, empty when it declares none.
+refuses. A private image URL travels as the path of a mode-0600 file in the runner's
+controller-local scratch, so argument validation never echoes its capability.
+The state entry point returns normalized power and media classifications beside
+the native observation its existing consumers use; an unreadable probe remains
+unknown. A requested physical TPM proof accepts only an enabled TPM 2.0 in the
+controller's `TrustedModules` inventory and otherwise names `tpm-absent` before
+any image is inserted.
 
-Not yet met: machine roles publish only `pre_boot`, `boot_media`,
-`boot_disk` and `identity_read`; tracked as [B704](milestones/m1.md#b704).
+The bare-metal entry points that reach the controller also take the
+path of its trust-bundle material, empty when it declares none.
 
 The result channel belongs to the consumer, so `pre_boot` leaves the refusal
 its failed check makes in a fact of its own role, cleared before the proof and

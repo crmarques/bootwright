@@ -40,7 +40,7 @@
         "virtstoraged.service"
       ],
       "uri": "qemu:///system",
-      "version": "substrate-host-libvirt-v5"
+      "version": "substrate-host-libvirt-v6"
     }
   ],
   "libvirtMachines": [
@@ -91,7 +91,7 @@
       "uri": "qemu:///system",
       "uuid": "99fb0e65-44db-88dc-80ee-660148714293",
       "vcpu": 8,
-      "version": "machine-libvirt-v7"
+      "version": "machine-libvirt-v8"
     }
   ]
 }

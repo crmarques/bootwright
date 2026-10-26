@@ -164,7 +164,7 @@ def test_the_parent_death_signal_is_armed_before_the_parent_is_rechecked():
     assert log == [("prctl", 1, int(signal.SIGTERM), 0, 0, 0), "getppid"]
     log = []
     assert supervisor.bind_child(Prctl(log=log), parent(100, log), 100, Installer())
-    assert log == [("prctl", 1, int(signal.SIGKILL), 0, 0, 0), "getppid"]
+    assert log == [("prctl", 36, 1, 0, 0, 0), ("prctl", 1, int(signal.SIGUSR2), 0, 0, 0), "getppid"]
     # The supervisor records its parent before arming, then re-checks it.
     log = []
     supervisor.guard_parent(Prctl(log=log), Tree(TREE, log=log), Installer())
@@ -233,16 +233,18 @@ def test_the_playbook_child_dies_with_its_supervisor():
     prctl, installer = Prctl(), Installer()
     assert supervisor.bind_child(prctl, lambda: 100, 100, installer)
     # The inherited handler would end the supervisor's own tree from the child.
-    assert installer.handlers == {signal.SIGTERM: signal.SIG_DFL}
-    assert prctl.calls == [(1, int(signal.SIGKILL), 0, 0, 0)]
+    assert installer.handlers[signal.SIGTERM] == signal.SIG_DFL
+    assert callable(installer.handlers[signal.SIGUSR2])
+    assert prctl.calls == [(36, 1, 0, 0, 0), (1, int(signal.SIGUSR2), 0, 0, 0)]
     assert not supervisor.bind_child(Prctl(), lambda: 1, 100, Installer())
 
 
 def test_only_a_lifecycle_playbook_child_is_bound_and_an_orphan_never_loads_ansible():
     ended, prctl, installer = [], Prctl(), Installer()
     supervisor.enter_child(True, prctl, lambda: 100, 100, installer, ended.append)
-    assert prctl.calls == [(1, int(signal.SIGKILL), 0, 0, 0)]
-    assert installer.handlers == {signal.SIGTERM: signal.SIG_DFL}
+    assert prctl.calls == [(36, 1, 0, 0, 0), (1, int(signal.SIGUSR2), 0, 0, 0)]
+    assert installer.handlers[signal.SIGTERM] == signal.SIG_DFL
+    assert callable(installer.handlers[signal.SIGUSR2])
     assert ended == []
     # Its supervisor died before the binding: the child ends before Ansible.
     supervisor.enter_child(True, Prctl(), lambda: 1, 100, Installer(), ended.append)
@@ -359,12 +361,12 @@ def test_a_terminated_lifecycle_supervisor_ends_its_tree(tmp_path):
 
 
 @LINUX
-def test_a_lifecycle_playbook_dies_with_its_killed_supervisor(tmp_path):
-    # A supervisor killed outright runs no handler, but its playbook child
-    # still cannot outlive it.
+def test_a_killed_lifecycle_supervisor_leaves_no_playbook_worker_or_task(tmp_path):
+    # The surviving playbook receives the parent-death signal and owns the
+    # orphaned worker and task even after their session separation.
     stop = signal_supervisor(signal.SIGKILL)
-    runs = stopped_tree_runs(tmp_path, ["--lifecycle"], stop, (0, 1), 3)
-    assert runs[:2] == [False, False]
+    runs = stopped_tree_runs(tmp_path, ["--lifecycle"], stop, ALL, 5)
+    assert runs == [False] * 4
 
 
 @LINUX
@@ -387,3 +389,22 @@ def test_a_controller_playbook_outlives_its_killed_supervisor(tmp_path):
     stop = signal_supervisor(signal.SIGKILL)
     runs = stopped_tree_runs(tmp_path, [], stop, (1,), 1)
     assert runs == [False, True, True, True]
+
+
+def test_a_playbook_refuses_if_it_cannot_reap_orphaned_workers():
+    prctl, installer = Prctl(result=-1), Installer()
+    assert not supervisor.bind_child(prctl, lambda: 100, 100, installer)
+    assert prctl.calls == [(36, 1, 0, 0, 0)]
+    assert signal.SIGUSR2 not in installer.handlers
+
+
+def test_the_surviving_playbook_installs_its_handler_before_arming_parent_death():
+    events = []
+
+    def installed(signum, callback):
+        events.append(("handler", signum, callable(callback)))
+
+    assert supervisor.bind_child(Prctl(log=events), parent(100, events), 100, installed)
+    handler = events.index(("handler", signal.SIGUSR2, True))
+    armed = events.index(("prctl", 1, int(signal.SIGUSR2), 0, 0, 0))
+    assert handler < armed < events.index("getppid")

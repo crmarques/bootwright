@@ -1,0 +1,32 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: metallb
+
+spec:
+  clusterRef: networks
+
+  packages:
+    metallb:
+      subscription:
+        channel: example-channel
+        startingCSV: metallb-operator.v0.0.0
+
+      pools:
+        - name: services
+
+          addresses:
+            - 198.51.100.128-198.51.100.135
+
+        - name: routed-services
+
+          addresses:
+            - 192.0.2.160-192.0.2.167
+
+          l2:
+            interface: enp3s0
+
+    nmstate:
+      subscription:
+        channel: example-channel
+        startingCSV: kubernetes-nmstate-operator.v0.0.0

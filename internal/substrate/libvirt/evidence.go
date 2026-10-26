@@ -82,6 +82,7 @@ type NetworkEvidence struct {
 	// definition not proved.
 	Definition bool   `json:"definition"`
 	Managed    bool   `json:"managed"`
+	MTU        int    `json:"mtu,omitempty"`
 	Name       string `json:"name"`
 	Owned      bool   `json:"owned"`
 	State      string `json:"state"`
@@ -240,6 +241,9 @@ func matchNetworks(observed []NetworkEvidence, frozen []Network) error {
 		entry := sorted[index]
 		if !entry.Bridge {
 			return refusal("lifecycle.state", "a declared network bridge is not present on the provider host", "")
+		}
+		if network.MTU != 0 && entry.MTU != network.MTU {
+			return refusal("lifecycle.state", "a declared network bridge does not carry its frozen MTU", "")
 		}
 		if !network.Managed {
 			continue

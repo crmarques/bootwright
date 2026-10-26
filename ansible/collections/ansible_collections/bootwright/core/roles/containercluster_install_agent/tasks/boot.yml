@@ -8,6 +8,11 @@
 # nothing. Each dispatch ends in a terminal fail for a substrate it has no
 # entry point for, and the proof dispatch's fail comes before the media is
 # inserted, rather than inserting it and booting nothing.
+- name: Retain a missing boot image as a typed node refusal
+  ansible.builtin.set_fact:
+    containercluster_install_agent_lifecycle_refusal: media-missing
+  when: containercluster_install_agent_url | length == 0
+
 - name: Refuse to boot a node whose cluster published no image
   ansible.builtin.assert:
     that:
@@ -61,36 +66,23 @@
         # declared NICs, the identity its Machine block pinned in this
         # operation, and its power off. A node that fails its proof is given
         # no media and is not booted.
-        - name: Prove a machine this substrate created before inserting anything
+        - name: Prove the exact node through its substrate before inserting media
           ansible.builtin.include_role:
-            name: bootwright.core.substrate_libvirt_machine
+            name: '{{ containercluster_install_agent_pre_boot_bindings[containercluster_install_agent_node.substrate] }}'
             tasks_from: pre_boot
           vars:
-            substrate_libvirt_machine_target_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-            substrate_libvirt_machine_target_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-            substrate_libvirt_machine_target_ca: '{{ containercluster_install_agent_ca }}'
-            substrate_libvirt_machine_target_user: '{{ containercluster_install_agent_user }}'
-            substrate_libvirt_machine_target_password: '{{ containercluster_install_agent_password }}'
-          when: containercluster_install_agent_node.substrate == 'libvirt'
-
-        - name: Prove the exact physical node before anything it holds is erased
-          ansible.builtin.include_role:
-            name: bootwright.core.substrate_baremetal_machine
-            tasks_from: pre_boot
-          vars:
-            substrate_baremetal_machine_target_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-            substrate_baremetal_machine_target_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-            substrate_baremetal_machine_target_expected: "{{ containercluster_install_agent_node.hardware.interfaces | map(attribute='macAddress') | list }}"
-            substrate_baremetal_machine_target_user: '{{ containercluster_install_agent_user }}'
-            substrate_baremetal_machine_target_password: '{{ containercluster_install_agent_password }}'
-            # A cluster node's controller is reached through no bundle until physical
-            # nodes are delivered (B67); agentinstall refuses physical nodes today.
-            substrate_baremetal_machine_target_ca: ''
-            substrate_baremetal_machine_target_pinned_uuid_base64: >-
-              {{ bootwright_cluster_install_material['pinnedUUIDBase64Node' ~ containercluster_install_agent_index] | default('') }}
-            substrate_baremetal_machine_target_pinned_serial_base64: >-
-              {{ bootwright_cluster_install_material['pinnedSerialBase64Node' ~ containercluster_install_agent_index] | default('') }}
-          when: containercluster_install_agent_node.substrate == 'baremetal'
+            bootwright_machine_port:
+              endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+              verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+              ca: '{{ containercluster_install_agent_ca }}'
+              user: '{{ containercluster_install_agent_user }}'
+              password: '{{ containercluster_install_agent_password }}'
+              require_tpm: '{{ containercluster_install_agent_node.requireTPM | default(false) }}'
+              expected: "{{ containercluster_install_agent_node.hardware.interfaces | default([]) | map(attribute='macAddress') | list }}"
+              pinned_uuid_base64: >-
+                {{ bootwright_cluster_install_material['pinnedUUIDBase64Node' ~ containercluster_install_agent_index] | default('') }}
+              pinned_serial_base64: >-
+                {{ bootwright_cluster_install_material['pinnedSerialBase64Node' ~ containercluster_install_agent_index] | default('') }}
 
         - name: Refuse a substrate this installation has no pre-boot binding for
           ansible.builtin.fail:
@@ -101,7 +93,7 @@
               {{ containercluster_install_agent_node.machine }} was not proved, no
               media was inserted into it and it was not booted; plan the
               installation again with this release
-          when: containercluster_install_agent_node.substrate not in ['libvirt', 'baremetal']
+          when: containercluster_install_agent_node.substrate not in containercluster_install_agent_pre_boot_bindings
 
         - name: Publish a fresh private link for this insert
           bootwright.core.containercluster_media_token:
@@ -144,6 +136,11 @@
           when: containercluster_install_agent_token_probe.status | default(-1) | int not in [200, 206]
           no_log: true
 
+        - name: Retain an unproved private listener as a typed node refusal
+          ansible.builtin.set_fact:
+            containercluster_install_agent_lifecycle_refusal: private-delivery
+          when: containercluster_install_agent_token_probe.status | default(-1) | int not in [200, 206]
+
         - name: Refuse an insert whose private image cannot be fetched
           ansible.builtin.assert:
             that: containercluster_install_agent_token_probe.status | default(-1) | int in [200, 206]
@@ -156,22 +153,31 @@
                  else 'the connection failed before a status line was received' }}
             quiet: true
 
-        - name: Insert the published image as virtual media
-          bootwright.core.redfish_boot:
-            endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-            user: '{{ lookup("ansible.builtin.file", containercluster_install_agent_user) }}'
-            password: '{{ lookup("ansible.builtin.file", containercluster_install_agent_password) }}'
-            verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-            ca_data: '{{ lookup("ansible.builtin.file", containercluster_install_agent_ca) if containercluster_install_agent_ca else omit }}'
-            operation: insert
-            image: '{{ containercluster_install_agent_token.url }}'
-          register: containercluster_install_agent_insertion
-          failed_when: false
+        - name: Keep this node's private insert URL in invocation scratch
+          ansible.builtin.copy:
+            content: '{{ containercluster_install_agent_token.url }}'
+            dest: '{{ bootwright_run_scratch }}/cluster-insert-{{ containercluster_install_agent_index }}'
+            mode: '0600'
+          no_log: true
+
+        - name: Insert through the selected substrate machine port
+          ansible.builtin.include_tasks: port.yml
+          vars:
+            containercluster_install_agent_port_operation: media_insert
+
+        - name: Retain the insertion answer
+          ansible.builtin.set_fact:
+            containercluster_install_agent_insertion: '{{ containercluster_install_agent_port_result }}'
           no_log: true
 
         # ansible-core keeps nothing of a failure under no_log but that it
         # failed, so the controller's own refusal is reported here, where no
         # credential is.
+        - name: Retain a refused insert as a typed node refusal
+          ansible.builtin.set_fact:
+            containercluster_install_agent_lifecycle_refusal: media-insert
+          when: containercluster_install_agent_insertion.msg is defined
+
         - name: Stop at an insert the management controller did not complete
           ansible.builtin.assert:
             that:
@@ -182,32 +188,18 @@
               {{ (containercluster_install_agent_insertion.msg | default('') | string | bootwright.core.printable)[:512] }}
             quiet: true
 
-        - name: Boot a machine this substrate created
+        - name: Boot the node through its selected substrate
           ansible.builtin.include_role:
-            name: bootwright.core.substrate_libvirt_machine
+            name: '{{ containercluster_install_agent_boot_media_bindings[containercluster_install_agent_node.substrate] }}'
             tasks_from: boot_media
           vars:
-            substrate_libvirt_machine_boot_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-            substrate_libvirt_machine_boot_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-            substrate_libvirt_machine_boot_ca: '{{ containercluster_install_agent_ca }}'
-            substrate_libvirt_machine_boot_user: '{{ containercluster_install_agent_user }}'
-            substrate_libvirt_machine_boot_password: '{{ containercluster_install_agent_password }}'
-            substrate_libvirt_machine_boot_installer_powers_off: false
-          when: containercluster_install_agent_node.substrate == 'libvirt'
-
-        - name: Boot an operator-owned machine through its own controller
-          ansible.builtin.include_role:
-            name: bootwright.core.substrate_baremetal_machine
-            tasks_from: boot_media
-          vars:
-            substrate_baremetal_machine_boot_endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-            substrate_baremetal_machine_boot_verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-            substrate_baremetal_machine_boot_user: '{{ containercluster_install_agent_user }}'
-            substrate_baremetal_machine_boot_password: '{{ containercluster_install_agent_password }}'
-            # A cluster node's controller is reached through no bundle until physical
-            # nodes are delivered (B67); agentinstall refuses physical nodes today.
-            substrate_baremetal_machine_boot_ca: ''
-          when: containercluster_install_agent_node.substrate == 'baremetal'
+            bootwright_machine_port:
+              endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
+              verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
+              ca: '{{ containercluster_install_agent_ca }}'
+              user: '{{ containercluster_install_agent_user }}'
+              password: '{{ containercluster_install_agent_password }}'
+              installer_powers_off: false
 
         - name: Refuse a substrate this installation has no media-boot binding for
           ansible.builtin.fail:
@@ -217,7 +209,7 @@
               installation has no boot_media binding for, so Machine
               {{ containercluster_install_agent_node.machine }} was not booted from
               the inserted image; plan the installation again with this release
-          when: containercluster_install_agent_node.substrate not in ['libvirt', 'baremetal']
+          when: containercluster_install_agent_node.substrate not in containercluster_install_agent_boot_media_bindings
 
       # A step the timeout stopped fails with ansible-core's own message, so the
       # budget is named here; any other failure stays a failure, and its own
@@ -250,18 +242,19 @@
         # boot budget has left. The rescue ends in a fail, so the media read of
         # the state read after boot, which the installation's deadline allows
         # for each node, does not run in this attempt.
-        - name: Read what the controller presents after an insert it did not complete
-          bootwright.core.redfish_system_read:
-            endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-            user: '{{ lookup("ansible.builtin.file", containercluster_install_agent_user) }}'
-            password: '{{ lookup("ansible.builtin.file", containercluster_install_agent_password) }}'
-            verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-            ca_data: '{{ lookup("ansible.builtin.file", containercluster_install_agent_ca) if containercluster_install_agent_ca else omit }}'
-            media: true
-          register: containercluster_install_agent_after_insert
-          timeout: 150
+        - name: Read the substrate after a failed insert
+          ansible.builtin.include_tasks:
+            file: port.yml
+            apply:
+              timeout: '{{ (containercluster_install_agent_node.stateReadSeconds | int) + 30 }}'
+          vars:
+            containercluster_install_agent_port_operation: state_read
           when: containercluster_install_agent_insertion.msg is defined
-          failed_when: false
+
+        - name: Retain the read after insertion
+          ansible.builtin.set_fact:
+            containercluster_install_agent_after_insert: '{{ containercluster_install_agent_port_result }}'
+          when: containercluster_install_agent_insertion.msg is defined
           no_log: true
 
         - name: Stop at a read after a failed insert the management controller did not answer
@@ -287,11 +280,9 @@
             - containercluster_install_agent_token.url.split('/')[-2] not in (containercluster_install_agent_after_insert.media | string)
           no_log: true
 
-        - name: Name the substrate's refusal of the node to the runner
-          bootwright.core.containercluster_install_protocol:
-            phase: refused
-            reason: '{{ containercluster_install_agent_refusal }}'
-            node: '{{ containercluster_install_agent_index }}'
+        - name: Retain the substrate refusal until every sibling finishes
+          ansible.builtin.set_fact:
+            containercluster_install_agent_lifecycle_refusal: '{{ containercluster_install_agent_refusal }}'
           vars:
             containercluster_install_agent_refusal: >-
               {{ substrate_libvirt_machine_refusal | default('')

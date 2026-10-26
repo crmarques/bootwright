@@ -2,7 +2,7 @@
 - name: Validate the frozen provider host request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v5'
+      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v6'
       - bootwright_substrate_host_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_substrate_host_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_substrate_host_request.poolPath == '/var/lib/libvirt/images/bootwright/'

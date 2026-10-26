@@ -20,3 +20,24 @@ substrate_libvirt_machine_missing_disks: >-
 # booted sets a budget.
 substrate_libvirt_machine_identity_retries: 0
 substrate_libvirt_machine_identity_delay: 0
+
+# Generic machine-port inputs; the native task implementation owns its aliases.
+substrate_libvirt_machine_target_endpoint: "{{ bootwright_machine_port.endpoint }}"
+substrate_libvirt_machine_target_ca: "{{ bootwright_machine_port.ca }}"
+substrate_libvirt_machine_target_user: "{{ bootwright_machine_port.user }}"
+substrate_libvirt_machine_target_password: "{{ bootwright_machine_port.password }}"
+substrate_libvirt_machine_target_verify: "{{ bootwright_machine_port.verify }}"
+
+substrate_libvirt_machine_boot_endpoint: "{{ bootwright_machine_port.endpoint }}"
+substrate_libvirt_machine_boot_ca: "{{ bootwright_machine_port.ca }}"
+substrate_libvirt_machine_boot_user: "{{ bootwright_machine_port.user }}"
+substrate_libvirt_machine_boot_password: "{{ bootwright_machine_port.password }}"
+substrate_libvirt_machine_boot_verify: "{{ bootwright_machine_port.verify }}"
+substrate_libvirt_machine_boot_installer_powers_off: "{{ bootwright_machine_port.installer_powers_off }}"
+
+substrate_libvirt_machine_disk_endpoint: "{{ bootwright_machine_port.endpoint }}"
+substrate_libvirt_machine_disk_ca: "{{ bootwright_machine_port.ca }}"
+substrate_libvirt_machine_disk_user: "{{ bootwright_machine_port.user }}"
+substrate_libvirt_machine_disk_password: "{{ bootwright_machine_port.password }}"
+substrate_libvirt_machine_disk_verify: "{{ bootwright_machine_port.verify }}"
+substrate_libvirt_machine_disk_power_on: "{{ bootwright_machine_port.power_on }}"

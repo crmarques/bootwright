@@ -22,6 +22,7 @@ LIFECYCLE = "--lifecycle"
 # one either runner sends to stop a supervisor's tree. The Go lifecycle runner
 # arms the same signal before exec, which covers this process's startup.
 PARENT_DEATH = signal.SIGTERM
+PLAYBOOK_PARENT_DEATH = signal.SIGUSR2
 
 # How long termination keeps finding descendants that a kill has not ended yet,
 # such as one in an uninterruptible wait, before it ends its own group.
@@ -146,14 +147,12 @@ def guard_parent(prctl, system, install):
 
 
 def bind_child(prctl, getppid, supervisor, install):
-    """Keep the ansible-playbook child from outliving its supervisor.
-
-    The child drops the supervisor's termination handler, which would end the
-    supervisor's own tree, and dies with the supervisor; a supervisor already
-    gone refuses before Ansible loads.
-    """
+    """A surviving playbook reaps its workers when its supervisor is killed."""
     install(PARENT_DEATH, signal.SIG_DFL)
-    return parent_guarded(prctl, getppid, supervisor, signal.SIGKILL)
+    if prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0:
+        return False
+    install(PLAYBOOK_PARENT_DEATH, lambda *_: terminate(System()))
+    return parent_guarded(prctl, getppid, supervisor, PLAYBOOK_PARENT_DEATH)
 
 
 def enter_child(lifecycle, prctl, getppid, supervisor, install, end):

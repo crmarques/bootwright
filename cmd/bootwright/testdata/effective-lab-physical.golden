@@ -1,0 +1,509 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: lab-physical
+spec:
+  domains:
+    base: lab.example.test
+    machines: lab.example.test
+    clusters: lab.example.test
+    containerClusters: lab.example.test
+    storageClusters: lab.example.test
+  controller:
+    machineRef: controller
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: controller
+spec:
+  capabilities:
+    - container-runtime
+  os:
+    provided: true
+  proxy:
+    direct: {}
+  network:
+    addresses:
+      - name: fqdn
+        address: controller.lab.example.test
+      - name: ip
+        address: 192.0.2.1
+  access:
+    local: true
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: physical-01
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-metal
+  hardware:
+    nics:
+      - name: eno1
+        macAddress: 52:54:00:9a:1b:01
+    management:
+      bmc:
+        address: https://bmc-01.example.test/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: lab-bmc-credentials
+        tls:
+          verify: true
+          trustBundleRef: lab-bmc-ca
+        virtualMedia:
+          tls:
+            trust: import-certificate
+            removeCertificateAfterBoot: false
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+  network:
+    configRef: lab-metal
+    attachmentRef: lab-metal
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: physical-01.lab.example.test
+      - name: ip
+        address: 198.51.100.21/24
+        interface: eno1
+    interfaceBinding:
+      - nicRef: eno1
+        interfaceName: eno1
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: physical-02
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-metal
+  hardware:
+    nics:
+      - name: eno1
+        macAddress: 52:54:00:9a:1b:02
+    management:
+      bmc:
+        address: https://bmc-02.example.test/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: lab-bmc-credentials
+        tls:
+          verify: true
+          trustBundleRef: lab-bmc-ca
+        virtualMedia:
+          tls:
+            trust: import-certificate
+            removeCertificateAfterBoot: false
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+  network:
+    configRef: lab-metal
+    attachmentRef: lab-metal
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: physical-02.lab.example.test
+      - name: ip
+        address: 198.51.100.22/24
+        interface: eno1
+    interfaceBinding:
+      - nicRef: eno1
+        interfaceName: eno1
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: physical-03
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-metal
+  hardware:
+    nics:
+      - name: eno1
+        macAddress: 52:54:00:9a:1b:03
+    management:
+      bmc:
+        address: https://bmc-03.example.test/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: lab-bmc-credentials
+        tls:
+          verify: true
+          trustBundleRef: lab-bmc-ca
+        virtualMedia:
+          tls:
+            trust: import-certificate
+            removeCertificateAfterBoot: false
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+  network:
+    configRef: lab-metal
+    attachmentRef: lab-metal
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: physical-03.lab.example.test
+      - name: ip
+        address: 198.51.100.23/24
+        interface: eno1
+    interfaceBinding:
+      - nicRef: eno1
+        interfaceName: eno1
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: physical-04
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-metal
+  hardware:
+    nics:
+      - name: eno1
+        macAddress: 52:54:00:9a:1b:04
+    management:
+      bmc:
+        address: https://bmc-04.example.test/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: lab-bmc-credentials
+        tls:
+          verify: true
+          trustBundleRef: lab-bmc-ca
+        virtualMedia:
+          tls:
+            trust: import-certificate
+            removeCertificateAfterBoot: false
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+  network:
+    configRef: lab-metal
+    attachmentRef: lab-metal
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: physical-04.lab.example.test
+      - name: ip
+        address: 198.51.100.24/24
+        interface: eno1
+    interfaceBinding:
+      - nicRef: eno1
+        interfaceName: eno1
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: physical-05
+spec:
+  capabilities:
+    - openshift-node
+  substrate:
+    providerRef: lab-metal
+  hardware:
+    nics:
+      - name: eno1
+        macAddress: 52:54:00:9a:1b:05
+    management:
+      bmc:
+        address: https://bmc-05.example.test/redfish/v1/Systems/1
+        protocol: redfish
+        credentialsRef: lab-bmc-credentials
+        tls:
+          verify: true
+          trustBundleRef: lab-bmc-ca
+        virtualMedia:
+          tls:
+            trust: import-certificate
+            removeCertificateAfterBoot: false
+  os:
+    provided: false
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+  network:
+    configRef: lab-metal
+    attachmentRef: lab-metal
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: physical-05.lab.example.test
+      - name: ip
+        address: 198.51.100.25/24
+        interface: eno1
+    interfaceBinding:
+      - nicRef: eno1
+        interfaceName: eno1
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: lab-metal
+spec:
+  machineNetwork:
+    - cidr: 198.51.100.0/24
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+  nmstate:
+    dns-resolver:
+      config:
+        search:
+          - lab.example.test
+    interfaces:
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: eno1
+        state: up
+        type: ethernet
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          metric: 100
+          next-hop-address: 198.51.100.1
+          next-hop-interface: eno1
+          table-id: 254
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-metal
+spec:
+  baremetal:
+    boot:
+      method: redfishVirtualMedia
+    defaults:
+      bmc:
+        credentialsRef: lab-bmc-credentials
+        tls:
+          verify: true
+          trustBundleRef: lab-bmc-ca
+        virtualMedia:
+          tls:
+            trust: import-certificate
+            removeCertificateAfterBoot: false
+  networkAttachments:
+    - name: lab-metal
+      baremetal: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Proxy
+metadata:
+  name: lab-proxy
+spec:
+  management: managed
+  machineRef: controller
+  implementation: squid
+  bindAddress: 192.0.2.1
+  port: 3128
+  endpoints:
+    - name: ip
+      addressRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: lab-dns
+spec:
+  management: managed
+  machineRef: controller
+  implementation: dnsmasq
+  bindAddress: 192.0.2.1
+  port: 53
+  endpoints:
+    - name: ip
+      addressRef: ip
+  forwarders:
+    - 192.0.2.53
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NTPServer
+metadata:
+  name: lab-ntp
+spec:
+  management: managed
+  machineRef: controller
+  implementation: chrony
+  bindAddress: 192.0.2.1
+  port: 123
+  endpoints:
+    - name: ip
+      addressRef: ip
+  upstreamSources:
+    - 192.0.2.123
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ArtifactServer
+metadata:
+  name: lab-artifacts
+spec:
+  management: managed
+  machineRef: controller
+  bindAddress: 192.0.2.1
+  retention: persistent
+  tls:
+    secretRef: artifact-server-tls
+    minVersion: TLSv1.2
+  listeners:
+    - name: https
+      protocol: https
+      port: 8443
+    - name: http
+      protocol: http
+      port: 8080
+  endpoints:
+    - name: ip-https
+      listenerRef: https
+      addressRef: ip
+    - name: ip-http
+      listenerRef: http
+      addressRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ContainerCluster
+metadata:
+  name: physical
+spec:
+  distribution:
+    type: openshift
+    release:
+      version: 4.21.15
+      channel: stable-4.21
+  install:
+    method: agent
+    mode: connected
+    platform:
+      type: baremetal
+      baremetal:
+        provisioningNetwork: disabled
+    proxy:
+      direct: {}
+    ntp:
+      - serverRef: lab-ntp
+        endpointRef: ip
+    endpoints:
+      api:
+        address: 198.51.100.10
+        interfaceNetworks: []
+        source:
+          type: openshift
+      api-int:
+        address: 198.51.100.10
+        source:
+          type: openshift
+      ingress:
+        address: 198.51.100.11
+        interfaceNetworks: []
+        source:
+          type: openshift
+    agent:
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+    pullSecretRef: openshift-pull-secret
+    nodeSSH:
+      keyPairRef: physical-cluster-admin-ssh-key
+    additionalTrustBundleRefs: []
+  networking:
+    clusterNetwork:
+      - cidr: 10.128.0.0/14
+        hostPrefix: 23
+    serviceNetwork:
+      - 172.30.0.0/16
+  nodes:
+    - name: master-0
+      fqdn: master-0.physical.lab.example.test
+      role: master
+      machineRef: physical-01
+    - name: master-1
+      fqdn: master-1.physical.lab.example.test
+      role: master
+      machineRef: physical-02
+    - name: master-2
+      fqdn: master-2.physical.lab.example.test
+      role: master
+      machineRef: physical-03
+    - name: worker-0
+      fqdn: worker-0.physical.lab.example.test
+      role: worker
+      machineRef: physical-04
+    - name: worker-1
+      fqdn: worker-1.physical.lab.example.test
+      role: worker
+      machineRef: physical-05
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: artifact-server-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: controller.lab.example.test
+      dnsNames:
+        - controller.lab.example.test
+      ipAddresses:
+        - 192.0.2.1
+      validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-ca
+spec:
+  type: caBundle
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-credentials
+spec:
+  type: usernamePassword
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: openshift-pull-secret
+spec:
+  type: dockerConfigJson
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: physical-cluster-admin-ssh-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: physical-cluster-admin

@@ -57,13 +57,27 @@
         content: >-
           {{ bootwright_cluster_media_request.installConfig
              | combine({
-                 'pullSecret': lookup('ansible.builtin.file', bootwright_cluster_media_material.pullSecret),
+                 'pullSecret': lookup('ansible.builtin.file', bootwright_cluster_media_material.pullSecret)
+                   | bootwright.core.registry_pull_secret(
+                     bootwright_cluster_media_request.registryMirror | default({}),
+                     lookup('ansible.builtin.file', bootwright_cluster_media_material.mirrorUsername)
+                       if bootwright_cluster_media_material.mirrorUsername is defined else
+                     lookup('ansible.builtin.file', bootwright_cluster_media_material.mirrorAuth)
+                       if bootwright_cluster_media_material.mirrorAuth is defined else '',
+                     lookup('ansible.builtin.file', bootwright_cluster_media_material.mirrorPassword, rstrip=false)
+                       if bootwright_cluster_media_material.mirrorPassword is defined else ''),
                  'sshKey': bootwright_cluster_media_material.sshKey,
                })
              | combine({
                  'additionalTrustBundle': query('ansible.builtin.file', *containercluster_media_agent_trust_bundles)
                                           | map('trim') | join(containercluster_media_agent_line_break),
                } if containercluster_media_agent_trust_bundles | length > 0 else {})
+             | bootwright.core.installer_proxy_credentials(
+                 bootwright_cluster_media_request.installProxy | default({}),
+                 lookup('ansible.builtin.file', bootwright_cluster_media_material.proxyUsername, rstrip=false)
+                   if bootwright_cluster_media_material.proxyUsername is defined else '',
+                 lookup('ansible.builtin.file', bootwright_cluster_media_material.proxyPassword, rstrip=false)
+                   if bootwright_cluster_media_material.proxyPassword is defined else '')
              | bootwright.core.to_installer_yaml }}
         dest: '{{ containercluster_media_agent_work }}/install-config.yaml'
         owner: root
@@ -71,6 +85,7 @@
         mode: '0600'
       changed_when: true
       no_log: true
+      diff: false
 
     # The installer's YAML reader retypes a plain scalar and refuses JSON's
     # surrogate-pair escapes, and this filter writes neither.
@@ -104,10 +119,12 @@
       no_log: true
       changed_when: true
 
-    # The build runs under timeout with the budget the request froze, so it
-    # returns within that budget and one kill-after grace. Any other failure
-    # is the installer's own and fails here as before.
-    - name: Build the image this cluster's nodes boot
+    - name: Read the start of the shared media build budget
+      ansible.builtin.set_fact:
+        containercluster_media_agent_started: >-
+          {{ ((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int) }}
+
+    - name: Generate native cluster manifests for encrypted installation
       ansible.builtin.command:
         argv:
           - /usr/bin/timeout
@@ -116,11 +133,69 @@
           - '{{ containercluster_media_agent_installer }}'
           - agent
           - create
+          - cluster-manifests
+          - --dir
+          - '{{ containercluster_media_agent_work }}'
+      environment: '{{ bootwright_cluster_media_request.buildEgress | default({}) }}'
+      when: bootwright_cluster_media_request.diskEncryption is defined
+      changed_when: true
+      no_log: true
+
+    - name: Set disk encryption in the generated AgentClusterInstall
+      ansible.builtin.copy:
+        content: >-
+          {{ lookup('ansible.builtin.file', containercluster_media_agent_work ~ '/cluster-manifests/agent-cluster-install.yaml')
+             | from_yaml
+             | bootwright.core.agent_disk_encryption(bootwright_cluster_media_request.diskEncryption,
+                 bootwright_cluster_media_request.identity.cluster)
+             | bootwright.core.to_installer_yaml }}
+        dest: '{{ containercluster_media_agent_work }}/cluster-manifests/agent-cluster-install.yaml'
+        owner: root
+        group: root
+        mode: '0600'
+      when: bootwright_cluster_media_request.diskEncryption is defined
+      changed_when: true
+      no_log: true
+      diff: false
+
+    - name: Read the time left after native manifest generation
+      ansible.builtin.set_fact:
+        containercluster_media_agent_build_now: >-
+          {{ ((now(utc=true) - ('1970-01-01 00:00:00' | to_datetime)).total_seconds() | int) }}
+
+    - name: Freeze the remaining shared build budget
+      ansible.builtin.set_fact:
+        containercluster_media_agent_build_remaining: >-
+          {{ (bootwright_cluster_media_request.budgets.buildSeconds | int)
+             - (containercluster_media_agent_build_now | int)
+             + (containercluster_media_agent_started | int) }}
+
+    - name: Refuse an exhausted media build budget before image creation
+      ansible.builtin.assert:
+        that:
+          - containercluster_media_agent_build_remaining | int > 0
+        fail_msg: native manifest generation exhausted the shared media build budget
+        quiet: true
+
+    # The build runs under timeout with the budget the request froze, so it
+    # returns within that budget and one kill-after grace. Any other failure
+    # is the installer's own and fails here as before.
+    - name: Build the image this cluster's nodes boot
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/timeout
+          - --kill-after={{ containercluster_media_agent_kill_grace | int }}s
+          - '{{ containercluster_media_agent_build_remaining | int }}s'
+          - '{{ containercluster_media_agent_installer }}'
+          - agent
+          - create
           - image
           - --dir
           - '{{ containercluster_media_agent_work }}'
           - --log-level
           - info
+      environment: '{{ bootwright_cluster_media_request.buildEgress | default({}) }}'
+      no_log: true
       register: containercluster_media_agent_built
       changed_when: true
       failed_when:
@@ -152,186 +227,20 @@
         fail_msg: the installer produced no single agent image for this cluster
         quiet: true
 
-# Every directory from the owned subtree down is 0711 and the image itself
-# 0640 root:root, so nothing is listable, the unguessable segment is the only
-# way to name what it contains, and only root and the serving worker's group
-# can read it.
-- name: Create the private subtree this block owns
-  ansible.builtin.file:
-    path: '{{ containercluster_media_agent_private }}'
-    state: directory
-    owner: root
-    group: root
-    mode: '0711'
-  when: not (containercluster_media_agent_published | bool)
+- name: Publish fetched media through its private listener
+  ansible.builtin.include_tasks: publish.yml
+  when: bootwright_cluster_media_request.deliveryKind == 'fetch'
 
-- name: Find the directory a previous attempt published in
-  ansible.builtin.find:
-    paths: '{{ containercluster_media_agent_private }}'
-    file_type: directory
-  when: not (containercluster_media_agent_published | bool)
-  register: containercluster_media_agent_previous
-
-- name: Remove what a previous attempt published
-  ansible.builtin.file:
-    path: '{{ item.path }}'
-    state: absent
-  when: not (containercluster_media_agent_published | bool)
-  loop: '{{ containercluster_media_agent_previous.files }}'
-  loop_control:
-    label: a previous publication
-  no_log: true
-
-# The unguessable segment is minted here, by the attempt, so it exists in no
-# frozen request and reaches no evidence, progress line or log.
-- name: Mint the unguessable directory this attempt publishes the image in
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/openssl
-      - rand
-      - -hex
-      - '32'
-  when: not (containercluster_media_agent_published | bool)
-  register: containercluster_media_agent_token
-  changed_when: false
-  no_log: true
-
-# A replay mints nothing: the directory it proves is the one the inspection
-# found the image in, the first by name directly beneath the owned subtree that
-# holds one. Like the inspection, the search also enters a directory whose name
-# starts with a dot: it skips only matches whose own name does.
-- name: Name the directory the image already published sits in
-  when: containercluster_media_agent_published | bool
-  vars:
-    containercluster_media_agent_holders: >-
-      {{ containercluster_media_agent_found.files | map(attribute='path') | map('dirname')
-         | reject('equalto', containercluster_media_agent_private) | list }}
-  block:
-    - name: Find the image an earlier attempt published
-      ansible.builtin.find:
-        paths: '{{ containercluster_media_agent_private }}'
-        patterns: agent.iso
-        file_type: file
-        recurse: true
-        depth: 2
-      register: containercluster_media_agent_found
-      no_log: true
-
-    - name: Refuse a replay whose published image is gone
-      ansible.builtin.assert:
-        that:
-          - containercluster_media_agent_holders | length > 0
-        fail_msg: >-
-          the published agent image this replay observed a moment earlier is
-          gone, so there is nothing to prove; repeat the apply
-        quiet: true
-
-    - name: Take the unguessable segment of the directory holding it
-      ansible.builtin.set_fact:
-        containercluster_media_agent_token:
-          stdout: '{{ containercluster_media_agent_holders | sort | first | basename }}'
-      no_log: true
-
-- name: Create the directory this attempt publishes in
-  ansible.builtin.file:
-    path: '{{ containercluster_media_agent_directory }}'
-    state: directory
-    owner: root
-    group: root
-    mode: '0711'
-  when: not (containercluster_media_agent_published | bool)
-  changed_when: true
-  no_log: true
-
-- name: Publish the image by atomic rename
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/mv
-      - --no-target-directory
-      - '{{ containercluster_media_agent_products.files[0].path }}'
-      - '{{ containercluster_media_agent_directory }}/agent.iso'
-  when: not (containercluster_media_agent_published | bool)
-  changed_when: true
-  no_log: true
-
-# The server's workers run as the image's application user in group root
-# (infra_artifact_server_nginx/templates/nginx.conf.j2), so the group grants
-# them read and nothing is granted to any other account. A replay applies it
-# too, and a replay that had to change it reports the repair as a change.
-- name: Keep the published image readable only by the serving process
-  ansible.builtin.file:
-    path: '{{ containercluster_media_agent_directory }}/agent.iso'
-    owner: root
-    group: root
-    mode: '0640'
-  register: containercluster_media_agent_served
-  no_log: true
-
-- name: Label the published subtree so the serving process can read it
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/chcon
-      - --recursive
-      - --reference
-      - '{{ containercluster_media_agent_private | dirname | dirname | dirname }}'
-      - '{{ containercluster_media_agent_private }}'
-  changed_when: true
-
-# Publication is proved by the fetch a controller will make: through the
-# listener, verified against the serving certificate the server's Secret binds
-# to this operation, and never through a proxy. A verifying fetcher is handed
-# that bound certificate, never the copy the server installed beneath its
-# content root, so a listener presenting anything else is refused here. The
-# block runs on the controller, where the runner wrote that material. One
-# byte proves the worker can open the image. The result carries the token, so
-# it is judged in a separate step that names only what failed, and before the
-# receipt, so a refused image is built again rather than replayed. A replay
-# fetches the image it found the same way, and a refusal fails it the same way.
-- name: Fetch the first byte of the published image through the listener
-  ansible.builtin.uri:
-    url: >-
-      {{ bootwright_cluster_media_request.image.url }}/{{ containercluster_media_agent_token.stdout | trim }}/agent.iso
-    method: GET
-    headers:
-      Range: bytes=0-0
-    ca_path: '{{ bootwright_cluster_media_material.artifactCertificate }}'
-    validate_certs: true
-    use_proxy: false
-    follow_redirects: none
-    status_code: [200, 206]
-    timeout: 30
-  register: containercluster_media_agent_probe
-  failed_when: false
-  changed_when: false
-  no_log: true
-
-- name: Refuse a published image the listener does not serve
-  ansible.builtin.fail:
-    msg: >-
-      the published agent image could not be fetched through its artifact
-      server listener, so no node could boot from it:
-      {{ 'the listener answered 403, so the worker it serves as cannot read the image'
-         if containercluster_media_agent_probe_status == 403 else
-         'the listener answered 404, so the worker it serves as finds no image at the path this attempt published'
-         if containercluster_media_agent_probe_status == 404 else
-         ('its certificate did not verify against the serving certificate Secret '
-          ~ bootwright_cluster_media_request.tlsCertificateRef ~ ' holds: ' ~ containercluster_media_agent_probe_cause)
-         if containercluster_media_agent_probe_cause is search('CERTIFICATE_VERIFY_FAILED|certificate verify failed') else
-         ('the request failed before any status line: ' ~ containercluster_media_agent_probe_cause)
-         if containercluster_media_agent_probe_status == -1 else
-         ('the listener answered ' ~ containercluster_media_agent_probe_status ~ ' where 200 or 206 was expected') }}
-  vars:
-    containercluster_media_agent_probe_status: '{{ containercluster_media_agent_probe.status | default(-1) | int }}'
-    containercluster_media_agent_probe_cause: >-
-      {{ containercluster_media_agent_probe.msg | default('the request recorded no result')
-         | replace(containercluster_media_agent_token.stdout | trim, '<token>') }}
-  when: containercluster_media_agent_probe.status | default(-1) | int not in [200, 206]
+- name: Keep pushed media in the controller work area
+  ansible.builtin.include_tasks: stage_push.yml
+  when: bootwright_cluster_media_request.deliveryKind == 'push'
 
 - name: Record what this image was built from
   ansible.builtin.copy:
     content: >-
       {{ {'inputs': bootwright_cluster_media_digest,
-          'installer': bootwright_cluster_media_request.release.version} | to_json }}
+          'installer': bootwright_cluster_media_request.release.version,
+          'flow': 'cluster-manifests-image' if bootwright_cluster_media_request.diskEncryption is defined else 'image'} | to_json }}
     dest: '{{ containercluster_media_agent_receipt }}'
     owner: root
     group: root

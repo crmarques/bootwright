@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
@@ -132,11 +131,10 @@ func TestProductionLifecycleWiringReadsTheMediaStore(t *testing.T) {
 	}
 }
 
-// A plan reads the media records while its lifecycle read holds the shared
-// root lock, which the store's shared read is compatible with; an attempt runs
-// under the exclusive lock, where the same read is refused as busy, so only
-// the plan reads the store and the attempt proves the bytes itself.
-func TestPlanningReadsTheMediaStoreUnderTheSharedLock(t *testing.T) {
+// A planning snapshot and an operation's context lease both allow the media
+// store's read-only root snapshot. The adapter still proves media bytes before
+// use; the store supplies only planning records.
+func TestLifecycleSnapshotsAndEffectsAllowReadOnlyMediaRecords(t *testing.T) {
 	services, repository, input, _ := contextFixture(t)
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	reader := storeMediaRecords{store: repository}
@@ -154,7 +152,7 @@ func TestPlanningReadsTheMediaStoreUnderTheSharedLock(t *testing.T) {
 		_, err := reader.MediaRecords(context.Background())
 		return err
 	})
-	if !errors.Is(err, media.ErrBusy) {
-		t.Fatalf("reading the media store under the exclusive lock = %v, want busy", err)
+	if err != nil {
+		t.Fatalf("reading media records while the context lease holds: %v", diagnostics.Of(err))
 	}
 }

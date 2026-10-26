@@ -258,7 +258,7 @@ func (s Service) execute(ctx context.Context, name string, resolved target, posi
 		}
 		step := powerStep(frozen, position, total)
 		s.progress(inner, step, "running", "")
-		evidence, err := s.run(inner, runtime, frozen, canonical, digest, pin, step)
+		evidence, err := s.run(inner, runtime, frozen, canonical, digest, pin, step, resolved.arm)
 		if err != nil {
 			s.progress(inner, step, settlement(inner, err), "")
 			return err
@@ -278,8 +278,8 @@ func (s Service) execute(ctx context.Context, name string, resolved target, posi
 }
 
 func (s Service) run(ctx context.Context, runtime lifecycle.Runtime, frozen Request, canonical []byte, digest string,
-	pin machine.HardwareIdentity, step lifecycle.ProgressEvent) (Evidence, error) {
-	run, err := s.runner.Run(ctx, invocation(runtime, frozen, canonical, digest, pin, s.groups(step, frozen.Force)))
+	pin machine.HardwareIdentity, step lifecycle.ProgressEvent, arm string) (Evidence, error) {
+	run, err := s.runner.Run(ctx, invocation(runtime, frozen, canonical, digest, pin, s.groups(step, frozen.Force), arm))
 	if err != nil {
 		return Evidence{}, err
 	}
@@ -404,7 +404,7 @@ func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []by
 }
 
 func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, digest string, pin machine.HardwareIdentity,
-	progress func(context.Context, string, string)) lifecycle.RunRequest {
+	progress func(context.Context, string, string), arm string) lifecycle.RunRequest {
 	materials := []lifecycle.MaterialFile{
 		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: frozen.Controller.CredentialsRef, Variable: "controllerUser"},
 		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: frozen.Controller.CredentialsRef, Variable: "controllerPassword"},
@@ -431,6 +431,10 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 		OutputRemediation: runtime.OutputRemediation,
 		Progress:          progress,
 	}
+	if request.MaterialValues == nil {
+		request.MaterialValues = map[string]string{}
+	}
+	request.MaterialValues["substrate"] = arm
 	if pin.Present() {
 		request.Refusals = map[string]error{identityMismatch: identityRefusal(frozen, runtime.OutputRemediation)}
 	}

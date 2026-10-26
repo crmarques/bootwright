@@ -20,9 +20,7 @@ import (
 // contract does not prove. A selected one refuses before registration rather
 // than installing part of what was declared.
 var unsupportedSelections = [][]string{
-	{"security", "diskEncryption"},
 	{"install", "servingCertificates"},
-	{"install", "registries"},
 }
 
 // Requirements names the API objects one cluster's blocks wait for, so those
@@ -32,6 +30,7 @@ type Requirements struct {
 	DNSServers      []string
 	Machines        []string
 	NTPServers      []string
+	Proxies         []string
 }
 
 // Refusals refuses every selected cluster this contract cannot install, with
@@ -75,11 +74,14 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 	if mode := spec.Get("install", "mode").Text(); mode != "" && mode != "connected" {
 		return "this executable installs no disconnected cluster", ""
 	}
-	if spec.Get("security", "fips", "enabled").Bool() {
-		return "a FIPS cluster needs an installer this executable does not publish", ""
+	if reason, remediation := encryptionRefusal(catalog, cluster); reason != "" {
+		return reason, remediation
 	}
-	if !spec.Get("install", "proxy").Has("direct") {
-		return "this executable installs no cluster through a proxy", ""
+	if _, _, err := installationProxy(catalog, cluster); err != nil {
+		return featureRefusal(err)
+	}
+	if _, err := registryMirror(catalog, cluster); err != nil {
+		return featureRefusal(err)
 	}
 	for _, path := range unsupportedSelections {
 		if spec.Has(path...) {
@@ -89,7 +91,7 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 	if spec.Get("nodes").Len() > 1 && !multiNodePlatform(spec.Get("install", "platform", "type").Text()) {
 		return "this executable installs no multi-node cluster on the declared platform", ""
 	}
-	if reason, remediation := pastTheCeiling(cluster); reason != "" {
+	if reason, remediation := pastTheCeiling(catalog, cluster); reason != "" {
 		return reason, remediation
 	}
 	controllerMachine, _ := lifecycle.ControllerMachine(catalog) // Placement refuses an absent controller.
@@ -111,15 +113,21 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 				return issues[0].Message, issues[0].Remediation
 			}
 		}
+		if provider, ok := machine.Provider(bound, catalog); ok && substrate.Variant(provider) == substrate.ArmKubeVirt && provider.Spec().Has("kubevirt", "hostClusterRef") {
+			return "a declared node's KubeVirt provider names hostClusterRef", "select kubeconfigRef on " + provider.Identity()
+		}
 		target, err := substrate.TargetFor(catalog, bound, cluster.Name(), controllerMachine)
 		if err != nil {
-			return nodeTargetRefusal(catalog, bound, err)
+			reason, remedy := nodeTargetRefusal(catalog, bound, err)
+			if len(diagnostics.Of(err)) > 0 && !strings.Contains(reason, "substrate this executable") {
+				reason = "node " + node.Get("name").Text() + " (" + bound.Identity() + "): " + reason
+			}
+			return reason, remedy
 		}
-		// Booting a physical node erases what it holds, and that boot is
-		// proved only by tests until an emulated rehearsal qualifies it.
 		if target.Physical {
-			return "physical cluster nodes are not supported until an emulated rehearsal qualifies them",
-				bound.Identity() + " is physical; declare " + cluster.Identity() + " on virtual nodes"
+			if reason, remedy := targetPrivateRefusal(bound.Name(), target.Controller); reason != "" {
+				return reason, remedy
+			}
 		}
 		if _, reason, remediation := installerRootDeviceHints(bound, target.RootDeviceHints); reason != "" {
 			return reason, remediation
@@ -159,26 +167,26 @@ func nodeTargetRefusal(catalog api.Catalog, bound api.Object, err error) (reason
 
 // pastTheCeiling says why a cluster's installation could not finish within the
 // deadline its runs are held to, or nothing when it can. The deadline grows with
-// the nodes the installation boots, reads and releases, and the runner cuts
+// rounds of nodes the installation boots, reads and releases, and the runner cuts
 // every run short at its ceiling rather than honoring a longer one, so a
 // cluster too large for it refuses here instead of being killed mid-install.
-func pastTheCeiling(cluster api.Object) (reason, remediation string) {
+func pastTheCeiling(catalog api.Catalog, cluster api.Object) (reason, remediation string) {
 	nodes := cluster.Spec().Get("nodes").Len()
-	deadline := installDeadline(installBudgets(nodes), nodes)
+	arms := clusterArms(catalog, cluster)
+	deadline := installDeadline(installBudgets(nodes, arms...), nodes)
 	if deadline <= lifecycle.MaxDeadline {
 		return "", ""
 	}
 	return "installing " + strconv.Itoa(nodes) + " nodes needs a run deadline of " + deadline.String() +
 			", past the " + lifecycle.MaxDeadline.String() + " every adapter run is held to",
-		"declare at most " + strconv.Itoa(largestCluster()) + " nodes on " + cluster.Identity()
+		"declare at most " + strconv.Itoa(largestCluster(arms...)) + " nodes on " + cluster.Identity()
 }
 
 // largestCluster is the most nodes whose installation deadline fits within the
-// ceiling. Each node adds at least nodeMargin to that deadline, so no more than
-// the ceiling divided by it can fit.
-func largestCluster() int {
-	for nodes := int(lifecycle.MaxDeadline / nodeMargin); nodes > 0; nodes-- {
-		if installDeadline(installBudgets(nodes), nodes) <= lifecycle.MaxDeadline {
+// ceiling. The plan bounds the declared Machine set at 512.
+func largestCluster(arms ...string) int {
+	for nodes := 512; nodes > 0; nodes-- {
+		if installDeadline(installBudgets(nodes, arms...), nodes) <= lifecycle.MaxDeadline {
 			return nodes
 		}
 	}
@@ -242,20 +250,11 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	if err != nil {
 		return empty(err)
 	}
-	selection := cluster.Spec().Get("install", "agent", "redfishVirtualMedia", "artifactServerEndpoint")
-	server, err := artifactserver.Selected(catalog, selection, cluster.Identity())
+	delivery, image, certificate, placement, err := mediaLocation(catalog, cluster, controllerMachine, contextName, &needs)
 	if err != nil {
 		return empty(err)
 	}
-	published, certificate, err := artifactserver.PrivatePath(catalog, server, selection, contextName, consumerPrefix, name, cluster.Identity())
-	if err != nil {
-		return empty(err)
-	}
-	placement, err := artifactserver.PlacementFor(catalog, server, controllerMachine)
-	if err != nil {
-		return empty(err)
-	}
-	needs.ArtifactServers = append(needs.ArtifactServers, server.Name())
+
 	timeSources, err := timeAddresses(catalog, cluster, &needs)
 	if err != nil {
 		return empty(err)
@@ -273,7 +272,9 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 		Version:      cluster.Spec().Get("distribution", "release", "version").Text(),
 	}
 	tool := Tool{Compatibility: release.Distribution, Kind: installerTool, Version: release.Version}
-	image := Publication{Path: published.Path, URL: published.URL}
+	if cluster.Spec().Get("security", "fips", "enabled").Bool() {
+		tool.Kind = "openshift-install-fips"
+	}
 	identity := func(block string) Identity {
 		return Identity{Block: block, Cluster: name, Context: contextName}
 	}
@@ -289,24 +290,65 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	needs.DNSServers, needs.NTPServers = sortedUnique(needs.DNSServers), sortedUnique(needs.NTPServers)
 	needs.Machines = sortedUnique(needs.Machines)
 	mediaRequest := MediaRequest{
-		AgentConfig: agent, Budgets: mediaBudgets, Identity: identity(MediaBlockID(name)), Image: image,
+		AgentConfig: agent, Budgets: mediaBudgets, DeliveryKind: delivery, Identity: identity(MediaBlockID(name)), Image: image,
 		InstallConfig: install, Manifests: installManifests(cluster), Placement: placement, PullSecretRef: pullSecret,
 		Release: release, SSHKeyRef: sshKey, TLSCertificateRef: certificate, Tool: tool,
 		TrustBundleRefs: cluster.Spec().Get("install", "additionalTrustBundleRefs").Strings(),
 		Version:         mediaRequestVersion, WorkRoot: WorkRoot(contextName, name),
 	}
+	if err := projectMediaFeatures(catalog, cluster, controllerMachine, &mediaRequest, &needs); err != nil {
+		return empty(err)
+	}
 	installRequest := InstallRequest{
-		Rendezvous: agent["rendezvousIP"].(string), PublicationRoot: image, TLSCertificateRef: certificate, VIPs: projectedVIPs(catalog, cluster),
-		Budgets: installBudgets(len(nodes)), Endpoints: endpointNames(catalog, cluster),
+		DeliveryKind: delivery, Rendezvous: agent["rendezvousIP"].(string), PublicationRoot: image, TLSCertificateRef: certificate, VIPs: projectedVIPs(catalog, cluster),
+		Budgets: installBudgets(len(nodes), clusterArms(catalog, cluster)...), Endpoints: endpointNames(catalog, cluster),
 		Identity: identity(InstallBlockID(name)), Image: image, Nodes: frozenNodes(nodes),
 		Placement: placement, Release: release, Tool: tool,
 		Version: installRequestVersion, WorkRoot: WorkRoot(contextName, name),
 	}
+	if err := bindPushedMedia(mediaRequest, needs, &installRequest); err != nil {
+		return empty(err)
+	}
+
 	if len(installRequest.Endpoints) == 0 {
 		return empty(refusalAt("api.required", "$.spec.install.endpoints", "the cluster resolves no endpoint address for its controller to reach",
 			"declare spec.install.endpoints on "+cluster.Identity()))
 	}
 	return mediaRequest, installRequest, needs, nil
+}
+
+// projectMediaFeatures freezes optional installation features and their dependencies.
+func projectMediaFeatures(catalog api.Catalog, cluster api.Object, controllerMachine string, request *MediaRequest, needs *Requirements) error {
+	mirror, err := registryMirror(catalog, cluster)
+	if err != nil {
+		return err
+	}
+
+	proxy, managedProxy, err := installationProxy(catalog, cluster)
+	if err != nil {
+		return err
+	}
+	if managedProxy != "" {
+		needs.Proxies = append(needs.Proxies, managedProxy)
+	}
+	host, _ := catalog.Find(api.Machine, controllerMachine)
+	egress, err := managedservice.EgressFor(catalog, host)
+	if err != nil {
+		return err
+	}
+	buildEgress := map[string]string(nil)
+	if egress.HTTPProxy != "" || egress.HTTPSProxy != "" {
+		if egress.HTTPProxy == "" {
+			egress.HTTPProxy = egress.HTTPSProxy
+		}
+		if egress.HTTPSProxy == "" {
+			egress.HTTPSProxy = egress.HTTPProxy
+		}
+		buildEgress = map[string]string{"HTTP_PROXY": egress.HTTPProxy, "HTTPS_PROXY": egress.HTTPSProxy, "NO_PROXY": strings.Join(egress.NoProxy, ",")}
+	}
+	request.RegistryMirror, request.InstallProxy = mirror, proxy
+	request.BuildEgress, request.DiskEncryption = buildEgress, diskEncryption(cluster)
+	return nil
 }
 
 // clusterKeyRef is the cluster administration key the installation authorizes
@@ -332,6 +374,7 @@ type nodeProjection struct {
 	network         map[string]any
 	role            string
 	rootDeviceHints map[string]any
+	requireTPM      bool
 	target          substrate.Target
 }
 
@@ -420,7 +463,7 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 		projections = append(projections, nodeProjection{
 			address: address, interfaces: target.Interfaces, machine: bound,
 			name: node.Get("name").Text(), network: network, role: node.Get("role").Text(),
-			rootDeviceHints: hints, target: target,
+			rootDeviceHints: hints, target: target, requireTPM: encryptedRole(cluster, node.Get("role").Text()),
 		})
 	}
 	if len(projections) == 0 {
@@ -436,7 +479,7 @@ func frozenNodes(nodes []nodeProjection) []Node {
 	frozen := make([]Node, 0, len(nodes))
 	for _, node := range nodes {
 		frozen = append(frozen, Node{
-			Address: node.address,
+			Address: node.address, ControllerKind: controllerKind(node.target.Substrate),
 			Controller: Controller{
 				CredentialsRef: node.target.Controller.CredentialsRef,
 				Endpoint:       node.target.Controller.Endpoint,
@@ -448,9 +491,9 @@ func frozenNodes(nodes []nodeProjection) []Node {
 					Trust:               node.target.Controller.VirtualMedia.Trust,
 				},
 			},
-			Hardware: frozenHardware(node.target),
-			Machine:  node.machine.Name(), Name: node.name,
-			Physical: node.target.Physical, Substrate: node.target.Substrate,
+			Hardware: frozenHardware(node.target), RequireTPM: node.requireTPM,
+			Machine: node.machine.Name(), Name: node.name,
+			StateReadSeconds: stateReadSeconds(node.target.Substrate), Physical: node.target.Physical, Substrate: node.target.Substrate,
 		})
 	}
 	return frozen
@@ -536,4 +579,38 @@ func refusal(code, message, remediation string) error {
 
 func refusalAt(code, field, message, remediation string) error {
 	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: code, Field: field, Message: message, Remediation: remediation}}}
+}
+
+func clusterArms(catalog api.Catalog, cluster api.Object) []string {
+	var arms []string
+	for _, node := range cluster.Spec().Get("nodes").Items() {
+		bound, ok := catalog.Find(api.Machine, node.Get("machineRef").Text())
+		if !ok {
+			continue
+		}
+		provider, ok := catalog.Find(api.InfraProvider, bound.Spec().Get("substrate", "providerRef").Text())
+		if !ok {
+			continue
+		}
+		arms = append(arms, substrate.Variant(provider))
+	}
+	return arms
+}
+
+func controllerKind(arm string) string {
+	bounds, _ := substrate.MachineBoundsFor(arm)
+	return bounds.ControllerKind
+}
+
+func featureRefusal(err error) (string, string) {
+	diagnostics := diagnostics.Of(err)
+	if len(diagnostics) != 0 {
+		return diagnostics[0].Message, diagnostics[0].Remediation
+	}
+	return "the installation feature could not be derived", "correct the cluster installation selection"
+}
+
+func stateReadSeconds(arm string) int {
+	bounds, _ := substrate.MachineBoundsFor(arm)
+	return int(bounds.StateRead.Seconds())
 }

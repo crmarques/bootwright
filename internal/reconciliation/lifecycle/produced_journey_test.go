@@ -29,12 +29,13 @@ const (
 // installation whose node is a libvirt machine, placed on the controller.
 func installedRequest() agentinstall.InstallRequest {
 	return agentinstall.InstallRequest{
-		Budgets:   agentinstall.InstallBudgets{BootSeconds: 900, BootstrapSeconds: 1800, InstallSeconds: 3600},
-		Endpoints: []agentinstall.Endpoint{{Address: "192.0.2.20", Name: "api.sno.lab.test"}},
-		Identity:  agentinstall.Identity{Block: agentinstall.InstallBlockID(installedCluster), Cluster: installedCluster, Context: lifecycle.JourneyContext},
-		Image:     agentinstall.Publication{Path: "/var/lib/bootwright/artifacts/lab/sno", URL: "https://192.0.2.1:8443/lab/sno"},
+		Budgets:      agentinstall.InstallBudgets{BootSeconds: 900, BootstrapSeconds: 1800, InstallSeconds: 3600, FanOut: 4, RoundMarginSeconds: 660},
+		DeliveryKind: "fetch",
+		Endpoints:    []agentinstall.Endpoint{{Address: "192.0.2.20", Name: "api.sno.lab.test"}},
+		Identity:     agentinstall.Identity{Block: agentinstall.InstallBlockID(installedCluster), Cluster: installedCluster, Context: lifecycle.JourneyContext},
+		Image:        agentinstall.Publication{Path: "/var/lib/bootwright/artifacts/lab/sno", URL: "https://192.0.2.1:8443/lab/sno"},
 		Nodes: []agentinstall.Node{{
-			Address: "192.0.2.20", Machine: "sno-01", Name: "sno-01", Substrate: "libvirt",
+			Address: "192.0.2.20", Machine: "sno-01", Name: "sno-01", Substrate: "libvirt", ControllerKind: "emulated", StateReadSeconds: 120,
 			Controller: agentinstall.Controller{CredentialsRef: "lab-bmc-credentials", Endpoint: "https://192.0.2.1:8000/redfish/v1/Systems/sno-01"},
 		}},
 		Placement:       machineref.Placement{Connection: machineref.ConnectionLocal, Machine: "controller"},
@@ -42,7 +43,7 @@ func installedRequest() agentinstall.InstallRequest {
 		Rendezvous:      "192.0.2.20", TLSCertificateRef: "artifact-server-tls", VIPs: []agentinstall.VIP{},
 		Release:  agentinstall.Release{Distribution: "openshift", Version: installedRelease},
 		Tool:     agentinstall.Tool{Compatibility: "openshift", Kind: "openshift-install", Version: installedRelease},
-		Version:  "cluster-install-agent-v5",
+		Version:  "cluster-install-agent-v7",
 		WorkRoot: "/var/lib/bootwright/work/lab/sno",
 	}
 }

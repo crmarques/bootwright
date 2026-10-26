@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strconv"
+	"strings"
 
 	controllerscope "github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -41,25 +42,12 @@ func (c MediaCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 		return lifecycle.CapabilityPlan{}, err
 	}
 	plan := lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}
-	digest := MediaContentDigest()
 	for index, request := range requests {
-		canonical, err := request.Canonical()
+		definition, err := mediaDefinition(request, requirements[index], input.Verb)
 		if err != nil {
 			return lifecycle.CapabilityPlan{}, err
 		}
-		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{
-			ID:             request.Identity.Block,
-			Description:    mediaDescription(input.Verb, request),
-			Stage:          reconciliation.StageClusters,
-			Requires:       mediaRequires(requirements[index]),
-			Impacts:        mediaImpacts(input.Verb, request),
-			Groups:         mediaGroups(input.Verb, request),
-			Kind:           Kind,
-			Object:         request.Identity.Cluster,
-			Implementation: MediaImplementation,
-			ContentDigest:  digest,
-			Request:        canonical,
-		})
+		plan.Definitions = append(plan.Definitions, definition)
 		plan.Secrets = append(plan.Secrets, request.SecretReferences()...)
 		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
 			Context: input.Context.Name, Kind: "cluster-media",
@@ -79,6 +67,9 @@ func mediaRequires(needs Requirements) []reconciliation.ObjectRef {
 	for _, name := range needs.ArtifactServers {
 		references = append(references, reconciliation.ObjectRef{Kind: "ArtifactServer", Object: name})
 	}
+	for _, name := range needs.Proxies {
+		references = append(references, reconciliation.ObjectRef{Kind: "Proxy", Object: name})
+	}
 	return references
 }
 
@@ -94,7 +85,10 @@ func mediaImpacts(verb reconciliation.Verb, request MediaRequest) []string {
 	if verb == reconciliation.Destroy {
 		published, work = "remove-content ", "remove-path "
 	}
-	impacts := []string{published + request.Image.Path, work + request.WorkRoot}
+	impacts := []string{work + request.WorkRoot}
+	if request.DeliveryKind != "push" {
+		impacts = append(impacts, published+request.Image.Path)
+	}
 	slices.Sort(impacts)
 	return slices.Compact(impacts)
 }
@@ -109,6 +103,13 @@ func mediaGroups(verb reconciliation.Verb, request MediaRequest) []reconciliatio
 		steps = [][2]string{
 			{"remove-published", "remove the published image and the installer's work area"},
 			{"verify-absence", "verify every published file is gone"},
+		}
+	}
+	if request.DeliveryKind == "push" {
+		if verb == reconciliation.Destroy {
+			steps[0][1], steps[1][1] = "remove the built image and installer work area", "verify the work area is gone"
+		} else {
+			steps = steps[:1]
 		}
 	}
 	out := make([]reconciliation.Group, 0, len(steps))
@@ -303,7 +304,7 @@ func (c MediaCapability) runWithOutputs(ctx context.Context, execution lifecycle
 	values := map[string]string{}
 	var materials []lifecycle.MaterialFile
 	if operation == "apply" {
-		installer, err := ToolPath(ctx, execution, request.Tool, installerTool)
+		installer, err := ToolPath(ctx, execution, request.Tool, request.Tool.Kind)
 		if err != nil {
 			return lifecycle.RunResult{}, err
 		}
@@ -311,15 +312,36 @@ func (c MediaCapability) runWithOutputs(ctx context.Context, execution lifecycle
 		if err != nil {
 			return lifecycle.RunResult{}, err
 		}
+		if request.InstallConfig["fips"] == true && strings.HasPrefix(strings.TrimSpace(key), "ssh-ed25519 ") {
+			return lifecycle.RunResult{}, refusal("controller.unsupported", "FIPS installation refuses the ssh-ed25519 key bound to Secret/"+request.SSHKeyRef, "bind an RSA or ECDSA administration key and repeat the apply")
+		}
 		values["installer"], values["sshKey"] = installer, key
 		// The fetch that proves the publication verifies the listener against
 		// the certificate its Secret binds to this operation, never against
 		// the copy the server installed, which proves only itself.
 		materials = append(materials, lifecycle.MaterialFile{
 			Name: "pull-secret", Part: secrets.ValuePart, Secret: request.PullSecretRef, Variable: "pullSecret",
-		}, lifecycle.MaterialFile{
-			Name: "artifact-ca", Part: secrets.CertificatePart, Secret: request.TLSCertificateRef, Variable: "artifactCertificate",
 		})
+		if request.DeliveryKind != "push" {
+			materials = append(materials, lifecycle.MaterialFile{
+				Name: "artifact-ca", Part: secrets.CertificatePart, Secret: request.TLSCertificateRef, Variable: "artifactCertificate",
+			})
+		}
+
+		if proxy := request.InstallProxy; proxy != nil && proxy.CredentialsRef != "" {
+			materials = append(materials,
+				lifecycle.MaterialFile{Name: "proxy-user", Part: secrets.UsernamePart, Secret: proxy.CredentialsRef, Variable: "proxyUsername"},
+				lifecycle.MaterialFile{Name: "proxy-password", Part: secrets.PasswordPart, Secret: proxy.CredentialsRef, Variable: "proxyPassword"})
+		}
+		if mirror := request.RegistryMirror; mirror != nil && mirror.CredentialsRef != "" {
+			if mirror.CredentialsType == "usernamePassword" {
+				materials = append(materials,
+					lifecycle.MaterialFile{Name: "mirror-username", Part: secrets.UsernamePart, Secret: mirror.CredentialsRef, Variable: "mirrorUsername"},
+					lifecycle.MaterialFile{Name: "mirror-password", Part: secrets.PasswordPart, Secret: mirror.CredentialsRef, Variable: "mirrorPassword"})
+			} else {
+				materials = append(materials, lifecycle.MaterialFile{Name: "mirror-auth", Part: secrets.ValuePart, Secret: mirror.CredentialsRef, Variable: "mirrorAuth"})
+			}
+		}
 		for index, reference := range request.TrustBundleRefs {
 			materials = append(materials, lifecycle.MaterialFile{
 				Name:     "trust-" + strconv.Itoa(index),
@@ -364,4 +386,24 @@ func (c MediaCapability) publicHalf(execution lifecycle.Execution, reference str
 		return "", refusal("lifecycle.state", "the public-key reader is not configured", "")
 	}
 	return c.authorizedKey(material, reference)
+}
+
+func mediaDefinition(request MediaRequest, needs Requirements, verb reconciliation.Verb) (reconciliation.BlockDefinition, error) {
+	canonical, err := request.Canonical()
+	if err != nil {
+		return reconciliation.BlockDefinition{}, err
+	}
+	return reconciliation.BlockDefinition{
+		ID:             request.Identity.Block,
+		Description:    mediaDescription(verb, request),
+		Stage:          reconciliation.StageClusters,
+		Requires:       mediaRequires(needs),
+		Impacts:        mediaImpacts(verb, request),
+		Groups:         mediaGroups(verb, request),
+		Kind:           Kind,
+		Object:         request.Identity.Cluster,
+		Implementation: MediaImplementation,
+		ContentDigest:  MediaContentDigest(),
+		Request:        canonical,
+	}, nil
 }

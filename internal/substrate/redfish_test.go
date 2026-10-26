@@ -49,7 +49,10 @@ func TestTheControllerBoundsAreTheClientsOwn(t *testing.T) {
 		"MEDIA_PROBES": controllerMediaProbes, "MEDIA_PROBE_DELAY": seconds(controllerMediaProbeDelay),
 		"POLL_ATTEMPTS": controllerPowerPolls, "POLL_DELAY": seconds(controllerPowerPollDelay),
 		"BOOT_POLLS": controllerBootPolls, "BOOT_POLL_DELAY": seconds(controllerBootPollDelay),
-		"CERTIFICATE_MEMBERS": controllerCertificateMembers,
+		"CERTIFICATE_MEMBERS":     controllerCertificateMembers,
+		"MAX_MEDIA_MANAGERS":      BaremetalMediaManagers,
+		"MAX_MEDIA_CANDIDATES":    BaremetalMediaCandidates,
+		"MAX_HARDWARE_INTERFACES": BaremetalHardwareInterfaces,
 	} {
 		value, found := declared[name]
 		if !found {

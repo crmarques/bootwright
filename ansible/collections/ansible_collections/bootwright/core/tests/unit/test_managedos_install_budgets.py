@@ -81,10 +81,17 @@ def test_the_role_defines_none_of_the_waits_it_once_chose():
             assert name not in text, "%s still names %s" % (path.relative_to(ROLE), name)
 
 
+def port_wait(name, budgets):
+    task = one(name, lambda task: (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "state_read")
+    scope = {"bootwright_os_install_request": {"budgets": budgets}, "managedos_install_anaconda_port_access": {}}
+    return Templar(loader=LOADER, variables=scope).template(task["vars"]["bootwright_machine_port"])
+
+
 def test_the_installer_wait_reads_its_frozen_budget():
-    wait = one("await.yml", lambda task: task.get("register") == "managedos_install_anaconda_installer")
-    assert rendered(wait["retries"]) == BUDGETS["installer"]["attempts"]
-    assert rendered(wait["delay"]) == BUDGETS["installer"]["delaySeconds"]
+    wait = port_wait("await.yml", BUDGETS)
+    assert wait["expected_power"] == "Off"
+    assert wait["retries"] == BUDGETS["installer"]["attempts"]
+    assert wait["delay"] == BUDGETS["installer"]["delaySeconds"]
 
 
 def test_the_identity_wait_reads_its_frozen_budget():
@@ -184,7 +191,8 @@ def test_the_network_waits_read_their_frozen_budgets():
     assert guest_waits("boot_id") == [reboot]
     for command in ("read", "prepare", "start", "rollback", "commit", "mark", "poweroff", "show"):
         assert set(guest_waits(command)) <= {(0, 0)}, command
-    poll = one("network.yml", lambda task: task.get("register") == "managedos_install_anaconda_powered_off")
-    assert (network_rendered(poll["retries"]), network_rendered(poll["delay"])) == reboot
+    poll = port_wait("network.yml", NETWORK_BUDGETS)
+    assert poll["expected_power"] == "Off"
+    assert (poll["retries"], poll["delay"]) == reboot
     pause = one("network.yml", lambda task: "ansible.builtin.pause" in task)
     assert network_rendered(pause["ansible.builtin.pause"]["seconds"]) == CHECKPOINT_SECONDS + 30

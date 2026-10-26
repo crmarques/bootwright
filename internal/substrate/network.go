@@ -85,11 +85,12 @@ func DefaultGateway(template api.Value) string {
 		if route.Get("state").Text() == "absent" {
 			continue
 		}
-		if !DefaultRouteIPv4(route.Get("destination").Text()) {
+		destination, err := netip.ParsePrefix(route.Get("destination").Text())
+		if err != nil || destination.Bits() != 0 {
 			continue
 		}
 		hop := route.Get("next-hop-address").Text()
-		if next, err := netip.ParseAddr(hop); err == nil && next.Is4() {
+		if next, err := netip.ParseAddr(hop); err == nil && next.Is4() == destination.Addr().Is4() {
 			return hop
 		}
 	}

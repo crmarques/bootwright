@@ -558,6 +558,7 @@ func TestAProvedMachineCarriesItsIdentityToTheAdapter(t *testing.T) {
 			if len(result.Machines) != 1 || result.Machines[0].Machine != "metal" {
 				t.Fatalf("result = %+v", result)
 			}
+			test.want["substrate"] = "baremetal"
 			if !maps.Equal(runner.seen.MaterialValues, test.want) {
 				t.Fatalf("material values = %v, want %v", runner.seen.MaterialValues, test.want)
 			}
@@ -658,7 +659,7 @@ func TestAnUnprovedMachineCarriesNoIdentity(t *testing.T) {
 		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
-	if runner.seen.MaterialValues != nil {
+	if !maps.Equal(runner.seen.MaterialValues, map[string]string{"substrate": "baremetal"}) {
 		t.Fatalf("material values = %v", runner.seen.MaterialValues)
 	}
 	if !slices.Equal(proved.asked, [][2]string{{"lab", "metal"}}) {
@@ -678,7 +679,7 @@ func TestAnEmulatedMachineConsultsNoPin(t *testing.T) {
 	if len(proved.asked) != 0 {
 		t.Fatalf("an emulated Machine asked for a pin: %v", proved.asked)
 	}
-	if runner.seen.MaterialValues != nil {
+	if !maps.Equal(runner.seen.MaterialValues, map[string]string{"substrate": "libvirt"}) {
 		t.Fatalf("material values = %v", runner.seen.MaterialValues)
 	}
 }

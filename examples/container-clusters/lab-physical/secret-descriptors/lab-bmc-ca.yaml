@@ -1,0 +1,10 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-ca
+
+spec:
+  type: caBundle
+
+  source:
+    contextStore: {}

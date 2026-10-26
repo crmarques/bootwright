@@ -36,6 +36,8 @@ options:
         C(identity-mismatch) or C(machine-running), or C(media-changed-boot)
         for a boot image that no longer has the size and SHA-256 the
         operation froze.
+      - C(foreign-installation) names a machine whose answered marker belongs
+        to another installation. C(tpm-absent) names a missing positive TPM 2.0 proof.
       - C(ssh-policy-unavailable), C(ssh-policy-host-excluded),
         C(ssh-policy-fleet-excluded) and C(ssh-policy-generated-excluded)
         identify pre-effect SSH policy refusals.

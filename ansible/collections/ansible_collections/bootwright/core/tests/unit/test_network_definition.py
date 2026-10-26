@@ -76,3 +76,16 @@ def test_the_observation_reads_every_rendered_definition_as_carried():
     nat = ElementTree.fromstring(render({}, dict(NETWORK, forward="nat")))
     assert not carries_definition(nat, dict(NETWORK, forward="none"), "lab-rhel")
     assert not carries_definition(nat, dict(NETWORK, forward="nat"), "another-context")
+
+
+def test_ipv6_and_mtu_survive_definition_and_observation():
+    network = dict(NETWORK, address="2001:db8:42::1/64", mtu=9000, forward="none")
+    root = ElementTree.fromstring(render({}, network))
+    assert root.find("./ip").get("family") == "ipv6"
+    assert root.find("./mtu").get("size") == "9000"
+    assert carries_definition(root, network, "lab-rhel")
+    root.find("./ip").attrib.pop("family")
+    assert not carries_definition(root, network, "lab-rhel")
+    root.find("./ip").set("family", "ipv6")
+    root.find("./mtu").set("size", "1500")
+    assert not carries_definition(root, network, "lab-rhel")

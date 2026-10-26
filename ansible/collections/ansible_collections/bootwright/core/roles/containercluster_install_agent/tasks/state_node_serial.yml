@@ -1,0 +1,13 @@
+---
+- name: Read the node's substrate
+  ansible.builtin.include_tasks: port.yml
+  vars:
+    containercluster_install_agent_port_operation: state_read
+
+- name: Keep the ordered controller answer
+  ansible.builtin.set_fact:
+    containercluster_install_agent_controllers:
+      results: >-
+        {{ containercluster_install_agent_controllers.results +
+           [containercluster_install_agent_port_result | combine({'item': containercluster_install_agent_node})] }}
+  no_log: true

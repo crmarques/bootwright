@@ -68,6 +68,7 @@
   "budgets": {
     "buildSeconds": 1800
   },
+  "deliveryKind": "fetch",
   "identity": {
     "block": "cluster-media-sno",
     "cluster": "sno",
@@ -132,6 +133,6 @@
     "kind": "openshift-install",
     "version": "4.21.15"
   },
-  "version": "cluster-media-agent-v7",
+  "version": "cluster-media-agent-v9",
   "workRoot": "/var/lib/bootwright-clusters/lab/sno"
 }

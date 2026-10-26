@@ -22,7 +22,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_channel
 # preboot.go), and that of a boot image that no longer has the size and
 # SHA-256 the operation froze (internal/managedos/installation, selection.go).
 # The tree image is the shared package-tree publication's to prove.
-REFUSALS = ("hardware-mismatch", "identity-mismatch", "machine-running")
+REFUSALS = ("hardware-mismatch", "identity-mismatch", "machine-running", "tpm-absent", "foreign-installation")
 MEDIA_REFUSALS = ("media-changed-boot",)
 POLICY_REFUSALS = ("ssh-policy-unavailable", "ssh-policy-host-excluded", "ssh-policy-fleet-excluded", "ssh-policy-generated-excluded")
 FIPS_REFUSALS = ("fips-not-enabled",)

@@ -166,6 +166,12 @@ class UnverifiedCertificate(ControllerError):
     """
 
 
+# Bound native discovery independently of each response body size.
+MAX_MEDIA_MANAGERS = 4
+MAX_MEDIA_CANDIDATES = 8
+MAX_HARDWARE_INTERFACES = 64
+
+
 class Client:
     """One controller, driven by what it advertises rather than by its vendor.
 
@@ -307,6 +313,8 @@ class Client:
         listed = collection.get("Members") if isinstance(collection, dict) else None
         if status != 200 or not isinstance(listed, list):
             return [], ["the interface collection could not be read"]
+        if len(listed) > MAX_HARDWARE_INTERFACES:
+            return [], ["the interface inventory exceeds 64 members; no complete hardware proof was made"]
         observed, failures = redfish_discovery.reported_macs([self._interface(link) for link in listed])
         if not observed and not failures:
             failures.append("the interface collection is empty")
@@ -359,11 +367,17 @@ class Client:
         listed = self._view(system, self.endpoint, fetched)
         managed = []
         links = system.get("Links")
-        for manager in self._references(links.get("ManagedBy") if isinstance(links, dict) else None, self.endpoint):
+        managers = self._references(links.get("ManagedBy") if isinstance(links, dict) else None, self.endpoint)
+        if len(managers) > MAX_MEDIA_MANAGERS:
+            raise ControllerError("reading: virtual-media discovery exceeds four managers; no media state was proved")
+        for manager in managers:
             body = self._read(manager)[0]
             self._managers.append((manager, body))
             managed.extend(self._view(body, manager, fetched))
-        for url in redfish_discovery.media_candidates(listed, managed):
+        candidates = redfish_discovery.media_candidates(listed, managed)
+        if len(candidates) > MAX_MEDIA_CANDIDATES:
+            raise ControllerError("reading: virtual-media discovery exceeds eight candidates; no media state was proved")
+        for url in candidates:
             member = self._read(url)[0]
             if redfish_discovery.optical(member):
                 self._member = member

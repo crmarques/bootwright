@@ -1,0 +1,40 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: physical-04
+
+spec:
+  capabilities:
+    - openshift-node
+
+  substrate:
+    providerRef: lab-metal
+
+  os:
+    provided: false
+
+    install:
+      rootDeviceHints:
+        deviceName: /dev/sda
+
+  network:
+    configRef: lab-metal
+    attachmentRef: lab-metal
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: physical-04.lab.example.test
+
+      - name: ip
+        address: 198.51.100.24/24
+        interface: eno1
+
+  hardware:
+    nics:
+      - name: eno1
+        macAddress: 52:54:00:9a:1b:04
+
+    management:
+      bmc:
+        address: https://bmc-04.example.test/redfish/v1/Systems/1

@@ -104,6 +104,17 @@ func (t *transaction) removeRetiringAreas(ctx context.Context, areas []controlle
 		if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFDIR || stat.Ino != area.DirectoryInode || uint64(stat.Dev) != area.DirectoryDevice {
 			return state("retiring controller tool area directory was replaced")
 		}
+		held, err := openDirectory(parent, area.ID)
+		if err != nil {
+			return err
+		}
+		defer held.file.Close()
+		if held.identity.Ino != stat.Ino || held.identity.Dev != stat.Dev {
+			return state("retiring controller tool area directory was replaced before its lease")
+		}
+		if err := lock(held); err != nil {
+			return err
+		}
 		remaining := maxBundleEntries
 		if err := emptySetupTree(ctx, parent, area.ID, stat, parent.identity, 0, &remaining); err != nil {
 			return err

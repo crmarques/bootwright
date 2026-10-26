@@ -32,7 +32,7 @@ func requireAreas(t *testing.T, store *Store, want ...string) {
 	t.Helper()
 	held := map[string]string{}
 	err := store.MutateLifecycle(context.Background(), "example", func(tx lifecycle.Transaction) error {
-		for _, area := range tx.(*lifecycleTransaction).stored.bundles {
+		for _, area := range tx.(*leasedLifecycle).lifecycleTransaction.stored.bundles {
 			held[area.ID] = area.Mode
 		}
 		return nil

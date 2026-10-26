@@ -49,11 +49,18 @@ const mediaMargin = time.Hour + controllerCalls
 // disk selection and power-on that boot the installed system, the eject the
 // verification repeats, and the disk selection and power-on of the restart
 // that proves its network. That is the libvirt arm's sequence. The bare-metal
-// arm powers nothing off and inspects its machine where the libvirt arm reads
-// its power, so its sequence stays within this one while that inspection makes
-// at most eight requests: the system, its interface collection and six.
-const controllerCalls = substrate.ControllerPowerReadBound + substrate.ControllerInsertBound +
-	4*substrate.ControllerPowerBound + 3*substrate.ControllerBootSelectionBound + 2*substrate.ControllerEjectBound
+// arm has its own inspection and media budgets, composed by machineMediaMargin
+// below from the same substrate-owned port table.
+const controllerCalls = substrate.LibvirtPreBootBound + substrate.LibvirtMediaInsertBound +
+	substrate.LibvirtBootMediaBound + 2*substrate.LibvirtBootDiskBound + 2*substrate.LibvirtMediaEjectBound
+
+func machineMediaMargin(arm string) time.Duration {
+	bounds, ok := substrate.MachineBoundsFor(arm)
+	if !ok {
+		return mediaMargin
+	}
+	return time.Hour + bounds.PreBoot + bounds.MediaInsert + bounds.BootMedia + 2*bounds.BootDisk + 2*bounds.MediaEject
+}
 
 // consumerPrefix owns os/<object>/ beneath the artifact server's served root.
 const consumerPrefix = "os"

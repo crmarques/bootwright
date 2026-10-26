@@ -17,7 +17,8 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_channel
 # before the run fails, under the node's position in the frozen request, each
 # one the runner reports as the installation's own diagnostic for that node's
 # Machine (internal/substrate, preboot.go).
-REFUSALS = ("hardware-mismatch", "identity-mismatch", "machine-running")
+REFUSALS = ("hardware-mismatch", "identity-mismatch", "machine-running", "tpm-absent",
+            "media-missing", "private-delivery", "controller-read", "media-insert", "media-eject", "node-unreachable")
 MAX_NODE = 999
 MAX_NAMES = 128
 

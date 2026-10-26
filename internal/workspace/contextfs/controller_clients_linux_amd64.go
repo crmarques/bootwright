@@ -25,6 +25,9 @@ import (
 // reservation this store published is its own interrupted attempt and may be
 // adopted only while empty; anything else refuses.
 func (t *lifecycleTransaction) ClientArea(ctx context.Context, id string) (prerequisites.BundleArea, error) {
+	if area := t.areas.find(id); area != nil {
+		return area, nil
+	}
 	if err := t.base.available(ctx); err != nil {
 		return nil, err
 	}
@@ -50,7 +53,7 @@ func (t *lifecycleTransaction) ClientArea(ctx context.Context, id string) (prere
 		}
 	}
 	sealed := func() bool {
-		return slices.ContainsFunc(t.stored.bundles, func(item controllerBundleReservation) bool {
+		return slices.ContainsFunc(t.current.Load().bundles, func(item controllerBundleReservation) bool {
 			return item.ID == id && item.Mode == "sealed"
 		})
 	}
@@ -167,7 +170,13 @@ func (t *lifecycleTransaction) SealClientArea(ctx context.Context, id string) er
 	if next[index].Mode == t.stored.bundles[index].Mode && (bound < 0 || t.stored.value.Bindings[bound].Tools == id) {
 		return nil
 	}
-	return t.publishControllerState(ctx, value, next, applyRetry(t.identity.Name), checkpointBeforeClientAreaSealing)
+	if err := t.publishControllerState(ctx, value, next, applyRetry(t.identity.Name), checkpointBeforeClientAreaSealing); err != nil {
+		return err
+	}
+	if area := t.openArea(id); area != nil {
+		return lockShared(area.dir)
+	}
+	return nil
 }
 
 func (t *lifecycleTransaction) openArea(id string) *controllerBundleArea {

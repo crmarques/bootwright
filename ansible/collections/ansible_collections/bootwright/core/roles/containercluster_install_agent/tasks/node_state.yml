@@ -1,0 +1,45 @@
+---
+- name: Reset this node phase failure
+  ansible.builtin.set_fact:
+    containercluster_install_agent_phase_failed: true
+    containercluster_install_agent_lifecycle_refusal: ""
+
+- name: Read the node without stopping sibling reads
+  block:
+    - name: Read this node through its substrate
+      ansible.builtin.include_tasks: port.yml
+      vars:
+        containercluster_install_agent_port_operation: state_read
+
+    - name: Keep this node's controller answer
+      ansible.builtin.set_fact:
+        containercluster_install_agent_node_read: '{{ containercluster_install_agent_port_result }}'
+      no_log: true
+
+    - name: Refuse a controller read that did not answer
+      ansible.builtin.assert:
+        that: containercluster_install_agent_node_read.msg is not defined
+        quiet: true
+        fail_msg: >-
+          reading Machine {{ containercluster_install_agent_node.machine }} through its management controller failed:
+          {{ (containercluster_install_agent_node_read.msg | default('') | string | bootwright.core.printable)[:512] }}
+
+    - name: Prove the presented image identity
+      bootwright.core.containercluster_media_token:
+        request: '{{ bootwright_cluster_install_request }}'
+        source: '{{ containercluster_install_agent_before.observation.url | default("") }}'
+        image: '{{ containercluster_install_agent_node_read.media | default("") }}'
+        operation: inspect
+      register: containercluster_install_agent_node_identity
+      when: containercluster_install_agent_before.observation.url | default('') | length > 0
+      no_log: true
+
+    - name: Mark this node phase complete only after its final step
+      ansible.builtin.set_fact:
+        containercluster_install_agent_phase_failed: false
+
+  rescue:
+    - name: Keep this node failure while siblings finish
+      ansible.builtin.set_fact:
+        containercluster_install_agent_phase_failed: true
+        containercluster_install_agent_lifecycle_refusal: controller-read

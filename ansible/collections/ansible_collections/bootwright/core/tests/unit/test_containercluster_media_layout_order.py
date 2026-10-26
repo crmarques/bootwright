@@ -55,8 +55,14 @@ def test_the_apply_proves_the_layout_before_it_includes_the_build():
         command = task.get('ansible.builtin.command')
         assert command is None or command['argv'][1:] == ['version'], task['name']
     assert not any(LAYOUT in task for task in flat(tasks('build.yml')))
-    assert not any('ansible.builtin.include_tasks' in task or 'ansible.builtin.import_tasks' in task
-                   for task in flat(tasks('build.yml')))
+    includes = [task for task in flat(tasks('build.yml')) if 'ansible.builtin.include_tasks' in task]
+    assert {task['ansible.builtin.include_tasks']: task['when'] for task in includes} == {
+        'publish.yml': "bootwright_cluster_media_request.deliveryKind == 'fetch'",
+        'stage_push.yml': "bootwright_cluster_media_request.deliveryKind == 'push'",
+    }
+    for name in ('publish.yml', 'stage_push.yml'):
+        assert not any('ansible.builtin.include_tasks' in task or 'ansible.builtin.import_tasks' in task
+                       for task in flat(tasks(name)))
 
 
 def test_the_destroy_proves_the_layout_before_it_removes_the_reserved_subtree():
@@ -66,3 +72,17 @@ def test_the_destroy_proves_the_layout_before_it_removes_the_reserved_subtree():
                 if (task.get('ansible.builtin.file') or {}).get('state') == 'absent']
     assert removals and proved < min(removals)
     assert all(modules(task) <= BEFORE - {'ansible.builtin.command'} for task in destroy[:proved])
+
+
+def test_pushed_media_stays_private_and_never_reaches_a_listener():
+    stage = list(flat(tasks('stage_push.yml')))
+    assert all('ansible.builtin.uri' not in task for task in stage)
+    files = [task['ansible.builtin.file'] for task in stage if 'ansible.builtin.file' in task]
+    assert files == [{'path': '{{ containercluster_media_agent_push_image }}',
+                      'owner': 'root', 'group': 'root', 'mode': '0600'}]
+    assert all('containercluster_media_agent_private' not in str(task) for task in stage)
+    destroy = tasks('destroy.yml')
+    publication = next(task for task in destroy
+                       if (task.get('ansible.builtin.file') or {}).get('path')
+                       == '{{ containercluster_media_agent_private }}')
+    assert publication['when'] == "bootwright_cluster_media_request.deliveryKind == 'fetch'"

@@ -507,7 +507,10 @@ guest that
 answers with a different marker, or a powered-on guest with none, refuses:
 there is no reinstall path, and a fresh installation requires the Machine's
 realization to be destroyed and applied again. A powered-off Machine with no
-marker installs.
+marker installs. A positively answered foreign marker publishes the typed
+`foreign-installation` refusal for the Machine before any boot. The marker
+bytes remain private; the diagnostic names the refused installation and the
+supported declaration-correction path.
 
 **Inverse.** Destroy removes the published image, the private subtree when one was
 published, with a private installation's image inside it, and the machine's

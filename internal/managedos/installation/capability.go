@@ -590,6 +590,7 @@ func (c Capability) applyRefusals(execution lifecycle.Execution, request Request
 		refusals = map[string]error{}
 	}
 	maps.Copy(refusals, mediaRefusals(execution.Context, request))
+	refusals["foreign-installation"] = foreignInstallation(execution.Context, request)
 	key, err := authorizedKey(execution, request)
 	if err != nil {
 		return nil, err

@@ -1,0 +1,37 @@
+---
+- name: Report every failed node after every sibling finished
+  ansible.builtin.debug:
+    msg: >-
+      Node {{ bootwright_cluster_install_request.nodes[hostvars[phase_host].bootwright_node_index | int].name }}
+      (Machine/{{ bootwright_cluster_install_request.nodes[hostvars[phase_host].bootwright_node_index | int].machine }},
+      {{ bootwright_cluster_install_request.nodes[hostvars[phase_host].bootwright_node_index | int].address }}) failed its node phase.
+  loop: '{{ containercluster_install_agent_phase_hosts | default(groups.bootwright_nodes) }}'
+  loop_control:
+    loop_var: phase_host
+  when: hostvars[phase_host].containercluster_install_agent_phase_failed | default(true)
+
+- name: Publish a typed node refusal only after every sibling finished
+  bootwright.core.containercluster_install_protocol:
+    phase: refused
+    reason: '{{ hostvars[phase_host].containercluster_install_agent_lifecycle_refusal }}'
+    node: '{{ hostvars[phase_host].bootwright_node_index }}'
+  loop: '{{ containercluster_install_agent_phase_hosts | default(groups.bootwright_nodes) }}'
+  loop_control:
+    loop_var: phase_host
+  when: hostvars[phase_host].containercluster_install_agent_lifecycle_refusal | default('') | length > 0
+  no_log: true
+
+- name: Fail the phase after every node in its rounds has finished
+  ansible.builtin.fail:
+    msg: >-
+      {% for phase_host in containercluster_install_agent_phase_hosts | default(groups.bootwright_nodes) %}
+      {% if hostvars[phase_host].containercluster_install_agent_phase_failed | default(true) %}
+      {% set node = bootwright_cluster_install_request.nodes[hostvars[phase_host].bootwright_node_index | int] %}
+      Node {{ node.name }} (Machine/{{ node.machine }}, {{ node.address }}) failed its node phase.
+      {% endif %}
+      {% endfor %}
+      Repair the named nodes and repeat the apply.
+  when: >-
+    containercluster_install_agent_phase_hosts | default(groups.bootwright_nodes)
+    | map('extract', hostvars) | map(attribute='containercluster_install_agent_phase_failed', default=true)
+    | select('equalto', true) | list | length > 0

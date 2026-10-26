@@ -27,6 +27,7 @@ type Network struct {
 	Bridge  string `json:"bridge"`
 	Forward string `json:"forward,omitempty"`
 	Managed bool   `json:"managed"`
+	MTU     int    `json:"mtu,omitempty"`
 	Name    string `json:"name"`
 }
 
@@ -75,6 +76,7 @@ type Disk struct {
 type Interface struct {
 	Bridge     string `json:"bridge"`
 	MACAddress string `json:"macAddress"`
+	MTU        int    `json:"mtu,omitempty"`
 	Name       string `json:"name"`
 	Network    string `json:"network"`
 }

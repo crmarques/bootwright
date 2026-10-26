@@ -1,0 +1,30 @@
+---
+- name: Clear the previous machine port answer
+  ansible.builtin.set_fact:
+    substrate_libvirt_machine_port_refusal: ''
+  no_log: true
+
+- name: Present the requested media
+  bootwright.core.redfish_boot:
+    endpoint: '{{ bootwright_machine_port.endpoint }}'
+    user: '{{ lookup("ansible.builtin.file", bootwright_machine_port.user) }}'
+    password: '{{ lookup("ansible.builtin.file", bootwright_machine_port.password) }}'
+    verify: '{{ bootwright_machine_port.verify }}'
+    ca_data: >-
+      {{ lookup('ansible.builtin.file', bootwright_machine_port.ca)
+         if bootwright_machine_port.ca | default('') | length > 0 else '' }}
+    operation: insert
+    image: '{{ lookup("ansible.builtin.file", bootwright_machine_port.image_url_file) }}'
+    trust: '{{ bootwright_machine_port.trust | default("established") }}'
+    certificate: >-
+      {{ lookup('ansible.builtin.file', bootwright_machine_port.certificate)
+         if bootwright_machine_port.certificate | default('') | length > 0 else '' }}
+    private_delivery: '{{ bootwright_machine_port.private | default(false) }}'
+  register: substrate_libvirt_machine_port_result
+  failed_when: false
+  no_log: true
+
+- name: Publish the machine port refusal
+  ansible.builtin.set_fact:
+    substrate_libvirt_machine_port_refusal: '{{ substrate_libvirt_machine_port_result.msg | default("") }}'
+  no_log: true

@@ -198,6 +198,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		return nil
 	}
 	issues := validateLocal(o, false)
+	issues = add(issues, validatePushedNodes(o, c)...)
 	s := o.Spec()
 	install := s.Get("install")
 	nodes := s.Get("nodes").Items()

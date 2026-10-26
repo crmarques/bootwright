@@ -36,9 +36,6 @@ accepted. A node whose realized target is physical installs through its
 management controller under the trust its Machine declares, with the
 [private delivery](#boot-media) rules below.
 
-Not yet met: a physical node still refuses before registration; tracked as
-[B67](milestones/m3.md#b67).
-
 A virtual node whose provider host is not the Machine the selected artifact
 server is placed on refuses because its emulated controller fetches the private
 [boot image](#boot-media) without verifying the server. The placement, install-profile and physical-node refusals
@@ -93,18 +90,17 @@ artifact server and its placement Machine.
 | An OKD cluster | `spec.distribution.type: okd` | `this executable installs no OKD cluster` | `correct <cluster>` |
 | A release pinned by image alone | `spec.distribution.release` without `version` | `a cluster pinned to a release image alone names no version for its installer to match` | `correct <cluster>` |
 | A disconnected cluster | `spec.install.mode: disconnected` | `this executable installs no disconnected cluster` | `correct <cluster>` |
-| A FIPS cluster | `spec.security.fips.enabled: true` | `a FIPS cluster needs an installer this executable does not publish` | `correct <cluster>` |
-| An installation proxy | `spec.install.proxy` other than `direct` | `this executable installs no cluster through a proxy` | `correct <cluster>` |
-| Disk encryption | `spec.security.diskEncryption` | `this executable does not install security.diskEncryption` | `correct <cluster>` |
 | Serving certificates | `spec.install.servingCertificates` | `this executable does not install install.servingCertificates` | `correct <cluster>` |
-| A registry policy | `spec.install.registries` | `this executable does not install install.registries` | `correct <cluster>` |
 | Several nodes on another platform | `spec.install.platform.type: vsphere` or `external` with more than one of `spec.nodes` | `this executable installs no multi-node cluster on the declared platform` | `correct <cluster>` |
-| More nodes than the run ceiling fits | more than 9 `spec.nodes`, whose installation [deadline](#installation) passes the 6-hour ceiling | `installing <nodes> nodes needs a run deadline of <deadline>, past the 6h0m0s every adapter run is held to` | `declare at most 9 nodes on <cluster>` |
+| More nodes than the run ceiling fits | more than 28 emulated `spec.nodes`, whose installation [deadline](#installation) passes the 6-hour ceiling | `installing <nodes> nodes needs a run deadline of <deadline>, past the 6h0m0s every adapter run is held to` | `declare at most 28 nodes on <cluster>` |
 | A node with an install profile | `spec.os.installProfileRef` on a node's Machine | `a declared node selects an install profile, so two installations would write its disk` | `remove spec.os.installProfileRef from <machine> or drop it from <cluster>` |
 | A node on an unrealized substrate | a node's Machine whose provider declares a substrate this executable does not realize | `a declared node is on a substrate this executable does not realize` | `correct <cluster>` |
-| A node whose emulated controller port does not allocate | a virtual node whose provider's `spec.libvirt.bmcEmulationDefaults.port` plus the node's position among that provider's Machines is past 65535 | `the Machine's emulated controller port does not allocate` | `correct spec.libvirt.bmcEmulationDefaults.port on <provider>` |
-| A node's provider with no emulated controller credential | a virtual node whose provider declares no `spec.libvirt.bmcEmulationDefaults.auth.credentialsRef` | `the provider declares no emulated controller credential` | `set spec.libvirt.bmcEmulationDefaults.auth.credentialsRef on <provider>` |
-| A physical node | a node's Machine on a `baremetal` provider | `physical cluster nodes are not supported until an emulated rehearsal qualifies them` | `<machine> is physical; declare <cluster> on virtual nodes` |
+| A KubeVirt node on a nested host | a node's KubeVirt provider names `hostClusterRef` | `a declared node's KubeVirt provider names hostClusterRef` | `select kubeconfigRef on <provider>` |
+| A node whose emulated controller port does not allocate | a virtual node whose provider's `spec.libvirt.bmcEmulationDefaults.port` plus the node's position among that provider's Machines is past 65535 | `node <node> (<machine>): the Machine's emulated controller port does not allocate` | `correct spec.libvirt.bmcEmulationDefaults.port on <provider>` |
+| A node's provider with no emulated controller credential | a virtual node whose provider declares no `spec.libvirt.bmcEmulationDefaults.auth.credentialsRef` | `node <node> (<machine>): the provider declares no emulated controller credential` | `set spec.libvirt.bmcEmulationDefaults.auth.credentialsRef on <provider>` |
+| A physical node with an HTTP controller | a physical node's controller uses HTTP | `a physical node's private boot image requires an HTTPS management controller` | `set spec.hardware.management.bmc.address on <machine> to an HTTPS ComputerSystem endpoint` |
+| A physical node with unverified controller TLS | a physical node disables controller TLS verification | `a physical node's private boot image requires a controller connection that verifies its certificate` | `enable spec.hardware.management.bmc.tls.verify on <machine> and declare its trust bundle when needed` |
+| A physical node with unverified media TLS | a physical node selects disable-verification | `a physical node's private boot image requires virtual-media TLS verification` | `set spec.hardware.management.bmc.virtualMedia.tls.trust on <machine> to import-certificate or established` |
 | A root device the installer cannot name | a node's `spec.os.install.rootDeviceHints.deviceName` other than `/dev/<name>` or `/dev/disk/by-path/<name>` | `the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>` | `set spec.os.install.rootDeviceHints.deviceName on <machine> to such a path` |
 | A root device size the frozen input cannot carry | a node whose `minSizeGigabytes` exceeds 9007199254740991, the largest integer the frozen input carries exactly, at `spec.os.install.rootDeviceHints` on its Machine | `a node's minSizeGigabytes is larger than the frozen installer input carries exactly` | `declare spec.os.install.rootDeviceHints.minSizeGigabytes on <machine> as at most 9007199254740991` |
 | A node off the artifact server's host | a virtual node whose provider's `spec.libvirt.machineRef` is not the selected server's `spec.machineRef` | `an emulated controller fetches the boot image without verifying its server, so the server is placed on the provider host that controller runs on` | `<machine> is booted through a controller on <provider host> and <server> is placed on <server host>; place <provider> and <server> on the same Machine` |
@@ -112,13 +108,7 @@ artifact server and its placement Machine.
 A row lifts with the code of the item that delivers what it refuses, and the
 table and its test change in that commit:
 
-- [B67](milestones/m3.md#b67) lifts the physical-node row.
-- [B714](milestones/m3.md#b714) replaces the node ceiling with the any-size
-  bound.
-- [B720](milestones/m3.md#b720), [B721](milestones/m3.md#b721),
-  [B722](milestones/m3.md#b722), [B723](milestones/m3.md#b723) and
-  [B724](milestones/m3.md#b724) lift the disk-encryption, installation-proxy,
-  FIPS, serving-certificate and registry-policy rows.
+- [B723](milestones/m3.md#b723) lifts the serving-certificate row.
 - [B69](milestones/m3.md#b69) lifts the disconnected-cluster row.
 - [B88](milestones/m3.md#b88) lifts the unrealized-substrate row for a node on
   a KubeVirt provider, and [B733](milestones/m3.md#b733) for a node on a
@@ -138,10 +128,6 @@ is private, a physical node whose controller leg is `http` or does not verify,
 or whose virtual-media trust is `disable-verification`, refuses before
 registration, and an insert under `established` refuses where the manager's
 deciding setting reads false.
-
-Not yet met: the cluster role passes no controller-leg bundle and no
-virtual-media trust settings, and the three private-delivery refusals have no
-rows; tracked as [B67](milestones/m3.md#b67).
 
 ### Cluster size
 
@@ -163,9 +149,6 @@ never starts with fewer nodes than it declares. Repairing the node and
 repeating the apply boots only the nodes not already running this cluster's
 image; dropping the node is a changed input, so the operation is destroyed and
 applied again.
-
-Not yet met: nodes are booted, read and released one at a time and more than 9
-nodes refuse; tracked as [B714](milestones/m3.md#b714).
 
 ### Nodes on KubeVirt and vSphere
 
@@ -189,8 +172,12 @@ does, not a support statement: Red Hat documents control-plane VMs on OpenShift
 Virtualization only as a 4.22 Technology Preview through KubeVirt Redfish, with
 workers elsewhere.
 
-Not yet met: a node on a KubeVirt provider refuses as a node on an unrealized
-substrate; tracked as [B88](milestones/m3.md#b88).
+Not yet met: a node on a KubeVirt provider still refuses as a node on an
+unrealized substrate; a nested host is refused by lifecycle selection. Admission checks the homogeneous arm,
+attachment kinds and endpoint sources, and installer input projections have
+offline goldens. Target derivation, native port integration and published
+bounds still require [B87](milestones/m1.md#b87); tracked as
+[B88](milestones/m3.md#b88).
 
 Not yet met: a node on a vSphere provider refuses as a node on an unrealized
 substrate, and a multi-node `vsphere` cluster refuses as several nodes on
@@ -336,11 +323,6 @@ entry for its host, and its trust bundle must be one the cluster selects.
 **IPv6.** A cluster whose networks are all IPv6 installs with IPv6 VIPs and
 rendezvous address, and each static IPv6 interface states `dhcp: false` and
 `autoconf: false`.
-
-Not yet met: disk encryption, an installation proxy and a registry policy
-refuse, and the projection falls back to IPv4 defaults; tracked as
-[B720](milestones/m3.md#b720), [B721](milestones/m3.md#b721),
-[B724](milestones/m3.md#b724) and [B725](milestones/m3.md#b725).
 
 ## Boot media
 
@@ -565,13 +547,6 @@ is still being read after the node answers on the network, and removing it
 early corrupts the running installer. A node that fails a step fails the block
 naming it once the other nodes of its round have finished.
 
-Not yet met: nodes boot one at a time; tracked as
-[B714](milestones/m3.md#b714).
-
-Not yet met: the image is inserted through the Redfish modules directly rather
-than through each node's `media_insert`; tracked as
-[B704](milestones/m1.md#b704).
-
 **Virtual IPs are free before boot.** When the boot is a fresh one, so no
 declared node is powered on, the block first proves that no host answers
 a virtual IP of a multi-node `baremetal` cluster, for each such address inside a
@@ -754,12 +729,6 @@ not grow with the nodes, which join concurrently. A cluster whose installation
 deadline would pass the runner's 6-hour ceiling refuses before registration,
 naming that deadline and how many nodes fit, rather than being cut short part
 way through its installation; [cluster size](#cluster-size) states the bound.
-
-Not yet met: the boot budget is 300 seconds and the margin 11 minutes for each
-node, so more than 9 nodes refuse; tracked as [B714](milestones/m3.md#b714).
-
-Not yet met: the allowance and margins are the Redfish figures for every node,
-not bounds each arm publishes; tracked as [B704](milestones/m1.md#b704).
 
 **The access it produces.** The installer writes the cluster administrator
 kubeconfig and the initial administrator password into the work area when it
@@ -1034,3 +1003,11 @@ planning produces because [the image is built on the controller](#boot-media).
 Either decoder refuses any other placement with `lifecycle.state`, so apply,
 destroy, observation and removal planning each refuse such a block before an
 adapter runs, and no run carries a placement's identity or host key.
+
+Selected FIPS clusters project `fips: true` and use the exact release's
+publisher-verified RHEL 9 `openshift-install-fips` executable. Controller
+preflight, plan and apply admission require a positive kernel FIPS-mode
+observation and otherwise refuse `controller.unsupported`. Media apply refuses
+an `ssh-ed25519` administration key naming the bound Secret before running the
+installer. These prerequisites make no claim about Bootwright's cryptography;
+real FIPS-host qualification remains [B722](milestones/m3.md#b722).

@@ -21,6 +21,8 @@ const (
 	// RefusalMachineRunning is a machine found running, whose disk an
 	// installation would write while it runs.
 	RefusalMachineRunning = "machine-running"
+	// RefusalTPMAbsent means an encrypted install lacks a positive TPM 2.0 proof.
+	RefusalTPMAbsent = "tpm-absent"
 )
 
 // PreBootRefusals is what the pre-boot proof of a Machine on one arm may
@@ -66,6 +68,7 @@ func PreBootRefusals(arm, contextName, continuation, machine, endpoint string) m
 				destroy+", correct spec.hardware.management.bmc.address on "+identity+" if it names another controller"+update+", then run "+apply+
 					", so the machine is proved again"),
 			RefusalMachineRunning: running,
+			RefusalTPMAbsent:      refused(identity+" does not positively report an enabled TPM 2.0, so no encrypted installer was booted", "enable a supported TPM 2.0 on "+identity+", then run "+next),
 		}
 	}
 	return nil

@@ -25,9 +25,8 @@ func stageName(name string, bare bool) bool {
 }
 
 // collectStages removes the publication stages a killed command left in dir.
-// It runs only under the exclusive root lock, and every writer of such a stage
-// holds the root lock for its whole command, so no stage found here has a live
-// writer. It removes only a private regular file named as a stage, on the
+// It runs under the exclusive root lock and, for context stages, the context
+// lease. Writers hold the corresponding lock, so no collected stage is live. It removes only a private regular file named as a stage, on the
 // directory's device and within bound, and leaves everything else to the
 // verification that refuses it; it descends into subdirectories only while
 // depth admits one.

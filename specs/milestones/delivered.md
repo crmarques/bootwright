@@ -2385,7 +2385,7 @@ and IPv6 policy among it ([B338](#x43--libvirt-roles-managed-os-installation-net
 glibc and libgcc builds a RHEL 9.8 controller must hold, and building on a
 workstation ([B292](#x42--media-contexts-setup-service-and-machine-admission)); help beyond destroy ([B95](#x44--help-completion-contracts-and-ratchets)); an
 invocation's own in-flight jobs ([B304](#x48--bounded-concurrent-execution)); and a bounded run
-beside another context's exclusive apply lock ([B18](m1.md#b18)). Under D48
+beside another context's exclusive apply lock ([B18](delivered.md#b18)). Under D48
 (D116) the other follow-ups were parked: B385 to B397, B385 and B393 split
 from B94 and B289.
 
@@ -5948,7 +5948,7 @@ A block this build plans differently from the build that froze it reads
 unknown, an unknown is never read as absent, and a projection that carries
 lent Secret material refuses the whole diff before any output. It exits 0
 whenever it renders, refuses `lifecycle.lease` while an apply or destroy holds
-the context ([B18](m1.md#b18)), and writes no record, run output or custody.
+the context ([B18](delivered.md#b18)), and writes no record, run output or custody.
 The first projector is the libvirt Machine.
 
 **Outcome, B566 (the engine read-only guard):** `RunFor` derives a `ReadOnly`
@@ -6036,7 +6036,7 @@ cluster and client blocks and the agent install and media blocks read unknown
 until their observation runs without outputs
 ([B596](backlog.md#b596)). A read refuses `lifecycle.lease` while an apply
 runs, and an `--observe` holds the shared lock so an `apply` refuses meanwhile
-([B18](m1.md#b18)). A canceled `--observe` can leave a read-only Ceph worker
+([B18](delivered.md#b18)). A canceled `--observe` can leave a read-only Ceph worker
 running to its own deadline ([B573](backlog.md#b573)). Only the libvirt Machine
 has a projector: a Ceph pool, a bare-metal Machine, the managed services and
 the artifact server, an OS tree and its install, the agent install, and the
@@ -8327,3 +8327,111 @@ has no default, refuses without bundle references, and reaches install-config
 only when authored. Admission twins and three projection goldens qualify the
 in-tree behavior. This supplies M4d's TLS trust prerequisite and does not
 claim live gateway trust or complete the other X123 items.
+
+## M3 independent in-tree completion
+
+The owner's 2026-10-23 request (D181) delivers the independent implementation
+of M3a–e's specified blockers. Operator-run rows and baseline acceptance stay
+on their owning milestone pages. The commit body records exact gate outcomes.
+
+### X120 — Libvirt attachments and network properties
+
+#### B701
+
+Per-interface libvirt attachment maps cover each available ethernet NIC once,
+resolve provider-local attachments, preserve NIC order and freeze individual
+network/bridge wiring. Admission and request/domain tests cover the boundary.
+
+#### B702
+
+Attachments admit MTU, project it into managed networks and domain NICs, prove
+an external bridge's declared MTU before host effects, and refuse guest MTU
+above the selected attachment. Bonds and VLANs follow their backing NIC limit.
+Request versions move with these fields. B703's IPv6 projection is implemented;
+its operator row stays on M1.
+
+### X121 — Node diagnostics and plan capacity
+
+#### B250
+
+The cluster's substrate diagnostics name both its node and bound Machine;
+realization continues to come from the one `substrate.Realized` rule.
+
+#### B715
+
+Plan bounds admit 128 impacts, 256 KiB per canonical request and 4 MiB of
+aggregate requests, with bounded stored plans and documented constants. Tests
+cover exact and excess bounds and an apply/inverse state envelope for 48
+physical nodes including Machine, media, install and network blocks. That
+capacity test is independent of the provider's run deadline: today's physical
+round budget admits 32 nodes, and it makes no 48-node runtime claim.
+
+### X128 — Substrate machine entry points
+
+#### B704
+
+Libvirt and bare-metal roles publish state, media and power ports beside the
+existing boot/identity operations. Consumers dispatch through the substrate;
+arm bounds and fetch/push delivery are centralized. Physical discovery has
+explicit manager, candidate and NIC bounds; TPM encryption requires a positive
+enabled TPM 2.0 read. Existing libvirt/bare-metal frozen request bytes are kept,
+except where X120 or X122 intentionally advances their own formats.
+
+### M3d implementation awaiting operator evidence
+
+X122 implements B714 and B725: per-provider frozen fan-out, per-node controller
+kind, round margins and read bounds, controller-local inventory aliases,
+round-level failure handling, larger topology goldens and IPv6 projection.
+A failed node lets siblings finish and prevents later rounds or installer waits.
+
+X123 implements B720, B721 and B724: the native-generated AgentClusterInstall
+fixture qualifies the two-step TPM2 image flow; cluster proxy credentials and
+mirror credentials are substituted only in the private attempt, and only the
+image build carries the controller's proxy route. B719's existing OVN manifest
+path remains partial pending its other typed source.
+
+X124 implements B67's controller/media trust propagation and pre-registration
+private-delivery refusals, plus B251's typed missing-media, transport, node
+readiness and foreign-installation diagnostics. Physical destroy releases
+media and retains disks. The emulated and hardware rehearsals remain unrun.
+
+### Shared lifecycle prerequisites
+
+#### B18
+
+Lifecycle effects retain an exclusive context lease while the root lock covers
+only coherent snapshots and shared-record transactions. Readers and another
+context's installation can proceed. Shared controller/secret state rebases
+under short root locks; own-context and tool evidence remain pinned, and bundle
+lifetime leases prevent retirement while a running operation uses its tools.
+Concurrent-reader, cross-context, reservation, identity and bundle-retirement
+regressions qualify the narrowed boundary.
+
+#### B23
+
+A lifecycle playbook child is itself a subreaper and handles a dedicated parent
+death signal before Ansible loads. If its outer supervisor is killed, the child
+reaps its session-isolated workers and task processes through the existing
+termination path. Real pinned-Ansible tests prove killed-supervisor cleanup
+and normal completion; controller transaction lifetime remains unchanged.
+
+#### B265
+
+Reciprocal tests over independently opened stores prove a bounded machine
+power operation and a lifecycle network restart cannot enter the same context
+while the other holds its lease. Both directions release normally afterward.
+
+### FIPS and KubeVirt preparation
+
+X127 implements B722's host-independent FIPS path: exact-release verified FIPS
+installer archive and executable selection, the positive kernel FIPS-mode
+precondition before lifecycle effects, `fips: true` projection and bound Ed25519
+key refusal. The native installer judges its host; Bootwright claims nothing
+about its own cryptography. B722's FIPS-host operator row remains open.
+
+X130 prepares B88's admission, installer projections and push-only media.
+Pushed images remain root-private under the controller work area, require no
+artifact server and freeze the media block's request identity. The native
+provider descriptor, media/state proof and bounds remain B87 dependencies;
+production selection continues to refuse that provider. B731's synthetic
+lab-kubevirt input and runbook are prepared and validated, with no live claim.

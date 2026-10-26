@@ -270,6 +270,8 @@ Alias cell.
 | [B794](#b794) | new, 2026-10-20 (D173) | product | Add-ons | A program check arm that probes an HTTP endpoint, such as GitLab's readiness path through its Route | A new check arm moves the program version; no M4 package needs it to exit |
 | [B795](#b795) | new, 2026-10-20 (D173) | product | Add-ons, with Secrets | GitLab trusts a declared CA bundle toward its object storage, PostgreSQL and Redis | The chart's custom-CA and TLS keys are unverified; the profile reaches its services without a private CA |
 | [B797](#b797) | new, 2026-10-21 (X56) | product | Storage | A StorageObjectBucket's declared policy changes after completion | A completed bucket refuses `object-bucket-identity` on a changed policy; a day-2 update is a state-contract change no milestone needs |
+| [B798](#b798) | new, 2026-10-23 (M3 verification) | defect | Verification tooling | The full Ansible unit gate selects its intended worker mode explicitly | Pre-existing tooling behavior outside the requested product change |
+| [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
 
 ### B82
 
@@ -2935,6 +2937,35 @@ state-contract change, and no milestone needs one. **Revive when** an operator
 asks to change a bucket policy or a user display name without retiring the
 context.
 
+### B798
+
+**Owner:** Verification tooling. **Kind:** defect. **Requires:** none.
+**Definition:** Specified. The full gate passes `--num-workers 0` to the
+locked ansible-test, whose implementation translates zero to pytest `-n auto`.
+Its unit run therefore starts workers despite the documented serial intent.
+Choose and test an explicit serial invocation without changing selected tests
+or their pass/fail behavior. **Exit evidence:** a harness regression over the
+actual generated pytest command and the full Ansible gate. **Why parked:**
+this pre-existing verification behavior is recorded separately from M3's
+product implementation; no failed test is reclassified as passed.
+
+### B799
+
+Investigate transient setup-lock refusals in the parallel publication
+checkpoint harness. During B18 verification on 2026-10-23, two default
+concurrency package runs reported `lifecycle.lease` (controller setup held)
+when retrying interrupted setup publications; a full race-enabled run passed.
+The failures included refused creation and killed/cancelled
+`before-setup-state-rename` checkpoints. `lockSetup` currently releases its
+flock by closing the descriptor, whereas root and context locks explicitly
+unlock first. An unrelated checkpoint helper could briefly inherit the
+close-on-exec descriptor between fork and exec; this is a hypothesis, not a
+proved cause. Parked as a pre-existing defect outside B18. **Revival needs:**
+a focused reproduction that identifies the remaining lock holder. **Exit
+evidence:** parallel interruption/retry probes and a justified release fix,
+considering an explicit unlock before close without weakening exclusion or
+adding a retry that conceals a live owner.
+
 ## Retired
 
 Historical IDs no longer issued in their original meanings. D131 reuses
@@ -4054,3 +4085,12 @@ Requires cell as `owner decision: <question>`.
   follows Q13(a): an authored-only typed additional trust policy, without a
   default, required by M4a's accepted Data Foundation trust contract. This
   authorizes no host operation and claims no passed operator gate.
+
+- **D181** (2026-10-23, the owner's request): "finish implementing all items
+  that are blocking M3a-e to be declared done that doesn't requires anything
+  from me". Implement the independent specified code, tests and acceptance
+  preparation, including shared prerequisites, while leaving owner decisions,
+  baseline acceptance, live environments, captured native responses and
+  operator-run acceptance open. This records no host operation or passed live
+  gate. The resulting in-tree work is recorded under
+  [M3 independent completion](delivered.md#m3-independent-in-tree-completion).

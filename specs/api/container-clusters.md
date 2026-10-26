@@ -175,9 +175,10 @@ A multi-node KubeVirt cluster may author `baremetal`; every slot's source is
 then `openshift`, and every node's attachments are `Localnet`
 ClusterUserDefinedNetworks or `bridge` NetworkAttachmentDefinitions.
 
-Not yet met: the vSphere arm admits no `vcenterCredentials`, and a KubeVirt
-`baremetal` cluster's attachment rule is not enforced; tracked as
-[B733](../milestones/m3.md#b733) and [B88](../milestones/m3.md#b88).
+Not yet met: the vSphere arm admits no `vcenterCredentials`; tracked as
+[B733](../milestones/m3.md#b733). KubeVirt attachment kinds are checked at
+admission; proving the referenced external object is `Localnet` or `bridge`
+requires the host-side reads of [B87](../milestones/m1.md#b87).
 
 ## Endpoints
 

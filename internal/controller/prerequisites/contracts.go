@@ -33,9 +33,7 @@ type HostRelease struct {
 	Architecture string
 }
 
-// FIPSInspector is how a HostInspector reports whether the host's kernel runs
-// in FIPS mode. A host without it reports no FIPS mode check; the check never
-// changes readiness either way.
+// FIPSInspector reports kernel mode; selected FIPS clusters require a positive observation.
 type FIPSInspector interface {
 	FIPSMode(context.Context) (bool, error)
 }

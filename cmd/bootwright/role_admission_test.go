@@ -40,10 +40,52 @@ type roleOption struct {
 // entry point.
 func roleEntryPoint(playbook string) (string, map[string]roleOption, error) {
 	var plays []struct {
-		Tasks []map[string]any `yaml:"tasks"`
+		Tasks          []map[string]any `yaml:"tasks"`
+		Hosts          string           `yaml:"hosts"`
+		AnyErrorsFatal bool             `yaml:"any_errors_fatal"`
+		GatherFacts    bool             `yaml:"gather_facts"`
+		Strategy       string           `yaml:"strategy"`
+		Serial         any              `yaml:"serial"`
+		Throttle       any              `yaml:"throttle"`
+		PostTasks      []map[string]any `yaml:"post_tasks"`
 	}
-	if err := yaml.Unmarshal(ansible.Assets()[playbookRoot+playbook], &plays); err != nil || len(plays) != 1 {
+	if err := yaml.Unmarshal(ansible.Assets()[playbookRoot+playbook], &plays); err != nil || len(plays) == 0 {
 		return "", nil, fmt.Errorf("%s is not one play (%v)", playbook, err)
+	}
+	if playbook == "containercluster/install_apply.yml" {
+		want := []string{"apply", "node_state", "prepare_boot", "node_boot", "waits", "node_release", "after_release", "node_state", "finish"}
+		if len(plays) != len(want) {
+			return "", nil, fmt.Errorf("%s has %d phases, want %d", playbook, len(plays), len(want))
+		}
+		for index, play := range plays {
+			if play.GatherFacts || play.Strategy != "ansible.builtin.linear" {
+				return "", nil, fmt.Errorf("%s phase %d changed execution strategy", playbook, index)
+			}
+			if strings.HasPrefix(want[index], "node_") {
+				fanOut := "{{ bootwright_cluster_install_request.budgets.fanOut | default(1) }}"
+				if play.AnyErrorsFatal || play.Hosts != "bootwright_nodes" || play.Serial != fanOut || play.Throttle != fanOut || len(play.PostTasks) != 1 {
+					return "", nil, fmt.Errorf("%s phase %d lost bounded node rounds", playbook, index)
+				}
+				guard := play.PostTasks[0]
+				vars, _ := guard["vars"].(map[string]any)
+				imported, ok := guard["ansible.builtin.import_role"].(map[string]any)
+				if !ok || vars["containercluster_install_agent_phase_hosts"] != "{{ ansible_play_batch }}" || guard["delegate_to"] != "{{ bootwright_controller_host }}" || imported["name"] != "bootwright.core.containercluster_install_agent" || imported["tasks_from"] != "phase_failures" || guard["any_errors_fatal"] != true || guard["when"] != "inventory_hostname == ansible_play_batch[0]" {
+					return "", nil, fmt.Errorf("%s phase %d lost its end-of-round failure guard", playbook, index)
+				}
+			} else if !play.AnyErrorsFatal || play.Hosts != "bootwright_target" || play.Serial != 1 {
+				return "", nil, fmt.Errorf("%s phase %d is not controller-local", playbook, index)
+			}
+
+			if len(play.Tasks) != 1 {
+				return "", nil, fmt.Errorf("%s phase %d is not one role import", playbook, index)
+			}
+			imported, ok := play.Tasks[0]["ansible.builtin.import_role"].(map[string]any)
+			if !ok || imported["name"] != "bootwright.core.containercluster_install_agent" || imported["tasks_from"] != want[index] {
+				return "", nil, fmt.Errorf("%s phase %d does not import %s", playbook, index, want[index])
+			}
+		}
+	} else if len(plays) != 1 {
+		return "", nil, fmt.Errorf("%s is not one play", playbook)
 	}
 	for _, task := range plays[0].Tasks {
 		imported, ok := task["ansible.builtin.import_role"].(map[string]any)

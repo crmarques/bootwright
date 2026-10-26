@@ -33,6 +33,7 @@ from ansible.modules import find
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
 
+from ansible_collections.bootwright.core.tests.unit.install_phase_tasks import apply_tasks
 from ansible_collections.bootwright.core.plugins.action import containercluster_media_protocol as protocol
 from ansible_collections.bootwright.core.plugins.modules import containercluster_install_inspect
 from ansible_collections.bootwright.core.plugins.modules import containercluster_media_inspect as inspect
@@ -136,27 +137,26 @@ def marks(task):
 
 
 def inserts(task):
-    arguments = task.get("bootwright.core.redfish_boot")
-    return isinstance(arguments, dict) and arguments.get("operation") == "insert"
+    return (task.get("vars") or {}).get("containercluster_install_agent_port_operation") == "media_insert"
 
 
 def test_the_installation_marks_the_work_area_before_any_node_is_handed_the_image():
-    run_order = list(expanded(INSTALL, "apply.yml"))
+    run_order = list(flattened(INSTALL, apply_tasks(LOADER, INSTALL)))
     mark = one([index for index, task in enumerate(run_order) if marks(task)], "mark the work area")
     handed = [index for index, task in enumerate(run_order) if inserts(task)]
     assert handed, "the walk no longer sees the installation insert any image"
     assert mark < min(handed)
     # The mark is written on every path that may reach an insert: at the top
-    # level of apply.yml, under no condition and never excused from failing.
+    # level of prepare_boot.yml, under no condition and never excused from failing.
     task = run_order[mark]
-    assert task in tasks(INSTALL, "apply.yml")
+    assert task in tasks(INSTALL, "prepare_boot.yml")
     assert not {"when", "failed_when", "ignore_errors"} & set(task)
 
 
 def test_the_mark_the_installation_writes_is_the_one_the_inspection_reads(tmp_path):
     frozen = request(tmp_path)
     pathlib.Path(frozen["workRoot"]).mkdir()
-    task = one([task for task in tasks(INSTALL, "apply.yml") if marks(task)], "mark the work area")
+    task = one([task for task in tasks(INSTALL, "prepare_boot.yml") if marks(task)], "mark the work area")
     copy = task["ansible.builtin.copy"]
     scope = dict(LOADER.load_from_file(str(INSTALL / "defaults" / "main.yml"), trusted_as_template=True))
     scope["bootwright_cluster_install_request"] = {"workRoot": frozen["workRoot"]}
@@ -262,7 +262,7 @@ def serves(task):
 
 
 def test_a_replay_builds_nothing_and_still_serves_and_proves_the_image():
-    build = tasks(MEDIA, "build.yml")
+    build = tasks(MEDIA, "publish.yml")
     served = [task for task in build if serves(task)]
     assert len(served) == 4
     for task in served:
@@ -283,7 +283,7 @@ def replay_tokens(tmp_path, capsys):
     so the choice is taken over every order it could list them in. None stands
     for a replay that refuses.
     """
-    replay = one([task for task in tasks(MEDIA, "build.yml") if task.get("when") == REPLAY], "run only on a replay")
+    replay = one([task for task in tasks(MEDIA, "publish.yml") if task.get("when") == REPLAY], "run only on a replay")
     finding, guard, taking = replay["block"]
     scope = media_scope(tmp_path, dict(PUBLISHED), **replay["vars"])
     arguments = Templar(loader=LOADER, variables=scope).template(finding["ansible.builtin.find"])
@@ -301,7 +301,7 @@ def replay_tokens(tmp_path, capsys):
 
 
 def serving_mode():
-    return one([task for task in tasks(MEDIA, "build.yml")
+    return one([task for task in tasks(MEDIA, "publish.yml")
                 if str((task.get("ansible.builtin.file") or {}).get("path", "")).endswith("/agent.iso")],
                "set the served mode")
 
@@ -331,7 +331,7 @@ def test_a_replay_proves_the_image_the_inspection_found_at_the_address_a_node_bo
     assert replay_tokens(tmp_path, capsys) == {token}
     scope = media_scope(tmp_path, dict(PUBLISHED), containercluster_media_agent_token={"stdout": token})
     rendering = Templar(loader=LOADER, variables=scope)
-    probe = one([task for task in tasks(MEDIA, "build.yml") if "ansible.builtin.uri" in task],
+    probe = one([task for task in tasks(MEDIA, "publish.yml") if "ansible.builtin.uri" in task],
                 "fetch through the listener")
     assert rendering.template(serving_mode()["ansible.builtin.file"]["path"]) == found
     assert rendering.template(probe["ansible.builtin.uri"]["url"]) == containercluster_install_inspect.published(

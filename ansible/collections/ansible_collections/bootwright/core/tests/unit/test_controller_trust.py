@@ -10,10 +10,8 @@ that reaches a physical controller and require every Redfish task, and every
 include of the bare-metal port, to pass it. The walk asserts how many tasks it
 checked, so one that stops seeing them fails rather than passing empty.
 
-The virtual-media trust a managed-OS installation froze is set by its insert
-and settled by the ejects after the installer's power-off; a cluster
-installation performs none of it, because its nodes are virtual until physical
-nodes are delivered (B67).
+Both installation consumers carry frozen virtual-media trust through the
+substrate port; physical nodes require verified private delivery (B67).
 
 Rendering needs Ansible's controller (DataLoader and Templar), which
 ansible-test does not offer to unit tests under tests/unit/plugins, so these
@@ -43,8 +41,7 @@ PORT_BUNDLE = {"pre_boot": "substrate_baremetal_machine_target_ca", "boot_media"
 # The roles that reach a controller a bundle can anchor, and how many Redfish
 # module tasks each holds. Finding another number means the walk or a role
 # changed, and either must be looked at.
-BUNDLED = {"managedos_install_anaconda": 6, "substrate_baremetal_machine": 7, "machine_power_redfish": 5,
-           "machine_power_read_redfish": 1, "substrate_libvirt_machine": 8, "containercluster_install_agent": 5}
+BUNDLED = {"substrate_baremetal_machine": 13, "machine_power_read_redfish": 1, "substrate_libvirt_machine": 14}
 # The roles that make Redfish calls without a bundle, and why.
 UNBUNDLED = {
     "containercluster_media_agent": "it makes no Redfish call",
@@ -121,10 +118,12 @@ def test_each_lifecycle_role_reads_the_bundle_it_was_handed(lookups, tmp_path, r
         assert Templar(loader=LOADER, variables=variables).template(variables[variable]) == expected
     for name, _module, arguments, _task in calls(role):
         port = PORT_BUNDLE.get(name[:-len(".yml")])
-        assert (port or variable) in str(arguments["ca_data"]), (name, arguments["ca_data"])
+        generic = "bootwright_machine_port.ca" in str(arguments["ca_data"])
+        assert generic or (port or variable) in str(arguments["ca_data"]), (name, arguments["ca_data"])
         for path, expected in ((str(bundle), pem), ("", "")):
-            if port:
-                assert Templar(loader=LOADER, variables={port: path}).template(arguments["ca_data"]) == expected
+            if generic or port:
+                scope = {"bootwright_machine_port": {"ca": path}} if generic else {port: path}
+                assert Templar(loader=LOADER, variables=scope).template(arguments["ca_data"]) == expected
 
 
 # Each target of a reading reads its own bundle under its own variable, and a
@@ -149,11 +148,11 @@ def test_every_bare_metal_include_passes_its_bundle():
         for task in walk(loaded(path)):
             for action in INCLUDES:
                 arguments = task.get(action)
-                if isinstance(arguments, dict) and arguments.get("name") == BAREMETAL:
+                if isinstance(arguments, dict) and arguments.get("tasks_from") in PORT_BUNDLE:
                     entry = arguments.get("tasks_from")
                     if entry in PORT_BUNDLE:
                         seen.append((path.relative_to(ROLES).as_posix(), entry))
-                        assert PORT_BUNDLE[entry] in (task.get("vars") or {}), (path.name, entry)
+                        assert "ca" in task["vars"]["bootwright_machine_port"], (path.name, entry)
     assert sorted(seen) == sorted([
         ("containercluster_install_agent/tasks/boot.yml", "boot_media"),
         ("containercluster_install_agent/tasks/boot.yml", "pre_boot"),
@@ -185,10 +184,20 @@ def test_the_argument_specs_admit_the_frozen_bundle():
 # The managed-OS insert sets the virtual-media trust the request froze, with
 # the server's certificate, and every eject after the installer's power-off
 # settles it; nothing else a managed-OS installation runs touches it.
+def port_calls(role):
+    found = []
+    for path in sorted((ROLES / role / "tasks").glob("*.yml")):
+        for task in walk(loaded(path)):
+            include = task.get("ansible.builtin.include_role", {})
+            if include.get("tasks_from") in ("media_insert", "media_eject"):
+                found.append((path.name, include["tasks_from"], task["vars"]["bootwright_machine_port"]))
+    return found
+
+
 def test_the_managed_os_installation_sets_and_settles_the_frozen_trust(lookups, tmp_path):
-    driven = [(name, arguments) for name, module, arguments, _task in calls("managedos_install_anaconda") if module == BOOT]
-    inserts = [arguments for _name, arguments in driven if arguments["operation"] == "insert"]
-    ejects = [(name, arguments) for name, arguments in driven if arguments["operation"] == "eject"]
+    driven = port_calls("managedos_install_anaconda")
+    inserts = [arguments for _name, entry, arguments in driven if entry == "media_insert"]
+    ejects = [(name, arguments) for name, entry, arguments in driven if entry == "media_eject"]
     assert len(inserts) == 1 and sorted(name for name, _arguments in ejects) == ["apply.yml", "await.yml"]
     served = tmp_path / "artifact-ca"
     served.write_text("SERVED CERTIFICATE\n")
@@ -197,25 +206,46 @@ def test_the_managed_os_installation_sets_and_settles_the_frozen_trust(lookups, 
             ("disable-verification", True, False, {}, ""),
             ("established", False, False, {}, "")):
         variables = dict(defaults("managedos_install_anaconda"), **{
-            "bootwright_os_install_material": material,
-            "bootwright_os_install_request": {"target": {"controller": {"virtualMedia": {
-                "trust": trust, "restoreVerification": restore, "removeCertificate": remove}}}},
+            "bootwright_run_scratch": "/run/private",
+            "bootwright_os_install_material": {"controllerUser": "/run/user", "controllerPassword": "/run/password", **material},
+            "bootwright_os_install_request": {"target": {"physical": True, "controller": {
+                "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "tlsVerify": True, "virtualMedia": {
+                    "trust": trust, "restoreVerification": restore, "removeCertificate": remove}}}},
         })
         rendering = Templar(loader=LOADER, variables=variables)
-        assert rendering.template(inserts[0]["trust"]) == trust
-        assert rendering.template(inserts[0]["certificate"]) == certificate
-        for name, arguments in ejects:
-            assert "trust" not in arguments, name
-            assert rendering.template(arguments["restore_verification"]) is restore, name
-            assert rendering.template(arguments["remove_certificate"]) is remove, name
-            assert rendering.template(arguments["certificate"]) == certificate, name
+        inserted = rendering.template(inserts[0])
+        assert inserted["trust"] == trust
+        for name, request in [("boot.yml", inserts[0]), *ejects]:
+            port = rendering.template(request)
+            entry = "media_insert" if name == "boot.yml" else "media_eject"
+            if entry == "media_eject":
+                assert "trust" not in port
+                assert port["restore_verification"] is restore
+                assert port["remove_certificate"] is remove
+            native = next(args for filename, module, args, _task in calls("substrate_baremetal_machine")
+                          if filename == entry + ".yml" and module == BOOT)
+            assert Templar(loader=LOADER, variables={"bootwright_machine_port": port}).template(native["certificate"]) == certificate
 
 
-# A cluster installation sets no virtual-media trust: its five direct calls
-# pass none, so the controller is left exactly as it was.
-def test_no_cluster_task_sets_a_virtual_media_trust():
-    found = calls("containercluster_install_agent")
-    assert len(found) == CLUSTER_CALLS
-    for name, _module, arguments, _task in found:
-        for option in ("trust", "certificate", "restore_verification", "remove_certificate"):
-            assert option not in arguments, (name, option)
+@pytest.mark.parametrize("physical", [False, True])
+def test_cluster_media_calls_carry_each_nodes_frozen_trust(physical):
+    tasks = loaded(ROLES / "containercluster_install_agent/tasks/port.yml")
+    invocation = next(task for task in tasks if "ansible.builtin.include_role" in task)
+    variables = {**invocation["vars"],
+                 "containercluster_install_agent_node": {"physical": physical, "controller": {
+                     "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "tlsVerify": True,
+                     "virtualMedia": {"trust": "import-certificate", "restoreVerification": False, "removeCertificate": True}}},
+                 "containercluster_install_agent_user": "/run/user", "containercluster_install_agent_password": "/run/password",
+                 "containercluster_install_agent_ca": "/run/ca", "bootwright_run_scratch": "/run/private",
+                 "containercluster_install_agent_index": 2,
+                 "bootwright_cluster_install_material": {"artifactCertificate": "/run/certificate"}}
+    for operation in ("state_read", "media_insert", "media_eject"):
+        rendering = Templar(loader=LOADER, variables={**variables, "containercluster_install_agent_port_operation": operation})
+        port = rendering.template(invocation["vars"]["bootwright_machine_port"])
+        assert port["ca"] == "/run/ca"
+        if operation == "media_insert":
+            assert port["private"] is physical
+            assert port["trust"] == "import-certificate" and port["certificate"] == "/run/certificate"
+        elif operation == "media_eject":
+            assert port["remove_certificate"] is True and port["restore_verification"] is False
+            assert port["certificate"] == "/run/certificate"

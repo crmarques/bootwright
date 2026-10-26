@@ -135,8 +135,8 @@ def test_a_private_installation_publishes_its_image_only_beneath_the_token():
     for arm in (True, False):
         assert expand("{{ managedos_install_anaconda_served_root }}", private=arm) == SERVED
     boot = flattened("boot.yml")
-    insert = boot[index_of(boot, lambda task: (task.get("bootwright.core.redfish_boot") or {}).get("operation") == "insert", "insert")]
-    assert render(insert["bootwright.core.redfish_boot"]["image"]) == PRIVATE["url"] + "/" + TOKEN + "/install.iso"
+    url = boot[index_of(boot, named("Keep the private media URL in the invocation's protected scratch"), "private URL")]
+    assert render(url[COPY]["content"]) == PRIVATE["url"] + "/" + TOKEN + "/install.iso"
 
 
 @pytest.mark.parametrize("private", [False, True], ids=["public", "private"])
@@ -206,10 +206,14 @@ def test_every_task_naming_the_private_url_or_token_is_hidden_and_stays_private(
             assert render(task.get("no_log", False)) in (True, "True", "true"), "%s: %r is not hidden" % (name, task.get("name"))
             for target in write_targets(task):
                 written = render(target, item={"name": "identity", "source": "/run/material/host-key"})
+                if written == "/var/tmp/bootwright-run-scratch-1-1/managedos-media-url":
+                    assert task[COPY]["mode"] == "0600" and task["diff"] is False
+                    assert task["delegate_to"] == "localhost"
+                    continue
                 assert written.startswith(work + "/") or written == PRIVATE["path"] or written.startswith(PRIVATE["path"] + "/"), (
                     "%s: %r writes %s" % (name, task.get("name"), written))
     for expected in ("Publish the installer image by atomic rename", "Fetch the first byte of each private file through its listener",
-                     "Insert the published installer image as virtual media", "Publish the host key pair this installation delivers",
+                     "Keep the private media URL in the invocation's protected scratch", "Publish the host key pair this installation delivers",
                      "Publish the recovery passphrase only this machine may read"):
         assert expected in seen, "the walk no longer sees %r" % expected
 
@@ -309,15 +313,20 @@ def test_an_insert_refusal_never_prints_the_token_the_controller_echoes():
 def test_the_insert_asks_for_the_verified_fetch_read_back_exactly_when_delivery_is_private():
     boot = flattened("boot.yml")
     insert = boot[index_of(boot, named("Insert the published installer image as virtual media"), "insert")]
-    arguments = insert["bootwright.core.redfish_boot"]
-    assert arguments["operation"] == "insert"
-    assert "private_delivery" in arguments, "the insert never asks for the D104 (b) read-back"
-    assert render(arguments["private_delivery"]) is True
-    assert render(arguments["private_delivery"], private=False) is False
+    assert insert["ansible.builtin.include_role"]["tasks_from"] == "media_insert"
+    arguments = render(insert["vars"]["bootwright_machine_port"], managedos_install_anaconda_port_access={},
+                       managedos_install_anaconda_media_trust={"trust": "defaultCA"})
+    assert "private" in arguments, "the insert never asks for the D104 (b) read-back"
+    assert arguments["private"] is True
+    assert render(insert["vars"]["bootwright_machine_port"], private=False,
+                  managedos_install_anaconda_port_access={},
+                  managedos_install_anaconda_media_trust={"trust": "defaultCA"})["private"] is False
     virtual = scope()["bootwright_os_install_request"]
     virtual["target"] = {"channel": "guest-agent", "physical": False}
-    assert render(arguments["private_delivery"], bootwright_os_install_request=virtual) is False
-    assert render(arguments["image"]) == PRIVATE["url"] + "/" + TOKEN + "/install.iso"
+    assert render(insert["vars"]["bootwright_machine_port"], bootwright_os_install_request=virtual,
+                  managedos_install_anaconda_port_access={},
+                  managedos_install_anaconda_media_trust={"trust": "defaultCA"})["private"] is False
+    assert arguments["image_url_file"] == "/var/tmp/bootwright-run-scratch-1-1/managedos-media-url"
 
 
 def test_observation_evidence_redacts_a_token_in_the_media_the_controller_reports():

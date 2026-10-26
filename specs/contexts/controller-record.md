@@ -119,8 +119,8 @@ holding one refuses.
 ## Tool areas
 
 A **tool area** is named by the digest of one exact target client closure and
-writable only inside a lifecycle mutation, which holds the root lock and the
-context lease for its whole callback; the `reserved` entry is that operation's
+writable only inside a lifecycle mutation, which holds the context lease and
+an exclusive lease on the tool directory; the `reserved` entry is that operation's
 durable intent, published before the directory exists. It is content-addressed,
 so every context selecting the same clients proves the same files and a
 different closure never disturbs them. A second publication records the actual
@@ -137,13 +137,14 @@ for as long as a binding names it. Every successful controller stage ends by
 naming on its context's binding the area it proved, whether it published that
 area or found it published, sealing first an area an earlier attempt
 published whole but never sealed, or by naming none when it selects no tool.
-In the same lifecycle mutation, under the root lock it already holds, it then
+In the same lifecycle mutation, under a short exclusive root transaction, it then
 retires every sealed area no binding names, except one the operation itself
 holds open; a context deletion does the same once it drops the context's
 binding. An area still `reserved` or `attributed` is an unfinished stage's
 intent and is never retired, and no other command retires one. Retirement
 publishes the areas' entries as `retiring`, removes each directory after
-proving it is still the attributed one, syncs the tools directory, then
+proving it is still the attributed one and taking its exclusive directory
+lease, syncs the tools directory, then
 publishes the record without those entries. A `retiring` area is no longer
 held: no read opens it and the view omits it, and a read accepts its directory
 present, partly removed or gone. The next retirement, or a stage whose closure
@@ -236,7 +237,9 @@ opens a registry transaction
 An uncertain rename or durability closes the transaction capability and
 permits no further mutation, and its refusal names the command that met it
 ([controller stage](../controller.md#the-controller-stage)). The root lock
-precedes the selected context lease and remains held through each callback.
-Read-only area capabilities expire with their shared-lock callback, and all
+precedes acquisition of the selected context lease. Lifecycle effects retain
+that context lease and their opened bundle leases, taking short root locks
+for shared-state reads and publications. Read-only area capabilities expire
+with their callback, and all
 mutation capabilities expire with their transaction. Reads never bootstrap,
 upgrade, repair or write these records.

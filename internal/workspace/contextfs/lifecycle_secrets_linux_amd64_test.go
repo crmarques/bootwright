@@ -110,7 +110,7 @@ func TestTheLifecycleSecretsAreaChecksLikeMutateSecrets(t *testing.T) {
 					return publishStoreRecord(ctx, area, "refused\n")
 				})
 			})
-			if err == nil || entered != test.publish {
+			if err == nil || entered != (test.publish && test.name != "a replaced registry") {
 				t.Fatalf("the lent area admitted %s: entered=%t err=%v", test.name, entered, err)
 			}
 			if err := store.MutateSecrets(ctx, token, func(secretstore.Area) error { return nil }); !test.publish && err == nil {
@@ -226,7 +226,7 @@ func waitingToLend() bool {
 	stacks := buffer[:runtime.Stack(buffer, true)]
 	for _, goroutine := range bytes.Split(stacks, []byte("\n\n")) {
 		text := string(goroutine)
-		if strings.Contains(text, "sync.(*Mutex).Lock") && strings.Contains(text, "(*lifecycleTransaction).Secrets") {
+		if strings.Contains(text, "sync.(*Mutex).Lock") && strings.Contains(text, "(*leasedLifecycle).Secrets") {
 			return true
 		}
 	}

@@ -54,6 +54,16 @@ func documentedBounds() []documentedBound {
 		completion       = "cmd/bootwright/completion_paths.go"
 	)
 	return []documentedBound{
+		{contexts, "| Encoded bytes in one stored lifecycle plan, including metadata | %s |", operations, "MaxPlanBytes", nil, true},
+		{contexts, "| Blocks in one lifecycle plan | %s |", "internal/reconciliation/plan.go", "MaxBlocks", nil, false},
+		{contexts, "| Groups in one lifecycle block | %s |", "internal/reconciliation/plan.go", "MaxGroups", nil, false},
+		{contexts, "| Machines in one lifecycle group | %s |", "internal/reconciliation/plan.go", "MaxMachines", nil, false},
+		{contexts, "| Impacts in one lifecycle block | %s |", "internal/reconciliation/plan.go", "MaxImpacts", nil, false},
+		{contexts, "| Exclusive resources in one lifecycle block | %s |", "internal/reconciliation/plan.go", "MaxExclusive", nil, false},
+		{contexts, "| Characters in a lifecycle identifier | %s |", "internal/reconciliation/plan.go", "maxIdentifier", nil, false},
+		{contexts, "| Bytes in one canonical lifecycle request | %s |", "internal/reconciliation/plan.go", "MaxRequestBytes", nil, true},
+		{contexts, "| Canonical request bytes in one lifecycle plan | %s |", "internal/reconciliation/plan.go", "MaxPlanRequestBytes", nil, true},
+
 		{contexts, "| Active or reserved context names | %s |", store, "maxContexts", nil, false},
 		{contexts, "The %s-name bound applies", store, "maxContexts", nil, false},
 		{contexts, "| Revisions per context | %s |", store, "maxRevisions", nil, false},

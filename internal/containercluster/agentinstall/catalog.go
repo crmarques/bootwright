@@ -23,8 +23,8 @@ const (
 )
 
 const (
-	mediaRequestVersion   = "cluster-media-agent-v7"
-	installRequestVersion = "cluster-install-agent-v5"
+	mediaRequestVersion   = "cluster-media-agent-v9"
+	installRequestVersion = "cluster-install-agent-v7"
 )
 
 // mediaMargin is what a media run's deadline allows beyond its build budget:
@@ -40,15 +40,13 @@ const mediaMargin = 30 * time.Minute
 // cluster reads before and after the waits, each request of which oc gives up
 // on after the role's request timeout, each wait's kill-after grace, the one
 // read of the registered hosts after a stall, which the inspection ends within
-// 10 seconds, and Ansible's own time between tasks. nodeMargin is what each
-// node adds beyond the boot budget: the bound of every call the installation
-// makes to its controller outside that budget, which is its media read in each
-// of the two state reads, and the eject and the disk selection that release
-// its media. A cluster whose deadline would pass the runner's ceiling refuses
-// before registration.
+// 10 seconds, and Ansible's own time between tasks. The request additionally
+// freezes its slowest arm's round margin. nodeMargin names the emulated
+// margin used by the contract tests; the production deadline uses the frozen
+// value, so a continuation never silently adopts a newer arm allowance.
 const (
 	installMargin = 30 * time.Minute
-	nodeMargin    = 2*substrate.ControllerMediaReadBound + substrate.ControllerEjectBound + substrate.ControllerBootSelectionBound
+	nodeMargin    = substrate.LibvirtNodeMargin
 )
 
 // consumerPrefix is the subtree these blocks own beneath a managed artifact

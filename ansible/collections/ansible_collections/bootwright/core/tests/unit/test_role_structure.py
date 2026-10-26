@@ -58,7 +58,8 @@ GROUPS = {
 # that does. Finding fewer would pass the rule that nothing catches a refusal
 # vacuously.
 INCLUDERS = {
-    "containercluster_install_agent/tasks/apply.yml",
+    "containercluster_install_agent/tasks/node_boot.yml",
+    "containercluster_install_agent/tasks/node_release.yml",
     "managedos_install_anaconda/tasks/apply.yml",
     "managedos_install_anaconda/tasks/identity_until_answered.yml",
     "managedos_install_anaconda/tasks/observe.yml",
@@ -75,9 +76,87 @@ INSERTING = {
 # dispatching files each includes. Finding fewer would pass the early-guard rule
 # vacuously.
 CONSUMED = {
-    "containercluster_install_agent/tasks/apply.yml": {"boot.yml", "release.yml"},
-    "managedos_install_anaconda/tasks/apply.yml": {"await.yml", "boot.yml", "identity.yml", "network.yml"},
+    "managedos_install_anaconda/tasks/apply.yml": {"identity.yml"},
 }
+
+
+MAP = re.compile(r"^{{\s*(\w+)\[([\w.]+)\](?:\.role)?\s*}}$")
+PHASE_FAILED = "containercluster_install_agent_phase_failed"
+DEFERRED = {"containercluster_install_agent/tasks/node_" + phase + ".yml" for phase in ("boot", "release", "state")}
+
+
+def mapped(task):
+    for action in ROLE_INCLUDES:
+        if isinstance(task.get(action), dict):
+            match = MAP.fullmatch(task[action].get("name", ""))
+            if match:
+                return match.group(1), match.group(2), task[action].get("tasks_from")
+    return None
+
+
+def mapping_defaults(where):
+    path = ROLES / where.split("/")[0] / "defaults/main.yml"
+    return yaml.safe_load(path.read_text()) if path.is_file() else {}
+
+
+def mapped_complete(task, following):
+    selection = mapped(task)
+    if not selection or tolerates_failure(task):
+        return False
+    binding, field, _entry = selection
+    if "when" not in task:
+        return True
+    if _entry == "state_read" and field not in str(task["when"]):
+        return True
+    return (task["when"] == field + " in " + binding
+            and following.get("when") == field + " not in " + binding
+            and "ansible.builtin.fail" in following and not tolerates_failure(following))
+
+
+def collector_plays():
+    return yaml.safe_load((ROLES.parent / "playbooks/containercluster/install_apply.yml").read_text())
+
+
+def phase_collects(entry, plays=None, collector=None):
+    plays = collector_plays() if plays is None else plays
+    collector = load(ROLES / "containercluster_install_agent/tasks/phase_failures.yml") if collector is None else collector
+    matching = [play for play in plays if any(task.get("ansible.builtin.import_role", {}).get("tasks_from") == entry
+                                              for task in play.get("tasks", []))]
+    if not matching or not collector or "ansible.builtin.fail" not in collector[-1] or tolerates_failure(collector[-1]):
+        return False
+    terminal = " ".join(collector[-1].get("when", "").split())
+    expected = ("containercluster_install_agent_phase_hosts | default(groups.bootwright_nodes) "
+                "| map('extract', hostvars) | map(attribute='containercluster_install_agent_phase_failed', default=true) "
+                "| select('equalto', true) | list | length > 0")
+    if terminal != expected:
+        return False
+    for play in matching:
+        post = play.get("post_tasks", [])
+        if len(post) != 1:
+            return False
+        task = post[0]
+        if (task.get("ansible.builtin.import_role") != {"name": "bootwright.core.containercluster_install_agent", "tasks_from": "phase_failures"}
+                or task.get("vars", {}).get("containercluster_install_agent_phase_hosts") != "{{ ansible_play_batch }}"
+                or task.get("delegate_to") != "{{ bootwright_controller_host }}"
+                or task.get("when") != "inventory_hostname == ansible_play_batch[0]"
+                or task.get("any_errors_fatal") is not True or tolerates_failure(task)):
+            return False
+    return True
+
+
+def deferred_rescue(where, block):
+    if where not in DEFERRED:
+        return False
+    rescue = block.get("rescue", [])
+    if len(rescue) != 1 or rescue[0].get("ansible.builtin.set_fact", {}).get(PHASE_FAILED) is not True:
+        return False
+    if "when" in rescue[0] or tolerates_failure(rescue[0]):
+        return False
+    return phase_collects(entry_name(where))
+
+
+def entry_name(where):
+    return pathlib.PurePosixPath(where).stem
 
 
 def task_files():
@@ -123,6 +202,9 @@ def dispatches(tasks):
     """The arms each dispatched field is compared with anywhere in one file."""
     found = {}
     for task, _names in walk(tasks):
+        selected = mapped(task)
+        if selected:
+            found.setdefault(selected[1], set())
         for field, arms in compared_arms(task).items():
             found.setdefault(field, set()).update(arms)
     return found
@@ -270,7 +352,7 @@ def unconditional_fail(task):
     return "ansible.builtin.fail" in task and "when" not in task and not tolerates_failure(task)
 
 
-def catcher(around):
+def catcher(around, where=""):
     """What around one task list could keep a failure in it from ending the run,
     or None: a block that tolerates failure, or one whose rescue that failure
     reaches and that can complete."""
@@ -279,7 +361,7 @@ def catcher(around):
         rescue = [child for child in block.get("rescue") or [] if isinstance(child, dict)]
         if tolerates_failure(block):
             return "block %r tolerates failure" % block.get("name")
-        if section == "block" and rescue and not unconditional_fail(rescue[-1]):
+        if section == "block" and rescue and not unconditional_fail(rescue[-1]) and not deferred_rescue(where, block):
             return "the rescue of block %r can complete" % block.get("name")
     return None
 
@@ -300,9 +382,17 @@ def dispatch_problems(where, tasks):
                                 % (head, sorted(set(arms)), sorted(refused(following, field))))
             elif not replans(following):
                 problems.append("%s ends in a fail that does not end by telling the operator to %s" % (head, REPLAN))
-            caught = catcher(around)
+            caught = catcher(around, where)
             if caught:
                 problems.append("%s sits where %s, so its refusal is caught" % (head, caught))
+        for position, task in enumerate(listed):
+            selection = mapped(task)
+            if selection:
+                following = listed[position + 1] if position + 1 < len(listed) else {}
+                if not mapped_complete(task, following):
+                    problems.append("%s: mapped dispatch can skip its binding without refusal" % where)
+                if catcher(around, where):
+                    problems.append("%s: mapped dispatch refusal can be caught" % where)
         for task in listed:
             if compared_arms(task) and step(task) is None:
                 problems.append("%s: %r selects by %s in a condition that is not exactly one arm, so no refusal "
@@ -333,7 +423,7 @@ def inclusion_problems(where, tasks, reached):
             head = "%s: %r includes %s, whose run ends a dispatch in a refusal," % (where, task.get("name"), target)
             if tolerates_failure(task):
                 problems.append("%s and tolerates its failure" % head)
-            caught = catcher(around)
+            caught = catcher(around, where)
             if caught:
                 problems.append("%s where %s" % (head, caught))
     return problems
@@ -349,11 +439,20 @@ def proof_before(listed, until, bound):
     """Whether a task list holds, before position until, a complete pre-boot
     group, one proof for each arm the file binds, followed directly by its
     refusal."""
+    for position, task in enumerate(listed[:until]):
+        if proves(task) and mapped(task) and mapped_complete(task, listed[position + 1] if position + 1 < until else {}):
+            return True
     for field, arms, start, end in groups(listed):
         if (end < until and all(proves(task) for task in listed[start:end])
                 and sorted(arms) == sorted(bound.get(field, ())) and closes(listed[end], field, arms)):
             return True
     return False
+
+
+def inserts(task):
+    return (redfish_operation(task) == "insert"
+            or any(task.get(action, {}).get("tasks_from") == "media_insert" for action in ROLE_INCLUDES if isinstance(task.get(action), dict))
+            or (included_file(task) == "port.yml" and task.get("vars", {}).get("containercluster_install_agent_port_operation") == "media_insert"))
 
 
 def insert_problems(where, tasks):
@@ -366,7 +465,7 @@ def insert_problems(where, tasks):
     bound = dispatches(tasks)
     for listed, around in task_lists(tasks):
         for position, task in enumerate(listed):
-            if redfish_operation(task) != "insert":
+            if not inserts(task):
                 continue
             scopes = [(entry[0], entry[1]) for entry in around] + [(listed, position)]
             if not any(proof_before(scope, until, bound) for scope, until in scopes):
@@ -390,7 +489,7 @@ def test_every_dispatch_ends_in_a_refusal_nothing_catches():
     for path in task_files():
         tasks = load(path)
         problems.extend(dispatch_problems(label(path), tasks))
-        seen[label(path)] = sum(len(groups(listed)) for listed, _around in task_lists(tasks))
+        seen[label(path)] = sum(len(groups(listed)) + sum(mapped(task) is not None for task in listed) for listed, _around in task_lists(tasks))
     short = {name: seen.get(name, 0) for name, count in GROUPS.items() if seen.get(name, 0) < count}
     assert not short, "the walk no longer sees every dispatch group of %s" % short
     assert not problems, "\n".join(problems)
@@ -415,7 +514,9 @@ def test_every_insert_follows_a_complete_pre_boot_proof():
     problems, seen = [], set()
     for path in task_files():
         tasks = load(path)
-        if any(redfish_operation(task) == "insert" for task, _names in walk(tasks)):
+        if path.parent.parent.name.startswith("substrate_") and path.name == "media_insert.yml":
+            continue
+        if any(inserts(task) for task, _names in walk(tasks)):
             seen.add(label(path))
         problems.extend(insert_problems(label(path), tasks))
     assert INSERTING <= seen, "the walk no longer sees %s insert media" % sorted(INSERTING - seen)
@@ -540,6 +641,7 @@ def test_every_consumer_refuses_an_arm_it_does_not_bind_before_its_own_first_eff
             if not target.is_file():
                 continue
             arms_by_field = dispatches(load(target))
+            arms_by_field = {field: arms for field, arms in arms_by_field.items() if arms}
             if arms_by_field:
                 checked.setdefault(label(path), set()).add(name)
             for field, arms in sorted(arms_by_field.items()):
@@ -596,7 +698,7 @@ def rescue_problems(where, tasks):
         if "rescue" not in task:
             continue
         rescue = [child for child in task.get("rescue") or [] if isinstance(child, dict)]
-        if not rescue or not unconditional_fail(rescue[-1]):
+        if (not rescue or not unconditional_fail(rescue[-1])) and not deferred_rescue(where, task):
             problems.append(
                 "%s: the rescue of block %r does not end in an unconditional ansible.builtin.fail, so a failure "
                 "it catches can complete" % (where, task.get("name"))
@@ -627,3 +729,76 @@ def test_the_rescue_rule_rejects(last):
 def test_the_rescue_rule_accepts():
     tasks = [{"name": "Guarded", "block": [RESCUED], "rescue": [{"name": "Refuse", "ansible.builtin.fail": {"msg": "failed"}}]}]
     assert not rescue_problems("fixture", tasks)
+
+
+def test_every_fixed_map_is_qualified_and_closed_before_installation_effects():
+    required = {
+        "managedos_install_anaconda": {"pre_boot", "boot_media_bindings", "boot_disk", "identity_read", "state_read", "media_insert", "media_eject"},
+        "containercluster_install_agent": {"ports", "pre_boot_bindings", "boot_media_bindings", "boot_disk_bindings"},
+    }
+    preparation = collector_plays()[0]
+    assert preparation["hosts"] == "bootwright_target" and preparation["any_errors_fatal"] is True
+    assert preparation["tasks"][0]["ansible.builtin.import_role"] == {
+        "name": "bootwright.core.containercluster_install_agent", "tasks_from": "apply"}
+    for role, suffixes in required.items():
+        bindings = mapping_defaults(role + "/tasks/apply.yml")
+        guards = []
+        for task in load(ROLES / role / "tasks/apply.yml"):
+            if hands_off(task):
+                continue
+            if "ansible.builtin.assert" not in task or "when" in task or tolerates_failure(task):
+                break
+            guards.extend((condition, task) for condition in conditions(task["ansible.builtin.assert"].get("that")))
+        field = "bootwright_os_install_request.target.substrate" if role.startswith("managedos") else "containercluster_install_agent_node.substrate"
+        for suffix in suffixes:
+            binding = role + "_" + suffix
+            assert binding in bindings and set(bindings[binding]) == {"libvirt", "baremetal"}
+            guard = [task for condition, task in guards if condition == field + " in " + binding]
+            assert len(guard) == 1, binding
+            if role.startswith("containercluster"):
+                assert iteration(guard[0]) == ("{{ bootwright_cluster_install_request.nodes }}", "containercluster_install_agent_node")
+            for arm, value in bindings[binding].items():
+                target = value["role"] if isinstance(value, dict) else value
+                assert target == "bootwright.core.substrate_" + arm + "_machine"
+        for path in (ROLES / role / "tasks").glob("*.yml"):
+            for task, _names in walk(load(path)):
+                selected = mapped(task)
+                if not selected:
+                    continue
+                binding, _field, entry = selected
+                assert binding in {role + "_" + suffix for suffix in suffixes}
+                assert _field == field
+                entries = ("state_read", "media_insert", "media_eject", "power") if entry.startswith("{{") else (entry,)
+                if entry.startswith("{{"):
+                    assert entry == "{{ containercluster_install_agent_port_operation }}"
+                    assert ("containercluster_install_agent_port_operation in ['state_read', 'media_insert', 'media_eject', 'power']"
+                            in load(path)[0]["ansible.builtin.assert"]["that"])
+                for arm in bindings[binding]:
+                    specs = yaml.safe_load((ROLES / ("substrate_" + arm + "_machine") / "meta/argument_specs.yml").read_text())["argument_specs"]
+                    assert set(entries) <= set(specs)
+
+
+@pytest.mark.parametrize("where", sorted(DEFERRED))
+def test_only_recorded_node_failures_may_defer_to_a_terminal_batch_collector(where):
+    tasks = load(ROLES / where)
+    assert tasks[0]["ansible.builtin.set_fact"][PHASE_FAILED] is True
+    block = next(task for task in tasks if "rescue" in task)
+    assert deferred_rescue(where, block)
+    assert block["block"][-1]["ansible.builtin.set_fact"][PHASE_FAILED] is False
+    assert "when" not in block["block"][-1]
+    from copy import deepcopy
+    broken = deepcopy(block)
+    broken["rescue"][0]["ansible.builtin.set_fact"][PHASE_FAILED] = False
+    assert rescue_problems(where, [broken])
+    assert not deferred_rescue("other/tasks/node_boot.yml", block)
+    plays = deepcopy(collector_plays())
+    for play in plays:
+        play.pop("post_tasks", None)
+    assert not phase_collects(entry_name(where), plays=plays)
+    assert not phase_collects(entry_name(where), collector=[])
+
+
+@pytest.mark.parametrize("when", ["request.fresh", "request.target.substrate in bindings and request.fresh"])
+def test_mapped_proof_cannot_be_narrower_than_the_insert(when):
+    task = {"ansible.builtin.include_role": {"name": "{{ bindings[request.target.substrate] }}", "tasks_from": "pre_boot"}, "when": when}
+    assert insert_problems("synthetic", [task, INSERT])

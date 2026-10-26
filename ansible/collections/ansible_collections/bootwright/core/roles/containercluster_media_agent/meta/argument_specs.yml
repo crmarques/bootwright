@@ -16,6 +16,10 @@ argument_specs:
               buildSeconds:
                 type: int
                 required: true
+          deliveryKind:
+            type: str
+            required: true
+            choices: [fetch, push]
           identity:
             type: dict
             required: true
@@ -38,12 +42,24 @@ argument_specs:
           release:
             type: dict
             required: true
+          diskEncryption:
+            type: dict
+            required: false
+          installProxy:
+            type: dict
+            required: false
+          buildEgress:
+            type: dict
+            required: false
+          registryMirror:
+            type: dict
+            required: false
           sshKeyRef:
             type: str
             required: true
           tlsCertificateRef:
             type: str
-            required: true
+            required: false
           tool:
             type: dict
             required: true
@@ -54,7 +70,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [cluster-media-agent-v7]
+            choices: [cluster-media-agent-v9]
           workRoot:
             type: str
             required: true

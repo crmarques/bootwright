@@ -1,0 +1,20 @@
+---
+- name: Reset this node phase failure
+  ansible.builtin.set_fact:
+    containercluster_install_agent_phase_failed: true
+    containercluster_install_agent_lifecycle_refusal: ""
+
+- name: Run the node release while siblings finish
+  block:
+    - name: Run this node's release
+      ansible.builtin.import_tasks: release.yml
+
+    - name: Mark this node phase complete only after its final step
+      ansible.builtin.set_fact:
+        containercluster_install_agent_phase_failed: false
+
+  rescue:
+    - name: Keep this node failure while siblings finish
+      ansible.builtin.set_fact:
+        containercluster_install_agent_phase_failed: true
+        containercluster_install_agent_lifecycle_refusal: media-eject
