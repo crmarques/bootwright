@@ -988,7 +988,7 @@ func (s Service) present(ctx context.Context, name string, decided transition) e
 // before they confirm, and what plan previews of the same transition.
 func (s Service) presentation(decided transition) PlanResult {
 	result := planPreview(decided.plan, decided.states, decided.selection)
-	result.Verb = string(decided.verb)
+	result.Verb, result.Warnings = string(decided.verb), s.removalWarnings(decided.plan)
 	result.Continuation = !decided.fresh
 	// Ordinary removal keeps its pre-registration gate. An online removal's
 	// later Machine boundary is re-proved on each continuation that needs it.
@@ -1495,7 +1495,11 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 	var live, stops, remedies []string
 	generic := false
 	blocks := slices.DeleteFunc(slices.Clone(plan.Blocks), func(block reconciliation.Block) bool { return skip[block.ID] })
-	retired := s.onlineRemoval(plan).retired
+	boundary := s.onlineRemoval(plan)
+	if err := survivorRefusal(blocks, boundary.survivors); err != nil {
+		s.reportCheck(ctx, ProgressEvent{Status: "failed"})
+		return err
+	}
 	err := s.withPython(ctx, approved, func(launch prerequisites.PythonLaunch) error {
 		for index, block := range blocks {
 			if err := ctx.Err(); err != nil {
@@ -1517,7 +1521,7 @@ func (s Service) proveQuiescent(ctx context.Context, store OperationStore, conte
 			}
 			state, err := capability.Quiescent(ctx, Probe{
 				ApplyOperation: applyOperation, ApplyProved: applyProved, Context: contextName, Block: block, Launch: launch, Material: material,
-				RetiredWithHosts: retired[block.ID],
+				RetiredWithHosts: boundary.retired[block.ID],
 			})
 			if err != nil {
 				return err

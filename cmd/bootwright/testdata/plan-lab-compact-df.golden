@@ -562,7 +562,10 @@
       "dns-lab-dns"
     ],
     "impacts": [
-      "create per-export Ceph principals for compact-storage"
+      "create per-export Ceph principals for compact-storage",
+      "grants consumer administrators every path of filesystem files",
+      "grants consumer administrators every RGW user, bucket and key in the realm of object gateway objects",
+      "is not isolated from other exports that share its cluster, filesystem or gateway"
     ]
   },
   {

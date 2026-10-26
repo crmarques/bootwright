@@ -88,6 +88,13 @@ func (c Capability) ProducedInputs(block reconciliation.Block) ([]lifecycle.Prod
 	request, err := DecodeRequest(block.Request)
 	return request.ProducedInputs, err
 }
+func (c Capability) HostObject(block reconciliation.Block) (reconciliation.ObjectRef, error) {
+	request, err := DecodeRequest(block.Request)
+	if err != nil {
+		return reconciliation.ObjectRef{}, err
+	}
+	return reconciliation.ObjectRef{Kind: "ContainerCluster", Object: request.Cluster}, nil
+}
 func (c Capability) StageTail(block reconciliation.BlockDefinition) (reconciliation.ObjectRef, bool, error) {
 	request, err := DecodeRequest(block.Request)
 	if err != nil {

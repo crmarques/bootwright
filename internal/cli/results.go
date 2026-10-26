@@ -157,6 +157,9 @@ func (r *Runner) writeLifecycleInspection(ctx context.Context, command *cobra.Co
 	out := r.config.Out
 	switch {
 	case path == "plan" && result.lifecyclePlan != nil:
+		if err := writeHumanDiagnostics(r.config.ErrOut, displayDiagnostics(result.lifecyclePlan.Warnings)); err != nil {
+			return true, err
+		}
 		return true, writeLifecyclePlan(out, result.lifecyclePlan)
 	case path == "status" && result.lifecycleStatus != nil:
 		return true, writeLifecycleStatus(out, result.lifecycleStatus, selectedJSON(command))

@@ -99,7 +99,7 @@ func TestResourceScopeRendersEachKindFromItsFrozenRequest(t *testing.T) {
 		{api.StorageObjectGateway, "objects", nil, ""},
 		{api.StorageObjectGateway, "objects", []reconciliation.Block{gatewayPool}, ""},
 		{api.StorageNFSExport, "docs-export", nil, ""},
-		{api.StorageExport, "foundation", nil, "export of pool rbd-meta, filesystem files, object gateway objects"},
+		{api.StorageExport, "foundation", nil, "export of pool rbd-meta, filesystem files, object gateway objects; grants consumer administrators every path of filesystem files; grants consumer administrators every RGW user, bucket and key in the realm of object gateway objects; is not isolated from other exports that share its cluster, filesystem or gateway"},
 		{api.StorageExport, "bare", nil, "export"},
 		{api.StorageExport, "missing", nil, ""},
 		{api.StorageNVMeoFSubsystem, "block-a", nil, ""},

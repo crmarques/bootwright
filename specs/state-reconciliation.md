@@ -2042,7 +2042,14 @@ refuse removal while any host survives it
 [target contract](storage.md) owns the consumer-quiescence and cleanup proofs.
 
 A storage effect whose every host Machine is a Bootwright-owned virtual
-Machine destroyed by the same removal is retired with them. It is not an
+Machine destroyed by the same removal is retired with them, provided no
+consumer of its produced output, or of an effect removed before it, survives
+the removal: each consumer's cluster must leave with owned virtual node
+Machines the same removal deletes, not only erases, or the removal refuses
+before registration, before any quiescence probe and whatever a capability
+would answer, naming the consumer and what it consumes. The apply's `plan`
+warns of each such consumer with `lifecycle.surviving-consumer`, from the same
+decision taken over the apply's inverse. It is not an
 online effect, its Machines are `Stop first`, its quiescence derives from
 their stop proof, and its inverse and removal observation record retirement
 without contacting the hosts. A retired block's removal observation is answered

@@ -188,7 +188,7 @@ func writeAdditionalStructuredResult(out io.Writer, command *cobra.Command, path
 	case (path == "preflight controller" || path == "setup" && result.controller != nil && !result.controller.DryRun) && validControllerReport(result.controller):
 		return true, writeStructuredController(out, path, result.controller, nil, 0)
 	case path == "plan" && result.lifecyclePlan != nil:
-		shown = displayPlan(result.lifecyclePlan)
+		shown, reported = displayPlan(result.lifecyclePlan), result.lifecyclePlan.Warnings
 	case (path == "apply" || path == "destroy") && result.lifecycleOperation != nil:
 		return true, writeStructuredOperation(out, path, result.lifecycleOperation, nil, 0)
 	case path == "secret show" && result.secretReveal != nil:

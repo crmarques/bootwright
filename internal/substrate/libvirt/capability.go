@@ -576,6 +576,8 @@ func (MachineCapability) ProbesQuiescence() bool { return true }
 
 func (MachineCapability) RemovesHost(reconciliation.Block) bool { return true }
 
+func (MachineCapability) DeletesMachine(reconciliation.Block) bool { return true }
+
 // Quiescent proves this machine is not running. Only a domain the hypervisor
 // reports shut off is idle: paused, suspended and crashed domains still hold
 // the memory and disks the removal would delete. A hypervisor that will not

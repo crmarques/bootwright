@@ -269,7 +269,6 @@ Alias cell.
 | [B797](#b797) | new, 2026-10-21 (X56) | product | Storage | A StorageObjectBucket's declared policy changes after completion | A completed bucket refuses `object-bucket-identity` on a changed policy; a day-2 update is a state-contract change no milestone needs |
 | [B798](#b798) | new, 2026-10-23 (M3 verification) | defect | Verification tooling | The full Ansible unit gate selects its intended worker mode explicitly | Pre-existing tooling behavior outside the requested product change |
 | [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
-| [B804](#b804) | new, 2026-10-26 (spec audit P0-E) | safety | Storage and State reconciliation | Export and cluster retirement refuses while a consuming cluster survives the removal | Audit roadmap work; implemented only on an explicit lane request |
 | [B805](#b805) | new, 2026-10-26 (spec audit P0-F) | safety | Secrets and State reconciliation | Secret references declare a class; a rotated access credential has a recorded removal exit | Audit roadmap work; implemented only on an explicit lane request |
 | [B807](#b807) | new, 2026-10-26 (spec audit P0-H) | safety | Desired state and Architecture | Inert fields report or refuse, one remote quoting function, truthful defaults and warnings | Audit roadmap work; implemented only on an explicit lane request |
 | [B808](#b808) | new, 2026-10-26 (spec audit P1-A) | enabling | Architecture | Engine claim check, implementation fitness test and a shared Capability-port contract suite | Audit roadmap work; implemented only on an explicit lane request |
@@ -293,7 +292,6 @@ Alias cell.
 | [B829](#b829) | new, 2026-10-26 (spec audit L7) | safety | Secrets | Work-area incarnation check, pipelined material payloads and fixed producer identity | Audit roadmap work; implemented only on an explicit lane request |
 | [B830](#b830) | new, 2026-10-26 (spec audit L8) | safety | State reconciliation and Add-ons | Unknown-operation rows allow continuation; add-on receipts carry their ownership basis | Audit roadmap work; implemented only on an explicit lane request |
 | [B833](#b833) | new, 2026-10-26 (spec audit L11) | enabling | Desired state | Examples drop defaulted values, gain an external-services scenario, distinct Environment names | Audit roadmap work; implemented only on an explicit lane request |
-| [B835](#b835) | new, 2026-10-26 (spec audit L13) | safety | Storage and CLI | Plan and status show a StorageExport's realm-wide grant | Audit roadmap work; implemented only on an explicit lane request |
 | [B837](#b837) | new, 2026-10-26 (D183, Q118) | product | Add-ons and CLI | Authored add-on ordering and an apply that stops after a named add-on | Lane I work under D182; implemented in its lane |
 | [B838](#b838) | new, 2026-10-26 (lane A review) | safety | Storage | U03's replica-safety refusal applies to every Ceph distribution, not only IBM | Widening adds a refusal; needs an owner decision |
 | [B839](#b839) | new, 2026-10-26 (lane B) | safety | Substrate and Workspace | A shared host claim taken while a removal's effect runs refuses | Found closing B803; the window is the removal's effect itself |
@@ -2993,39 +2991,6 @@ evidence:** parallel interruption/retry probes and a justified release fix,
 considering an explicit unlock before close without weakening exclusion or
 adding a retry that conceals a live owner.
 
-### B804
-
-**Owner:** Storage and State reconciliation. **Kind:** safety.
-**Requires:** owner decision [Q68](#audit-remediation-decisions).
-**Definition:** Needs definition. Roadmap step
-P0-E of the [2026-10-26 spec audit](../../audits/spec/2026-10-26.md);
-findings R2-02-01 and F10-04. Retiring a Ceph cluster or its exports
-with their hosts never strands a surviving consumer's storage.
-
-**Specs:** [StorageExport](../storage-resources.md#storageexport) and its
-[refusal table](../storage-resources.md#export-refusals) state the refusal
-(option A) with a Not yet met line;
-[removal and concurrency](../storage.md#removal-and-concurrency) and
-[add-ons](../add-ons.md) link it;
-[quiescence before removal](../state-reconciliation.md#quiescence-before-removal)
-is unchanged until the owner confirms. `../storage.md` names the safe-retry
-exceptions (B659, B662) and the physical exits; [B485](m2.md#b485) requires
-B659, B662 and B491 ([D183](#decisions)).
-
-**Work:**
-
-- R2-02-01 (High), F10-04 (Medium): in `internal/storage/ceph`
-  (`export.go`, `retirement.go`), export and core-cluster retirement planning
-  refuses before registration when a container cluster whose fdf package names
-  the export survives the removal, naming the cluster and the export; plan
-  flags the non-destroyable topology before the first apply. A planner test
-  destroys a context with virtual Ceph and a physical-node fdf consumer. Under
-  option B, an impact plus a distinct acknowledgement replaces the refusal
-  and its row. State-reconciliation.md takes the confirmed sentence.
-
-**Exit evidence:** the export refusal row "consumer cluster survives the
-removal" and the planner test that cites it; `make check` passes.
-
 ### B805
 
 **Owner:** Secrets and State reconciliation. **Kind:** safety.
@@ -4047,33 +4012,6 @@ only.
 distinct-name test passes; no authored value equals its default without a
 comment; every StoragePlacementPolicy is referenced or noted; `make check`.
 
-### B835
-
-**Owner:** Storage and CLI. **Kind:** safety. **Requires:** none.
-**Definition:** Specified. Batch L13 of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings V2-07,
-V2-09. The operator sees a StorageExport's trust extent before and after
-apply.
-
-**Specs:** [cli/output.md](../cli/output.md) requires plan and the resource
-rows to state what a StorageExport with an object gateway or filesystem
-grants, linking [storage-resources.md](../storage-resources.md); Not yet met
-here. V2-07 is stated in
-[state-reconciliation.md](../state-reconciliation.md) and
-[storage.md](../storage.md), and [B491](m2.md#b491)'s exit evidence carries
-its removal test.
-
-**Work:**
-
-- V2-09: render the grant clause (realm-wide RGW users, buckets and keys,
-  every filesystem path, no isolation between exports) in the plan step
-  description and in the `cluster info` and `status` resource rows
-  (`exportScopeText` in `internal/storage/ceph/inspection.go`).
-
-**Exit evidence:** goldens over a StorageExport with a gateway and one with a
-filesystem show the grant in plan and status; output.md's Not yet met line is
-removed; `make check`.
-
 ### B837
 
 **Owner:** Add-ons and CLI. **Kind:** product. **Requires:** [B814](#b814).
@@ -4164,7 +4102,7 @@ decision stay open while its other parts land.
 | --- | --- | --- | --- | --- |
 | A Harness and guards | B800 (X161), B801 (X161) | none | none | Q62, Q63, Q64 |
 | B Physical targets and shared hosts | B802 (X165), B803 (X165) | B801 | D, E, G, I | Q65, Q66, Q67 |
-| C Storage retirement | [B804](#b804), [B835](#b835) | none | F, G | Q68 |
+| C Storage retirement | B804 (X167), B835 (X167) | none | F, G | Q68 |
 | D Credentials and trust | [B805](#b805), B817 (X166), [B829](#b829), B831 (X166) | none | B | Q70, Q97, Q98, Q99, Q100, Q101, Q116 |
 | E Store durability and controller records | B806 (X164), B836 (X164), B832 (X164) | B801 | B, J | none |
 | F Truthful admission | [B807](#b807) | none | C, I | Q71 |
@@ -4192,7 +4130,7 @@ also updates this table.
 | 4 | E Store durability and controller records | merged (X164) |
 | 5 | B Physical targets and shared hosts | merged (X165) |
 | 6 | D Credentials and trust | merged (X166) |
-| 7 | C Storage retirement | not started |
+| 7 | C Storage retirement | merged (X167) |
 | 8 | F Truthful admission | not started |
 | 9 | G Extension architecture | not started |
 | 10 | J Reconciliation rules | not started |
@@ -4226,7 +4164,7 @@ blocks.
 | Q65 | How does a removal observation that cannot tell its postcondition from an unreadable target resolve (state-reconciliation.md Resolution outcomes, against security.md's unknown-stays-unknown rule)? | (a: delete the clause) An unreadable removal observation stays unknown and only an operator resolution moves it; smallest edit, more manual resolutions, teardown can strand.; (b: typed inconclusive result) A new effect state distinct from no-effect permits one retry only for a capability declaring the removal idempotent, with ownership proved from durable records and a re-read before any effect; one table row, one capability field, one test, and one sentence in security.md. | **Answered by D183: b.** The report gives both without choosing (14.8); section 8.B3 calls B the smallest correction that keeps replay-safe teardown. Either way the negative test is the same. | [B802](delivered.md#x165--audit-lane-b-physical-targets-and-shared-hosts) |
 | Q66 | How is a private Machine that the network restart powered off before (or after) its disk boot read on recovery (managed-os.md 'the one window', currently 'positive no effect')? | (a: relabel) Read the window as a positive partial realization of this operation's own installation, retried by the same frozen request behind the boot proof, and name the cases it covers including power-off after disk boot.; (b: durable intent) Record durably before power-off that installation was proved and disk boot is intended; recovery takes the disk-boot identity path or stays unknown, never re-running the installer. | **Answered by D183: b.** The report records no choice; it calls the relabel the smallest fix, while durable intent removes the reinstall. | [B802](delivered.md#x165--audit-lane-b-physical-targets-and-shared-hosts) |
 | Q67 | Should an orphan-acknowledged context deletion keep its exclusive host keys as an abandoned/<name> tombstone instead of releasing them at once (amending D38)? | (a: keep D38) Keys release at the deletion; the orphan confirmation names the keys it frees and the reinstall hazard (spec applied, code in B803).; (b: tombstone) Exclusive entries become an abandoned/<name> holder that refuses conflicting claims until a new confirmed 'bootwright controller release --abandoned <name>'; shared media entries still drop at once. | **Answered by D183: a.** Arbiter and lanes: A's warning now; B only if the owner reopens D38. | [B803](delivered.md#x165--audit-lane-b-physical-targets-and-shared-hosts) |
-| Q68 | Confirm the D143 clause 6 reading: does retiring a Ceph cluster (or StorageExport) with its virtual hosts require that no consumer of its exports survives the removal? | (a: refuse) Removal refuses before registration naming the surviving consumer and export until B491; a mixed context (virtual Ceph, physical OpenShift) has no full destroy until then (the specs state this refusal as the interim safe reading).; (b: named impact plus acknowledgement) Removal proceeds after an acknowledgement naming the surviving consumer, whose PVs and Secrets then point at deleted storage. | **Answered by D183: a.** Roadmap P0-E and R2-02-01 recommend A with a plan-time topology flag; F10-04's refuter and calibrator prefer B as smaller. | [B804](#b804) |
+| Q68 | Confirm the D143 clause 6 reading: does retiring a Ceph cluster (or StorageExport) with its virtual hosts require that no consumer of its exports survives the removal? | (a: refuse) Removal refuses before registration naming the surviving consumer and export until B491; a mixed context (virtual Ceph, physical OpenShift) has no full destroy until then (the specs state this refusal as the interim safe reading).; (b: named impact plus acknowledgement) Removal proceeds after an acknowledgement naming the surviving consumer, whose PVs and Secrets then point at deleted storage. | **Answered by D183: a.** Roadmap P0-E and R2-02-01 recommend A with a plan-time topology flag; F10-04's refuter and calibrator prefer B as smaller. | [B804](delivered.md#x167--audit-lane-c-storage-retirement) |
 | Q69 | Should B659, B662 and B491 become prerequisites of M2d's B485 exit, or does B485 close with the physical recovery limitation recorded? | (a: prerequisites) B485 Requires gains B659, B662 and B491; M2d cannot complete until interrupted physical deployments have exits, which first needs their protocol decisions.; (b: record the limitation) B485 may close with the physical profile documented as an incomplete recovery profile (text applied now); the exits stay parked. | **Answered by D183: a.** The audit (14.8) offers both and keeps the recovery protocols as owner decisions; it does not choose. | [B485](m2.md#b485) |
 | Q70 | Should continuation and removal be able to present the current version of a rotated access credential (BMC/Redfish, KubeVirt kubeconfigRef, vCenter, registry login) instead of the bound one, and through which recorded gate? | (a: explicit recorded rebind exit) A third exit beside D37 for access credentials only, gated by a flag or the --authorize token model and recorded as a new binding version; ownership proofs still run and effect-material Secrets refuse it.; (b: keep today's rule) Removal always presents the bound version; a rotated credential strands destroy, leaving restore-keyring or --purge --allow-orphans. | **Answered by D183: a.** The report recommends A, gated by the --authorize model and named apart from B181's bounded-run rebind, keeping D37 and D85; the owner decides the flag. | [B805](#b805) |
 | Q71 | Refuse the four inert ContainerCluster endpoint fields (port, scheme, prefixLength, interfaceNetworks) at plan on the agent path, or remove them from the schema until a consumer exists? | (a: refuse at plan) Fields stay admitted; an authored non-native value refuses at its path with a refusal row per field (spec states this).; (b: remove the fields) The endpoint shape loses the four fields; no refusal rows; examples and goldens change. | **Answered by D183: a.** Refuse at plan now (roadmap P0-H); removal stays an owner option. Non-blocking: B807 implements A unless the owner chooses B first. | [B807](#b807) |

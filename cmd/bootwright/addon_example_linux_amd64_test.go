@@ -85,6 +85,60 @@ func TestBuiltinAddonExamplePlansGolden(t *testing.T) {
 	}
 }
 
+func TestExportConsumerRetirementFactsReachTheRemovalEngine(t *testing.T) {
+	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-compact-df"))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
+	input := lifecycle.PlanInput{Verb: reconciliation.Apply, State: state, Controller: "controller", Context: lifecycle.ContextIdentity{Name: "lab-compact-df"}}
+	blocks := map[string]reconciliation.Block{}
+	removed := map[string]bool{}
+	for _, binding := range resolver.Bindings() {
+		capability, _ := resolver.Resolve(binding.Kind, binding.Implementation)
+		contribution, err := capability.Plan(context.Background(), input)
+		if err != nil {
+			t.Fatal(binding, err)
+		}
+		for _, definition := range contribution.Definitions {
+			block := reconciliation.Block{BlockDefinition: definition}
+			blocks[definition.ID] = block
+			if deletion, ok := capability.(lifecycle.MachineDeletion); ok && definition.Kind == "Machine" && deletion.DeletesMachine(block) {
+				removed[definition.Object] = true
+			}
+		}
+	}
+	capabilityOf := func(id string) (reconciliation.Block, lifecycle.Capability) {
+		block, found := blocks[id]
+		capability, ok := resolver.Resolve(block.Kind, block.Implementation)
+		if !found || !ok {
+			t.Fatalf("lab-compact-df plans no block %s", id)
+		}
+		return block, capability
+	}
+	exportBlock, export := capabilityOf("ceph-export-compact-storage")
+	outputs, err := export.(lifecycle.ProducedOutputProvider).ProducedOutputs(exportBlock)
+	if _, bound := export.(lifecycle.HostBound); err != nil || !bound || len(outputs) != 1 {
+		t.Fatalf("export outputs = %v (%v)", outputs, err)
+	}
+	consumerBlock, consumer := capabilityOf("addon-fdf-compact")
+	inputs, err := consumer.(lifecycle.ProducedInputConsumer).ProducedInputs(consumerBlock)
+	if err != nil || !slices.Contains(inputs, lifecycle.ProducedInput{Kind: exportBlock.Kind, Object: exportBlock.Object, Output: outputs[0]}) {
+		t.Fatalf("fdf consumer inputs = %+v (%v)", inputs, err)
+	}
+	home, err := consumer.(lifecycle.HostedConsumer).HostObject(consumerBlock)
+	if err != nil || home != (reconciliation.ObjectRef{Kind: agentinstall.Kind, Object: "compact"}) {
+		t.Fatalf("fdf consumer home = %+v (%v)", home, err)
+	}
+	installBlock, install := capabilityOf(agentinstall.InstallBlockID("compact"))
+	nodes, err := install.(lifecycle.NodeBound).NodeMachines(installBlock)
+	if err != nil || !slices.Equal(nodes, []string{"compact-01", "compact-02", "compact-03"}) || installBlock.Kind != home.Kind || installBlock.Object != home.Object {
+		t.Fatalf("consumer nodes = %v (%v)", nodes, err)
+	}
+	for _, node := range nodes {
+		if !removed[node] {
+			t.Fatalf("no destroy of lab-compact-df removes consumer node %s", node)
+		}
+	}
+}
+
 func TestAddonExamplesPreviewWithAllProducedInputs(t *testing.T) {
 	for _, name := range []string{"lab-compact-df", "lab-compact-hub"} {
 		t.Run(name, func(t *testing.T) {

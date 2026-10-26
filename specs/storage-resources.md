@@ -1174,7 +1174,7 @@ nodes that run it.
 | Direct RGW placement selects fewer daemons than eligible hosts | Planning requires an ingress VIP or a placement whose count covers its selected hosts. |
 | Disallowed key type, missing native prerequisite or mismatched owned identity | Realization refuses before creating credentials; correct the declared prerequisites or restore the original owned state. It does not change cipher policy or adopt foreign entities. |
 | Removing an export while its hosts survive, or with physical hosts | Removal refuses; export retirement requires every host to be an owned virtual Machine removed by the same destroy. |
-| Removing an export while a consuming container cluster survives the removal | Removal refuses before registration, naming the consuming cluster and the export; retirement also requires every container cluster whose `fdf` package names the export to be removed by the same destroy, its nodes owned virtual Machines that destroy stops and deletes. A surviving consumer waits for [B491](milestones/m2.md#b491)'s consumer quiescence. |
+| Removing an export while a consuming container cluster survives the removal | Removal refuses before registration, naming the consuming cluster and the export; retirement also requires every container cluster whose `fdf` package names the export to be removed by the same destroy, its nodes owned virtual Machines that destroy stops and deletes. A consumer whose `fdf` block started but never completed still makes the destroy refuse. A surviving consumer waits for [B491](milestones/m2.md#b491)'s consumer quiescence. |
 
 The export block depends on the cluster, the pool, the filesystem, the
 gateway and the monitoring unit, is exclusive on its cluster, and runs on the
@@ -1259,17 +1259,21 @@ The export block retires with its cluster when every host is a
 Bootwright-owned virtual Machine the same destroy removes and every container
 cluster whose `fdf` package names the export is removed by the same destroy,
 its nodes Bootwright-owned virtual Machines that destroy stops and deletes.
-Only then does the hosts' stop proof stand in for the consumer's quiescence;
-a consumer that survives the removal, such as a cluster on physical nodes,
+Only then does the hosts' stop proof stand in for the consumer's quiescence.
+A consumer that survives the removal, such as a cluster on physical nodes,
 makes the removal refuse before registration, naming the consuming cluster and
-the export. Otherwise its removal refuses with the cluster's other resources,
-and revoking one export while the cluster stays is
-[B491](milestones/m2.md#b491)'s.
-
-Not yet met: the surviving-consumer refusal, the interim reading of D143
-clause 6 until the owner confirms it or chooses a named, acknowledged impact
-instead; destroy retires the export on its hosts' stop proof alone; tracked as
-[B804](milestones/backlog.md#b804).
+the export, and the cluster's own retirement refuses with it
+(`TestRetirementRefusesBeforeRegistrationWhileAConsumerSurvives`,
+`TestADestroyRefusesWhileAPhysicalCompactConsumerSurvives`), until
+[B491](milestones/m2.md#b491) proves a surviving consumer quiescent. A context
+whose Ceph is virtual and whose consuming cluster is not therefore has no full
+destroy until then, and `plan` says so before the first apply: the apply's
+plan carries a `lifecycle.surviving-consumer` warning naming the consuming
+cluster and the export, which the removal engine derives from the same decision
+that refuses the destroy
+([quiescence before removal](state-reconciliation.md#quiescence-before-removal)).
+Otherwise its removal refuses with the cluster's other resources, and revoking
+one export while the cluster stays is B491's.
 
 ### Attached gateway DNS
 

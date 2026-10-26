@@ -102,3 +102,26 @@ func TestScopeTableSpellsEveryRenderedClientAndImageScope(t *testing.T) {
 		}
 	}
 }
+
+// TestScopeTableSpellsTheExportGrant holds the StorageExport scope row to the
+// grant clauses that plan and the resource rows render.
+func TestScopeTableSpellsTheExportGrant(t *testing.T) {
+	data, err := os.ReadFile(outputSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var row string
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if strings.HasPrefix(line, "| StorageExport |") {
+			row = line
+		}
+	}
+	if row == "" {
+		t.Fatalf("%s names no StorageExport scope row", outputSpec)
+	}
+	for _, clause := range exportGrant("<filesystemRef>", "<objectGatewayRef>") {
+		if !strings.Contains(row, "`; "+clause+"`") {
+			t.Errorf("the StorageExport scope row does not spell the grant %q", clause)
+		}
+	}
+}

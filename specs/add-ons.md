@@ -408,9 +408,9 @@ is answered, from its frozen request. A virtual cluster's objects leave with
 its nodes' disks; a physical cluster keeps running after its context is
 destroyed, with its add-on objects and placed Secrets, unmanaged, which the
 removal's description states and its impacts omit. A surviving cluster that
-consumes a `StorageExport` is a named impact of that export's removal, which
-refuses while the cluster survives
-([retirement condition](storage-resources.md#storageexport)), not of this one. An
+consumes a `StorageExport` is named by that export's removal, which refuses
+while the cluster survives
+([retirement condition](storage-resources.md#storageexport)), not by this one. An
 effect outside the cluster is never an add-on effect but a block of the domain
 that owns it, with its own inverse. Removing one instance from a running
 cluster is parked as [B769](milestones/backlog.md#b769).

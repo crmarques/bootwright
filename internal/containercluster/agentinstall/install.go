@@ -315,6 +315,18 @@ func (InstallCapability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its nodes are probed in this removal"}, nil
 }
 
+// NodeMachines names the Machines this installation's nodes run on, so a
+// removal can tell whether the cluster leaves with them.
+func (InstallCapability) NodeMachines(block reconciliation.Block) ([]string, error) {
+	request, err := DecodeInstallRequest(block.Request)
+	if err != nil {
+		return nil, err
+	}
+	machines := request.Machines()
+	slices.Sort(machines)
+	return slices.Compact(machines), nil
+}
+
 // Unsupported refuses every selected cluster this capability cannot install,
 // with its reason and remedy, so the operation refuses before registration.
 func (InstallCapability) Unsupported(state *compilation.State) []lifecycle.Refusal {

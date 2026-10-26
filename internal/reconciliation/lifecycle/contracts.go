@@ -271,6 +271,23 @@ type HostRemoval interface {
 	RemovesHost(reconciliation.Block) bool
 }
 
+type MachineDeletion interface {
+	DeletesMachine(reconciliation.Block) bool
+}
+
+type HostedConsumer interface {
+	HostObject(reconciliation.Block) (reconciliation.ObjectRef, error)
+}
+
+type NodeBound interface {
+	NodeMachines(reconciliation.Block) ([]string, error)
+}
+
+type SurvivingConsumer struct {
+	Consumer reconciliation.ObjectRef
+	Provider reconciliation.ObjectRef
+}
+
 // Removal describes inverse effects and authorization, deliberately excluding
 // identity, request and digests so planning cannot change what is removed.
 type Removal struct {

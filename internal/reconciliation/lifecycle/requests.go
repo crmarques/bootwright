@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
@@ -163,6 +164,7 @@ type PlanResult struct {
 	// StopsAfterOnline names Machines whose stop proof follows durable online cleanup:
 	// online service removal or a pre-stop inverse. They must remain reachable until then.
 	StopsAfterOnline []string
+	Warnings         []diagnostics.Diagnostic
 	Receipt          Receipt
 }
 

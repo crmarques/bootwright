@@ -201,7 +201,7 @@ func (c ExportCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (
 		if _, err = DecodeExportRequest(canonical); err != nil {
 			return plan, err
 		}
-		impacts := []string{"create per-export Ceph principals for " + obj.Name()}
+		impacts := append([]string{"create per-export Ceph principals for " + obj.Name()}, exportGrant(r.Filesystem, refs.Get("objectGatewayRef").Text())...)
 		consumes := []string{}
 		if input.Verb == reconciliation.Destroy {
 			impacts = []string{"retire Ceph export " + obj.Name() + " with its owned hosts"}

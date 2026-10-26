@@ -157,6 +157,28 @@ func TestExportSurvivingHostRemovalRefuses(t *testing.T) {
 	}
 }
 
+func TestExportGrantGolden(t *testing.T) {
+	type shown struct {
+		Plan  []string `json:"plan"`
+		Scope string   `json:"scope"`
+	}
+	views := map[string]shown{}
+	for name, gateway := range map[string]bool{"filesystem": false, "gateway": true} {
+		block := managedExportPlan(t, gateway)
+		refs := requestMap("rbdPoolRef", "block", "filesystemRef", "files")
+		if gateway {
+			refs = refs.With("objectGatewayRef", api.StringValue("objects"))
+		}
+		declared := api.NewCatalog([]api.Object{childOf(api.StorageExport, "consumer", "dataFoundation", refs)})
+		views[name] = shown{Plan: block.Impacts, Scope: ResourceScope(declared, api.StorageExport, "consumer", nil)}
+	}
+	data, err := json.Marshal(views)
+	if err != nil {
+		t.Fatal(err)
+	}
+	matchesGolden(t, "export-grant", data, false)
+}
+
 func syntheticDetails(r ExportRequest, owner string) []exportEntry {
 	prefix := ExportPrincipalPrefix(owner, r.Name)
 	keyBytes := make([]byte, 28)

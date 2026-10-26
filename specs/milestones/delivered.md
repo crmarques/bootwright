@@ -8578,6 +8578,34 @@ recapture and privilege tests, each proved by a seeded mismatch; the
 delivering commit records the gates. The sudo variable set was not checked
 against a real sudo and PAM stack.
 
+### X167 — Audit lane C: storage retirement
+
+**Items:** B804 and B835 (2026-10-26 spec audit step P0-E and batch L13).
+**Kind:** safety. **Owners:** Storage and State reconciliation. Delivered on
+2026-10-26 as lane C of the
+[audit remediation](backlog.md#lane-order-and-progress) under D182, with
+D183's answer to Q68.
+
+Retiring a Ceph cluster or StorageExport refuses `lifecycle.live` before
+registration while a consuming container cluster survives the removal, naming
+the consumer and the export, until [B491](m2.md#b491): the removal engine
+finds consumers through produced-output edges and two ports
+(`HostedConsumer`, `NodeBound`), counts a consumer as leaving only when the
+same removal deletes every one of its owned virtual node Machines, treats any
+unreadable fact as surviving, and refuses before any quiescence probe so no
+capability can admit the removal. A consumer whose `fdf` block started but
+never completed still refuses; one that never started does not. `plan` warns
+`lifecycle.surviving-consumer` from the same predicate. A StorageExport's
+grant clauses (every path of its filesystem; with a gateway, every RGW user,
+bucket and key of its realm; no isolation from exports sharing its cluster,
+filesystem or gateway) appear in plan impacts and in `cluster info` scope.
+Physical-node consumers refuse the destroy of a context with virtual Ceph.
+
+**Guard tests:** `TestRetirementRefusesBeforeRegistrationWhileAConsumerSurvives`,
+`TestADestroyRefusesWhileAPhysicalCompactConsumerSurvives`,
+`TestScopeTableSpellsTheExportGrant` and the engine and Ceph tests, each proved
+by a seeded mismatch; the delivering commit records the gates.
+
 ## M3 independent in-tree completion
 
 The owner's 2026-10-23 request (D181) delivers the independent implementation

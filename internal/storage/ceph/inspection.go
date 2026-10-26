@@ -683,11 +683,20 @@ func exportScopeText(spec api.Value) string {
 	if !foundation.Present() {
 		return "export"
 	}
-	scope := "export of pool " + foundation.Get("rbdPoolRef").Text() + ", filesystem " + foundation.Get("filesystemRef").Text()
-	if gateway := foundation.Get("objectGatewayRef").Text(); gateway != "" {
+	filesystem, gateway := foundation.Get("filesystemRef").Text(), foundation.Get("objectGatewayRef").Text()
+	scope := "export of pool " + foundation.Get("rbdPoolRef").Text() + ", filesystem " + filesystem
+	if gateway != "" {
 		scope += ", object gateway " + gateway
 	}
-	return scope
+	return strings.Join(append([]string{scope}, exportGrant(filesystem, gateway)...), "; ")
+}
+
+func exportGrant(filesystem, gateway string) []string {
+	grant := []string{"grants consumer administrators every path of filesystem " + filesystem}
+	if gateway != "" {
+		grant = append(grant, "grants consumer administrators every RGW user, bucket and key in the realm of object gateway "+gateway)
+	}
+	return append(grant, "is not isolated from other exports that share its cluster, filesystem or gateway")
 }
 
 func nvmeofScopeText(r Request) string {

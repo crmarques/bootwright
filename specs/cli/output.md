@@ -310,7 +310,11 @@ proves readiness. Optional `capacity` carries `resource`, `unit`, `required`,
 A plan's optional `checks` list contains read-only controller listener observations.
 Each row has `id`, `status`, `summary` and `remedy`; firewall status is `open`,
 `closed` or `unknown`, and `remedy` is empty for an open socket. These observations
-never change the frozen plan or register an operation.
+never change the frozen plan or register an operation. A `plan` of an apply
+also reports one `lifecycle.surviving-consumer` warning for each consumer and
+effect a destroy of the context would refuse over
+([quiescence before removal](../state-reconciliation.md#quiescence-before-removal)),
+in `diagnostics` and on standard error before the plan.
 
 JSON retains the complete report when checks fail. Uninstalled guests remain
 pending without remote probes; dry-run performs no live capacity or guest
@@ -566,17 +570,16 @@ A managed Ceph StorageCluster entry adds these fields, in this order, after its
 | StorageNVMeoFSubsystem | `subsystem <nqn> on nvmeof.<serviceID>` |
 | StorageNFSExport | `export <native.pseudo> on nfs.<serviceID>`, cephadm's service name |
 | StorageSMBResource | `smb cluster <cluster_id>, <auth_mode>`, `share <share_id> on smb cluster <cluster_id>`, `join auth <auth_id>` or `users and groups <users_groups_id>`, by `native.resource_type` |
-| StorageExport | `export of pool <rbdPoolRef>, filesystem <filesystemRef>`, then `, object gateway <objectGatewayRef>` when set; `export` without `dataFoundation` |
+| StorageExport | `export of pool <rbdPoolRef>, filesystem <filesystemRef>`, then `, object gateway <objectGatewayRef>` when set, then its grant: `; grants consumer administrators every path of filesystem <filesystemRef>`, with a gateway `; grants consumer administrators every RGW user, bucket and key in the realm of object gateway <objectGatewayRef>`, and `; is not isolated from other exports that share its cluster, filesystem or gateway`; `export` without `dataFoundation` |
 
 A StorageExport that sets an object gateway or a filesystem also states, in
 `plan` and in these resource rows, what it grants: consumer administrators hold
 every RGW user, bucket and key of the gateway's realm and every path of the
 filesystem, and exports that share a cluster, filesystem or gateway are not
 isolated from each other
-([trust extent](../storage-resources.md#storageexport)).
-
-Not yet met: the StorageExport row and `plan` show the scope alone, with no
-statement of the grant; tracked as [B835](../milestones/backlog.md#b835).
+([trust extent](../storage-resources.md#storageexport)). In `plan` the export's
+apply step carries each grant clause above, without its leading `; `, as an
+impact line after `create per-export Ceph principals for <export>`.
 
 `--secrets --name <cluster>` adds `passwordValue` to `dashboard`, the only
 field that carries a secret. Its contract, refusals and warning are the
@@ -909,6 +912,7 @@ it to a variable.
 | `lifecycle.lease` | The context root lock or mutation lease cannot be safely acquired or recovered. |
 | `lifecycle.unknown` | A frozen block has an unresolved unknown effect outcome. |
 | `lifecycle.live` | A removal would take back state that is still in use, and refuses before registering. |
+| `lifecycle.surviving-consumer` | Informational: a `plan` of an apply names a consumer whose cluster would outlive a destroy of the context while consuming an effect that destroy retires, so that destroy refuses with `lifecycle.live`. Never a refusal. |
 | `lifecycle.adapter-running` | An adapter of the same context, or one whose record names no context, still holds its job lock, so no adapter of that context starts until it ends. |
 | `trust.identity` | SSH identity is missing, changed, contradictory, or not authorized. |
 | `access.unavailable` | An applicable access request lacks required local access metadata or an available credential artifact. |
