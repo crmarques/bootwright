@@ -1,0 +1,77 @@
+---
+# A machine an earlier attempt of this apply installed and proved, then
+# powered off for its network restart (Q66), boots its installed disk here and
+# answers through its own channel. It is never booted from the installer
+# again; one that is not off, does not answer or answers with another marker
+# fails, its state unknown.
+- name: Read the power of the machine this apply already proved
+  ansible.builtin.include_role:
+    name: "{{ managedos_install_anaconda_state_read[bootwright_os_install_request.target.substrate] }}"
+    tasks_from: state_read
+  vars:
+    bootwright_machine_port: "{{ managedos_install_anaconda_port_access | combine({'media': false}) }}"
+
+- name: Retain the machine port answer
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_proved_power: "{{ vars[managedos_install_anaconda_port_result[bootwright_os_install_request.target.substrate]] }}"
+  no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# the controller's own answer is reported here, where no credential is.
+- name: Refuse to boot a proved machine that is not powered off
+  ansible.builtin.assert:
+    that:
+      - (managedos_install_anaconda_proved_power.power | default('')) == 'Off'
+    fail_msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }}, which an earlier
+      attempt of this apply installed and proved, does not answer and is not
+      reported powered off, so it was neither booted from its disk nor installed
+      again; its management controller answered
+      {{ ('power ' ~ (managedos_install_anaconda_proved_power.power | string | bootwright.core.printable)[:32])
+      if managedos_install_anaconda_proved_power.power is defined
+      else (managedos_install_anaconda_proved_power.msg | default('') | string | bootwright.core.printable)[:512] }};
+      its state is unknown: power it off from its management controller, then
+      repeat bootwright apply
+    quiet: true
+
+- name: Boot the installed disk of the proved machine
+  ansible.builtin.include_role:
+    name: "{{ managedos_install_anaconda_boot_disk[bootwright_os_install_request.target.substrate] }}"
+    tasks_from: boot_disk
+  vars:
+    bootwright_machine_port:
+      endpoint: '{{ managedos_install_anaconda_endpoint }}'
+      verify: '{{ managedos_install_anaconda_verify }}'
+      ca: '{{ managedos_install_anaconda_controller_ca }}'
+      user: '{{ bootwright_os_install_material.controllerUser }}'
+      password: '{{ bootwright_os_install_material.controllerPassword }}'
+      power_on: true
+  when: bootwright_os_install_request.target.substrate in managedos_install_anaconda_boot_disk
+
+- name: Refuse a substrate this installation has no disk-boot binding for
+  ansible.builtin.fail:
+    msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }} names substrate
+      {{ bootwright_os_install_request.target.substrate }}, which this installation has
+      no boot_disk binding for, so its installed disk was not booted; plan the
+      installation again with this release
+  when: bootwright_os_install_request.target.substrate not in managedos_install_anaconda_boot_disk
+
+- name: Read the proved machine through its own channel once its disk booted
+  ansible.builtin.include_tasks: identity_until_answered.yml
+
+- name: Refuse a booted disk that does not hold this installation
+  ansible.builtin.assert:
+    that:
+      - managedos_install_anaconda_marker == bootwright_os_install_material.marker
+    fail_msg: >-
+      Machine {{ bootwright_os_install_request.identity.object }} booted from its disk
+      does not hold the installation this apply proved, so it was not installed again;
+      its state is unknown
+    quiet: true
+  no_log: true
+
+- name: Treat the proved machine as installed
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_was_installed: true
+  changed_when: false

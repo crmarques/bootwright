@@ -129,7 +129,7 @@ func TestAPhysicalLiteralRequestReadsBackFromItsGolden(t *testing.T) {
 				TLSVerify: true, TrustBundleRef: "lab-bmc-ca",
 				VirtualMedia: VirtualMedia{RemoveCertificate: true, Trust: substrate.TrustImportCertificate},
 			},
-			Hardware:   &Hardware{Interfaces: []Interface{{MACAddress: "52:54:00:9a:1b:01", Name: "enp1s0"}}, RootDevice: "/dev/sda"},
+			Hardware:   &Hardware{Interfaces: []Interface{{MACAddress: "52:54:00:9a:1b:01", Name: "enp1s0"}}, RootDevice: "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"},
 			HostKeyRef: "metal-01-host-key", HostKeyType: "ed25519", Physical: true, Substrate: substrate.ArmBaremetal,
 		},
 		TLSCertificateRef: "lab-artifacts-tls",

@@ -1163,7 +1163,7 @@ spec:
         - serverRef: default-02
         - serverRef: default-03
       rootDeviceHints:
-        deviceName: /dev/sda
+        deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c311
   proxy:
     proxyRef: default
     noProxy:
@@ -1244,7 +1244,7 @@ spec:
         - serverRef: default-02
         - serverRef: default-03
       rootDeviceHints:
-        deviceName: /dev/sda
+        deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c312
   proxy:
     proxyRef: default
     noProxy:
@@ -1325,7 +1325,7 @@ spec:
         - serverRef: default-02
         - serverRef: default-03
       rootDeviceHints:
-        deviceName: /dev/sda
+        deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c313
   proxy:
     proxyRef: default
     noProxy:
@@ -1406,7 +1406,7 @@ spec:
         - serverRef: default-02
         - serverRef: default-03
       rootDeviceHints:
-        deviceName: /dev/sda
+        deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c314
   proxy:
     proxyRef: default
     noProxy:
@@ -1487,7 +1487,7 @@ spec:
         - serverRef: default-02
         - serverRef: default-03
       rootDeviceHints:
-        deviceName: /dev/sda
+        deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c315
   proxy:
     proxyRef: default
     noProxy:
@@ -1568,7 +1568,7 @@ spec:
         - serverRef: default-02
         - serverRef: default-03
       rootDeviceHints:
-        deviceName: /dev/sda
+        deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c316
   proxy:
     proxyRef: default
     noProxy:

@@ -475,6 +475,7 @@ class Guest:
         self.argv = {}
         self.budgets = []
         self.fired = []
+        self.published = []
         self.scope = dict(defaults(), **{
             "bootwright_os_install_digest": DIGEST,
             "bootwright_os_install_request": {
@@ -539,6 +540,8 @@ class Guest:
             self.scope[result] = {"power": self.power}
         elif "ansible.builtin.pause" in task:
             self.ran.append("pause")
+        elif PROTOCOL in task:
+            self.published.append(task[PROTOCOL]["phase"])
         else:
             assert "ansible.builtin.include_role" in task, task["name"]
 
@@ -572,6 +575,8 @@ def test_a_converging_network_fires_no_refusal(first, after, expected):
         answers.pop("boot_id")
     guest = Guest(answers).run("network.yml")
     assert guest.fired == [] and guest.ran == expected
+    # A restart records the proved installation before the power-off (Q66).
+    assert guest.published == (["prepared"] if "poweroff" in after else [])
     assert guest.scope["managedos_install_anaconda_network_result"] == {
         "network": True, "networkReboot": True, "networkDifferences": [], "changed": expected != ["wait", "read", "show"]}
     if "rollback" in after:

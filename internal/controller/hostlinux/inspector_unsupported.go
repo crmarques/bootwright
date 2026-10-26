@@ -40,3 +40,7 @@ func unsupported(ctx context.Context) error {
 	}
 	return diagnostics.NewFailure("controller.unsupported", "local host inspection requires Linux/amd64", "")
 }
+
+func (Inspector) HardwareAddresses(ctx context.Context) ([]string, error) {
+	return nil, unsupported(ctx)
+}

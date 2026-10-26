@@ -2,6 +2,7 @@ package prerequisites
 
 import (
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -26,7 +27,7 @@ type Conflict struct {
 // keys at one port and either binds a wildcard address, which holds its port
 // on every address; and when both are managed network prefixes that overlap,
 // identical or nested, since the host routes each prefix to its own bridge. A
-// shared claim conflicts with nothing.
+// shared claim conflicts with nothing but an exclusive holder of its bmc: key.
 func Conflicts(held, wanted []HostReservation) []Conflict {
 	var found []Conflict
 	for _, holder := range held {
@@ -44,10 +45,10 @@ func Conflicts(held, wanted []HostReservation) []Conflict {
 
 func firstConflict(holder HostReservation, heldKey string, wanted []HostReservation) (Conflict, bool) {
 	for _, claim := range wanted {
-		if claim.Shared {
-			continue
-		}
 		for _, wantedKey := range claim.Keys {
+			if claim.Shared && !(strings.HasPrefix(wantedKey, "bmc:") && wantedKey == heldKey) {
+				continue
+			}
 			if keysConflict(heldKey, wantedKey) {
 				return Conflict{Held: holder, Wanted: claim, HeldKey: heldKey, WantedKey: wantedKey}, true
 			}
@@ -85,15 +86,17 @@ func prefixKey(key string) (netip.Prefix, bool) {
 // conflictKinds are the API kinds of the claim kinds a diagnostic names as
 // objects.
 var conflictKinds = map[string]api.Kind{
-	"substrate-host":     api.InfraProvider,
-	"substrate-machine":  api.Machine,
-	"substrate-physical": api.Machine,
-	"os-install":         api.Machine,
-	"proxy":              api.Proxy,
-	"dns":                api.DNSServer,
-	"ntp":                api.NTPServer,
-	"artifact-server":    api.ArtifactServer,
-	"cluster-media":      api.ContainerCluster,
+	"substrate-host":        api.InfraProvider,
+	"substrate-host-use":    api.InfraProvider,
+	"substrate-machine":     api.Machine,
+	"substrate-machine-bmc": api.Machine,
+	"substrate-physical":    api.Machine,
+	"os-install":            api.Machine,
+	"proxy":                 api.Proxy,
+	"dns":                   api.DNSServer,
+	"ntp":                   api.NTPServer,
+	"artifact-server":       api.ArtifactServer,
+	"cluster-media":         api.ContainerCluster,
 }
 
 // ConflictDiagnostic names the holding context, the key it holds, the holder's
@@ -232,4 +235,64 @@ func socketKey(key string) (socket, bool) {
 		read.wildcard = address.Unmap().IsUnspecified()
 	}
 	return read, true
+}
+
+func ReleaseConflicts(held []HostReservation, contextName string) []Conflict {
+	var found []Conflict
+	for _, ours := range held {
+		if ours.Context != contextName {
+			continue
+		}
+		for _, key := range ours.Keys {
+			guarding, shared := releaseGuard(key, ours.Shared)
+			if guarding == "" {
+				continue
+			}
+			for _, theirs := range held {
+				if theirs.Context != contextName && theirs.Shared == shared && slices.Contains(theirs.Keys, guarding) {
+					found = append(found, Conflict{Held: theirs, Wanted: ours, HeldKey: guarding, WantedKey: key})
+				}
+			}
+		}
+	}
+	return found
+}
+
+func releaseGuard(key string, shared bool) (string, bool) {
+	if bridge, found := strings.CutPrefix(key, "bridge:"); found && !shared {
+		return "bridge-use:" + bridge, true
+	}
+	if strings.HasPrefix(key, "bmc:") && shared {
+		return key, false
+	}
+	return "", false
+}
+
+func ReleaseFailure(held []HostReservation, contextName, kind, object string) error {
+	var found []diagnostics.Diagnostic
+	for _, conflict := range ReleaseConflicts(held, contextName) {
+		if kind != "" && (string(conflictKinds[conflict.Wanted.Kind]) != kind || conflict.Wanted.Service != object) {
+			continue
+		}
+		found = append(found, ReleaseDiagnostic(conflict))
+	}
+	if len(found) == 0 {
+		return nil
+	}
+	return &diagnostics.Failure{Diagnostics: found}
+}
+
+func ReleaseDiagnostic(c Conflict) diagnostics.Diagnostic {
+	used := describeKey(c.WantedKey)
+	if strings.HasPrefix(c.WantedKey, "bmc:") {
+		used = "the management controller endpoint"
+	}
+	message := "context " + c.Held.Context + " still uses " + used + " that " + conflictObject(c.Wanted) +
+		" of this context holds, through " + conflictObject(c.Held) + ", so this removal would take it from under that context"
+	diagnostic := diagnostics.Diagnostic{Severity: "error", Code: "controller.conflict", Message: message,
+		Remediation: "run bootwright destroy --context " + c.Held.Context + " first"}
+	if kind, ok := conflictKinds[c.Wanted.Kind]; ok {
+		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(kind), Name: c.Wanted.Service}
+	}
+	return diagnostic
 }

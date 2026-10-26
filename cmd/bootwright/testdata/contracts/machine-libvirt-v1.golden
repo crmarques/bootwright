@@ -1,5 +1,5 @@
 implementation: machine-libvirt-v1
-content-digest: a790938872a1e3b634f1726dc33410572e231aee1e83e1f8bc1d64a1a704b8bf
+content-digest: cdc1385b33efabedfa35f9e32dee2181bc0fed66134b2668f19d6ed22e07f482
 request-version: machine-libvirt-v8
 automation-formats: https://bootwright.io/substrate/v1
 mark-formats: https://bootwright.io/substrate/v1
@@ -10,6 +10,7 @@ effect-pins:
   /var/lib/libvirt/images/bootwright
   bootwright
   data-media-ssd-scsi-v1
+  shared-bmc-claim
 request-identity:
   identity.context
   identity.object

@@ -977,11 +977,6 @@ states. The orphan confirmation names the exclusive keys the deletion frees
 and warns that another context may then claim a resource an abandoned object
 still uses, such as the management controller of a powered-off Machine.
 
-Not yet met: the refusal, the orphan confirmation and the deletion plan name
-`status` alone as the inventory and list only what the selected input
-declares, and the orphan confirmation names neither the same-name hazard nor
-the exclusive keys it frees; tracked as [B803](milestones/backlog.md#b803).
-
 Not yet met: the orphan confirmation does not name the installer work areas
 or the native-side retention the deletion leaves; tracked as
 [B829](milestones/backlog.md#b829) and [B817](milestones/backlog.md#b817).

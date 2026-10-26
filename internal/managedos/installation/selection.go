@@ -2,6 +2,7 @@ package installation
 
 import (
 	"net/netip"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -547,17 +548,21 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 	return target, nil
 }
 
+var durableRootPath = regexp.MustCompile(`^/dev/disk/by-id/wwn-0x[0-9a-f]{16}(?:[0-9a-f]{16})?$`)
+
+func durableRootDevice(path string) bool { return durableRootPath.MatchString(path) }
+
 // refusedTarget says why this contract cannot install onto a Machine's
 // realized target, or nothing when it can. It is the one statement of that
 // refusal, so Unsupported and the request builder never disagree about it.
 func refusedTarget(machine api.Object, target substrate.Target, private bool) (reason, remediation string) {
-	// A physical machine already holds whatever it holds, and an installation
-	// that names no disk leaves the installer to clear every one. A wwn is
-	// admitted as a selector but not yet derived into a device the installer
-	// and its own target proof can name.
-	if target.Physical && target.RootDeviceHints.DeviceName == "" {
-		return "a physical installation erases only a root device named by path, and the Machine names none",
-			"set spec.os.install.rootDeviceHints.deviceName on " + machine.Identity() + "; a wwn-only selection is not yet supported"
+	// A physical machine already holds whatever it holds, and a kernel name
+	// may name another disk on the next boot, so only a by-id WWN path does.
+	// A wwn alone is not yet derived into a device the installer can name.
+	if target.Physical && !durableRootDevice(target.RootDeviceHints.DeviceName) {
+		return "a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path, and the Machine names none",
+			"set spec.os.install.rootDeviceHints.deviceName on " + machine.Identity() +
+				" to the disk's /dev/disk/by-id/wwn-0x path, 16 or 32 lowercase hexadecimal digits; a kernel name such as /dev/sda is refused, and a wwn-only selection is not yet supported"
 	}
 	// The Kickstart selects its disk by name alone, so any other hint would be
 	// ignored and the disk it selected installed over regardless.

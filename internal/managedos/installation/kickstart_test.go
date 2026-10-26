@@ -220,7 +220,7 @@ func physicalInstallation() Installation {
 		Hostname:     "metal-01.metal.example.test", Interface: "eno1",
 		InterfaceType: "ethernet", Keyboard: "us", Language: "en_US.UTF-8",
 		MarkerPath: MarkerPath, HostKeyPath: HostKeyPath, HostKeyType: "ed25519", PackageSource: "cdrom",
-		Physical: true, Prefix: 24, RootDevice: "/dev/sda", Timezone: "UTC", User: "bootwright",
+		Physical: true, Prefix: 24, RootDevice: "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4", Timezone: "UTC", User: "bootwright",
 	}
 }
 
@@ -258,9 +258,9 @@ func TestAPhysicalKickstartNeverClearsADiskItDidNotName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	requireLine(t, rendered, "ignoredisk --only-use=sda")
+	requireLine(t, rendered, "ignoredisk --only-use=disk/by-id/wwn-0x5000c500a1b2c3d4")
 	for _, line := range strings.Split(rendered, "\n") {
-		if strings.HasPrefix(line, "clearpart") && line != "clearpart --all --initlabel --drives=sda" {
+		if strings.HasPrefix(line, "clearpart") && line != "clearpart --all --initlabel --drives=disk/by-id/wwn-0x5000c500a1b2c3d4" {
 			t.Fatalf("a physical installation renders %q", line)
 		}
 	}
@@ -299,7 +299,13 @@ sshkey --username=bootwright "@@BOOTWRIGHT_AUTHORIZED_KEY@@"
 
 %pre --erroronfail --interpreter=/bin/bash
 set -euo pipefail
-bootwright_observed=$(cat /sys/class/net/*/address | tr 'A-Z' 'a-z' | sort -u)
+bootwright_observed=$(for bootwright_nic in /sys/class/net/*; do
+if [ ! -e "${bootwright_nic}/device" ]; then continue; fi
+case "$(basename -- "$(readlink -f -- "${bootwright_nic}/device/driver")")" in cdc_ether|cdc_eem|cdc_ncm|rndis_host) continue;; esac
+bootwright_mac="${bootwright_nic}/address"
+if [ -r "${bootwright_nic}/bonding_slave/perm_hwaddr" ]; then bootwright_mac="${bootwright_nic}/bonding_slave/perm_hwaddr"; fi
+tr 'A-Z' 'a-z' < "${bootwright_mac}" || exit 1
+done | sort -u)
 if ! printf '%s\n' "${bootwright_observed}" | grep -Fqx '52:54:00:9a:1b:01'; then
 echo 'Bootwright: this machine does not report 52:54:00:9a:1b:01, which its declaration requires; refusing before any disk is touched.' >&2
 exit 1
@@ -308,19 +314,24 @@ if ! printf '%s\n' "${bootwright_observed}" | grep -Fqx '52:54:00:9a:1b:02'; the
 echo 'Bootwright: this machine does not report 52:54:00:9a:1b:02, which its declaration requires; refusing before any disk is touched.' >&2
 exit 1
 fi
-bootwright_root=$(readlink -f -- '/dev/sda' || true)
+bootwright_undeclared=$(printf '%s\n' "${bootwright_observed}" | grep -Fvx -e '52:54:00:9a:1b:01' -e '52:54:00:9a:1b:02' | grep -c . || true)
+if [ "${bootwright_undeclared}" != 0 ]; then
+echo "Bootwright: this machine reports ${bootwright_undeclared} hardware address(es) its declaration does not name; refusing before any disk is touched." >&2
+exit 1
+fi
+bootwright_root=$(readlink -f -- '/dev/disk/by-id/wwn-0x5000c500a1b2c3d4' || true)
 if [ -z "${bootwright_root}" ] || [ ! -b "${bootwright_root}" ]; then
-echo 'Bootwright: the declared root device /dev/sda is not a block device here; refusing before any disk is touched.' >&2
+echo 'Bootwright: the declared root device /dev/disk/by-id/wwn-0x5000c500a1b2c3d4 is not a block device here; refusing before any disk is touched.' >&2
 exit 1
 fi
 if [ "$(lsblk -ndo TYPE -- "${bootwright_root}")" != disk ]; then
-echo 'Bootwright: the declared root device /dev/sda is not a whole disk; refusing before any disk is touched.' >&2
+echo 'Bootwright: the declared root device /dev/disk/by-id/wwn-0x5000c500a1b2c3d4 is not a whole disk; refusing before any disk is touched.' >&2
 exit 1
 fi
 %end
 
-ignoredisk --only-use=sda
-clearpart --all --initlabel --drives=sda
+ignoredisk --only-use=disk/by-id/wwn-0x5000c500a1b2c3d4
+clearpart --all --initlabel --drives=disk/by-id/wwn-0x5000c500a1b2c3d4
 autopart --type=lvm
 
 %packages

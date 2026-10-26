@@ -68,7 +68,7 @@ spec:
         - serverRef: lab-ntp
           endpointRef: ip
       rootDeviceHints:
-        deviceName: /dev/sda
+        deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c301
   proxy:
     direct: {}
   network:

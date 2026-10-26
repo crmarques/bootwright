@@ -1,6 +1,7 @@
 package libvirt
 
 import (
+	"fmt"
 	"maps"
 	"os"
 	"reflect"
@@ -48,6 +49,8 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 		"An emulated BMC no endpoint can name": {catalogOf(controller(), wildcard), "InfraProvider/lab-libvirt",
 			map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
 		"A provider with more managed attachments than its reservation holds": {catalogOf(controller(), provider(managedAttachments(substrate.MaxManagedAttachments+1))),
+			"InfraProvider/lab-libvirt", map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
+		"A provider using more external bridges than its use reservation holds": {catalogOf(controller(), provider(externalAttachments(manyBridges(substrate.MaxExternalBridges+1)...))),
 			"InfraProvider/lab-libvirt", map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
 	}
 	for _, row := range refusalTable(t) {
@@ -134,4 +137,12 @@ func expand(text string, values map[string]string) string {
 		text = strings.ReplaceAll(text, placeholder, value)
 	}
 	return text
+}
+
+func manyBridges(count int) []string {
+	bridges := make([]string, 0, count)
+	for index := range count {
+		bridges = append(bridges, fmt.Sprintf("br-%02d", index))
+	}
+	return bridges
 }

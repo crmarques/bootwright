@@ -8502,6 +8502,46 @@ not handled.
 sweep, prompt-race, reservation-bound, context-list and rebind tests, each
 proved by a seeded mismatch; the delivering commit records the gates.
 
+### X165 — Audit lane B: physical targets and shared hosts
+
+**Items:** B802 and B803 (2026-10-26 spec audit steps P0-C and P0-D), lane B
+of the [audit remediation](backlog.md#lane-order-and-progress) under D182,
+with D183's answers to Q65, Q66 and Q67. **Kind:** safety. **Owners:**
+Managed OS, Substrate, State reconciliation and Workspace. Delivered on
+2026-10-26.
+
+A bare-metal Bootwright-installed Machine names its root disk by its
+`/dev/disk/by-id/wwn-0x` path, refused otherwise at plan, and `%pre` stops
+before any storage directive unless that path resolves to a whole disk
+([B840](backlog.md#b840) keeps the WWN and serial comparison). Every physical
+proof uses one MAC-set predicate, equality, excepting the management
+controller's host interface. Power commands refuse the controller Machine and
+a BMC reporting this host's own UUID or MACs, and an unpinned physical Machine
+gets the full target proof. A bare-metal block claims `bmc-system:<UUID>`
+before any media is inserted.
+
+An unreadable removal observation is a typed `inconclusive` result, never
+no-effect: it allows one retry only for a capability that declares the
+removal replay-safe and owns a durably recorded attempt, re-reading the
+target first (Q65); the managed-OS removal is the first to use it, and an
+audit of every removal observer fixed physical erase, whose unreadable
+evidence now reads unknown. Installation records its proved state before the
+network restart powers the Machine off, so recovery boots the installed disk
+and never reruns the installer (Q66).
+
+External libvirt attachments claim `bridge-use:<name>` and emulated BMCs a
+shared `bmc:` key; a destroy refuses, at registration and again under the
+root lock immediately before each effect, when it would take a key another
+context holds ([B839](backlog.md#b839) keeps the window during the effect).
+Deletion names `bootwright diff` beside `status`, lists the exclusive keys it
+frees and warns of same-name reuse; D38 stands (Q67). Content digests moved
+for the OS installation, bare-metal and libvirt machine and host contracts,
+so operations frozen before refuse by name rather than continue.
+
+**Guard tests:** the refusal, `%pre`, MAC, power, claim, inconclusive,
+interruption and release tests, each proved by a seeded mismatch; the
+delivering commit records the gates.
+
 ## M3 independent in-tree completion
 
 The owner's 2026-10-23 request (D181) delivers the independent implementation

@@ -62,7 +62,7 @@ spec:
     eraseOnRemoval:
       method: logicalOverwrite
       targets:
-        - deviceName: /dev/sda
+        - deviceName: /dev/disk/by-id/wwn-0x6000000000000001
           wwn: "0x6000000000000001"
           serialNumber: SYNTHETIC-ROOT-01
           sizeBytes: 53687091200
@@ -94,7 +94,7 @@ spec:
         - serverRef: lab-ntp
           endpointRef: ip
       rootDeviceHints:
-        deviceName: /dev/sda
+        deviceName: /dev/disk/by-id/wwn-0x6000000000000001
   proxy:
     direct: {}
   network:
@@ -132,7 +132,7 @@ spec:
     eraseOnRemoval:
       method: logicalOverwrite
       targets:
-        - deviceName: /dev/sda
+        - deviceName: /dev/disk/by-id/wwn-0x6000000000000002
           wwn: "0x6000000000000002"
           serialNumber: SYNTHETIC-ROOT-02
           sizeBytes: 53687091200
@@ -164,7 +164,7 @@ spec:
         - serverRef: lab-ntp
           endpointRef: ip
       rootDeviceHints:
-        deviceName: /dev/sda
+        deviceName: /dev/disk/by-id/wwn-0x6000000000000002
   proxy:
     direct: {}
   network:
@@ -202,7 +202,7 @@ spec:
     eraseOnRemoval:
       method: logicalOverwrite
       targets:
-        - deviceName: /dev/sda
+        - deviceName: /dev/disk/by-id/wwn-0x6000000000000003
           wwn: "0x6000000000000003"
           serialNumber: SYNTHETIC-ROOT-03
           sizeBytes: 53687091200
@@ -234,7 +234,7 @@ spec:
         - serverRef: lab-ntp
           endpointRef: ip
       rootDeviceHints:
-        deviceName: /dev/sda
+        deviceName: /dev/disk/by-id/wwn-0x6000000000000003
   proxy:
     direct: {}
   network:

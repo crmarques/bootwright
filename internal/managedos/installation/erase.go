@@ -195,11 +195,18 @@ func (c EraseCapability) ObserveRemoval(ctx context.Context, execution lifecycle
 	if err != nil {
 		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
 	}
-	effect := reconciliation.EffectPartial
+	effect := reconciliation.EffectUnknown
 	if eraseEvidence(result.Evidence, request, execution.Block.RequestDigest, true) == nil {
 		effect = reconciliation.EffectCompleted
+	} else if eraseUnfinished(result.Evidence, execution.Block.RequestDigest) {
+		effect = reconciliation.EffectPartial
 	}
 	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence}, nil
+}
+
+func eraseUnfinished(data json.RawMessage, digest string) bool {
+	proof, err := reconciliation.DecodeEvidence[EraseEvidence](data, 32768, "physical erase")
+	return err == nil && proof.Version == EraseImplementation && proof.Request == digest && !proof.Removed && !proof.Retained
 }
 
 func installationStarted(execution lifecycle.Execution, request EraseRequest) (bool, error) {

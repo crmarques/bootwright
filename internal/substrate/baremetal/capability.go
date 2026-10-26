@@ -3,7 +3,9 @@ package baremetal
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -244,3 +246,30 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 		Canonical: canonical, Placement: request.Placement, Materials: materials,
 	}))
 }
+
+var systemToken = regexp.MustCompile(`^[0-9a-z][0-9a-z._-]{0,127}$`)
+
+func (MachineCapability) ProvedClaim(contextName string, block reconciliation.Block, evidence json.RawMessage) (prerequisites.HostReservation, bool, error) {
+	request, err := DecodeRequest(block.Request)
+	if err != nil || !request.Placement.Local() {
+		return prerequisites.HostReservation{}, false, err
+	}
+	identity, err := ProvedIdentity(evidence)
+	if err != nil || identity.UUID == "" {
+		return prerequisites.HostReservation{}, false, err
+	}
+	system := strings.ToLower(identity.UUID)
+	if !systemToken.MatchString(system) {
+		return prerequisites.HostReservation{}, false, refusal("lifecycle.state",
+			"the system UUID the management controller at "+request.Controller.Endpoint+" reported cannot name a host claim",
+			"correct spec.hardware.management.bmc.address on Machine/"+request.Identity.Object+" so it names a controller that reports a standard UUID")
+	}
+	return prerequisites.HostReservation{
+		Context: contextName, Kind: "substrate-physical", Service: request.Identity.Object,
+		Keys: append(request.ReservationKeys(), SystemReservationKey(system)),
+	}, true, nil
+}
+
+func SystemReservationKey(uuid string) string { return "bmc-system:" + strings.ToLower(uuid) }
+
+var _ lifecycle.ProvingClaimer = MachineCapability{}

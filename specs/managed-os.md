@@ -551,7 +551,7 @@ unfinished work is a positive partial realization the next attempt converges,
 which is either content it published on a powered-off guest that never
 installed, or the frozen marker with the completion not yet true. The frozen
 marker with a network not yet converged, rolled back, mismatched or drifted is
-a positive partial realization; network convergence yields no effect only in the one window below.
+a positive partial realization; network convergence never yields no effect.
 The frozen marker with an `absent` or `pending` registration is a positive
 partial realization too, and a `foreign` registration stays unknown, as
 [Registration](#registration) states. Over the pinned fleet
@@ -565,14 +565,24 @@ image; that subtree left on a powered-off guest
 that never installed is its partial. Anything else
 stays unknown, including a guest answering with another marker and a powered-on
 guest with none, because the first belongs to another installation and the
-second may be running the installer now. A private Machine, of a delivered key
-or an encrypted root disk, the network
-restart powered off before its disk boot is the one window that leaves nothing
-to read: the withdrawn private material and image, no marker over the unanswered
-identity read and a powered-off BMC read are exactly what an apply that
-stopped before it published anything leaves, so it reads positive no effect.
-The next apply installs it again, as the interruption table below says; a
-Machine whose installer image stays published reads partial in the same window. A removal's resolution observes
+second may be running the installer now. Before the network restart powers a
+Machine off, its attempt durably records, as the before-state its apply's
+records keep, that this installation's marker is proved and its disk boot
+intended (Q66, D183). That before-state is the same marker proof a
+registering apply records before it registers, so a removal of a registering
+installation whose apply reached the restart reads the guest's registration,
+as it does once that proof is recorded. An apply whose records hold that
+intent never reads positive no effect: a powered-off Machine whose identity
+read gets no answer and that shows nothing published, which is what the
+restart leaves a private
+Machine, of a delivered key or an encrypted root disk, after it withdrew its
+material, is a positive partial realization of this operation's own
+installation. Its retry is told the installation is proved, so it boots the
+installed disk through the substrate's
+[disk-boot entry point](substrates.md#identity-and-power-operations) and reads
+the identity instead of booting the installer: a Machine that is not off, does
+not answer within the identity budget or answers with another marker fails,
+its state unknown, and is never installed again. A removal's resolution observes
 the published content, which the removal withdraws whatever the guest holds,
 and, for a registering request, the guest's registration through the identity
 channel and the worker's `inspect`; it never reads the BMC. No content
@@ -581,9 +591,12 @@ left and no registration of this installation left, which is an `absent` or
 completion; the whole completion, which content alone never proves, is
 positive no effect; any content left, or this installation's own registration
 left, is a positive partial realization; and an unread registration is never
-completion and reads no effect, so the removal repeats and proves its own
-postcondition. A shared package tree alone is never this machine's installation
-effect; its own block observes and resolves that publication. The
+completion or no effect but inconclusive. The installation's removal declares
+itself replay-safe, so the inconclusive reading admits one retry, which reads
+the guest again before any effect, and a registration still unread then
+stays unknown ([resolution outcomes](state-reconciliation.md#resolution-outcomes)).
+A shared package tree alone is never this machine's installation effect; its
+own block observes and resolves that publication. The
 work area is never served, so an
 apply that left only it still had no effect, but a removal takes it back and
 counts it as left. Observation reads durable work without creating it;
@@ -733,8 +746,8 @@ the document and the marker only on standard input. In order:
 **Failures and recovery.** Every failure of the phase follows the proof that
 the guest holds this request's install marker, so the attempt fails and the
 resolution's observation reads a positive partial realization when the marker
-still reads, or unknown when the guest does not answer; no effect only for the
-delivered-key window the resolution paragraph names. The
+still reads, or unknown when the guest does not answer, and never no effect
+once the attempt recorded its disk-boot intent. The
 document is frozen with the installation and the install marker names the
 request's digest, so neither a continuation nor a new plan can change the
 declared network of an installed Machine: a network declaration error is
@@ -790,7 +803,7 @@ did not restart end with `repeat bootwright apply`.
 | after the apply, NetworkManager already rolled back | error log naming the checkpoint, not listed | apply | converges |
 | after the commit, before the marker | error log naming the checkpoint, not listed, network as declared | apply, commit, marker | converges |
 | after the marker, before the power-off | marker with the current boot ID | reboot | converges |
-| after the power-off, before the disk boot | machine off; the identity read at the top of the replay gets no answer | the existing replay path: installer boot of this same request, then the whole phase | converges at the cost of one installation |
+| after the power-off, before the disk boot | machine off; the identity read at the top of the replay gets no answer; the recorded before-state names this installation's marker | disk boot of the installed system, then the identity read and the whole phase; never the installer | converges, or stays unknown when the Machine does not answer |
 | after the disk boot, before the evidence | marker with an earlier boot ID | inspect | converges |
 | guest power loss with a checkpoint pending | no log (`/run` is volatile), no marker | apply | converges if the path still works, otherwise unknown |
 
@@ -1289,16 +1302,14 @@ re-addressed in between, so the derived Kickstart opens with a fail-closed
 is running the installer must present exactly the declared MAC set, under the
 MAC-set predicate of
 [physical disk safety](state-reconciliation.md#physical-disk-safety), and the
-declared by-id path must resolve to a whole disk. The installation stops
-before any storage directive when either fails. This narrows, but does not
-close, the interval between the controller's last proof and the installer's
-first write; what remains is recorded as a residual race rather than described
-as eliminated.
-
-Not yet met: a physical installation admits any device path as `deviceName`,
-and `%pre` resolves whatever path it names and proves only that every declared
-MAC is present; tracked as
-[B802](milestones/backlog.md#b802).
+declared by-id path must resolve to a whole disk. There a port is an interface
+backed by a device, and one driven by a USB CDC or RNDIS Ethernet driver
+(`cdc_ether`, `cdc_eem`, `cdc_ncm` or `rndis_host`) is read as the management
+controller's host interface; a declaration with no MAC refuses. The
+installation stops before any storage directive when either fails. This
+narrows, but does not close, the interval between the controller's last proof
+and the installer's first write; what remains is recorded as a residual race
+rather than described as eliminated.
 
 **The identity it will answer with is delivered, not discovered.** A physical
 Machine names an `sshKeyPair` Secret as the host key its installed system will
@@ -1406,7 +1417,7 @@ the length of that many bytes in base64url without padding.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
-| A physical Machine naming no root device | no `spec.os.install.rootDeviceHints.deviceName` on a Machine on a `baremetal` provider, a `wwn` alone included | `a physical installation erases only a root device named by path, and the Machine names none` | `set spec.os.install.rootDeviceHints.deviceName on <machine>; a wwn-only selection is not yet supported` |
+| A physical Machine naming no root device | on a Machine on a `baremetal` provider, no `spec.os.install.rootDeviceHints.deviceName` that is `/dev/disk/by-id/wwn-0x` followed by 16 or 32 lowercase hexadecimal digits, a kernel name such as `/dev/sda`, another by-id path and a `wwn` alone included | `a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path, and the Machine names none` | `set spec.os.install.rootDeviceHints.deviceName on <machine> to the disk's /dev/disk/by-id/wwn-0x path, 16 or 32 lowercase hexadecimal digits; a kernel name such as /dev/sda is refused, and a wwn-only selection is not yet supported` |
 | A root-device hint other than deviceName | any `spec.os.install.rootDeviceHints` field but `deviceName` | `a managed-OS installation selects its root disk by deviceName alone and cannot carry the other root-device hints the Machine declares` | `remove <hints> from <machine>` |
 | An unverified fetch of private material | `spec.hardware.management.bmc.virtualMedia.tls.trust: disable-verification` on a Machine whose installation delivers private material (a delivered host key or an encrypted root disk's recovery passphrase) | `a Machine that delivers private material through its installation cannot let its controller fetch without verifying the artifact server` | `declare hardware.management.bmc.virtualMedia.tls.trust: import-certificate on <machine>, or established when its controller already trusts the server` |
 | An unverified controller leg for private delivery | a Machine whose installation delivers private material (a delivered host key or an encrypted root disk's recovery passphrase), with a non-https `spec.hardware.management.bmc.address` or `tls.verify: false` | `a Machine whose installation delivers private material hands its controller the private installer image URL, so the controller must be reached over https with its certificate verified` | `address the controller of <machine> with an https:// spec.hardware.management.bmc.address and remove the tls.verify opt-out on <machine> or in spec.baremetal.defaults.bmc of <provider>; name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it` |

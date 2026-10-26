@@ -341,13 +341,13 @@ func TestANetworkFailureIsPartialNeverNoEffect(t *testing.T) {
 	}
 }
 
-// The network restart powers the guest off after a delivered-key Machine has
-// withdrawn its key pair and image, so a Machine interrupted before its disk
-// boot leaves nothing to read: no marker, nothing published and a powered-off
-// controller read. That is the one window convergence reads as no effect, which
-// the specification names; a Machine whose image stays published reads partial
-// in the same window.
-func TestAPrivateMachinePoweredOffByTheRestartReadsNoEffect(t *testing.T) {
+// The evidence alone of a delivered-key Machine the restart powered off shows
+// nothing: no marker, nothing published and a powered-off controller read. Read
+// alone it is no effect; the observation reads it partial once the apply's
+// records hold the disk-boot intent
+// (TestAnInstallationProvedBeforeItsPowerOffIsNeverReadAsNoEffect). A Machine
+// whose image stays published reads partial in the same window.
+func TestAPrivateMachinePoweredOffByTheRestartReadsNoEffectAlone(t *testing.T) {
 	off := func(image bool) []byte {
 		return encode(t, Evidence{Address: "198.51.100.11", Image: image, Power: "Off", Request: "digest", NetworkDifferences: []string{}})
 	}

@@ -16,7 +16,7 @@ import (
 
 func physicalVariantCatalog(profile api.Object, hostType string) api.Catalog {
 	source := api.MapValue(field("generated", api.MapValue(text("keyType", hostType))))
-	objects := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))), sshKeySecret(source), profile, rhelEntitlement(), fleetSecret(api.MapValue(field("generated", api.MapValue(text("keyType", "ecdsa-p256")))))).Objects()
+	objects := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"))), sshKeySecret(source), profile, rhelEntitlement(), fleetSecret(api.MapValue(field("generated", api.MapValue(text("keyType", "ecdsa-p256")))))).Objects()
 	return api.NewCatalog(slices.DeleteFunc(objects, func(object api.Object) bool { return object.Kind() == api.Machine && object.Name() == "rhel-01" }))
 }
 
@@ -30,7 +30,7 @@ func TestPhysicalHostVariantsKeepPrivateTargetAndRootProofs(t *testing.T) {
 		if !request.Target.Physical || request.Target.Channel != substrate.ChannelDeliveredKey || request.Private == nil || request.Image != nil || request.Target.HostKeyRef != "metal-01-host-key" || request.Target.HostKeyType != "ecdsa-p256" {
 			t.Fatal("physical target/private identity lost")
 		}
-		if !strings.Contains(request.Kickstart, "ignoredisk --only-use=sda") || !strings.Contains(request.Kickstart, "clearpart --all --initlabel --drives=sda") || !strings.Contains(request.Kickstart, "52:54:00:9a:1b:01") || !strings.Contains(request.Kickstart, "is not a whole disk") {
+		if !strings.Contains(request.Kickstart, "ignoredisk --only-use=disk/by-id/wwn-0x5000c500a1b2c3d4") || !strings.Contains(request.Kickstart, "clearpart --all --initlabel --drives=disk/by-id/wwn-0x5000c500a1b2c3d4") || !strings.Contains(request.Kickstart, "52:54:00:9a:1b:01") || !strings.Contains(request.Kickstart, "is not a whole disk") {
 			t.Fatal("physical installer proof lost")
 		}
 		if profile.Spec().Has("subscription") && request.Registration == nil {

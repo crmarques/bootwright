@@ -34,6 +34,11 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 				fmt.Sprintf("a libvirt provider's host reservation claims three keys for each managed attachment beside the two of its media pool and its firewall readiness unit, within the 64 keys one reservation holds, so it declares at most %d managed attachments", substrate.MaxManagedAttachments),
 				fmt.Sprintf("declare at most %d attachments with management: managed in spec.networkAttachments of %s, or make the others external", substrate.MaxManagedAttachments, provider.Identity())))
 		}
+		if len(substrate.ExternalBridges(provider)) > substrate.MaxExternalBridges {
+			found = append(found, lifecycle.RefusalOf(provider,
+				fmt.Sprintf("a libvirt provider's bridge-use reservation claims one shared key for each bridge its external attachments use, within the 64 keys one reservation holds, so they use at most %d bridges", substrate.MaxExternalBridges),
+				fmt.Sprintf("name at most %d distinct bridges in the external attachments of spec.networkAttachments of %s", substrate.MaxExternalBridges, provider.Identity())))
+		}
 	}
 	return lifecycle.SortRefusals(found)
 }

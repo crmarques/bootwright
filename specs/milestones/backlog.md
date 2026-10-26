@@ -269,8 +269,6 @@ Alias cell.
 | [B797](#b797) | new, 2026-10-21 (X56) | product | Storage | A StorageObjectBucket's declared policy changes after completion | A completed bucket refuses `object-bucket-identity` on a changed policy; a day-2 update is a state-contract change no milestone needs |
 | [B798](#b798) | new, 2026-10-23 (M3 verification) | defect | Verification tooling | The full Ansible unit gate selects its intended worker mode explicitly | Pre-existing tooling behavior outside the requested product change |
 | [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
-| [B802](#b802) | new, 2026-10-26 (spec audit P0-C) | safety | Managed OS and Substrate | Physical installs, power commands and BMC claims act only on a proved target | Audit roadmap work; implemented only on an explicit lane request |
-| [B803](#b803) | new, 2026-10-26 (spec audit P0-D) | safety | Substrate and Workspace | Shared provider hosts claim bridges and emulated BMCs; deletion lists everything a context realized | Audit roadmap work; implemented only on an explicit lane request |
 | [B804](#b804) | new, 2026-10-26 (spec audit P0-E) | safety | Storage and State reconciliation | Export and cluster retirement refuses while a consuming cluster survives the removal | Audit roadmap work; implemented only on an explicit lane request |
 | [B805](#b805) | new, 2026-10-26 (spec audit P0-F) | safety | Secrets and State reconciliation | Secret references declare a class; a rotated access credential has a recorded removal exit | Audit roadmap work; implemented only on an explicit lane request |
 | [B807](#b807) | new, 2026-10-26 (spec audit P0-H) | safety | Desired state and Architecture | Inert fields report or refuse, one remote quoting function, truthful defaults and warnings | Audit roadmap work; implemented only on an explicit lane request |
@@ -300,6 +298,9 @@ Alias cell.
 | [B835](#b835) | new, 2026-10-26 (spec audit L13) | safety | Storage and CLI | Plan and status show a StorageExport's realm-wide grant | Audit roadmap work; implemented only on an explicit lane request |
 | [B837](#b837) | new, 2026-10-26 (D183, Q118) | product | Add-ons and CLI | Authored add-on ordering and an apply that stops after a named add-on | Lane I work under D182; implemented in its lane |
 | [B838](#b838) | new, 2026-10-26 (lane A review) | safety | Storage | U03's replica-safety refusal applies to every Ceph distribution, not only IBM | Widening adds a refusal; needs an owner decision |
+| [B839](#b839) | new, 2026-10-26 (lane B) | safety | Substrate and Workspace | A shared host claim taken while a removal's effect runs refuses | Found closing B803; the window is the removal's effect itself |
+| [B840](#b840) | new, 2026-10-26 (lane B) | safety | Managed OS | `%pre` compares the resolved root disk's WWN and serial with the frozen values | The follow-up the F10-01 choice left after the by-id path rule |
+| [B841](#b841) | new, 2026-10-26 (lane D) | defect | Verification tooling | The enrollment observer test double is safe under `-race` | Pre-existing test defect found by lane D |
 
 ### B82
 
@@ -1379,7 +1380,7 @@ registration; the two spec sentences and the comment at `capability.go:558` say
 so. Under D142 and D145 the role guard continues a live operation and needs no
 destroy. The host-wide `bridge-use:` reservation, so that an external
 attachment conflicts with another context's managed bridge, is tracked as
-[B803](#b803). **Open:** whether a shut-off domain defined on the
+[B803](delivered.md#x165--audit-lane-b-physical-targets-and-shared-hosts). **Open:** whether a shut-off domain defined on the
 network or bridge also refuses, since it cannot start once the bridge is gone.
 **Exit evidence:** a collection unit test that
 `destroy.yml` refuses on an unanswered listing and on a plugged-in domain that is
@@ -2994,112 +2995,6 @@ evidence:** parallel interruption/retry probes and a justified release fix,
 considering an explicit unlock before close without weakening exclusion or
 adding a retry that conceals a live owner.
 
-### B802
-
-**Owner:** Managed OS and Substrate. **Kind:** safety. **Requires:** B801;
-owner decisions [Q65](#audit-remediation-decisions) and [Q66](#audit-remediation-decisions) for
-their parts. **Definition:** Specified. Roadmap step P0-C of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F10-01,
-F10-05, F10-02, R2-06-03, CX-R5, CX-X1. A physical installation erases only a
-disk named by its by-id WWN path, every physical proof uses one MAC-set
-equality, power commands never reach the controller host or an unproved
-target, and one BMC is one claim whatever its spelling.
-
-**Specs:** [physical installation](../managed-os.md#physical-installation),
-[root-device shape](../api/machines.md#bmc-and-root-device-shape),
-[physical disk safety](../state-reconciliation.md#physical-disk-safety),
-[controller-host protection](../state-reconciliation.md#controller-host-protection),
-[identity and power operations](../substrates.md#identity-and-power-operations),
-[physical machine realization](../substrates.md#physical-machine-realization),
-[machine power operations](../cli.md#machine-power-operations) and
-[host reservations](../infrastructure-services.md#host-reservations) state the
-rules; their Not yet met lines point here.
-
-**Work:**
-
-- F10-01 (High): baremetal admission in `internal/managedos/installation`
-  refuses a `deviceName` that is not `/dev/disk/by-id/wwn-0x` plus 16 or 32
-  lowercase hex digits, at `os.install.rootDeviceHints.deviceName`; the `%pre`
-  rendered by `kickstart.go` stops before any storage directive unless the path
-  resolves to a whole block device. Update the code-checked refusal-table row
-  "A physical Machine naming no root device" with the code
-  (`TestManagedOSRefusalTableMatchesUnsupported`). Tests: a `/dev/sdX`
-  `deviceName` on baremetal refuses at plan; a rendered `%pre` whose path
-  resolves to a partition or nothing stops before storage.
-- F10-05 (Medium): the controller-side target proof, the pre-boot proof
-  (`internal/substrate/preboot.go`, `target.go`) and `targetProofLines` use
-  set equality, a management controller's host interface excepted; the proof
-  records the complete reported set for the erase comparison. Tests: an extra
-  reported MAC refuses; a host-interface NIC does not.
-- F10-02 (Medium): `internal/machine/power` refuses the Environment's
-  controller Machine, refuses a reported UUID or MAC equal to the controller
-  host's own, runs the full target proof for an unpinned physical Machine and
-  refuses one declaring no MAC. One test per refusal.
-- R2-06-03 (Medium): the physical block publishes `bmc-system:<lowercase
-  UUID>` in the same controller record before any media insert and refuses
-  `controller.conflict` naming the holder. Test: a DNS name and an IP literal
-  for one BMC refuse the second context before media insertion.
-- Waits for [Q65](#audit-remediation-decisions): change the Resolution outcomes
-  clause, add the table row and capability field if B, and a negative test
-  that a forbidden, disconnected or malformed removal observation is never
-  `no-effect` and never admits a replacement registration
-  (`TestTransitionTablesMatchSpec` moves with the row).
-- Waits for [Q66](#audit-remediation-decisions): managed-os.md's unknown resolution and
-  interruption row, and the interruption test over installation proof,
-  material withdrawal, power-off and disk boot.
-- Follow-up, outside this exit: admit `wwn` and `serialNumber` beside
-  `deviceName` on baremetal and compare them in `%pre`, failing closed on a
-  mismatch or an unreadable attribute.
-
-**Exit evidence:** the named refusal tests above; the security-safety skill
-bullet matches managed-os.md; the CX-R5 and CX-X1 answers are recorded and
-applied with their tests; `make check` passes.
-
-### B803
-
-**Owner:** Substrate and Workspace. **Kind:** safety. **Requires:** B801;
-owner decision [Q67](#audit-remediation-decisions) for its part. **Definition:**
-Specified. Roadmap step P0-D of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F10-03,
-R2-06-01, R2-06-04, R2-06-02, V2-03. Contexts sharing a provider host claim
-the bridges and emulated BMCs they use, and a permanent deletion names every
-object its operations realized and the hazards it leaves.
-
-**Specs:** [mutation safety](../state-reconciliation.md#mutation-safety),
-[permanent deletion](../contexts.md#permanent-deletion),
-[host reservations](../infrastructure-services.md#host-reservations),
-[substrates](../substrates.md) (libvirt attachments, emulated BMC) and
-[machines](../api/machines.md) state the rules. The incarnation identity stays
-[B568](#b568); the live-domain destroy guard stays [B567](#b567).
-
-**Work:**
-
-- F10-03 (High), R2-06-02 (Low): the orphan confirmation, and every
-  retained-operation exit that names deletion then `init`, print the by-hand
-  removal of abandoned objects, the same-name and cross-controller warning
-  (D155) and the exclusive keys the deletion frees; a golden of each.
-- R2-06-01 (High): every external libvirt attachment publishes the shared key
-  `bridge-use:<name>` (`internal/substrate/libvirt/requests.go`); a removal
-  that would release an exclusive `bridge:<name>` refuses `controller.conflict`
-  naming the other context. The code-checked attachment-bound row counts the
-  new keys. Define and test a stale `bridge-use` left by an abandoned context.
-  Tests: a removal of a managed bridge another context uses refuses.
-- R2-06-04 (Low): the libvirt machine block claims its BMC endpoint's `bmc:`
-  key shared, with `ControllerReservationKey`'s normalization; its removal
-  refuses while another context holds that key exclusively, and its
-  installation refuses at registration. A test for each.
-- V2-03 (Medium): the deletion refusal, orphan confirmation and deletion plan
-  in `internal/workspace/contexts` list the objects the frozen operations
-  realized (or name `bootwright diff --context <name>`); goldens over a context
-  whose edited input dropped a realized object.
-- Waits for [Q67](#audit-remediation-decisions): under the tombstone answer, an
-  `abandoned/<name>` holder, a confirmed release command in
-  `../cli/commands.md`, and a test that a second context's `bmc:` claim
-  refuses until it is released.
-
-**Exit evidence:** the named tests and goldens; grep finds B568 in Mutation
-safety and Permanent deletion; `make check` passes.
-
 ### B804
 
 **Owner:** Storage and State reconciliation. **Kind:** safety.
@@ -4280,6 +4175,39 @@ and the U03 row and [storage-coverage](../storage-coverage.md) text drop the
 IBM qualifier. **Exit evidence:** a refusal test for an `oss` cluster and the
 matrix row.
 
+### B839
+
+**Owner:** Substrate and Workspace. **Kind:** safety. **Requires:** none.
+**Definition:** Needs definition. Since X165 a destroy re-proves under the
+root lock, immediately before each effect, that no other context holds a
+shared `bridge-use:` or `bmc:` key the effect releases. A shared claim still
+conflicts with nothing when another context takes it, so a context can claim
+the key while the removal's effect is running. **Outcome:** taking a shared
+claim refuses while a removal holding that key is between its re-proof and its
+completion, or the removal holds the key exclusively for that window.
+**Exit evidence:** a test in which another context claims the key during the
+effect and refuses, and the removal completes.
+
+### B840
+
+**Owner:** Managed OS. **Kind:** safety. **Requires:** none. **Definition:**
+Needs definition. A bare-metal Bootwright-installed Machine names its root disk
+by its `/dev/disk/by-id/wwn-0x` path and `%pre` stops unless that path resolves
+to a whole disk (X165). **Outcome:** `wwn` and `serialNumber` may stand beside
+`deviceName` on bare metal, and `%pre` compares the resolved disk's WWN and
+serial with the frozen values, stopping before storage on a mismatch or an
+unreadable value. **Exit evidence:** a `%pre` test per mismatch and unreadable
+case, and the refusal-table rows moved with the admission change.
+
+### B841
+
+**Owner:** Verification tooling. **Kind:** defect. **Requires:** none.
+**Definition:** Specified. `go test -race ./internal/trust/enrollment/` fails
+on main because the observer test double appends without a lock while
+observations run concurrently (found by lane D, 2026-10-26). **Outcome:** the
+double guards its records. **Exit evidence:** the package passes under
+`-race`, and `make race` covers it if it is meant to.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/spec/2026-10-26.md) ordered its
@@ -4299,7 +4227,7 @@ decision stay open while its other parts land.
 | Lane | Items in order | Starts after | Not concurrently with | Owner decisions |
 | --- | --- | --- | --- | --- |
 | A Harness and guards | B800 (X161), B801 (X161) | none | none | Q62, Q63, Q64 |
-| B Physical targets and shared hosts | [B802](#b802), [B803](#b803) | B801 | D, E, G, I | Q65, Q66, Q67 |
+| B Physical targets and shared hosts | B802 (X165), B803 (X165) | B801 | D, E, G, I | Q65, Q66, Q67 |
 | C Storage retirement | [B804](#b804), [B835](#b835) | none | F, G | Q68 |
 | D Credentials and trust | [B805](#b805), [B817](#b817), [B829](#b829), [B831](#b831) | none | B | Q70, Q97, Q98, Q99, Q100, Q101, Q116 |
 | E Store durability and controller records | B806 (X164), B836 (X164), B832 (X164) | B801 | B, J | none |
@@ -4326,7 +4254,7 @@ also updates this table.
 | 2 | K Language and adapter contracts | merged (X162) |
 | 3 | H Cross-build continuation | merged (X163) |
 | 4 | E Store durability and controller records | merged (X164) |
-| 5 | B Physical targets and shared hosts | not started |
+| 5 | B Physical targets and shared hosts | merged (X165) |
 | 6 | D Credentials and trust | not started |
 | 7 | C Storage retirement | not started |
 | 8 | F Truthful admission | not started |
@@ -4359,9 +4287,9 @@ blocks.
 | Q62 | Should a Codex project hook call scripts/hooks/stop-check, which needs a narrow .codex/hooks.json un-ignored in the tracked tree? | (a: add it) Codex sessions get the same advisory end-of-turn focus check; .gitignore gains one exception.; (b: leave .codex/ untracked) Only Claude Code runs the hook; Codex users configure their own. | **Answered by D183: a.** The report (10.4) leaves it to the owner without a recommendation; non-blocking for B800's docs test. | [B800](delivered.md#x161--audit-lane-a-harness-and-guards) |
 | Q63 | How should the WIP limit of two active slices (D158) be reconciled with the five slices now in progress (X61, X118, X123, X130, X143), where X130 (M3e, D181) has no recorded exception? | (a: keep the limit and per-decision exceptions) Record an exception for X130 or pause one slice; the scope rule stays as written.; (b: a limit per program or milestone) Rewrite the scope rule to count active slices per program; the standing exceptions in D134, D143, D159, D172 and D173 retire.; (c: retire the WIP limit) Delete the limit and its exceptions; the Active slices table alone governs authorization. | **Answered by D183: b.** The audit leaves the WIP limit to the owner (P0-B exit); it suggests a rule current practice satisfies, such as a per-program limit, but does not choose. | [B801](delivered.md#x161--audit-lane-a-harness-and-guards) |
 | Q64 | Does matrix row U03 (replicated size equal to the OSD-host count refused, citing IBM's colocation page) stay as an admission refusal under D159 clause 15? | (a: keep) U03 stays tested, recorded as a native replica-safety rule (three replicas need four hosts) rather than a support statement.; (b: remove) Admission stops refusing size equal to host count; the U03 row, fixture and admission check are removed by a code change. | **Answered by D183: a.** The report routes this to the owner without a recommendation; its basis may be a replica-safety rule rather than a vendor table. | [B801](delivered.md#x161--audit-lane-a-harness-and-guards) |
-| Q65 | How does a removal observation that cannot tell its postcondition from an unreadable target resolve (state-reconciliation.md Resolution outcomes, against security.md's unknown-stays-unknown rule)? | (a: delete the clause) An unreadable removal observation stays unknown and only an operator resolution moves it; smallest edit, more manual resolutions, teardown can strand.; (b: typed inconclusive result) A new effect state distinct from no-effect permits one retry only for a capability declaring the removal idempotent, with ownership proved from durable records and a re-read before any effect; one table row, one capability field, one test, and one sentence in security.md. | **Answered by D183: b.** The report gives both without choosing (14.8); section 8.B3 calls B the smallest correction that keeps replay-safe teardown. Either way the negative test is the same. | [B802](#b802) |
-| Q66 | How is a private Machine that the network restart powered off before (or after) its disk boot read on recovery (managed-os.md 'the one window', currently 'positive no effect')? | (a: relabel) Read the window as a positive partial realization of this operation's own installation, retried by the same frozen request behind the boot proof, and name the cases it covers including power-off after disk boot.; (b: durable intent) Record durably before power-off that installation was proved and disk boot is intended; recovery takes the disk-boot identity path or stays unknown, never re-running the installer. | **Answered by D183: b.** The report records no choice; it calls the relabel the smallest fix, while durable intent removes the reinstall. | [B802](#b802) |
-| Q67 | Should an orphan-acknowledged context deletion keep its exclusive host keys as an abandoned/<name> tombstone instead of releasing them at once (amending D38)? | (a: keep D38) Keys release at the deletion; the orphan confirmation names the keys it frees and the reinstall hazard (spec applied, code in B803).; (b: tombstone) Exclusive entries become an abandoned/<name> holder that refuses conflicting claims until a new confirmed 'bootwright controller release --abandoned <name>'; shared media entries still drop at once. | **Answered by D183: a.** Arbiter and lanes: A's warning now; B only if the owner reopens D38. | [B803](#b803) |
+| Q65 | How does a removal observation that cannot tell its postcondition from an unreadable target resolve (state-reconciliation.md Resolution outcomes, against security.md's unknown-stays-unknown rule)? | (a: delete the clause) An unreadable removal observation stays unknown and only an operator resolution moves it; smallest edit, more manual resolutions, teardown can strand.; (b: typed inconclusive result) A new effect state distinct from no-effect permits one retry only for a capability declaring the removal idempotent, with ownership proved from durable records and a re-read before any effect; one table row, one capability field, one test, and one sentence in security.md. | **Answered by D183: b.** The report gives both without choosing (14.8); section 8.B3 calls B the smallest correction that keeps replay-safe teardown. Either way the negative test is the same. | [B802](delivered.md#x165--audit-lane-b-physical-targets-and-shared-hosts) |
+| Q66 | How is a private Machine that the network restart powered off before (or after) its disk boot read on recovery (managed-os.md 'the one window', currently 'positive no effect')? | (a: relabel) Read the window as a positive partial realization of this operation's own installation, retried by the same frozen request behind the boot proof, and name the cases it covers including power-off after disk boot.; (b: durable intent) Record durably before power-off that installation was proved and disk boot is intended; recovery takes the disk-boot identity path or stays unknown, never re-running the installer. | **Answered by D183: b.** The report records no choice; it calls the relabel the smallest fix, while durable intent removes the reinstall. | [B802](delivered.md#x165--audit-lane-b-physical-targets-and-shared-hosts) |
+| Q67 | Should an orphan-acknowledged context deletion keep its exclusive host keys as an abandoned/<name> tombstone instead of releasing them at once (amending D38)? | (a: keep D38) Keys release at the deletion; the orphan confirmation names the keys it frees and the reinstall hazard (spec applied, code in B803).; (b: tombstone) Exclusive entries become an abandoned/<name> holder that refuses conflicting claims until a new confirmed 'bootwright controller release --abandoned <name>'; shared media entries still drop at once. | **Answered by D183: a.** Arbiter and lanes: A's warning now; B only if the owner reopens D38. | [B803](delivered.md#x165--audit-lane-b-physical-targets-and-shared-hosts) |
 | Q68 | Confirm the D143 clause 6 reading: does retiring a Ceph cluster (or StorageExport) with its virtual hosts require that no consumer of its exports survives the removal? | (a: refuse) Removal refuses before registration naming the surviving consumer and export until B491; a mixed context (virtual Ceph, physical OpenShift) has no full destroy until then (the specs state this refusal as the interim safe reading).; (b: named impact plus acknowledgement) Removal proceeds after an acknowledgement naming the surviving consumer, whose PVs and Secrets then point at deleted storage. | **Answered by D183: a.** Roadmap P0-E and R2-02-01 recommend A with a plan-time topology flag; F10-04's refuter and calibrator prefer B as smaller. | [B804](#b804) |
 | Q69 | Should B659, B662 and B491 become prerequisites of M2d's B485 exit, or does B485 close with the physical recovery limitation recorded? | (a: prerequisites) B485 Requires gains B659, B662 and B491; M2d cannot complete until interrupted physical deployments have exits, which first needs their protocol decisions.; (b: record the limitation) B485 may close with the physical profile documented as an incomplete recovery profile (text applied now); the exits stay parked. | **Answered by D183: a.** The audit (14.8) offers both and keeps the recovery protocols as owner decisions; it does not choose. | [B485](m2.md#b485) |
 | Q70 | Should continuation and removal be able to present the current version of a rotated access credential (BMC/Redfish, KubeVirt kubeconfigRef, vCenter, registry login) instead of the bound one, and through which recorded gate? | (a: explicit recorded rebind exit) A third exit beside D37 for access credentials only, gated by a flag or the --authorize token model and recorded as a new binding version; ownership proofs still run and effect-material Secrets refuse it.; (b: keep today's rule) Removal always presents the bound version; a rotated credential strands destroy, leaving restore-keyring or --purge --allow-orphans. | **Answered by D183: a.** The report recommends A, gated by the --authorize model and named apart from B181's bounded-run rebind, keeping D37 and D85; the owner decides the flag. | [B805](#b805) |

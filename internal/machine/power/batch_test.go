@@ -29,7 +29,8 @@ func (s fleetState) RenderEffective(context.Context, compilation.EffectiveReques
 	for index := range s.extra {
 		name := fmt.Sprintf("node-%02d", index+1)
 		objects = append(objects, object(api.Machine, name, m("os", m("provided", true), "network", addresses(fmt.Sprintf("192.0.2.%d/24", 100+index)),
-			"hardware", m("management", m("bmc", m("address", "https://"+name+".example.test/redfish/v1/Systems/1", "credentialsRef", name+"-bmc"))))))
+			"hardware", m("nics", list(m("name", "eno1", "macAddress", fmt.Sprintf("52:54:00:9a:1d:%02d", index))),
+				"management", m("bmc", m("address", "https://"+name+".example.test/redfish/v1/Systems/1", "credentialsRef", name+"-bmc"))))))
 	}
 	return &compilation.EffectiveResult{Effective: api.NewCatalog(objects)}, nil
 }
@@ -327,7 +328,7 @@ func TestARefusingMemberRunsNothingOnAnyMachine(t *testing.T) {
 	service, runtime, proved := batchService(0, runner, nil, confirmer, nil)
 	_, err := service.Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal", "host", "controller"}})
 	refused := onlyRefusal(t, err)
-	if refused.Code != "access.unavailable" || refused.Object == nil || refused.Object.Name != "controller" || refused.Object.Kind != string(api.Machine) {
+	if refused.Code != "machine.power" || refused.Object == nil || refused.Object.Name != "controller" || refused.Object.Kind != string(api.Machine) {
 		t.Fatalf("refusal = %+v", refused)
 	}
 	if runtime.entered != 0 || len(proved.asked) != 0 || len(confirmer.asked) != 0 || len(runner.seen) != 0 {

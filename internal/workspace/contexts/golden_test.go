@@ -1,6 +1,8 @@
 package contexts_test
 
 import (
+	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -8,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -106,4 +110,34 @@ func TestContextConfigurationMatchesItsGolden(t *testing.T) {
 	if err != nil || read != configuration {
 		t.Fatalf("the configuration read back as %+v (%v)", read, err)
 	}
+}
+
+// A context whose edited input no longer declares an object its operations
+// realized still owns that object, so neither the deletion refusal nor the
+// orphan confirmation names the selected input as the inventory: each names
+// bootwright diff --context beside status, which lists what the input dropped,
+// and the plan names the exclusive keys the deletion frees (B803).
+func TestTheOrphanedDeletionInventoryGolden(t *testing.T) {
+	r := existingRepository(t)
+	r.evidence["example"] = []byte(`{"version":1,"operation":"applied","ownership":"retained"}`)
+	r.reservations = map[string][]string{"example": {"bmc:192.0.2.1:8000/1", "libvirt-domain:bootwright-example-rhel-01", "media:rhel-9.iso"}}
+	edited := desiredstate.Sources{Roots: []string{"/synthetic/input"}, Files: []desiredstate.SourceFile{
+		desiredstate.NewSourceFile("/synthetic/input/environment.yaml", []byte(environmentInput)),
+	}}
+	_, refused := service(t, r, edited).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true})
+	if _, err := service(t, r, edited).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: true}); err != nil {
+		t.Fatal(err)
+	}
+	reported := diagnostics.Of(refused)
+	if len(reported) != 1 || r.deletionPlan == nil {
+		t.Fatalf("refusal %#v, plan %+v", reported, r.deletionPlan)
+	}
+	data, err := json.MarshalIndent(map[string]any{
+		"refusal": map[string]string{"message": reported[0].Message, "remediation": reported[0].Remediation},
+		"confirm": r.confirmed, "freed": r.deletionPlan.Exclusive, "released": r.deletionPlan.Reservations,
+	}, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	matchesTextGolden(t, "deletion-orphaned-inventory", append(data, '\n'))
 }

@@ -26,12 +26,17 @@ type Realization interface {
 	Realization(ctx context.Context, contextName, name string) (machine.OwnershipState, bool, error)
 }
 
-// Identities reports the hardware identity the context's current apply proved
-// for one physical Machine, and whether it proved one. A physical controller
-// answers whatever server is cabled behind it, so a power operation holds the
-// Machine to that pin before it sends any power request.
+// Identities reports the identity the context's current apply proved for one
+// physical Machine, which a power operation holds it to before any request,
+// and the controller host's own, read locally, which no request may reach.
 type Identities interface {
 	ProvedIdentity(context.Context, string, string) (machine.HardwareIdentity, bool, error)
+	ControllerHost(context.Context) (HostIdentity, error)
+}
+
+type HostIdentity struct {
+	UUID string
+	MACs []string
 }
 
 // Runtime lends the controller's private execution boundary for exactly one

@@ -70,12 +70,12 @@ func MachineBlockID(machine string) string { return "machine-" + machine }
 // the host layout invalidates a frozen plan.
 func HostContentDigest() string {
 	return contentDigest("bootwright.substrate.libvirt.host-v1", HostImplementation, hostRequestVersion,
-		strings.Join(hypervisorPackages, ","), substrate.ImagePrefix, substrate.Prefix, strings.Join(serviceUnits, ","))
+		strings.Join(hypervisorPackages, ","), substrate.ImagePrefix, substrate.Prefix, strings.Join(serviceUnits, ","), "bridge-use-claim")
 }
 
 func MachineContentDigest() string {
 	return contentDigest("bootwright.substrate.libvirt.machine-v1", MachineImplementation, machineRequestVersion,
-		emulatorImage, substrate.ImagePrefix, substrate.Prefix, "data-media-ssd-scsi-v1")
+		emulatorImage, substrate.ImagePrefix, substrate.Prefix, "data-media-ssd-scsi-v1", "shared-bmc-claim")
 }
 
 func contentDigest(parts ...string) string {

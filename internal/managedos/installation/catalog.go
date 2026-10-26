@@ -108,6 +108,8 @@ const registrationBound = 15 * time.Minute
 // deleting the name moved no frozen plan.
 const frozenTooling = "lorax,xorriso"
 
+const provedDiskBoot = "proved-installation-disk-boot,replay-safe-unread-registration"
+
 // BlockID names the block this capability contributes. A consumer states
 // requirements by API object, never by this identity.
 func BlockID(machine string) string { return "os-install-" + machine }
@@ -120,7 +122,7 @@ func ContentDigest() string {
 		"bootwright.managedos.install-anaconda-v1",
 		Implementation, requestVersion, kickstartVersion,
 		consumerPrefix, privatePrefix, servedRoot, MarkerPath, HostKeyPath,
-		NetworkDocumentPath, NetworkMarkerPath, strconv.Itoa(networkCheckpointSeconds), frozenTooling,
+		NetworkDocumentPath, NetworkMarkerPath, strconv.Itoa(networkCheckpointSeconds), frozenTooling, provedDiskBoot,
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

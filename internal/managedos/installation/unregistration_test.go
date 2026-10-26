@@ -184,7 +184,7 @@ func TestRemovalResolutionReadsTheGuestOnlyWhenRegistrationIsFrozen(t *testing.T
 		"withdrawn and retained":        {registering, Evidence{Registration: RegistrationEvidence{State: "retained"}}, reconciliation.EffectCompleted},
 		"withdrawn and foreign":         {registering, Evidence{Registration: RegistrationEvidence{State: "foreign"}}, reconciliation.EffectCompleted},
 		"withdrawn and still owned":     {registering, Evidence{Registration: RegistrationEvidence{Consumer: ownedConsumer, State: "owned"}}, reconciliation.EffectPartial},
-		"withdrawn and unread":          {registering, Evidence{}, reconciliation.EffectNoEffect},
+		"withdrawn and unread":          {registering, Evidence{}, reconciliation.EffectInconclusive},
 		"content left and unread":       {registering, Evidence{Image: true}, reconciliation.EffectPartial},
 		"not registering, withdrawn":    {plain, Evidence{}, reconciliation.EffectCompleted},
 		"not registering, content left": {plain, Evidence{Image: true}, reconciliation.EffectPartial},
@@ -268,5 +268,16 @@ func TestRemovalEvidenceDecodesTheUnregistrationStates(t *testing.T) {
 		if _, err := decodeEvidence(encode(t, Evidence{Absent: true, Postcondition: true, Registration: registration, Request: "digest"}), "digest"); err != nil {
 			t.Fatalf("%+v refused: %v", registration, diagnostics.Of(err))
 		}
+	}
+}
+
+// The removal declares itself replay-safe, so the inconclusive reading of a
+// registration it could not read admits the one retry the engine allows,
+// which reads the guest again before any effect (Q65, D183).
+func TestTheInstallationRemovalDeclaresItselfReplaySafe(t *testing.T) {
+	call, _ := execution(t, "digest")
+	removal, err := New(nil).Removal(context.Background(), call.Block)
+	if err != nil || !removal.ReplaySafe {
+		t.Fatalf("removal = %+v (%v)", removal, err)
 	}
 }

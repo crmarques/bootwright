@@ -82,7 +82,7 @@ def presence(arguments, request_digest):
     evidence["postcondition"] = bool(
         expected
         and not (observation.get("failures") or [])
-        and expected.issubset(set(evidence["addresses"]))
+        and expected == set(evidence["addresses"])
         and evidence["power"]
         and (evidence["uuid"] or evidence["serial"])
     )
@@ -139,6 +139,9 @@ def unproved(evidence, arguments):
         names.append("any declared hardware address")
     else:
         names.extend(_missing(expected - set(evidence["addresses"]), _declared_names(arguments)))
+        undeclared = len(set(evidence["addresses"]) - expected)
+        if undeclared:
+            names.append("an inventory free of addresses the Machine does not declare (%d reported)" % undeclared)
     if not evidence["power"]:
         names.append("a power state")
     if not evidence["uuid"] and not evidence["serial"]:

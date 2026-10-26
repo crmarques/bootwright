@@ -1451,14 +1451,12 @@ A power command never acts on the host that runs Bootwright. One naming the
 environment's controller Machine refuses `machine.power` before any request, and
 so does one whose management controller reports a system UUID or MAC address
 that is the controller host's own, read locally; `--force` and `--yes` lift
-neither. A physical Machine with no recorded pin is proved by the
+neither. A command on a physical Machine also refuses when this host cannot
+read its own DMI product UUID and MAC addresses, since nothing then shows the
+request misses it. A physical Machine with no recorded pin is proved by the
 [target proof](substrates.md#physical-machine-realization), a complete
 inventory that reports exactly its declared MAC set, before a power request, and
 refuses when it declares none, so no request is compared with nothing.
-
-Not yet met: a power command is not refused for the controller Machine or for
-the controller host's own identity, and an unpinned physical Machine is compared
-with nothing; tracked as [B802](milestones/backlog.md#b802).
 
 [`machine list --power-status`](#resource-inspection-and-explicit-access)
 reads the same management controllers over the same boundary and under the same

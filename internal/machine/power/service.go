@@ -3,6 +3,7 @@ package power
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -234,7 +235,7 @@ func batchCommand(contextName, verb string, names []string, force bool) string {
 
 // execute runs one Machine; only a lone run names its log location.
 func (s Service) execute(ctx context.Context, name string, resolved target, position, total int) (*Result, error) {
-	frozen, pin := resolved.frozen, resolved.pin
+	frozen := resolved.frozen
 	canonical, err := frozen.Canonical()
 	if err != nil {
 		return nil, err
@@ -258,7 +259,7 @@ func (s Service) execute(ctx context.Context, name string, resolved target, posi
 		}
 		step := powerStep(frozen, position, total)
 		s.progress(inner, step, "running", "")
-		evidence, err := s.run(inner, runtime, frozen, canonical, digest, pin, step, resolved.arm)
+		evidence, err := s.run(inner, runtime, resolved, canonical, digest, step)
 		if err != nil {
 			s.progress(inner, step, settlement(inner, err), "")
 			return err
@@ -277,9 +278,12 @@ func (s Service) execute(ctx context.Context, name string, resolved target, posi
 	return result, nil
 }
 
-func (s Service) run(ctx context.Context, runtime lifecycle.Runtime, frozen Request, canonical []byte, digest string,
-	pin machine.HardwareIdentity, step lifecycle.ProgressEvent, arm string) (Evidence, error) {
-	run, err := s.runner.Run(ctx, invocation(runtime, frozen, canonical, digest, pin, s.groups(step, frozen.Force), arm))
+func (s Service) run(ctx context.Context, runtime lifecycle.Runtime, resolved target, canonical []byte, digest string,
+	step lifecycle.ProgressEvent) (Evidence, error) {
+	frozen := resolved.frozen
+	request := invocation(runtime, frozen, canonical, digest, resolved.pin, s.groups(step, frozen.Force), resolved.arm)
+	physicalProofs(&request, resolved)
+	run, err := s.runner.Run(ctx, request)
 	if err != nil {
 		return Evidence{}, err
 	}
@@ -440,6 +444,37 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 	}
 	return request
 }
+
+func physicalProofs(request *lifecycle.RunRequest, resolved target) {
+	if resolved.arm != "baremetal" {
+		return
+	}
+	encode := func(value string) string { return base64.StdEncoding.EncodeToString([]byte(value)) }
+	if resolved.host.UUID != "" {
+		request.MaterialValues["controllerHostUUIDBase64"] = encode(resolved.host.UUID)
+	}
+	if len(resolved.host.MACs) != 0 {
+		request.MaterialValues["controllerHostMACsBase64"] = encode(strings.Join(resolved.host.MACs, ","))
+	}
+	if request.Refusals == nil {
+		request.Refusals = map[string]error{}
+	}
+	name := resolved.frozen.Identity.Object
+	request.Refusals[controllerHost] = refusedOn(name, "the management controller at "+resolved.frozen.Controller.Endpoint+
+		" answers with the system UUID or a MAC address of the host that runs Bootwright, so no power request was sent",
+		"correct spec.hardware.management.bmc.address on Machine/"+name+" so it names that machine's own controller")
+	if len(resolved.expected) != 0 {
+		request.MaterialValues["expectedMACsBase64"] = encode(strings.Join(resolved.expected, ","))
+		request.Refusals[hardwareMismatch] = refusedOn(name, "the machine answering at "+resolved.frozen.Controller.Endpoint+
+			" does not report exactly the hardware addresses Machine/"+name+" declares in a complete inventory, so no power request was sent",
+			"correct spec.hardware.management.bmc.address or spec.hardware.nics on Machine/"+name+", or apply the context so its bare-metal block proves it")
+	}
+}
+
+const (
+	controllerHost   = "controller-host"
+	hardwareMismatch = "hardware-mismatch"
+)
 
 // identityMismatch is the refusal a power run names when the machine's
 // controller answers as another system than the one its pin records, before

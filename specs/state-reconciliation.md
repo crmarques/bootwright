@@ -285,10 +285,6 @@ archival mode. The deleted context's host reservations go with it, as
 name no longer refuse another context, while the abandoned objects themselves
 stay where they are.
 
-Not yet met: deletion names only `status`, whose rows omit a realized object
-the selected input no longer declares; tracked as
-[B803](milestones/backlog.md#b803).
-
 The [Workspace context contract](contexts.md) defines publication and permanent
 local deletion under this guard.
 
@@ -570,18 +566,27 @@ that verb's effect. A destroy block's completion is its removal's own
 postcondition, as its capability states it, so a target that still shows what
 the removal takes back, and is this context's own, is positive no effect or a
 positive partial realization, as its capability states which. What a removal
-keeps by design proves nothing against it. An observation that cannot tell the
-removal's postcondition from a target it could not read never proves
-completion: its capability reads it as no effect, and the retry that follows
-proves its own absence, since a removal over an absent target completes (see
-[attempts and unknown outcomes](#attempts-and-unknown-outcomes)).
+keeps by design proves nothing against it. A read that succeeds yet cannot
+tell the removal's postcondition from a target it could not read proves
+neither completion nor no effect: its capability reports it `inconclusive`, a
+state distinct from `no-effect` (Q65, D183). It admits one retry only when the
+capability declares its removal replay-safe (the removal's `ReplaySafe`), the
+block's owning apply durably recorded an attempt of it, so its ownership comes
+from durable records, and no earlier resolution of the block in this
+operation was inconclusive; that retry reads the target again before any
+effect, completing over a postcondition the read proves, removing over a
+target the read shows, and performing nothing otherwise. Any other
+inconclusive observation stays `unknown`, as a failed, forbidden,
+disconnected or malformed observation always does, which never reads as
+`no-effect` and never admits a retry or a replacement operation.
 
 | Observation proves | Effect state | Block |
 | --- | --- | --- |
 | Positive completion | `completed` | `done` |
 | Positive no effect | `no-effect` | `failed` |
 | Positive partial realization this context owns | `partial` | `failed` |
-| Failed, forbidden, empty, malformed, contradictory, or foreign observation | `unknown` | `unknown` |
+| Inconclusive removal observation of a replay-safe removal, before its one retry | `inconclusive` | `failed` |
+| Failed, forbidden, empty, malformed, contradictory, or foreign observation, or any other inconclusive one | `unknown` | `unknown` |
 
 The operation then takes the state its blocks give it under
 [precedence](#operation-state-precedence), and a block resolved `failed` is
@@ -2061,12 +2066,6 @@ holds the claim and the controller-side proof, and
 [physical installation](managed-os.md#physical-installation) repeats that proof
 immediately before it boots and again inside the installer itself.
 
-Not yet met: a physical managed-OS installation accepts a root disk named by
-any device path, such as `/dev/sda`, rather than its by-id WWN path, and its
-installer check does not prove that path resolves to a whole disk; the target
-proof and the installer check require only that every declared MAC is
-reported; tracked as [B802](milestones/backlog.md#b802).
-
 The interval between the controller's last proof and the installer's first
 write is a residual race, not an ownership proof. No MAC set, root-device hint,
 power-off state, context claim or `data-loss` authorization closes it, and none
@@ -2205,11 +2204,6 @@ under a current pin or a fresh proof of its complete MAC set. An owned service
 may be removed only through its frozen inverse when remaining operations no
 longer depend on it. Selecting a Machine as the controller never grants ownership of
 the host, its runtime or another context's services.
-
-Not yet met: a bounded power run refuses neither the controller Machine nor a
-target reporting the controller host's own identity, and it compares an
-unpinned physical Machine with nothing; tracked as
-[B802](milestones/backlog.md#b802).
 
 Controller setup, immutable execution dependencies and locally hosted services
 have separate owners. Plans must model their actual readiness relationships

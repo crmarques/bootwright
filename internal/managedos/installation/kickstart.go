@@ -12,7 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const kickstartVersion = "kickstart-anaconda-v10"
+const kickstartVersion = "kickstart-anaconda-v13"
 
 // guestHostKeys are the keys a guest-agent installation generates here rather
 // than at first boot, so the republished copy is the key sshd presents. Each
@@ -124,15 +124,14 @@ type Installation struct {
 // the root account is locked, and the %post removes every retained copy of the
 // file so the installed system keeps none.
 func RenderKickstart(input Installation) (string, error) {
-	// Only a disk its substrate created may be left for the installer to
-	// choose. A physical machine already holds whatever it holds, so naming no
-	// disk there would clear every one it has.
-	if input.Physical && input.RootDevice == "" {
-		return "", refusal("lifecycle.state", "a physical installation names no root device to erase",
-			"set spec.os.install.rootDeviceHints.deviceName; a wwn-only selection is not yet supported")
-	}
 	if err := guardKickstartValues(input); err != nil {
 		return "", err
+	}
+	// Only a disk its substrate created may be left for the installer to
+	// choose; a physical one is named by its by-id WWN path.
+	if input.Physical && !durableRootDevice(input.RootDevice) {
+		return "", refusal("lifecycle.state", "a physical installation names no root disk by its /dev/disk/by-id/wwn-0x path to erase",
+			"set spec.os.install.rootDeviceHints.deviceName to the disk's /dev/disk/by-id/wwn-0x path; a wwn-only selection is not yet supported")
 	}
 	if _, known := deliveredHostKeys[input.HostKeyType]; input.Channel == substrate.ChannelDeliveredKey && !known {
 		return "", refusal("lifecycle.state", "the delivered SSH host key type "+input.HostKeyType+" has no installed path",
@@ -631,22 +630,35 @@ func deliveredKeyLines(input Installation) []string {
 }
 
 // targetProofLines repeat the controller-side target proof on the machine that
-// is actually running the installer. The controller's proof closes before the
-// machine boots, and a machine can be re-cabled or re-addressed in between, so
-// this is the last point at which the wrong server can still be stopped. It
-// runs before any storage is touched and fails closed; no authorization
-// relaxes it, because `data-loss` acknowledges a loss rather than selecting
-// what to lose.
+// is actually running the installer: exactly the declared MAC set over the
+// device-backed ports, a USB CDC or RNDIS management host interface excepted,
+// and a whole root disk. It is the last point at which the wrong server can
+// still be stopped, runs before any storage is touched and fails closed; no
+// authorization relaxes it, because `data-loss` acknowledges a loss rather
+// than selecting what to lose.
 func targetProofLines(input Installation) []string {
-	if !input.Physical || len(input.ExpectedMACs) == 0 {
+	if !input.Physical {
 		return nil
 	}
 	lines := []string{
 		"%pre --erroronfail --interpreter=/bin/bash",
 		"set -euo pipefail",
-		`bootwright_observed=$(cat /sys/class/net/*/address | tr 'A-Z' 'a-z' | sort -u)`,
+		`bootwright_observed=$(for bootwright_nic in /sys/class/net/*; do`,
+		`if [ ! -e "${bootwright_nic}/device" ]; then continue; fi`,
+		`case "$(basename -- "$(readlink -f -- "${bootwright_nic}/device/driver")")" in cdc_ether|cdc_eem|cdc_ncm|rndis_host) continue;; esac`,
+		`bootwright_mac="${bootwright_nic}/address"`,
+		`if [ -r "${bootwright_nic}/bonding_slave/perm_hwaddr" ]; then bootwright_mac="${bootwright_nic}/bonding_slave/perm_hwaddr"; fi`,
+		`tr 'A-Z' 'a-z' < "${bootwright_mac}" || exit 1`,
+		`done | sort -u)`,
 	}
+	if len(input.ExpectedMACs) == 0 {
+		lines = append(lines,
+			`echo 'Bootwright: this machine declares no hardware address to prove it by; refusing before any disk is touched.' >&2`,
+			"exit 1")
+	}
+	excluded := []string{}
 	for _, address := range input.ExpectedMACs {
+		excluded = append(excluded, "-e '"+address+"'")
 		lines = append(lines,
 			`if ! printf '%s\n' "${bootwright_observed}" | grep -Fqx '`+address+`'; then`,
 			`echo 'Bootwright: this machine does not report `+address+
@@ -654,20 +666,26 @@ func targetProofLines(input Installation) []string {
 			"exit 1",
 			"fi")
 	}
-	if input.RootDevice != "" {
+	if len(excluded) != 0 {
 		lines = append(lines,
-			`bootwright_root=$(readlink -f -- '`+input.RootDevice+`' || true)`,
-			`if [ -z "${bootwright_root}" ] || [ ! -b "${bootwright_root}" ]; then`,
-			`echo 'Bootwright: the declared root device `+input.RootDevice+
-				` is not a block device here; refusing before any disk is touched.' >&2`,
-			"exit 1",
-			"fi",
-			`if [ "$(lsblk -ndo TYPE -- "${bootwright_root}")" != disk ]; then`,
-			`echo 'Bootwright: the declared root device `+input.RootDevice+
-				` is not a whole disk; refusing before any disk is touched.' >&2`,
+			`bootwright_undeclared=$(printf '%s\n' "${bootwright_observed}" | grep -Fvx `+strings.Join(excluded, " ")+` | grep -c . || true)`,
+			`if [ "${bootwright_undeclared}" != 0 ]; then`,
+			`echo "Bootwright: this machine reports ${bootwright_undeclared} hardware address(es) its declaration does not name; refusing before any disk is touched." >&2`,
 			"exit 1",
 			"fi")
 	}
+	lines = append(lines,
+		`bootwright_root=$(readlink -f -- '`+input.RootDevice+`' || true)`,
+		`if [ -z "${bootwright_root}" ] || [ ! -b "${bootwright_root}" ]; then`,
+		`echo 'Bootwright: the declared root device `+input.RootDevice+
+			` is not a block device here; refusing before any disk is touched.' >&2`,
+		"exit 1",
+		"fi",
+		`if [ "$(lsblk -ndo TYPE -- "${bootwright_root}")" != disk ]; then`,
+		`echo 'Bootwright: the declared root device `+input.RootDevice+
+			` is not a whole disk; refusing before any disk is touched.' >&2`,
+		"exit 1",
+		"fi")
 	return append(lines, "%end", "")
 }
 

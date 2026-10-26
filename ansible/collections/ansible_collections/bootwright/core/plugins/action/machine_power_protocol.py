@@ -16,7 +16,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.controller_channel
 
 # The refusals a power run names to its runner before it fails, each one the
 # runner reports as its caller's own diagnostic (internal/machine/power).
-REFUSALS = ("identity-mismatch",)
+REFUSALS = ("controller-host", "hardware-mismatch", "identity-mismatch")
 REPORTED = {"On": "on", "Off": "off", "": ""}
 READINGS = {"On": "on", "Off": "off"}
 VERBS = {"start": "on", "stop": "off", "restart": "on"}

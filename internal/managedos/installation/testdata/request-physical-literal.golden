@@ -98,7 +98,7 @@
           "name": "enp1s0"
         }
       ],
-      "rootDevice": "/dev/sda"
+      "rootDevice": "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"
     },
     "hostKeyRef": "metal-01-host-key",
     "hostKeyType": "ed25519",

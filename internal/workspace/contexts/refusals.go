@@ -120,7 +120,8 @@ func unreadableEvidenceRefusal(code, name string, cause error) error {
 // still attributes objects to it, naming status as their inventory.
 func orphanRefusal(name string) error {
 	return UnsafeDeleteWithRemediation("context "+name+" still owns realized objects; deleting it would orphan them",
-		"review them with bootwright status --context "+name+", then remove them with bootwright destroy --context "+name+
+		"review them with bootwright status --context "+name+" and bootwright diff --context "+name+
+			", which also lists what the selected input no longer declares, then remove them with bootwright destroy --context "+name+
 			", or abandon them with bootwright context delete --name "+name+" --purge --allow-orphans")
 }
 

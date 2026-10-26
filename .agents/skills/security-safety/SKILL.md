@@ -21,8 +21,7 @@ Each is, or must become, an executable guard. Check every one a change touches.
   selector refuses. On bare metal a kernel name such as `/dev/sda` is no disk
   identity: `deviceName` must be a `/dev/disk/by-id/wwn-0x...` path, and `%pre`
   refuses before any storage directive unless it resolves to a whole disk
-  ([physical installation](../../../specs/managed-os.md#physical-installation);
-  enforced from [B802](../../../specs/milestones/backlog.md#b802)).
+  ([physical installation](../../../specs/managed-os.md#physical-installation)).
   Read [the disk-safety finding](../../knowledge/openshift-agent-disk-safety.md).
 - Consumer roles dispatch on the frozen substrate and fail closed on an unknown
   arm, and a task named for a proof never mutates. The structural tests live in

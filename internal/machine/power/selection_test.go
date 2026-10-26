@@ -56,8 +56,9 @@ func catalog() api.Catalog {
 		"os", m("provided", false, "installProfileRef", "rhel"),
 		"network", addresses("192.0.2.20/24").With("configRef", api.StringValue("guests"))))
 	physical := object(api.Machine, "metal", m("os", m("provided", true), "network", addresses("192.0.2.30/24"),
-		"hardware", m("management", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1",
-			"credentialsRef", "metal-bmc")))))
+		"hardware", m("nics", list(m("name", "eno1", "macAddress", "52:54:00:9A:1B:01")),
+			"management", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1",
+				"credentialsRef", "metal-bmc")))))
 	return api.NewCatalog([]api.Object{environment, controller, host, provider, guests, guest, physical})
 }
 

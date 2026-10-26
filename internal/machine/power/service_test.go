@@ -1,6 +1,7 @@
 package power
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -157,11 +158,30 @@ type pins struct {
 	identity machine.HardwareIdentity
 	found    bool
 	err      error
+	host     *HostIdentity
+	hostErr  error
 }
 
 func (p *pins) ProvedIdentity(_ context.Context, contextName, name string) (machine.HardwareIdentity, bool, error) {
 	p.asked = append(p.asked, [2]string{contextName, name})
 	return p.identity, p.found, p.err
+}
+
+// testHost is the controller host's own identity the tests run beside, one
+// no fixture's management controller reports.
+var testHost = HostIdentity{UUID: "8e1b6a3c-0d7f-4c2a-9a51-3f0c2d4b5e61", MACs: []string{"aa:bb:cc:00:00:01"}}
+
+// hostValues is testHost as a physical run's material carries it.
+var hostValues = map[string]string{
+	"controllerHostUUIDBase64": "OGUxYjZhM2MtMGQ3Zi00YzJhLTlhNTEtM2YwYzJkNGI1ZTYx",
+	"controllerHostMACsBase64": "YWE6YmI6Y2M6MDA6MDA6MDE=",
+}
+
+func (p *pins) ControllerHost(context.Context) (HostIdentity, error) {
+	if p.hostErr != nil || p.host != nil {
+		return *cmp.Or(p.host, &HostIdentity{}), p.hostErr
+	}
+	return testHost, nil
 }
 
 func service(runtime Runtime, runner Runner, confirmer Confirmer) Service {
@@ -559,6 +579,7 @@ func TestAProvedMachineCarriesItsIdentityToTheAdapter(t *testing.T) {
 				t.Fatalf("result = %+v", result)
 			}
 			test.want["substrate"] = "baremetal"
+			maps.Copy(test.want, hostValues)
 			if !maps.Equal(runner.seen.MaterialValues, test.want) {
 				t.Fatalf("material values = %v, want %v", runner.seen.MaterialValues, test.want)
 			}
@@ -589,7 +610,8 @@ func TestAPinnedRunRefusesAnotherSystemNamingTheMachineAndTheRemedy(t *testing.T
 		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
-	if len(runner.seen.Refusals) != 1 || !reflect.DeepEqual(diagnostics.Of(runner.seen.Refusals["identity-mismatch"]), want) {
+	if len(runner.seen.Refusals) != 2 || runner.seen.Refusals["controller-host"] == nil ||
+		!reflect.DeepEqual(diagnostics.Of(runner.seen.Refusals["identity-mismatch"]), want) {
 		t.Fatalf("refusals = %+v, want identity-mismatch as %+v", runner.seen.Refusals, want)
 	}
 	refusing := &adapter{machine: "metal", err: runner.seen.Refusals["identity-mismatch"]}
@@ -603,7 +625,7 @@ func TestAPinnedRunRefusesAnotherSystemNamingTheMachineAndTheRemedy(t *testing.T
 		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
-	if unpinned.seen.Refusals != nil {
+	if _, named := unpinned.seen.Refusals["identity-mismatch"]; named {
 		t.Fatalf("a run with no pin names refusals %+v", unpinned.seen.Refusals)
 	}
 }
@@ -651,15 +673,21 @@ func TestPowerCarriesTheControllerBundle(t *testing.T) {
 	}
 }
 
-// A physical Machine the current apply never proved has no pin, so nothing is
-// compared and the adapter is sent no identity.
-func TestAnUnprovedMachineCarriesNoIdentity(t *testing.T) {
+// A physical Machine the current apply never proved has no pin, so it is
+// held to the full target proof instead: the adapter is sent its declared MAC
+// set, in canonical form, and names a hardware mismatch.
+func TestAnUnprovedMachineCarriesItsDeclaredMACSet(t *testing.T) {
 	proved, runner := &pins{}, &adapter{machine: "metal", power: "off"}
 	if _, err := New(stateSource{}, evidenceSource{}, proved, &boundary{}, runner, nil, nil, nil, nil).
 		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
-	if !maps.Equal(runner.seen.MaterialValues, map[string]string{"substrate": "baremetal"}) {
+	want := map[string]string{"substrate": "baremetal", "expectedMACsBase64": "NTI6NTQ6MDA6OWE6MWI6MDE="}
+	maps.Copy(want, hostValues)
+	if !maps.Equal(runner.seen.MaterialValues, want) || runner.seen.Refusals["hardware-mismatch"] == nil {
+		t.Fatalf("material values = %v, refusals %v", runner.seen.MaterialValues, runner.seen.Refusals)
+	}
+	if !maps.Equal(runner.seen.MaterialValues, want) {
 		t.Fatalf("material values = %v", runner.seen.MaterialValues)
 	}
 	if !slices.Equal(proved.asked, [][2]string{{"lab", "metal"}}) {
@@ -771,4 +799,110 @@ func encode(t *testing.T, evidence Evidence) []byte {
 		t.Fatal(err)
 	}
 	return data
+}
+
+// A power command never reaches the host that runs Bootwright: one naming the
+// Environment's controller Machine refuses before anything is read, asked or
+// run, whatever --force and --yes say.
+func TestAPowerCommandRefusesTheControllerMachine(t *testing.T) {
+	proved, runtime, runner, confirmer := &pins{}, &boundary{}, &adapter{power: "off"}, &answer{}
+	_, err := New(stateSource{}, evidenceSource{}, proved, runtime, runner, nil, confirmer, nil, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"controller"}, Force: true, SkipConfirmation: true})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "machine.power" || reported[0].Object == nil || reported[0].Object.Name != "controller" ||
+		!strings.Contains(reported[0].Message, "the Environment's controller Machine") {
+		t.Fatalf("refusal = %+v", reported)
+	}
+	if runtime.entered != 0 || len(proved.asked) != 0 || len(confirmer.asked) != 0 || runner.seen.Implementation != "" {
+		t.Fatalf("the controller Machine still lent %d, read pins %v, asked %v, ran %q", runtime.entered, proved.asked, confirmer.asked, runner.seen.Implementation)
+	}
+}
+
+// A physical run carries the controller host's own identity and names the
+// refusal its adapter gives when the management controller answers with it,
+// so the diagnostic names the Machine and the remedy, never the host's values.
+func TestAPhysicalRunRefusesTheControllerHostsOwnIdentity(t *testing.T) {
+	runner := &adapter{machine: "metal", power: "off"}
+	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, runner, nil, nil, nil, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	for key, value := range hostValues {
+		if runner.seen.MaterialValues[key] != value {
+			t.Fatalf("material values = %v", runner.seen.MaterialValues)
+		}
+	}
+	refusal := runner.seen.Refusals["controller-host"]
+	reported := diagnostics.Of(refusal)
+	if len(reported) != 1 || reported[0].Code != "machine.power" || reported[0].Object.Name != "metal" ||
+		!strings.Contains(reported[0].Message, "the host that runs Bootwright") || strings.Contains(reported[0].Message, testHost.UUID) {
+		t.Fatalf("refusal = %+v", reported)
+	}
+	refusing := &adapter{machine: "metal", err: refusal}
+	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, refusing, nil, nil, nil, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true}); !reflect.DeepEqual(diagnostics.Of(err), reported) {
+		t.Fatalf("a refused run reported %+v", diagnostics.Of(err))
+	}
+	emulated := &adapter{power: "off"}
+	if _, err := New(stateSource{}, evidenceSource{}, &pins{}, &boundary{}, emulated, nil, nil, nil, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"guest"}, SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(emulated.seen.Refusals) != 0 {
+		t.Fatalf("an emulated run names %v", emulated.seen.Refusals)
+	}
+}
+
+// A controller host whose own identity cannot be read cannot show that a
+// physical request does not reach it, so the command refuses before any run.
+func TestAnUnreadableControllerHostIdentityRefusesAPhysicalRun(t *testing.T) {
+	for name, proved := range map[string]*pins{
+		"unreadable": {hostErr: errors.New("product_uuid: permission denied")},
+		"empty":      {host: &HostIdentity{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			runtime, runner := &boundary{}, &adapter{machine: "metal", power: "off"}
+			_, err := New(stateSource{}, evidenceSource{}, proved, runtime, runner, nil, nil, nil, nil).
+				Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true})
+			if code(t, err) != "machine.power" || runtime.entered != 0 {
+				t.Fatalf("refusal = %+v, lent %d", diagnostics.Of(err), runtime.entered)
+			}
+		})
+	}
+}
+
+// A physical Machine with no pin is held to the full target proof, and one
+// that declares no MAC address has nothing to be proved by, so it refuses
+// before any run rather than compare with nothing.
+func TestAnUnpinnedPhysicalMachineDeclaringNoMACRefuses(t *testing.T) {
+	objects := catalogWithout("metal", "nics")
+	runtime, runner := &boundary{}, &adapter{machine: "metal", power: "off"}
+	_, err := New(objects, evidenceSource{}, &pins{}, runtime, runner, nil, nil, nil, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "machine.power" || !strings.Contains(reported[0].Message, "declares no MAC address") || runtime.entered != 0 {
+		t.Fatalf("refusal = %+v, lent %d", reported, runtime.entered)
+	}
+	pinned := &pins{identity: machine.HardwareIdentity{UUID: "4C4C4544-0042-3510-8052-B4C04F4D4E31"}, found: true}
+	if _, err := New(objects, evidenceSource{}, pinned, &boundary{}, &adapter{machine: "metal", power: "off"}, nil, nil, nil, nil).
+		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true}); err != nil {
+		t.Fatalf("a pinned Machine declaring no MAC was refused: %v", err)
+	}
+}
+
+// stripped answers with the fixture less one hardware field of a Machine.
+type stripped struct{ catalog api.Catalog }
+
+func (s stripped) RenderEffective(context.Context, compilation.EffectiveRequest) (*compilation.EffectiveResult, error) {
+	return &compilation.EffectiveResult{Effective: s.catalog}, nil
+}
+
+func catalogWithout(name, field string) stripped {
+	objects := catalog().Objects()
+	for index, candidate := range objects {
+		if candidate.Kind() == api.Machine && candidate.Name() == name {
+			objects[index] = candidate.WithSpec(candidate.Spec().With("hardware", candidate.Spec().Get("hardware").Without(field)))
+		}
+	}
+	return stripped{catalog: api.NewCatalog(objects)}
 }

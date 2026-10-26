@@ -126,10 +126,10 @@ func TestLabBaremetalAdmissionRefusesANewlineInTheRootDevice(t *testing.T) {
 			replaced := 0
 			for index, file := range sources.Files {
 				body := string(file.Bytes())
-				if !strings.Contains(body, "deviceName: /dev/sda\n") {
+				if !strings.Contains(body, "deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c301\n") {
 					continue
 				}
-				body = strings.Replace(body, "deviceName: /dev/sda\n", "deviceName: "+value+"\n", 1)
+				body = strings.Replace(body, "deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c301\n", "deviceName: "+value+"\n", 1)
 				sources.Files[index] = desiredstate.NewSourceFile(file.Path(), []byte(body))
 				replaced++
 			}

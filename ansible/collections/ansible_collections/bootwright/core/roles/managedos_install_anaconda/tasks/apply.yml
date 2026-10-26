@@ -467,6 +467,15 @@
         managedos_install_anaconda_was_installed: '{{ managedos_install_anaconda_installed | bool }}'
       changed_when: false
 
+    # An earlier attempt of this apply recorded this installation proved before
+    # it powered the machine off (Q66), so a machine that no longer answers is
+    # booted from its installed disk, never from the installer again.
+    - name: Boot the installed disk of a machine this apply already proved
+      ansible.builtin.include_tasks: proved_boot.yml
+      when:
+        - bootwright_os_install_material.installationProved | default('false') | bool
+        - not (managedos_install_anaconda_was_installed | bool)
+
     # The substrate's pre-boot proof leaves the refusal it made in its own fact,
     # because this role, not the substrate's, holds the result channel. Naming it
     # to the runner makes the operator's diagnostic the installation's own for that
@@ -678,7 +687,9 @@
       bootwright.core.managedos_install_protocol:
         phase: prepared
         marker: '{{ managedos_install_anaconda_marker }}'
-      when: bootwright_os_install_request.registration is defined
+      when:
+        - bootwright_os_install_request.registration is defined
+        - not (managedos_install_anaconda_prepared | default(false) | bool)
       no_log: true
 
     - name: Register the installed machine with its subscription service after its network converged

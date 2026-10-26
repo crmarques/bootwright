@@ -70,6 +70,11 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
 			Context: input.Context.Name, Kind: "substrate-host", Service: request.Identity.Object, Keys: request.ReservationKeys(),
 		})
+		if shared := request.SharedReservationKeys(); len(shared) != 0 {
+			plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
+				Context: input.Context.Name, Kind: "substrate-host-use", Service: request.Identity.Object, Keys: shared, Shared: true,
+			})
+		}
 	}
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
@@ -174,7 +179,10 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 			})
 			continue
 		}
-		plan.Reservations = append(plan.Reservations, claim)
+		plan.Reservations = append(plan.Reservations, claim, prerequisites.HostReservation{
+			Context: input.Context.Name, Kind: "substrate-machine-bmc", Service: request.Identity.Object,
+			Keys: request.SharedReservationKeys(), Shared: true,
+		})
 	}
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)

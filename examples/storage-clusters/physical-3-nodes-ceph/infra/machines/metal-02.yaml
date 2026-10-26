@@ -17,7 +17,7 @@ spec:
       hostKeyRef: metal-02-host-key
 
       rootDeviceHints:
-        deviceName: /dev/sda
+        deviceName: /dev/disk/by-id/wwn-0x6000000000000002
 
       ntp:
         - serverRef: lab-ntp
@@ -28,7 +28,7 @@ spec:
       method: logicalOverwrite
 
       targets:
-        - deviceName: /dev/sda
+        - deviceName: /dev/disk/by-id/wwn-0x6000000000000002
           wwn: '0x6000000000000002'
           serialNumber: SYNTHETIC-ROOT-02
           sizeBytes: 53687091200

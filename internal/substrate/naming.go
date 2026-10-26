@@ -40,6 +40,8 @@ const MachineNameLimit = 52
 // 64 keys one reservation holds.
 const MaxManagedAttachments = 20
 
+const MaxExternalBridges = 64
+
 func NetworkName(contextName, attachment string) string {
 	return Prefix + "-" + contextName + "-" + attachment
 }

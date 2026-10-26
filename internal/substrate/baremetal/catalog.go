@@ -28,7 +28,7 @@ func BlockID(machine string) string { return "machine-" + machine }
 func ContentDigest() string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		"bootwright.substrate.baremetal.machine-v1", Implementation, requestVersion,
-		"identity+addresses+power",
+		"identity+exact-addresses+power+system-claim",
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

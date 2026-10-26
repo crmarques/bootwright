@@ -1,5 +1,5 @@
 implementation: substrate-host-libvirt-v1
-content-digest: ba58cf950116c1701f45c0f90878f7a6ca765ed66b27f3c47e83bdc5526dddbf
+content-digest: c3a397c4edf3b672ee713e18937575dd43e32d9f690d7be5a4a1a67030d78d1a
 request-version: substrate-host-libvirt-v6
 automation-formats: https://bootwright.io/substrate/v1
 mark-formats: Bootwright owned readiness barrier, Description=Bootwright managed network firewall, https://bootwright.io/substrate/v1
@@ -10,6 +10,7 @@ effect-pins:
   /var/lib/libvirt/images/bootwright
   bootwright
   virtqemud.service,virtnetworkd.service,virtstoraged.service
+  bridge-use-claim
 request-identity:
   identity.context
   identity.object

@@ -501,7 +501,7 @@ func privateExecution(t *testing.T, freeze func(*Request)) (lifecycle.Execution,
 	call, request := execution(t, "digest")
 	request.Image = nil
 	request.Private = &Publication{Path: "private/os/rhel-01", URL: "https://artifacts.lab.example.test/private/os/rhel-01"}
-	request.Target.Physical, request.Target.Hardware = true, &Hardware{RootDevice: "/dev/sda"}
+	request.Target.Physical, request.Target.Hardware = true, &Hardware{RootDevice: "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"}
 	request.Target.Substrate, request.Target.Channel = substrate.ArmBaremetal, substrate.ChannelDeliveredKey
 	request.Target.Controller.Endpoint, request.Target.Controller.TLSVerify = "https://bmc-01.lab.example.test/redfish/v1/Systems/1", true
 	request.Target.HostKeyRef, request.Target.HostKeyType, request.TLSCertificateRef = "rhel-01-host-key", "ed25519", "lab-artifacts-tls"

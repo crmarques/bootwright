@@ -69,7 +69,9 @@ type Transaction interface {
 	// A first apply establishes it; every later one revalidates exactly it.
 	Bind(context.Context, string, controller.InstalledHostIdentity) error
 	Reserve(context.Context, []prerequisites.HostReservation) error
+	Claim(context.Context, prerequisites.HostReservation) error
 	ReleaseReservations(context.Context) error
+	ReproveReservations(context.Context, func([]prerequisites.HostReservation) error) error
 	// ClientArea opens the shared host area one exact client closure a context
 	// selects is published into, creating and attributing it under a durable
 	// reservation. A sealed area reopens read-only.
@@ -195,10 +197,9 @@ type Capability interface {
 	// takes back, partial when part of that remains and is this context's own,
 	// and unknown otherwise. It is separate from Observe because a target the
 	// apply realized is the removal's absence of effect, and what a removal
-	// keeps by design proves nothing against it. An observation that cannot
-	// tell the removal's postcondition from a target it could not read is
-	// never completed: it reports no-effect, so the removal repeats and proves
-	// its own postcondition.
+	// keeps by design proves nothing against it. A successful read that cannot
+	// tell the removal's postcondition from a target it could not read reports
+	// inconclusive, never completed or no-effect; a failed read stays unknown.
 	ObserveRemoval(context.Context, Execution) (Observation, error)
 }
 
@@ -212,6 +213,10 @@ type Capability interface {
 type Keeper interface {
 	Keeps(reconciliation.Block) (KeptEntry, bool, error)
 	Keep(context.Context, Execution) ([]Produced, error)
+}
+
+type ProvingClaimer interface {
+	ProvedClaim(contextName string, block reconciliation.Block, evidence json.RawMessage) (prerequisites.HostReservation, bool, error)
 }
 
 // KeptEntry is the custody entry a kept copy enters: the block that captures
@@ -256,6 +261,7 @@ type Removal struct {
 	Impacts     []string
 	Consumes    []string
 	Groups      []reconciliation.Group
+	ReplaySafe  bool
 }
 
 // Probe reads quiescence without mutation, attempt, log or before-state hooks.

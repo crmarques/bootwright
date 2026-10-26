@@ -38,10 +38,10 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 			text("imageRef", "rhel-9-8-boot"), field("packageSource", source),
 		)))))
 	}
-	untrusting := server(api.MapValue(text("deviceName", "/dev/sda")))
+	untrusting := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
 	untrusting = untrusting.WithSpec(untrusting.Spec().WithPath(api.StringValue(substrate.TrustDisableVerification),
 		"hardware", "management", "bmc", "virtualMedia", "tls", "trust"))
-	unverified := server(api.MapValue(text("deviceName", "/dev/sda")))
+	unverified := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
 	unverified = unverified.WithSpec(unverified.Spec().WithPath(api.BoolValue(false), "hardware", "management", "bmc", "tls", "verify"))
 	rotational := guest()
 	rotational = rotational.WithSpec(rotational.Spec().WithPath(
@@ -72,7 +72,7 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 		WithPath(api.StringValue("192.0.2.3"), "libvirt", "bmcEmulationDefaults", "bindAddress"))
 	cases := map[string]refusalCase{
 		"A physical Machine naming no root device": {
-			labCatalog(metalProvider(), server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))), "Machine/metal-01", onMetal,
+			labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda")))), "Machine/metal-01", onMetal,
 		},
 		"A root-device hint other than deviceName": {labCatalog(rotational), "Machine/rhel-01",
 			map[string]string{"<machine>": "Machine/rhel-01", "<hints>": "spec.os.install.rootDeviceHints.rotational"}},
@@ -102,7 +102,7 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 		"A credentialed proxy": {labCatalog(externalProxy("corporate", text("httpsProxy", "http://proxy.example.test:3128"),
 			text("trustBundleRef", "corporate-ca")), proxiedGuest(), repositoryProfile("https://mirror.example.test/a")), "Machine/rhel-01",
 			map[string]string{"<machine>": "Machine/rhel-01", "<profile>": "MachineInstallProfile/rhel-9-8", "<proxy>": "Proxy/corporate"}},
-		"An Ed25519 delivered host key under FIPS": {labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))),
+		"An Ed25519 delivered host key under FIPS": {labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"))),
 			sshKeySecret(api.MapValue(field("generated", api.MapValue()))), fipsProfile()), "Machine/metal-01",
 			map[string]string{"<secret>": "Secret/metal-01-host-key"}},
 		"An Ed25519 fleet key under FIPS": {labCatalog(fipsProfile(), normalizedFleetSecret(t, api.MapValue(field("generated", api.MapValue())))),

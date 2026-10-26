@@ -47,7 +47,14 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	if err != nil {
 		return "", err
 	}
+	if err := s.claimProved(ctx, tx, plan, block, proved); err != nil {
+		return "", err
+	}
 	applyProved, preparations, err := applyRecords(ctx, store, owningApply(operation), block.ID)
+	if err != nil {
+		return "", err
+	}
+	reread, err := rereads(ctx, store, operation, block)
 	if err != nil {
 		return "", err
 	}
@@ -56,6 +63,11 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 		return "", err
 	}
 	defer release()
+	if operation.Verb == reconciliation.Destroy {
+		if err := reproveRelease(ctx, tx, block.Kind, block.Object); err != nil {
+			return "", err
+		}
+	}
 	number, err := store.StartAttempt(ctx, operation.ID, block.ID, s.ranUnder(block))
 	if err != nil {
 		return "", err
@@ -77,6 +89,11 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	result, runErr := s.invoke(ctx, tx, store, approved, boundary, operation, plan, block, material, proved, applyProved, preparations, log, number, 0, position, total, func(inner context.Context, execution Execution) (Result, error) {
 		if operation.Verb == reconciliation.Destroy {
 			execution.RetiredWithHosts = s.onlineRemoval(plan).retired[block.ID]
+			if reread {
+				if result, settled, err := rereadBeforeRemoval(inner, capability, execution); settled {
+					return result, err
+				}
+			}
 			if err := s.keepBeforeRemoval(inner, tx, boundary, log, capability, execution); err != nil {
 				return Result{Outcome: reconciliation.OutcomeFailed}, err
 			}
@@ -217,7 +234,8 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 		return observation, stageReading(runErr, target, as, tx.Identity().Name)
 	}
 	observation, byRemoval, runErr := resolutionReading(ctx, boundary, log, operation.Verb, block, observed, verb, removal, retiresOffline(capability), read)
-	resolvedEffect, state, err := reconciliation.ResolutionTransition(observedEffect(observation, runErr, byRemoval))
+	effect := s.replayEffect(ctx, store, operation, block, capability, attemptNumber, observedEffect(observation, runErr, byRemoval))
+	resolvedEffect, state, err := reconciliation.ResolutionTransition(effect)
 	if err != nil {
 		ClearProduced(observation.Produced)
 		return reconciliation.BlockUnknown, err
@@ -258,10 +276,8 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 		return state, failure("lifecycle.state",
 			"the frozen effect was never performed",
 			resolutionRemedy(tx.Identity().Name, operation.Verb, plan, false))
-	case resolvedEffect == reconciliation.EffectPartial:
-		return state, failure("lifecycle.state",
-			"the frozen effect is partly realized and owned by this context",
-			resolutionRemedy(tx.Identity().Name, operation.Verb, plan, true))
+	case resolvedEffect == reconciliation.EffectPartial || resolvedEffect == reconciliation.EffectInconclusive:
+		return state, failure("lifecycle.state", retriedEffect[resolvedEffect], resolutionRemedy(tx.Identity().Name, operation.Verb, plan, true))
 	}
 	explanation := s.explain(verb, observed, observation.Evidence)
 	_ = boundary.append(ctx, log, operationstore.LogRecord{Event: "unresolved", Block: block.ID, Detail: explanation.Reason})
@@ -698,4 +714,84 @@ func logFault(err error) error {
 func retiresOffline(capability Capability) bool {
 	retirement, ok := capability.(OfflineRetirement)
 	return ok && retirement.RetiresOffline()
+}
+
+var retriedEffect = map[reconciliation.EffectState]string{
+	reconciliation.EffectPartial:      "the frozen effect is partly realized and owned by this context",
+	reconciliation.EffectInconclusive: "the removal could not tell its postcondition from a target it could not read, so it is retried once, reading the target again first",
+}
+
+func (s Service) replayEffect(ctx context.Context, store OperationStore, operation operationstore.Operation, block reconciliation.Block, capability Capability, attempt int, effect reconciliation.EffectState) reconciliation.EffectState {
+	if effect == reconciliation.EffectInconclusive && !s.replayable(ctx, store, operation, block, capability, attempt) {
+		return reconciliation.EffectUnknown
+	}
+	return effect
+}
+
+func (s Service) replayable(ctx context.Context, store OperationStore, operation operationstore.Operation, block reconciliation.Block, capability Capability, attempt int) bool {
+	removal, err := capability.Removal(ctx, block)
+	if err != nil || !removal.ReplaySafe || operation.Verb != reconciliation.Destroy || owningApply(operation) == "" {
+		return false
+	}
+	if applied, err := store.Block(ctx, owningApply(operation), block.ID); err != nil || applied.Attempts < 1 {
+		return false
+	}
+	for number := 1; number <= attempt; number++ {
+		if earlier, found, err := store.LastResolution(ctx, operation.ID, block.ID, number); err != nil || found && earlier.Effect == reconciliation.EffectInconclusive {
+			return false
+		}
+	}
+	return true
+}
+
+func (s Service) claimProved(ctx context.Context, tx Transaction, plan reconciliation.Plan, block reconciliation.Block, proved []BlockEvidence) error {
+	for _, evidence := range proved {
+		if evidence.State != reconciliation.BlockDone {
+			continue
+		}
+		index := slices.IndexFunc(plan.Blocks, func(candidate reconciliation.Block) bool {
+			return slices.Contains(block.Dependencies, candidate.ID) && candidate.Kind == evidence.Kind &&
+				candidate.Object == evidence.Object && candidate.Implementation == evidence.Implementation
+		})
+		capability, ok := s.capabilities.Resolve(evidence.Kind, evidence.Implementation)
+		claimer, claims := capability.(ProvingClaimer)
+		if index < 0 || !ok || !claims {
+			continue
+		}
+		claim, found, err := claimer.ProvedClaim(tx.Identity().Name, plan.Blocks[index], evidence.Evidence)
+		if err != nil {
+			return err
+		}
+		if found {
+			if err := tx.Claim(ctx, claim); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func rereads(ctx context.Context, store OperationStore, operation operationstore.Operation, block reconciliation.Block) (bool, error) {
+	if operation.Verb != reconciliation.Destroy {
+		return false, nil
+	}
+	record, err := store.Block(ctx, operation.ID, block.ID)
+	if err != nil || record.Attempts < 1 {
+		return false, err
+	}
+	last, found, err := store.LastResolution(ctx, operation.ID, block.ID, record.Attempts)
+	return found && last.Effect == reconciliation.EffectInconclusive, err
+}
+
+func rereadBeforeRemoval(ctx context.Context, capability Capability, execution Execution) (Result, bool, error) {
+	observed, err := capability.ObserveRemoval(ctx, execution)
+	switch {
+	case err == nil && observed.Effect == reconciliation.EffectCompleted:
+		return Result{Outcome: reconciliation.OutcomeUnchanged, Evidence: observed.Evidence}, true, nil
+	case err == nil && (observed.Effect == reconciliation.EffectNoEffect || observed.Effect == reconciliation.EffectPartial):
+		return Result{}, false, nil
+	case err == nil:
+		err = failure("lifecycle.state", "the retried removal read its target again and still could not tell its postcondition, so it performed no effect", "")
+	}
+	return Result{Outcome: reconciliation.OutcomeUnknown}, true, err
 }

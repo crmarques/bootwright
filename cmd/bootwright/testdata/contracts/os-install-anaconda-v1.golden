@@ -1,5 +1,5 @@
 implementation: os-install-anaconda-v1
-content-digest: bf2f5171c4dcf626e1847ce6e277791ddf1f77e37be45cc25bfd8b71e1ab91e3
+content-digest: c78416b961a8eafd0035ddcc4d4f45446882a6ef7a0fb0953946fda9d17710d8
 request-version: os-install-anaconda-v16
 automation-formats: none
 mark-formats: none
@@ -15,6 +15,7 @@ effect-pins:
   /etc/bootwright/network-marker.json
   300
   lorax,xorriso
+  proved-installation-disk-boot,replay-safe-unread-registration
 request-identity:
   identity.context
   identity.object

@@ -37,7 +37,7 @@ func preparingRequest(t *testing.T, request Request, operation string) (lifecycl
 	return runner.requests[0], marker, recorded
 }
 
-func TestRegisteringApplyValidatesItsMarkerPreparation(t *testing.T) {
+func TestEveryApplyValidatesItsMarkerPreparation(t *testing.T) {
 	request := pinnedRequest(t, labCatalog(registeringProfile(), rhelEntitlement()))
 	run, marker, recorded := preparingRequest(t, request, "apply")
 	if run.Prepare == nil {
@@ -68,8 +68,8 @@ func TestRegisteringApplyValidatesItsMarkerPreparation(t *testing.T) {
 	if run, _, _ := preparingRequest(t, request, "destroy"); run.Prepare != nil {
 		t.Fatal("a removal admits a before-state")
 	}
-	if run, _, _ := preparingRequest(t, pinnedRequest(t, labCatalog()), "apply"); run.Prepare != nil {
-		t.Fatal("an apply that registers nothing admits a before-state")
+	if run, _, _ := preparingRequest(t, pinnedRequest(t, labCatalog()), "apply"); run.Prepare == nil {
+		t.Fatal("an apply that registers nothing admits no disk-boot intent before its network restart")
 	}
 }
 

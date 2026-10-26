@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -275,6 +276,7 @@ func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (li
 		Description: description(reconciliation.Destroy, request),
 		Impacts:     impacts(reconciliation.Destroy, request),
 		Groups:      groups(reconciliation.Destroy, request),
+		ReplaySafe:  true,
 	}, nil
 }
 
@@ -338,7 +340,7 @@ const observesRemoval = "removal"
 // ObserveRemoval reads the published content and a registering request's
 // guest registration. Neither of this installation's left is completion; the
 // whole completion is no effect; content or its own registration left is a
-// positive partial removal; an unread registration is no effect, so it repeats.
+// positive partial removal; an unread registration is inconclusive (Q65).
 func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	return c.observe(ctx, execution, reconciliation.Destroy)
 }
@@ -398,7 +400,7 @@ func removalEffect(evidence []byte, request Request, digest, marker string, unre
 		if decoded, err := decodeEvidence(evidence, digest); err == nil && ownRegistration(decoded) {
 			return reconciliation.EffectPartial, nil
 		}
-		return reconciliation.EffectNoEffect, nil
+		return reconciliation.EffectInconclusive, nil
 	}
 	return reconciliation.EffectUnknown, unfinished
 }
@@ -424,6 +426,15 @@ func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, 
 		return unknown, err
 	}
 	effect, _ := decidedEffect(verb, result.Evidence, request, execution.Block.RequestDigest, string(marker), unregister)
+	if verb == reconciliation.Apply && effect == reconciliation.EffectNoEffect {
+		proved, err := registeredBefore(execution.Context, request.Identity.Object, execution.ApplyPreparations, marker)
+		if err != nil {
+			return unknown, err
+		}
+		if proved {
+			effect = reconciliation.EffectPartial
+		}
+	}
 	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence}, nil
 }
 
@@ -504,7 +515,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	}
 	var refusals map[string]error
 	if operation == "apply" {
-		if refusals, err = c.applyRefusals(execution, request, values); err != nil {
+		if refusals, err = c.applyRefusals(execution, request, values, marker); err != nil {
 			return lifecycle.RunResult{}, err
 		}
 	}
@@ -573,7 +584,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 		maps.Copy(refusals, keyPolicyRefusals(request, values))
 	}
 	var preparation func(json.RawMessage) error
-	if operation == "apply" && request.Registration != nil {
+	if operation == "apply" {
 		preparation = markerPreparation(marker)
 	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
@@ -583,7 +594,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	}))
 }
 
-func (c Capability) applyRefusals(execution lifecycle.Execution, request Request, values map[string]string) (map[string]error, error) {
+func (c Capability) applyRefusals(execution lifecycle.Execution, request Request, values map[string]string, marker []byte) (map[string]error, error) {
 	// Only an apply proves its target before it boots it.
 	refusals := substrate.PreBootRefusals(request.Target.Substrate, execution.Context, execution.Continuation, request.Identity.Object, request.Target.Controller.Endpoint)
 	if refusals == nil {
@@ -597,6 +608,11 @@ func (c Capability) applyRefusals(execution lifecycle.Execution, request Request
 	}
 	values["authorizedKey"] = key
 	values["fleetKeyType"] = strings.Fields(key)[0]
+	proved, err := registeredBefore(execution.Context, request.Identity.Object, execution.ApplyPreparations, marker)
+	if err != nil {
+		return nil, err
+	}
+	values["installationProved"] = strconv.FormatBool(proved)
 	if request.fips() {
 		if err := fipsFleetKey(execution.Context, request, key); err != nil {
 			return nil, err

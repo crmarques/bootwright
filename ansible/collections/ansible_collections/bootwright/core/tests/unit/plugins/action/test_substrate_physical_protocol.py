@@ -35,12 +35,16 @@ def test_the_declared_machine_is_proved_by_its_complete_inventory():
     assert evidence["uuid"] == "uuid-1" and evidence["power"] == "Off"
 
 
-# Extra hardware is not a mismatch: a server may carry more NICs than the
-# declaration names, and every declared one being present is the proof.
-def test_hardware_beyond_the_declaration_still_proves_it():
-    evidence = substrate_physical_protocol.presence(
-        arguments(observation={"addresses": DECLARED + ["aa:bb:cc:dd:ee:09"]}), DIGEST)
-    assert evidence["postcondition"]
+# The proof is set equality: a reported address the declaration does not name
+# is another server, or one re-cabled since, so it refuses and is counted,
+# never printed.
+def test_hardware_beyond_the_declaration_refuses():
+    values = arguments(observation={"addresses": DECLARED + ["aa:bb:cc:dd:ee:09"]})
+    evidence = substrate_physical_protocol.presence(values, DIGEST)
+    assert not evidence["postcondition"]
+    names = substrate_physical_protocol.unproved(evidence, values)
+    assert names == ["an inventory free of addresses the Machine does not declare (1 reported)"]
+    assert not any("ee:09" in name for name in names)
 
 
 # An inventory that could not be read in full proves nothing about which

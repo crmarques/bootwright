@@ -258,7 +258,7 @@ func TestOnlyTheFirstRefusalAMachineMeetsIsReported(t *testing.T) {
 // placement, not for its fetch.
 func TestTheProviderHostRuleDoesNotRefuseAPhysicalTarget(t *testing.T) {
 	sshPlaced := artifactServer(text("machineRef", "services"), text("bindAddress", "192.0.2.2"))
-	metal := server(api.MapValue(text("deviceName", "/dev/sda")))
+	metal := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
 	catalog := catalogOf(environment(), controller(), servicesHost(), metalProvider(), networkConfig(), sshPlaced,
 		service(api.DNSServer, "lab-dns", "53"), service(api.NTPServer, "lab-ntp", "123"), bootImage(), installProfile(), metal)
 	profile, _ := catalog.Find(api.MachineInstallProfile, "rhel-9-8")
@@ -328,7 +328,7 @@ func TestRequestRefusalsNameTheFieldThatDeclaresIt(t *testing.T) {
 // tooling list it once named must leave its input, and every frozen plan,
 // unchanged.
 func TestTheContentDigestIsPinned(t *testing.T) {
-	if digest := ContentDigest(); digest != "bf2f5171c4dcf626e1847ce6e277791ddf1f77e37be45cc25bfd8b71e1ab91e3" {
+	if digest := ContentDigest(); digest != "c78416b961a8eafd0035ddcc4d4f45446882a6ef7a0fb0953946fda9d17710d8" {
 		t.Fatalf("content digest = %s", digest)
 	}
 }

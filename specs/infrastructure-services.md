@@ -105,20 +105,17 @@ A reservation key is one of:
 | `unit:<name>` | One host service-manager unit and its container name. |
 | `path:<absolute path>` | One owned directory tree. |
 | `bridge:<name>` | One host bridge, whichever network defines it. |
-| `bridge-use:<name>` | A shared claim that an external libvirt attachment uses one host bridge. It conflicts with nothing at acquisition, and a removal that would release the exclusive `bridge:<name>` refuses `controller.conflict` while another context holds it, naming that context. |
+| `bridge-use:<name>` | A shared claim that an external libvirt attachment uses one host bridge. It conflicts with nothing at acquisition, and a removal that would release the exclusive `bridge:<name>` refuses `controller.conflict` while another context holds it, naming that context: when the destroy registers, and again under the root lock immediately before the removal's effect on the provider holding the bridge, so a claim made after registration refuses that effect with nothing performed. One an abandoned context held is released with every other key of that context when it is deleted (D38), so it strands a removal only while the using context exists. |
 | `libvirt-network:<name>` | One libvirt network definition. |
 | `libvirt-pool:<name>` | One libvirt storage pool definition. |
 | `prefix:<masked prefix>` | One managed libvirt network's routed prefix, IPv4 or IPv6, written masked (`prefix:198.51.100.0/24`); it conflicts with every held prefix it overlaps, identical or nested, because the host routes each to its own bridge. |
 | `libvirt-domain:<name>` | One libvirt domain definition. |
 | `kubevirt-vm:<server>/<namespace>/<name>` | One KubeVirt VirtualMachine, by the host cluster's API server, namespace and name. |
-| `bmc:<host>:<port>/<system>` | One [physical machine](substrates.md#physical-machine-realization), named by its management-controller endpoint, normalized for the key alone as that page states (the port it names or else its scheme's default), and exact ComputerSystem, so two contexts of one controller store never drive one server. The claim serializes use; it is never ownership of the machine and authorizes nothing about it. An [emulated BMC's](substrates.md#machine-realization) machine block holds the same key shared: it conflicts with nothing at acquisition, and its release refuses `controller.conflict` while another context holds the key exclusively. |
+| `bmc:<host>:<port>/<system>` | One [physical machine](substrates.md#physical-machine-realization), named by its management-controller endpoint, normalized for the key alone as that page states (the port it names or else its scheme's default), and exact ComputerSystem, so two contexts of one controller store never drive one server. The claim serializes use; it is never ownership of the machine and authorizes nothing about it. An [emulated BMC's](substrates.md#machine-realization) machine block holds the same key shared: it conflicts with no other shared holder, its registration, which carries this Machine's installation, refuses `controller.conflict` while another context holds the key exclusively, and so does its release, re-proved like `bridge-use:<name>` immediately before the removal's effect. |
 | `bmc-system:<UUID>` | The same physical machine, named by the `UUID` its proof records in lower case, claimed once the proof records it and before any media is inserted, so a second spelling of one server's address refuses. A system that reports no `UUID` claims no such key. |
 | `media:<filename.iso>` | A shared claim on one image of the [media store](managed-os.md#media-store); it conflicts with nothing and blocks only that image's deletion or replacement while any context holds it. |
 
-Not yet met: the physical block claims no `bmc-system:` key; tracked as
-[B802](milestones/backlog.md#b802). An external libvirt attachment claims no
-`bridge-use:` key and an emulated BMC claims no `bmc:` key; tracked as
-[B803](milestones/backlog.md#b803). No KubeVirt VirtualMachine claims a
+Not yet met: no KubeVirt VirtualMachine claims a
 `kubevirt-vm:` key; tracked as [B816](milestones/backlog.md#b816).
 
 A `socket:` key writes an IPv6 address unbracketed, the one form every
@@ -356,7 +353,7 @@ host reads as this context's, because no native identity yet distinguishes the
 two.
 
 Not yet met: a context incarnation enters no ownership marker; tracked as
-[B803](milestones/backlog.md#b803) and [B568](milestones/backlog.md#b568).
+[B568](milestones/backlog.md#b568).
 
 **Inverse.** Destroy stops the service, removes the unit definition, resets
 the failed state systemd still lists the unit in, as a unit whose daemon exited

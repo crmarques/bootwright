@@ -121,3 +121,21 @@ def test_power_on_prefers_a_type_that_does_not_wait_on_an_operating_system():
     assert redfish_discovery.power_on_reset_type(["On", "ForceOn"]) == "ForceOn"
     assert redfish_discovery.power_on_reset_type(["PushPowerButton", "On"]) == "On"
     assert redfish_discovery.power_on_reset_type(["ForceOff", "Nmi"]) == ""
+
+
+# A member that links a management controller's host interface is that
+# controller's own port into the host, not one of the system's network ports,
+# so it neither counts as reported nor as a member that proved nothing.
+def test_the_host_interface_is_excepted_from_the_reported_set():
+    host = {"HostInterface": {"@odata.id": "/redfish/v1/Managers/1/HostInterfaces/1"}}
+    members = [{"MACAddress": "AA:BB:CC:DD:EE:01"}, {"MACAddress": "aa:bb:cc:dd:ee:77", "Links": host}, {"Links": host}]
+    assert redfish_discovery.reported_macs(members) == (["aa:bb:cc:dd:ee:01"], [])
+
+
+@pytest.mark.parametrize("links", [
+    None, {}, {"HostInterface": None}, {"HostInterface": {"@odata.id": ""}}, {"HostInterface": "x"}])
+def test_a_member_without_a_host_interface_link_is_a_port(links):
+    member = {"MACAddress": "aa:bb:cc:dd:ee:77"}
+    if links is not None:
+        member["Links"] = links
+    assert redfish_discovery.reported_macs([member]) == (["aa:bb:cc:dd:ee:77"], [])

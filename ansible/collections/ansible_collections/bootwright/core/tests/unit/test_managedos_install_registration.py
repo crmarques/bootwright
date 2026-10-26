@@ -37,6 +37,7 @@ INSPECT = "bootwright.core.managedos_install_inspect"
 PROTOCOL = "bootwright.core.managedos_install_protocol"
 REGISTRATION = "bootwright.core.managedos_registration"
 REGISTERING = "bootwright_os_install_request.registration is defined"
+ONCE = "not (managedos_install_anaconda_prepared | default(false) | bool)"
 REACHABLE = "managedos_install_anaconda_reachable.rc | default(1) == 0"
 NOT_REMOVAL = "not (managedos_install_anaconda_observes_removal | bool)"
 RESULT = "managedos_install_anaconda_registration_result"
@@ -171,14 +172,16 @@ def test_apply_publishes_the_marker_proof_before_registering():
     registered = only(applied, included("register.yml"), "register the machine")
     assert fips < proved and proved + 1 == prepared and prepared + 1 == registered
     assert applied[prepared][PROTOCOL] == {"phase": "prepared", "marker": "{{ managedos_install_anaconda_marker }}"}
-    assert applied[prepared]["when"] == [REGISTERING] and applied[prepared]["no_log"] is True
+    assert applied[prepared]["when"] == [REGISTERING, ONCE] and applied[prepared]["no_log"] is True
     assert applied[proved]["no_log"] is True
     assert holds(applied[proved]["ansible.builtin.assert"]["that"],
                  managedos_install_anaconda_marker="m", bootwright_os_install_material={"marker": "m"})
     assert not holds(applied[proved]["ansible.builtin.assert"]["that"],
                      managedos_install_anaconda_marker="other", bootwright_os_install_material={"marker": "m"})
+    # The network restart records the same proof before its power-off (Q66),
+    # and an attempt publishes it once, whichever comes first.
     assert [name for name in task_files() for task in flattened(name)
-            if (task.get(PROTOCOL) or {}).get("phase") == "prepared"] == ["apply.yml"]
+            if (task.get(PROTOCOL) or {}).get("phase") == "prepared"] == ["apply.yml", "network.yml"]
 
 
 def test_register_material_never_enters_a_task_variable():

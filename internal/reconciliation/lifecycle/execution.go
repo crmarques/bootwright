@@ -1729,12 +1729,38 @@ func (s Service) reprove(ctx context.Context, tx Transaction, store OperationSto
 }
 
 // reserve claims the exclusive host resources the plan needs before any effect.
-// A destroy needs no new claim; it releases at completion.
+// A destroy needs no new claim and releases at completion, so it refuses when
+// that release would strand another context's use of what it removes.
 func (s Service) reserve(ctx context.Context, tx Transaction, decided transition) error {
 	if decided.verb == reconciliation.Destroy {
-		return nil
+		return reproveRelease(ctx, tx, "", "")
 	}
-	return tx.Reserve(ctx, decided.binding.reservations)
+	return tx.Reserve(ctx, keepProved(tx.Controller().State.Reservations, tx.Identity().Name, decided.binding.reservations))
+}
+
+func reproveRelease(ctx context.Context, tx Transaction, kind, object string) error {
+	return tx.ReproveReservations(ctx, func(held []prerequisites.HostReservation) error {
+		return prerequisites.ReleaseFailure(held, tx.Identity().Name, kind, object)
+	})
+}
+
+func keepProved(held []prerequisites.HostReservation, contextName string, planned []prerequisites.HostReservation) []prerequisites.HostReservation {
+	kept := make([]prerequisites.HostReservation, 0, len(planned))
+	for _, reservation := range planned {
+		reservation.Keys = slices.Clone(reservation.Keys)
+		for _, own := range held {
+			if own.Context != contextName || own.Kind != reservation.Kind || own.Service != reservation.Service || own.Shared != reservation.Shared {
+				continue
+			}
+			for _, key := range own.Keys {
+				if strings.HasPrefix(key, "bmc-system:") && !slices.Contains(reservation.Keys, key) {
+					reservation.Keys = append(reservation.Keys, key)
+				}
+			}
+		}
+		kept = append(kept, reservation)
+	}
+	return kept
 }
 
 // establishBinding proves the prepared host and records this context against

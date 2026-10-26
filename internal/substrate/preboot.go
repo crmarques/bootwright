@@ -13,7 +13,7 @@ import (
 // reason.
 const (
 	// RefusalHardwareMismatch is a physical machine whose complete hardware
-	// inventory lacks a declared address, or that could not be read in full.
+	// inventory is not the declared set, or that could not be read in full.
 	RefusalHardwareMismatch = "hardware-mismatch"
 	// RefusalIdentityMismatch is a physical machine that answers as another
 	// system than the one its Machine's block pinned in this operation.
@@ -59,7 +59,7 @@ func PreBootRefusals(arm, contextName, continuation, machine, endpoint string) m
 		return map[string]error{RefusalMachineRunning: running}
 	case ArmBaremetal:
 		return map[string]error{
-			RefusalHardwareMismatch: refused("the machine answering at "+endpoint+" does not report every hardware address "+identity+
+			RefusalHardwareMismatch: refused("the machine answering at "+endpoint+" does not report exactly the hardware addresses "+identity+
 				" declares, or its inventory could not be read in full, so no media was inserted into it and it was not booted",
 				"once the machine reports the hardware "+identity+" declares in full, run "+next+"; to correct that declaration instead, "+destroy+
 					", correct spec.hardware.management.bmc.address or spec.hardware.nics on "+identity+update+", then run "+apply),

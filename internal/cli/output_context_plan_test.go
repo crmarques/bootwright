@@ -53,7 +53,8 @@ func TestTheContextUpdatePlanNamesItsInputCountsAndWarnings(t *testing.T) {
 func TestTheContextDeletionPlanNamesWhatItRemovesAndAbandons(t *testing.T) {
 	plan := contexts.DeletionPlan{
 		Context: "retired", Mode: contexts.Ready, Revision: "rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f",
-		Reservations: []string{"libvirt-domain:bootwright-lab-rhel-01", "socket:192.0.2.1:8000"}, Abandons: contexts.AbandonsOwned,
+		Reservations: []string{"libvirt-domain:bootwright-lab-rhel-01", "media:rhel-9.iso", "socket:192.0.2.1:8000"},
+		Exclusive:    []string{"libvirt-domain:bootwright-lab-rhel-01", "socket:192.0.2.1:8000"}, Abandons: contexts.AbandonsOwned,
 	}
 	var out, errOut bytes.Buffer
 	if err := NewContextPlanPresenter(&out, &errOut).PresentDeletion(context.Background(), plan); err != nil {

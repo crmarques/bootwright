@@ -90,6 +90,7 @@ type DeletionPlan struct {
 	Mode         Mode
 	Revision     string
 	Reservations []string
+	Exclusive    []string
 	Abandons     Abandonment
 	Reason       string
 	Lost         bool

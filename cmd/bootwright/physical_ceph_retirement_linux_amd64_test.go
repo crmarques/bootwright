@@ -53,7 +53,7 @@ func physicalCephRetirementPlan(t *testing.T, omitted bool) reconciliation.Plan 
 		edits := []exampleEdit{}
 		for number := 1; number <= 3; number++ {
 			path := fmt.Sprintf("infra/machines/metal-%02d.yaml", number)
-			old := fmt.Sprintf("    eraseOnRemoval:\n      method: logicalOverwrite\n\n      targets:\n        - deviceName: /dev/sda\n          wwn: '0x600000000000000%d'\n          serialNumber: SYNTHETIC-ROOT-%02d\n          sizeBytes: 53687091200\n\n        - deviceName: /dev/disk/by-id/wwn-0x500000000000000%d\n          wwn: '0x500000000000000%d'\n          serialNumber: SYNTHETIC-CEPH-%02d\n          sizeBytes: 107374182400\n\n", number, number, number, number, number)
+			old := fmt.Sprintf("    eraseOnRemoval:\n      method: logicalOverwrite\n\n      targets:\n        - deviceName: /dev/disk/by-id/wwn-0x600000000000000%d\n          wwn: '0x600000000000000%d'\n          serialNumber: SYNTHETIC-ROOT-%02d\n          sizeBytes: 53687091200\n\n        - deviceName: /dev/disk/by-id/wwn-0x500000000000000%d\n          wwn: '0x500000000000000%d'\n          serialNumber: SYNTHETIC-CEPH-%02d\n          sizeBytes: 107374182400\n\n", number, number, number, number, number, number)
 			edits = append(edits, exampleEdit{path, old, ""})
 		}
 		sources = editedExample(t, "physical-3-nodes-ceph", edits...)

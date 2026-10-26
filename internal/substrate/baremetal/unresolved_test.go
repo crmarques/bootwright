@@ -24,7 +24,7 @@ func TestUnresolvedNamesTheRefusingCheck(t *testing.T) {
 		explains bool
 	}{
 		"an apply over a machine short of an address": {reconciliation.Apply, short, lifecycle.Unresolved{
-			Reason: subject + " is not what its apply froze: the machine does not report every hardware address this Machine declares",
+			Reason: subject + " is not what its apply froze: the machine does not report exactly the hardware addresses this Machine declares",
 			Remedy: "restore " + subject + " to what its frozen request names",
 		}, true},
 		"a removal":                    {reconciliation.Destroy, short, lifecycle.Unresolved{}, false},

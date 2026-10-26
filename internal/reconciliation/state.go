@@ -31,10 +31,11 @@ const (
 type EffectState string
 
 const (
-	EffectNoEffect  EffectState = "no-effect"
-	EffectPartial   EffectState = "partial"
-	EffectCompleted EffectState = "completed"
-	EffectUnknown   EffectState = "unknown"
+	EffectNoEffect     EffectState = "no-effect"
+	EffectPartial      EffectState = "partial"
+	EffectCompleted    EffectState = "completed"
+	EffectInconclusive EffectState = "inconclusive"
+	EffectUnknown      EffectState = "unknown"
 )
 
 // Outcome is what a capability proves about one attempt. A direct apply or
@@ -68,7 +69,7 @@ func ValidBlockState(value BlockState) bool {
 
 func ValidEffectState(value EffectState) bool {
 	switch value {
-	case EffectNoEffect, EffectPartial, EffectCompleted, EffectUnknown:
+	case EffectNoEffect, EffectPartial, EffectCompleted, EffectInconclusive, EffectUnknown:
 		return true
 	}
 	return false
@@ -109,6 +110,8 @@ func ResolutionTransition(observed EffectState) (EffectState, BlockState, error)
 		return EffectNoEffect, BlockFailed, nil
 	case EffectPartial:
 		return EffectPartial, BlockFailed, nil
+	case EffectInconclusive:
+		return EffectInconclusive, BlockFailed, nil
 	case EffectUnknown:
 		return EffectUnknown, BlockUnknown, nil
 	}
@@ -127,7 +130,7 @@ func ResolutionOutcome(resolved EffectState, proved Outcome) Outcome {
 			return proved
 		}
 		return OutcomeChanged
-	case EffectNoEffect, EffectPartial:
+	case EffectNoEffect, EffectPartial, EffectInconclusive:
 		return OutcomeFailed
 	}
 	return OutcomeUnknown

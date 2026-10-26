@@ -119,10 +119,7 @@ def reported(uuid=UUID, serial=SERIAL):
 
 
 def gated(variables):
-    rendering = Templar(loader=LOADER, variables=variables)
-    gates = [rendering.evaluate_conditional(task["when"]) for task in (reading(), refusal())]
-    assert gates[0] == gates[1]
-    return gates[0]
+    return Templar(loader=LOADER, variables=variables).evaluate_conditional(refusal()["when"])
 
 
 def accepts(variables):
@@ -145,10 +142,9 @@ def test_the_identity_is_read_and_compared_before_any_power_request():
     assert "machine_power_redfish_access" in arguments and "'inspect': true" in arguments
     retained = loaded[read + 1]
     assert IDENTITY in retained["ansible.builtin.set_fact"] and retained["no_log"] is True
-    assert retained["when"] == loaded[read]["when"]
+    assert retained["when"] == loaded[read]["when"] == "machine_power_redfish_physical | bool"
     assert loaded[compared][ASSERT]["quiet"] is True
     assert "no_log" not in loaded[compared]
-    assert loaded[read]["when"] == loaded[compared]["when"]
     # The read tolerates its own failure only so that the controller's message
     # reaches the output uncensored: the step after it refuses there, so a read
     # that failed is never compared as an empty identity.
@@ -199,7 +195,7 @@ def test_a_machine_with_no_pin_compares_nothing(tmp_path):
 
 
 def naming():
-    return tasks()[indexed(lambda task: (task.get(PROTOCOL) or {}).get("phase") == "refused", "name the refusal")]
+    return tasks()[indexed(lambda task: (task.get(PROTOCOL) or {}).get("reason") == "identity-mismatch", "name the refusal")]
 
 
 def names_the_refusal(variables):
@@ -216,7 +212,7 @@ def test_the_runner_is_told_of_the_refusal_before_the_run_fails():
     read = indexed(is_identity_read, "read the reported identity")
     stopped = indexed(lambda task: ASSERT in task and IDENTITY + ".msg" in json.dumps(task[ASSERT]),
                       "stop at a read the controller did not answer")
-    named = indexed(lambda task: (task.get(PROTOCOL) or {}).get("phase") == "refused", "name the refusal")
+    named = indexed(lambda task: (task.get(PROTOCOL) or {}).get("reason") == "identity-mismatch", "name the refusal")
     compared = indexed(compares, "compare the pin")
     assert read < stopped < named < compared
     assert loaded[named][PROTOCOL] == {"phase": "refused", "reason": "identity-mismatch"}
@@ -266,3 +262,75 @@ def test_the_refusal_prints_each_identity_bounded_and_printable(tmp_path):
         % (ENDPOINT, "[31m" + UUID + "]0;owned" + "U" * 80, "S" * 100 + "T" * 28, UUID + "2J" + "V" * 90,
            "\xe9" + "P" * 127, REMEDY))
     assert message.isprintable()
+
+
+HOST_UUID = "8e1b6a3c-0d7f-4c2a-9a51-3f0c2d4b5e61"
+HOST_MACS = "aa:bb:cc:00:00:01,aa:bb:cc:00:00:02"
+
+
+def check(reason):
+    """The refusal a run names for reason, and the assert that refuses it."""
+    loaded = tasks()
+    named = indexed(lambda task: (task.get(PROTOCOL) or {}).get("reason") == reason, "name " + reason)
+    asserted = next(index for index in range(named + 1, len(loaded)) if ASSERT in loaded[index])
+    return loaded[named], loaded[asserted]
+
+
+def holds(variables, task):
+    rendering = Templar(loader=LOADER, variables=variables)
+    gate = task.get("when", True)
+    gates = gate if isinstance(gate, list) else [gate]
+    if not all(rendering.evaluate_conditional(item) for item in gates):
+        return None
+    return all(rendering.evaluate_conditional(item) for item in task[ASSERT]["that"])
+
+
+HOST = {
+    "a foreign machine": (dict(reported(), addresses=["52:54:00:9a:1b:01"]), True),
+    "the controller host's uuid": (dict(reported(uuid=" " + HOST_UUID.upper()), addresses=["52:54:00:9a:1b:01"]), False),
+    "one of the controller host's MACs": (dict(reported(), addresses=["52:54:00:9a:1b:01", "aa:bb:cc:00:00:02"]), False),
+}
+
+
+# A power command never reaches the host that runs Bootwright: a machine whose
+# controller reports this host's own UUID, in any case or space, or any of its
+# MAC addresses refuses before any power request, and names the refusal first.
+@pytest.mark.parametrize("observation, foreign", HOST.values(), ids=HOST.keys())
+def test_a_machine_reporting_the_controller_hosts_identity_refuses(tmp_path, observation, foreign):
+    variables = scope(tmp_path, observation, substrate="baremetal", controllerHostUUIDBase64=encoded(HOST_UUID),
+                      controllerHostMACsBase64=encoded(HOST_MACS))
+    named, asserted = check("controller-host")
+    assert holds(variables, asserted) is foreign
+    rendering = Templar(loader=LOADER, variables=variables)
+    assert all(rendering.evaluate_conditional(item) for item in named["when"]) is (not foreign)
+    compared = indexed(compares, "compare the pin")
+    assert tasks().index(asserted) < compared
+
+
+DECLARED = "52:54:00:9a:1b:01,52:54:00:9a:1b:02"
+PROVED = {
+    "exactly the declared set": (dict(reported(), addresses=["52:54:00:9a:1b:02", "52:54:00:9a:1b:01"]), True),
+    "an extra reported address": (
+        dict(reported(), addresses=["52:54:00:9a:1b:01", "52:54:00:9a:1b:02", "52:54:00:9a:1b:09"]), False),
+    "a declared address missing": (dict(reported(), addresses=["52:54:00:9a:1b:01"]), False),
+    "an incomplete inventory": (dict(reported(), addresses=["52:54:00:9a:1b:01", "52:54:00:9a:1b:02"],
+                                     failures=["member[2] could not be read"]), False),
+}
+
+
+# A physical Machine with no pin is proved by the full target proof before any
+# power request: a complete inventory reporting exactly its declared MAC set.
+@pytest.mark.parametrize("observation, proved", PROVED.values(), ids=PROVED.keys())
+def test_an_unpinned_machine_must_report_exactly_its_declared_set(tmp_path, observation, proved):
+    variables = scope(tmp_path, observation, substrate="baremetal", expectedMACsBase64=encoded(DECLARED),
+                      controllerHostMACsBase64=encoded(HOST_MACS))
+    named, asserted = check("hardware-mismatch")
+    assert holds(variables, asserted) is proved
+    rendering = Templar(loader=LOADER, variables=variables)
+    assert all(rendering.evaluate_conditional(item) for item in named["when"]) is (not proved)
+
+
+def test_a_pinned_machine_skips_the_unpinned_proof(tmp_path):
+    variables = scope(tmp_path, dict(reported(), addresses=["52:54:00:9a:1b:09"]), UUID, SERIAL, substrate="baremetal",
+                      controllerHostMACsBase64=encoded(HOST_MACS))
+    assert holds(variables, check("hardware-mismatch")[1]) is None

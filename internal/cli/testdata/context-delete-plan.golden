@@ -3,5 +3,14 @@
     Name             retired
     Input revisions  selected rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f
     Keyring          removed with every secret version it holds
-    Reservations     libvirt-domain:bootwright-lab-rhel-01, socket:192.0.2.1:8000
-    Owned objects    abandoned unmanaged; bootwright status --context retired lists them
+    Reservations     libvirt-domain:bootwright-lab-rhel-01, media:rhel-9.iso,
+                     socket:192.0.2.1:8000
+    Owned objects    abandoned unmanaged; bootwright status --context retired and bootwright
+                     diff --context retired list them, diff also what the selected input no
+                     longer declares
+    Freed keys       libvirt-domain:bootwright-lab-rhel-01, socket:192.0.2.1:8000; another
+                     context may then claim a resource an abandoned object still uses, such as
+                     the management controller of a powered-off Machine
+    Same name        remove the abandoned objects by hand before bootwright context init --name
+                     retired again, because that name reads them as its own, and never reuse
+                     retired on another controller that shares a provider host

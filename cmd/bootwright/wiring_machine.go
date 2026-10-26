@@ -6,6 +6,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/cli"
+	"github.com/crmarques/bootwright/internal/controller/hostlinux"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
@@ -208,6 +209,19 @@ func (h machineHostKeys) HostKey(ctx context.Context, contextName, name string) 
 // evidence, so it decodes it here and decides what pins the Machine; a power
 // operation asks only for the answer.
 type machineIdentities struct{ reconciler lifecycle.Service }
+
+func (machineIdentities) ControllerHost(ctx context.Context) (power.HostIdentity, error) {
+	inspector := hostlinux.New()
+	identity, err := inspector.Identity(ctx)
+	if err != nil {
+		return power.HostIdentity{}, err
+	}
+	addresses, err := inspector.HardwareAddresses(ctx)
+	if err != nil {
+		return power.HostIdentity{}, err
+	}
+	return power.HostIdentity{UUID: identity.ProductUUID(), MACs: addresses}, nil
+}
 
 func (i machineIdentities) ProvedIdentity(ctx context.Context, contextName, name string) (machine.HardwareIdentity, bool, error) {
 	published, err := i.reconciler.Evidence(ctx, contextName, baremetal.Kind, name)

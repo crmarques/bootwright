@@ -142,7 +142,7 @@
     "records": [],
     "result": {
       "failed": true,
-      "msg": "the machine was not proved to be the one this Machine declares; missing: a complete hardware inventory (x), declared address aa:bb:cc:dd:ee:02, a power state"
+      "msg": "the machine was not proved to be the one this Machine declares; missing: a complete hardware inventory (x), declared address aa:bb:cc:dd:ee:02, an inventory free of addresses the Machine does not declare (1 reported), a power state"
     }
   },
   {

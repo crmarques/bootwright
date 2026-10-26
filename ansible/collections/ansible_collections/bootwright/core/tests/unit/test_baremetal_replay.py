@@ -59,8 +59,7 @@ def observation(**overrides):
 
 PROOFS = {
     "powered off with exactly the declared addresses": observation(),
-    "powered on with an address beyond the declaration": observation(
-        power="On", addresses=DECLARED + ["aa:bb:cc:dd:ee:09"]),
+    "powered on with exactly the declared addresses": observation(power="On"),
 }
 
 

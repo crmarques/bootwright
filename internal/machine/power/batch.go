@@ -15,9 +15,11 @@ import (
 
 // target is one resolved Machine: its frozen request and its pin, if any.
 type target struct {
-	frozen Request
-	arm    string
-	pin    machine.HardwareIdentity
+	frozen   Request
+	arm      string
+	pin      machine.HardwareIdentity
+	host     HostIdentity
+	expected []string
 }
 
 // normalized trims, drops empty and repeated names, and sorts them bytewise.
@@ -61,6 +63,14 @@ func (s Service) resolve(ctx context.Context, catalog api.Catalog, contextName s
 }
 
 func (s Service) resolveOne(ctx context.Context, catalog api.Catalog, contextName, name, command string, request PowerRequest) (target, error) {
+	controllerMachine, err := lifecycle.ControllerMachine(catalog)
+	if err != nil {
+		return target{}, err
+	}
+	if name == controllerMachine {
+		return target{}, refusedOn(name, "Machine/"+name+" is the Environment's controller Machine, the host that runs Bootwright, so no power request may reach it",
+			"power the controller host from its own console or management controller, outside Bootwright")
+	}
 	frozen, physical, err := requestFor(catalog, contextName, name, request.Verb, request.Force, s.realized(ctx, contextName))
 	if err != nil {
 		return target{}, err
@@ -69,10 +79,6 @@ func (s Service) resolveOne(ctx context.Context, catalog api.Catalog, contextNam
 		return target{}, err
 	}
 	object, _ := catalog.Find(api.Machine, name)
-	controllerMachine, err := lifecycle.ControllerMachine(catalog)
-	if err != nil {
-		return target{}, err
-	}
 	managed, err := managedTarget(catalog, object, contextName, controllerMachine)
 	if err != nil {
 		return target{}, err
@@ -90,8 +96,47 @@ func (s Service) resolveOne(ctx context.Context, catalog api.Catalog, contextNam
 		if found {
 			resolved.pin = proved
 		}
+		if resolved.host, err = s.controllerHost(ctx, name); err != nil {
+			return target{}, err
+		}
+		if !resolved.pin.Present() {
+			if resolved.expected = declaredMACs(object); len(resolved.expected) == 0 {
+				return target{}, refusedOn(name, "Machine/"+name+" has no identity this context's current apply proved and declares no MAC address, so nothing could prove the machine a power request would reach",
+					"declare its NICs in spec.hardware.nics of Machine/"+name+", or apply the context so its bare-metal block proves it")
+			}
+		}
 	}
 	return resolved, nil
+}
+
+func (s Service) controllerHost(ctx context.Context, name string) (HostIdentity, error) {
+	host, err := s.identities.ControllerHost(ctx)
+	if err == nil && (strings.TrimSpace(host.UUID) != "" || len(host.MACs) != 0) {
+		return host, nil
+	}
+	if ctx.Err() != nil {
+		return HostIdentity{}, ctx.Err()
+	}
+	return HostIdentity{}, refusedOn(name, "this host's own system UUID and MAC addresses could not be read, so a power request to Machine/"+name+" cannot be shown not to reach the host that runs Bootwright",
+		"run the power command on the controller host as the account its setup prepared")
+}
+
+func declaredMACs(object api.Object) []string {
+	var macs []string
+	for _, nic := range object.Spec().Get("hardware", "nics").Items() {
+		if address := strings.ToLower(strings.TrimSpace(nic.Get("macAddress").Text())); address != "" {
+			macs = append(macs, address)
+		}
+	}
+	slices.Sort(macs)
+	return slices.Compact(macs)
+}
+
+func refusedOn(name, message, remediation string) error {
+	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
+		Severity: "error", Code: "machine.power", Message: message, Remediation: remediation,
+		Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: name},
+	}}}
 }
 
 // confirm asks once, for every Machine, before a stop or restart.

@@ -21,6 +21,10 @@ const (
 	destroyOwnedExit = "remove what the context owns with bootwright destroy --context lab, then repeat the apply"
 	reclaimClaimExit = "reclaim the operation directories interrupted applies left with bootwright destroy --context lab, then repeat the apply"
 	createdAgain     = ", then create it again with bootwright context init --name lab from its original configuration and input"
+	// abandonedName is what every exit that names an acknowledged deletion
+	// and then init of the same name adds (B803, D155).
+	abandonedName = "; before that init, remove by hand the objects the deletion abandons, because the same name reads them as its own, " +
+		"and never reuse lab on another controller that shares a provider host"
 )
 
 const interruptedClaim = "op-0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e"
@@ -139,7 +143,7 @@ func TestTheRetainedOperationExitOverUnreadableEvidenceNamesTheAcknowledgedDelet
 	h := newHarness(t, "alpha")
 	h.workspace.evidence = []byte(`{`)
 	view := h.workspace.view()
-	want := unlistedDeletion + ", then create it again with bootwright context init --name lab from its original configuration and input"
+	want := unlistedDeletion + createdAgain + abandonedName
 	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
 		if exit := retainedExit(context.Background(), view, h.service.store(view), verb); exit != want {
 			t.Fatalf("the %s exit over unreadable evidence is %q, want %q", verb, exit, want)
@@ -224,7 +228,7 @@ func TestEachRetainedOperationExitLeadsOutOfTheBound(t *testing.T) {
 	})
 	t.Run("the deletion that abandons what a removal could not take back", func(t *testing.T) {
 		h := cases["a removal the operation area cannot hold"].arrange(t)
-		remedy := orphanedDeletion + createdAgain
+		remedy := orphanedDeletion + createdAgain + abandonedName
 		refusedAtTheBound(t, h, reconciliation.Destroy, remedy)
 		requireDeletionAdmitted(t, h, remedy)
 		recreate(t, h)

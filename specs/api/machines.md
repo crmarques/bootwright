@@ -176,10 +176,6 @@ the same bridge. The removal of a managed network
 therefore refuses while another context's attachment uses its bridge
 ([substrates](../substrates.md#provider-host-realization) owns the rule).
 
-Not yet met: an external attachment claims nothing and no removal checks
-another context's use of a bridge; tracked as
-[B803](../milestones/backlog.md#b803).
-
 ## Machine
 
 `Machine` is the single object for physical machines, provider-created virtual
@@ -353,10 +349,6 @@ at `os.install.rootDeviceHints.deviceName`, naming the by-id form. The
 installation's `%pre` resolves the name and stops before any storage directive
 unless it is a whole block device
 ([physical installation](../managed-os.md#physical-installation)).
-
-Not yet met: a bare-metal Bootwright-installed Machine's `deviceName` may be
-any kernel device path; tracked as
-[B802](../milestones/backlog.md#b802).
 
 ### Network configuration
 

@@ -125,7 +125,7 @@ func TestSubscriptionFreezesRegistrationWithoutSecretBytes(t *testing.T) {
 func TestRegistrationRefusalsNameTheEntitlementField(t *testing.T) {
 	agent := substrate.Target{Identity: substrate.Identity{Channel: substrate.ChannelGuestAgent}}
 	delivered := substrate.Target{Identity: substrate.Identity{Channel: substrate.ChannelDeliveredKey}}
-	metal := server(api.MapValue(text("deviceName", "/dev/sda")))
+	metal := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
 	corporate := externalProxy("corporate", text("httpsProxy", "http://192.0.2.80:3128"))
 	for name, test := range map[string]struct {
 		catalog api.Catalog

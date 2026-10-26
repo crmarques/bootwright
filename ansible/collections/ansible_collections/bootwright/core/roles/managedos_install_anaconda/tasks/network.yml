@@ -330,6 +330,22 @@
 - name: Restart the machine on its committed network
   when: managedos_install_anaconda_network_step in ['rollback', 'apply', 'reboot']
   block:
+    # The phase follows the proof of this installation's marker, so before the
+    # power-off the attempt durably records that proof, and a later attempt
+    # boots the installed disk of a machine that no longer answers rather than
+    # install it again (Q66).
+    - name: Record that this installation is proved and its disk boot intended
+      bootwright.core.managedos_install_protocol:
+        phase: prepared
+        marker: '{{ bootwright_os_install_material.marker }}'
+      when: not (managedos_install_anaconda_prepared | default(false) | bool)
+      no_log: true
+
+    - name: Remember that this attempt recorded its before-state
+      ansible.builtin.set_fact:
+        managedos_install_anaconda_prepared: true
+      changed_when: false
+
     - name: Ask the machine to power off
       ansible.builtin.include_tasks: guest.yml
       vars:

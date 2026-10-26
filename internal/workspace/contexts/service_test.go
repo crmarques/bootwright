@@ -23,7 +23,7 @@ import (
 
 const pristineEvidence = `{"version":1,"operation":"none","ownership":"none"}`
 
-const orphanAction = "delete, abandoning the objects bootwright status --context example lists and any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context example --name <cluster>)"
+const orphanAction = "delete, abandoning the objects bootwright status --context example and bootwright diff --context example list, freeing the exclusive keys the plan names, and removing any custodied cluster kubeconfig (export it first with bootwright cluster kubeconfig --context example --name <cluster>)"
 
 const lostAction = "delete with orphaned objects that cannot be listed (its directory is gone)"
 
@@ -329,6 +329,11 @@ func (tx transaction) HostReservations(ctx context.Context, name string) ([]stri
 		return nil, err
 	}
 	return slices.Clone(tx.r.reservations[name]), nil
+}
+
+func (tx transaction) ExclusiveHostReservations(_ context.Context, name string) ([]string, error) {
+	tx.requireLock()
+	return slices.DeleteFunc(slices.Clone(tx.r.reservations[name]), func(key string) bool { return strings.HasPrefix(key, "media:") }), nil
 }
 
 func (tx transaction) Delete(ctx context.Context, record contexts.Record) error {
@@ -1363,11 +1368,11 @@ func TestOrdinaryConfirmationNamesTheObjectsADeletionAbandons(t *testing.T) {
 	_, err := service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true})
 	requireCode(t, err, "context.unsafe-delete")
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Message != "context example still owns realized objects; deleting it would orphan them" ||
-		reported[0].Remediation != "review them with bootwright status --context example, then remove them with bootwright destroy --context example, or abandon them with bootwright context delete --name example --purge --allow-orphans" {
+		reported[0].Remediation != "review them with bootwright status --context example and bootwright diff --context example, which also lists what the selected input no longer declares, then remove them with bootwright destroy --context example, or abandon them with bootwright context delete --name example --purge --allow-orphans" {
 		t.Fatalf("the refusal = %#v", reported)
 	}
 	got, err := service(t, r, sourceFixture("/synthetic/input")).Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true, AllowOrphans: true})
-	if err != nil || got == nil || !got.OrphansAbandoned || r.confirmed != orphanAction || !strings.Contains(r.confirmed, "bootwright status --context example lists") {
+	if err != nil || got == nil || !got.OrphansAbandoned || r.confirmed != orphanAction || !strings.Contains(r.confirmed, "bootwright status --context example and bootwright diff --context example list") {
 		t.Fatalf("confirmation did not name the abandonment: %#v %v %q", got, err, r.confirmed)
 	}
 	if plan := r.deletionPlan; plan == nil || plan.Abandons != contexts.AbandonsOwned || plan.Reason != "" {
@@ -1551,7 +1556,7 @@ func TestUpdateAndDeletionPresentTheirPlanBeforeTheConfirmation(t *testing.T) {
 	if deleted != nil || !errors.Is(err, r.failureErr) || slices.Contains(r.calls, "delete") || len(r.registry.Contexts) != 1 {
 		t.Fatalf("a declined deletion = %#v (%v): %v", deleted, err, r.calls)
 	}
-	plan := contexts.DeletionPlan{Context: "example", Mode: contexts.Ready, Revision: "rev-00000000000000000000000000000001", Reservations: keys, Abandons: contexts.AbandonsNone}
+	plan := contexts.DeletionPlan{Context: "example", Mode: contexts.Ready, Revision: "rev-00000000000000000000000000000001", Reservations: keys, Exclusive: keys, Abandons: contexts.AbandonsNone}
 	if r.deletionPlan == nil || !reflect.DeepEqual(*r.deletionPlan, plan) || slices.Index(r.calls, "present") != slices.Index(r.calls, "confirm")-1 {
 		t.Fatalf("the deletion presented %+v, want %+v, before %v", r.deletionPlan, plan, r.calls)
 	}

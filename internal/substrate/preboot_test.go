@@ -47,7 +47,7 @@ func eachPreBootRefusal(t *testing.T, continuation string) {
 	for arm, want := range map[string]map[string][]diagnostics.Diagnostic{
 		ArmLibvirt: {RefusalMachineRunning: running},
 		ArmBaremetal: {
-			RefusalHardwareMismatch: refusal("the machine answering at "+preBootEndpoint+" does not report every hardware address Machine/metal-01 declares, "+
+			RefusalHardwareMismatch: refusal("the machine answering at "+preBootEndpoint+" does not report exactly the hardware addresses Machine/metal-01 declares, "+
 				"or its inventory could not be read in full, so no media was inserted into it and it was not booted",
 				"once the machine reports the hardware Machine/metal-01 declares in full, run "+next+"; to correct that declaration instead, "+
 					"take this context back with bootwright destroy --context lab-b, correct spec.hardware.management.bmc.address or spec.hardware.nics on Machine/metal-01 "+

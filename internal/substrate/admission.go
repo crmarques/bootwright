@@ -490,6 +490,17 @@ func validateLibvirtHostFootprint(o api.Object, _ api.Catalog) []api.Issue {
 
 // ManagedAttachments counts a libvirt provider's attachments of management:
 // managed; an attachment that declares none is external.
+func ExternalBridges(provider api.Object) []string {
+	var bridges []string
+	for _, attachment := range provider.Spec().Get("networkAttachments").Items() {
+		if bridge := attachment.Get("libvirt", "bridge").Text(); bridge != "" && attachment.Get("libvirt", "management").Text() != "managed" {
+			bridges = append(bridges, bridge)
+		}
+	}
+	slices.Sort(bridges)
+	return slices.Compact(bridges)
+}
+
 func ManagedAttachments(provider api.Object) int {
 	count := 0
 	for _, attachment := range provider.Spec().Get("networkAttachments").Items() {

@@ -17,7 +17,7 @@ spec:
       hostKeyRef: metal-01-host-key
 
       rootDeviceHints:
-        deviceName: /dev/sda
+        deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c301
 
       ntp:
         - serverRef: lab-ntp

@@ -27,8 +27,9 @@ options:
   reason:
     description:
       - The refusal a refused phase names to the runner before the run fails,
-        which the runner reports as its caller's own diagnostic for it. The
-        one a power run names is C(identity-mismatch).
+        which the runner reports as its caller's own diagnostic for it. A power
+        run names C(controller-host), C(hardware-mismatch) or
+        C(identity-mismatch).
     type: str
     required: false
   outcome:

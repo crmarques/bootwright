@@ -1,6 +1,9 @@
 package prerequisites
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestAWildcardSocketConflictsWithEveryAddressAtItsPort(t *testing.T) {
 	for name, test := range map[string]struct {
@@ -81,5 +84,60 @@ func TestAConflictNamesTheFirstHolderInStoredOrder(t *testing.T) {
 	conflicts := Conflicts(held, wanted)
 	if len(conflicts) != 2 || conflicts[0].Held.Context != "alpha" || conflicts[1].Held.Context != "bravo" {
 		t.Fatalf("conflicts = %+v, want alpha then bravo", conflicts)
+	}
+}
+
+// A shared claim conflicts with nothing at acquisition, except a shared bmc:
+// key another context holds exclusively, which refuses the registration that
+// carries the emulated BMC's installation; an exclusive bmc: claim over a held
+// shared one, and two shared claims, conflict with nothing (B803).
+func TestOnlyASharedBMCKeyConflictsWithItsExclusiveHolder(t *testing.T) {
+	physical := HostReservation{Context: "metal", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc:192.0.2.1:8000/1"}}
+	emulated := HostReservation{Context: "lab", Kind: "substrate-machine-bmc", Service: "rhel-01", Keys: []string{"bmc:192.0.2.1:8000/1"}, Shared: true}
+	use := HostReservation{Context: "lab", Kind: "substrate-host-use", Service: "lab", Keys: []string{"bridge-use:virbr-lab"}, Shared: true}
+	if found := Conflicts([]HostReservation{physical}, []HostReservation{emulated}); len(found) != 1 || found[0].Held.Context != "metal" {
+		t.Fatalf("a shared bmc key under an exclusive holder = %+v", found)
+	}
+	if found := Conflicts([]HostReservation{emulated}, []HostReservation{physical}); len(found) != 0 {
+		t.Fatalf("an exclusive bmc key over a shared holder = %+v", found)
+	}
+	other := use
+	other.Context = "other"
+	if found := Conflicts([]HostReservation{other, emulated}, []HostReservation{use, emulated}); len(found) != 0 {
+		t.Fatalf("shared claims conflicted: %+v", found)
+	}
+	managed := HostReservation{Context: "other", Kind: "substrate-host", Service: "lab-b", Keys: []string{"bridge:virbr-lab"}}
+	if found := Conflicts([]HostReservation{managed}, []HostReservation{use}); len(found) != 0 {
+		t.Fatalf("a bridge-use claim conflicted with the managed bridge it uses: %+v", found)
+	}
+}
+
+// A removal would strand another context's use of a managed bridge this
+// context defines, or another context's exclusive claim of the controller
+// endpoint this context's emulated BMC serves; a context's own claims, and
+// another context's claims of anything else, strand nothing.
+func TestAReleaseConflictsWithAnotherContextsUse(t *testing.T) {
+	managed := HostReservation{Context: "lab", Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab", "libvirt-network:bootwright-lab-lab"}}
+	emulated := HostReservation{Context: "lab", Kind: "substrate-machine-bmc", Service: "rhel-01", Keys: []string{"bmc:192.0.2.1:8000/1"}, Shared: true}
+	use := HostReservation{Context: "other", Kind: "substrate-host-use", Service: "edge", Keys: []string{"bridge-use:virbr-lab"}, Shared: true}
+	physical := HostReservation{Context: "metal", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc:192.0.2.1:8000/1"}}
+	held := []HostReservation{managed, emulated, use, physical}
+	found := ReleaseConflicts(held, "lab")
+	if len(found) != 2 || found[0].Held.Context != "other" || found[0].WantedKey != "bridge:virbr-lab" || found[1].Held.Context != "metal" {
+		t.Fatalf("release conflicts = %+v", found)
+	}
+	diagnostic := ReleaseDiagnostic(found[0])
+	if diagnostic.Code != "controller.conflict" || diagnostic.Remediation != "run bootwright destroy --context other first" ||
+		diagnostic.Message != "context other still uses bridge virbr-lab that InfraProvider/lab of this context holds, through InfraProvider/edge, so this removal would take it from under that context" {
+		t.Fatalf("diagnostic = %+v", diagnostic)
+	}
+	if message := ReleaseDiagnostic(found[1]).Message; strings.Contains(message, "192.0.2.1") {
+		t.Fatalf("a bmc release named its endpoint: %s", message)
+	}
+	if found := ReleaseConflicts(held, "other"); len(found) != 0 {
+		t.Fatalf("a removal of the user strands %+v", found)
+	}
+	if found := ReleaseConflicts([]HostReservation{managed, emulated}, "lab"); len(found) != 0 {
+		t.Fatalf("a context's own claims strand %+v", found)
 	}
 }

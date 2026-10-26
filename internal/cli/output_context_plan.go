@@ -51,16 +51,28 @@ func (p *ContextPlanPresenter) PresentDeletion(ctx context.Context, plan context
 	if plan.Lost {
 		keyring = "already gone with its directory"
 	}
+	fields := []field{
+		{Label: "Name", Value: plan.Context},
+		{Label: "Input revisions", Value: revisions},
+		{Label: "Keyring", Value: keyring},
+		{Label: "Reservations", Value: reservations},
+		{Label: "Owned objects", Value: abandonedObjects(plan)},
+	}
+	if plan.Abandons != contexts.AbandonsNone {
+		freed := "none"
+		if len(plan.Exclusive) != 0 {
+			freed = strings.Join(plan.Exclusive, ", ")
+		}
+		fields = append(fields,
+			field{Label: "Freed keys", Value: freed + "; another context may then claim a resource an abandoned object still uses, such as the management controller of a powered-off Machine"},
+			field{Label: "Same name", Value: "remove the abandoned objects by hand before bootwright context init --name " + plan.Context +
+				" again, because that name reads them as its own, and never reuse " + plan.Context + " on another controller that shares a provider host"},
+		)
+	}
 	var text display
 	text.headline("", "Context deletion plan")
 	text.section("")
-	text.fields(
-		field{Label: "Name", Value: plan.Context},
-		field{Label: "Input revisions", Value: revisions},
-		field{Label: "Keyring", Value: keyring},
-		field{Label: "Reservations", Value: reservations},
-		field{Label: "Owned objects", Value: abandonedObjects(plan)},
-	)
+	text.fields(fields...)
 	if err := p.write(ctx, text); err != nil {
 		return err
 	}
@@ -72,7 +84,8 @@ func (p *ContextPlanPresenter) PresentDeletion(ctx context.Context, plan context
 func abandonedObjects(plan contexts.DeletionPlan) string {
 	switch plan.Abandons {
 	case contexts.AbandonsOwned:
-		return "abandoned unmanaged; bootwright status --context " + plan.Context + " lists them"
+		return "abandoned unmanaged; bootwright status --context " + plan.Context + " and bootwright diff --context " + plan.Context +
+			" list them, diff also what the selected input no longer declares"
 	case contexts.AbandonsUnlisted:
 		return "cannot be listed: " + plan.Reason
 	}

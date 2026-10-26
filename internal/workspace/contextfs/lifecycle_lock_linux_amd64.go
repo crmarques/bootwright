@@ -100,8 +100,14 @@ func (l *leasedLifecycle) Bind(ctx context.Context, machine string, host control
 func (l *leasedLifecycle) Reserve(ctx context.Context, reservations []prerequisites.HostReservation) error {
 	return l.shared(ctx, func(ctx context.Context) error { return l.lifecycleTransaction.Reserve(ctx, reservations) })
 }
+func (l *leasedLifecycle) Claim(ctx context.Context, reservation prerequisites.HostReservation) error {
+	return l.shared(ctx, func(ctx context.Context) error { return l.lifecycleTransaction.Claim(ctx, reservation) })
+}
 func (l *leasedLifecycle) ReleaseReservations(ctx context.Context) error {
 	return l.shared(ctx, func(ctx context.Context) error { return l.lifecycleTransaction.ReleaseReservations(ctx) })
+}
+func (l *leasedLifecycle) ReproveReservations(ctx context.Context, check func([]prerequisites.HostReservation) error) error {
+	return l.shared(ctx, func(ctx context.Context) error { return l.lifecycleTransaction.ReproveReservations(ctx, check) })
 }
 func (l *leasedLifecycle) ClientArea(ctx context.Context, id string) (area prerequisites.BundleArea, err error) {
 	err = l.shared(ctx, func(ctx context.Context) error { area, err = l.lifecycleTransaction.ClientArea(ctx, id); return err })

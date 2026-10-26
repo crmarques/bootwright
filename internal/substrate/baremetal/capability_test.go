@@ -241,12 +241,13 @@ func fixtureRequest(t *testing.T) Request {
 }
 
 // Completion requires the exact machine: its identity recorded, a power state
-// read, and every declared address present. Anything less proves nothing,
-// because a partial inventory cannot tell one server from another.
+// read, and a complete inventory reporting exactly the declared addresses.
+// Anything less proves nothing, because a partial inventory cannot tell one
+// server from another, and an extra address is another server or a re-cabling.
 func TestCompletionRequiresTheExactMachine(t *testing.T) {
 	request := fixtureRequest(t)
 	complete := Evidence{
-		Addresses:     []string{"aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02", "aa:bb:cc:dd:ee:09"},
+		Addresses:     []string{"aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02"},
 		Postcondition: true, Power: "Off", Request: "digest", Serial: "SN1", UUID: "uuid-1",
 	}
 	if err := ValidatePresence(encode(t, complete), request, "digest"); err != nil {
@@ -254,10 +255,12 @@ func TestCompletionRequiresTheExactMachine(t *testing.T) {
 	}
 	for name, evidence := range map[string]Evidence{
 		"one address missing": {Addresses: []string{"aa:bb:cc:dd:ee:01"}, Postcondition: true, Power: "Off", Request: "digest", UUID: "uuid-1"},
-		"no inventory":        {Postcondition: true, Power: "Off", Request: "digest", UUID: "uuid-1"},
-		"no identity":         {Addresses: request.Addresses(), Postcondition: true, Power: "Off", Request: "digest"},
-		"no power state":      {Addresses: request.Addresses(), Postcondition: true, Request: "digest", UUID: "uuid-1"},
-		"unproved":            {Addresses: request.Addresses(), Power: "Off", Request: "digest", UUID: "uuid-1"},
+		"an extra reported address": {Addresses: []string{"aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02", "aa:bb:cc:dd:ee:09"},
+			Postcondition: true, Power: "Off", Request: "digest", UUID: "uuid-1"},
+		"no inventory":   {Postcondition: true, Power: "Off", Request: "digest", UUID: "uuid-1"},
+		"no identity":    {Addresses: request.Addresses(), Postcondition: true, Power: "Off", Request: "digest"},
+		"no power state": {Addresses: request.Addresses(), Postcondition: true, Request: "digest", UUID: "uuid-1"},
+		"unproved":       {Addresses: request.Addresses(), Power: "Off", Request: "digest", UUID: "uuid-1"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := ValidatePresence(encode(t, evidence), request, "digest"); err == nil {
@@ -423,5 +426,31 @@ func TestARemovalHereInterruptsNothing(t *testing.T) {
 	}
 	if quiescence.Stop != "" {
 		t.Fatal("nothing has to be stopped for a removal that retains the machine")
+	}
+}
+
+// A proved machine's claim gains bmc-system:<UUID>, the UUID in lower case,
+// beside its bmc: key; one whose proof recorded no UUID claims no such key,
+// and a UUID that cannot name a key refuses rather than claim nothing.
+func TestAProvedMachineClaimsItsSystemUUID(t *testing.T) {
+	definition := planOf(t, reconciliation.Apply).Definitions[0]
+	block := reconciliation.Block{BlockDefinition: definition}
+	request := fixtureRequest(t)
+	proof := func(uuid string) []byte {
+		return encode(t, Evidence{Addresses: request.Addresses(), Postcondition: true, Power: "Off", Request: "digest", Serial: "SN1", UUID: uuid})
+	}
+	claim, found, err := NewMachine(nil).ProvedClaim("lab", block, proof(" 4C4C4544-0042-3510-8052-B4C04F4D4E31 "))
+	if err != nil || !found {
+		t.Fatalf("claim = %v, %v", found, err)
+	}
+	want := append(request.ReservationKeys(), "bmc-system:4c4c4544-0042-3510-8052-b4c04f4d4e31")
+	if claim.Context != "lab" || claim.Kind != "substrate-physical" || claim.Service != request.Identity.Object || claim.Shared || !slices.Equal(claim.Keys, want) {
+		t.Fatalf("claim = %+v, want keys %v", claim, want)
+	}
+	if _, found, err := NewMachine(nil).ProvedClaim("lab", block, proof("")); found || err != nil {
+		t.Fatalf("a machine with no UUID claimed %v (%v)", found, err)
+	}
+	if _, _, err := NewMachine(nil).ProvedClaim("lab", block, proof("uuid with space")); err == nil {
+		t.Fatal("a UUID that names no key was claimed")
 	}
 }

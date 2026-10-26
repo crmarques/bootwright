@@ -116,12 +116,13 @@ recovery value unchanged for the lifetime of the disk. Select `ecdsa-p256` or
 `rsa` in both the fleet and delivered host-key descriptors: FIPS refuses an
 Ed25519 key before publishing the installer. OSPP is not selected.
 
-Keep an explicit whole-disk `rootDeviceHints.deviceName`, declared physical
-MAC inventory, verified BMC TLS and the delivered host key. Check the TPM 2.0
-is enabled and available to the installer and arrange console recovery before
-installation. Bootwright never clears a physical TPM; any TPM reset is a
-separate operator decision affecting other TPM consumers. The empty TPM policy
-selects no PCRs and protects a copied disk without its TPM, not a tampered boot.
+Keep the root disk's by-id WWN path in `rootDeviceHints.deviceName`, the
+declared physical MAC inventory, verified BMC TLS and the delivered host key.
+Check the TPM 2.0 is enabled and available to the installer and arrange
+console recovery before installation. Bootwright never clears a physical TPM;
+any TPM reset is a separate operator decision affecting other TPM consumers.
+The empty TPM policy selects no PCRs and protects a copied disk without its
+TPM, not a tampered boot.
 A chosen PCR policy must be qualified across the installer and installed boot.
 
 Use the normal staged installation below. Its physical apply requires the

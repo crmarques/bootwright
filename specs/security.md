@@ -42,7 +42,11 @@ Not yet met: the sessions of several Machines start with no bound; tracked as
 
 Validation must distinguish absence, known value, and unknown result. A failed
 or ambiguous probe is unknown, never proof that a machine, object, credential,
-path, or effect is absent.
+path, or effect is absent. The one narrowing is a removal whose capability
+declares it replay-safe: a successful read that cannot tell its postcondition
+from an unreadable target is recorded `inconclusive`, never `no-effect`, and
+admits one retry that reads the target again before any effect
+([resolution outcomes](state-reconciliation.md#resolution-outcomes)).
 
 ### The controller host's attacker model
 

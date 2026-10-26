@@ -260,8 +260,33 @@ func reservationsAreTheContextsOwn(t *testing.T, s Subject) {
 		reserves(t, tx, s.Context)
 		succeeds(t, tx.Reserve(ctx, claim), "a reservation")
 		reserves(t, tx, s.Context, claim...)
+		var reproved []prerequisites.HostReservation
+		succeeds(t, tx.ReproveReservations(ctx, func(held []prerequisites.HostReservation) error {
+			reproved = held
+			return nil
+		}), "a re-proof")
+		if !slices.ContainsFunc(reproved, func(held prerequisites.HostReservation) bool {
+			return held.Context == s.Context && held.Service == claim[0].Service && slices.Equal(held.Keys, claim[0].Keys)
+		}) {
+			t.Fatalf("a re-proof read %+v, not the reservation just published", reproved)
+		}
+		refuses(t, tx.ReproveReservations(ctx, func([]prerequisites.HostReservation) error { return fmt.Errorf("refused") }), "a refusing re-proof")
 	})
 	read(t, s, func(view lifecycle.View) { reserves(t, view, s.Context, claim...) })
+	planned := prerequisites.HostReservation{Context: s.Context, Kind: "substrate-physical", Service: "metal-01",
+		Keys: []string{"bmc:bmc-01.example.test:443/1"}}
+	proved := planned
+	proved.Keys = []string{"bmc-system:4c4c4544-0042-3510-8052-b4c04f4d4e31", "bmc:bmc-01.example.test:443/1"}
+	mutate(t, s, func(tx lifecycle.Transaction) {
+		foreignClaim := proved
+		foreignClaim.Context = "foreign"
+		refuses(t, tx.Claim(ctx, foreignClaim), "a claim for another context")
+		succeeds(t, tx.Claim(ctx, planned), "a claim beside the reservation")
+		succeeds(t, tx.Claim(ctx, proved), "a claim replacing its own kind and service")
+		succeeds(t, tx.Claim(ctx, proved), "the same claim again")
+		reserves(t, tx, s.Context, claim[0], proved)
+	})
+	read(t, s, func(view lifecycle.View) { reserves(t, view, s.Context, claim[0], proved) })
 	mutate(t, s, func(tx lifecycle.Transaction) {
 		succeeds(t, tx.ReleaseReservations(ctx), "a release")
 		reserves(t, tx, s.Context)

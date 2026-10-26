@@ -40,8 +40,8 @@ type Evidence struct {
 
 // ValidatePresence accepts evidence only when it proves the exact machine the
 // request names answered: its controller reachable with the bound credential,
-// an identity recorded, a power state read, and every declared address present
-// in a complete inventory.
+// an identity recorded, a power state read, and a complete inventory reporting
+// exactly the declared addresses.
 func ValidatePresence(data []byte, request Request, digest string) error {
 	evidence, err := decodeEvidence(data, digest)
 	if err != nil {
@@ -60,10 +60,8 @@ func ValidatePresence(data []byte, request Request, digest string) error {
 	if evidence.Power == "" {
 		return refusal("lifecycle.state", "the management controller reported no power state", "")
 	}
-	for _, declared := range request.Addresses() {
-		if !slices.Contains(evidence.Addresses, declared) {
-			return refusal("lifecycle.state", "the machine does not report every hardware address this Machine declares", "")
-		}
+	if reported := slices.Sorted(slices.Values(evidence.Addresses)); !slices.Equal(slices.Compact(reported), request.Addresses()) {
+		return refusal("lifecycle.state", "the machine does not report exactly the hardware addresses this Machine declares", "")
 	}
 	if len(request.Addresses()) == 0 {
 		return refusal("lifecycle.state", "the machine request declares no hardware address to prove it by", "")

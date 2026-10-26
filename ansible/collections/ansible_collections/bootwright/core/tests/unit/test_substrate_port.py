@@ -60,6 +60,7 @@ COMPOSED = {
         ("libvirt", "pre_boot"), ("baremetal", "pre_boot"), ("libvirt", "boot_media"), ("baremetal", "boot_media")],
     "managedos_install_anaconda/tasks/identity.yml": [("libvirt", "identity_read"), ("baremetal", "identity_read")],
     "managedos_install_anaconda/tasks/network.yml": [("libvirt", "boot_disk"), ("baremetal", "boot_disk")],
+    "managedos_install_anaconda/tasks/proved_boot.yml": [("libvirt", "boot_disk"), ("baremetal", "boot_disk")],
 }
 
 # Only these read the media a machine presents; every other read is a power read.
@@ -72,6 +73,7 @@ READS = MEDIA_READS | {
     "machine_power_redfish/tasks/power.yml",
     "managedos_install_anaconda/tasks/await.yml",
     "managedos_install_anaconda/tasks/network.yml",
+    "managedos_install_anaconda/tasks/proved_boot.yml",
     "substrate_libvirt_machine/tasks/apply.yml",
     "substrate_libvirt_machine/tasks/observe.yml",
     "substrate_libvirt_machine/tasks/pre_boot.yml",
@@ -137,6 +139,8 @@ ASKED = {
         LIBVIRT + "_boot_installer_powers_off": True},
     ("managedos_install_anaconda/tasks/network.yml", "libvirt", "boot_disk"): {LIBVIRT + "_disk_power_on": True},
     ("managedos_install_anaconda/tasks/network.yml", "baremetal", "boot_disk"): {BAREMETAL + "_disk_power_on": True},
+    ("managedos_install_anaconda/tasks/proved_boot.yml", "libvirt", "boot_disk"): {LIBVIRT + "_disk_power_on": True},
+    ("managedos_install_anaconda/tasks/proved_boot.yml", "baremetal", "boot_disk"): {BAREMETAL + "_disk_power_on": True},
 }
 
 ENDPOINTS = {

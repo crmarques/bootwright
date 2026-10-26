@@ -188,6 +188,21 @@ func (r HostRequest) ReservationKeys() []string {
 	return slices.Compact(keys)
 }
 
+func (r HostRequest) SharedReservationKeys() []string {
+	var keys []string
+	for _, network := range r.Networks {
+		if !network.Managed && network.Bridge != "" {
+			keys = append(keys, "bridge-use:"+network.Bridge)
+		}
+	}
+	slices.Sort(keys)
+	return slices.Compact(keys)
+}
+
+func (r MachineRequest) SharedReservationKeys() []string {
+	return []string{substrate.ControllerReservationKey(r.Controller.Endpoint)}
+}
+
 func (r MachineRequest) ReservationKeys() []string {
 	keys := []string{
 		"libvirt-domain:" + r.Domain,

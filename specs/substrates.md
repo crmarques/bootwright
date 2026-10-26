@@ -97,6 +97,7 @@ Its reason and remedy are the diagnostic's message and remediation, in which
 | A Machine on an unrealized substrate | a Machine with `os.provided: false` whose `spec.substrate.providerRef` names such a provider | `its provider <provider> is on a substrate this executable does not realize` | `host <machine> on a baremetal or libvirt provider, declare its operating system provided, or remove it from the selected Environment` |
 | An emulated BMC no endpoint can name | a libvirt provider's `spec.libvirt.bmcEmulationDefaults.bindAddress` that is not one unicast host address | `an emulated BMC listens on one unicast address its controller endpoints can name, and this provider's bindAddress is not one` | `set spec.libvirt.bmcEmulationDefaults.bindAddress on <provider> to one unicast host address` |
 | A provider with more managed attachments than its reservation holds | a libvirt provider with more than 20 `networkAttachments[]` entries of `management: managed` | `a libvirt provider's host reservation claims three keys for each managed attachment beside the two of its media pool and its firewall readiness unit, within the 64 keys one reservation holds, so it declares at most 20 managed attachments` | `declare at most 20 attachments with management: managed in spec.networkAttachments of <provider>, or make the others external` |
+| A provider using more external bridges than its use reservation holds | a libvirt provider whose `networkAttachments[]` entries of `management: external` name more than 64 distinct bridges | `a libvirt provider's bridge-use reservation claims one shared key for each bridge its external attachments use, within the 64 keys one reservation holds, so they use at most 64 bridges` | `name at most 64 distinct bridges in the external attachments of spec.networkAttachments of <provider>` |
 
 ## Provider host realization
 
@@ -279,12 +280,16 @@ Each `external` attachment claims the shared key `bridge-use:<name>` for the
 bridge it attaches to, so a bridge another context defines is known to be in
 use. A removal that would release an exclusive `bridge:<name>` refuses
 `controller.conflict` while another context holds `bridge-use:<name>`, naming
-that context and `bootwright destroy --context <holder>`.
-
-Not yet met: an external attachment claims nothing, so a removal releases its
-managed bridge while another context's Machines attach to it, and the
-attachment bound does not count these keys; tracked as
-[B803](milestones/backlog.md#b803).
+that context and `bootwright destroy --context <holder>`. The destroy proves
+this when it registers and again, under the controller root lock, immediately
+before its effect on the provider that holds the bridge, so a context that
+claims the key after registration refuses that effect with nothing performed
+(`TestAClaimMadeAfterTheDestroyRegisteredRefusesTheRemovalsEffect`).
+These keys travel in a shared reservation of their own, which holds at most 64
+keys, so a provider's external attachments use at most 64 distinct bridges
+(the refusal table's external-bridge row). A `bridge-use:` key an abandoned
+context held is released with that context's deletion (D38), so it strands a
+removal only while the using context exists.
 
 **Evidence.** Completion requires the hypervisor present by package name, every
 driver daemon active and enabled to start with the host, the `uri` answering,
@@ -458,11 +463,9 @@ same address and port conflicts with the emulated BMC. The block also claims,
 shared, the `bmc:` key of its BMC endpoint, the key a physical Machine that
 addresses that endpoint claims exclusively. Its removal refuses
 `controller.conflict` while another context holds that key exclusively, naming
-that context and `bootwright destroy --context <holder>`, and this Machine's
-own installation refuses at registration while another context holds it.
-
-Not yet met: an emulated BMC claims no `bmc:` key; tracked as
-[B803](milestones/backlog.md#b803).
+that context and `bootwright destroy --context <holder>`, and the registration
+that carries this Machine's installation refuses while another context holds
+it.
 
 **Evidence.** Completion requires the domain defined with the frozen definition
 and ownership metadata, every disk present at its frozen size, the BMC unit
@@ -592,7 +595,9 @@ and records its reported `UUID`, `SerialNumber`, `Manufacturer` and `Model`;
 then reads the system's complete `EthernetInterfaces` collection and requires
 the MACs it reports to equal the set the Machine declares, under the one
 MAC-set predicate of
-[physical disk safety](state-reconciliation.md#physical-disk-safety). The
+[physical disk safety](state-reconciliation.md#physical-disk-safety). A member
+that links a Redfish host interface (`Links.HostInterface`) is the management
+controller's host interface and is excepted. The
 collection must be present, non-empty and readable in full: a member that answers with an error, a
 malformed body or no MAC leaves the proof unknown, never satisfied, because a
 partial inventory cannot show that this is the server the operator meant. A
@@ -604,10 +609,6 @@ member that proved nothing, by its position counted from zero, never a value
 the BMC reported; the repeated proof before media is inserted names the
 declared addresses. The power state is read and recorded but never changed
 here.
-
-Not yet met: the target proof and the repeated proof require only every
-declared MAC to appear in the inventory; tracked as
-[B802](milestones/backlog.md#b802).
 
 A reported `UUID` and `SerialNumber` are recorded without their surrounding
 space, and each must then be at most 128 characters, every one of them
@@ -655,16 +656,13 @@ therefore cannot both drive one physical server; contexts in different stores
 are not coordinated. The claim serializes use; it is not ownership of the
 machine and never authorizes destroying it.
 
-Not yet met: the block claims no `bmc-system:` key; tracked as
-[B802](milestones/backlog.md#b802).
-
 **Reservations.** `bmc:<host>:<port>/<system>` and, once proved,
 `bmc-system:<UUID>`. A physical block owns no path, unit, socket or hypervisor
 object.
 
 **Evidence.** Completion requires the ComputerSystem answering with the bound
-credential, its recorded identity, every declared MAC observed, and a reported
-power state. An apply that proves the machine reports `completed` with no
+credential, its recorded identity, a complete inventory reporting exactly the
+declared MAC set, and a reported power state. An apply that proves the machine reports `completed` with no
 change, the first proof included, and so does a resolution that proves it,
 because its observation repeats that proof: the claim the block contributes is
 taken as the operation's reservation when the operation registers, not by the
@@ -926,10 +924,6 @@ the Environment's controller Machine refuses, and so does one whose BMC reports
 the controller host's own `UUID` or one of its MAC addresses, read locally and
 compared as a pin is, because no power command may stop the host that runs Bootwright.
 The [CLI journey](cli.md#machine-power-operations) owns the rest.
-
-Not yet met: a Machine with no pin is compared with nothing, and nothing
-refuses a power command on the controller Machine or the controller host;
-tracked as [B802](milestones/backlog.md#b802).
 
 Not yet met: machine power commands run only the Redfish power role; tracked as
 [B809](milestones/backlog.md#b809).

@@ -423,6 +423,14 @@ func (t *transaction) checkControllerPublication(ctx context.Context, name strin
 // HostReservations names every host resource key the controller record
 // reserves for one context, which its deletion releases.
 func (t *transaction) HostReservations(ctx context.Context, name string) ([]string, error) {
+	return t.hostReservations(ctx, name, true)
+}
+
+func (t *transaction) ExclusiveHostReservations(ctx context.Context, name string) ([]string, error) {
+	return t.hostReservations(ctx, name, false)
+}
+
+func (t *transaction) hostReservations(ctx context.Context, name string, shared bool) ([]string, error) {
 	if err := t.available(ctx); err != nil {
 		return nil, err
 	}
@@ -432,7 +440,7 @@ func (t *transaction) HostReservations(ctx context.Context, name string) ([]stri
 	}
 	keys := []string{}
 	for _, reservation := range stored.value.Reservations {
-		if reservation.Context == name {
+		if reservation.Context == name && (shared || !reservation.Shared) {
 			keys = append(keys, reservation.Keys...)
 		}
 	}

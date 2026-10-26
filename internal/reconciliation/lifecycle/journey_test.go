@@ -326,14 +326,16 @@ type testWorkspace struct {
 	runArea      *memoryArea
 	evidence     []byte
 	reservations []prerequisites.HostReservation
-	controller   prerequisites.StorageView
-	inputs       desiredstate.Sources
-	mutations    int
-	runs         int
-	binds        int
-	areas        map[string]bool
-	retained     []prerequisites.DependencySource
-	failPublish  error
+	// foreign are the reservations other contexts hold, which a claim conflicts with.
+	foreign     []prerequisites.HostReservation
+	controller  prerequisites.StorageView
+	inputs      desiredstate.Sources
+	mutations   int
+	runs        int
+	binds       int
+	areas       map[string]bool
+	retained    []prerequisites.DependencySource
+	failPublish error
 	// landThenFail fails the next evidence publication once, after its bytes
 	// landed, as a publication whose read-back or sync failed does.
 	landThenFail error
@@ -553,7 +555,7 @@ func (v *testView) Revision(ctx context.Context, id string) (desiredstate.Source
 // record, as the store's controller record carries them.
 func (v *testView) Controller() prerequisites.StorageView {
 	view := v.workspace.controller
-	view.State.Reservations = slices.Clone(v.workspace.reservations)
+	view.State.Reservations = append(slices.Clone(v.workspace.reservations), v.workspace.foreign...)
 	return view
 }
 func (v *testView) Evidence() []byte { return slices.Clone(v.workspace.evidence) }
@@ -634,12 +636,46 @@ func (v *testView) Reserve(_ context.Context, reservations []prerequisites.HostR
 	return nil
 }
 
+func (v *testView) Claim(_ context.Context, reservation prerequisites.HostReservation) error {
+	if reservation.Context != v.Identity().Name {
+		return errors.New("a lifecycle reservation must belong to its own context")
+	}
+	for _, held := range v.workspace.foreign {
+		for _, key := range held.Keys {
+			if slices.Contains(reservation.Keys, key) && !held.Shared && !reservation.Shared {
+				return failure("controller.conflict", "host resource "+key+" is already reserved by context "+held.Context, "")
+			}
+		}
+	}
+	if err := v.killed("publish claim"); err != nil {
+		return err
+	}
+	next := []prerequisites.HostReservation{reservation}
+	for _, held := range v.workspace.reservations {
+		if held.Kind != reservation.Kind || held.Service != reservation.Service {
+			next = append(next, held)
+		}
+	}
+	slices.SortFunc(next, func(x, y prerequisites.HostReservation) int {
+		return strings.Compare(x.Kind+"\x00"+x.Service, y.Kind+"\x00"+y.Service)
+	})
+	v.workspace.reservations = next
+	return nil
+}
+
 func (v *testView) ReleaseReservations(context.Context) error {
 	if err := v.killed("release reservations"); err != nil {
 		return err
 	}
 	v.workspace.reservations = nil
 	return nil
+}
+
+func (v *testView) ReproveReservations(_ context.Context, check func([]prerequisites.HostReservation) error) error {
+	if err := v.killed("reprove reservations"); err != nil {
+		return err
+	}
+	return check(append(slices.Clone(v.workspace.reservations), v.workspace.foreign...))
 }
 
 // killed asks the workspace's kill hook whether this publication may land.
@@ -903,6 +939,8 @@ type testCapability struct {
 	// a race rather than by the test.
 	outcomeFor map[string]Result
 	errorFor   map[string]error
+	// claims are the keys a done block's evidence names, by block.
+	claims map[string][]string
 	// verbose, when set, is how many more bytes an attempt prints on its
 	// adapter output, asked as it prints them.
 	verbose func() int
@@ -992,6 +1030,13 @@ func (c *testCapability) next(outcomes *[]Result) Result {
 	value := (*outcomes)[0]
 	*outcomes = (*outcomes)[1:]
 	return value
+}
+
+func (c *testCapability) ProvedClaim(contextName string, block reconciliation.Block, _ json.RawMessage) (prerequisites.HostReservation, bool, error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	keys, found := c.claims[block.ID]
+	return prerequisites.HostReservation{Context: contextName, Kind: "substrate-physical", Service: block.ID, Keys: keys}, found, nil
 }
 
 func (c *testCapability) Apply(ctx context.Context, execution Execution) (Result, error) {

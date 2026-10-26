@@ -232,13 +232,19 @@ func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 }
 
 // A physical installation erases the disk it names, so a Machine that names
-// none by path refuses before registration rather than leaving the installer
-// to clear every disk the server holds. A wwn alone is admitted as a selector
-// but not yet derived into a device, so it refuses the same way.
+// none by its by-id WWN path refuses before registration rather than leaving
+// the installer to clear every disk the server holds, or a kernel name that
+// another boot gives another disk. A wwn alone is admitted as a selector but
+// not yet derived into a device, so it refuses the same way.
 func TestAPhysicalInstallationWithoutANamedRootDeviceRefuses(t *testing.T) {
 	for name, hints := range map[string]api.Value{
-		"wwn only":        api.MapValue(text("wwn", "0x5000c500a1b2c3d4")),
-		"predicates only": api.MapValue(text("model", "PERC H755"), number("minSizeGigabytes", "400")),
+		"wwn only":                api.MapValue(text("wwn", "0x5000c500a1b2c3d4")),
+		"predicates only":         api.MapValue(text("model", "PERC H755"), number("minSizeGigabytes", "400")),
+		"a kernel name":           api.MapValue(text("deviceName", "/dev/sda")),
+		"another by-id path":      api.MapValue(text("deviceName", "/dev/disk/by-id/ata-ST4000NM0035_ZC1A2B3C")),
+		"a by-id partition":       api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4-part1")),
+		"an uppercase wwn":        api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000C500A1B2C3D4")),
+		"a wwn of another length": api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3")),
 	} {
 		t.Run(name, func(t *testing.T) {
 			catalog := labCatalog(metalProvider(), server(hints))
@@ -262,7 +268,7 @@ func TestAPhysicalInstallationWithoutANamedRootDeviceRefuses(t *testing.T) {
 // an unverified controller leg, and Unsupported agrees with the request
 // builder.
 func TestAPrivateInstallationRefusesDisabledVerification(t *testing.T) {
-	metal := server(api.MapValue(text("deviceName", "/dev/sda")))
+	metal := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
 	metal = metal.WithSpec(metal.Spec().WithPath(api.StringValue(substrate.TrustDisableVerification),
 		"hardware", "management", "bmc", "virtualMedia", "tls", "trust"))
 	catalog := labCatalog(metalProvider(), metal)
@@ -286,7 +292,7 @@ func TestAPrivateInstallationRefusesDisabledVerification(t *testing.T) {
 // reaches this today, because only a delivered-key target imports and it
 // always publishes privately, so the rule is proved on its own statement.
 func TestImportCertificateNeedsAnHttpsImageAndItsCertificate(t *testing.T) {
-	machine := server(api.MapValue(text("deviceName", "/dev/sda")))
+	machine := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
 	importing := func(url string) Request {
 		return Request{
 			Private:           &Publication{URL: url},
@@ -348,7 +354,7 @@ func TestAPrivateInstallationRefusesAnUnverifiedController(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			metal := server(api.MapValue(text("deviceName", "/dev/sda")))
+			metal := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
 			metal = metal.WithSpec(change(metal.Spec()))
 			catalog := labCatalog(metalProvider(), metal, sshKeySecret(api.MapValue(field("generated", api.MapValue(text("keyType", "ed25519"))))))
 			refusals := Refusals(catalog)
@@ -370,7 +376,7 @@ func TestAPrivateInstallationRefusesAnUnverifiedController(t *testing.T) {
 // operation an earlier build froze with a public image beside its private
 // publication refuses its apply before anything is published.
 func TestAPhysicalInstallationRefusesWhileItsHostKeyWouldBePublic(t *testing.T) {
-	catalog := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))),
+	catalog := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"))),
 		sshKeySecret(api.MapValue(field("generated", api.MapValue()))))
 	requests, _, err := Requests(catalog, "controller", testContext)
 	if err != nil {
@@ -407,7 +413,7 @@ func TestAPhysicalInstallationRefusesWhileItsHostKeyWouldBePublic(t *testing.T) 
 // subtree: no public image, the private parent and URL, the serving
 // certificate the installer verifies, and the key type it installs.
 func TestAVerifiedPhysicalInstallationDerivesAPrivateRequest(t *testing.T) {
-	catalog := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"))),
+	catalog := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"))),
 		sshKeySecret(api.MapValue(field("generated", api.MapValue(text("keyType", "rsa"))))))
 	if refusals := Refusals(catalog); len(refusals) != 0 {
 		t.Fatalf("refusals = %v", refusals)
@@ -460,11 +466,11 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 		remediation string
 	}{
 		"a physical model": {
-			[]api.Object{metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"), text("model", "PERC H755")))},
+			[]api.Object{metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"), text("model", "PERC H755")))},
 			"Machine/metal-01", "remove spec.os.install.rootDeviceHints.model from Machine/metal-01",
 		},
 		"a physical wwn": {
-			[]api.Object{metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda"), text("wwn", "0x5000c500a1b2c3d4")))},
+			[]api.Object{metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"), text("wwn", "0x5000c500a1b2c3d4")))},
 			"Machine/metal-01", "remove spec.os.install.rootDeviceHints.wwn from Machine/metal-01",
 		},
 		"a guest's rotational": {
@@ -694,7 +700,7 @@ func sshKeySecret(source api.Value) api.Object {
 // exists: its keyType, or the ed25519 admission defaults it to. A key of any
 // other source refuses, naming the Secret and the Machine that selects it.
 func TestTheDeliveredHostKeyTypeIsItsGeneratedKeyType(t *testing.T) {
-	machine := server(api.MapValue(text("deviceName", "/dev/sda")))
+	machine := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
 	for _, row := range []struct {
 		name   string
 		source api.Value

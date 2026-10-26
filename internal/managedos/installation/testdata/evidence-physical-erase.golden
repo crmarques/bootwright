@@ -14,7 +14,7 @@
     ],
     "targets": [
       {
-        "deviceName": "/dev/vda",
+        "deviceName": "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4",
         "serialNumber": "serial-example",
         "sizeBytes": 8192,
         "wwn": "wwn-example",

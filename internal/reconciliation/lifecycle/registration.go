@@ -233,7 +233,12 @@ func retainedExit(ctx context.Context, view View, store OperationStore, verb rec
 			return "reclaim the operation directories interrupted applies left with bootwright destroy --context " + name + ", then repeat the apply"
 		}
 	}
-	return deletionExit(view) + ", then create it again with bootwright context init --name " + name + " from its original configuration and input"
+	exit := deletionExit(view) + ", then create it again with bootwright context init --name " + name + " from its original configuration and input"
+	if command, _ := deletionCommand(view); strings.HasSuffix(command, " "+allowOrphans) {
+		exit += "; before that init, remove by hand the objects the deletion abandons, because the same name reads them as its own, " +
+			"and never reuse " + name + " on another controller that shares a provider host"
+	}
+	return exit
 }
 
 // unregistered gives back what a registration that provably did not happen

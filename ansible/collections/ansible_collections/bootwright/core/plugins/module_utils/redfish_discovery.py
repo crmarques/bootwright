@@ -359,6 +359,13 @@ def canonical_mac(value):
     return text if MAC.match(text) else ""
 
 
+def host_interface(member):
+    """Whether a member is the management controller's own host interface."""
+    links = member.get("Links")
+    linked = links.get("HostInterface") if isinstance(links, dict) else None
+    return isinstance(linked, dict) and isinstance(linked.get("@odata.id"), str) and bool(linked["@odata.id"])
+
+
 def reported_macs(members):
     """Every address the controller reports, and why any member proved none.
 
@@ -370,6 +377,8 @@ def reported_macs(members):
     for index, member in enumerate(members):
         if not isinstance(member, dict):
             failures.append("member[%d] could not be read" % index)
+            continue
+        if host_interface(member):
             continue
         found = [canonical_mac(member.get(field)) for field in ("MACAddress", "PermanentMACAddress")]
         found = [address for address in found if address]

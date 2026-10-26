@@ -620,7 +620,8 @@ func deleteAction(plan DeletionPlan) string {
 	case plan.Abandons == AbandonsUnlisted:
 		return "delete with orphaned objects that cannot be listed (" + plan.Reason + "), removing" + custody
 	case plan.Abandons == AbandonsOwned:
-		return "delete, abandoning the objects bootwright status --context " + plan.Context + " lists and" + custody
+		return "delete, abandoning the objects bootwright status --context " + plan.Context + " and bootwright diff --context " +
+			plan.Context + " list, freeing the exclusive keys the plan names, and removing" + custody
 	}
 	return "delete"
 }
@@ -755,6 +756,9 @@ func (s Service) decideDeletion(ctx context.Context, tx Transaction, record Reco
 		return DeletionPlan{}, err
 	}
 	plan.Reservations = reservations
+	if plan.Exclusive, err = tx.ExclusiveHostReservations(ctx, record.Name); err != nil {
+		return DeletionPlan{}, err
+	}
 	return plan, nil
 }
 

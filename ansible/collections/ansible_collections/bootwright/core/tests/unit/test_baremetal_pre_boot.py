@@ -251,9 +251,10 @@ def test_the_managed_os_hands_its_proof_the_pin_or_nothing(tmp_path):
 
 
 # The repeated proof names what it lacks from the declaration and the client's
-# own positional lines: each declared address the inventory does not report and
-# each member that proved nothing, never an address, UUID or serial the
-# controller reported.
+# own positional lines: each declared address the inventory does not report,
+# the number of reported addresses the declaration does not name and each
+# member that proved nothing, never an address, UUID or serial the controller
+# reported.
 @pytest.mark.parametrize("consumer", sorted(CONSUMERS))
 def test_the_hardware_refusal_names_the_unreported_addresses_and_the_failures(tmp_path, consumer):
     observation = dict(reported(), addresses=[MACS[1], "aa:bb:cc:dd:ee:09"],
@@ -261,10 +262,18 @@ def test_the_hardware_refusal_names_the_unreported_addresses_and_the_failures(tm
     variables = scope(tmp_path, consumer, observation)
     assert accepts(declared(), variables) is False
     message = Templar(loader=LOADER, variables=variables).template(declared()[ASSERT]["fail_msg"])
-    assert message.endswith("so it must not be erased; declared addresses not reported: %s; inventory failures: "
-                            "member[2] reports no hardware address" % MACS[0])
+    assert message.endswith("so it must not be erased; declared addresses not reported: %s; reported addresses not "
+                            "declared: 1; inventory failures: member[2] reports no hardware address" % MACS[0])
     for value in (UUID, SERIAL, "aa:bb:cc:dd:ee:09"):
         assert value not in message
+
+
+# The proof is set equality: a complete inventory that reports one address the
+# Machine does not declare is another server, or one re-cabled since.
+@pytest.mark.parametrize("consumer", sorted(CONSUMERS))
+def test_an_extra_reported_address_refuses(tmp_path, consumer):
+    observation = dict(reported(), addresses=MACS + ["aa:bb:cc:dd:ee:09"])
+    assert accepts(declared(), scope(tmp_path, consumer, observation)) is False
 
 
 @pytest.mark.parametrize("consumer", sorted(CONSUMERS))
@@ -272,4 +281,5 @@ def test_the_hardware_refusal_names_none_when_nothing_is_missing(tmp_path, consu
     observation = dict(reported(), uuid="", serial="")
     variables = scope(tmp_path, consumer, observation)
     message = Templar(loader=LOADER, variables=variables).template(declared()[ASSERT]["fail_msg"])
-    assert message.endswith("declared addresses not reported: none; inventory failures: none")
+    assert message.endswith("declared addresses not reported: none; reported addresses not declared: 0; "
+                            "inventory failures: none")

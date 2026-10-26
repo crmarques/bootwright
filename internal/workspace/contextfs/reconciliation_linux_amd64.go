@@ -433,11 +433,55 @@ func (t *lifecycleTransaction) Reserve(ctx context.Context, reservations []prere
 	return t.publishReservations(ctx, next, applyRetry(t.identity.Name))
 }
 
+// Claim adds one reservation to this context's claims, replacing the one of
+// its kind and service, and writes nothing when it is already held exactly.
+func (t *lifecycleTransaction) Claim(ctx context.Context, reservation prerequisites.HostReservation) error {
+	if err := t.base.available(ctx); err != nil {
+		return err
+	}
+	if reservation.Context != t.identity.Name {
+		return state("a lifecycle reservation must belong to its own context")
+	}
+	reservation.Keys = slices.Sorted(slices.Values(reservation.Keys))
+	next := []prerequisites.HostReservation{reservation}
+	if t.stored.data != nil {
+		for _, held := range t.stored.value.Reservations {
+			if held.Context != t.identity.Name {
+				continue
+			}
+			if held.Kind == reservation.Kind && held.Service == reservation.Service {
+				if held.Shared == reservation.Shared && slices.Equal(held.Keys, reservation.Keys) {
+					return nil
+				}
+				continue
+			}
+			next = append(next, held)
+		}
+	}
+	slices.SortFunc(next, func(x, y prerequisites.HostReservation) int {
+		if order := strings.Compare(x.Kind, y.Kind); order != 0 {
+			return order
+		}
+		return strings.Compare(x.Service, y.Service)
+	})
+	return t.publishReservations(ctx, next, applyRetry(t.identity.Name))
+}
+
 func (t *lifecycleTransaction) ReleaseReservations(ctx context.Context) error {
 	if err := t.base.available(ctx); err != nil {
 		return err
 	}
 	return t.publishReservations(ctx, nil, destroyRetry(t.identity.Name))
+}
+
+func (t *lifecycleTransaction) ReproveReservations(ctx context.Context, check func([]prerequisites.HostReservation) error) error {
+	if err := t.base.available(ctx); err != nil {
+		return err
+	}
+	if t.stored.data == nil {
+		return check(nil)
+	}
+	return check(cloneControllerState(t.stored.value).Reservations)
 }
 
 // Bind records this context's controller relationship on the prepared host.

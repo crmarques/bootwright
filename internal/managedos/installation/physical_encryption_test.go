@@ -12,7 +12,7 @@ func TestPhysicalTPMBindingNeverTouchesAForeignDisk(t *testing.T) {
 	for _, scenario := range []string{"owned", "root-moved", "root-not-disk", "foreign-root", "no-luks", "shared-parent", "foreign-candidate"} {
 		t.Run(scenario, func(t *testing.T) {
 			input := physicalInstallation()
-			input.RootDevice = "/dev/sda"
+			input.RootDevice = "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"
 			input.DiskEncryption = &KickstartEncryption{}
 			lines := encryptionPostLines(input)
 			script := strings.Join(lines[1:], "\n")

@@ -149,12 +149,13 @@ func physicalMatrixState(t *testing.T, name string, original *compilation.State)
 			secret := requireObject(t, base.Authored(), api.Secret, "metal-01-host-key")
 			objects = append(objects, api.NewObject(api.Secret, key, api.Value{}, secret.Spec().WithPath(api.StringValue("ecdsa-p256"), "source", "generated", "keyType")))
 			spec = spec.With("substrate", api.MapValue(api.FieldValue{Name: "providerRef", Value: api.StringValue(provider.Name())}))
-			spec = spec.WithPath(api.StringValue(key), "os", "install", "hostKeyRef").WithPath(api.StringValue("/dev/sdz"), "os", "install", "rootDeviceHints", "deviceName")
+			root := fmt.Sprintf("/dev/disk/by-id/wwn-0x6%015x", number)
+			spec = spec.WithPath(api.StringValue(key), "os", "install", "hostKeyRef").WithPath(api.StringValue(root), "os", "install", "rootDeviceHints", "deviceName")
 			nics := []api.Value{}
 			for _, nic := range virtual.Interfaces {
 				nics = append(nics, api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue(nic.Name)}, api.FieldValue{Name: "macAddress", Value: api.StringValue(nic.MACAddress)}))
 			}
-			targets := []api.Value{physicalMatrixTarget("/dev/sdz", fmt.Sprintf("0x6%015x", number), number*16, int64(virtual.Disks[0].SizeGiB)<<30)}
+			targets := []api.Value{physicalMatrixTarget(root, fmt.Sprintf("0x6%015x", number), number*16, int64(virtual.Disks[0].SizeGiB)<<30)}
 			for _, disk := range virtual.Disks[1:] {
 				path := paths[object.Name()]["/dev/"+disk.Target]
 				targets = append(targets, physicalMatrixTarget(path, strings.TrimPrefix(path, "/dev/disk/by-id/wwn-"), number*16+len(targets), int64(disk.SizeGiB)<<30))
