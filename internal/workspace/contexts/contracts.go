@@ -32,7 +32,7 @@ type Registry struct {
 }
 
 // ControllerDescriptor attributes the independently versioned shared subtree.
-// Only confirmed setup may introduce it; ordinary context writes preserve it.
+// Only a host's first binding introduces it; other writes preserve it.
 type ControllerDescriptor struct {
 	Version         int    `json:"version"`
 	Mode            string `json:"mode"`

@@ -360,11 +360,12 @@ placement policy supplies its resolved pair to the pool. These values qualify
 validation but remain native or policy defaults unless an owning normalization
 rule explicitly materializes them.
 
-For ordinary IBM host-domain replication, the declared OSD-bearing host count
-must exceed the effective replica size. IBM's
-[colocation requirements](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=recommendations-colocation)
-specify three all-flash hosts for two replicas and at least four hosts for
-three replicas. The three-node development profile therefore explicitly
+For ordinary (non-stretch) host-domain replication on an IBM cluster, the
+declared OSD-bearing host count must exceed the effective replica size. This is
+a native replica-safety rule, not a vendor support statement: a replicated pool
+of size N keeps one replica per host, so it needs at least N+1 hosts to
+re-create a lost host's replicas and return to full size; three replicas need
+four hosts. The three-node development profile therefore explicitly
 selects `size: 2` and `minSize: 2`; omission or zero still selects `3/2` and
 requires an additional OSD-bearing host. MON-only hosts do not add data
 capacity. Stretch protection keeps its separate provider contract.

@@ -3,8 +3,10 @@ package architecture_test
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path"
@@ -723,4 +725,394 @@ func notYetMetParagraph(pages map[string]markdownFile, from string, line int, te
 		}
 	}
 	return violations
+}
+
+// askRuleMarkers are the phrases of a catalog Effects cell that name a remote
+// or host effect, or a command that reveals a secret: the cells of the
+// "Mutate" class that specs/cli/commands.md defines, never "Local" or
+// "Observe" ones. A marker with a flag fires only for the invocation that
+// carries the flag, because the command reveals the secret by that flag alone.
+var askRuleMarkers = []struct{ phrase, flag string }{
+	{phrase: "planned mutation"},
+	{phrase: "planned removal"},
+	{phrase: "host packages"},
+	{phrase: "download"},
+	{phrase: "ssh"},
+	{phrase: "power operation"},
+	{phrase: "reveal"},
+	{phrase: "confidential material", flag: "--secrets"},
+	{phrase: "sensitive files", flag: "--sensitive"},
+	{phrase: "local artifact writes", flag: "--sensitive"},
+}
+
+// askRuleNoAsk classifies each catalog row that has no marker: the command,
+// and the phrase of its Effects cell that makes it a Local or Observe command
+// (none, read local state, local writes of its own context, bounded observation)
+// that needs no ask rule. A row whose Effects cell gains a marker, or loses the
+// phrase, fails until it is classified again.
+var askRuleNoAsk = map[string]string{
+	"context init": "local", "context update": "local", "context use": "local",
+	"context list": "read local state", "context current": "read local state",
+	"context delete": "never resource mutation", "add-ons list": "read executable registry",
+	"secret set": "local confidential write", "secret generate": "generated-material batch",
+	"secret check": "no values emitted", "secret list": "read confidential-store metadata",
+	"secret info": "read confidential-store metadata only", "secret delete": "local logical deletion",
+	"secret encryption init": "idempotent initialization", "secret encryption status": "read confidential metadata",
+	"secret encryption rotate": "local key rotation", "media list": "read local media",
+	"media delete": "local media deletion", "validate": "no write",
+	"preflight controller": "bounded local observation", "preflight infra": "observe unless",
+	"preflight clusters": "observe unless", "preflight container-cluster": "observe unless",
+	"preflight storage-cluster": "observe unless", "preflight add-ons": "bounded observation",
+	"preflight all": "observe unless", "plan": "none", "status": "read local state",
+	"diff": "read local state", "render effective": "none", "render storage": "never execution",
+	"machine list": "read local state", "machine info": "read local inventory",
+	"cluster list": "read local state", "cluster oc": "read context-owned access metadata",
+	"cluster kubectl": "read context-owned access metadata", "version": "none", "help": "none",
+	"completion bash": "none", "completion zsh": "none", "completion fish": "none",
+	"completion powershell": "none",
+}
+
+// askRuleInvocations are the shapes in which an agent may start a command:
+// bare, through the repository binary by a relative or an absolute path, and
+// with global flags between the binary and the command.
+var askRuleInvocations = []string{
+	"bootwright %s",
+	"./bin/bootwright %s",
+	"/home/user/projects/bootwright/bin/bootwright %s",
+	"bin/bootwright --context c -o json %s",
+}
+
+// catalogCommand is one command row of the catalog: its local flags and its
+// Effects cell with a "same" cell replaced by the cell it repeats.
+type catalogCommand struct{ flags, effects string }
+
+// catalogCommands reads the Effects column of specs/cli/commands.md.
+func catalogCommands(t *testing.T) map[string]catalogCommand {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "specs", "cli", "commands.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, section, found := strings.Cut(string(data), "\n## Command and flag catalog\n")
+	if !found {
+		t.Fatal("specs/cli/commands.md has no command and flag catalog")
+	}
+	section, _, _ = strings.Cut(section, "\n## ")
+	commands := map[string]catalogCommand{}
+	previous := ""
+	var order []string
+	for line := range strings.SplitSeq(section, "\n") {
+		if !strings.HasPrefix(line, "| `bootwright ") {
+			continue
+		}
+		cells := strings.Split(strings.Trim(line, "| "), " | ")
+		if len(cells) != 4 {
+			t.Fatalf("specs/cli/commands.md row has %d cells, not 4: %s", len(cells), line)
+		}
+		var words []string
+		for _, word := range strings.Fields(strings.Trim(cells[0], "`"))[1:] {
+			if strings.HasPrefix(word, "[") || strings.HasPrefix(word, "<") {
+				break
+			}
+			words = append(words, word)
+		}
+		name := strings.Join(words, " ")
+		effects := cells[3]
+		if effects == "same" {
+			effects = commands[previous].effects
+		}
+		commands[name] = catalogCommand{flags: cells[1], effects: effects}
+		order = append(order, name)
+		previous = name
+	}
+	for _, name := range order {
+		other, repeats := strings.CutPrefix(commands[name].effects, "same as `")
+		if repeats {
+			other, _, _ = strings.Cut(other, "`")
+			commands[name] = catalogCommand{flags: commands[name].flags, effects: commands[other].effects}
+		}
+	}
+	return commands
+}
+
+// askRuleViolations compares the catalog with the ask patterns of
+// .claude/settings.json: every command whose Effects cell carries a marker has
+// a pattern that matches its invocation, and every pattern naming a Bootwright
+// command names one the catalog lists, with only flags that command accepts.
+func askRuleViolations(commands map[string]catalogCommand, patterns []string, noAsk map[string]string) []string {
+	var violations []string
+	bodies := map[string]*regexp.Regexp{}
+	for _, pattern := range patterns {
+		body, isBash := strings.CutPrefix(pattern, "Bash(")
+		body = strings.TrimSuffix(body, ")")
+		if !isBash {
+			continue
+		}
+		var quoted []string
+		for part := range strings.SplitSeq(body, "*") {
+			quoted = append(quoted, regexp.QuoteMeta(part))
+		}
+		bodies[pattern] = regexp.MustCompile("^" + strings.Join(quoted, ".*") + "$")
+		_, after, named := strings.Cut(body, "bootwright")
+		if !named {
+			continue
+		}
+		var parts []string
+		for part := range strings.SplitSeq(after, "*") {
+			if part = strings.TrimSpace(part); part != "" {
+				parts = append(parts, part)
+			}
+		}
+		name := ""
+		if len(parts) > 0 {
+			name = parts[0]
+		}
+		command, listed := commands[name]
+		if !listed || name == "" {
+			violations = append(violations, fmt.Sprintf("the ask pattern %q names bootwright %q, which specs/cli/commands.md does not list", pattern, name))
+			continue
+		}
+		for _, flag := range parts[1:] {
+			if !strings.Contains(command.flags, "`"+flag) {
+				violations = append(violations, fmt.Sprintf("the ask pattern %q names %s, which bootwright %s does not list", pattern, flag, name))
+			}
+		}
+	}
+	matches := func(invocation string) bool {
+		for _, body := range bodies {
+			if body.MatchString(invocation) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, name := range sortedKeys(commands) {
+		effects := strings.ToLower(commands[name].effects)
+		marked := false
+		for _, marker := range askRuleMarkers {
+			if !strings.Contains(effects, marker.phrase) {
+				continue
+			}
+			if marker.flag != "" && !strings.Contains(commands[name].flags, "`"+marker.flag+"`") {
+				violations = append(violations, fmt.Sprintf("bootwright %s has %q effects but no %s flag; update askRuleMarkers", name, marker.phrase, marker.flag))
+				continue
+			}
+			marked = true
+			forms := []string{name}
+			if marker.flag != "" {
+				forms = []string{name + " " + marker.flag, name + " " + marker.flag + "=true", name + " --name x " + marker.flag}
+			}
+			for _, form := range forms {
+				for _, shape := range askRuleInvocations {
+					if invocation := fmt.Sprintf(shape, form); !matches(invocation) {
+						violations = append(violations, fmt.Sprintf("bootwright %s has %q effects, but no ask pattern in .claude/settings.json matches %q", name, marker.phrase, invocation))
+					}
+				}
+			}
+			break
+		}
+		phrase, classified := noAsk[name]
+		switch {
+		case marked && classified:
+			violations = append(violations, fmt.Sprintf("bootwright %s has marked effects and is also in askRuleNoAsk; remove it there", name))
+		case !marked && !classified:
+			violations = append(violations, fmt.Sprintf("bootwright %s has effects %q that match no ask marker and are not in askRuleNoAsk; add a marker and an ask pattern, or classify it as needing no ask", name, commands[name].effects))
+		case classified && !strings.Contains(effects, phrase):
+			violations = append(violations, fmt.Sprintf("askRuleNoAsk classifies bootwright %s by %q, which its effects %q no longer say; classify it again", name, phrase, commands[name].effects))
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(noAsk)) {
+		if _, listed := commands[name]; !listed {
+			violations = append(violations, fmt.Sprintf("askRuleNoAsk names bootwright %q, which specs/cli/commands.md does not list", name))
+		}
+	}
+	return violations
+}
+
+// TestDocsAskRulesCoverEveryEffectfulCommand keeps the tracked Claude Code ask
+// list complete: AGENTS.md forbids an agent to run a command with effects or
+// one that reveals a secret on its own, and specs/cli/commands.md owns which
+// commands those are.
+func TestDocsAskRulesCoverEveryEffectfulCommand(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", ".claude", "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings struct {
+		Permissions struct {
+			Ask []string `json:"ask"`
+		} `json:"permissions"`
+	}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf(".claude/settings.json: %v", err)
+	}
+	commands := catalogCommands(t)
+	if len(commands) < 50 || len(settings.Permissions.Ask) == 0 {
+		t.Fatalf("read %d catalog rows and %d ask patterns; the files' shape has changed", len(commands), len(settings.Permissions.Ask))
+	}
+	for _, violation := range askRuleViolations(commands, settings.Permissions.Ask, askRuleNoAsk) {
+		t.Error(violation)
+	}
+}
+
+func TestDocsAskRuleViolations(t *testing.T) {
+	commands := map[string]catalogCommand{
+		"apply":            {flags: "`--yes` false", effects: "complete planned mutation"},
+		"destroy":          {flags: "`--yes` false", effects: "complete planned removal"},
+		"machine exec":     {flags: "required `--name <list>`", effects: "run one pinned SSH client"},
+		"cluster info":     {flags: "`--secrets` false", effects: "read local state and optional confidential material"},
+		"render":           {flags: "`--sensitive` false", effects: "local artifact writes only"},
+		"render installer": {flags: "`--sensitive` false", effects: "local placeholder files and optional sensitive files"},
+		"status":           {flags: "none", effects: "read local state"},
+	}
+	noAsk := map[string]string{"status": "read local state"}
+	asks := []string{"Bash(git push *)", "Bash(*bootwright *apply*)", "Bash(*bootwright *destroy*)", "Bash(*bootwright *machine exec*)", "Bash(*bootwright *cluster info*--secrets*)", "Bash(*bootwright *render*--sensitive*)"}
+	if got := askRuleViolations(commands, asks, noAsk); len(got) != 0 {
+		t.Fatalf("a complete ask list has violations: %v", got)
+	}
+	without := func(part string) []string {
+		return slices.DeleteFunc(slices.Clone(asks), func(p string) bool { return strings.Contains(p, part) })
+	}
+	for name, test := range map[string]struct {
+		asks []string
+		want string
+	}{
+		"destroy pattern removed": {without("destroy"), `bootwright destroy has "planned removal" effects, but no ask pattern`},
+		"secrets pattern removed": {without("--secrets"), `bootwright cluster info has "confidential material" effects`},
+		"sensitive pattern gone":  {without("--sensitive"), `bootwright render installer has "sensitive files" effects`},
+		"secrets flag only":       {append(without("--secrets"), "Bash(*bootwright *cluster info*--secrets)"), `"bootwright cluster info --secrets=true"`},
+		"leading binary only":     {append(without("destroy"), "Bash(bootwright destroy*)"), `"./bin/bootwright destroy"`},
+		"no global flags":         {append(without("destroy"), "Bash(*bootwright destroy*)"), `"bin/bootwright --context c -o json destroy"`},
+		"orphan pattern":          {append(slices.Clone(asks), "Bash(*bootwright *machine wipe*)"), `names bootwright "machine wipe", which specs/cli/commands.md does not list`},
+		"orphan without a space":  {append(slices.Clone(asks), "Bash(*bootwright machine wipe*)"), `names bootwright "machine wipe", which specs/cli/commands.md does not list`},
+		"unknown flag":            {append(slices.Clone(asks), "Bash(*bootwright *apply*--force*)"), "names --force, which bootwright apply does not list"},
+	} {
+		got := askRuleViolations(commands, test.asks, noAsk)
+		if len(got) == 0 || !strings.Contains(strings.Join(got, "\n"), test.want) {
+			t.Errorf("%s: violations %v, want %q", name, got, test.want)
+		}
+	}
+	added := maps.Clone(commands)
+	added["machine wipe"] = catalogCommand{flags: "none", effects: "bounded power operation"}
+	if got := askRuleViolations(added, asks, noAsk); len(got) != len(askRuleInvocations) || !strings.Contains(got[0], "bootwright machine wipe") {
+		t.Errorf("a new effectful command without a pattern gave %v", got)
+	}
+	unclassified := maps.Clone(commands)
+	unclassified["machine wipe"] = catalogCommand{flags: "none", effects: "rewrite the firmware"}
+	if got := askRuleViolations(unclassified, asks, noAsk); len(got) != 1 || !strings.Contains(got[0], "bootwright machine wipe has effects") || !strings.Contains(got[0], "not in askRuleNoAsk") {
+		t.Errorf("a command whose effects match no marker and no classification gave %v", got)
+	}
+	for name, test := range map[string]struct {
+		noAsk map[string]string
+		want  string
+	}{
+		"classified and marked": {map[string]string{"status": "read local state", "apply": "mutation"}, "bootwright apply has marked effects and is also in askRuleNoAsk"},
+		"phrase gone":           {map[string]string{"status": "no write"}, `classifies bootwright status by "no write"`},
+		"stale entry":           {map[string]string{"status": "read local state", "gone": "none"}, `askRuleNoAsk names bootwright "gone"`},
+	} {
+		if got := askRuleViolations(commands, asks, test.noAsk); len(got) != 1 || !strings.Contains(got[0], test.want) {
+			t.Errorf("%s: violations %v, want %q", name, got, test.want)
+		}
+	}
+}
+
+// vendorSupportPhrase is what a spec must not say: a coverage row means that
+// Bootwright realizes a capability, never that a vendor supports it (D157,
+// D159 clause 15, D163).
+var vendorSupportPhrase = regexp.MustCompile(`(?i)\b(?:IBM|vendor|Red Hat|provider)[- ]supported\b|\bsupported by (?:IBM|Red Hat|the vendor)\b|release-qualified|support status|Release support`)
+
+// vendorSupportRecords may name a vendor support status: the delivery records
+// and the decision-history rows, which state what was decided and when.
+var (
+	vendorSupportRecords = map[string]bool{"specs/milestones/backlog.md": true, "specs/milestones/delivered.md": true}
+	decisionHistoryRow   = regexp.MustCompile(`^\| (?:OD|D)\d+ \|`)
+)
+
+// vendorSupportNegations are the sentences that say Bootwright records no
+// vendor support status. An entry fails once the sentence it names is gone.
+var vendorSupportNegations = []struct{ file, sentence string }{
+	{"specs/cli/output.md", "vendor release or support status"},
+	{"specs/milestones/m1.md", "records no vendor FIPS support status"},
+}
+
+// vendorSupportViolations lists each use of a vendor-support phrase in the
+// specs outside the delivery records, the decision-history rows and the named
+// negative statements, and each negative statement no spec makes any more.
+func vendorSupportViolations(files []markdownFile) []string {
+	var violations []string
+	used := map[int]bool{}
+	for _, file := range files {
+		if !strings.HasPrefix(file.path, "specs/") || vendorSupportRecords[file.path] {
+			continue
+		}
+		proseLines(file, func(number int, line string) {
+			if decisionHistoryRow.MatchString(line) {
+				return
+			}
+			text := line
+			if number < len(file.lines) {
+				text += " " + strings.TrimSpace(file.lines[number])
+			}
+			for _, match := range vendorSupportPhrase.FindAllStringIndex(text, -1) {
+				if match[0] >= len(line) {
+					continue
+				}
+				negated := false
+				for index, negation := range vendorSupportNegations {
+					if file.path == negation.file && strings.Contains(text, negation.sentence) {
+						negated, used[index] = true, true
+					}
+				}
+				if !negated {
+					violations = append(violations, fmt.Sprintf("%s:%d says %q; a coverage row means Bootwright realizes the capability, never a vendor's support status", file.path, number, text[match[0]:match[1]]))
+				}
+			}
+		})
+	}
+	for index, negation := range vendorSupportNegations {
+		if !used[index] {
+			violations = append(violations, fmt.Sprintf("%s no longer says %q; remove its entry from vendorSupportNegations", negation.file, negation.sentence))
+		}
+	}
+	return violations
+}
+
+func TestDocsSpecsStateNoVendorSupportStatus(t *testing.T) {
+	for _, violation := range vendorSupportViolations(guidanceFiles(t)) {
+		t.Error(violation)
+	}
+}
+
+func TestDocsVendorSupportViolations(t *testing.T) {
+	negated := markdownFile{path: "specs/cli/output.md", lines: []string{"A refusal never claims a", "vendor release or support", "status of its own."}}
+	if got := vendorSupportViolations([]markdownFile{negated}); len(got) != 1 || !strings.Contains(got[0], "specs/milestones/m1.md no longer says") {
+		t.Errorf("a spec that makes only one negative statement gave %v", got)
+	}
+	pages := []markdownFile{
+		negated,
+		{path: "specs/milestones/m1.md", lines: []string{"Bootwright records no vendor FIPS support status (D159 clause 15)."}},
+		{path: "specs/milestones/backlog.md", lines: []string{"The IBM-supported release."}},
+		{path: "specs/milestones/m2.md", lines: []string{"| OD27 | Vendor support statuses | answered |", "```", "support status", "```"}},
+	}
+	if got := vendorSupportViolations(pages); len(got) != 0 {
+		t.Errorf("allowed uses gave %v", got)
+	}
+	pages = append(pages, markdownFile{path: "specs/storage-coverage.md", lines: []string{"Each row is required when", "IBM-supported by the frozen release; a Release Support", "table lists the support", "status of each."}})
+	got := vendorSupportViolations(pages)
+	if len(got) != 3 {
+		t.Fatalf("a reintroduced phrase gave %v, want three violations", got)
+	}
+	variants := []markdownFile{{path: "specs/storage.md", lines: []string{
+		"The vendor supported release, the Red Hat-supported path, a provider supported layout,",
+		"and a row supported by IBM, supported by Red Hat or supported by the vendor.",
+		"A path Bootwright supports, a supported flag and supported by the schema are fine.",
+	}}}
+	if got := vendorSupportViolations(append(slices.Clone(pages[:4]), variants...)); len(got) != 6 {
+		t.Errorf("the vendor-support variants gave %v, want six violations", got)
+	}
+	for _, want := range []string{`specs/storage-coverage.md:2 says "IBM-supported"`, `specs/storage-coverage.md:2 says "Release Support"`, `specs/storage-coverage.md:3 says "support status"`} {
+		if !slices.ContainsFunc(got, func(violation string) bool { return strings.HasPrefix(violation, want) }) {
+			t.Errorf("no violation starts %q in %v", want, got)
+		}
+	}
 }

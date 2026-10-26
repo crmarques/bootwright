@@ -497,8 +497,8 @@ Each bootstrap, enrollment, service and resource attempt observes first and
 defines partial-completion evidence and safe retry, except two states that
 refuse until their recovery is defined: a cluster that is not ready after a
 non-bootstrap host carries a daemon refuses `partial-cluster`
-([B659](milestones/backlog.md#b659)), and a nonempty or partial DB/WAL device
-refuses before submission ([B662](milestones/backlog.md#b662)). The
+([B659](milestones/m2.md#b659)), and a nonempty or partial DB/WAL device
+refuses before submission ([B662](milestones/m2.md#b662)). The
 [interruption table](#cluster-execution-budget) states their exits. Complete
 owned state is unchanged; other owned differences converge only through
 qualified transitions.
@@ -684,7 +684,7 @@ measured OSD convergence time; a shortfall there is its own item.
 | before the bootstrap call | continues each host from its `unclaimed`, `claimed` or `prepared` stage |
 | inside bootstrap, tunnel configuration or tunnel mount | continues from the seed stages of the [verified transport](storage-native-api.md#verified-native-orchestration-transport) |
 | inside enrollment, devices, host device identities, OSD preparation or the services calls, before any non-bootstrap host carries a daemon | continues from `enrolling`, every other host `prepared` |
-| after a non-bootstrap host carries a daemon, the cluster not ready | refuses `partial-cluster` until [B659](milestones/backlog.md#b659) defines its recovery |
+| after a non-bootstrap host carries a daemon, the cluster not ready | refuses `partial-cluster` until [B659](milestones/m2.md#b659) defines its recovery |
 | in a readiness wait | continues once cephadm has converged, as above |
 
 Neither `partial-cluster` nor the partial DB/WAL refusal of
@@ -724,7 +724,7 @@ OSD per data device. All selected paths are distinct within a drive group and
 across services on a host; dynamic selectors, slots and sizes remain
 unsupported. TPM2 requires encryption and a declared TPM profile. Omitted
 options retain native BlueStore defaults. Any nonempty or partial DB/WAL
-device refuses before submission; [B662](milestones/backlog.md#b662) owns
+device refuses before submission; [B662](milestones/m2.md#b662) owns
 recovery. Read-only host readiness separately proves completed data/DB/WAL
 allocations by OSD identity and LV UUID relationships. Encryption requires
 matching native `ceph.encrypted` and `ceph.with_tpm` tags and an active LUKS

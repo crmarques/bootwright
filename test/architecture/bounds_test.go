@@ -98,6 +98,14 @@ func documentedBounds() []documentedBound {
 		{commands, "A prefix longer than %s bytes", completion, "maxCompletionPrefix", nil, false},
 		{commands, "an entry whose name is longer than %s bytes", completion, "maxCompletionEntry", nil, false},
 		{"specs/controller.md", "each entry at most %s bytes", "api/v1alpha1/lexical.go", "maxProxyBypassBytes", nil, false},
+
+		{contexts, "The registry writes private format version %s.", "internal/workspace/contexts/contracts.go", "RegistryVersion", nil, false},
+		{contexts, "| Registry | `version` (%s), `contexts`", "internal/workspace/contexts/contracts.go", "RegistryVersion", nil, false},
+		{contexts, "| Reservation | `version` (%s), `name` |", "internal/workspace/contextfs/records.go", "ReservationVersion", nil, false},
+		{contexts, "| Input manifest | `version` (%s), `context`", "internal/workspace/contextfs/records.go", "ManifestVersion", nil, false},
+		{contexts, "| User selection | `version` (%s), `name` |", "internal/workspace/contexts/contracts.go", "SelectionVersion", nil, false},
+		{contexts, "| Media record | `version` (%s), `name`", mediaRecords, "MediaRecordVersion", nil, false},
+		{"specs/contexts/controller-record.md", "The private Controller record version is `%s`.", bundles, "ControllerRecordVersion", nil, false},
 	}
 }
 

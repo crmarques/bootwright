@@ -11,7 +11,8 @@
 /.cache/
 /.claude/settings.local.json
 /.claude/worktrees/
-/.codex/
+/.codex/*
+!/.codex/hooks.json
 /site/
 /.state/
 /tmp/

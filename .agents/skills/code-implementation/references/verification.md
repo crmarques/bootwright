@@ -63,15 +63,20 @@ fork hangs the lane until interrupted; tracked as
 
 ## End-of-turn hook
 
-The Claude Code Stop hook in `.claude/settings.json` runs
+The Stop hooks of Claude Code (`.claude/settings.json`) and Codex
+(`.codex/hooks.json`, the only tracked file under `.codex/`) run
 `scripts/hooks/stop-check` with a 300 s timeout. It is advisory: it does nothing
 in the primary checkout, in a clean worktree, or while the runtime reports
 `stop_hook_active`; otherwise it runs `make focus` at the worktree's top level
-and asks for one more turn (exit 2) only when that fails. A pass records a key
-over `HEAD`, the tracked diff and the untracked files' names and contents in
-`stop-check.ok` in the worktree's Git directory, so an unchanged tree is not
-checked twice. A failure the task did not cause is reported, not fixed. Codex
-has no tracked counterpart; a Codex hook may call the same script.
+and asks for one more turn (exit 2, reason on stderr, stdout empty as Codex
+requires) only when that fails. A pass records a key over `HEAD`, the tracked
+diff and the untracked files' names and contents in `stop-check.ok` in the
+worktree's Git directory, so an unchanged tree is not checked twice; a failure
+records its key in `stop-check.failed`, so the same content never blocks twice
+even when the runtime omits `stop_hook_active`. A failure the task did not
+cause is reported, not fixed. Codex runs project hooks only once the project's
+`.codex/` layer and the hook are trusted (`/hooks`), and skips the hook again
+after it changes until it is re-trusted.
 
 ## Recording
 

@@ -1,0 +1,16 @@
+{
+  "description": "Advisory end-of-turn check: make focus in a changed task worktree",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)\"/scripts/hooks/stop-check",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}

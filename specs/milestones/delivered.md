@@ -8272,7 +8272,7 @@ skills and to park the rest of its roadmap.
 The specs, glossary and skills now state what the code does where they had
 drifted, and state each recommended rule that needs no owner decision; a rule
 the code does not yet meet carries a Not yet met line naming its parked item,
-[B800](backlog.md#b800) to [B836](backlog.md#b836). The
+[B800](#x161--audit-lane-a-harness-and-guards) to [B836](backlog.md#b836). The
 [remediation lanes and owner questions](backlog.md#audit-remediation-2026-10-26)
 order that work; no owner decision was taken and no safety refusal narrowed.
 The glossary moved to its own page. The agent harness gained the effect
@@ -8356,6 +8356,37 @@ has no default, refuses without bundle references, and reaches install-config
 only when authored. Admission twins and three projection goldens qualify the
 in-tree behavior. This supplies M4d's TLS trust prerequisite and does not
 claim live gateway trust or complete the other X123 items.
+
+### X161 — Audit lane A: harness and guards
+
+**Items:** B800 and B801 (2026-10-26 spec audit steps P0-A and P0-B), lane A
+of the [audit remediation](backlog.md#lane-order-and-progress) under D182.
+**Kind:** enabling. **Owners:** Agent guidance, Verification tooling and
+Milestones. Delivered on 2026-10-26, with the owner's answers to Q62 to Q64
+(D183).
+
+`TestDocsAskRulesCoverEveryEffectfulCommand` holds `.claude/settings.json`'s
+ask rules to the command catalog's Effects column: every command with a
+planned mutation, host packages, downloads, SSH, power or a reveal needs a
+matching rule, `cluster info --secrets` included, and a rule naming no catalog
+command fails. A tracked `.codex/hooks.json` runs the same advisory
+`scripts/hooks/stop-check` for Codex, which now also records a failing content
+key so it never blocks twice on unchanged content. `TestDocumentedBoundsMatchCode`
+holds the contexts record-version cells and the controller record version to
+their Go constants. `TestDocsSpecsStateNoVendorSupportStatus` refuses
+vendor-support phrases in the specs outside decision history. The milestone
+checker holds the Active slices table to the item Delivery cells and to the
+WIP limit, which D183 counts per program. Matrix row U03 keeps its refusal,
+now justified as a native replica-safety rule. B484's exit names the realized
+profiles P1 to P7.
+
+The optional storage-kind check against `lifecycle.Supported` was not built;
+U03 still refuses only `distribution: ibm` clusters; whether it widens is
+[B838](backlog.md#b838). D183 records every answer to Q62 to Q118, moves B659 and B662 to
+M2 as prerequisites of B485, and adds B837 to lane I.
+
+**Guard tests:** the tests above, each proved by a seeded mismatch; the
+delivering commit records the gates.
 
 ## M3 independent in-tree completion
 

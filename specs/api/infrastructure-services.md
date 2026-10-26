@@ -42,8 +42,8 @@ reference is pinned by content digest, `<repository>@sha256:<64 hex>`, whose
 digest normalizes to lowercase, because planning resolves no tag; validate
 refuses a tag at that reference, in kind defaults too. The selected image belongs to this service; fleet defaults
 can supply it through the corresponding kind entry.
-Image declarations neither select an executable adapter nor establish release
-support.
+Image declarations neither select an executable adapter nor claim anything
+about the image's release.
 
 Every managed service runs as a container, so each requires its placement
 Machine's `container-runtime` capability. That Machine also has effective

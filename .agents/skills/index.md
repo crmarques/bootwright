@@ -30,6 +30,8 @@ an existing skill; otherwise its content moves to that reference.
 use `~/.claude/CLAUDE.md` or `CLAUDE.local.md` for Claude Code and
 `~/.codex/AGENTS.md` for Codex, or make the local file defer to the tracked
 `AGENTS.md`. The tracked `.claude/settings.json` asks before every command
-AGENTS.md forbids an agent to run on its own; a bypass permission mode skips
+AGENTS.md forbids an agent to run on its own, and `TestDocsAskRulesCoverEveryEffectfulCommand` keeps that list complete against the [command catalog](../../specs/cli/commands.md#command-and-flag-catalog); a bypass permission mode skips
 those rules, and Codex needs the same commands under its own approval policy,
-which this repository does not track.
+which this repository does not track. Both runtimes run the same advisory
+[end-of-turn check](code-implementation/references/verification.md#end-of-turn-hook):
+`.claude/settings.json` and `.codex/hooks.json` call `scripts/hooks/stop-check`.

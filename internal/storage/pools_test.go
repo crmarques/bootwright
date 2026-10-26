@@ -63,7 +63,7 @@ func TestIBMReplicationNeedsAnAdditionalOSDHost(t *testing.T) {
 				}
 				return
 			}
-			if len(issues) != 1 || issues[0].Field != "$.spec.replicated.size" || !strings.Contains(issues[0].Message, "additional OSD-bearing host") || !strings.Contains(issues[0].Remediation, "replicated.size: 2") {
+			if len(issues) != 1 || issues[0].Field != "$.spec.replicated.size" || !strings.Contains(issues[0].Message, "an OSD-bearing host beyond the effective replica size") || !strings.Contains(issues[0].Remediation, "replicated.size: 2") {
 				t.Fatalf("missing actionable provider-capacity refusal: %+v", issues)
 			}
 		})

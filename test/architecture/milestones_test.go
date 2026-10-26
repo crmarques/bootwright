@@ -21,7 +21,9 @@ const (
 	milestoneItemsHeader       = "| ID | Alias | Kind | Owner | Outcome | Requires | Definition | Delivery |"
 	milestoneParkedHeader      = "| ID | Alias | Kind | Owner | Outcome | Why parked |"
 	milestoneSlicesHeader      = "| Slice | Kind | Items in order | Owner decisions | Requires |"
+	milestoneActiveHeader      = "| Slice | Milestone | Authorized by | State |"
 	milestoneItemsMarker       = "**Items:**"
+	milestoneProgramLimit      = 2
 )
 
 var (
@@ -32,6 +34,8 @@ var (
 	milestoneItemHeading    = regexp.MustCompile(`^#+\s*B[0-9]`)
 	milestoneItemRowLike    = regexp.MustCompile(`^\|\s*\[B[0-9]+\]`)
 	milestoneSliceID        = regexp.MustCompile(`^X[0-9]+$`)
+	milestoneActiveStage    = regexp.MustCompile(`^M([0-9]+)[a-z]?$`)
+	milestoneDecision       = regexp.MustCompile(`\bD[0-9]+\b`)
 	milestoneAlias          = regexp.MustCompile(`\([^()]*\)`)
 	milestoneNamedItem      = regexp.MustCompile(`\bB[0-9]+\b`)
 	milestoneNamedSlice     = regexp.MustCompile(`\bX[0-9]+\b`)
@@ -63,10 +67,12 @@ type milestoneStatusEntry struct {
 }
 
 type milestoneCheck struct {
-	sources  map[string]string
-	findings []string
-	rows     map[string][]milestoneItem
-	planned  map[string]bool
+	sources   map[string]string
+	findings  []string
+	rows      map[string][]milestoneItem
+	planned   map[string]bool
+	pageOf    map[string]string
+	pageItems map[string][]milestoneItem
 }
 
 func (c *milestoneCheck) report(path string, line int, format string, args ...any) {
@@ -298,7 +304,7 @@ func (c *milestoneCheck) plannedSlices(path string, items []milestoneItem) int {
 				c.report(path, row.line, "%s already has the Planned slices row at line %d", id, previous)
 				continue
 			}
-			rowLine[id], c.planned[id] = row.line, true
+			rowLine[id], c.planned[id], c.pageOf[id] = row.line, true, path
 			if !slices.Contains(milestoneKinds, row.cells[1]) {
 				c.report(path, row.line, "%s has Kind %q outside %s", id, row.cells[1], strings.Join(milestoneKinds, ", "))
 			}
@@ -365,6 +371,71 @@ func (c *milestoneCheck) references(entries map[string]milestoneStatusEntry) {
 	}
 }
 
+// activeSlices holds the Active slices table to the milestone pages: each row
+// whose State reads in progress names a slice planned on its milestone's page
+// that holds an item in progress under it, an authorizing decision is named,
+// no decision authorizes more than milestoneProgramLimit of them, and every
+// slice with an item in progress has such a row.
+func (c *milestoneCheck) activeSlices() {
+	lines := strings.Split(c.sources[milestoneStatusPath], "\n")
+	start, end, found := c.section(milestoneStatusPath, lines, "## Active slices")
+	if !found {
+		c.report(milestoneStatusPath, 0, "no ## Active slices section")
+		return
+	}
+	active, rowLine, program := map[string]bool{}, map[string]int{}, map[string][]string{}
+	for _, row := range c.table(milestoneStatusPath, lines, start, end, milestoneActiveHeader) {
+		slice, stage, authorized, state := row.cells[0], row.cells[1], row.cells[2], row.cells[3]
+		if !milestoneSliceID.MatchString(slice) {
+			c.report(milestoneStatusPath, row.line, "Active slices Slice cell %q is not X<n>", slice)
+			continue
+		}
+		if previous, ok := rowLine[slice]; ok {
+			c.report(milestoneStatusPath, row.line, "%s already has the Active slices row at line %d", slice, previous)
+			continue
+		}
+		rowLine[slice] = row.line
+		if state != "in progress" {
+			continue
+		}
+		active[slice] = true
+		decisions := milestoneDecision.FindAllString(authorized, -1)
+		if len(decisions) == 0 {
+			c.report(milestoneStatusPath, row.line, "active slice %s names no authorizing decision in %q", slice, authorized)
+		}
+		slices.Sort(decisions)
+		for _, decision := range slices.Compact(decisions) {
+			program[decision] = append(program[decision], slice)
+		}
+		page, planned := c.pageOf[slice]
+		if !planned {
+			c.report(milestoneStatusPath, row.line, "active slice %s is no planned slice on any milestone page", slice)
+			continue
+		}
+		if match := milestoneActiveStage.FindStringSubmatch(stage); match == nil {
+			c.report(milestoneStatusPath, row.line, "active slice %s names milestone %q, not M<n> with an optional letter", slice, stage)
+		} else if want := "specs/milestones/m" + match[1] + ".md"; page != want {
+			c.report(milestoneStatusPath, row.line, "active slice %s names milestone %s, but %s plans it", slice, stage, page)
+		}
+		if !slices.ContainsFunc(c.pageItems[page], func(item milestoneItem) bool { return item.delivery == "in progress" && item.slice == slice }) {
+			c.report(milestoneStatusPath, row.line, "active slice %s has no item in progress on %s", slice, page)
+		}
+	}
+	for _, decision := range slices.Sorted(maps.Keys(program)) {
+		if authorized := program[decision]; len(authorized) > milestoneProgramLimit {
+			c.report(milestoneStatusPath, rowLine[authorized[milestoneProgramLimit]], "%s authorizes %d active slices (%s), over the WIP limit of %d per program",
+				decision, len(authorized), strings.Join(authorized, ", "), milestoneProgramLimit)
+		}
+	}
+	for _, path := range slices.Sorted(maps.Keys(c.pageItems)) {
+		for _, item := range c.pageItems[path] {
+			if item.delivery == "in progress" && item.slice != "" && !active[item.slice] {
+				c.report(item.path, item.line, "%s is in progress under %s, which has no Active slices row reading in progress", item.id, item.slice)
+			}
+		}
+	}
+}
+
 func (c *milestoneCheck) delivered() {
 	lines := strings.Split(c.sources[milestoneDeliveredPath], "\n")
 	for first := 0; first < len(lines); {
@@ -406,7 +477,7 @@ func (c *milestoneCheck) delivered() {
 }
 
 func milestoneFindings(sources map[string]string) []string {
-	c := &milestoneCheck{sources: sources, rows: map[string][]milestoneItem{}, planned: map[string]bool{}}
+	c := &milestoneCheck{sources: sources, rows: map[string][]milestoneItem{}, planned: map[string]bool{}, pageOf: map[string]string{}, pageItems: map[string][]milestoneItem{}}
 	for _, required := range []string{milestoneStatusPath, milestoneBacklogPath, milestoneDeliveredPath} {
 		if _, ok := sources[required]; !ok {
 			c.report(required, 0, "missing")
@@ -420,6 +491,7 @@ func milestoneFindings(sources map[string]string) []string {
 		}
 		items := c.items(path, "## Items", milestoneItemsHeader)
 		milestoneItems += len(items)
+		c.pageItems[path] = items
 		planned := c.plannedSlices(path, items)
 		entry, ok := entries[path]
 		if !ok {
@@ -447,6 +519,7 @@ func milestoneFindings(sources map[string]string) []string {
 		}
 	}
 	c.references(entries)
+	c.activeSlices()
 	c.delivered()
 	return c.findings
 }
@@ -526,7 +599,8 @@ func milestoneFixtureStatus(deliveries ...string) string {
 		rows = append(rows, milestoneFixtureStatusRow(index+1, delivery))
 	}
 	return "# Milestones\n\nRules.\n\n## Status\n\n" + milestoneStatusHeader + "\n" + milestoneSeparator(5) + "\n" +
-		strings.Join(rows, "\n") + "\n\nX1 is active.\n\n## Scope rules\n\n- A rule.\n"
+		strings.Join(rows, "\n") + "\n\nX1 is active.\n\n## Active slices\n\n" + milestoneActiveHeader + "\n" + milestoneSeparator(4) + "\n" +
+		"| X2 | M1a | D1 | in progress |\n\n## Scope rules\n\n- A rule.\n"
 }
 
 func milestoneFixturePage(number int, opening, slice string, rows []string, sections ...string) string {
@@ -780,6 +854,44 @@ func TestDocsMilestoneCheckFindsEachDisagreement(t *testing.T) {
 		{"a Next naming a milestone without a Status row",
 			[]milestoneEdit{milestoneReplace(milestoneStatusPath, status(7, "not started"), statusLine(7, "none", "not started", "nothing until M9"))},
 			milestoneStatusPath + ":15: M7 Next names M9, which has no Status row"},
+		{"an active slice whose item is no longer in progress",
+			[]milestoneEdit{milestoneReplace(m1, row("B1", "in progress, X2"), row("B1", "not started, X2")),
+				milestoneReplace(m1, row("B2", "not started, X2"), row("B2", "blocked, X2"))},
+			"active slice X2 has no item in progress on " + m1},
+		{"an item in progress under a slice with no Active slices row",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, "| X2 | M1a | D1 | in progress |\n", "")},
+			m1 + ":15: B1 is in progress under X2, which has no Active slices row reading in progress"},
+		{"an item in progress under a slice whose row is not in progress",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, "| D1 | in progress |", "| D1 | paused |")},
+			m1 + ":15: B1 is in progress under X2, which has no Active slices row reading in progress"},
+		{"an active slice that is no planned slice",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, "| X2 | M1a |", "| X9 | M1a |")},
+			"active slice X9 is no planned slice on any milestone page"},
+		{"an active slice under another milestone",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, "| X2 | M1a |", "| X2 | M2a |")},
+			"active slice X2 names milestone M2a, but " + m1 + " plans it"},
+		{"an active slice with no milestone",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, "| X2 | M1a |", "| X2 | Ceph |")},
+			`active slice X2 names milestone "Ceph"`},
+		{"an active slice with no authorizing decision",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, "| M1a | D1 |", "| M1a | the owner |")},
+			`active slice X2 names no authorizing decision in "the owner"`},
+		{"three active slices authorized by one decision",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, "| X2 | M1a | D1 | in progress |",
+				"| X2 | M1a | D1 | in progress |\n| X3 | M1a | D1, D2 | in progress |\n| X4 | M1a | D1 | in progress |")},
+			"D1 authorizes 3 active slices (X2, X3, X4), over the WIP limit of 2 per program"},
+		{"two Active slices rows for one slice",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, "| X2 | M1a | D1 | in progress |", "| X2 | M1a | D1 | in progress |\n| X2 | M1a | D1 | in progress |")},
+			"X2 already has the Active slices row at line"},
+		{"an Active slices row that is not a slice",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, "| X2 | M1a |", "| M1a | M1a |")},
+			`Active slices Slice cell "M1a" is not X<n>`},
+		{"an Active slices header that differs",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, milestoneActiveHeader, "| Slice | Milestone | Decision | State |")},
+			"table header"},
+		{"no Active slices section",
+			[]milestoneEdit{milestoneReplace(milestoneStatusPath, "## Active slices", "## Slices")},
+			"no ## Active slices section"},
 		{"a Planned slices header that differs",
 			[]milestoneEdit{milestoneReplace(m1, "| Owner decisions | Requires |", "| Decisions | Requires |")},
 			m1 + ":7: table header"},

@@ -45,10 +45,9 @@ authorized it; only a row whose State reads `in progress` is active.
   spec, milestone page, item or decision authorizes no implementation or
   effect.
 - A slice is **active** only while its [row](#active-slices) reads
-  `in progress`, and only active slices count toward the WIP limit of two: one
-  product, safety or defect slice and one enabling slice, at most one of them
-  out of sequence.
-  Milestones are never active.
+  `in progress`; milestones are never active. The WIP limit is at most two
+  active slices per program, the slices one owner decision or request
+  authorizes.
 - **In sequence** means the next planned slice of the first milestone in
   Status order that holds open items; when it has none, planning its next
   slice is. D158 schedules shared M1 work with its first consuming product
