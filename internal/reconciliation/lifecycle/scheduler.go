@@ -361,11 +361,16 @@ func (c *scheduler) closeAnnounced(ctx context.Context) {
 // own order is the one an operator already read.
 func (c *scheduler) cause() error {
 	var reported []diagnostics.Diagnostic
+	only := false
 	for _, block := range c.plan.Blocks {
 		reported = append(reported, c.reported(block.ID)...)
+		only = only || errors.As(c.causes[block.ID], new(onlyExit))
 	}
 	if len(reported) == 0 {
 		return nil
+	}
+	if only {
+		return onlyExit{&diagnostics.Failure{Diagnostics: reported}}
 	}
 	return &diagnostics.Failure{Diagnostics: reported}
 }

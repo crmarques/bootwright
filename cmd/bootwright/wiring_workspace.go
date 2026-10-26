@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
+
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation/contextguard"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -19,8 +22,24 @@ func wireContexts(deps serviceDependencies, compiler compilation.Compiler, secre
 		ValidateConfiguration: secrets.Validate,
 		InitializeSecrets:     secrets.Initialize,
 	}
+	if deps.Lifecycle.Workspace != nil {
+		options.Operations = unfinishedOperations{workspace: deps.Lifecycle.Workspace, operations: operationStores(systemClock{}, deps.Lifecycle.Executable)}
+	}
 	if deps.Streams.Out != nil {
 		options.Presenter = cli.NewContextPlanPresenter(deps.Streams.Out, deps.Streams.Err)
 	}
 	return contexts.New(reader, compiler, deps.Repository, contextguard.Guard{}, deps.Confirmer, options)
+}
+
+type unfinishedOperations struct {
+	workspace  lifecycle.Workspace
+	operations lifecycle.OperationStoreFactory
+}
+
+func (u unfinishedOperations) Unfinished(ctx context.Context, name string) (*contexts.Unfinished, error) {
+	found, unfinished, err := lifecycle.ReadUnfinished(ctx, u.workspace, u.operations, name)
+	if err != nil || !unfinished {
+		return nil, err
+	}
+	return &contexts.Unfinished{Operation: found.ID, Verb: found.Verb, State: found.State, Build: found.Build}, nil
 }

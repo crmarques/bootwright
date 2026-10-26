@@ -303,7 +303,7 @@ func unlinkAt(dir *directory, name string, directory bool) syscall.Errno {
 }
 
 func (t *transaction) Delete(ctx context.Context, requested contexts.Record) error {
-	if err := t.available(ctx); err != nil {
+	if err := t.writable(ctx); err != nil {
 		return err
 	}
 	if err := t.checkControllerRecovery(ctx, requested.Name); err != nil {
@@ -533,6 +533,13 @@ func (d *deletionTransaction) MutationState(ctx context.Context, name string) ([
 		return nil, reservationDamage(ctx, name, err)
 	}
 	return nil, d.tx.lostRefusal(ctx, name, err)
+}
+
+func (d *deletionTransaction) OperationIndex(ctx context.Context, name string) ([]byte, error) {
+	if err := d.scoped(name); err != nil {
+		return nil, err
+	}
+	return d.tx.OperationIndex(ctx, name)
 }
 
 // lostRefusal classifies a lease that found nothing: the contexts container

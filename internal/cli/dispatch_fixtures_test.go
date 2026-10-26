@@ -173,6 +173,10 @@ func (s controllerSpy) Setup(ctx context.Context, request prerequisites.SetupReq
 	return s.record.result.controller, s.record.called(ctx, "setup", request)
 }
 
+func (s controllerSpy) Rebind(ctx context.Context, request prerequisites.RebindRequest) (*prerequisites.RebindResult, error) {
+	return s.record.result.rebind, s.record.called(ctx, "controller rebind", request)
+}
+
 type environmentSpy struct{ record *dispatchRecord }
 
 func (s environmentSpy) PreflightInfrastructure(ctx context.Context, request environmentpreflight.InfrastructurePreflightRequest) error {

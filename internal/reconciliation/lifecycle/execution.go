@@ -1561,6 +1561,10 @@ func withCause(cause, terminal error) error {
 	if len(reported) == 0 {
 		return terminal
 	}
+	var only onlyExit
+	if errors.As(cause, &only) {
+		return cause
+	}
 	return &diagnostics.Failure{Diagnostics: append(reported, diagnostics.Of(terminal)...)}
 }
 
@@ -1855,14 +1859,14 @@ func verifyHostBinding(view prerequisites.StorageView, identity ContextIdentity,
 		return err
 	}
 	if !view.State.Host.Equal(host) {
-		return failure("controller.identity", "this host is not the host the context is bound to", "restore the original host, or create a context on this one")
+		return failure("controller.identity", "this host is not the host the context is bound to", controller.HostMismatchRemedy(identity.Name))
 	}
 	for _, binding := range view.State.Bindings {
 		if binding.Context != identity.Name {
 			continue
 		}
 		if binding.HostDigest != digest {
-			return failure("controller.identity", "the recorded controller binding does not match this host", "restore the original host, or create a context on this one")
+			return failure("controller.identity", "the recorded controller binding does not match this host", controller.HostMismatchRemedy(identity.Name))
 		}
 		return nil
 	}

@@ -48,7 +48,8 @@ func requireRemovalRefusedUntouched(t *testing.T, h *harness, code, message, rem
 	before.require(t, h)
 }
 
-const anotherHostRemedy = "restore the original host, or create a context on this one"
+// anotherHostRemedy names the exits of a host mismatch in order.
+const anotherHostRemedy = "run on the host this controller state belongs to, or restore that host's machine-id, DMI product UUID and root filesystem UUID on this one; if this host keeps the same state store under the changed values, rebind its record with bootwright controller rebind; otherwise bootwright context delete --name lab --purge --allow-orphans, which abandons every object the context realized"
 
 // A fresh removal of a completed apply proves the host before anything else:
 // on a host the controller state does not record it refuses, presenting no

@@ -1,0 +1,11 @@
+  NAME   MODE    CURRENT   INPUT
+  edge   ready   no        imported
+  lab    ready   yes       imported
+  lost   ready   no        imported
+  old    ready   no        imported
+
+  Unfinished operations
+  CONTEXT   VERB      STATE        BUILD             OPERATION
+  lab       apply     failed       0.4.0 (abcdef1)   op-01010101010101010101010101010101
+  lost      unknown   unreadable   unknown           unknown
+  old       destroy   unknown      unrecorded        op-02020202020202020202020202020202

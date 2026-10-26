@@ -122,6 +122,7 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"media list", nil, ignoresRoute},
 		{"media list", []string{"--checksums"}, ignoresRoute},
 		{"media delete", []string{"--name", "image.iso"}, ignoresRoute},
+		{"controller rebind", nil, ignoresRoute},
 		// Every other command acquires nothing before a context exists.
 		{"context init", []string{"--name", "lab"}, ignoresRoute},
 		{"context update", []string{"--name", "lab", "--input-dir", "inputs"}, ignoresRoute},

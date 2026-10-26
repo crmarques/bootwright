@@ -273,7 +273,6 @@ Alias cell.
 | [B803](#b803) | new, 2026-10-26 (spec audit P0-D) | safety | Substrate and Workspace | Shared provider hosts claim bridges and emulated BMCs; deletion lists everything a context realized | Audit roadmap work; implemented only on an explicit lane request |
 | [B804](#b804) | new, 2026-10-26 (spec audit P0-E) | safety | Storage and State reconciliation | Export and cluster retirement refuses while a consuming cluster survives the removal | Audit roadmap work; implemented only on an explicit lane request |
 | [B805](#b805) | new, 2026-10-26 (spec audit P0-F) | safety | Secrets and State reconciliation | Secret references declare a class; a rotated access credential has a recorded removal exit | Audit roadmap work; implemented only on an explicit lane request |
-| [B806](#b806) | new, 2026-10-26 (spec audit P0-G) | safety | Workspace and State reconciliation | Durable production roots, a removal-only reserve, owner-checked sweeps, prompts outside the root lock | Audit roadmap work; implemented only on an explicit lane request |
 | [B807](#b807) | new, 2026-10-26 (spec audit P0-H) | safety | Desired state and Architecture | Inert fields report or refuse, one remote quoting function, truthful defaults and warnings | Audit roadmap work; implemented only on an explicit lane request |
 | [B808](#b808) | new, 2026-10-26 (spec audit P1-A) | enabling | Architecture | Engine claim check, implementation fitness test and a shared Capability-port contract suite | Audit roadmap work; implemented only on an explicit lane request |
 | [B809](#b809) | new, 2026-10-26 (spec audit P1-B) | enabling | Substrate and Architecture | One substrate-owned dispatcher replaces per-consumer arm tables, power commands included | Audit roadmap work; implemented only on an explicit lane request |
@@ -297,10 +296,8 @@ Alias cell.
 | [B829](#b829) | new, 2026-10-26 (spec audit L7) | safety | Secrets | Work-area incarnation check, pipelined material payloads and fixed producer identity | Audit roadmap work; implemented only on an explicit lane request |
 | [B830](#b830) | new, 2026-10-26 (spec audit L8) | safety | State reconciliation and Add-ons | Unknown-operation rows allow continuation; add-on receipts carry their ownership basis | Audit roadmap work; implemented only on an explicit lane request |
 | [B831](#b831) | new, 2026-10-26 (spec audit L9) | safety | Controller setup and CLI | Elevation re-executes a root-owned install by path and refuses foreign variables | Audit roadmap work; implemented only on an explicit lane request |
-| [B832](#b832) | new, 2026-10-26 (spec audit L10) | defect | Workspace and CLI | Controller-record refusals name real exits; context list shows unfinished operations | Audit roadmap work; implemented only on an explicit lane request |
 | [B833](#b833) | new, 2026-10-26 (spec audit L11) | enabling | Desired state | Examples drop defaulted values, gain an external-services scenario, distinct Environment names | Audit roadmap work; implemented only on an explicit lane request |
 | [B835](#b835) | new, 2026-10-26 (spec audit L13) | safety | Storage and CLI | Plan and status show a StorageExport's realm-wide grant | Audit roadmap work; implemented only on an explicit lane request |
-| [B836](#b836) | split from B103 on 2026-10-26 (spec audit L10) | safety | Workspace and Controller setup | Contexts survive a controller host whose machine, DMI or root filesystem identity changed | No milestone relocates a controller; implemented only on an explicit request |
 | [B837](#b837) | new, 2026-10-26 (D183, Q118) | product | Add-ons and CLI | Authored add-on ordering and an apply that stops after a named add-on | Lane I work under D182; implemented in its lane |
 | [B838](#b838) | new, 2026-10-26 (lane A review) | safety | Storage | U03's replica-safety refusal applies to every Ceph distribution, not only IBM | Widening adds a refusal; needs an owner decision |
 
@@ -405,7 +402,7 @@ Explicit complete-store restore with logical identity preservation. Copy
 restoration changes physical identities and may roll back seal reservations;
 [M1c](delivered.md#m1c--context-secret-management) converts no earlier keyring
 format and refuses it instead, and offers no backup or restore command.
-Controller relocation, left over from C16, was split out as [B836](#b836) on
+Controller relocation, left over from C16, was split out as [B836](delivered.md#x164--audit-lane-e-store-durability-and-controller-records) on
 2026-10-26. **Exit evidence:**
 coherent snapshot validation, authorized inode rebinding, a fresh key before
 writes after rollback, interruption and retry and wrong-store refusal tests;
@@ -721,7 +718,9 @@ The custody and power confirmation ports keep `Confirm` and gain an optional `Co
 
 ### B389
 
-X41 moved dependency resolution under the staging parent `/var/lib/bootwright-staging`, with locked and swept stages and a refusal that names a noexec mount, while the controller runner's job and scratch parents stay under `/run` and `/var/tmp` (found in X41). [B19](delivered.md#x93--the-owner-run-of-2026-10-14)'s one runner may carry the move. The move also closes a local denial of service: the sweep counts every entry whose name matches `bootwright-run-scratch-` against its bound of 256 before any owner check (`internal/reconciliation/ansiblerunner/jobs_linux_amd64.go`, `matching`), so any local account that creates 257 such names in sticky `/var/tmp` makes every later lifecycle run refuse until root removes them; a root-owned 0700 parent, or a bound that counts only root-owned private directories, removes it. **Exit evidence:** the controller runner's job and scratch under the staging port, with its sweep and noexec refusal tested, and a test in which more than 256 foreign-owned matching entries sit in the old scratch parent and a lifecycle run still starts.
+X41 moved dependency resolution under the staging parent `/var/lib/bootwright-staging`, with locked and swept stages and a refusal that names a noexec mount, while the controller runner's job and scratch parents stay under `/run` and `/var/tmp` (found in X41). [B19](delivered.md#x93--the-owner-run-of-2026-10-14)'s one runner may carry the move. The move also closes a local denial of service: the sweep counts every entry whose name matches `bootwright-run-scratch-` against its bound of 256 before any owner check (`internal/reconciliation/ansiblerunner/jobs_linux_amd64.go`, `matching`), so any local account that creates 257 such names in sticky `/var/tmp` makes every later lifecycle run refuse until root removes them; a root-owned 0700 parent, or a bound that counts only root-owned private directories, removes it. Since 2026-10-26 (X164, B806) the sweep counts only private
+directories the runner owns, with its foreign-entries test; the move to a
+root-owned 0700 parent remains. **Exit evidence:** the controller runner's job and scratch under the staging port, with its sweep and noexec refusal tested, and a test in which more than 256 foreign-owned matching entries sit in the old scratch parent and a lifecycle run still starts.
 
 ### B390
 
@@ -1559,7 +1558,14 @@ used the reserve. **Exit evidence:** a test double that enforces the entry bound
 a test that hits the bound mid-attempt and leaves the block resolvable, a test
 that exhausts the area by repeated apply retries and shows the next apply
 refusing before an effect while the destroy registers and completes, and the
-amended contexts spec.
+amended contexts spec. **Partly delivered** on 2026-10-26 by X164 (B806): an
+apply's attempt, retry or resolution refuses before its effect when it would
+cut into the removal's reserve, a removal's own retries refuse when the area
+cannot hold them, and `TestApplyRetriesNeverTakeTheRemovalReserve` runs over a
+bound-enforcing double. **Remains:** `capacity()` still counts entries+1 on
+every write, no test hits the bound mid-attempt, and log bytes written after an
+attempt starts and a destroy's resolutions before it registers are not counted
+against the reserve.
 
 ### B573
 
@@ -3157,50 +3163,6 @@ keeps D37's two exits until the owner decides.
 succeeds only through the chosen exit while the ownership proof still runs, and
 that an effect-material Secret refuses it; `make check` passes.
 
-### B806
-
-**Owner:** Workspace and State reconciliation. **Kind:** safety.
-**Requires:** B801. **Definition:** Specified. Roadmap step P0-G of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F09-02,
-F13-07, F11-07, F13-02. The store survives a reboot, its removal always has
-room to register, no other account blocks a run, and no prompt holds the root
-lock.
-
-**Specs:** [storage, locking and publication](../contexts.md#storage-locking-and-publication)
-and [command results](../contexts.md#command-results-and-confirmation) in
-contexts.md, and the sweep bound in [security](../security.md); their Not yet
-met lines point here.
-
-**Work:**
-
-- F09-02 (Medium): deliver [B572](#b572)'s removal-reserve clause with its
-  exhaustion test; replace or rename
-  `TestADestroyTheAreaCannotHoldRefusesAtItsRegistration`
-  (`internal/reconciliation/lifecycle`); revisit the B267 removal-refused exit
-  in contexts.md once the code meets the rule.
-- F13-07 (Medium): `localFilesystem` in
-  `internal/workspace/contextfs/files_linux_amd64.go` and the setup dry run's
-  state-root check refuse tmpfs and overlayfs for the production root, keeping
-  them for injected test roots; mark `delivered.md`'s old filesystem list
-  historical.
-- F11-07 (Medium): `matching()` in
-  `internal/reconciliation/ansiblerunner/jobs_linux_amd64.go` counts only
-  root-owned private run directories, or [B389](#b389)'s move to a root-owned
-  0700 parent lands; its foreign-entries test.
-- F13-02 (Medium): `context update` and `context delete` present from a
-  shared hold, prompt with no lock, then take the exclusive root lock and
-  lease and re-prove the plan, refusing with no write on any change. State in
-  contexts.md the block outcome when an in-operation root transaction cannot
-  take the root lock (failed with no effect run, unknown otherwise, produced
-  material kept under D124), keeping the no-wait rule unless the same change
-  specifies a bounded wait.
-
-**Exit evidence:** an apply-retry exhaustion test with a destroy that registers
-and completes; tests refusing a tmpfs and an overlayfs production root before
-first publication; more than 256 foreign matching entries and a run that still
-starts; a store changed between prompt and confirmation leaves no write; each
-cited from its clause; `make check` passes.
-
 ### B807
 
 **Owner:** Desired state and Architecture. **Kind:** safety.
@@ -4222,43 +4184,6 @@ F11-12 are stated and need no code.
 path and the child refuses a foreign variable; the two Not yet met lines are
 removed; `make check` and `make race`.
 
-### B832
-
-**Owner:** Workspace and CLI. **Kind:** defect. **Requires:** none.
-**Definition:** Specified. Batch L10 of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F13-06,
-F13-08, R2-06-07, R2-06-08, V2-06. Controller-record refusals name the exits
-that exist, and `context list` shows each unfinished operation's build.
-
-**Specs:** [contexts.md](../contexts.md) states the host-mismatch exits, the
-256-reservation bound and the unfinished-operation report;
-[contexts/controller-record.md](../contexts/controller-record.md) states the
-4096-tool-source and 256-reservation refusals;
-[infrastructure-services.md](../infrastructure-services.md) lists every
-release path and the reservation refusal; [cli/output.md](../cli/output.md)
-defines the `unfinished` member. Each has a Not yet met line here.
-
-**Work:**
-
-- F13-06: the host-mismatch refusal and its golden list the exits in order;
-  the operator guide warns before a planned identity change. The
-  root-confirmed identity rebind is [B836](#b836).
-- F13-08: `toolSourcesRemedy` (`internal/workspace/contextfs/controller_records.go`)
-  names the fresh-store exit, with a test.
-- R2-06-08: publication under the root lock refuses `controller.conflict`
-  before registration, naming the bound, the entries needed and those other
-  contexts hold, with the destroy or `context delete --purge` remedy and a
-  named test (the bounds row is already held by `TestDocumentedBoundsMatchCode`).
-- V2-06: `context list` human and JSON output carry `unfinished` (id, verb,
-  state, build as `<version> (<commit>)`), with a test asserting the
-  registering build; the upgrade step in
-  [docs/operator-guide.md](../../docs/operator-guide.md) then reads the build
-  from `context list` instead of each context's `status`.
-
-**Exit evidence:** the mismatch, tool-source and reservation tests and
-goldens; `TestDocumentedBoundsMatchCode`; the context list test; the Not yet
-met lines removed; `make check`.
-
 ### B833
 
 **Owner:** Desired state. **Kind:** enabling. **Requires:** none.
@@ -4318,24 +4243,6 @@ its removal test.
 filesystem show the grant in plan and status; output.md's Not yet met line is
 removed; `make check`.
 
-### B836
-
-**Owner:** Workspace and Controller setup. **Kind:** safety. **Requires:** none.
-**Definition:** Needs definition. Split from [B103](#b103) on 2026-10-26 for
-finding F13-06 of the [2026-10-26 spec audit](../../audits/spec/2026-10-26.md),
-because it is operability rather than backup. A change of the controller's
-machine-id, DMI product UUID or root filesystem UUID strands every context:
-the host-mismatch refusal leaves the original host or its restored identity
-values, a destroy run from the original host before the change, or the
-orphan-acknowledged deletion ([B832](#b832) makes the refusal name them).
-Outcome: an explicit, root-confirmed rebind that proves the new host holds the
-same root store and rewrites the recorded host identity once, keeping every
-binding and reservation. The mechanism and its command are part of the
-definition. **Exit evidence:** a rebind test over a changed identity tuple that
-keeps bindings and reservations, a refusal for a different store, interruption
-and retry tests, and the operator guide's identity-change section naming the
-command.
-
 ### B837
 
 **Owner:** Add-ons and CLI. **Kind:** product. **Requires:** [B814](#b814).
@@ -4378,7 +4285,7 @@ matrix row.
 The [2026-10-26 spec audit](../../audits/spec/2026-10-26.md) ordered its
 recommendations into a roadmap (its section 14). Slice X160 corrected the
 specs and skills where no owner decision or code was needed; every remaining
-recommendation is parked above as [B800](delivered.md#x161--audit-lane-a-harness-and-guards) to [B836](#b836), one item per
+recommendation is parked above as [B800](delivered.md#x161--audit-lane-a-harness-and-guards) to [B836](delivered.md#x164--audit-lane-e-store-durability-and-controller-records), one item per
 roadmap step or batch, and the Not yet met lines in the specs point to them.
 Like every parked item, these authorize nothing: a lane, an item or a set of
 lanes runs on an explicit request, which attaches its items to a slice.
@@ -4395,7 +4302,7 @@ decision stay open while its other parts land.
 | B Physical targets and shared hosts | [B802](#b802), [B803](#b803) | B801 | D, E, G, I | Q65, Q66, Q67 |
 | C Storage retirement | [B804](#b804), [B835](#b835) | none | F, G | Q68 |
 | D Credentials and trust | [B805](#b805), [B817](#b817), [B829](#b829), [B831](#b831) | none | B | Q70, Q97, Q98, Q99, Q100, Q101, Q116 |
-| E Store durability and controller records | [B806](#b806), [B836](#b836), [B832](#b832) | B801 | B, J | none |
+| E Store durability and controller records | B806 (X164), B836 (X164), B832 (X164) | B801 | B, J | none |
 | F Truthful admission | [B807](#b807) | none | C, I | Q71 |
 | G Extension architecture | [B808](#b808), [B811](#b811), [B809](#b809), [B810](#b810), [B812](#b812) | B800 to B807 | B, C, I, J, K | Q72, Q73, Q74, Q75 |
 | H Cross-build continuation | B813 (X163) | B801 | none | Q76 |
@@ -4418,7 +4325,7 @@ also updates this table.
 | 1 | A Harness and guards | merged (X161) |
 | 2 | K Language and adapter contracts | merged (X162) |
 | 3 | H Cross-build continuation | merged (X163) |
-| 4 | E Store durability and controller records | not started |
+| 4 | E Store durability and controller records | merged (X164) |
 | 5 | B Physical targets and shared hosts | not started |
 | 6 | D Credentials and trust | not started |
 | 7 | C Storage retirement | not started |
@@ -5690,3 +5597,12 @@ Requires cell as `owner decision: <question>`.
   `diff --exit-code`. Q118: authored add-on ordering and an apply that stops
   after a named add-on become [B837](#b837) in lane I. Each answer authorizes
   only the item that applies it, within D182.
+
+- **D184** (2026-10-26, the owner's answer about [B836](delivered.md#x164--audit-lane-e-store-durability-and-controller-records)): a
+  root-confirmed `bootwright controller rebind` moves every context to a
+  controller host whose machine-id, DMI product UUID or root filesystem UUID
+  changed. It confirms interactively, naming the recorded and the new
+  identity, or under `--yes` only with the new identity named; it proves the
+  same store under the exclusive root lock, rewrites the recorded host
+  identity once, and keeps every binding and reservation. This adds a public
+  command under D153 clause 2.

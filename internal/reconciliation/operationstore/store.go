@@ -38,6 +38,9 @@ type Store struct {
 	outputs  sync.Mutex
 	measured bool
 	room     int64
+	attempts sync.Mutex
+	inflight int
+	reserves map[string]int64
 }
 
 func New(area Area, clock func() time.Time) *Store {
@@ -257,6 +260,87 @@ func (s *Store) admit(ctx context.Context, id string, plan reconciliation.Plan, 
 		return refuseAtTheBound(fmt.Sprintf("%s, and this removal needs %d more for the records its registration writes", holds, needed))
 	}
 	return refuseAtTheBound(fmt.Sprintf("%s, and this apply needs the %d it keeps for its records and logs and those of the removal that takes it back", holds, needed))
+}
+
+const AttemptEntries = 6
+
+const AttemptBytes = 2 * MaxAttemptBytes
+
+type reserveRefusal struct{ error }
+
+func (r reserveRefusal) Unwrap() error { return r.error }
+
+func IntoTheReserve(err error) bool {
+	var refusal reserveRefusal
+	return errors.As(err, &refusal)
+}
+
+// AdmitAttempt refuses, before it writes, an attempt or resolution that would
+// take the area into a removal's reserve, counting every one in flight.
+func (s *Store) AdmitAttempt(ctx context.Context, operation Operation, plan reconciliation.Plan, removal bool) (func(), error) {
+	s.attempts.Lock()
+	defer s.attempts.Unlock()
+	held, size, err := s.held(ctx, "", "")
+	if err != nil {
+		return nil, err
+	}
+	running := s.inflight + 1
+	entries, bytes := running*AttemptEntries+1, int64(running)*AttemptBytes
+	keptEntries, keptBytes := 0, int64(0)
+	apply := operation.Verb == reconciliation.Apply && !removal
+	if apply {
+		entries = running * AttemptEntries
+		if keptEntries, keptBytes, err = s.removalReserve(operation, plan); err != nil {
+			return nil, err
+		}
+	}
+	if held+entries+keptEntries > MaxEntries {
+		return nil, refuseAttempt(apply, fmt.Sprintf("it holds %d of its %d entries", held, MaxEntries), int64(entries), int64(keptEntries))
+	}
+	if size+bytes+keptBytes > MaxBytes {
+		return nil, refuseAttempt(apply, fmt.Sprintf("it holds %d of its %d bytes", size, MaxBytes), bytes, keptBytes)
+	}
+	s.inflight++
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			s.attempts.Lock()
+			defer s.attempts.Unlock()
+			s.inflight--
+		})
+	}, nil
+}
+
+func refuseAttempt(apply bool, holds string, needed, kept int64) error {
+	if apply {
+		return reserveRefusal{recordError(fmt.Sprintf("the context's operation area keeps what is left of it for the removal that takes this apply back: %s, and this attempt needs %d more beside the %d that removal keeps",
+			holds, needed, kept))}
+	}
+	return reserveRefusal{recordError(fmt.Sprintf("the context's operation area cannot hold another attempt of this removal: %s, and it needs %d more", holds, needed))}
+}
+
+func (s *Store) removalReserve(operation Operation, plan reconciliation.Plan) (int, int64, error) {
+	removal, err := plan.Inverse()
+	if err != nil {
+		return 0, 0, err
+	}
+	if kept, read := s.reserves[operation.ID]; read {
+		return AdmissionEntries(removal), kept, nil
+	}
+	encodedPlan, err := encode(removal, MaxPlanBytes)
+	if err != nil {
+		return 0, 0, recordError("lifecycle plan exceeds its encoded plan limit")
+	}
+	record, err := encode(operation, MaxOperationBytes)
+	if err != nil {
+		return 0, 0, err
+	}
+	kept := int64(len(encodedPlan) + len(record) + MaxIndexBytes)
+	if s.reserves == nil {
+		s.reserves = map[string]int64{}
+	}
+	s.reserves[operation.ID] = kept
+	return AdmissionEntries(removal), kept, nil
 }
 
 // held counts the entries beneath target as the area's entry bound counts

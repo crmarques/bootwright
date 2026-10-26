@@ -304,7 +304,7 @@ func (s Service) settleHost(ctx context.Context, current *inspection, settle fun
 	}
 	if stored := current.stored.State.Host; stored.Valid() && !stored.Equal(current.host) {
 		settle(unverified("installed-host", "verified local identity", HostScope))
-		return failure("controller.identity", "stored controller state belongs to a different installed host", "restore the original host and state; setup cannot rebind it")
+		return failure("controller.identity", "stored controller state belongs to a different installed host", controller.HostMismatchRemedy(""))
 	}
 	settle(readiness("installed-host", "verified local identity", true, HostScope))
 	inspector, reports := s.host.(FIPSInspector)

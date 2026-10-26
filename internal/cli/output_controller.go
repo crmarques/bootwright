@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -547,4 +548,19 @@ func controllerChecksText(text *display, report *prerequisites.Report, table boo
 		text.rows(rows)
 	}
 
+}
+
+func validRebind(result *prerequisites.RebindResult) bool {
+	return result != nil && result.Outcome == "rebound" && result.Bindings >= 0 && result.Reservations >= 0
+}
+
+func writeRebind(out io.Writer, result *prerequisites.RebindResult) error {
+	var text display
+	text.headline("OK", "Controller record rebound to this host")
+	text.section("")
+	text.fields(
+		field{Label: "Bindings kept", Value: strconv.Itoa(result.Bindings)},
+		field{Label: "Reservations kept", Value: strconv.Itoa(result.Reservations)},
+	)
+	return text.writeTo(out)
 }

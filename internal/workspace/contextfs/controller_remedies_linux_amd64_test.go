@@ -55,7 +55,7 @@ func TestControllerRefusalsNameTheirOwnRemedies(t *testing.T) {
 		name, machine, remedy string
 		host                  controller.InstalledHostIdentity
 	}{
-		{"another host", "controller", "restore the host this controller state belongs to; Bootwright never rebinds it", other},
+		{"another host", "controller", "run on the host this controller state belongs to, or restore that host's machine-id, DMI product UUID and root filesystem UUID on this one; if this host keeps the same state store under the changed values, rebind its record with bootwright controller rebind; otherwise bootwright context delete --name example --purge --allow-orphans, which abandons every object the context realized", other},
 		{"another Machine", "replacement", "restore the bound controller Machine input, or create a context on this host", host},
 	} {
 		err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error { return tx.Bind(ctx, test.machine, test.host) })

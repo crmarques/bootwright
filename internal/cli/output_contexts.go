@@ -99,6 +99,23 @@ func writeContextList(out io.Writer, result *contexts.ListResult) error {
 		rows = append(rows, []string{summary.Name, string(summary.Mode), contextCurrent(summary.Current), contextInput(summary.Configured)})
 	}
 	text.table([]string{"NAME", "MODE", "CURRENT", "INPUT"}, rows)
+	unfinished := [][]string{}
+	for _, summary := range summaries {
+		if summary.OperationsUnreadable {
+			unfinished = append(unfinished, []string{summary.Name, "unknown", "unreadable", "unknown", "unknown"})
+		}
+		if operation := summary.Unfinished; operation != nil {
+			build := operation.Build
+			if build == "" {
+				build = "unrecorded"
+			}
+			unfinished = append(unfinished, []string{summary.Name, operation.Verb, operation.State, build, operation.Operation})
+		}
+	}
+	if len(unfinished) != 0 {
+		text.section("Unfinished operations")
+		text.table([]string{"CONTEXT", "VERB", "STATE", "BUILD", "OPERATION"}, unfinished)
+	}
 	return text.writeTo(out)
 }
 

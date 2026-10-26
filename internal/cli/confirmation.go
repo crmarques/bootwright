@@ -99,6 +99,9 @@ func confirmationOf(action, name string) confirmation {
 	case "setup":
 		return confirmation{code: "controller.setup", label: "setup", review: "the plan",
 			prompt: "Confirm controller setup on " + shown + "? [y/N] "}
+	case "controller rebind":
+		return confirmation{code: "controller.identity", label: "rebind", review: "both identities, affirm --recorded-host-retired and name this host's --machine-id, --product-uuid and --root-uuid",
+			prompt: "Confirm the recorded host no longer runs this store, and rebind the controller record from " + shown + "? [y/N] "}
 	case "media replace", "media delete":
 		verb := strings.TrimPrefix(action, "media ")
 		return confirmation{code: "media.store", label: "media", review: "it",

@@ -149,11 +149,8 @@ record](contexts/controller-record.md#bounds)). An apply whose
 reservations would pass that bound refuses before registration with
 `controller.conflict`, naming the bound and the count it needs, and its remedy
 is `bootwright destroy --context <name>` or `bootwright context delete
---name <name> --purge` of a context this host no longer needs.
-
-Not yet met: the bound is a stored-record check that fails the store, not a
-named refusal before registration; tracked as
-[B832](milestones/backlog.md#b832).
+--name <name> --purge` of a context this host no longer needs
+(`TestReservationsPastTheRecordBoundRefuseBeforePublication`).
 
 Every key is exclusive except the classes marked shared. Each key class has
 one conflict relation, stated in the table above, which Workspace applies when

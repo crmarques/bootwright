@@ -13,7 +13,7 @@ import (
 )
 
 func (t *transaction) Reserve(ctx context.Context, name, environment string, config []byte) (contexts.Record, error) {
-	if err := t.available(ctx); err != nil {
+	if err := t.writable(ctx); err != nil {
 		return contexts.Record{}, err
 	}
 	if !contextName(name) || environment != "" && (!canonicalPath(environment) || beneath(environment, t.root.path)) || len(config) == 0 || len(config) > maxRecord {
@@ -212,7 +212,7 @@ func (t *transaction) Configuration(ctx context.Context, name string) ([]byte, e
 }
 
 func (t *transaction) InitializeSecrets(ctx context.Context, id string, callback func(secretstore.Area) error) error {
-	if err := t.available(ctx); err != nil {
+	if err := t.writable(ctx); err != nil {
 		return err
 	}
 	if callback == nil {

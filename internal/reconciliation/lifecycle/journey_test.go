@@ -64,6 +64,9 @@ type memoryArea struct {
 	// records hold past it, counting a replaced record's current bytes as the
 	// real area does until its replacement lands.
 	bound int
+	// entries, when set, refuses a record or log write unless one entry is
+	// free beneath it, as the real area's entry bound does.
+	entries int
 }
 
 // held is the bytes the area's records hold.
@@ -84,6 +87,9 @@ func (a *memoryArea) stored() int {
 func (a *memoryArea) fits(data []byte) error {
 	if a.bound > 0 && a.stored()+len(data) > a.bound {
 		return errors.New("the operation area has reached its bytes")
+	}
+	if a.entries > 0 && areaEntries(a, "")+1 > a.entries {
+		return errors.New("the operation area has reached its entries")
 	}
 	return nil
 }

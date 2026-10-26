@@ -51,6 +51,11 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	if err != nil {
 		return "", err
 	}
+	release, err := admitAttempt(ctx, tx, store, operation, plan, false)
+	if err != nil {
+		return "", err
+	}
+	defer release()
 	number, err := store.StartAttempt(ctx, operation.ID, block.ID, s.ranUnder(block))
 	if err != nil {
 		return "", err
@@ -106,6 +111,41 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	return state, runErr
 }
 
+func admitAttempt(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, removal bool) (func(), error) {
+	release, err := store.AdmitAttempt(ctx, operation, plan, removal)
+	reported := diagnostics.Of(err)
+	if err == nil || !operationstore.IntoTheReserve(err) || len(reported) != 1 {
+		return release, err
+	}
+	if operation.Verb == reconciliation.Apply && !removal {
+		return nil, onlyExit{failure(reported[0].Code, reported[0].Message,
+			"remove what the context owns with bootwright destroy --context "+tx.Identity().Name+", which is this apply's only way on")}
+	}
+	return nil, failure(reported[0].Code, reported[0].Message, deletionExit(tx))
+}
+
+type onlyExit struct{ error }
+
+func (e onlyExit) Unwrap() error { return e.error }
+
+func (s Service) startResolution(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, attempt int, removal bool) (int, string, func(), error) {
+	release, err := admitAttempt(ctx, tx, store, operation, plan, removal)
+	if err != nil {
+		return 0, "", nil, err
+	}
+	number, err := store.StartResolution(ctx, operation.ID, block.ID, attempt, s.ranUnder(block))
+	if err != nil {
+		release()
+		return 0, "", nil, err
+	}
+	logPath, err := operationstore.AttemptLogPath(operation.ID, block.ID, attempt, number)
+	if err != nil {
+		release()
+		return 0, "", nil, err
+	}
+	return number, logPath, release, nil
+}
+
 // ranUnder is the build this executable runs a block under, with the block's frozen content digest.
 func (s Service) ranUnder(block reconciliation.Block) operationstore.Build {
 	return operationstore.Build{
@@ -150,14 +190,11 @@ func (s Service) resolveUnknown(ctx context.Context, tx Transaction, store Opera
 	if err != nil {
 		return "", err
 	}
-	number, err := store.StartResolution(ctx, operation.ID, block.ID, attemptNumber, s.ranUnder(block))
+	number, logPath, release, err := s.startResolution(ctx, tx, store, operation, plan, block, attemptNumber, removal)
 	if err != nil {
 		return "", err
 	}
-	logPath, err := operationstore.AttemptLogPath(operation.ID, block.ID, attemptNumber, number)
-	if err != nil {
-		return "", err
-	}
+	defer release()
 	recording := recordingContext(ctx)
 	log, err := boundary.open(ctx, logPath)
 	if err != nil {

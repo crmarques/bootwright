@@ -76,6 +76,7 @@ type Repository interface {
 	// transaction serves only the registry, that context's mutation state and
 	// host reservations, and the deletion of its record.
 	TransactDeletion(context.Context, string, func(Transaction) error) error
+	Inspect(context.Context, string, func(Transaction) error) error
 }
 
 type Transaction interface {
@@ -92,9 +93,10 @@ type Transaction interface {
 	// directory, freezes exactly the context's selected revision, so an
 	// update keeps that revision rather than publishing another.
 	Unchanged(context.Context, string, string, desiredstate.Sources) (bool, error)
-	// MutationState acquires and holds the context lease until transaction
-	// completion, then returns bounded Reconciliation-owned evidence bytes.
+	// MutationState holds the context lease until completion and returns its
+	// evidence; OperationIndex, the operation index read with it, or nil.
 	MutationState(context.Context, string) ([]byte, error)
+	OperationIndex(context.Context, string) ([]byte, error)
 	// HostReservations names the host resource keys the controller record
 	// reserves for one context. Delete releases them with the context.
 	HostReservations(context.Context, string) ([]string, error)
@@ -146,8 +148,13 @@ type ConfigurationReader interface {
 	ReadFile(context.Context, string, int) ([]byte, error)
 }
 
+type OperationReader interface {
+	Unfinished(context.Context, string) (*Unfinished, error)
+}
+
 type Options struct {
 	Selection             SelectionStore
+	Operations            OperationReader
 	ConfigurationReader   ConfigurationReader
 	InitializeSecrets     func(context.Context, Record, secretstore.Area) error
 	ValidateConfiguration func(context.Context, Configuration) error

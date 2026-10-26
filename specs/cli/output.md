@@ -263,11 +263,17 @@ not completed also carries `unfinished`, with the operation's `id`, `verb` and
 `state` and `build`, the build that registered it as `<version> (<commit>)`, or
 `devel (<commit>)` for one stamped with no version; `build` is omitted when the
 record names no executable. The member is omitted when the context holds no such
-operation. The listing says nothing of whether another build can continue the
-operation, which only that build's `plan` reports in its `Build` field.
-
-Not yet met: `context list` reports no unfinished operation or registering
-build; tracked as [B832](../milestones/backlog.md#b832).
+operation. An entry whose current operation could not be read, because its
+directory is lost, its evidence is unreadable or its lock is busy, carries
+`operationsUnreadable: true` and no `unfinished`; the member is omitted
+otherwise, and such a read never fails the listing. The listing says nothing
+of whether another build can continue the operation, which only that build's
+`plan` reports in its `Build` field. Human output adds an "Unfinished
+operations" table after the contexts, naming each such context, verb, state,
+build (`unrecorded` when the record names none) and operation, and each
+unreadable context with state `unreadable` and `unknown` elsewhere
+(`TestCommandOutputMatchesItsGoldens`, `cli-context-list-unfinished`,
+`TestContextListMarksAnUnreadableOperationAndListsTheRest`).
 
 A step is one frozen block as a preview or result presents it, numbered by its
 place in plan order. In a `plan`, `apply` or `destroy` result, `steps` lists the

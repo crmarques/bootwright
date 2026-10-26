@@ -752,6 +752,29 @@ func (s *Store) Transact(ctx context.Context, create bool, inputs []string, call
 	return s.transact(ctx, create, inputs, "", func(tx *transaction) error { return callback(tx) })
 }
 
+// Inspect serves the reads of Transact, or of TransactDeletion when scope
+// names a context, under the shared root lock and shared context leases. It
+// collects, repairs and publishes nothing, and every write of its
+// transaction refuses, so a command presents its plan from it and prompts
+// with no lock held.
+func (s *Store) Inspect(ctx context.Context, scope string, callback func(contexts.Transaction) error) error {
+	if scope != "" && !contextName(scope) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return state("context name is invalid")
+	}
+	if callback == nil {
+		return state("context inspection callback is missing")
+	}
+	return s.transactHeld(ctx, false, true, nil, scope, func(tx *transaction) error {
+		if scope != "" {
+			return callback(&deletionTransaction{tx: tx, name: scope})
+		}
+		return callback(tx)
+	})
+}
+
 // TransactDeletion is the registry transaction of one context's deletion. It
 // takes the exclusive root lock and verifies and collects exactly as Transact
 // does, except that it leaves the named context's own mapping to that
@@ -775,6 +798,13 @@ func (s *Store) TransactDeletion(ctx context.Context, name string, callback func
 // transact holds the exclusive root lock across one registry transaction.
 // scope names the one context a deletion transaction admits unverified.
 func (s *Store) transact(ctx context.Context, create bool, inputs []string, scope string, callback func(*transaction) error) error {
+	return s.transactHeld(ctx, create, false, inputs, scope, callback)
+}
+
+// transactHeld holds the root lock across one registry transaction: the
+// exclusive one, or the shared one of a transaction that only reads, which
+// collects nothing.
+func (s *Store) transactHeld(ctx context.Context, create, shared bool, inputs []string, scope string, callback func(*transaction) error) error {
 	root, err := s.openRoot(ctx, create, inputs)
 	if !create && errors.Is(err, syscall.ENOENT) {
 		return emptyStore()
@@ -783,7 +813,11 @@ func (s *Store) transact(ctx context.Context, create bool, inputs []string, scop
 		return safeError(err)
 	}
 	defer root.file.Close()
-	if err := lock(root); err != nil {
+	hold := lock
+	if shared {
+		hold = lockShared
+	}
+	if err := hold(root); err != nil {
 		return safeError(err)
 	}
 	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)
@@ -812,17 +846,19 @@ func (s *Store) transact(ctx context.Context, create bool, inputs []string, scop
 	if err := verifyMappingsExcept(ctx, root, registry, scope); err != nil {
 		return safeError(err)
 	}
-	if err := s.collectControllerStages(ctx, root, registry); err != nil {
-		return safeError(err)
-	}
-	if err := s.collectRegistryStages(ctx, root); err != nil {
-		return safeError(err)
+	if !shared {
+		if err := s.collectControllerStages(ctx, root, registry); err != nil {
+			return safeError(err)
+		}
+		if err := s.collectRegistryStages(ctx, root); err != nil {
+			return safeError(err)
+		}
 	}
 	expected, err := registryExpectation(ctx, root, registry)
 	if err != nil {
 		return safeError(err)
 	}
-	tx := &transaction{store: s, root: root, registry: registry, leases: make(map[string]*directory), evidence: make(map[string][]byte)}
+	tx := &transaction{store: s, root: root, registry: registry, leases: make(map[string]*directory), evidence: make(map[string][]byte), shared: shared}
 	tx.expected = expected
 	defer tx.close()
 	if callback == nil {
@@ -841,12 +877,16 @@ type transaction struct {
 	registry           contexts.Registry
 	leases             map[string]*directory
 	evidence           map[string][]byte
+	indexes            map[string][]byte
 	lost               map[string]bool
 	committed          bool
 	closed             bool
 	expected           *expectedRegistry
 	controllerInputs   map[string]string
 	controllerEvidence *controllerStored
+	// shared marks a transaction under the shared root lock, which only
+	// reads: its leases are shared and every write refuses.
+	shared bool
 }
 
 func (t *transaction) close() {
@@ -871,6 +911,17 @@ func (t *transaction) available(ctx context.Context) error {
 }
 
 func (t *transaction) Registry() contexts.Registry { return cloneRegistry(t.registry) }
+
+// writable is available for a write, which a shared transaction refuses.
+func (t *transaction) writable(ctx context.Context) error {
+	if err := t.available(ctx); err != nil {
+		return err
+	}
+	if t.shared {
+		return state("a context inspection writes nothing")
+	}
+	return nil
+}
 
 func (t *transaction) record(name string) (contexts.Record, error) {
 	for _, record := range t.registry.Contexts {
@@ -960,7 +1011,7 @@ func (t *transaction) MutationState(ctx context.Context, name string) ([]byte, e
 	}
 	if prior, ok := t.evidence[name]; ok {
 		if dir := t.leases[name]; dir != nil {
-			if err := t.store.retiredOperations(ctx, dir, name); err != nil {
+			if err := t.readIndex(ctx, dir, name); err != nil {
 				return nil, err
 			}
 		}
@@ -979,10 +1030,32 @@ func (t *transaction) MutationState(ctx context.Context, name string) ([]byte, e
 		return nil, err
 	}
 	t.evidence[name] = slices.Clone(data)
-	if err := t.store.retiredOperations(ctx, dir, name); err != nil {
+	if err := t.readIndex(ctx, dir, name); err != nil {
 		return nil, err
 	}
 	return data, nil
+}
+
+func (t *transaction) readIndex(ctx context.Context, dir *directory, name string) error {
+	index, err := t.store.retiredOperations(ctx, dir, name)
+	if err == nil {
+		if t.indexes == nil {
+			t.indexes = map[string][]byte{}
+		}
+		t.indexes[name] = index
+	}
+	return err
+}
+
+func (t *transaction) OperationIndex(ctx context.Context, name string) ([]byte, error) {
+	if err := t.available(ctx); err != nil {
+		return nil, err
+	}
+	index, read := t.indexes[name]
+	if !read {
+		return nil, state("the operation index is read only with the context's mutation evidence")
+	}
+	return slices.Clone(index), nil
 }
 
 func (t *transaction) leaseContext(ctx context.Context, name string) (*directory, error) {
@@ -996,7 +1069,11 @@ func (t *transaction) leaseContext(ctx context.Context, name string) (*directory
 	if err != nil {
 		return nil, err
 	}
-	if err := lock(dir); err != nil {
+	hold := lock
+	if t.shared {
+		hold = lockShared
+	}
+	if err := hold(dir); err != nil {
 		dir.file.Close()
 		return nil, err
 	}
@@ -1018,7 +1095,7 @@ func (t *transaction) admitLease(ctx context.Context, dir *directory, name strin
 	if err != nil {
 		return err
 	}
-	if record.DirectoryInode != 0 {
+	if record.DirectoryInode != 0 && !t.shared {
 		if err := t.store.collectContextStages(ctx, dir, true); err != nil {
 			return err
 		}
@@ -1216,7 +1293,7 @@ func verifyPending(ctx context.Context, root *directory, name string, data []byt
 }
 
 func (t *transaction) Commit(ctx context.Context, registry contexts.Registry) error {
-	if err := t.available(ctx); err != nil {
+	if err := t.writable(ctx); err != nil {
 		return err
 	}
 	if err := validateRegistry(registry); err != nil {

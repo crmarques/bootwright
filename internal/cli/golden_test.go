@@ -876,6 +876,10 @@ func cliGoldens() []cliGolden {
 				{Name: "retired", Mode: contexts.Deleting, Configured: true}, lab, {Name: "edge", Mode: contexts.Initializing},
 			}}
 		}},
+		{golden: "cli-context-list-unfinished", args: "context list", record: unfinishedContexts},
+		{golden: "cli-controller-rebind", args: "controller rebind", record: rebound},
+		{golden: "cli-controller-rebind-json", args: "controller rebind --output json", record: rebound},
+		{golden: "cli-context-list-unfinished-json", args: "context list --output json", record: unfinishedContexts},
 		{golden: "cli-context-current", args: "context current", record: func(r *dispatchRecord) { r.result.current = &contexts.CurrentResult{Context: lab} }},
 		{golden: "cli-context-current-short", args: "context current --short", record: func(r *dispatchRecord) { r.result.current = &contexts.CurrentResult{Context: lab} }},
 		{
@@ -1326,4 +1330,22 @@ func containerPreflightReport(pending bool) *storagepreflight.Report {
 		summary = storagepreflight.Summary{Pending: 1}
 	}
 	return &storagepreflight.Report{Context: "synthetic", Target: "container-cluster", Checks: []storagepreflight.Check{{ID: "resolution.api", Target: "api.sno.example.test", Status: status, Reason: reason, Next: next}}, Summary: summary}
+}
+
+// unfinishedContexts lists one context whose apply has not completed, with
+// the build that registered it, beside one with none and one whose
+// unfinished removal names no build.
+func unfinishedContexts(r *dispatchRecord) {
+	r.result.list = &contexts.ListResult{Contexts: []contexts.Summary{
+		{Name: "lab", Mode: contexts.Ready, Current: true, Configured: true, Unfinished: &contexts.Unfinished{
+			Operation: "op-" + strings.Repeat("01", 16), Verb: "apply", State: "failed", Build: "0.4.0 (abcdef1)"}},
+		{Name: "edge", Mode: contexts.Ready, Configured: true},
+		{Name: "lost", Mode: contexts.Ready, Configured: true, OperationsUnreadable: true},
+		{Name: "old", Mode: contexts.Ready, Configured: true, Unfinished: &contexts.Unfinished{
+			Operation: "op-" + strings.Repeat("02", 16), Verb: "destroy", State: "unknown"}},
+	}}
+}
+
+func rebound(r *dispatchRecord) {
+	r.result.rebind = &prerequisites.RebindResult{Outcome: "rebound", Bindings: 2, Reservations: 5}
 }

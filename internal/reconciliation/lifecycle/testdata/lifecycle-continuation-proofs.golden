@@ -46,7 +46,7 @@
     "refusal": {
       "code": "controller.identity",
       "message": "this host is not the host the context is bound to",
-      "remediation": "restore the original host, or create a context on this one"
+      "remediation": "run on the host this controller state belongs to, or restore that host's machine-id, DMI product UUID and root filesystem UUID on this one; if this host keeps the same state store under the changed values, rebind its record with bootwright controller rebind; otherwise bootwright context delete --name lab --purge --allow-orphans, which abandons every object the context realized"
     },
     "presented": 0,
     "asked": 0

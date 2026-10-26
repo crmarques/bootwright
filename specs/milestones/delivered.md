@@ -61,7 +61,8 @@ deletion, concurrent replacement, subprocess exits on both sides of the
 registry commit).
 
 **Constraints left behind:** local filesystems other than tmpfs and Btrfs,
-power loss and remote filesystems are not qualified.
+power loss and remote filesystems are not qualified. (Historical: since X164 a
+production store root on tmpfs or overlayfs refuses.)
 
 ### M1c — context secret management
 
@@ -8272,7 +8273,7 @@ skills and to park the rest of its roadmap.
 The specs, glossary and skills now state what the code does where they had
 drifted, and state each recommended rule that needs no owner decision; a rule
 the code does not yet meet carries a Not yet met line naming its parked item,
-[B800](#x161--audit-lane-a-harness-and-guards) to [B836](backlog.md#b836). The
+[B800](#x161--audit-lane-a-harness-and-guards) to [B836](#x164--audit-lane-e-store-durability-and-controller-records). The
 [remediation lanes and owner questions](backlog.md#audit-remediation-2026-10-26)
 order that work; no owner decision was taken and no safety refusal narrowed.
 The glossary moved to its own page. The agent harness gained the effect
@@ -8461,6 +8462,45 @@ names the build in its own `build` member, or names it as this executable.
 
 **Guard tests:** the tests above and `TestCheckCommits*`, each proved by a
 seeded mismatch; the delivering commit records the gates.
+
+### X164 — Audit lane E: store durability and controller records
+
+**Items:** B806, B832 and B836 (2026-10-26 spec audit step P0-G and batch
+L10, and the controller relocation split from B103), lane E of the
+[audit remediation](backlog.md#lane-order-and-progress) under D182, with
+D184 for B836. **Kind:** safety. **Owners:** Workspace, Controller setup and
+State reconciliation. Delivered on 2026-10-26.
+
+A production store root on tmpfs or overlayfs refuses `context.state` before
+anything is published, and the setup dry run reports it. The runner's sweep
+counts only private directories it owns, so another account's matching names
+no longer stop a run ([B389](backlog.md#b389)'s move to a root-owned parent
+remains). An apply's attempts, retries and resolutions never cut into the
+removal's reserved entries, and a removal's own attempts, counted together,
+refuse when the area cannot hold them; the byte reserve and the rest of the
+accounting stay with [B572](backlog.md#b572).
+`context update` and `context delete` present their plan under shared locks,
+prompt with no lock held, and re-decide under the exclusive lock, refusing
+with no write when anything changed; an in-operation root transaction that
+cannot take the root lock keeps the no-wait rule.
+
+The host-mismatch refusal names its exits in order; the tool-sources refusal
+names the fresh store; reservations past 256 refuse `controller.conflict`
+before publication; `context list` reports each unfinished operation with its
+registering build, which the operator guide's upgrade step reads.
+`bootwright controller rebind` (D184) moves every context to a host whose
+identity changed, keeping bindings and reservations and refusing a different
+store whose directories are not the ones its registry attributed (a
+block-level clone is indistinguishable, so the operator affirms the recorded
+host no longer runs it) or a record changed since the prompt; the prompt shows the identity
+values to the root operator, and results and diagnostics never carry them. A
+changed identity that also changes the store filesystem's device number is
+not handled.
+
+**Guard tests:** `TestApplyRetriesNeverTakeTheRemovalReserve`,
+`TestARemovalTheAreaCannotHoldRefusesAtItsRegistration`, the filesystem,
+sweep, prompt-race, reservation-bound, context-list and rebind tests, each
+proved by a seeded mismatch; the delivering commit records the gates.
 
 ## M3 independent in-tree completion
 

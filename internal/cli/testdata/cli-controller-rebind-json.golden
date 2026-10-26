@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "controller rebind",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "outcome": "rebound",
+    "bindings": 2,
+    "reservations": 5
+  },
+  "diagnostics": [],
+  "logs": []
+}

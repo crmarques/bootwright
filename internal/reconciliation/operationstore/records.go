@@ -49,14 +49,11 @@ func FirstPassEntries(plan reconciliation.Plan) int {
 	return 7 + 6*len(plan.Blocks)
 }
 
-// AdmissionEntries is what the area must hold free, beside what it holds, to
-// admit an operation of plan. An apply needs its own first pass, that of the
-// removal that takes it back, which carries at most the blocks the apply
-// froze, and ReservedEntries beside both. A removal needs its own first pass
-// and the one entry every later write needs free: the apply it takes back was
-// admitted with room for that pass, and the later attempts of both share what
-// that apply left of the reserve. The removal of an admitted apply therefore
-// registers unless that apply's own later attempts used the reserve up.
+// AdmissionEntries is what the area must hold free to admit an operation of
+// plan: an apply needs its own first pass, its removal's (at most the blocks
+// it froze) and ReservedEntries; a removal needs its first pass and one entry
+// for later writes, since AdmitAttempt keeps the apply's later attempts out of
+// what that removal needs, so it registers.
 func AdmissionEntries(plan reconciliation.Plan) int {
 	if plan.Verb == reconciliation.Destroy {
 		return FirstPassEntries(plan) + 1

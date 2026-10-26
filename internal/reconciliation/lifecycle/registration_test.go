@@ -1113,11 +1113,75 @@ func TestTheRemovalOfAnApplyLargerThanTheReserveRegistersAtTheLine(t *testing.T)
 	}
 }
 
-// A removal the operation area cannot hold refuses at its registration, at
-// the retained-operation bound, and leaves the apply it would take back as it
+// An apply whose block keeps failing retries it on every repetition, and each
+// retry adds its records to the operation area. Its attempts never take the
+// area into the reserve of the removal that takes it back: once a retry's
+// writes would, the apply refuses lifecycle.state before its effect, naming
+// that removal, and the removal then registers and completes under the
+// area's entry bound.
+func TestApplyRetriesNeverTakeTheRemovalReserve(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, "alpha")
+	area := h.workspace.area
+	area.entries = operationstore.MaxEntries
+	h.capability.errorFor = map[string]error{"alpha": errors.New("the apply failed")}
+	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
+		t.Fatal("an apply whose block failed reported no failure")
+	}
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{definition("alpha")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	removal, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reserve := operationstore.AdmissionEntries(removal)
+	for index := range operationstore.MaxEntries - areaEntries(area, "") - reserve - 4*operationstore.AttemptEntries {
+		area.files[fmt.Sprintf("filled/record-%d", index)] = []byte("{}\n")
+	}
+	for retries := 0; ; retries++ {
+		if retries > 4*operationstore.AttemptEntries {
+			t.Fatalf("%d retries ran and none refused", retries)
+		}
+		applied := len(h.capability.applies)
+		_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+		refused := diagnostics.Of(err)
+		if len(refused) == 1 && strings.Contains(refused[0].Message, "for the removal that takes this apply back") {
+			if refused[0].Code != "lifecycle.state" || !strings.Contains(refused[0].Remediation, "bootwright destroy --context "+testContextName) {
+				t.Fatalf("the retry refused with %+v, want lifecycle.state naming the destroy", refused[0])
+			}
+			if len(h.capability.applies) != applied {
+				t.Fatalf("the refused retry ran its effect: %v", h.capability.applies)
+			}
+			if retries == 0 {
+				t.Fatal("the first retry refused, so none proved the area held them")
+			}
+			break
+		}
+		if len(h.capability.applies) != applied+1 {
+			t.Fatalf("retry %d ran %v (%v: %+v)", retries, h.capability.applies[applied:], err, refused)
+		}
+	}
+	if free := operationstore.MaxEntries - areaEntries(area, ""); free < reserve {
+		t.Fatalf("the retries left %d entries free, beneath the removal's reserve %d", free, reserve)
+	}
+	h.capability.errorFor = nil
+	result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if err != nil || result.Receipt.State != "done" {
+		t.Fatalf("the removal after the retries = %+v (%v: %+v)", result, err, diagnostics.Of(err))
+	}
+	if record, _ := durableOperation(t, h); record.Verb != reconciliation.Destroy || record.State != reconciliation.OperationDone || !slices.Equal(h.capability.destroys, []string{"alpha"}) {
+		t.Fatalf("the removal after the retries is %s %s after removing %v", record.Verb, record.State, h.capability.destroys)
+	}
+}
+
+// A removal the operation area cannot hold, as one filled by something other
+// than the apply's own attempts, refuses at its registration, at the
+// retained-operation bound, and leaves the apply it would take back as it
 // was: its evidence, its binding and its effects, with no directory added.
 // With one entry more free, the same destroy registers and completes.
-func TestADestroyTheAreaCannotHoldRefusesAtItsRegistration(t *testing.T) {
+func TestARemovalTheAreaCannotHoldRefusesAtItsRegistration(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
 	if err := killInvoke(ctx, h.service, reconciliation.Apply); err != nil {

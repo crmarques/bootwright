@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -273,27 +274,28 @@ func (s *Store) readyEvidence(ctx context.Context, dir *directory, name string) 
 	if err != nil {
 		return nil, err
 	}
-	return evidence, s.retiredOperations(ctx, dir, name)
+	_, err = s.retiredOperations(ctx, dir, name)
+	return evidence, err
 }
 
-func (s *Store) retiredOperations(ctx context.Context, dir *directory, name string) error {
+func (s *Store) retiredOperations(ctx context.Context, dir *directory, name string) ([]byte, error) {
 	active := true
 	defer func() { active = false }()
 	area := &operationArea{store: s, subtree: "operations", context: dir, name: name, active: func() bool { return active }, readOnly: true}
 	data, found, err := area.Read(ctx, "index.json", operationstore.MaxIndexBytes)
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return err
+		return nil, err
 	}
 	if err != nil {
-		return errors.Join(contexts.ErrUnreadableEvidence, err)
+		return nil, errors.Join(contexts.ErrUnreadableEvidence, err)
 	}
 	if !found {
-		return nil
+		return nil, nil
 	}
 	if err := operationstore.CheckIndex(data, name); err != nil {
-		return errors.Join(contexts.ErrUnreadableEvidence, err)
+		return nil, errors.Join(contexts.ErrUnreadableEvidence, err)
 	}
-	return nil
+	return data, nil
 }
 
 // MutateLifecycle snapshots under the root lock, then holds only its context lease during effects.
@@ -460,7 +462,7 @@ func (t *lifecycleTransaction) Bind(ctx context.Context, machine string, host co
 	}
 	if !t.stored.value.Host.Equal(host) {
 		return controllerFailure("controller.identity", "this host is not the host this controller state belongs to",
-			"restore the host this controller state belongs to; Bootwright never rebinds it")
+			controller.HostMismatchRemedy(t.identity.Name))
 	}
 	digest, err := host.PrivateDigest()
 	if err != nil {
@@ -516,6 +518,11 @@ func (t *lifecycleTransaction) publishReservations(ctx context.Context, next []p
 			found = append(found, prerequisites.ConflictDiagnostic(conflict))
 		}
 		return &diagnostics.Failure{Diagnostics: found}
+	}
+	if len(retained)+len(next) > maxControllerReservations {
+		return controllerFailure("controller.conflict", fmt.Sprintf("the controller record holds at most %d host reservations: this apply needs %d and other contexts hold %d",
+			maxControllerReservations, len(next), len(retained)),
+			"take back a context this host no longer needs with bootwright destroy --context <name>, or delete it with bootwright context delete --name <name> --purge, then repeat the apply")
 	}
 	combined := append(retained, next...)
 	slices.SortFunc(combined, func(x, y prerequisites.HostReservation) int {

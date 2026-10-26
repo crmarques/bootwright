@@ -42,6 +42,7 @@
       "Bash(*bootwright *cluster kubeconfig*)",
       "Bash(*bootwright *cluster keyring*)",
       "Bash(*bootwright *secret show*)",
+      "Bash(*bootwright *controller rebind*)",
       "Bash(*bootwright *cluster info*--secrets*)",
       "Bash(*bootwright *render*--sensitive*)",
       "Bash(sudo *)",

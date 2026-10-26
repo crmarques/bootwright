@@ -98,13 +98,41 @@ A host whose [identity](controller.md#host-identity-and-shared-prerequisites)
 changed, because its machine-id, DMI product UUID or root filesystem UUID
 changed, strands every context bound to it. The refusal names its exits in
 order: run on the host the binding names, or restore those identity values on
-this one; otherwise `bootwright context delete --name <name> --purge
---allow-orphans`, naming what it abandons. Destroying each context from the
-original host is the only exit that abandons nothing, so it precedes a planned
-change of any of those values.
+this one; if this host keeps the same state store under the changed values,
+`bootwright controller rebind`; otherwise `bootwright context delete --name
+<name> --purge --allow-orphans`, naming what it abandons. Destroying each
+context from the original host is the only exit that needs no rebind, so it
+precedes a planned change of any of those values
+(`TestTheHostMismatchRemedyNamesItsExitsInOrder`).
 
-Not yet met: the refusal names only the host the state belongs to; tracked as
-[B832](milestones/backlog.md#b832).
+`bootwright controller rebind` (D184) is that explicit rebind. It reads the
+recorded identity under the shared root lock and refuses when it equals this
+host's, then asks with no lock held, naming the recorded and the new
+machine-id, DMI product UUID and root filesystem UUID and asking the operator
+to affirm that the recorded host no longer runs this store; with `--yes` it
+takes `--recorded-host-retired`, that affirmation, and `--machine-id`,
+`--product-uuid` and `--root-uuid`, which must name this host's values and
+which a repeated command names only by placeholder. It then takes the
+exclusive root lock, verifies the store as every registry transaction does,
+so a store whose controller or context directories are not the ones its
+registry attributed, as a file-by-file copy's are not, refuses
+`context.state`, and refuses when the record no longer holds the identity it
+confirmed. That check cannot tell a byte-for-byte clone (a disk image, a
+filesystem snapshot or a cloned VM) from the store, because a clone keeps the
+inodes and device the registry attributed; only the operator's affirmation
+rules out a recorded host still running its copy. It rewrites the record once through the controller
+record's atomic publication: the host identity becomes this host's and each
+binding's host digest follows it, while every binding's context, Machine and
+tool closure and every reservation stay. A rebind stopped before its rename
+changes nothing and its repetition rebinds; one whose publication is uncertain
+names its repetition, which finds the record already naming this host and
+changes nothing (`TestARebindKeepsEveryBindingAndReservation`,
+`TestARebindRefusesAnotherStoreAndAChangedRecord`,
+`TestAnInterruptedRebindIsRetried`,
+`TestARebindAsksNamingBothIdentitiesOrTakesThemNamed`). This is the one place
+the identity values reach output: the prompt shows them to the root operator,
+and no result or diagnostic carries them, not even a refused run's remedy
+(`TestARefusedRebindNeverRepeatsTheIdentityItNames`).
 
 Workspace keeps that shared-host state, the Controller descriptor and record,
 the tool areas and the setup subtree with its receipt and runtimes, in the
@@ -405,7 +433,16 @@ exclusive root lock, then retains the context's exclusive lease throughout its
 effects. Readers and other contexts may proceed. Context identity, inputs and
 mutation evidence remain scoped to that lease; short root transactions refresh
 the registry and shared controller state before reservation, binding, secret
-or tool publication. Another context's bindings and reservations are preserved;
+or tool publication. Those short root transactions wait for no lock either:
+one that cannot take the root lock because another command holds it refuses
+`lifecycle.lease`. The block it served then records `failed` when none of its
+effect ran, and `unknown` once some may have, such as the custody publication
+of what a proved effect produced, which keeps that material as
+[produced material custody](state-reconciliation.md#produced-material-custody)
+and D124 keep it: the next invocation of either verb observes the block again
+and captures what that proves before any inverse runs. A command that prompts
+holds no root lock while it waits for its answer, so no prompt refuses them.
+Another context's bindings and reservations are preserved;
 changes to this operation's own binding, reservations, host identity or retained
 dependency sources refuse. Bundle reads take short shared root locks and retain
 shared directory leases; publication holds an exclusive bundle lease until
@@ -534,15 +571,15 @@ production root `/var/lib/bootwright` must survive a reboot, because it holds
 the only ownership evidence of what its contexts realized: it is qualified on
 ext4, XFS and Btrfs. A production root on tmpfs or overlayfs, whose upper
 layer the kernel does not name, refuses `context.state` before any
-publication, naming the filesystem type and the remedy of placing
+publication, and a missing root beneath a directory on one refuses before it
+is created, so no empty root remains, naming the filesystem type and the remedy of placing
 `/var/lib/bootwright` on a persistent local filesystem, and the
 [setup dry run](controller.md#the-setup-flow)'s `state-root` check reports the
-same refusal. tmpfs and overlayfs serve only isolated test roots injected at
-composition. Linux must provide `openat2`. Unsupported containment or
-durability primitives fail closed.
-
-Not yet met: the store admits a production root on tmpfs or overlayfs; tracked
-as [B806](milestones/backlog.md#b806).
+same refusal
+(`TestAProductionRootOnATransientFilesystemRefusesBeforeAnyPublication`).
+tmpfs and overlayfs serve only isolated test roots injected at composition
+(`TestAnInjectedTestRootOnTmpfsIsUsed`). Linux must provide `openat2`.
+Unsupported containment or durability primitives fail closed.
 
 Bounds apply before allocation/traversal: registry 8 MiB; manifest 4 MiB and
 32 MiB aggregate referenced manifests; paths 4096 bytes; mutation records
@@ -613,16 +650,25 @@ hold the index and the later attempts and resolutions of the current apply and
 of its removal, the only operations that write again. The removal's first
 pass, its one entry more, the bytes its registration writes and the opening
 record that restores a latched log fault are its reserve, which only that
-removal writes. An attempt, retry or resolution of the apply whose writes
-would cut into the reserve refuses `lifecycle.state` before its effect, naming
-`bootwright destroy --context <name>`, which is then that apply's only way on;
-a retry or resolution of the removal that would pass the bound refuses before
-its effect and leaves its block as it was.
+removal writes. Before an attempt, retry or resolution of the apply writes
+anything, it counts six entries, what an attempt creates at most, and the
+bytes of its record as started and as completed, for itself and for every
+other one the same invocation runs beside it. One whose writes would cut into
+the reserve refuses `lifecycle.state` before its effect, naming
+`bootwright destroy --context <name>`, which is then that apply's only way on,
+and the apply's result names no continuation beside it; the removal then
+registers and completes (`TestApplyRetriesNeverTakeTheRemovalReserve`). An
+attempt, retry or resolution of the removal, or the removal's observation of
+the apply it takes back, counts the same six entries and bytes for itself and
+for every one in flight beside it, and one entry more; one that would pass the
+bound refuses before its effect and leaves its block as it was, naming the
+deletion the guard admits (`TestAdmitAttemptKeepsTheRemovalReserve`).
 
-Not yet met: the apply's later attempts may use that reserve, and its removal
-then refuses at its registration, leaving the apply's evidence, binding and
-effects as they were (`TestADestroyTheAreaCannotHoldRefusesAtItsRegistration`);
-tracked as [B806](milestones/backlog.md#b806).
+Not yet met: the log records an apply's attempt writes after its start are
+not counted against the removal's byte reserve, so they can still take it, and
+the reserve holds no room for the resolutions a destroy makes, before it
+registers, of apply blocks an interrupted attempt left `unknown`; tracked as
+[B572](milestones/backlog.md#b572).
 
 The area's bytes are admitted the same way, as its byte bound counts them. A
 fresh apply needs 16 MiB of them free, which hold its records and logs and
@@ -670,8 +716,11 @@ repeated apply fits in what the destroy freed or refuses again. A fresh apply
 refused beside pristine evidence and no such claim names
 `bootwright context delete --name <name> --purge` and then
 `bootwright context init --name <name>` from the context's original
-configuration and input. A removal refused at its registration has no destroy
-left to name, so it names the deletion the guard admits, with
+configuration and input. Since an apply's own attempts keep its removal's
+entries, a removal refuses at its registration only over an area something
+else filled, or that the log records or resolutions above took
+(`TestARemovalTheAreaCannotHoldRefusesAtItsRegistration`). It has
+no destroy left to name, so it names the deletion the guard admits, with
 `--allow-orphans`, which abandons what the context may still own, and then the
 same init. Over evidence the guard cannot read, either refusal names the
 deletion with `--allow-orphans`, which cannot list what the context may still
@@ -977,10 +1026,11 @@ root.
 finished, that operation's verb, its state and the build that registered it,
 as `<version> (<commit>)`, so an operator sees what to finish before
 installing another build. It never judges whether another build can continue
-the operation; only that build's plan preview does.
-
-Not yet met: `context list` reports no operation; tracked as
-[B832](milestones/backlog.md#b832).
+the operation; only that build's plan preview does. A context whose
+operation cannot be read is listed as unreadable and never fails the listing
+(`TestReadUnfinishedNamesTheRegisteringBuild`,
+`TestContextListCarriesEachUnfinishedOperation`,
+`TestContextListMarksAnUnreadableOperationAndListsTheRest`).
 
 Fresh init and use need no confirmation. Init refuses an already-ready name
 and directs the user to update. Input update and deletion require
@@ -989,14 +1039,14 @@ equivalent configuration-only update and an input update that keeps the
 selected revision do not. The prompt follows admission and safeguards, which
 a shared hold reads, and runs with no lock held; a refused confirmation
 publishes nothing. A confirmed update or deletion then takes the exclusive
-root lock and the lease and proves again everything its plan presented, and
-refuses with no write, naming the repetition of the command, when any of it
-changed meanwhile, as `media delete` does. With `--yes` the command takes the
-exclusive lock and the lease alone.
-
-Not yet met: `context update` and `context delete` hold the exclusive root
-lock and the lease across their prompt; tracked as
-[B806](milestones/backlog.md#b806).
+root lock and the lease and proves again everything its plan presented, a
+deletion also the context's mutation evidence and the operation index naming
+its current operation, so an apply or destroy that ran between the prompt and
+the lock refuses it; it refuses with no write, naming the repetition of the
+command, when any of it changed meanwhile, as `media delete` does
+(`TestAStoreChangedWhileAPromptWasAnsweredRefusesWithNoWrite`,
+`TestAnInspectionHoldsTheSharedLockAndWritesNothing`). With `--yes` the
+command takes the exclusive lock and the lease alone.
 
 An update's prompt follows its presented plan: the name, the admitted input
 directory, the files it copies, the files seen and the objects decoded on

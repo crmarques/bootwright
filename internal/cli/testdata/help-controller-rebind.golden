@@ -1,0 +1,37 @@
+  bootwright / controller rebind
+      Rewrite the host identity the controller record holds to this host's, once, when this
+      host keeps the same state store under a changed machine-id, DMI product UUID or root
+      filesystem UUID. It refuses a store whose directories are not the ones its registry
+      attributed and an identity that did not change, and keeps every binding and reservation.
+      A byte-for-byte clone, such as a disk image, snapshot or cloned VM, keeps those
+      directories, so it cannot tell a clone from the store: the prompt names the recorded and
+      the new identity and asks you to affirm that the recorded host no longer runs this store;
+      --yes rebinds only with --recorded-host-retired and this host's three values named, which
+      no output repeats.
+
+  Usage
+    bootwright controller rebind [flags]
+
+  Command flags
+      --machine-id             Name this host's machine-id; required with --yes
+      --product-uuid           Name this host's DMI product UUID; required with --yes
+      --recorded-host-retired  Affirm the recorded host no longer runs this store; required
+                               with --yes
+      --root-uuid              Name this host's root filesystem UUID; required with --yes
+      --yes                    Confirm the command's ordinary confirmation
+
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
+
+  More detail
+    Use --help --detail full to include SSH overrides.
+
+  Examples
+    bootwright controller rebind

@@ -185,11 +185,11 @@ func (r Runner) sweepLocked(contextName string) error {
 		return failure("lifecycle.state", "private adapter invocation storage is unavailable", "")
 	}
 	defer dirs.close()
-	jobs, err := matching(dirs.jobs, jobSuffix)
+	jobs, err := dirs.matching(dirs.jobs, jobSuffix)
 	if err != nil {
 		return r.unswept()
 	}
-	scratch, err := matching(dirs.scratch, scratchJob)
+	scratch, err := dirs.matching(dirs.scratch, scratchJob)
 	if err != nil {
 		return r.unswept()
 	}
@@ -673,9 +673,9 @@ func entries(dir *os.Root, remaining *int) ([]string, error) {
 }
 
 // matching lists the entries of one parent that carry the runner's exact
-// names, keyed by the job they belong to. Other entries are only read past, so
-// a busy /var/tmp costs nothing but the reading.
-func matching(parent *os.Root, match func(string) (string, bool)) (map[string][]string, error) {
+// names and are private directories of the owner, keyed by the job they
+// belong to; other entries, another account's too, are only read past.
+func (d runDirectories) matching(parent *os.Root, match func(string) (string, bool)) (map[string][]string, error) {
 	listing, err := parent.Open(".")
 	if err != nil {
 		return nil, err
@@ -685,12 +685,24 @@ func matching(parent *os.Root, match func(string) (string, bool)) (map[string][]
 	for {
 		names, err := listing.Readdirnames(1024)
 		for _, name := range names {
-			if suffix, ok := match(name); ok {
-				if count++; count > maxRunDirectories {
-					return nil, errors.New("run directory bound")
-				}
-				found[suffix] = append(found[suffix], name)
+			suffix, ok := match(name)
+			if !ok {
+				continue
 			}
+			listed, err := parent.Lstat(name)
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			if _, private := d.private(listed, nil); !private || !listed.IsDir() {
+				continue
+			}
+			if count++; count > maxRunDirectories {
+				return nil, errors.New("run directory bound")
+			}
+			found[suffix] = append(found[suffix], name)
 		}
 		if errors.Is(err, io.EOF) {
 			return found, nil

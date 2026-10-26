@@ -125,6 +125,7 @@ func commandCatalog() []commandSpec {
 	catalog = append(catalog, machineCommands()...)
 	catalog = append(catalog, machineTrustCommand())
 	catalog = append(catalog, controllerSetupCommand())
+	catalog = append(catalog, controllerRebindCommand())
 	catalog = append(catalog, environmentClusterCommands()...)
 	catalog = append(catalog, storageAccessCommands()...)
 	catalog = append(catalog, containerAccessCommands()...)

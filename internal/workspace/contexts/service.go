@@ -2,8 +2,11 @@ package contexts
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -326,10 +329,16 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 	if err != nil {
 		return nil, err
 	}
+	var presented *updateDecision
+	if !request.SkipConfirmation && request.InputDirectory != "" {
+		if presented, err = s.confirmUpdate(ctx, request, admitted); err != nil {
+			return nil, absentWhenEmpty(err, request.Name)
+		}
+	}
 	var result *AdmissionResult
 	err = s.repository.Transact(ctx, false, slices.Clone(admitted.sources.Roots), func(tx Transaction) error {
 		var err error
-		result, err = s.updateUnder(ctx, tx, request, selected, admitted)
+		result, err = s.updateUnder(ctx, tx, request, selected, admitted, presented)
 		return err
 	})
 	if err != nil {
@@ -339,6 +348,66 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 		return nil, StateError("context update returned no result")
 	}
 	return result, nil
+}
+
+type updateDecision struct {
+	record    Record
+	unchanged bool
+	warnings  []diagnostics.Diagnostic
+	plan      UpdatePlan
+}
+
+func (s Service) confirmUpdate(ctx context.Context, request UpdateRequest, admitted admittedUpdate) (*updateDecision, error) {
+	var decided updateDecision
+	err := s.repository.Inspect(ctx, "", func(tx Transaction) error {
+		var err error
+		decided, err = s.decideUnder(ctx, tx, request, admitted)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	if decided.unchanged {
+		return &decided, nil
+	}
+	if _, err := s.confirmPresented(ctx, false, "update", decided.record.Name, func(presenter Presenter) error {
+		return presenter.PresentUpdate(ctx, decided.plan)
+	}); err != nil {
+		return nil, err
+	}
+	return &decided, nil
+}
+
+func (s Service) decideUnder(ctx context.Context, tx Transaction, request UpdateRequest, admitted admittedUpdate) (updateDecision, error) {
+	reg := tx.Registry()
+	record, err := readyRecord(reg, request.Name)
+	if err != nil {
+		return updateDecision{}, err
+	}
+	if request.ConfigurationFile != "" {
+		if err := sameConfiguration(ctx, tx, record.Name, admitted.config); err != nil {
+			return updateDecision{}, err
+		}
+	}
+	decided := updateDecision{record: record}
+	if request.InputDirectory == "" {
+		return decided, nil
+	}
+	if decided.unchanged, decided.warnings, err = s.decideUpdate(ctx, tx, reg, record, admitted); err != nil {
+		return updateDecision{}, err
+	}
+	if !decided.unchanged {
+		decided.plan = UpdatePlan{
+			Context: record.Name, InputDirectory: admitted.sources.Roots[0], FilesCopied: len(admitted.sources.Files) + len(admitted.sources.Markers),
+			Counts: admitted.report.Counts, Diagnostics: slices.Clone(decided.warnings),
+		}
+	}
+	return decided, nil
+}
+
+func changedWhileConfirming(name, action string) error {
+	return StateErrorWithRemediation("context "+name+" changed while its "+action+" was being confirmed",
+		"repeat the command, which presents what it now changes")
 }
 
 // admitUpdate reads and compiles what an update was given, before any lock.
@@ -363,49 +432,42 @@ func (s Service) admitUpdate(ctx context.Context, request UpdateRequest) (admitt
 // configuration, decides the input update, and publishes changed input once
 // its plan was presented and confirmed. Input equal to the selected revision
 // keeps that revision, publishing nothing and asking nothing.
-func (s Service) updateUnder(ctx context.Context, tx Transaction, request UpdateRequest, selected Selection, admitted admittedUpdate) (*AdmissionResult, error) {
-	reg := tx.Registry()
-	record, err := readyRecord(reg, request.Name)
+func (s Service) updateUnder(ctx context.Context, tx Transaction, request UpdateRequest, selected Selection, admitted admittedUpdate, presented *updateDecision) (*AdmissionResult, error) {
+	decided, err := s.decideUnder(ctx, tx, request, admitted)
 	if err != nil {
 		return nil, err
 	}
-	if request.ConfigurationFile != "" {
-		if err := sameConfiguration(ctx, tx, record.Name, admitted.config); err != nil {
-			return nil, err
-		}
+	if presented != nil && !reflect.DeepEqual(decided, *presented) {
+		return nil, changedWhileConfirming(decided.record.Name, "update")
 	}
+	record := decided.record
 	if request.InputDirectory == "" {
 		return admissionResult(record, selected, desiredstate.Sources{}, nil), nil
 	}
-	unchanged, warnings, err := s.decideUpdate(ctx, tx, reg, record, admitted)
-	if err != nil {
-		return nil, err
-	}
-	if unchanged {
+	if decided.unchanged {
 		result := admissionResult(record, selected, desiredstate.Sources{}, nil)
 		result.Counts, result.Diagnostics = admitted.report.Counts, slices.Clone(admitted.report.Diagnostics)
 		return result, nil
 	}
-	plan := UpdatePlan{
-		Context: record.Name, InputDirectory: admitted.sources.Roots[0], FilesCopied: len(admitted.sources.Files) + len(admitted.sources.Markers),
-		Counts: admitted.report.Counts, Diagnostics: slices.Clone(warnings),
-	}
-	presented, err := s.confirmPresented(ctx, request.SkipConfirmation, "update", record.Name, func(presenter Presenter) error {
-		return presenter.PresentUpdate(ctx, plan)
-	})
-	if err != nil {
-		return nil, err
+	warnings := decided.warnings
+	if presented == nil {
+		if _, err := s.confirmPresented(ctx, request.SkipConfirmation, "update", record.Name, func(presenter Presenter) error {
+			return presenter.PresentUpdate(ctx, decided.plan)
+		}); err != nil {
+			return nil, err
+		}
 	}
 	if record.Revision, err = tx.Publish(ctx, record.Name, admitted.environment, admitted.sources); err != nil {
 		return nil, err
 	}
 	record.EnvironmentDirectory = admitted.environment
+	reg := tx.Registry()
 	reg.Contexts[findRecord(reg, record.Name)] = record
 	if err := commitRegistry(ctx, tx, reg); err != nil {
 		return nil, err
 	}
 	result := admissionResult(record, selected, admitted.sources, admitted.report)
-	result.Diagnostics, result.Presented = warnings, presented
+	result.Diagnostics, result.Presented = warnings, presented != nil
 	return result, nil
 }
 
@@ -507,7 +569,17 @@ func (s Service) List(ctx context.Context, _ ListRequest) (*ListResult, error) {
 	}
 	result := &ListResult{Contexts: []Summary{}}
 	for _, record := range reg.Contexts {
-		result.Contexts = append(result.Contexts, summary(record, selected))
+		listed := summary(record, selected)
+		if record.Mode == Ready && s.options.Operations != nil {
+			unfinished, err := s.options.Operations.Unfinished(ctx, record.Name)
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			if listed.OperationsUnreadable = err != nil; err == nil {
+				listed.Unfinished = unfinished
+			}
+		}
+		result.Contexts = append(result.Contexts, listed)
 	}
 	slices.SortFunc(result.Contexts, func(a, b Summary) int { return strings.Compare(a.Name, b.Name) })
 	return result, nil
@@ -567,23 +639,22 @@ func (s Service) Delete(ctx context.Context, request DeleteRequest) (*DeleteResu
 	if err != nil {
 		return nil, err
 	}
+	var presented *deletionDecision
+	if !request.SkipConfirmation {
+		if presented, err = s.confirmDeletion(ctx, request); err != nil {
+			return nil, absentWhenEmpty(err, request.Name)
+		}
+	}
 	var result *DeleteResult
 	err = s.repository.TransactDeletion(ctx, request.Name, func(tx Transaction) error {
-		reg := tx.Registry()
-		index := findRecord(reg, request.Name)
-		if index < 0 {
-			return AbsentContext(request.Name)
-		}
-		record := reg.Contexts[index]
-		plan, err := s.decideDeletion(ctx, tx, record, request.AllowOrphans)
+		decided, err := s.deletionUnder(ctx, tx, request)
 		if err != nil {
 			return err
 		}
-		if _, err := s.confirmPresented(ctx, request.SkipConfirmation, deleteAction(plan), record.Name, func(presenter Presenter) error {
-			return presenter.PresentDeletion(ctx, plan)
-		}); err != nil {
-			return err
+		if presented != nil && !reflect.DeepEqual(decided, *presented) {
+			return changedWhileConfirming(decided.record.Name, "deletion")
 		}
+		record, plan := decided.record, decided.plan
 		if err := tx.Delete(ctx, record); err != nil {
 			return err
 		}
@@ -603,6 +674,69 @@ func (s Service) Delete(ctx context.Context, request DeleteRequest) (*DeleteResu
 		return nil, StateError("context deletion returned no result")
 	}
 	return result, nil
+}
+
+type deletionDecision struct {
+	record   Record
+	plan     DeletionPlan
+	evidence [sha256.Size]byte
+}
+
+type evidenceRecorder struct {
+	Transaction
+	read bool
+	data []byte
+}
+
+func (r *evidenceRecorder) MutationState(ctx context.Context, name string) ([]byte, error) {
+	data, err := r.Transaction.MutationState(ctx, name)
+	r.read, r.data = err == nil, data
+	return data, err
+}
+
+func (s Service) deletionUnder(ctx context.Context, tx Transaction, request DeleteRequest) (deletionDecision, error) {
+	reg := tx.Registry()
+	index := findRecord(reg, request.Name)
+	if index < 0 {
+		return deletionDecision{}, AbsentContext(request.Name)
+	}
+	record := reg.Contexts[index]
+	recorder := &evidenceRecorder{Transaction: tx}
+	plan, err := s.decideDeletion(ctx, recorder, record, request.AllowOrphans)
+	if err != nil {
+		return deletionDecision{}, err
+	}
+	decided := deletionDecision{record: record, plan: plan}
+	if recorder.read {
+		operations, err := tx.OperationIndex(ctx, record.Name)
+		if err != nil {
+			return deletionDecision{}, err
+		}
+		digest := sha256.New()
+		digest.Write(binary.BigEndian.AppendUint64(nil, uint64(len(recorder.data))))
+		digest.Write(recorder.data)
+		digest.Write(operations)
+		copy(decided.evidence[:], digest.Sum(nil))
+	}
+	return decided, nil
+}
+
+func (s Service) confirmDeletion(ctx context.Context, request DeleteRequest) (*deletionDecision, error) {
+	var decided deletionDecision
+	err := s.repository.Inspect(ctx, request.Name, func(tx Transaction) error {
+		var err error
+		decided, err = s.deletionUnder(ctx, tx, request)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.confirmPresented(ctx, false, deleteAction(decided.plan), decided.record.Name, func(presenter Presenter) error {
+		return presenter.PresentDeletion(ctx, decided.plan)
+	}); err != nil {
+		return nil, err
+	}
+	return &decided, nil
 }
 
 // decideDeletion runs a deletion's safeguards under the root lock and the

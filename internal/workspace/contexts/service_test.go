@@ -62,6 +62,7 @@ type repository struct {
 	create         bool
 	roots          []string
 	evidence       map[string][]byte
+	operationIndex map[string][]byte
 	published      map[string]desiredstate.Sources
 	revisions      int
 	failure        string
@@ -77,6 +78,12 @@ type repository struct {
 	updatePlan     *contexts.UpdatePlan
 	deletionPlan   *contexts.DeletionPlan
 	unreadable     error
+	// shared marks an inspection: the shared root lock, under which every
+	// write is a defect of the service.
+	shared bool
+	// confirming runs as a confirmation is given, with no lock held, so a
+	// test can change the store between a prompt and its confirmation.
+	confirming func()
 }
 
 func newRepository(t *testing.T) *repository {
@@ -152,6 +159,23 @@ func (r *repository) TransactDeletion(ctx context.Context, name string, fn func(
 	return r.Transact(ctx, false, nil, fn)
 }
 
+// Inspect takes the shared hold a command presents its plan from, scoped to
+// one deletion when name is set, and refuses every write under it.
+func (r *repository) Inspect(ctx context.Context, name string, fn func(contexts.Transaction) error) error {
+	if r.locked {
+		r.t.Fatal("nested transaction")
+	}
+	if err := r.step(ctx, "inspection"); err != nil {
+		return err
+	}
+	if name != "" {
+		r.deletion = name
+	}
+	r.locked, r.shared = true, true
+	defer func() { r.locked, r.leased, r.shared = false, false, false }()
+	return fn(transaction{r})
+}
+
 // lostRefusal is a repository's refusal of a ready context whose directory is
 // gone, as the store reports it.
 type lostRefusal struct{ failure error }
@@ -171,6 +195,14 @@ func (tx transaction) requireLock() {
 	}
 }
 
+func (tx transaction) requireWrite() {
+	tx.r.t.Helper()
+	tx.requireLock()
+	if tx.r.shared {
+		tx.r.t.Fatal("a write escaped into the shared inspection")
+	}
+}
+
 func (tx transaction) Registry() contexts.Registry {
 	tx.requireLock()
 	tx.r.calls = append(tx.r.calls, "registry")
@@ -178,7 +210,7 @@ func (tx transaction) Registry() contexts.Registry {
 }
 
 func (tx transaction) Reserve(ctx context.Context, name, directory string, data []byte) (contexts.Record, error) {
-	tx.requireLock()
+	tx.requireWrite()
 	if err := tx.r.step(ctx, "reserve"); err != nil {
 		return contexts.Record{}, err
 	}
@@ -211,7 +243,7 @@ func (tx transaction) Configuration(ctx context.Context, name string) ([]byte, e
 }
 
 func (tx transaction) InitializeSecrets(ctx context.Context, name string, callback func(secretstore.Area) error) error {
-	tx.requireLock()
+	tx.requireWrite()
 	tx.r.leased = true
 	if err := tx.r.step(ctx, "initialize"); err != nil {
 		return err
@@ -234,8 +266,13 @@ func (tx transaction) MutationState(ctx context.Context, name string) ([]byte, e
 	return slices.Clone(tx.r.evidence[name]), nil
 }
 
-func (tx transaction) Publish(ctx context.Context, name, directory string, input desiredstate.Sources) (string, error) {
+func (tx transaction) OperationIndex(_ context.Context, name string) ([]byte, error) {
 	tx.requireLock()
+	return slices.Clone(tx.r.operationIndex[name]), nil
+}
+
+func (tx transaction) Publish(ctx context.Context, name, directory string, input desiredstate.Sources) (string, error) {
+	tx.requireWrite()
 	if !tx.r.leased {
 		tx.r.t.Fatal("publication escaped the context lease")
 	}
@@ -295,7 +332,7 @@ func (tx transaction) HostReservations(ctx context.Context, name string) ([]stri
 }
 
 func (tx transaction) Delete(ctx context.Context, record contexts.Record) error {
-	tx.requireLock()
+	tx.requireWrite()
 	if err := tx.r.step(ctx, "delete"); err != nil {
 		return err
 	}
@@ -306,7 +343,7 @@ func (tx transaction) Delete(ctx context.Context, record contexts.Record) error 
 }
 
 func (tx transaction) Commit(ctx context.Context, reg contexts.Registry) error {
-	tx.requireLock()
+	tx.requireWrite()
 	if err := tx.r.step(ctx, "commit"); err != nil {
 		return err
 	}
@@ -342,8 +379,11 @@ type confirmer struct{ r *repository }
 
 func (c confirmer) Confirm(ctx context.Context, action, name string) error {
 	lost := action == lostAction && name == c.r.lost
-	if !c.r.locked || !lost && (!c.r.leased || c.r.unreadable == nil && !slices.Contains(c.r.calls, "guard")) {
-		c.r.t.Fatal("confirmation preceded locked mutation safeguards")
+	if c.r.locked || !slices.Contains(c.r.calls, "inspection") || !lost && c.r.unreadable == nil && !slices.Contains(c.r.calls, "guard") {
+		c.r.t.Fatal("confirmation held a lock or preceded the inspected mutation safeguards", c.r.calls)
+	}
+	if c.r.confirming != nil {
+		c.r.confirming()
 	}
 	if name == "" || action != "update" && action != "delete" && action != orphanAction && action != unreadableAction && !lost {
 		c.r.t.Fatal("unexpected confirmation request", action, name)
@@ -355,12 +395,13 @@ func (c confirmer) Confirm(ctx context.Context, action, name string) error {
 	return c.r.step(ctx, "confirm")
 }
 
-// presenter records each plan it is shown, after every safeguard and under the
-// root lock, and fails as an injected failure at "present" does.
+// presenter records each plan it is shown, after every safeguard an
+// inspection ran and with no lock held, and fails as an injected failure at
+// "present" does.
 type presenter struct{ r *repository }
 
 func (p presenter) PresentUpdate(ctx context.Context, plan contexts.UpdatePlan) error {
-	if !p.r.locked || !p.r.leased || !slices.Contains(p.r.calls, "guard") || !slices.Contains(p.r.calls, "unchanged") {
+	if p.r.locked || !slices.Contains(p.r.calls, "inspection") || !slices.Contains(p.r.calls, "guard") || !slices.Contains(p.r.calls, "unchanged") {
 		p.r.t.Fatal("the update plan preceded its safeguards", p.r.calls)
 	}
 	p.r.updatePlan = &plan
@@ -368,7 +409,7 @@ func (p presenter) PresentUpdate(ctx context.Context, plan contexts.UpdatePlan) 
 }
 
 func (p presenter) PresentDeletion(ctx context.Context, plan contexts.DeletionPlan) error {
-	if !p.r.locked || !slices.Contains(p.r.calls, "reservations") {
+	if p.r.locked || !slices.Contains(p.r.calls, "inspection") || !slices.Contains(p.r.calls, "reservations") {
 		p.r.t.Fatal("the deletion plan preceded its safeguards", p.r.calls)
 	}
 	p.r.deletionPlan = &plan
@@ -587,7 +628,10 @@ func TestInvalidAdmissionAndNamesNeverStartTransaction(t *testing.T) {
 	}
 }
 
-func TestUpdatePreservesIdentityAndSelectionAndConfirmsUnderLease(t *testing.T) {
+// An update decides and presents its plan from a shared inspection, asks with
+// no lock held, then proves the same decision again under the exclusive hold
+// and its lease before it publishes.
+func TestUpdatePreservesIdentityAndSelectionAndConfirmsBetweenItsHolds(t *testing.T) {
 	r := existingRepository(t)
 	r.selection = contexts.Selection{Version: contexts.SelectionVersion, Name: "other"}
 	r.registry.Contexts = append(r.registry.Contexts, contexts.Record{Name: "other", EnvironmentDirectory: "/synthetic/other", Revision: "rev-00000000000000000000000000000002", Mode: contexts.Ready})
@@ -596,7 +640,8 @@ func TestUpdatePreservesIdentityAndSelectionAndConfirmsUnderLease(t *testing.T) 
 	if err != nil || got.Context.Name != before.Contexts[0].Name || got.Context.Current || r.selection.Name != "other" || r.registry.Contexts[0].Revision == before.Contexts[0].Revision || !reflect.DeepEqual(r.registry.Contexts[1], before.Contexts[1]) || r.create {
 		t.Fatalf("update changed unrelated state: %#v %v", got, err)
 	}
-	if !reflect.DeepEqual(r.calls, []string{"preflight", "read", "compile", "transaction", "registry", "lease", "guard", "unchanged", "present", "confirm", "publish", "commit"}) {
+	if !reflect.DeepEqual(r.calls, []string{"preflight", "read", "compile", "inspection", "registry", "lease", "guard", "unchanged", "present", "confirm",
+		"transaction", "registry", "lease", "guard", "unchanged", "publish", "registry", "commit"}) {
 		t.Fatal("update order", r.calls)
 	}
 }
@@ -1369,7 +1414,7 @@ func TestALostContextIsAbandonedOnlyWithTheOrphanAcknowledgement(t *testing.T) {
 	if r.confirmed != lostAction || !strings.Contains(r.confirmed, "cannot be listed") || strings.Contains(r.confirmed, "kubeconfig") {
 		t.Fatalf("the confirmation named %q, want the abandonment of objects that cannot be listed", r.confirmed)
 	}
-	if !slices.Equal(r.calls, []string{"transaction", "registry", "lease", "reservations", "present", "confirm", "delete", "clear"}) {
+	if !slices.Equal(r.calls, []string{"inspection", "registry", "lease", "reservations", "present", "confirm", "transaction", "registry", "lease", "reservations", "delete", "clear"}) {
 		t.Fatalf("abandonment stages = %v", r.calls)
 	}
 	if plan := r.deletionPlan; plan == nil || plan.Abandons != contexts.AbandonsUnlisted || plan.Reason != "its directory is gone" || !plan.Lost || !slices.Equal(plan.Reservations, keys) {
@@ -1509,5 +1554,126 @@ func TestUpdateAndDeletionPresentTheirPlanBeforeTheConfirmation(t *testing.T) {
 	plan := contexts.DeletionPlan{Context: "example", Mode: contexts.Ready, Revision: "rev-00000000000000000000000000000001", Reservations: keys, Abandons: contexts.AbandonsNone}
 	if r.deletionPlan == nil || !reflect.DeepEqual(*r.deletionPlan, plan) || slices.Index(r.calls, "present") != slices.Index(r.calls, "confirm")-1 {
 		t.Fatalf("the deletion presented %+v, want %+v, before %v", r.deletionPlan, plan, r.calls)
+	}
+}
+
+// A confirmed update or deletion takes the exclusive hold only after its
+// prompt, which held no lock, and proves again everything its plan presented,
+// a deletion also the context's evidence and current operation, so one that
+// ran meanwhile refuses: a store changed meanwhile refuses with no write,
+// naming the repetition of the command, and the same command with the store
+// unchanged writes.
+func TestAStoreChangedWhileAPromptWasAnsweredRefusesWithNoWrite(t *testing.T) {
+	applied := []byte(`{"version":1,"operation":"applied","ownership":"retained"}`)
+	for _, test := range []struct {
+		name   string
+		change func(*repository)
+		run    func(contexts.Service) error
+		writes []string
+	}{
+		{"update", func(r *repository) { r.evidence["example"] = applied }, func(s contexts.Service) error {
+			_, err := s.Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/input"})
+			return err
+		}, []string{"publish", "commit"}},
+		{"deletion", func(r *repository) { r.reservations = map[string][]string{"example": {"bmc/192.0.2.10"}} }, func(s contexts.Service) error {
+			_, err := s.Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true})
+			return err
+		}, []string{"delete", "clear"}},
+		{"deletion", func(r *repository) {
+			r.operationIndex = map[string][]byte{"example": []byte(`{"version":1,"context":"example","current":"op-` + strings.Repeat("03", 16) + `"}`)}
+		}, func(s contexts.Service) error {
+			_, err := s.Delete(context.Background(), contexts.DeleteRequest{Name: "example", Purge: true})
+			return err
+		}, []string{"delete", "clear"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			r := existingRepository(t)
+			r.confirming = func() { test.change(r) }
+			before := cloneRegistry(r.registry)
+			err := test.run(service(t, r, sourceFixture("/synthetic/input")))
+			requireCode(t, err, "context.state")
+			requireRemediation(t, err, "repeat the command")
+			if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Message != "context example changed while its "+test.name+" was being confirmed" {
+				t.Fatalf("the changed store reported %#v", refused)
+			}
+			for _, write := range test.writes {
+				if slices.Contains(r.calls, write) {
+					t.Fatalf("the refused %s wrote: %v", test.name, r.calls)
+				}
+			}
+			if !reflect.DeepEqual(r.registry, before) || len(r.published) != 0 {
+				t.Fatalf("the refused %s changed the registry %#v or published %v", test.name, r.registry, r.published)
+			}
+			r.confirming, r.calls = nil, nil
+			if err := test.run(service(t, r, sourceFixture("/synthetic/input"))); err != nil {
+				t.Fatalf("the repeated %s over an unchanged store refused: %v", test.name, err)
+			}
+			if !slices.Contains(r.calls, test.writes[0]) {
+				t.Fatalf("the repeated %s wrote nothing: %v", test.name, r.calls)
+			}
+		})
+	}
+}
+
+// operationsFunc reports each context's unfinished operation for a listing.
+type operationsFunc func(context.Context, string) (*contexts.Unfinished, error)
+
+func (f operationsFunc) Unfinished(ctx context.Context, name string) (*contexts.Unfinished, error) {
+	return f(ctx, name)
+}
+
+// A listing carries, for each ready context, the operation it has not
+// completed with the build that registered it, reads none for a context that
+// is not ready, and refuses with the reader's own refusal.
+func TestContextListCarriesEachUnfinishedOperation(t *testing.T) {
+	r := existingRepository(t)
+	r.registry.Contexts = append(r.registry.Contexts, contexts.Record{Name: "pending", Mode: contexts.Initializing})
+	configured := options(r)
+	read := []string{}
+	unfinished := &contexts.Unfinished{Operation: "op-" + strings.Repeat("01", 16), Verb: "apply", State: "failed", Build: "0.4.0 (abcdef1)"}
+	configured.Operations = operationsFunc(func(_ context.Context, name string) (*contexts.Unfinished, error) {
+		read = append(read, name)
+		return unfinished, nil
+	})
+	s := contexts.New(nil, nil, r, guard{r}, confirmer{r}, configured)
+	listed, err := s.List(context.Background(), contexts.ListRequest{})
+	if err != nil || len(listed.Contexts) != 2 || !slices.Equal(read, []string{"example"}) {
+		t.Fatalf("the listing = %#v (%v), read %v", listed, err, read)
+	}
+	for _, summary := range listed.Contexts {
+		if want := summary.Name == "example"; (summary.Unfinished == unfinished) != want {
+			t.Fatalf("context %s listed unfinished %+v", summary.Name, summary.Unfinished)
+		}
+	}
+}
+
+// A context whose current operation cannot be read, because its directory is
+// lost, its evidence is unreadable or its lock is busy, never fails the
+// listing: its row says the operation is unreadable and names none.
+func TestContextListMarksAnUnreadableOperationAndListsTheRest(t *testing.T) {
+	for _, failure := range []error{
+		contexts.StateError("the context directory is missing"),
+		diagnostics.NewFailureWithRemediation("lifecycle.lease", "context storage is busy", "", "wait for the other bootwright command to finish"),
+	} {
+		r := existingRepository(t)
+		r.registry.Contexts = append(r.registry.Contexts, contexts.Record{Name: "healthy", Mode: contexts.Ready})
+		configured := options(r)
+		unfinished := &contexts.Unfinished{Operation: "op-" + strings.Repeat("02", 16), Verb: "destroy", State: "paused"}
+		configured.Operations = operationsFunc(func(_ context.Context, name string) (*contexts.Unfinished, error) {
+			if name == "example" {
+				return unfinished, failure
+			}
+			return unfinished, nil
+		})
+		listed, err := contexts.New(nil, nil, r, guard{r}, confirmer{r}, configured).List(context.Background(), contexts.ListRequest{})
+		if err != nil || len(listed.Contexts) != 2 {
+			t.Fatalf("a listing with an unreadable operation (%v) = %#v (%v)", failure, listed, err)
+		}
+		for _, summary := range listed.Contexts {
+			lost := summary.Name == "example"
+			if summary.OperationsUnreadable != lost || (summary.Unfinished == nil) != lost {
+				t.Fatalf("context %s listed unreadable %v, unfinished %+v", summary.Name, summary.OperationsUnreadable, summary.Unfinished)
+			}
+		}
 	}
 }

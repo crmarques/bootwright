@@ -739,6 +739,7 @@ var askRuleMarkers = []struct{ phrase, flag string }{
 	{phrase: "download"},
 	{phrase: "ssh"},
 	{phrase: "power operation"},
+	{phrase: "host identity rewrite"},
 	{phrase: "reveal"},
 	{phrase: "confidential material", flag: "--secrets"},
 	{phrase: "sensitive files", flag: "--sensitive"},

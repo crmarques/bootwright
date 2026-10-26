@@ -32,10 +32,16 @@ type DeleteRequest struct {
 }
 
 type Summary struct {
-	Name       string
-	Mode       Mode
-	Current    bool
-	Configured bool
+	Name                 string
+	Mode                 Mode
+	Current              bool
+	Configured           bool
+	Unfinished           *Unfinished
+	OperationsUnreadable bool
+}
+
+type Unfinished struct {
+	Operation, Verb, State, Build string
 }
 
 type AdmissionResult struct {

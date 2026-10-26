@@ -339,7 +339,9 @@ which must be the entry listed, follows no link, crosses no filesystem and
 fails closed when it cannot remove one, or when a parent holds more run
 directories of its own or a tree more depth or entries than its bounds allow,
 and reads no more than 4 KiB of a held job's record. An entry another account
-owns neither counts toward the run-directory bound nor stops a run.
+owns, or that is open to other accounts, neither counts toward the
+run-directory bound nor stops a run
+(`TestRunDirectoryNamesAnotherAccountCreatedStopNoRun`).
 Only a job's own processes hold
 its lock exclusively. A sweep takes it shared, which it can only once none of
 them runs and which keeps it so, and removes the job only while it also holds
@@ -368,10 +370,6 @@ record whole, written under another name and renamed into place once its
 holder exists, so a sweep never reads one half written, and another context's
 job a sweep finds mid-claim or mid-removal neither refuses nor goes
 (`TestASweepBesideAnotherContextsClaimsAndReleasesNeverRefuses`).
-
-Not yet met: the sweep counts every entry carrying a run directory's name
-before it proves the owner, so another account's entries in `/var/tmp` stop
-every run; tracked as [B806](milestones/backlog.md#b806).
 
 The process that runs a Bootwright-owned operation cancels it on SIGHUP exactly
 as on SIGINT and SIGTERM, so a closed terminal or a lost session interrupts the

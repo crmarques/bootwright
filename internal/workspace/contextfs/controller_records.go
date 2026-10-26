@@ -18,7 +18,8 @@ func controllerFailure(code, message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
 }
 
-const toolSourcesRemedy = "no command of this build frees a retained tool source, because it never retires one; run this context's controller stage on another controller host"
+const toolSourcesRemedy = "no command of this build frees a retained tool source, because it never retires one; run this context's controller stage on another controller host, " +
+	"or start this host afresh: destroy every environment and delete every context on it, then, as root, remove /var/lib/bootwright and run bootwright setup"
 
 // ControllerRecordVersion is the private shared-host evidence format. Version 3
 // holds host identity, bindings, tool sources and areas, and reservations; the

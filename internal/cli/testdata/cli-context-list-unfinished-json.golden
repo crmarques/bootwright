@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "context list",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "contexts": [
+      {
+        "name": "edge",
+        "mode": "ready",
+        "current": false,
+        "configured": true
+      },
+      {
+        "name": "lab",
+        "mode": "ready",
+        "current": true,
+        "configured": true,
+        "unfinished": {
+          "id": "op-01010101010101010101010101010101",
+          "verb": "apply",
+          "state": "failed",
+          "build": "0.4.0 (abcdef1)"
+        }
+      },
+      {
+        "name": "lost",
+        "mode": "ready",
+        "current": false,
+        "configured": true,
+        "operationsUnreadable": true
+      },
+      {
+        "name": "old",
+        "mode": "ready",
+        "current": false,
+        "configured": true,
+        "unfinished": {
+          "id": "op-02020202020202020202020202020202",
+          "verb": "destroy",
+          "state": "unknown"
+        }
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

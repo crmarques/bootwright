@@ -19,14 +19,28 @@ func writeStructuredResult(out io.Writer, command string, result jsonResult, rep
 }
 
 type contextSummaryPresentation struct {
-	Name       string `json:"name"`
-	Mode       string `json:"mode"`
-	Current    bool   `json:"current"`
-	Configured bool   `json:"configured"`
+	Name       string                    `json:"name"`
+	Mode       string                    `json:"mode"`
+	Current    bool                      `json:"current"`
+	Configured bool                      `json:"configured"`
+	Unfinished *unfinishedOperationShown `json:"unfinished,omitempty"`
+	Unreadable bool                      `json:"operationsUnreadable,omitempty"`
+}
+
+type unfinishedOperationShown struct {
+	ID    string `json:"id"`
+	Verb  string `json:"verb"`
+	State string `json:"state"`
+	Build string `json:"build,omitempty"`
 }
 
 func contextSummary(summary contexts.Summary) contextSummaryPresentation {
-	return contextSummaryPresentation{Name: escapeDisplayLine(summary.Name), Mode: escapeDisplayLine(string(summary.Mode)), Current: summary.Current, Configured: summary.Configured}
+	shown := contextSummaryPresentation{Name: escapeDisplayLine(summary.Name), Mode: escapeDisplayLine(string(summary.Mode)), Current: summary.Current, Configured: summary.Configured, Unreadable: summary.OperationsUnreadable}
+	if unfinished := summary.Unfinished; unfinished != nil {
+		shown.Unfinished = &unfinishedOperationShown{ID: escapeDisplayLine(unfinished.Operation), Verb: escapeDisplayLine(unfinished.Verb),
+			State: escapeDisplayLine(unfinished.State), Build: escapeDisplayLine(unfinished.Build)}
+	}
+	return shown
 }
 
 type contextPresentation struct {
@@ -71,6 +85,14 @@ type secretMutationPresentation struct {
 }
 
 func (secretMutationPresentation) documentedResult() {}
+
+type rebindPresentation struct {
+	Outcome      string `json:"outcome"`
+	Bindings     int    `json:"bindings"`
+	Reservations int    `json:"reservations"`
+}
+
+func (rebindPresentation) documentedResult() {}
 
 type mediaMutationPresentation struct {
 	Name    string `json:"name"`
@@ -144,6 +166,8 @@ func writeAdditionalStructuredResult(out io.Writer, command *cobra.Command, path
 	case (path == "secret set" || path == "secret generate" || path == "secret delete") && validSecretMutation(path, result.secretMutation):
 		m := result.secretMutation
 		shown = secretMutationPresentation{Context: displaySecretContext(m.Context), Name: escapeDisplayLine(m.Name), Changed: m.Changed, Unchanged: m.Unchanged, ChangedNames: displayNames(m.ChangedNames), UnchangedNames: displayNames(m.UnchangedNames), Parts: displaySecretPartValues(m.Parts)}
+	case path == "controller rebind" && validRebind(result.rebind):
+		shown = rebindPresentation{Outcome: escapeDisplayLine(result.rebind.Outcome), Bindings: result.rebind.Bindings, Reservations: result.rebind.Reservations}
 	case (path == "media add" || path == "media delete") && validMediaMutation(result.mediaMutation):
 		m := result.mediaMutation
 		shown = mediaMutationPresentation{Name: escapeDisplayLine(m.Name), Outcome: escapeDisplayLine(m.Outcome), Size: m.Size, SHA256: escapeDisplayLine(m.SHA256)}

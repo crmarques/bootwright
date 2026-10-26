@@ -404,6 +404,7 @@ type OperationStore interface {
 	Block(context.Context, string, string) (operationstore.BlockRecord, error)
 	LostBlockRecords(context.Context, string, reconciliation.Plan) ([]string, error)
 	Attempt(context.Context, string, string, int) (operationstore.Attempt, error)
+	AdmitAttempt(context.Context, operationstore.Operation, reconciliation.Plan, bool) (func(), error)
 	StartAttempt(context.Context, string, string, operationstore.Build) (int, error)
 	RecordPreparation(context.Context, string, string, int, json.RawMessage) error
 	CompleteAttempt(context.Context, string, string, int, reconciliation.Outcome, reconciliation.EffectState, reconciliation.BlockState, json.RawMessage) error

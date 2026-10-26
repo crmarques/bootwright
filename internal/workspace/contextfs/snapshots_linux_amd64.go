@@ -73,7 +73,7 @@ func prepareManifest(name, environment string, sources desiredstate.Sources) (ma
 }
 
 func (t *transaction) Publish(ctx context.Context, name, environment string, sources desiredstate.Sources) (string, error) {
-	if err := t.available(ctx); err != nil {
+	if err := t.writable(ctx); err != nil {
 		return "", err
 	}
 	if err := t.checkControllerRecovery(ctx, name); err != nil {

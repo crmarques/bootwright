@@ -114,6 +114,10 @@ type TargetToolCatalog interface {
 // sources and areas, and reservations. ExplicitName is empty for baseline
 // scope; no method consults current-context selection. The callback holds the
 // root lock and must consume input before returning.
+type ControllerRebinder interface {
+	RebindController(ctx context.Context, recorded, next controller.InstalledHostIdentity) (RebindResult, error)
+}
+
 type Storage interface {
 	ReadController(context.Context, string, func(StorageView) error) error
 }

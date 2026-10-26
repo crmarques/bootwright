@@ -98,10 +98,8 @@ take the record past 256 entries refuses with `controller.conflict` before it
 publishes them, naming that bound, the entries it needs and those other
 contexts hold, with the remedy to take back a context this host no longer
 needs with `bootwright destroy --context <name>` or
-`bootwright context delete --name <name> --purge`.
-
-Not yet met: that apply refuses with `context.state`, naming the bound alone;
-tracked as [B832](../milestones/backlog.md#b832).
+`bootwright context delete --name <name> --purge`
+(`TestReservationsPastTheRecordBoundRefuseBeforePublication`).
 
 There are at most 16 tool areas, a bound of their own that nothing else
 counts toward, each named by the 64-character content digest of the closure
@@ -118,10 +116,8 @@ would pass 4096 refuses with `controller.conflict`, saying that no command of
 this build frees a retained tool source, and names the two exits: run this
 context's controller stage on another controller host, or start this host
 afresh by destroying every environment and deleting every context on it, then,
-as root, removing `/var/lib/bootwright` and running `bootwright setup`.
-
-Not yet met: that refusal names only another controller host; tracked as
-[B832](../milestones/backlog.md#b832).
+as root, removing `/var/lib/bootwright` and running `bootwright setup`
+(`TestToolSourcesPastTheBoundNameTheFreshStoreExit`).
 
 A tool area is bounded to 8 GiB total,
 1 GiB per file, 32768 entries and depth 32. Symlinks, hard links, nested

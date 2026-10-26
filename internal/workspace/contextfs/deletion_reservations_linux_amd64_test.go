@@ -4,6 +4,7 @@ package contextfs
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -79,5 +80,49 @@ func TestADeletedContextsReservationsAreReleasedForAnotherContext(t *testing.T) 
 	}
 	if err := reserve("second", machine); err != nil {
 		t.Fatalf("another context could not reserve the released keys: %#v", diagnostics.Of(err))
+	}
+}
+
+// Reservations that would take the controller record past its bound refuse
+// controller.conflict before anything is published, naming the bound, the
+// entries this apply needs and those other contexts hold, with the exits that
+// free some; at the bound they are published.
+func TestReservationsPastTheRecordBoundRefuseBeforePublication(t *testing.T) {
+	ctx := context.Background()
+	store, record := lifecycleFixture(t)
+	_, sources := fixture(t)
+	publish(t, store, "second", sources)
+	reserveFixture(t, store, record)
+	claims := func(name string, count int) []prerequisites.HostReservation {
+		claimed := make([]prerequisites.HostReservation, count)
+		for index := range claimed {
+			service := fmt.Sprintf("machine-%03d", index)
+			claimed[index] = prerequisites.HostReservation{Context: name, Kind: "substrate-machine", Service: service, Keys: []string{"unit:bootwright-bmc-" + name + "-" + service}}
+		}
+		return claimed
+	}
+	reserve := func(name string, count int) error {
+		return store.MutateLifecycle(ctx, name, func(tx lifecycle.Transaction) error { return tx.Reserve(ctx, claims(name, count)) })
+	}
+	if err := reserve(record.Name, 200); err != nil {
+		t.Fatalf("200 reservations refused: %#v", diagnostics.Of(err))
+	}
+	err := reserve("second", maxControllerReservations-200+1)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Code != "controller.conflict" ||
+		reported[0].Message != "the controller record holds at most 256 host reservations: this apply needs 57 and other contexts hold 200" ||
+		!strings.Contains(reported[0].Remediation, "bootwright destroy --context <name>") || !strings.Contains(reported[0].Remediation, "bootwright context delete --name <name> --purge") {
+		t.Fatalf("reservations past the bound reported %#v", reported)
+	}
+	var held []string
+	if err := store.Transact(ctx, false, nil, func(tx contexts.Transaction) error {
+		var err error
+		held, err = tx.HostReservations(ctx, "second")
+		return err
+	}); err != nil || len(held) != 0 {
+		t.Fatalf("the refused reservations left %v (%v)", held, err)
+	}
+	if err := reserve("second", maxControllerReservations-200); err != nil {
+		t.Fatalf("reservations at the bound refused: %#v", diagnostics.Of(err))
 	}
 }

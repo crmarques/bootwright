@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
@@ -346,5 +347,57 @@ func TestACanceledConfirmationKeepsItsCodeAndNamesNoRemedy(t *testing.T) {
 	want := []diagnostics.Diagnostic{{Severity: "error", Code: "machine.power", Message: "power confirmation was canceled"}}
 	if reported := diagnostics.Of(err); !reflect.DeepEqual(reported, want) {
 		t.Fatalf("cancellation = %+v", reported)
+	}
+}
+
+// A rebind that names this host's identity on its command line and is refused
+// at its confirmation, declined, without a terminal or in JSON, never repeats
+// those values: its remedy names placeholders, and neither the output nor any
+// diagnostic carries them.
+func TestARefusedRebindNeverRepeatsTheIdentityItNames(t *testing.T) {
+	machineID, product, root := strings.Repeat("7", 32), "0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9", "f9e8d7c6-b5a4-9382-7160-5f4e3d2c1b0a"
+	named := []string{"controller", "rebind", "--machine-id", machineID, "--product-uuid", product, "--root-uuid", root, "--recorded-host-retired"}
+	for _, tc := range []struct {
+		name     string
+		output   []string
+		terminal bool
+	}{
+		{name: "declined", terminal: true},
+		{name: "not a terminal"},
+		{name: "json", output: []string{"--output", "json"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := append(append([]string{}, named...), tc.output...)
+			answer := strings.NewReader("n\n")
+			read := func(_ context.Context, p []byte) (int, error) {
+				if !tc.terminal {
+					return 0, errors.New("unexpected read")
+				}
+				return answer.Read(p)
+			}
+			refusal := NewConfirmation(read, io.Discard, func() (bool, error) { return tc.terminal, nil }).Repeating(args).
+				Confirm(context.Background(), "controller rebind", "machine-id "+strings.Repeat("1", 32))
+			record := &dispatchRecord{err: refusal}
+			var out, errOut bytes.Buffer
+			code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), args)
+			request, ok := record.request.(prerequisites.RebindRequest)
+			if code == 0 || !ok || request.MachineID != machineID || request.ProductUUID != product || request.FilesystemUUID != root || !request.RecordedRetired {
+				t.Fatalf("exit %d, request %+v", code, record.request)
+			}
+			reported := diagnostics.Of(refusal)
+			if len(reported) != 1 {
+				t.Fatalf("refusal = %+v", reported)
+			}
+			for _, placeholder := range []string{"--machine-id <machine-id> ", "--product-uuid <product-uuid> --recorded-host-retired --root-uuid <root-uuid> with --yes"} {
+				if !strings.Contains(reported[0].Remediation, placeholder) {
+					t.Fatalf("the remedy %q does not name %q", reported[0].Remediation, placeholder)
+				}
+			}
+			for _, value := range []string{machineID, product, root} {
+				if strings.Contains(out.String()+errOut.String(), value) || strings.Contains(reported[0].Message+reported[0].Remediation, value) {
+					t.Fatalf("the refused rebind repeated %q:\n%s%s", value, out.String(), errOut.String())
+				}
+			}
+		})
 	}
 }

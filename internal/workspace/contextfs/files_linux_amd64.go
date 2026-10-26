@@ -207,7 +207,7 @@ func (d *directory) verify() error {
 	}
 	var reopened *os.File
 	if d.parent == nil {
-		reopened, err = walkAbsolute(d.path, false)
+		reopened, err = walkAbsolute(d.path, nil)
 	} else {
 		if err = d.parent.verify(); err != nil {
 			return err
@@ -288,7 +288,7 @@ func directoryNames(dir *directory, maximum int) ([]string, error) {
 
 // Existing ancestors may be system directories; all missing suffixes are
 // exclusively created private directories. No component may be a symlink.
-func walkAbsolute(path string, create bool) (*os.File, error) {
+func walkAbsolute(path string, create func(*os.File) error) (*os.File, error) {
 	fd, err := syscall.Open("/", syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		return nil, err
@@ -297,14 +297,14 @@ func walkAbsolute(path string, create bool) (*os.File, error) {
 	if path == "/" {
 		return parent, nil
 	}
-	if create {
+	if create != nil {
 		probe, err := openWithin(&directory{file: parent, path: "/"}, ".", pathHandle|syscall.O_DIRECTORY, 0)
 		if err != nil {
 			parent.Close()
 			return nil, state("state containment primitives are unavailable")
 		}
 		probe.Close()
-		return createAbsolute(path, parent)
+		return createAbsolute(path, parent, create)
 	}
 	components := strings.Split(strings.TrimPrefix(path, "/"), "/")
 	for i, name := range components {
@@ -375,7 +375,7 @@ func unreachableAncestor(parent *os.File, name string, walked []string, err erro
 	return unreachableRootRefusal("/"+strings.Join(walked, "/"), stat)
 }
 
-func createAbsolute(path string, base *os.File) (*os.File, error) {
+func createAbsolute(path string, base *os.File, admit func(*os.File) error) (*os.File, error) {
 	type held struct {
 		file     *os.File
 		name     string
@@ -430,6 +430,9 @@ func createAbsolute(path string, base *os.File) (*os.File, error) {
 		created := false
 		if errors.Is(err, syscall.ENOENT) {
 			if err := verify(); err != nil {
+				return nil, err
+			}
+			if err := admit(parent); err != nil {
 				return nil, err
 			}
 			err = syscall.Mkdirat(int(parent.Fd()), name, 0700)
@@ -504,7 +507,11 @@ func (s *Store) openRoot(ctx context.Context, create bool, inputs []string) (*di
 			return nil, state("state root overlaps admitted input")
 		}
 	}
-	file, err := walkAbsolute(path, create)
+	var admit func(*os.File) error
+	if create {
+		admit = s.admitCreation(path)
+	}
+	file, err := walkAbsolute(path, admit)
 	if err != nil {
 		// A root that is itself a link or not a directory is a root of
 		// another type, which setup reports the same way.
@@ -528,6 +535,10 @@ func (s *Store) openRoot(ctx context.Context, create bool, inputs []string) (*di
 		file.Close()
 		return nil, state("state filesystem is not qualified for private durable storage")
 	}
+	if _, err := s.persistentRoot(path, fs.Type); err != nil {
+		file.Close()
+		return nil, err
+	}
 	root := &directory{file: file, path: path, identity: stat}
 	// Probe the required kernel primitive without creating anything.
 	probe, err := openRelative(root, "registry.json", pathHandle, 0)
@@ -547,6 +558,40 @@ func localFilesystem(kind int64) bool {
 		return true
 	}
 	return false
+}
+
+// transientFilesystems are the qualified filesystems that may not keep a
+// production root's contents across a reboot: tmpfs, which a reboot empties,
+// and overlayfs, whose upper layer the kernel does not name. Only an isolated
+// test root injected at composition lies on one.
+var transientFilesystems = map[int64]string{0x01021994: "tmpfs", 0x794c7630: "overlayfs"}
+
+// persistentRoot refuses the production root on a transient filesystem, before
+// anything is published beneath it, and names that filesystem.
+func (s *Store) persistentRoot(path string, kind int64) (string, error) {
+	production := s.options.Root == ""
+	if s.rootFilesystem != nil {
+		kind, production = s.rootFilesystem(), true
+	}
+	name, transient := transientFilesystems[kind]
+	if !production || !transient {
+		return "", nil
+	}
+	return name, contexts.StateErrorWithRemediation("the state root "+path+" is on "+name+", which may not keep the ownership evidence it holds across a reboot",
+		"place "+path+" on a persistent local filesystem, such as ext4, XFS or Btrfs, then repeat the command")
+}
+
+// admitCreation refuses to create a missing component of path beneath a
+// directory whose filesystem persistentRoot refuses, so no empty root remains.
+func (s *Store) admitCreation(path string) func(*os.File) error {
+	return func(parent *os.File) error {
+		var fs syscall.Statfs_t
+		if err := syscall.Fstatfs(int(parent.Fd()), &fs); err != nil {
+			return state("state filesystem is not qualified for private durable storage")
+		}
+		_, err := s.persistentRoot(path, fs.Type)
+		return err
+	}
 }
 
 func qualifiedFileSystem(file *os.File) error {

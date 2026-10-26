@@ -39,6 +39,10 @@ type Store struct {
 	random  io.Reader
 	// fail is a test-only injection boundary immediately before named effects.
 	fail func(string) error
+	// rootFilesystem is a test-only injection of the state root's filesystem
+	// type: a store that has it judges its explicit root as the production
+	// root on that filesystem.
+	rootFilesystem func() int64
 }
 
 func New(options Options) *Store {

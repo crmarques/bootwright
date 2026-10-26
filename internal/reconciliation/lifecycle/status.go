@@ -708,3 +708,26 @@ func buildIdentity(executable operationstore.Executable) string {
 	}
 	return executable.Version + " (" + executable.Commit + ")"
 }
+
+type UnfinishedOperation struct {
+	ID, Verb, State, Build string
+}
+
+func ReadUnfinished(ctx context.Context, workspace Workspace, operations OperationStoreFactory, name string) (UnfinishedOperation, bool, error) {
+	var found UnfinishedOperation
+	var unfinished bool
+	err := workspace.ReadLifecycle(ctx, name, func(view View) error {
+		store := operations(view.Operations())
+		index, err := store.Index(ctx)
+		if err != nil || index.Current == "" {
+			return err
+		}
+		operation, err := store.ReadOperation(ctx, index.Current)
+		if err != nil || operation.State == reconciliation.OperationDone {
+			return err
+		}
+		found, unfinished = UnfinishedOperation{ID: operation.ID, Verb: string(operation.Verb), State: string(operation.State), Build: buildIdentity(operation.Executable)}, true
+		return nil
+	})
+	return found, unfinished, err
+}

@@ -46,6 +46,10 @@ func (s *Store) inspectStateRoot(ctx context.Context, path string, uid, gid uint
 	stat, filesystem, err := statStateRoot(path)
 	switch {
 	case errors.Is(err, syscall.ENOENT):
+		if name, refusal := s.persistentRoot(path, filesystem.Type); refusal != nil {
+			inspection.Observed, inspection.Status, inspection.Refusal = "absent, beneath a directory on "+name, "not-ready", refusal
+			return inspection, nil
+		}
 		inspection.Observed, inspection.Status = "absent; setup creates it", "ready"
 		return inspection, nil
 	case errors.Is(err, syscall.EACCES):
@@ -63,6 +67,10 @@ func (s *Store) inspectStateRoot(ctx context.Context, path string, uid, gid uint
 	if !localFilesystem(filesystem.Type) {
 		inspection.Observed, inspection.Status = "not on a qualified local filesystem", "not-ready"
 		inspection.Refusal = state("state filesystem is not qualified for private durable storage")
+		return inspection, nil
+	}
+	if name, refusal := s.persistentRoot(path, filesystem.Type); refusal != nil {
+		inspection.Observed, inspection.Status, inspection.Refusal = "on "+name, "not-ready", refusal
 		return inspection, nil
 	}
 	held := ownerText(stat.Uid, stat.Gid) + " " + modeText(stat.Mode)
@@ -84,17 +92,21 @@ func (s *Store) inspectStateRoot(ctx context.Context, path string, uid, gid uint
 // statStateRoot reads the root as the store opens it: every ancestor without
 // following a link and on a qualified filesystem, then the root itself by a
 // path handle that needs only search permission on its parent. It does not
-// refuse a root that is a mount point, which the store accepts.
+// refuse a root that is a mount point, which the store accepts. For an absent
+// root it reports the parent's filesystem, where setup would create it.
 func statStateRoot(path string) (syscall.Stat_t, syscall.Statfs_t, error) {
 	var stat syscall.Stat_t
 	var filesystem syscall.Statfs_t
-	parent, err := walkAbsolute(filepath.Dir(path), false)
+	parent, err := walkAbsolute(filepath.Dir(path), nil)
 	if err != nil {
 		return stat, filesystem, err
 	}
 	defer parent.Close()
 	if err := qualifiedFileSystem(parent); err != nil {
 		return stat, filesystem, err
+	}
+	if syscall.Fstatfs(int(parent.Fd()), &filesystem) != nil {
+		filesystem.Type = 0
 	}
 	fd, err := syscall.Openat(int(parent.Fd()), filepath.Base(path), pathHandle|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
 	if err != nil {

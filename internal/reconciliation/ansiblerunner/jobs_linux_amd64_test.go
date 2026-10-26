@@ -589,6 +589,54 @@ func TestTheSweepRefusesBeyondItsBounds(t *testing.T) {
 	})
 }
 
+// Another account may create any name in a sticky /var/tmp, but only private
+// directories the owner holds count toward the run-directory bound, so more
+// entries of the runner's names than the bound, created by another account or
+// left open to it, never stop a run and are never removed.
+func TestRunDirectoryNamesAnotherAccountCreatedStopNoRun(t *testing.T) {
+	var output bytes.Buffer
+	plantNames := func(t *testing.T, runner Runner, mode os.FileMode) {
+		t.Helper()
+		for n := range maxRunDirectories + 1 {
+			for _, path := range []string{
+				filepath.Join(runner.jobParent, jobPrefix+strconv.Itoa(n+1)),
+				filepath.Join(runner.scratchParent, scratchPrefix+strconv.Itoa(n+1)+"-1"),
+			} {
+				if err := os.Mkdir(path, 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Chmod(path, mode); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	}
+	for _, foreign := range []struct {
+		name  string
+		owner uint32
+		mode  os.FileMode
+	}{
+		{"owned by another account", 1, 0700},
+		{"open to other accounts", 0, 0755},
+	} {
+		t.Run(foreign.name, func(t *testing.T) {
+			runner := sweepingRunner(t, completing)
+			runner.owner += foreign.owner
+			plantNames(t, runner, foreign.mode)
+			before := trees(t, runner.jobParent, runner.scratchParent)
+			if _, err := runner.Run(context.Background(), adapterRequest(t, &output)); err != nil {
+				t.Fatalf("%d entries the runner does not own refused the run: %v", maxRunDirectories+1, err)
+			}
+			after := trees(t, runner.jobParent, runner.scratchParent)
+			for _, entry := range before {
+				if !slices.Contains(after, entry) {
+					t.Fatalf("the sweep removed %s, which is not its own", entry)
+				}
+			}
+		})
+	}
+}
+
 // A mount is never emptied. One a killed adapter left inside its job makes
 // every sweep fail closed; one standing where a job would is not the runner's.
 func TestTheSweepNeverEmptiesAMount(t *testing.T) {

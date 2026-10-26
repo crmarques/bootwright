@@ -319,7 +319,22 @@ the BMC network reaches on the artifact ports
 
 Changing the controller's machine-id, DMI product UUID or root filesystem UUID
 strands every context bound to it: the next command refuses with the host
-mismatch. Destroy each context from this host before such a change. The
+mismatch. Destroy each context from this host before such a change. When the
+host keeps the same `/var/lib/bootwright` under its new identity, as a
+recreated VM with the same disk does, rebind the record once as root:
+
+```sh
+sudo bootwright controller rebind
+```
+
+It names the recorded and the new identity before it asks, keeps every
+binding and reservation, and refuses a store whose directories are not the
+ones its registry attributed. It cannot tell a byte-for-byte clone of the
+store, from a disk image, a snapshot or a cloned VM, from the original, so
+confirm it only when the recorded host no longer runs this store; with `--yes`
+that affirmation is `--recorded-host-retired`. Values named with
+`--machine-id`, `--product-uuid` and `--root-uuid` are visible in the process
+list and the shell history. The
 [host binding](../specs/contexts.md#controller-relationship-and-host-binding)
 names the other exits.
 
@@ -469,9 +484,9 @@ A build from before the setup v2 cut-over cannot read this build's store, and
 this build cannot read its store: crossing it is the
 [fresh install](#a-host-an-earlier-bootwright-build-manages).
 
-Before installing a new build, take stock of every context: `bootwright context
-list` names them, and `bootwright status --context <name>` names, in its
-Lifecycle section, the operation a context has not finished and the build that
+Before installing a new build, take stock of every context:
+`bootwright context list` names them and, under "Unfinished operations", each
+operation a context has not finished, with its verb, state and the build that
 registered it. Finish each one under that build, or note it, because the new
 build continues an operation only as the paragraph on another build below says.
 
