@@ -1,6 +1,18 @@
 implementation: os-package-tree-v1
 content-digest: 62218223d7cca3604594c231a1265d351e6c12e0e9d6d8b31f2f51086a839445
+request-version: os-package-tree-v1
 automation-formats: none
+mark-formats: none
+proof-ids: .bootwright-tree-identity, /.bootwright-tree-identity
+fixed-places: none
+effect-pins:
+  none
+request-identity:
+  identity.context
+  identity.profile
+  media.name
+  publication.path
+  placement.machine
 request-schema:
   identity struct installation.TreeIdentity
   identity.context string

@@ -1,6 +1,20 @@
 implementation: physical-erase-v1
 content-digest: b6f96c3d61793fbbd1f4d78f8ff1a2f2f1c80702137eebf689449d0f1ea6c0a4
+request-version: physical-erase-v1
 automation-formats: none
+mark-formats: none
+proof-ids: bootwright.erase=1
+fixed-places: /var/lib/bootwright-erase
+effect-pins:
+  descriptor-diskseq-full-readback-receipt-v1
+request-identity:
+  install.identity.context
+  install.identity.object
+  install.identity.block
+  installDigest
+  targets[].deviceName
+  targets[].serialNumber
+  targets[].wwn
 request-schema:
   deadlineSeconds int
   install struct installation.Request

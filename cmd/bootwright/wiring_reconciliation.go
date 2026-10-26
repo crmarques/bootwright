@@ -299,14 +299,18 @@ func lifecycleOptions(deps lifecycleDependencies, clock systemClock, runner ansi
 		Clock: clock, Entropy: rand.Read, Selection: currentSelection(deps.Selection),
 		BeginInvocation: runner.BeginInvocation,
 		Executable:      deps.Executable,
-		Operations:      operationStores(clock),
+		Operations:      operationStores(clock, deps.Executable),
 		Setup:           deps.Setup,
 	}
 }
 
-func operationStores(clock systemClock) lifecycle.OperationStoreFactory {
+func operationStores(clock systemClock, executable lifecycle.Executable) lifecycle.OperationStoreFactory {
 	return func(area operationstore.Area) lifecycle.OperationStore {
-		return operationstore.New(area, clock.Now)
+		store := operationstore.New(area, clock.Now)
+		if !executable.Modified {
+			store.Running(operationstore.Executable{Version: executable.Version, Commit: executable.Commit})
+		}
+		return store
 	}
 }
 

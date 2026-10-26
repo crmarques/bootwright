@@ -1,11 +1,52 @@
 #!/bin/sh
 # Check every non-merge commit in BASE..HEAD: a Conventional Commit subject and
 # a body that says what was verified. Attribution trailers alone are not a body.
-set -eu
+#
+# A commit whose diff touches a path below one of contract_paths also carries
+# one body line "Contract: unchanged", or "Contract: " and the comma-separated
+# implementations whose contract it moved, each of whose contract golden
+# (cmd/bootwright/testdata/contracts/<implementation>.golden) the same commit
+# changes: the author's answer to whether the change alters what an effect is
+# (specs/state-reconciliation.md, "Continuation and removal").
+set -euf
+# The collection's meta, playbooks, plugins and roles, and every package that
+# defines a contract version's implementation, request or evidence type, or a
+# value a content digest hashes. TestCheckCommitsContractPathsCoverEveryImplementation
+# holds the list to the implementations the contract goldens pin.
+contract_paths='
+ansible/collections/ansible_collections/bootwright/core/meta/
+ansible/collections/ansible_collections/bootwright/core/playbooks/
+ansible/collections/ansible_collections/bootwright/core/plugins/
+ansible/collections/ansible_collections/bootwright/core/roles/
+internal/addons/clusterobjects/
+internal/addons/instance/
+internal/containercluster/agentinstall/
+internal/containercluster/networking/
+internal/controller/clients/
+internal/infrastructureservices/artifactserver/
+internal/infrastructureservices/dnsserver/
+internal/infrastructureservices/managedservice/
+internal/infrastructureservices/ntpserver/
+internal/infrastructureservices/proxy/
+internal/machine/power/
+internal/managedos/installation/
+internal/storage/ceph/
+internal/substrate/
+'
 if test "$#" -ne 2; then
     echo "usage: scripts/check-commits BASE HEAD" >&2
     exit 2
 fi
+touches_contract() {
+    for file in $1; do
+        for prefix in $contract_paths; do
+            case $file in
+            "$prefix"*) return 0 ;;
+            esac
+        done
+    done
+    return 1
+}
 status=0
 for commit in $(git rev-list --no-merges "$1..$2"); do
     subject=$(git log -1 --format=%s "$commit")
@@ -13,10 +54,36 @@ for commit in $(git rev-list --no-merges "$1..$2"); do
         echo "$commit: subject is not a Conventional Commit: $subject" >&2
         status=1
     fi
-    body=$(git log -1 --format=%b "$commit" | grep -Ev '^(Co-Authored-By|Claude-Session|Signed-off-by|Refs):' | tr -d '[:space:]')
+    body=$(git log -1 --format=%b "$commit" | grep -Ev '^(Co-Authored-By|Claude-Session|Signed-off-by|Refs|Contract):' | tr -d '[:space:]')
     if test -z "$body"; then
         echo "$commit: body is empty; state the gates that ran and their results" >&2
         status=1
     fi
+    changed=$(git -c core.quotePath=false diff-tree --no-commit-id --name-only -r --root "$commit")
+    if ! touches_contract "$changed"; then
+        continue
+    fi
+    contract=$(git log -1 --format=%b "$commit" | sed -n 's/^Contract: //p')
+    if test "$contract" = unchanged; then
+        moved=$(git -c core.quotePath=false diff-tree --no-commit-id -p -r --root "$commit" -- 'cmd/bootwright/testdata/contracts/*.golden' |
+            grep -E '^[-+]content-digest: ' || true)
+        if test -n "$moved"; then
+            echo "$commit: says 'Contract: unchanged' but changes a content-digest line of a contract golden; name each implementation whose contract it moved" >&2
+            status=1
+        fi
+        continue
+    fi
+    if test -z "$contract" || test "$(printf '%s\n' "$contract" | wc -l)" -ne 1 ||
+        ! printf '%s\n' "$contract" | grep -Eqx '[a-z][a-z0-9-]*(, [a-z][a-z0-9-]*)*'; then
+        echo "$commit: touches automation or a capability package; add one body line 'Contract: unchanged' or 'Contract: <implementation>, ...' naming each implementation whose contract it moved" >&2
+        status=1
+        continue
+    fi
+    for implementation in $(printf '%s\n' "$contract" | tr -d ','); do
+        if ! printf '%s\n' "$changed" | grep -Fqx "cmd/bootwright/testdata/contracts/$implementation.golden"; then
+            echo "$commit: names $implementation in its Contract line but does not change cmd/bootwright/testdata/contracts/$implementation.golden" >&2
+            status=1
+        fi
+    done
 done
 exit "$status"

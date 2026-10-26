@@ -1,6 +1,25 @@
 implementation: substrate-host-libvirt-v1
 content-digest: ba58cf950116c1701f45c0f90878f7a6ca765ed66b27f3c47e83bdc5526dddbf
+request-version: substrate-host-libvirt-v6
 automation-formats: https://bootwright.io/substrate/v1
+mark-formats: Bootwright owned readiness barrier, Description=Bootwright managed network firewall, https://bootwright.io/substrate/v1
+proof-ids: none
+fixed-places: none
+effect-pins:
+  libvirt-client,libvirt-daemon,libvirt-daemon-driver-network,libvirt-daemon-driver-qemu,libvirt-daemon-driver-storage-core,qemu-img,qemu-kvm,swtpm,swtpm-tools
+  /var/lib/libvirt/images/bootwright
+  bootwright
+  virtqemud.service,virtnetworkd.service,virtstoraged.service
+request-identity:
+  identity.context
+  identity.object
+  identity.block
+  uri
+  poolName
+  poolPath
+  networks[].name
+  networks[].bridge
+  firewallReadyUnit
 request-schema:
   firewallReadyUnit string
   identity struct libvirt.Identity

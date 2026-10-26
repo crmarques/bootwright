@@ -1,6 +1,21 @@
 implementation: addon-instance-v1
 content-digest: 493e3268d9a21775626378b40d42829af4892dfc23f8e9cc142598a817a63681
+request-version: addon-instance-request-v1
 automation-formats: none
+mark-formats: bootwright.cluster-objects.owner-v1, bootwright.io/owner
+proof-ids: none
+fixed-places: bootwright-
+effect-pins:
+  bootwright.cluster-objects.owner-v1
+  bootwright.cluster-objects.object-v1
+  exact-v1
+  operator-managed-v1
+  dependent-exact-v1
+request-identity:
+  cluster
+  package
+  binding
+  placement.machine
 request-schema:
   binding string
   budgetSeconds int64

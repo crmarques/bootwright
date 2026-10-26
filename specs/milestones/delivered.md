@@ -8429,6 +8429,39 @@ changed, so a live host needs `make build` and `setup` before it applies.
 delivering commit records the gates. No live Ceph run exercised the new
 bundle modules.
 
+### X163 — Audit lane H: cross-build continuation guards
+
+**Item:** B813 (2026-10-26 spec audit step P1-F), lane H of the
+[audit remediation](backlog.md#lane-order-and-progress) under D182.
+**Kind:** safety. **Owner:** State reconciliation. Delivered on 2026-10-26.
+D183's answer to Q76 keeps D145(4): no digest split, so that part closed with
+no change.
+
+Each contract golden now carries `request-version`, `mark-formats`,
+`proof-ids`, `fixed-places`, `effect-pins` and `request-identity` sections,
+and `TestEveryImplementationMovesItsContentDigestWithItsContract` fails when
+any of them changes without the content digest moving; a changed fixed place
+also needs a request-version move, and a missing section counts as a change.
+`TestEveryAutomationVersionLiteralIsClassified` scans every embedded
+automation file, refusing an unread extension, for `-vN` literals,
+`bootwright.io` keys and Bootwright host paths, prefixes and marks in any
+case, each classified as persisted, mirrored, fixed, validated, transient or
+documentation with a reason; `TestEveryCephMarkerNameIsDeclared` puts every
+Ceph marker record name into the Ceph goldens' proofs. The removal-reads-only-
+the-frozen-request rule of [dependency safety](../state-reconciliation.md#dependency-safety-during-recovery)
+is held by the `fixed` class, the exact list of values removal automation reads
+from the build in hand; names built only from values stay outside the scan.
+
+`scripts/check-commits` requires one `Contract: unchanged` or
+`Contract: <implementations>` body line on a commit touching the collection's
+roles, plugins, playbooks or meta, or a package that defines a contract, and
+refuses `unchanged` beside a moved content digest; the local fast-forward
+runs it before integrating. A record a reader refuses for an unknown member
+names the build in its own `build` member, or names it as this executable.
+
+**Guard tests:** the tests above and `TestCheckCommits*`, each proved by a
+seeded mismatch; the delivering commit records the gates.
+
 ## M3 independent in-tree completion
 
 The owner's 2026-10-23 request (D181) delivers the independent implementation

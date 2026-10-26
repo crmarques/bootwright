@@ -122,12 +122,28 @@ capability's request, evidence, observation or ownership code:
 - Decide whether it alters what an effect is: the objects it creates, their
   names and places, the ownership mark, the host resources it claims or what
   its observation proves. If it does, move the implementation's version, which
-  moves its content digest, and say so in the commit body.
+  moves its content digest, and name the implementation in the commit's
+  [`Contract:` line](git-integration.md#contract-line); otherwise write
+  `Contract: unchanged`.
 - `TestEveryImplementationMovesItsContentDigestWithItsContract` in
-  `cmd/bootwright/contract_versions_test.go` fails when a Go request or evidence
-  schema, or a persisted format version the collection quotes, changes with the
-  digest unmoved. It cannot see a change of meaning under an unmoved version.
-- `TestEveryAutomationVersionLiteralIsClassified` in the same file requires a
-  new or renamed quoted version literal in the collection to be classified.
+  `cmd/bootwright/contract_versions_test.go` fails when a section of the
+  implementation's contract golden changes with the digest unmoved: its Go
+  request or evidence schema, a persisted format version the collection
+  quotes, a mark, proof identifier or place its automation fixes outside the
+  request, an effect pin or a request identity member. A changed fixed place
+  also needs the request version to move. It cannot see a change of meaning
+  under an unmoved version.
+- `contractRecipes` in `cmd/bootwright/contract_identity_test.go` restates what
+  each content digest hashes, effect pins included, and must reproduce it;
+  `requestIdentities` there names the request members that carry an effect's
+  identity.
+- `TestEveryAutomationVersionLiteralIsClassified` requires each new or renamed
+  quoted version literal, and each token naming a `bootwright.io` key or a
+  Bootwright host path, name prefix or mark, or capitalized `Bootwright` text,
+  to be classified with its reason; `TestEveryCephMarkerNameIsDeclared` (in
+  `contract_markers_test.go`) requires each Ceph marker record name in
+  `cephMarkerNames`. A removal reads its target's identity from the frozen
+  request; a value it reads from the build in hand instead is a `fixed`
+  classification.
 - A moved version still refuses a record of the old one by name (D142): add no
   converter and no older reader.

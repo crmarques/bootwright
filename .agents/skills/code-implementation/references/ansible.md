@@ -16,7 +16,8 @@ ownership mark, the host resources it claims or what its observation proves.
 If it does, move the implementation's version as the
 [Go reference](go.md#contract-versions-and-content-digests) says; an automation
 change that moves no content digest continues a live operation under another
-build.
+build. The commit's [`Contract:` line](git-integration.md#contract-line)
+records the answer.
 
 ## Implementation
 

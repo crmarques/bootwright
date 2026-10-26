@@ -7,6 +7,8 @@ import (
 	"errors"
 	"regexp"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -239,6 +241,10 @@ func encode(value any, maximum int) ([]byte, error) {
 // decode accepts only the exact canonical encoding of the record type, so a
 // reader and a writer can never disagree about what a stored operation says.
 func decode(data []byte, maximum int, target any) error {
+	return decodeUnder(data, maximum, target, nil)
+}
+
+func decodeUnder(data []byte, maximum int, target any, running *Executable) error {
 	if len(data) == 0 || len(data) > maximum || !utf8.Valid(data) {
 		return recordError("lifecycle record exceeds its bounds or encoding")
 	}
@@ -246,6 +252,14 @@ func decode(data []byte, maximum int, target any) error {
 	case errors.Is(err, canonicaljson.ErrTrailing):
 		return recordError("lifecycle record contains trailing data")
 	case err != nil:
+		if build, ok := recordBuild(data); ok {
+			named := buildName(build)
+			if running != nil && *running != (Executable{}) && build.Executable == *running && !build.Modified {
+				return recordError("lifecycle record is malformed or unsupported; it names " + named + ", this executable")
+			}
+			return diagnostics.NewFailureWithRemediation("lifecycle.state", "lifecycle record is malformed or unsupported; "+named+" wrote it", "",
+				"continue or remove this operation with "+named+", which reads the record")
+		}
 		return recordError("lifecycle record is malformed or unsupported")
 	}
 	canonical, err := encode(target, maximum)
@@ -395,6 +409,42 @@ func validateAttempt(record Attempt) error {
 		}
 	}
 	return validateTimestamps(record.Started, record.Updated)
+}
+
+// recordBuild is the canonical build of a record's one member spelled build in any case.
+func recordBuild(data []byte) (Build, bool) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
+		return Build{}, false
+	}
+	var raw json.RawMessage
+	found := false
+	for decoder.More() {
+		token, err := decoder.Token()
+		key, ok := token.(string)
+		var value json.RawMessage
+		if err != nil || !ok || decoder.Decode(&value) != nil {
+			return Build{}, false
+		}
+		if strings.EqualFold(key, "build") {
+			if key != "build" || found {
+				return Build{}, false
+			}
+			raw, found = value, true
+		}
+	}
+	var build Build
+	if !found || canonicaljson.Decode(raw, &build, canonicaljson.Bare) != nil || validateBuild(build) != nil {
+		return Build{}, false
+	}
+	return build, true
+}
+
+func buildName(build Build) string {
+	if build.Executable.Version == "" && build.Executable.Commit == "" {
+		return "the build with automation digest " + build.AutomationDigest
+	}
+	return "build " + strconv.Quote(build.Executable.Version) + " at commit " + strconv.Quote(build.Executable.Commit)
 }
 
 func validateBuild(build Build) error {

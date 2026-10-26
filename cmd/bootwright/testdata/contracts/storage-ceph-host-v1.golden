@@ -1,6 +1,24 @@
 implementation: storage-ceph-host-v1
 content-digest: a3abfd47845c35f38f64b81d7c9b4064d28a72af865157a03dd8bdc7004585bb
+request-version: ceph-host-v7
 automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v2, ceph-host-route-v3, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-physical-device-binding-v1, ceph-runtime-profile-v3
+mark-formats: none
+proof-ids: .bootwright-tree-identity, marker:-attempt-%d.json, marker:-pulled.json, marker:auth.json, marker:auxiliary-, marker:cache-directory-intent.json, marker:cache-directory.json, marker:cache-pending.json, marker:cache-ready.json, marker:complete.json, marker:decision.json, marker:device-identities.json, marker:physical-device-binding.json, marker:policy.json, marker:pull-attempt-%d.json, marker:pulled.json, marker:route.json, marker:runtime-profile.json, marker:scope.json, marker:synthetic.json, marker:verified.json
+fixed-places: /var/lib/bootwright/ceph-host, /var/lib/bootwright/ceph-packages
+effect-pins:
+  selected-packages-pull-profile-route-devices-v3
+request-identity:
+  host
+  cluster.cluster
+  cluster.fsid
+  cluster.owner
+  cluster.clusterSSHUser
+  cluster.cephadm.path
+  cluster.hosts[].name
+  cluster.hosts[].machine
+  cluster.hosts[].devices[].path
+  cluster.hosts[].devices[].serial
+  cluster.hosts[].devices[].wwn
 request-schema:
   cluster struct ceph.ClusterScope
   cluster.ansiblePackageVersion string

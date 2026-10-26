@@ -1,6 +1,15 @@
 implementation: cluster-network-v1
 content-digest: d88db7f8f1ee3c9e02902ffe1bec80b514a7218367da863cfd4f2ec5be75ca6f
+request-version: cluster-network-request-v1
 automation-formats: none
+mark-formats: bootwright.cluster-objects.owner-v1, bootwright.io/owner
+proof-ids: none
+fixed-places: bootwright-
+effect-pins:
+  none
+request-identity:
+  cluster
+  placement.machine
 request-schema:
   budgetSeconds int64
   cluster string

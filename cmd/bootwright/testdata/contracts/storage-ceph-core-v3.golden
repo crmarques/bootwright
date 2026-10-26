@@ -1,6 +1,34 @@
 implementation: storage-ceph-core-v3
 content-digest: 4d9c2e770ef9f47665b051a3bd797a6bd1804bcac737f8aa477453929e5ab3ba
+request-version: ceph-core-v32
 automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v2, ceph-dashboard-port-attempt-v1, ceph-dashboard-port-repair-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-user-v1, ceph-device-identities-v2, ceph-filesystem-attempt-v1, ceph-host-cache-v1, ceph-native-teardown-v1, ceph-osd-device-intent-v1, ceph-physical-device-binding-v1, ceph-policy-attempt-v1, ceph-pool-attempt-v2, ceph-rbd-image-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v3, ceph-service-inputs-v1, ceph-subvolume-attempt-v1, ceph-subvolume-group-attempt-v1, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v3
+mark-formats: .bootwright-registry-, bootwright-owner, bootwright:
+proof-ids: bootwright-bound:, bootwright-bound:/spec/ssl_cert, bootwright-bound:/spec/ssl_key, marker:-attempt, marker:-attempt-%d.json, marker:-attempt.json, marker:-complete.json, marker:-id, marker:-inputs.json, marker:-pulled.json, marker:-ready.json, marker:-reserved.json, marker:.json, marker:artifact.json, marker:attempt-call_home_initialize.json, marker:auth.json, marker:auxiliary-, marker:bootstrap-attempt.json, marker:bootstrap-enrollment.json, marker:bootstrap-original-ready.json, marker:bootstrap-original-reserved.json, marker:bootstrap-output-source.json, marker:bootstrap-prepared.json, marker:bootstrap-protocol.json, marker:bootstrap-scope.json, marker:cache-directory-intent.json, marker:cache-directory.json, marker:cache-pending.json, marker:cache-ready.json, marker:call-home-accepted.json, marker:client-, marker:client-applied-, marker:client-attempt-, marker:client-generator.json, marker:complete-call_home_initialize.json, marker:complete.json, marker:dashboard-port-, marker:dashboard-port-repair.json, marker:dashboard-redeploy.json, marker:dashboard-redeployed.json, marker:decision.json, marker:device-identities.json, marker:filesystem-, marker:filesystem-attempt., marker:filesystem-id., marker:group-attempt., marker:group., marker:initial-mgr-original-ready.json, marker:manifest.json, marker:monitoring-log-config-attempt.json, marker:monitoring-log-config-complete.json, marker:native-teardown.json, marker:nfs-export-attempt., marker:nfs-export-id., marker:nfs-pool-id.json, marker:nfs-pool.json, marker:nvmeof-attempt., marker:nvmeof-complete., marker:object-bucket-, marker:object-user-, marker:osd-device-, marker:osd-device-intent.json, marker:owner.json, marker:physical-device-binding.json, marker:podman-auth.json, marker:policy-, marker:policy-attempt-, marker:policy-id-, marker:policy.json, marker:pool-, marker:pool-attempt-, marker:pool-id-, marker:pool-rbd-attempt-, marker:pool-rbd-complete-, marker:pool-setting-, marker:pull-attempt-%d.json, marker:pulled.json, marker:rbd-, marker:rbd-attempt., marker:rbd-id., marker:registry-file.json, marker:registry-intent.json, marker:registry-pending.json, marker:registry-removal.json, marker:registry-removed.json, marker:rgw-root.json, marker:route.json, marker:runtime-profile.json, marker:scope.json, marker:service-, marker:service-inputs.json, marker:ssh-authorization.json, marker:sshd-policy.json, marker:subvolume-, marker:subvolume-attempt., marker:subvolume-path., marker:synthetic.json, marker:transport-directory.json, marker:transport-file-ready-, marker:transport-file-relabeled-, marker:transport-file-reserved-, marker:transport-ready.json, marker:transport-relabel.json, marker:transport.json, marker:tunnel-config-attempt-, marker:tunnel-config-attempt-call_home.json, marker:tunnel-config-complete-, marker:tunnel-config-complete-call_home.json, marker:tunnel-config-intent.json, marker:tunnel-configured.json, marker:tunnel-manager-files.json, marker:tunnel-mgr-source.json, marker:tunnel-mounted.json, marker:tunnel-redeploy.json, marker:tunnel-stage.json
+fixed-places: .bootwright-cephadm-, /run/bootwright-ceph-ssh, /var/lib/bootwright/ceph, /var/lib/bootwright/ceph-host, 05-bootwright-ceph-
+effect-pins:
+  selected-tunnel-image-v3
+request-identity:
+  cluster
+  fsid
+  owner
+  clusterSSHUser
+  cephadm.path
+  hosts[].name
+  hosts[].machine
+  hosts[].devices[].path
+  hosts[].devices[].serial
+  hosts[].devices[].wwn
+  pool.name
+  rbd.name
+  filesystem.name
+  subvolume.name
+  client.name
+  service.id
+  objectUser.name
+  objectBucket.name
+  nvmeof.name
+  nfsExport.name
+  policy.name
 request-schema:
   action string
   ansiblePackageVersion string

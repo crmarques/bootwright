@@ -1,6 +1,23 @@
 implementation: artifact-server-nginx-v1
 content-digest: d6b66734772bef4e6869a796e6e8ac4f82587dd9711b442b37f14bde1f21f70f
+request-version: artifact-server-nginx-v2
 automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  registry.access.redhat.com/ubi9/nginx-124@sha256:bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56
+  /var/lib/bootwright-services
+  bootwright
+request-identity:
+  identity.context
+  identity.service
+  identity.block
+  contentRoot
+  unit
+  bindAddress
+  listeners[].port
+  placement.machine
 request-schema:
   bindAddress string
   contentRoot string

@@ -1,6 +1,23 @@
 implementation: ntp-server-chrony-v1
 content-digest: 826e9dcae8e4f7187d0e268d4403db8b6895770020b03daaca789a828e0a920a
+request-version: managed-service-v3
 automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  docker.io/dockurr/chrony@sha256:f584829f268b26b26b351000b60aa7c3507933873b6a6d77ffe9dcabcfdc7025
+  /var/lib/bootwright-services
+  bootwright
+request-identity:
+  identity.context
+  identity.service
+  identity.block
+  contentRoot
+  unit
+  bindAddress
+  port
+  placement.machine
 request-schema:
   bindAddress string
   clients []string omitempty

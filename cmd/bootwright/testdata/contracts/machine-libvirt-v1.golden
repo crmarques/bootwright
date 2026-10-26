@@ -1,6 +1,30 @@
 implementation: machine-libvirt-v1
 content-digest: a790938872a1e3b634f1726dc33410572e231aee1e83e1f8bc1d64a1a704b8bf
+request-version: machine-libvirt-v8
 automation-formats: https://bootwright.io/substrate/v1
+mark-formats: https://bootwright.io/substrate/v1
+proof-ids: none
+fixed-places: /var/lib/bootwright-substrate/
+effect-pins:
+  quay.io/metal3-io/sushy-tools@sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e
+  /var/lib/libvirt/images/bootwright
+  bootwright
+  data-media-ssd-scsi-v1
+request-identity:
+  identity.context
+  identity.object
+  identity.block
+  uri
+  domain
+  uuid
+  directory
+  poolName
+  poolPath
+  disks[].name
+  disks[].path
+  interfaces[].macAddress
+  controller.unit
+  controller.port
 request-schema:
   controller struct libvirt.Controller
   controller.address string

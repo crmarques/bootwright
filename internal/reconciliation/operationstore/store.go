@@ -28,6 +28,7 @@ const indexPath = "index.json"
 type Store struct {
 	area     Area
 	clock    func() time.Time
+	running  *Executable
 	mutex    sync.Mutex
 	expected map[string][]byte
 	// outputs guards what the attempts' retained output may still take of the
@@ -41,6 +42,12 @@ type Store struct {
 
 func New(area Area, clock func() time.Time) *Store {
 	return &Store{area: area, clock: clock, expected: map[string][]byte{}}
+}
+
+// Running names the unmodified executable that reads the store.
+func (s *Store) Running(executable Executable) *Store {
+	s.running = &executable
+	return s
 }
 
 // remember records the exact bytes a later replacement must still find. A nil
@@ -85,7 +92,7 @@ func (s *Store) Index(ctx context.Context) (Index, error) {
 		return Index{}, err
 	}
 	var index Index
-	if err := decode(data, MaxIndexBytes, &index); err != nil {
+	if err := decodeUnder(data, MaxIndexBytes, &index, s.running); err != nil {
 		return Index{}, err
 	}
 	if err := validateIndex(index); err != nil {
@@ -460,7 +467,7 @@ func (s *Store) readOperation(ctx context.Context, id string) (Operation, []byte
 		return Operation{}, nil, recordError("the named lifecycle operation has no durable record")
 	}
 	var operation Operation
-	if err := decode(data, MaxOperationBytes, &operation); err != nil {
+	if err := decodeUnder(data, MaxOperationBytes, &operation, s.running); err != nil {
 		return Operation{}, nil, err
 	}
 	if err := validateOperation(operation); err != nil {
@@ -489,7 +496,7 @@ func (s *Store) ReadPlan(ctx context.Context, id string) (reconciliation.Plan, e
 		return reconciliation.Plan{}, recordError("the named lifecycle operation has no frozen plan")
 	}
 	var plan reconciliation.Plan
-	if err := decode(data, MaxPlanBytes, &plan); err != nil {
+	if err := decodeUnder(data, MaxPlanBytes, &plan, s.running); err != nil {
 		return reconciliation.Plan{}, err
 	}
 	// Rebuilding through NewPlan re-runs every structural rule, so a record
@@ -642,7 +649,7 @@ func (s *Store) Attempt(ctx context.Context, id, block string, number int) (Atte
 		return Attempt{}, recordError("the lifecycle attempt record is missing")
 	}
 	var record Attempt
-	if err := decode(data, MaxAttemptBytes, &record); err != nil {
+	if err := decodeUnder(data, MaxAttemptBytes, &record, s.running); err != nil {
 		return Attempt{}, err
 	}
 	if err := validateAttempt(record); err != nil {
@@ -673,7 +680,7 @@ func (s *Store) readBlockRecord(ctx context.Context, id, block string) (BlockRec
 		return BlockRecord{Version: 1, Block: block, State: reconciliation.BlockPending}, false, nil
 	}
 	var record BlockRecord
-	if err := decode(data, MaxAttemptBytes, &record); err != nil {
+	if err := decodeUnder(data, MaxAttemptBytes, &record, s.running); err != nil {
 		return BlockRecord{}, false, err
 	}
 	if err := validateBlock(record); err != nil {
@@ -786,7 +793,7 @@ func (s *Store) adoptable(ctx context.Context, id, block string, number int, rec
 		return Attempt{}, recordError("the block holds an attempt record but no block record that counts it")
 	}
 	var record Attempt
-	if err := decode(data, MaxAttemptBytes, &record); err != nil {
+	if err := decodeUnder(data, MaxAttemptBytes, &record, s.running); err != nil {
 		return Attempt{}, err
 	}
 	if err := validateAttempt(record); err != nil {
@@ -848,7 +855,7 @@ func (s *Store) RecordPreparation(ctx context.Context, id, block string, number 
 		return recordError("the lifecycle attempt record is missing its durable start")
 	}
 	var record Attempt
-	if err := decode(data, MaxAttemptBytes, &record); err != nil {
+	if err := decodeUnder(data, MaxAttemptBytes, &record, s.running); err != nil {
 		return err
 	}
 	if record.Phase != "running" || record.Block != block || record.Number != number || record.Resolution != 0 {
@@ -994,7 +1001,7 @@ func (s *Store) LastResolution(ctx context.Context, id, block string, attempt in
 		return Attempt{}, false, recordError("the lifecycle resolution record is missing")
 	}
 	var record Attempt
-	if err := decode(data, MaxAttemptBytes, &record); err != nil {
+	if err := decodeUnder(data, MaxAttemptBytes, &record, s.running); err != nil {
 		return Attempt{}, false, err
 	}
 	if err := validateAttempt(record); err != nil {
@@ -1019,7 +1026,7 @@ func (s *Store) completeRecord(ctx context.Context, id, block, target string, nu
 		return err
 	}
 	var record Attempt
-	if err := decode(data, MaxAttemptBytes, &record); err != nil {
+	if err := decodeUnder(data, MaxAttemptBytes, &record, s.running); err != nil {
 		return err
 	}
 	if record.Phase != "running" || record.Block != block || record.Number != number || record.Resolution != resolution {

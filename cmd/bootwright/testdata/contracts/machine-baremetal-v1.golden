@@ -1,6 +1,19 @@
 implementation: machine-baremetal-v1
 content-digest: a9b7de0371ebbd2caee7e2852f1fc58b25ff9ca538697a5623ea322fc93fa6f9
+request-version: machine-baremetal-v2
 automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  identity+addresses+power
+request-identity:
+  identity.context
+  identity.object
+  identity.block
+  provider
+  controller.endpoint
+  hardware[].macAddress
 request-schema:
   controller struct baremetal.Controller
   controller.credentialsRef string

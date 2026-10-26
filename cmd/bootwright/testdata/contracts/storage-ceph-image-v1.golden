@@ -1,6 +1,17 @@
 implementation: storage-ceph-image-v1
 content-digest: ebd93eef0f05c5d05e27e466a1601db100b939092f44671020e479267783ab33
+request-version: ceph-image-v4
 automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  selected-artifact-manifest-v2
+request-identity:
+  cluster
+  image
+  registry
+  auxiliary[].image
 request-schema:
   auxiliary []struct ceph.AuxiliaryImage omitempty
   auxiliary[].base string

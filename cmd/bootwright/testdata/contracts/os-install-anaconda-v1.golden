@@ -1,6 +1,36 @@
 implementation: os-install-anaconda-v1
 content-digest: bf2f5171c4dcf626e1847ce6e277791ddf1f77e37be45cc25bfd8b71e1ab91e3
+request-version: os-install-anaconda-v16
 automation-formats: none
+mark-formats: none
+proof-ids: .bootwright-tree-identity, /etc/bootwright/registration.json
+fixed-places: /etc/bootwright, /run/bootwright, /var/lib/bootwright-install, /var/lib/bootwright-install/, bootwright-network-apply.service
+effect-pins:
+  os
+  private
+  public
+  /etc/bootwright/install-marker.json
+  /etc/bootwright/host-key.pub
+  /etc/bootwright/network.yml
+  /etc/bootwright/network-marker.json
+  300
+  lorax,xorriso
+request-identity:
+  identity.context
+  identity.object
+  identity.block
+  identity.profile
+  hostname
+  markerPath
+  hostKeyPath
+  network.documentPath
+  network.markerPath
+  private.path
+  image.path
+  target.domain
+  target.uri
+  target.hardware.rootDevice
+  placement.machine
 request-schema:
   address string
   bootMedia struct installation.Media

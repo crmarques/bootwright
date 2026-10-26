@@ -72,39 +72,83 @@ func contractVersions() []contractVersion {
 	return versions
 }
 
-// Automation format classes: what a versioned literal in the embedded
-// collection names. Only a persisted format belongs to an implementation's
-// contract; the others are already a content-digest input or gated by the
-// automation digest.
+// Automation literal classes: what a versioned literal, or a literal naming a
+// Bootwright host path, name prefix or mark, in the embedded collection names.
+// A persisted format or a fixed value belongs to the contract of every
+// implementation it names; the others are already a content-digest input,
+// carried by the frozen request, or gated by the automation digest.
+//
+//   - persisted: a record format the automation writes on a host and a later
+//     run reads back;
+//   - mirrored: a version Go also holds, which the role refuses unless the
+//     frozen request or evidence names it;
+//   - transient: a value that lives within one run and is never read across
+//     runs, such as a probe's scratch or a temporary name;
+//   - controller: the controller stage's own format or store, not an effect's;
+//   - fixed: a host path, name prefix, ownership mark or proof identifier the
+//     automation fixes outside the frozen request, so a removal under another
+//     build reads it from the build in hand (the exceptions to the rule that a
+//     removal reads its target's identity from the frozen request);
+//   - validated: a value that only bounds what a frozen request may carry, so
+//     another build's value refuses the request rather than relocating it;
+//   - documentation: text that runs nothing.
 const (
-	formatPersisted  = "persisted"
-	formatMirrored   = "mirrored"
-	formatTransient  = "transient"
-	formatController = "controller"
+	formatPersisted     = "persisted"
+	formatMirrored      = "mirrored"
+	formatTransient     = "transient"
+	formatController    = "controller"
+	formatFixed         = "fixed"
+	formatValidated     = "validated"
+	formatDocumentation = "documentation"
 )
 
-// automationFormat classifies one literal; a persisted one names every
-// implementation whose host data it versions.
+// The kinds of a persisted or fixed literal, each its own contract golden
+// section: a mark that proves an object this context's own, the identifier of
+// what an observation proves, and a place, the host path or name prefix where
+// an effect lives.
+const (
+	kindMark  = "mark"
+	kindProof = "proof"
+	kindPlace = "place"
+)
+
+// automationFormat classifies one literal; a persisted or fixed one names
+// every implementation whose effects it versions, places, marks or proves,
+// and every class but persisted and mirrored records its reason.
 type automationFormat struct {
 	class           string
+	kind            string
 	implementations []string
+	reason          string
 }
 
 func persistedBy(implementations ...string) automationFormat {
 	return automationFormat{class: formatPersisted, implementations: implementations}
 }
 
-// automationFormats classifies every versioned literal the embedded plugins
-// and roles carry, by where each is written and read.
+func fixedBy(kind, reason string, implementations ...string) automationFormat {
+	return automationFormat{class: formatFixed, kind: kind, implementations: implementations, reason: reason}
+}
+
+func transient(reason string) automationFormat {
+	return automationFormat{class: formatTransient, reason: reason}
+}
+
+func validated(reason string) automationFormat {
+	return automationFormat{class: formatValidated, reason: reason}
+}
+
+// automationFormats classifies every literal the embedded collection carries
+// that ends in a version or names a Bootwright host path, name prefix or
+// mark, by where each is written and read.
 func automationFormats() map[string]automationFormat {
 	host, core := persistedBy(ceph.HostImplementation), persistedBy(ceph.Implementation)
-	return map[string]automationFormat{
-		"addon-instance-request-v1":           {class: formatMirrored},
-		"ceph-export-request-v1":              {class: formatMirrored},
-		"ceph-export-evidence-v1":             {class: formatMirrored},
-		"cluster-network-request-v1":          {class: formatMirrored},
-		"cluster-objects-v1":                  {class: formatMirrored},
-		"bootwright.cluster-objects.owner-v1": {class: formatMirrored},
+	formats := map[string]automationFormat{
+		"addon-instance-request-v1":  {class: formatMirrored},
+		"ceph-export-request-v1":     {class: formatMirrored},
+		"ceph-export-evidence-v1":    {class: formatMirrored},
+		"cluster-network-request-v1": {class: formatMirrored},
+		"cluster-objects-v1":         {class: formatMirrored},
 		// The host block writes them; the core block's workers read them back
 		// for the manager account, the cephadm cache and the OSD identities.
 		"ceph-runtime-profile-v3":         persistedBy(ceph.HostImplementation, ceph.Implementation),
@@ -145,22 +189,22 @@ func automationFormats() map[string]automationFormat {
 		// The core block's cache phase publishes cephadm on each host under it.
 		"ceph-host-cache-v1": core,
 		// The client and dashboard credential custody records, by kind.
-		"-custody-v1": core,
+		"-custody-v1": persistedBy(ceph.Implementation, ceph.ExportImplementation),
 
-		"https://bootwright.io/substrate/v1": persistedBy(libvirt.HostImplementation, libvirt.MachineImplementation),
+		// The namespace of the ownership metadata a libvirt network, pool or
+		// domain carries.
+		"https://bootwright.io/substrate/v1": {class: formatPersisted, kind: kindMark,
+			implementations: []string{libvirt.HostImplementation, libvirt.MachineImplementation}},
 
-		"ceph-host-image-v1":                 {class: formatTransient},
-		"ceph-host-device-id-v1":             {class: formatTransient},
-		"bootwright-ceph-route-probe-v1":     {class: formatTransient},
-		"bootwright-ceph-route-prepare-v1":   {class: formatTransient},
-		"bootwright-ceph-route-synthetic-v1": {class: formatTransient},
-		// The registry client's User-Agent.
-		"bootwright-ceph-metadata-v1": {class: formatTransient},
-		"bootwright-pull-broker-v1":   {class: formatTransient},
-		// The bytes the label probe writes in its own scratch and reads back.
-		"bootwright-contained-public-label-probe-v1": {class: formatTransient},
-		// The guest package transaction policy ceph_packages.transaction_request builds and the shared resolver reads within one run.
-		"ceph-packages-v2": {class: formatTransient},
+		"ceph-host-image-v1":                         transient("the image facts a contained probe prints and the same call reads back"),
+		"ceph-host-device-id-v1":                     transient("the device identity a contained probe prints and the same call reads back"),
+		"bootwright-ceph-route-probe-v1":             transient("the result schema of the route probe, read back by the call that ran it"),
+		"bootwright-ceph-route-prepare-v1":           transient("the result schema of the route probe's preparation, read back by the call that ran it"),
+		"bootwright-ceph-route-synthetic-v1":         transient("the synthetic account the route probe creates and checks within one call"),
+		"bootwright-ceph-metadata-v1":                transient("the registry client's User-Agent"),
+		"bootwright-pull-broker-v1":                  transient("the pull broker's User-Agent"),
+		"bootwright-contained-public-label-probe-v1": transient("the bytes the label probe writes in its own scratch and reads back"),
+		"ceph-packages-v2":                           transient("the guest package transaction policy ceph_packages.transaction_request builds and the shared resolver reads within one run"),
 
 		"ceph-host-v7":                 {class: formatMirrored},
 		"ceph-host-evidence-v3":        {class: formatMirrored},
@@ -189,7 +233,170 @@ func automationFormats() map[string]automationFormat {
 		"machine-power-redfish-v2": {class: formatMirrored},
 		"machine-power-read-v2":    {class: formatMirrored},
 
-		"controller-prerequisites-v6": {class: formatController},
+		"controller-prerequisites-v6": {class: formatController, reason: "the controller stage's request, which setup applies and no plan block retains"},
+	}
+	for literal, format := range automationIdentities() {
+		if _, twice := formats[literal]; twice {
+			panic(literal + " is classified twice")
+		}
+		formats[literal] = format
+	}
+	return formats
+}
+
+// automationIdentities classifies the literals naming a Bootwright host path,
+// name prefix or mark (TestEveryAutomationVersionLiteralIsClassified scans
+// them): the exact list of values a removal may read from the build in hand
+// rather than from its frozen request, and why every other one is safe.
+func automationIdentities() map[string]automationFormat {
+	core, host := ceph.Implementation, ceph.HostImplementation
+	media, install := agentinstall.MediaImplementation, agentinstall.InstallImplementation
+	addon, network := instance.Implementation, networking.Implementation
+	anaconda, tree, erase := installation.Implementation, installation.TreeImplementation, installation.EraseImplementation
+	scratch := transient("a temporary name the call that creates it removes or renames before it returns")
+	inProcess := transient("a name the plugin gives a module it loads into its own process")
+	eraseRuntime := transient("the erase environment's RAM-only runtime, which exists only while that boot runs")
+	scriptName := transient("the $0 word of a fixed shell probe")
+	identities := map[string]automationFormat{
+		"bootwright.cluster-objects.owner-v1":     fixedBy(kindMark, "the domain an applied object's owner annotation is derived under", addon, network),
+		"bootwright.io/owner":                     fixedBy(kindMark, "the annotation key of an applied object's owner mark", addon, network),
+		"bootwright-":                             fixedBy(kindPlace, "the prefix of the server-side apply field manager and of the install's wildcard DNS label", addon, network, install),
+		"bootwright-owner":                        fixedBy(kindMark, "the key of the owner mark on a Ceph resource", core, ceph.ExportImplementation, ceph.SMBImplementation, ceph.ReplicationImplementation),
+		"bootwright:":                             fixedBy(kindMark, "the comment prefix that marks the cluster's authorized SSH key line as this owner's", core),
+		".bootwright-registry-":                   fixedBy(kindMark, "the anchor naming the registry credential this owner placed", core),
+		"bootwright-managed-export":               fixedBy(kindMark, "the argument the published handoff ConfigMap names the export by", ceph.ExportImplementation),
+		"bootwright-bound:":                       fixedBy(kindProof, "the placeholder a stored service spec holds where a bound secret goes", core),
+		"bootwright-bound:/spec/ssl_cert":         fixedBy(kindProof, "the placeholder a stored gateway spec holds for its bound certificate", core),
+		"bootwright-bound:/spec/ssl_key":          fixedBy(kindProof, "the placeholder a stored gateway spec holds for its bound key", core),
+		"bootwright.storage-export.principal-v1":  fixedBy(kindPlace, "the domain the export's principal name is derived under", ceph.ExportImplementation),
+		"/var/lib/bootwright/ceph":                fixedBy(kindPlace, "the root of the cluster's tunnel, custody and native records on each host, which the export, SMB and replication workers read and write under", core, ceph.ExportImplementation, ceph.SMBImplementation, ceph.ReplicationImplementation),
+		"/var/lib/bootwright/ceph-host":           fixedBy(kindPlace, "the root of the host's runtime profile", host, core),
+		"/var/lib/bootwright/ceph-packages":       fixedBy(kindPlace, "the root of the host's package records", host),
+		"/run/bootwright-ceph-ssh":                fixedBy(kindPlace, "the tunnel's mount point inside the cluster's containers", core),
+		".bootwright-cephadm-":                    fixedBy(kindPlace, "the prefix of the staged cephadm name the host cache record holds", core),
+		"05-bootwright-ceph-":                     fixedBy(kindPlace, "the prefix of the sshd policy include the cluster owns", core),
+		".bootwright-tree-identity":               fixedBy(kindProof, "the identity file a published package tree carries", tree, anaconda, host),
+		"/.bootwright-tree-identity":              fixedBy(kindProof, "the identity file a published package tree carries", tree),
+		"bootwright-media.json":                   fixedBy(kindProof, "the receipt the published boot media carries", media),
+		"/bootwright-media.json":                  fixedBy(kindProof, "the receipt the published boot media carries", media),
+		".bootwright-booted":                      fixedBy(kindProof, "the marker the install leaves once its nodes booted the media", media, install),
+		"/.bootwright-booted":                     fixedBy(kindProof, "the marker the install leaves once its nodes booted the media", install),
+		"bootwright/containercluster/identity/v2": fixedBy(kindProof, "the domain the installed cluster's identity is derived under", install),
+		".bootwright-kubeconfig":                  fixedBy(kindPlace, "the kept copy of the installer's kubeconfig in the work root", install),
+		"/.bootwright-kubeconfig":                 fixedBy(kindPlace, "the kept copy of the installer's kubeconfig in the work root", media, install),
+		"/etc/bootwright":                         fixedBy(kindPlace, "the guest directory of the registration record", anaconda),
+		"/etc/bootwright/registration.json":       fixedBy(kindProof, "the registration record the unregistration reads", anaconda),
+		"/var/lib/bootwright-install":             fixedBy(kindPlace, "the parent of the installation's work area", anaconda),
+		"/var/lib/bootwright-install/":            fixedBy(kindPlace, "the parent of the installation's work area", anaconda),
+		"/run/bootwright":                         fixedBy(kindPlace, "the installed machine's network convergence runtime directory", anaconda),
+		"bootwright-network-apply.service":        fixedBy(kindPlace, "the installed machine's network convergence unit", anaconda),
+		"/var/lib/bootwright-substrate/":          fixedBy(kindPlace, "the parent of the Machine's management controller area", libvirt.MachineImplementation),
+		"/var/lib/bootwright-erase":               fixedBy(kindPlace, "the controller root of the erase's per-operation area", erase),
+		"bootwright.erase=1":                      fixedBy(kindProof, "the kernel argument that proves the booted environment is the erase environment", erase),
+
+		"/var/lib/bootwright-services/":            validated("the content root every service request must lie beneath"),
+		"/var/lib/bootwright-clusters/":            validated("the work root every cluster media and install request must lie beneath"),
+		"/var/lib/libvirt/images/bootwright/":      validated("the media pool path every libvirt request must name"),
+		"/etc/bootwright/install-marker.json":      validated("the marker path every installation request must name, and the guest agent may read"),
+		"/etc/bootwright/host-key.pub":             validated("the host key path every installation request must name, and the guest agent may read"),
+		"/etc/bootwright/network.yml":              validated("the network document path every installation request must name"),
+		"/etc/bootwright/network-marker.json":      validated("the network marker path every installation request must name"),
+		"bootwright-%s-%s-firewalld-ready.service": validated("the readiness unit name a libvirt host request must carry"),
+
+		"/var/lib/bootwright/media":  {class: formatController, reason: "the controller's media store; a block reads media by the name its request carries"},
+		"/var/lib/bootwright/media/": {class: formatController, reason: "the controller's media store; a block reads media by the name its request carries"},
+
+		"bootwright":                                        transient("the user of a parser-only SSH option set the host probe never dials"),
+		"bootwright_native_cephadm":                         inProcess,
+		"bootwright_tunnel_route":                           inProcess,
+		"<bootwright-fixed-":                                inProcess,
+		"/bootwright/core/plugins/":                         inProcess,
+		"bootwright_node_%03d":                              transient("the inventory alias the runner gives each node within one run"),
+		".bootwright-":                                      scratch,
+		".bootwright-firewall-":                             scratch,
+		"bootwright-ceph-":                                  scratch,
+		"bootwright-ceph-packages-":                         scratch,
+		"bootwright-host-probe-":                            scratch,
+		"bootwright-route-probe-":                           scratch,
+		"bootwright-run-scratch-":                           transient("the per-run scratch directory the runner creates and removes"),
+		"/run/bootwright-ceph-route":                        transient("the route probe's synthetic root, removed by the call that made it"),
+		"bootwright-route":                                  transient("the route probe's synthetic account, removed by the call that made it"),
+		"bootwright-probe":                                  transient("the host name of a probe container the same call removes"),
+		"bootwright.ceph.host.probe=":                       transient("the label of a probe container the same call removes"),
+		"/run/bootwright-label":                             transient("the label probe's mount inside its own container"),
+		"/run/bootwright-label/proof":                       transient("the label probe's file inside its own container"),
+		"bootwright-fips":                                   scriptName,
+		"bootwright-network":                                scriptName,
+		"bootwright-root-encryption":                        scriptName,
+		"$6$bootwright$*":                                   eraseRuntime,
+		"/run/bootwright-erase":                             eraseRuntime,
+		"/run/bootwright-erase/authorized_keys":             eraseRuntime,
+		"/run/bootwright-erase/host-key":                    eraseRuntime,
+		"/run/bootwright-erase/runtime.py":                  eraseRuntime,
+		"/run/bootwright-erase/sshd.pid":                    eraseRuntime,
+		"/run/bootwright-erase/sshd_config":                 eraseRuntime,
+		"/run/systemd/system/bootwright-erase-sshd.service": eraseRuntime,
+		"/run/systemd/system/bootwright-erase.service":      eraseRuntime,
+		"bootwright-erase-sshd.service":                     eraseRuntime,
+		"bootwright-erase.service":                          eraseRuntime,
+
+		"//github.com/crmarques/bootwright": {class: formatDocumentation, reason: "the collection's repository URL in galaxy.yml"},
+		"bootwright-lab-rhel-01":            {class: formatDocumentation, reason: "a domain name in guest_agent_read's EXAMPLES"},
+	}
+	for literal, format := range automationCapitalized() {
+		identities[literal] = format
+	}
+	return identities
+}
+
+// automationCapitalized classifies the capitalized Bootwright tokens. The
+// readiness unit's header lines are a mark: the libvirt host proves the unit
+// its own by comparing the whole unit's bytes.
+func automationCapitalized() map[string]automationFormat {
+	readiness := fixedBy(kindMark, "a header line of the firewall readiness unit, whose exact bytes prove the unit the libvirt host's own", libvirt.HostImplementation)
+	prose := automationFormat{class: formatDocumentation, reason: "prose in a docstring, module documentation or a message"}
+	description := automationFormat{class: formatDocumentation, reason: "the Description of a unit the role writes from its template, which no run reads back"}
+	eraseRuntime := transient("the erase environment's RAM-only runtime, which exists only while that boot runs")
+	kickstart := transient("a placeholder the role replaces in the kickstart it renders in the same run")
+	return map[string]automationFormat{
+		"Bootwright owned readiness barrier":                readiness,
+		"Description=Bootwright managed network firewall":   readiness,
+		"SSH-2.0-BootwrightRoute":                           transient("the banner the route probe's control channel sends and checks within one call"),
+		"CN=Bootwright ephemeral pull broker":               transient("the subject of the pull broker's certificate, made and discarded within one run"),
+		"Bootwright-Controller/1":                           transient("the controller download's User-Agent"),
+		"_BOOTWRIGHT_SOURCE":                                transient("the attribute that carries a helper's source into the worker process within one call"),
+		"._BOOTWRIGHT_SOURCE":                               transient("the attribute that carries a helper's source into the worker process within one call"),
+		"@@BOOTWRIGHT_MARKER@@":                             kickstart,
+		"@@BOOTWRIGHT_AUTHORIZED_KEY@@":                     kickstart,
+		"@@BOOTWRIGHT_PRIVATE_URL@@":                        kickstart,
+		"@@BOOTWRIGHT_ARTIFACT_CERTIFICATE@@":               kickstart,
+		"BOOTWRIGHT_ERASE_DATA":                             eraseRuntime,
+		"BOOTWRIGHT_ERASE_SSH_UNIT":                         eraseRuntime,
+		"BOOTWRIGHT_ERASE_UNIT":                             eraseRuntime,
+		"Description=Bootwright RAM receipt transport":      eraseRuntime,
+		"Description=Bootwright authorized offline logical": eraseRuntime,
+		"Description=Bootwright managed artifact server":    description,
+		"Description=Bootwright managed name resolution":    description,
+		"Description=Bootwright managed proxy":              description,
+		"Description=Bootwright managed time service":       description,
+		"Description=Bootwright management controller for":  description,
+		"Bootwright contributors":                           {class: formatDocumentation, reason: "the author line of galaxy.yml and of each module's documentation"},
+		"Bootwright capability adapters":                    {class: formatDocumentation, reason: "the collection description in galaxy.yml"},
+		"Bootwright cannot read":                            prose,
+		"Bootwright coordinates":                            prose,
+		"Bootwright does not realize":                       prose,
+		"Bootwright installation publishes":                 prose,
+		"Bootwright libvirt provider host":                  prose,
+		"Bootwright managed artifact server":                prose,
+		"Bootwright managed network service":                prose,
+		"Bootwright never changes a":                        prose,
+		"Bootwright never pins that":                        prose,
+		"Bootwright process":                                prose,
+		"Bootwright process reads":                          prose,
+		"Bootwright retains it":                             prose,
+		"Bootwright sets a default":                         prose,
+		"Bootwright virtual machine and":                    prose,
+		"Bootwright-managed operating system and":           prose,
 	}
 }
 
@@ -246,46 +453,96 @@ func TestEveryStoreFormatIsClassified(t *testing.T) {
 const automationCollection = "collections/ansible_collections/bootwright/core/"
 
 var (
-	automationTexts   = []string{".py", ".yml", ".yaml", ".j2"}
-	versionedLiteral  = regexp.MustCompile(`"([^"\\\n]*-v[0-9]+)(?:\\[nrt0])?"|'([^'\\\n]*-v[0-9]+)(?:\\[nrt0])?'`)
-	bootwrightLiteral = regexp.MustCompile(`["'](https://bootwright\.io/[^"'\\\s]*)["']`)
+	automationTexts  = []string{".py", ".yml", ".yaml", ".j2"}
+	versionedLiteral = regexp.MustCompile(`"([^"\\\n]*-v[0-9]+)(?:\\[nrt0])?"|'([^'\\\n]*-v[0-9]+)(?:\\[nrt0])?'`)
+	// identityLiteral is a token, quoted or not, naming a bootwright.io URI or
+	// key, a host path with bootwright in it, a name, prefix or mark beginning
+	// with bootwright and a separator, or a quoted bootwright name.
+	identityLiteral = regexp.MustCompile(`(?:^|[^A-Za-z0-9_.%{/$<-])(https://bootwright\.io/[^\s"'\\]*|/[A-Za-z0-9._/%-]*bootwright[A-Za-z0-9._/%-]*|[A-Za-z0-9_%$<-]*\.?bootwright[-.:=$/][A-Za-z0-9._/%:=$*-]*)|["'](bootwright(?:_[A-Za-z0-9_%]*)?)["']`)
+	// capitalLiteral is a capitalized Bootwright or BOOTWRIGHT token, with the
+	// characters joined to it and up to three following words, such as a unit
+	// header, a banner, a certificate subject, a heredoc delimiter or prose.
+	capitalLiteral = regexp.MustCompile(`[A-Za-z0-9_.@=-]*(?:Bootwright|BOOTWRIGHT)[A-Za-z0-9_./:=@-]*(?: [A-Za-z][A-Za-z0-9-]*){0,3}`)
+	// unescaped turns a string escape into the separator it writes, so the
+	// escape's letter never joins the capitalized token after it.
+	unescaped = strings.NewReplacer(`\n`, " ", `\r`, " ", `\t`, " ")
 )
 
-// automationLiterals is every quoted versioned literal the collection's
-// embedded plugins and roles carry, with the files that carry it.
-func automationLiterals() map[string][]string {
+// identityLiterals is every token of one file identityLiteral finds outside a
+// comment line, except the collection's own module and package names.
+func identityLiterals(text string) []string {
+	var literals []string
+	for line := range strings.SplitSeq(text, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		for _, match := range identityLiteral.FindAllStringSubmatch(line, -1) {
+			literal := match[1] + match[2]
+			if strings.HasPrefix(literal, "bootwright.core") || strings.Contains(literal, "ansible_collections.bootwright") {
+				continue
+			}
+			literals = append(literals, literal)
+		}
+		literals = append(literals, capitalLiteral.FindAllString(unescaped.Replace(line), -1)...)
+	}
+	return literals
+}
+
+// automationLiterals is every quoted versioned literal, and every token
+// naming a Bootwright host path, name prefix or mark, that the collection's
+// embedded plugins, roles and playbooks carry, with the files that carry it,
+// and the collection's automation files whose extension it does not read.
+func automationLiterals() (map[string][]string, []string) {
 	found := map[string][]string{}
-	assets := ansible.Assets()
+	var unread []string
+	assets := ansible.Automation()
 	for _, name := range slices.Sorted(maps.Keys(assets)) {
-		if !strings.HasPrefix(name, automationCollection) || !slices.Contains(automationTexts, filepath.Ext(name)) {
+		if !strings.HasPrefix(name, automationCollection) {
+			continue
+		}
+		if !slices.Contains(automationTexts, filepath.Ext(name)) {
+			unread = append(unread, name)
 			continue
 		}
 		var literals []string
 		for _, match := range versionedLiteral.FindAllStringSubmatch(string(assets[name]), -1) {
 			literals = append(literals, match[1]+match[2])
 		}
-		for _, match := range bootwrightLiteral.FindAllStringSubmatch(string(assets[name]), -1) {
-			literals = append(literals, match[1])
-		}
+		literals = append(literals, identityLiterals(string(assets[name]))...)
 		for _, literal := range literals {
 			if !slices.Contains(found[literal], name) {
 				found[literal] = append(found[literal], name)
 			}
 		}
 	}
-	return found
+	return found, unread
 }
 
 // TestEveryAutomationVersionLiteralIsClassified holds the classification of
-// the quoted literals ending in a version, or naming a bootwright.io URI, that
-// the collection's embedded plugins and roles carry (.py, .yml, .yaml and .j2)
-// exact, so a new or renamed quoted format cannot reach a host without saying
-// whether it is part of an implementation's contract. An unquoted, dynamically
-// built or unversioned format is outside what it sees.
+// the quoted literals ending in a version, of the tokens naming a
+// bootwright.io URI or key or a Bootwright host path, name prefix or mark, and
+// of the capitalized Bootwright tokens, that the collection's automation files
+// carry (.py, .yml, .yaml and .j2; any other extension fails it) exact, so a
+// new or renamed format, place or mark cannot
+// reach a host without saying whether it is part of an implementation's
+// contract. It is also the guard that removal automation reads a target's
+// identity only from the frozen request: every value it reads from the build
+// in hand instead is a fixed literal naming its implementations, which their
+// contract goldens list. A dynamically built value, or one naming no
+// Bootwright token, is outside what it sees.
 func TestEveryAutomationVersionLiteralIsClassified(t *testing.T) {
-	found, formats := automationLiterals(), automationFormats()
+	found, unread := automationLiterals()
+	formats := automationFormats()
 	if len(found) == 0 {
 		t.Fatal("the embedded collection carries no versioned literal: the scan is broken")
+	}
+	for _, name := range unread {
+		t.Errorf("%s is embedded automation the scan does not read: read its extension in automationTexts, or make it collection documentation", name)
+	}
+	for _, sentinel := range []string{"ceph-tunnel-v3", "/var/lib/bootwright/ceph", "bootwright.io/owner", "/var/lib/bootwright-install", "bootwright-network-apply.service"} {
+		if _, ok := found[sentinel]; !ok {
+			t.Errorf("the scan no longer finds %q: the scan is broken, or the literal moved and another sentinel must replace it", sentinel)
+		}
 	}
 	implementations := map[string]bool{}
 	for _, version := range contractVersions() {
@@ -293,7 +550,7 @@ func TestEveryAutomationVersionLiteralIsClassified(t *testing.T) {
 	}
 	for _, literal := range slices.Sorted(maps.Keys(found)) {
 		if _, ok := formats[literal]; !ok {
-			t.Errorf("%q in %s is not classified: classify it in automationFormats", literal, strings.Join(found[literal], ", "))
+			t.Errorf("%q in %s is not classified: classify it in automationFormats or automationIdentities", literal, strings.Join(found[literal], ", "))
 		}
 	}
 	for _, literal := range slices.Sorted(maps.Keys(formats)) {
@@ -301,8 +558,23 @@ func TestEveryAutomationVersionLiteralIsClassified(t *testing.T) {
 		if _, ok := found[literal]; !ok {
 			t.Errorf("%q is classified but no embedded plugin or role carries it: stale classification, remove it", literal)
 		}
-		if (format.class == formatPersisted) != (len(format.implementations) != 0) {
-			t.Errorf("%q: only a persisted format names implementations", literal)
+		named := format.class == formatPersisted || format.class == formatFixed
+		if named != (len(format.implementations) != 0) {
+			t.Errorf("%q: only a persisted or fixed literal names implementations, and each names one", literal)
+		}
+		kinds := []string{kindMark, kindProof, kindPlace}
+		switch format.class {
+		case formatPersisted:
+			kinds = append(kinds, "")
+		case formatFixed:
+		default:
+			kinds = []string{""}
+		}
+		if !slices.Contains(kinds, format.kind) {
+			t.Errorf("%q: a fixed literal is a mark, a proof or a place, and only a persisted one may also be one", literal)
+		}
+		if (format.reason == "") == slices.Contains([]string{formatTransient, formatController, formatFixed, formatValidated, formatDocumentation}, format.class) {
+			t.Errorf("%q: a %s literal records its reason, and only it", literal, format.class)
 		}
 		for _, implementation := range format.implementations {
 			if !implementations[implementation] {
@@ -313,32 +585,69 @@ func TestEveryAutomationVersionLiteralIsClassified(t *testing.T) {
 }
 
 // TestEveryImplementationMovesItsContentDigestWithItsContract holds each
-// implementation's contract, its Go request and evidence schemas and the
-// formats its automation persists on a host, to its content digest: the
-// digest is what a continuation under another build compares, so a contract
-// that changes under the same digest would let another build continue work
-// half done under the old contract. Such a change fails and -update refuses
-// it: move the implementation's version. A moved digest is rewritten by
-// -update. A raw-JSON, interface or map[string]any member is fingerprinted as
-// an opaque leaf, so the schema nested in one, such as the raw cluster
-// services the Ceph core and host requests carry or the agent media's install
-// and agent configurations, is the author's to move; re-planning still
-// compares its bytes.
+// implementation's contract to its content digest: its Go request and
+// evidence schemas, the formats its automation persists on a host, the marks,
+// proof identifiers and places its automation fixes outside the frozen
+// request, the effect pins its digest hashes and the request members that
+// carry its effects' identity. The digest is what a continuation under another
+// build compares, so a contract that changes under the same digest would let
+// another build continue work half done under the old contract. Such a change
+// fails and -update refuses it: move the implementation's version. A moved
+// digest is rewritten by -update, except that a changed place also needs the
+// request version to move, because a removal compares no digest: only a
+// request this build cannot read keeps a removal from looking for the old
+// blocks' effects in the new place. A raw-JSON, interface or map[string]any
+// member is fingerprinted as an opaque leaf, so the schema nested in one, such
+// as the raw cluster services the Ceph core and host requests carry or the
+// agent media's install and agent configurations, is the author's to move;
+// re-planning still compares its bytes.
 func TestEveryImplementationMovesItsContentDigestWithItsContract(t *testing.T) {
 	versions := contractVersions()
 	contractOfferedImplementations(t, versions)
-	persisted, formats := map[string][]string{}, automationFormats()
-	for literal := range automationLiterals() {
-		for _, implementation := range formats[literal].implementations {
-			persisted[implementation] = append(persisted[implementation], literal)
+	recipes, identities := contractRecipes(), requestIdentities()
+	sections, formats := map[string]map[string][]string{}, automationFormats()
+	literals, _ := automationLiterals()
+	for literal := range literals {
+		format := formats[literal]
+		section := map[string]string{kindMark: "mark-formats", kindProof: "proof-ids", kindPlace: "fixed-places"}[format.kind]
+		for _, implementation := range format.implementations {
+			if sections[implementation] == nil {
+				sections[implementation] = map[string][]string{}
+			}
+			if format.class == formatPersisted {
+				sections[implementation]["automation-formats"] = append(sections[implementation]["automation-formats"], literal)
+			}
+			if section != "" {
+				sections[implementation][section] = append(sections[implementation][section], literal)
+			}
 		}
+	}
+	for implementation, proofs := range cephMarkerProofs() {
+		if sections[implementation] == nil {
+			sections[implementation] = map[string][]string{}
+		}
+		sections[implementation]["proof-ids"] = append(sections[implementation]["proof-ids"], proofs...)
 	}
 	directory := filepath.Join("testdata", "contracts")
 	wanted := map[string]bool{}
 	for _, version := range versions {
 		name := version.implementation + ".golden"
 		wanted[name] = true
-		text := contractText(version, persisted[version.implementation])
+		recipe, ok := recipes[version.implementation]
+		if !ok || recipe.digest() != version.digest {
+			t.Errorf("%s: its digest recipe does not reproduce its content digest: restate in contractRecipes exactly what its ContentDigest hashes", version.implementation)
+			continue
+		}
+		if !contractIdentitiesInSchema(t, version, identities[version.implementation]) {
+			continue
+		}
+		listed := sections[version.implementation]
+		if listed == nil {
+			listed = map[string][]string{}
+		}
+		listed["effect-pins"] = recipe.pins()
+		listed["request-identity"] = identities[version.implementation]
+		text := contractText(version, recipe.requestVersionOf(), listed)
 		contractHoldGolden(t, version, filepath.Join(directory, name), text)
 	}
 	entries, err := os.ReadDir(directory)
@@ -350,6 +659,29 @@ func TestEveryImplementationMovesItsContentDigestWithItsContract(t *testing.T) {
 			t.Errorf("%s names no implementation a contract version names: remove it", filepath.Join(directory, entry.Name()))
 		}
 	}
+}
+
+// contractIdentitiesInSchema proves an implementation lists the request
+// members that carry its effects' identity, and that each is one.
+func contractIdentitiesInSchema(t *testing.T, version contractVersion, identities []string) bool {
+	t.Helper()
+	if len(identities) == 0 {
+		t.Errorf("%s lists no request member carrying its effects' identity: add it to requestIdentities", version.implementation)
+		return false
+	}
+	members := map[string]bool{}
+	for _, line := range schemaFingerprint(version.request) {
+		member, _, _ := strings.Cut(line, " ")
+		members[member] = true
+	}
+	ok := true
+	for _, identity := range identities {
+		if !members[identity] {
+			t.Errorf("%s names %s as a request identity member, which its request schema lacks", version.implementation, identity)
+			ok = false
+		}
+	}
+	return ok
 }
 
 // contractOfferedImplementations proves the versions name exactly the
@@ -397,22 +729,28 @@ func contractOfferedImplementations(t *testing.T, versions []contractVersion) {
 	}
 }
 
-// contractSections is the order of a contract golden's sections.
-var contractSections = []string{"implementation", "content-digest", "automation-formats", "request-schema", "evidence-schema"}
+// contractSections is the order of a contract golden's sections. A section a
+// recorded golden lacks, or one it carries beyond them, is a changed section.
+var contractSections = []string{"implementation", "content-digest", "request-version", "automation-formats", "mark-formats", "proof-ids",
+	"fixed-places", "effect-pins", "request-identity", "request-schema", "evidence-schema"}
 
-func contractText(version contractVersion, persisted []string) string {
-	formats := "none"
-	if len(persisted) != 0 {
-		formats = strings.Join(slices.Sorted(slices.Values(persisted)), ", ")
-	}
+// contractListSections are the sections that list values one per line.
+var contractListSections = []string{"effect-pins", "request-identity", "request-schema", "evidence-schema"}
+
+func contractText(version contractVersion, requestVersion string, listed map[string][]string) string {
 	var text strings.Builder
-	fmt.Fprintf(&text, "implementation: %s\ncontent-digest: %s\nautomation-formats: %s\n", version.implementation, version.digest, formats)
-	for _, schema := range []struct {
-		name  string
-		value reflect.Type
-	}{{"request-schema", version.request}, {"evidence-schema", version.evidence}} {
-		text.WriteString(schema.name + ":\n")
-		lines := schemaFingerprint(schema.value)
+	fmt.Fprintf(&text, "implementation: %s\ncontent-digest: %s\nrequest-version: %s\n", version.implementation, version.digest, requestVersion)
+	for _, section := range []string{"automation-formats", "mark-formats", "proof-ids", "fixed-places"} {
+		values := "none"
+		if len(listed[section]) != 0 {
+			values = strings.Join(slices.Sorted(slices.Values(listed[section])), ", ")
+		}
+		fmt.Fprintf(&text, "%s: %s\n", section, values)
+	}
+	listed["request-schema"], listed["evidence-schema"] = schemaFingerprint(version.request), schemaFingerprint(version.evidence)
+	for _, section := range contractListSections {
+		text.WriteString(section + ":\n")
+		lines := listed[section]
 		if len(lines) == 0 {
 			lines = []string{"none"}
 		}
@@ -454,15 +792,26 @@ func contractHoldGolden(t *testing.T, version contractVersion, path, text string
 		return
 	}
 	recorded, current := contractSectionsOf(string(golden)), contractSectionsOf(text)
-	if recorded["content-digest"] == current["content-digest"] {
-		var changed []string
-		for _, section := range contractSections {
-			if recorded[section] != current[section] {
-				changed = append(changed, section)
-			}
+	var changed []string
+	for _, section := range contractSections {
+		if value, ok := recorded[section]; !ok || value != current[section] {
+			changed = append(changed, section)
 		}
+	}
+	for section := range recorded {
+		if !slices.Contains(contractSections, section) {
+			changed = append(changed, section)
+		}
+	}
+	_, digested := recorded["content-digest"]
+	if (!digested || recorded["content-digest"] == current["content-digest"]) && len(changed) != 0 {
 		t.Errorf("%s: its %s changed while its content digest did not, so another build would continue its blocks under the old contract: move %s's version, which moves its content digest (-update refuses to record this):\n%s",
 			version.implementation, strings.Join(changed, " and "), version.implementation, lineDiff(string(golden), text))
+		return
+	}
+	if requestVersion, ok := recorded["request-version"]; recorded["fixed-places"] != current["fixed-places"] && (!ok || requestVersion == current["request-version"]) {
+		t.Errorf("%s: its fixed places changed while its request version did not, so a removal under this build would look for the old blocks' effects in the new place: move its request version (-update refuses to record this):\n%s",
+			version.implementation, lineDiff(string(golden), text))
 		return
 	}
 	if !*update {

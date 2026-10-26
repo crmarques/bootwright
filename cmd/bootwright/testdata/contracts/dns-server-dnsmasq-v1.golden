@@ -1,6 +1,23 @@
 implementation: dns-server-dnsmasq-v1
 content-digest: c4cbeee432384a8a093ebae8a82909f0da73531a5b9f8f2253c9c30b5f89ba5a
+request-version: managed-service-v3
 automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  docker.io/4km3/dnsmasq@sha256:52e25fb2601156ab66f6a0872c180b285df7cafaa41267d8d65689f066490641
+  /var/lib/bootwright-services
+  bootwright
+request-identity:
+  identity.context
+  identity.service
+  identity.block
+  contentRoot
+  unit
+  bindAddress
+  port
+  placement.machine
 request-schema:
   bindAddress string
   clients []string omitempty

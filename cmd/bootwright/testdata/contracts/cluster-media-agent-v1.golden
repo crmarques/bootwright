@@ -1,6 +1,22 @@
 implementation: cluster-media-agent-v1
 content-digest: 6641773dca8bea0eee1770ac1810f2511110dd7c8f4ae1d43c6d2a04424ac733
+request-version: cluster-media-agent-v9
 automation-formats: none
+mark-formats: none
+proof-ids: .bootwright-booted, /bootwright-media.json, bootwright-media.json
+fixed-places: /.bootwright-kubeconfig
+effect-pins:
+  clusters
+  agent.iso
+  /var/lib/bootwright-clusters
+  openshift-install
+request-identity:
+  identity.context
+  identity.cluster
+  identity.block
+  workRoot
+  image.path
+  placement.machine
 request-schema:
   agentConfig opaque
   budgets struct agentinstall.MediaBudgets

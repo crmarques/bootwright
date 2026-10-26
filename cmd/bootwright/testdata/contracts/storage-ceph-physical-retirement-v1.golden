@@ -1,6 +1,18 @@
 implementation: storage-ceph-physical-retirement-v1
 content-digest: c278273c035e12b44eca61c1c7ec12c2bd31f3f7fba10e9e54c009cd6c4a6190
+request-version: storage-ceph-physical-retirement-v1
 automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  original-host-and-completed-erase-proof-v1
+request-identity:
+  cluster
+  hosts[].name
+  hosts[].machine
+  hosts[].eraseWWNs
+  hosts[].devices[].wwn
 request-schema:
   cluster string
   hosts []struct ceph.PhysicalRetirementHost

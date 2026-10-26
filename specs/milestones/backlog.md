@@ -280,7 +280,6 @@ Alias cell.
 | [B810](#b810) | new, 2026-10-26 (spec audit P1-C) | enabling | Architecture and Storage | Storage and cluster contexts split into neutral cores, implementations and fan-in ports | Audit roadmap work; implemented only on an explicit lane request |
 | [B811](#b811) | new, 2026-10-26 (spec audit P1-D) | enabling | Architecture | No release-keyed specialization registry; registries discovered by a marker | Audit roadmap work; implemented only on an explicit lane request |
 | [B812](#b812) | new, 2026-10-26 (spec audit P1-E) | defect | Desired state and State reconciliation | One reference-edge catalog checked against requirements, and complete selection closure | Audit roadmap work; implemented only on an explicit lane request |
-| [B813](#b813) | new, 2026-10-26 (spec audit P1-F) | safety | State reconciliation | Removal identity values read only from the frozen request, guarded by contract goldens | Audit roadmap work; implemented only on an explicit lane request |
 | [B814](#b814) | new, 2026-10-26 (spec audit P1-G) | enabling | Desired state | Owner API shape decisions for ContainerCluster, Storage, Machine and union rules | Audit roadmap work; implemented only on an explicit lane request |
 | [B815](#b815) | new, 2026-10-26 (spec audit P1-H) | enabling | Milestones | Portfolio separated from envelope; Requires state real dependencies; one clause queue | Audit roadmap work; implemented only on an explicit lane request |
 | [B816](#b816) | new, 2026-10-26 (spec audit P1-I) | safety | State reconciliation and Controller setup | Recovery refusals, partial-removal readings and host probes match the rules | Audit roadmap work; implemented only on an explicit lane request |
@@ -3489,51 +3488,6 @@ Not yet met lines there point here.
 **Exit evidence:** the P1-E roadmap exit; the catalog test and the selection
 tests above pass; `make check` passes.
 
-### B813
-
-**Owner:** State reconciliation. **Kind:** safety. **Requires:** B801; owner
-decision [Q76](#audit-remediation-decisions) for the digest split.
-**Definition:** Specified. Roadmap step P1-F of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings R2-03-01,
-R2-03-02, R2-03-03, R2-03-05, R2-03-06. A removal under another build reads
-every identity-fixing value from the frozen request, and a guard catches a
-mark or proof change that leaves the content digest in place.
-
-**Specs:** [dependency safety](../state-reconciliation.md#dependency-safety-during-recovery)
-states that identity, place, mark and host-claim values travel in the frozen
-request, defines "effect pin" once and states the fail-closed backstop;
-[operation records](../state-reconciliation.md#operation-records) states the
-optional-member rule; the Go and Ansible code-implementation references
-carry the digest checklist item. The Not yet met lines there point here.
-
-**Work:**
-
-- R2-03-01 (Medium): a contract-guard or architecture test that removal
-  automation reads no host path, prefix or mark constant except through the
-  frozen request; each contract golden lists the identity and mark values its
-  request carries.
-- R2-03-02 (Medium): mark-format and proof-id sections in each contract
-  golden, so changing either without moving the digest fails
-  `TestEveryImplementationMovesItsContentDigestWithItsContract`; a recorded
-  reason for each transient classification; extend
-  `TestEveryAutomationVersionLiteralIsClassified` to quoted `bootwright.io`
-  label and annotation keys.
-- R2-03-03 (Medium): `scripts/check-commits` requires a
-  `Contract: unchanged | <moved implementation>` body line on commits touching
-  the collection's roles or plugins or a capability package.
-- R2-03-06 (Low): an effect-pins section in each contract golden.
-- R2-03-05 (Low): a reader refusing an unknown optional member names the
-  record's `build` when it decodes; a test.
-- Waits for [Q76](#audit-remediation-decisions): the effect-identity and
-  mechanism digest split with a `lifecycle.state` refusal before resolution;
-  whether the Ceph digest hashes pinned values instead of the
-  `selected-tunnel-image-v3` tag; the continuation-after-a-fix knowledge
-  advice on pin moves.
-
-**Exit evidence:** the P1-F roadmap exit; a dry-run commit touching a role
-without the Contract line is refused; the guard tests fail on their fixtures;
-`make docs-check` and `make check` pass.
-
 ### B814
 
 **Owner:** Desired state. **Kind:** enabling. **Requires:** B808; owner
@@ -4444,7 +4398,7 @@ decision stay open while its other parts land.
 | E Store durability and controller records | [B806](#b806), [B836](#b836), [B832](#b832) | B801 | B, J | none |
 | F Truthful admission | [B807](#b807) | none | C, I | Q71 |
 | G Extension architecture | [B808](#b808), [B811](#b811), [B809](#b809), [B810](#b810), [B812](#b812) | B800 to B807 | B, C, I, J, K | Q72, Q73, Q74, Q75 |
-| H Cross-build continuation | [B813](#b813) | B801 | none | Q76 |
+| H Cross-build continuation | B813 (X163) | B801 | none | Q76 |
 | I API shape and grammar | [B814](#b814), [B826](#b826), [B827](#b827), [B828](#b828), [B824](#b824), [B821](#b821), [B837](#b837) | B808 | B, F, G | Q77, Q78, Q79, Q80, Q81, Q82, Q83, Q84, Q85, Q86, Q87, Q88, Q105, Q106, Q107, Q110, Q111, Q112, Q113, Q114, Q115, Q118 |
 | J Reconciliation rules | [B816](#b816), [B830](#b830) | B800 to B807 | E, G | Q92, Q93, Q94, Q95, Q96, Q117, Q118 |
 | K Language and adapter contracts | B818 (X162), B834 (X162) | none | G | none |
@@ -4463,7 +4417,7 @@ also updates this table.
 | --- | --- | --- |
 | 1 | A Harness and guards | merged (X161) |
 | 2 | K Language and adapter contracts | merged (X162) |
-| 3 | H Cross-build continuation | not started |
+| 3 | H Cross-build continuation | merged (X163) |
 | 4 | E Store durability and controller records | not started |
 | 5 | B Physical targets and shared hosts | not started |
 | 6 | D Credentials and trust | not started |
@@ -4509,7 +4463,7 @@ blocks.
 | Q73 | If cluster lists stay, does selecting a nested cluster retain its KubeVirt provider's hostClusterRef ContainerCluster as a root with its own closure? | (a) Add the closure row, effective when B732 lifts the KubeVirt refusal, with a multidc selection test as B732 exit evidence.; (b) Moot because cluster lists are dropped (environment-scope-mechanism b). | **Answered by D183: a.** a if cluster lists stay; record the selection test as B732 exit evidence either way. | [B812](#b812) |
 | Q74 | Does an authored cluster list retain Bootwright-installed Machines (and their provider closure) that are nodes or hosts of no declared cluster, instead of only warning? | (a) Retain them as roots; the validate warning covers only what stays excluded.; (b) Warn only, as the spec states today. | **Answered by D183: a.** a (calibrator), decided with environment-scope-mechanism; the warning stands until then. | [B812](#b812) |
 | Q75 | When an attachment reaches a cluster root that an authored list omits, does validate warn, refuse, or retain the full closure? | (a) Deterministic validate warning naming the list to extend (spec today).; (b) Validate error naming the list to extend, since a completed apply's selection cannot change (D153).; (c) Retain the full closure of the omitted root. | **Answered by D183: b.** b (calibrator); the warning is the interim minimum. | [B812](#b812) |
-| Q76 | Does a removal under another build compare an effect-identity part of the content digest with the build in hand (amending D145(4))? | (a) Keep D145(4): removals compare no digest and rely on identity values travelling in the frozen request (stated in the spec now).; (b) Split the digest into effect-identity and mechanism parts; a removal refuses lifecycle.state before resolution on an effect-identity mismatch, naming the registering build and the deletion exit. | **Answered by D183: a.** a now (calibrator, smallest); b presented to the owner as an amendment of D145(4). | [B813](#b813) |
+| Q76 | Does a removal under another build compare an effect-identity part of the content digest with the build in hand (amending D145(4))? | (a) Keep D145(4): removals compare no digest and rely on identity values travelling in the frozen request (stated in the spec now).; (b) Split the digest into effect-identity and mechanism parts; a removal refuses lifecycle.state before resolution on an effect-identity mismatch, naming the registering build and the deletion exit. | **Answered by D183: a.** a now (calibrator, smallest); b presented to the owner as an amendment of D145(4). | [B813](delivered.md#x163--audit-lane-h-cross-build-continuation-guards) |
 | Q77 | How does a non-OpenShift distribution enter ContainerCluster, and does B748's OKD arm follow the same path? | (a) A distribution-neutral envelope (nodes with neutral roles, endpoints, networks, proxy/NTP/registry, trust) plus a presence union of distribution arms starting with spec.openshift; node binding reads a distribution-declared node capability; role master becomes control-plane and endpoint source.type openshift becomes installer (section 4.3).; (b) One kind per distribution family, with the generic touch points each new kind implies listed.; (c) Confirm OpenShift and OKD only in project.md and defer the question. | **Answered by D183: b, as OpenShiftCluster.** Record one decision now, linked from api/container-clusters.md, stating node binding and B748 alignment; the report's scenario analysis favors a, which is cheapest before 1.x. M3/M4 keep the flat shape until decided. | [B814](#b814) |
 | Q78 | How are the Ceph-only Storage* child kinds bound to Ceph? | (a) Rename the children to Ceph* (CephPool, CephClient, CephRBDImage and the rest), keeping StorageCluster neutral; revisits D133's naming baseline and touches examples and goldens.; (b) Keep the names; api/storage.md states they are the Ceph arm's kinds, admission refuses a child whose cluster's type is not ceph, a new storage type brings its own kinds, and StorageExport is classified. | **Answered by D183: a, with CephCluster.** b (verifiers and calibrator); a only as an explicit owner decision revisiting D133, which the report prefers while renames are cheap. | [B814](#b814) |
 | Q79 | Does Machine carry substrate facts in a per-substrate arm mirroring the InfraProvider arm? | (a) Full arm: spec.substrate {providerRef, baremetal/libvirt/kubevirt/vsphere} with admission requiring the arm to match the provider.; (b) Narrow arm: NIC names and neutral root hints stay top level; only bmc, MACs, wwn/hctl/serial admissibility, profileRef, failureDomainRef, template and interfaceAttachments move into arms.; (c) Keep the flat shape and derive per-substrate admissibility from one substrate-arm registry table. | **Answered by D183: b.** b, decided before B87/B99 revive the arms; D44 and D94 hold under every option. | [B814](#b814) |

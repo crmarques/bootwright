@@ -40,8 +40,8 @@ omits.
   targeted edits to rewrites.
 - Verify by the [tiers](references/verification.md). The commit that integrates
   into main rests on `make check`, which CI runs, plus the safety additions.
-- A change to what an effect is moves its content digest; the Go and Ansible
-  references carry the check.
+- A change to what an effect is moves its content digest (Go and Ansible
+  references).
 - Record exact commands and results; failed, skipped, flaky, unavailable and
   unrun gates are not passes.
 - Before committing, review the complete diff and run `git diff --cached --check`.
@@ -49,9 +49,10 @@ omits.
 ## Commit and integrate
 
 - One commit per coherent change: a `type(domain): subject` Conventional Commit
-  subject; a body stating what changed and why and every gate that ran with its
-  result; a `Refs:` line naming the slice and its items.
-  `scripts/check-commits BASE HEAD` runs the commit check CI runs.
+  subject; a body stating what changed and why and each gate run with its
+  result; `Refs:` naming slice and items; a
+  [`Contract:` line](references/git-integration.md#contract-line) when due.
+  CI and a fast-forward run `scripts/check-commits BASE HEAD`.
 - Integrate by a [git integration](references/git-integration.md) variant:
   local fast-forward by default (D168), a pull request when the owner or
   harness asks. Push only when the owner or harness requires it. Model, effort

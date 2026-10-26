@@ -1,6 +1,15 @@
 implementation: controller-prerequisites
 content-digest: 951ef5ecaec40a877ca5cc82dd0c745d3e1c8e8edc96a29de37fc701af4238f7
+request-version: controller-clients-v5
 automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  none
+request-identity:
+  packages
+  tools[].kind
 request-schema:
   egress struct prerequisites.SetupEgress
   egress.httpProxy string

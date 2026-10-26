@@ -1,6 +1,23 @@
 implementation: proxy-squid-v1
 content-digest: bb0e7600497436c24dd6101980f3421e4d9784fb4b08c69eedf352e7c3f75272
+request-version: managed-service-v3
 automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  docker.io/ubuntu/squid@sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029
+  /var/lib/bootwright-services
+  bootwright
+request-identity:
+  identity.context
+  identity.service
+  identity.block
+  contentRoot
+  unit
+  bindAddress
+  port
+  placement.machine
 request-schema:
   bindAddress string
   clients []string omitempty

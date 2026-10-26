@@ -1,6 +1,20 @@
 implementation: storage-ceph-smb-v1
 content-digest: 8881e871ae65d1dae0f830b683954cbcd665a792c4d7dd5ee808710605c9bcda
+request-version: ceph-smb-v1
 automation-formats: none
+mark-formats: bootwright-owner
+proof-ids: marker:-attempt.json, marker:-complete.json, marker:.json, marker:artifact.json, marker:attempt-call_home_initialize.json, marker:bootstrap-attempt.json, marker:bootstrap-enrollment.json, marker:bootstrap-original-ready.json, marker:bootstrap-original-reserved.json, marker:bootstrap-output-source.json, marker:bootstrap-prepared.json, marker:bootstrap-protocol.json, marker:bootstrap-scope.json, marker:cache-ready.json, marker:call-home-accepted.json, marker:client-, marker:client-applied-, marker:client-attempt-, marker:client-generator.json, marker:complete-call_home_initialize.json, marker:complete.json, marker:dashboard-port-, marker:dashboard-port-repair.json, marker:dashboard-redeploy.json, marker:dashboard-redeployed.json, marker:decision.json, marker:device-identities.json, marker:filesystem-, marker:filesystem-attempt., marker:filesystem-id., marker:group-attempt., marker:group., marker:initial-mgr-original-ready.json, marker:manifest.json, marker:native-teardown.json, marker:nfs-export-attempt., marker:nfs-export-id., marker:nfs-pool-id.json, marker:nfs-pool.json, marker:osd-device-, marker:osd-device-intent.json, marker:owner.json, marker:podman-auth.json, marker:policy-, marker:policy-attempt-, marker:policy-id-, marker:pool-, marker:pool-attempt-, marker:pool-id-, marker:pool-rbd-attempt-, marker:pool-rbd-complete-, marker:pool-setting-, marker:rbd-, marker:rbd-attempt., marker:rbd-id., marker:registry-file.json, marker:registry-intent.json, marker:registry-pending.json, marker:registry-removal.json, marker:registry-removed.json, marker:service-, marker:service-inputs.json, marker:smb-applied., marker:smb-attempt., marker:ssh-authorization.json, marker:sshd-policy.json, marker:subvolume-, marker:subvolume-attempt., marker:subvolume-path., marker:transport-directory.json, marker:transport-ready.json, marker:transport.json, marker:tunnel-config-attempt-, marker:tunnel-config-attempt-call_home.json, marker:tunnel-config-complete-, marker:tunnel-config-complete-call_home.json, marker:tunnel-config-intent.json, marker:tunnel-configured.json, marker:tunnel-manager-files.json, marker:tunnel-mgr-source.json, marker:tunnel-mounted.json, marker:tunnel-redeploy.json, marker:tunnel-stage.json
+fixed-places: /var/lib/bootwright/ceph
+effect-pins:
+  storage-ceph-physical-retirement-v1
+request-identity:
+  cluster
+  object
+  id
+  clusterIDs
+  scope
+  resourceType
+  service.name
 request-schema:
   bindings []struct ceph.SMBBinding
   bindings[].path string

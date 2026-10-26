@@ -446,7 +446,12 @@ record written before it meant. A member whose omission would mean anything
 else moves its record's version. An optional member is compatible one way only:
 a build from before it decodes records closed and refuses one that carries it
 as malformed or unsupported, so once a build that writes `build` has worked an
-operation, no earlier build can continue or remove it.
+operation, no earlier build can continue or remove it. Such a refusal of an
+attempt or resolution record names the build its own `build` member names,
+when exactly one member is spelled `build` in any case and it holds a valid
+build in its canonical encoding, with the remedy to continue or remove the
+operation with that build; when that build is the unmodified running
+executable, the refusal says the record names it and offers no such remedy.
 
 Records are closed, canonical, bounded JSON published atomically beneath held
 verified handles, with the directory and file modes of
@@ -1155,14 +1160,17 @@ verb always runs under the build and runtime in hand.
 A removal keeps the content digest its apply froze and compares none, so every
 value that fixes a removal's target identity, place, ownership mark or host
 claim travels in the request that apply froze, and the removal reads it from
-there, never from the build in hand.
+there, never from the build in hand. The automation values that are exceptions,
+a host path, name prefix, mark or proof identifier the automation fixes outside
+the request, are an exact list of the literals the
+[contract guard](#continuation-and-removal) sees, which it holds to each
+implementation's contract, and a changed fixed place also moves the
+implementation's request version, so a removal under the new build refuses the
+old block's request instead of looking for its effects in the new place.
 
 Not yet met: the closure refusal says this host keeps the registering build's
 runtime, which retention may have retired; tracked as
 [B816](milestones/backlog.md#b816).
-
-Not yet met: no guard proves that removal automation reads such a value only
-from the frozen request; tracked as [B813](milestones/backlog.md#b813).
 
 That re-proof, with the controller setup and host binding a continuation also
 re-proves ([controller-host protection](#controller-host-protection)), runs
@@ -1543,14 +1551,33 @@ resources it claims, or what its observation proves. An apply continuation under
 another build compares content digests and never automation bytes, so automation
 that moves no content digest reaches the blocks a continuation still runs, and a
 removal still reads the request its apply froze. A mechanical guard,
-`TestEveryImplementationMovesItsContentDigestWithItsContract`, fails the build
-when an implementation's Go request or evidence schema, or a persisted format
-version quoted in the collection's embedded plugins and roles, changes while
-its content digest does not. It fingerprints a raw-JSON member, such as the
-cluster services the Ceph core and host requests carry, as an opaque leaf, and
-sees no unquoted, dynamically built or unversioned format; the schema nested
-in such a member, and what a record or mark means beyond its shape and
-declared version, stay the author's to move. A mark changed without moving the
+`TestEveryImplementationMovesItsContentDigestWithItsContract`, keeps one
+contract golden per implementation and fails the build when any of its
+sections changes while its content digest does not: the Go request and
+evidence schemas, the persisted format versions quoted in the collection's
+embedded plugins, roles and playbooks, the marks, proof identifiers and places
+its automation fixes outside the frozen request, the effect pins its digest
+hashes (the golden's recipe must reproduce the digest) and the request members
+that carry its effects' identity. A changed fixed place fails even under a
+moved digest until the request version moves, since only a request the new
+build cannot read keeps a removal from looking in the new place.
+`TestEveryAutomationVersionLiteralIsClassified` requires every quoted literal
+ending in a version, every token naming a `bootwright.io` URI or key or a
+Bootwright host path, name prefix or mark, and every capitalized `Bootwright`
+token with up to three words after it, in every automation file of the
+collection, to be classified with its reason: persisted, fixed, transient,
+validated (it only bounds what a request may carry), mirrored, controller or
+documentation; an automation file of an extension it does not read fails it.
+`TestEveryCephMarkerNameIsDeclared` holds the declared Ceph marker record
+names, each a proof identifier of the Ceph implementations whose sources carry
+it, to the quoted record names and name fragments those sources carry. The
+guard fingerprints a
+raw-JSON member, such as the cluster services the Ceph core and host requests
+carry, as an opaque leaf, and sees no dynamically built value, no value naming
+no Bootwright token, no marker name built only from values and no unversioned
+format; the schema nested in such a
+member, and what a record or mark means beyond its shape and declared version,
+stay the author's to move. A mark changed without moving the
 digest fails closed: a removal under the new build reads the objects the old
 mark proves as foreign and refuses, leaving them in place, so its cost is a
 stuck or partial destroy. A change that loosens what an observation accepts as
