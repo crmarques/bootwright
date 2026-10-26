@@ -8606,6 +8606,35 @@ Physical-node consumers refuse the destroy of a context with virtual Ceph.
 `TestScopeTableSpellsTheExportGrant` and the engine and Ceph tests, each proved
 by a seeded mismatch; the delivering commit records the gates.
 
+### X168 — Audit lane F: truthful admission
+
+**Item:** B807 (2026-10-26 spec audit step P0-H). **Kind:** safety.
+**Owners:** Desired state and Architecture. Delivered on 2026-10-26 as lane F
+of the [audit remediation](backlog.md#lane-order-and-progress) under D182,
+with D183's answer to Q71.
+
+The agent installer refuses at plan, at each field's path, an endpoint port
+other than the native one (6443 for `api` and `api-int`, 443 for
+`ingress`), a scheme other than `https`, any `prefixLength` and a non-empty
+`interfaceNetworks`; `lifecycle.unsupported` carries the refused field. An
+authored endpoint `dnsName` and node labels and taints warn `api.deferred`.
+An apply frozen by an earlier build whose cluster authors one of those values
+now fails to re-plan and is taken back with `destroy`. An omitted Ceph
+`clusterSSH.transport` selects `verified-tunnel`, and `validate` refuses
+`native` (matrix row U07 moved to validation); no frozen request held
+`native`, so no contract moved. The context-update warning says importing
+the original files again does not undo the update, and every entitlement
+example carries the license-review header. One module,
+`module_utils/remote_command.py`, joins every remote command; the guest
+session builder takes an argv, and `test_python_sites.py` refuses other shell
+quoting, `shell=` and new ssh sites, aliases included.
+
+**Guard tests:** `TestUnusedEndpointFieldsRefuseAtTheirPath`,
+`TestClusterSSHTransportDefaultsToTheVerifiedTunnel`,
+`TestAnOmittedCephTransportCompilesAndPlans`, `test_remote_command.py` and
+the site guards, each proved by a seeded mismatch; the delivering commit
+records the gates.
+
 ## M3 independent in-tree completion
 
 The owner's 2026-10-23 request (D181) delivers the independent implementation

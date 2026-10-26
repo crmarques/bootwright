@@ -108,6 +108,9 @@ func (a *admission) clusterAccess(ceph api.Value) {
 	if fallback(ssh.Get("user"), "cephadm") != "root" && !ssh.Has("keyRef") {
 		a.required(ssh, "keyRef", "$.spec.ceph.cephadm.clusterSSH")
 	}
+	if textOf(ssh, "transport") == "native" {
+		a.invalid("$.spec.ceph.cephadm.clusterSSH.transport", "the native cluster SSH transport is reserved, and no build realizes it", "set spec.ceph.cephadm.clusterSSH.transport to verified-tunnel, or omit it")
+	}
 	key := textOf(ssh, "keyRef")
 	if key != "" {
 		for _, environment := range a.catalog.OfKind(api.Environment) {

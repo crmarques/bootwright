@@ -166,7 +166,7 @@ func TestAnEndpointWithoutAnAddressIsRefused(t *testing.T) {
 				}
 				effective, _ := Normalize(o.WithSpec(o.Spec().WithPath(slot, "install", "endpoints", "api")), c)
 				issues := Validate(effective, c)
-				if refused := hasIssue(issues, "$.spec.install.endpoints.api.address", "requires an IP address"); refused == admitted || admitted && len(issues) != 0 {
+				if refused := hasIssue(issues, "$.spec.install.endpoints.api.address", "requires an IP address"); refused == admitted || admitted && (len(issues) != 1 || issues[0].Code != "api.deferred") {
 					t.Fatal(endpoint, issues)
 				}
 			}
@@ -212,6 +212,35 @@ func TestAPIInternalCopiesOnlyAddressAndSource(t *testing.T) {
 	effective, _ = Normalize(o, c)
 	if !effective.Spec().Get("install", "endpoints", "api-int").Equal(explicit) {
 		t.Fatal("authored internal endpoint replaced")
+	}
+}
+
+// Each authored field the agent installer reads no input for is a warning at
+// its own path, and nothing else is.
+func TestInertFieldsReportDeferredAtTheirPath(t *testing.T) {
+	o, c := fixture("kubevirt", 1, false)
+	effective, _ := Normalize(o, c)
+	if issues := Validate(effective, c); len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	nodes := o.Spec().Get("nodes").Items()
+	nodes[0] = nodes[0].With("labels", m("example.test/rack", "a")).With("taints", list(m("key", "example.test/reserved", "effect", "NoSchedule")))
+	spec := o.Spec().With("nodes", list(nodes...))
+	spec = spec.WithPath(spec.Get("install", "endpoints", "api"), "install", "endpoints", "api-int")
+	for _, slot := range []string{"api", "api-int", "ingress"} {
+		spec = spec.WithPath(api.StringValue(slot+".custom.example.test"), "install", "endpoints", slot, "dnsName")
+	}
+	effective, _ = Normalize(o.WithSpec(spec), c)
+	var got []string
+	for _, issue := range Validate(effective, c) {
+		if issue.Code != "api.deferred" || issue.Message == "" || issue.Remediation == "" {
+			t.Fatalf("an inert field reports %+v", issue)
+		}
+		got = append(got, issue.Field)
+	}
+	want := []string{"$.spec.install.endpoints.api.dnsName", "$.spec.install.endpoints.api-int.dnsName", "$.spec.install.endpoints.ingress.dnsName", "$.spec.nodes[0].labels", "$.spec.nodes[0].taints"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("inert fields warn at %q, want %q", got, want)
 	}
 }
 
@@ -321,7 +350,7 @@ func TestKubernetesLabelsAndRepeatedTaints(t *testing.T) {
 	nodes[0] = nodes[0].With("labels", m("example.test/Zone_Name", "rack.A", "plain", "")).With("taints", list(taint, taint))
 	o = o.WithSpec(o.Spec().With("nodes", list(nodes...)))
 	effective, _ := Normalize(o, c)
-	if issues := Validate(effective, c); len(issues) > 0 {
+	if issues := Validate(effective, c); len(issues) != 2 || issues[0].Code != "api.deferred" || issues[1].Code != "api.deferred" {
 		t.Fatal(issues)
 	}
 	if effective.Spec().Get("nodes").Items()[0].Get("taints").Len() != 2 {

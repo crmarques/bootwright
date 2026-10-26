@@ -338,6 +338,28 @@ func TestNativeReleaseRefusesC1ControlsAndLineSeparators(t *testing.T) {
 	}
 }
 
+// An omitted cluster SSH transport selects the verified tunnel, the only one a
+// build realizes, and an authored native transport refuses at validation.
+func TestClusterSSHTransportDefaultsToTheVerifiedTunnel(t *testing.T) {
+	catalog := fixtureCatalog()
+	cluster := find(t, catalog, api.StorageCluster, "storage")
+	if got := textOf(cluster.Spec(), "ceph", "cephadm", "clusterSSH", "transport"); got != "verified-tunnel" {
+		t.Fatalf("an omitted transport normalizes to %q", got)
+	}
+	if issues := Validate(cluster, catalog); len(issues) != 0 {
+		t.Fatalf("the default transport refuses: %#v", issues)
+	}
+	native := cluster.WithSpec(cluster.Spec().WithPath(api.StringValue("native"), "ceph", "cephadm", "clusterSSH", "transport"))
+	native, _ = Normalize(native, catalog)
+	if textOf(native.Spec(), "ceph", "cephadm", "clusterSSH", "transport") != "native" {
+		t.Fatal("normalization replaced an authored transport")
+	}
+	issues := Validate(native, replace(catalog, native))
+	if len(issues) != 1 || issues[0].Code != "api.invariant" || issues[0].Field != "$.spec.ceph.cephadm.clusterSSH.transport" {
+		t.Fatalf("a native transport refuses with %#v", issues)
+	}
+}
+
 func TestDeferredStretchStillConstrainsProtection(t *testing.T) {
 	catalog := fixtureCatalog()
 	cluster := find(t, catalog, api.StorageCluster, "storage")

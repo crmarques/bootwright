@@ -757,18 +757,20 @@ A Python site is where its code runs: the controller runtime for action
 plugins, a managed host for modules and shipped workers, and a native image
 for its scripts.
 [Python guidance](../.agents/skills/code-implementation/references/python.md)
-owns the idioms of each. Controller and managed-host code encodes canonical
-JSON only in `module_utils/canonical_json.py` and starts processes only in
+owns the idioms of each. Controller and managed-host code encodes canonical JSON
+only in `module_utils/canonical_json.py`, starts processes only in
 `module_utils/bounded_process.py`, which the shipped Ceph and package bundles
-carry. Starting a process is a subprocess call, `os.system`, `os.popen`,
-`os.fork`, `os.forkpty`, an `os.exec*` or `os.spawn*` function, `posix_spawn` or
-`pty.spawn`; `test_python_sites.py` finds each in the syntax tree through any
-import alias, so a command string inside a shipped source constant is not a
-call. A file that runs alone, such as a script shipped as source or a worker in
-an image, a supervisor that forks or replaces itself on purpose, or an encoding
-that differs on purpose is a named exception with its reason in that test, and
-the lists only shrink. Repository tools
-under `scripts/tools/` are Python outside the collection; the
+carry, and quotes an SSH remote command only in
+`module_utils/remote_command.py`; the guest session builder takes the remote
+command as an argv and joins it there. Starting a process is a subprocess call,
+`os.system`, `os.popen`, `os.fork`, `os.forkpty`, an `os.exec*` or `os.spawn*`
+function, `posix_spawn` or `pty.spawn`; `test_python_sites.py` finds each in the
+syntax tree through any import alias, so a command string inside a shipped
+source constant is not a call. A file that runs alone, such as a script shipped
+as source or a worker in an image, a supervisor that forks or replaces itself on
+purpose, or an encoding that differs on purpose is a named exception with its
+reason in that test, and the lists only shrink. Repository tools under
+`scripts/tools/` are Python outside the collection; the
 [Python reference](../.agents/skills/code-implementation/references/python.md#repository-tools)
 owns them. `TestEveryCollectionAndScriptSourceMapsToALanguageRow` fails on a
 tracked source under the collection's plugins or `scripts/` that no row holds.

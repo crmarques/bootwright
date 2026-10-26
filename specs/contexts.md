@@ -204,9 +204,6 @@ apply owns, and that importing the original files again does not undo the
 update: they become a new revision, which apply refuses the same way
 ([B598](milestones/backlog.md#b598)).
 
-Not yet met: the warning does not say that importing the original files again
-leaves apply refusing; tracked as [B807](milestones/backlog.md#b807).
-
 Before discovery, resolve the
 state-root location read-only and reject a root within the input directory;
 revalidate containment through held handles at publication. Freeze every

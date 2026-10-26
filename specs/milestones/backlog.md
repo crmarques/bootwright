@@ -270,7 +270,6 @@ Alias cell.
 | [B798](#b798) | new, 2026-10-23 (M3 verification) | defect | Verification tooling | The full Ansible unit gate selects its intended worker mode explicitly | Pre-existing tooling behavior outside the requested product change |
 | [B799](#b799) | new, 2026-10-23 (M3 verification) | defect | Workspace | Setup interruption retries identify any remaining setup-lock holder | Pre-existing intermittent refusal; its cause is unproved |
 | [B805](#b805) | new, 2026-10-26 (spec audit P0-F) | safety | Secrets and State reconciliation | Secret references declare a class; a rotated access credential has a recorded removal exit | Audit roadmap work; implemented only on an explicit lane request |
-| [B807](#b807) | new, 2026-10-26 (spec audit P0-H) | safety | Desired state and Architecture | Inert fields report or refuse, one remote quoting function, truthful defaults and warnings | Audit roadmap work; implemented only on an explicit lane request |
 | [B808](#b808) | new, 2026-10-26 (spec audit P1-A) | enabling | Architecture | Engine claim check, implementation fitness test and a shared Capability-port contract suite | Audit roadmap work; implemented only on an explicit lane request |
 | [B809](#b809) | new, 2026-10-26 (spec audit P1-B) | enabling | Substrate and Architecture | One substrate-owned dispatcher replaces per-consumer arm tables, power commands included | Audit roadmap work; implemented only on an explicit lane request |
 | [B810](#b810) | new, 2026-10-26 (spec audit P1-C) | enabling | Architecture and Storage | Storage and cluster contexts split into neutral cores, implementations and fan-in ports | Audit roadmap work; implemented only on an explicit lane request |
@@ -3028,47 +3027,6 @@ exit (D183, Q70), classified through each capability's Secret references.
 **Remains:** classifying the KubeVirt `kubeconfigRef` and the vCenter login
 when those arms exist ([B87](m1.md#b87), [B99](m1.md#b99)).
 
-### B807
-
-**Owner:** Desired state and Architecture. **Kind:** safety.
-**Requires:** none. **Definition:** Specified. Roadmap step P0-H of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F05-06,
-F08-01, F12-06, R2-05-11, V2-02. Admission reports or refuses what it will not
-honor, no default always refuses, and every remote command is quoted in one
-place.
-
-**Specs:** [container clusters](../container-clusters.md#selection-and-refusal)
-and [endpoints](../api/container-clusters.md#endpoints) state the warnings and
-refusals; [process boundary](../security.md#process-boundary) names the remote
-fixed worker; [contexts](../contexts.md) the update warning;
-`../api/storage.md` the `verified-tunnel` default.
-
-**Work:**
-
-- F05-06 (Medium): in `internal/containercluster/agentinstall`, an authored
-  endpoint `port` or `scheme` other than the native one, any `prefixLength`
-  and a non-empty `interfaceNetworks` refuse at plan at the field path;
-  `dnsName`, `labels` and `taints` report `api.deferred`. Add the refusal-table
-  rows with the code (`TestContainerClusterRefusalTableMatchesUnsupported`); a
-  test per field asserts code and path. [Q71](#audit-remediation-decisions) may
-  instead remove the four fields.
-- F08-01 (Medium): one `module_utils` function quotes every SSH remote command
-  (`ceph_core.py` `ssh_argv` and `managedos_registration.py` today); a
-  collection unit test lists every subprocess or ssh construction site under
-  `plugins/` and fails outside it, extending the `shell=True` check.
-- V2-02 (Medium): an omitted `ceph.cephadm.clusterSSH.transport` normalizes to
-  `verified-tunnel` (`internal/storage/ceph/requests.go`) and `validate`
-  refuses `native`; update storage.md's refusal row, matrix row U07 and its
-  fixture with the code.
-- F12-06 (Low): the context-update warning says restoring the original files
-  leaves apply refusing until [B598](#b598); its golden.
-- R2-05-11 (Low): add the license-review header to the four entitlement YAMLs
-  lacking it (`multidc-platform/entitlements/ceph.yaml` and the `host-variants`,
-  `observability` and `services` storage entitlements).
-
-**Exit evidence:** each finding's acceptance holds; a StorageCluster omitting
-the transport passes `validate` and `plan`; `make check` passes.
-
 ### B808
 
 **Owner:** Architecture. **Kind:** enabling. **Requires:** B800 to B807
@@ -4105,7 +4063,7 @@ decision stay open while its other parts land.
 | C Storage retirement | B804 (X167), B835 (X167) | none | F, G | Q68 |
 | D Credentials and trust | [B805](#b805), B817 (X166), [B829](#b829), B831 (X166) | none | B | Q70, Q97, Q98, Q99, Q100, Q101, Q116 |
 | E Store durability and controller records | B806 (X164), B836 (X164), B832 (X164) | B801 | B, J | none |
-| F Truthful admission | [B807](#b807) | none | C, I | Q71 |
+| F Truthful admission | B807 (X168) | none | C, I | Q71 |
 | G Extension architecture | [B808](#b808), [B811](#b811), [B809](#b809), [B810](#b810), [B812](#b812) | B800 to B807 | B, C, I, J, K | Q72, Q73, Q74, Q75 |
 | H Cross-build continuation | B813 (X163) | B801 | none | Q76 |
 | I API shape and grammar | [B814](#b814), [B826](#b826), [B827](#b827), [B828](#b828), [B824](#b824), [B821](#b821), [B837](#b837) | B808 | B, F, G | Q77, Q78, Q79, Q80, Q81, Q82, Q83, Q84, Q85, Q86, Q87, Q88, Q105, Q106, Q107, Q110, Q111, Q112, Q113, Q114, Q115, Q118 |
@@ -4131,7 +4089,7 @@ also updates this table.
 | 5 | B Physical targets and shared hosts | merged (X165) |
 | 6 | D Credentials and trust | merged (X166) |
 | 7 | C Storage retirement | merged (X167) |
-| 8 | F Truthful admission | not started |
+| 8 | F Truthful admission | merged (X168) |
 | 9 | G Extension architecture | not started |
 | 10 | J Reconciliation rules | not started |
 | 11 | I API shape and grammar | not started |
@@ -4167,7 +4125,7 @@ blocks.
 | Q68 | Confirm the D143 clause 6 reading: does retiring a Ceph cluster (or StorageExport) with its virtual hosts require that no consumer of its exports survives the removal? | (a: refuse) Removal refuses before registration naming the surviving consumer and export until B491; a mixed context (virtual Ceph, physical OpenShift) has no full destroy until then (the specs state this refusal as the interim safe reading).; (b: named impact plus acknowledgement) Removal proceeds after an acknowledgement naming the surviving consumer, whose PVs and Secrets then point at deleted storage. | **Answered by D183: a.** Roadmap P0-E and R2-02-01 recommend A with a plan-time topology flag; F10-04's refuter and calibrator prefer B as smaller. | [B804](delivered.md#x167--audit-lane-c-storage-retirement) |
 | Q69 | Should B659, B662 and B491 become prerequisites of M2d's B485 exit, or does B485 close with the physical recovery limitation recorded? | (a: prerequisites) B485 Requires gains B659, B662 and B491; M2d cannot complete until interrupted physical deployments have exits, which first needs their protocol decisions.; (b: record the limitation) B485 may close with the physical profile documented as an incomplete recovery profile (text applied now); the exits stay parked. | **Answered by D183: a.** The audit (14.8) offers both and keeps the recovery protocols as owner decisions; it does not choose. | [B485](m2.md#b485) |
 | Q70 | Should continuation and removal be able to present the current version of a rotated access credential (BMC/Redfish, KubeVirt kubeconfigRef, vCenter, registry login) instead of the bound one, and through which recorded gate? | (a: explicit recorded rebind exit) A third exit beside D37 for access credentials only, gated by a flag or the --authorize token model and recorded as a new binding version; ownership proofs still run and effect-material Secrets refuse it.; (b: keep today's rule) Removal always presents the bound version; a rotated credential strands destroy, leaving restore-keyring or --purge --allow-orphans. | **Answered by D183: a.** The report recommends A, gated by the --authorize model and named apart from B181's bounded-run rebind, keeping D37 and D85; the owner decides the flag. | [B805](#b805) |
-| Q71 | Refuse the four inert ContainerCluster endpoint fields (port, scheme, prefixLength, interfaceNetworks) at plan on the agent path, or remove them from the schema until a consumer exists? | (a: refuse at plan) Fields stay admitted; an authored non-native value refuses at its path with a refusal row per field (spec states this).; (b: remove the fields) The endpoint shape loses the four fields; no refusal rows; examples and goldens change. | **Answered by D183: a.** Refuse at plan now (roadmap P0-H); removal stays an owner option. Non-blocking: B807 implements A unless the owner chooses B first. | [B807](#b807) |
+| Q71 | Refuse the four inert ContainerCluster endpoint fields (port, scheme, prefixLength, interfaceNetworks) at plan on the agent path, or remove them from the schema until a consumer exists? | (a: refuse at plan) Fields stay admitted; an authored non-native value refuses at its path with a refusal row per field (spec states this).; (b: remove the fields) The endpoint shape loses the four fields; no refusal rows; examples and goldens change. | **Answered by D183: a.** Refuse at plan now (roadmap P0-H); removal stays an owner option. Non-blocking: B807 implements A unless the owner chooses B first. | [B807](delivered.md#x168--audit-lane-f-truthful-admission) |
 | Q72 | Which mechanism scopes an Environment: the source directory, spec.resources and cluster lists all narrow scope today? | (a) Remove spec.resources; the Environment directory is the scope and cluster lists are the only narrowing, documented with an example.; (b) Keep spec.resources and drop cluster lists, which makes the hostClusterRef retention edge moot.; (c) Keep both, with one tracked example using spec.resources and a one-sentence rationale in environment.md. | **Answered by D183: a.** Decide together with hostclusterref-retention-edge; the report's first option is (a), and the lanes expect cluster lists to stay. Either way the excluded-reference refusal names the selection field. | [B812](#b812) |
 | Q73 | If cluster lists stay, does selecting a nested cluster retain its KubeVirt provider's hostClusterRef ContainerCluster as a root with its own closure? | (a) Add the closure row, effective when B732 lifts the KubeVirt refusal, with a multidc selection test as B732 exit evidence.; (b) Moot because cluster lists are dropped (environment-scope-mechanism b). | **Answered by D183: a.** a if cluster lists stay; record the selection test as B732 exit evidence either way. | [B812](#b812) |
 | Q74 | Does an authored cluster list retain Bootwright-installed Machines (and their provider closure) that are nodes or hosts of no declared cluster, instead of only warning? | (a) Retain them as roots; the validate warning covers only what stays excluded.; (b) Warn only, as the spec states today. | **Answered by D183: a.** a (calibrator), decided with environment-scope-mechanism; the warning stands until then. | [B812](#b812) |

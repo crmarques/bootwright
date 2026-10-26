@@ -16,7 +16,7 @@
   "cluster": "example",
   "clusterKeyRef": "cluster-key",
   "clusterNetworks": [],
-  "clusterSSHTransport": "native",
+  "clusterSSHTransport": "verified-tunnel",
   "clusterSSHUser": "operator",
   "controller": "",
   "delegated": [

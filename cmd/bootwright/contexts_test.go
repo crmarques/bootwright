@@ -599,7 +599,7 @@ func TestAnIdenticalReimportOverACompletedApplyPublishesNothing(t *testing.T) {
 		t.Fatalf("changed input over a completed apply published without confirmation: %s", stderr)
 	}
 	out, stderr = contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input, "--yes")
-	want := "  warning  lifecycle.state\n    context alpha holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back\n    Next: take it back with bootwright destroy --context alpha, then run bootwright apply --context alpha\n"
+	want := "  warning  lifecycle.state\n    context alpha holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back; importing the original files again does not undo this update, because they become a new revision apply refuses the same way\n    Next: take it back with bootwright destroy --context alpha, then run bootwright apply --context alpha\n"
 	if !strings.HasPrefix(out, "  ✓ Context updated\n") || humanContent(stderr) != humanContent(want) {
 		t.Fatalf("changed input over a completed apply: %s %q", out, stderr)
 	}

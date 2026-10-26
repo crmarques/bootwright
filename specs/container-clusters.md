@@ -71,14 +71,9 @@ fields refused above makes `validate`, `plan` and `apply` report an
 `api.deferred` warning at its path, so an operator learns that it changes
 nothing. An authored endpoint `port`, `scheme`, `prefixLength` or
 `interfaceNetworks` that the installer does not use refuses at `plan`, naming
-the field, because the installation would not follow the declaration. Node
-`labels` and `taints` stay warnings until [B716](milestones/m3.md#b716) decides
-them.
-
-Not yet met: no inert field reports a warning and an authored endpoint `port`,
-`scheme`, `prefixLength` or `interfaceNetworks` plans without a refusal, so the
-refusal table has no row for them yet; tracked as
-[B807](milestones/backlog.md#b807).
+the field, because the installation would not follow the declaration; the
+[refusal table](#refusal-table) holds one row for each. Node `labels` and
+`taints` stay warnings until [B716](milestones/m3.md#b716) decides them.
 
 A multi-node cluster's platform follows who answers its endpoints: on
 `baremetal` the installer owns all three as virtual IPs its own VIP holders
@@ -95,7 +90,10 @@ to it. Its reason and remedy are the diagnostic's message and remediation, in
 which `<cluster>` is the refused cluster, `<machine>` the Machine of the node
 refused, `<provider>` and `<provider host>` that Machine's provider and the
 Machine the provider runs on, and `<server>` and `<server host>` the selected
-artifact server and its placement Machine.
+artifact server and its placement Machine. The four endpoint rows name the
+first refused endpoint `<slot>` in `api`, `api-int`, `ingress` order and its
+native `<port>`, are checked only once no other row refuses the cluster, and
+their diagnostic carries the refused field's path.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
@@ -109,6 +107,10 @@ artifact server and its placement Machine.
 | A release pinned by image alone | `spec.distribution.release` without `version` | `a cluster pinned to a release image alone names no version for its installer to match` | `correct <cluster>` |
 | A disconnected cluster | `spec.install.mode: disconnected` | `this executable installs no disconnected cluster` | `correct <cluster>` |
 | Serving certificates | `spec.install.servingCertificates` | `this executable does not install install.servingCertificates` | `correct <cluster>` |
+| An endpoint port the installer does not serve | `spec.install.endpoints.<slot>.port` other than 6443 for `api` and `api-int`, or 443 for `ingress` | `the agent installer serves endpoint <slot> on port <port> and has no input for another` | `remove spec.install.endpoints.<slot>.port from <cluster>, or set it to <port>` |
+| An endpoint scheme the installer does not serve | `spec.install.endpoints.<slot>.scheme` other than `https` | `the agent installer serves endpoint <slot> over https and has no input for another protocol` | `remove spec.install.endpoints.<slot>.scheme from <cluster>, or set it to https` |
+| An endpoint prefix length | `spec.install.endpoints.<slot>.prefixLength` | `no agent installer input consumes endpoint <slot>'s prefixLength` | `remove spec.install.endpoints.<slot>.prefixLength from <cluster>` |
+| Endpoint interface networks | a non-empty `spec.install.endpoints.<slot>.interfaceNetworks` | `no agent installer input consumes endpoint <slot>'s interfaceNetworks` | `remove spec.install.endpoints.<slot>.interfaceNetworks from <cluster>, or leave it empty` |
 | Several nodes on another platform | `spec.install.platform.type: vsphere` or `external` with more than one of `spec.nodes` | `this executable installs no multi-node cluster on the declared platform` | `correct <cluster>` |
 | More nodes than the run ceiling fits | more than 28 emulated `spec.nodes`, whose installation [deadline](#installation) passes the 6-hour ceiling | `installing <nodes> nodes needs a run deadline of <deadline>, past the 6h0m0s every adapter run is held to` | `declare at most 28 nodes on <cluster>` |
 | A node with an install profile | `spec.os.installProfileRef` on a node's Machine | `a declared node selects an install profile, so two installations would write its disk` | `remove spec.os.installProfileRef from <machine> or drop it from <cluster>` |

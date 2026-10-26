@@ -34,7 +34,7 @@ func TestPhysicalPrivateDeliveryRequiresVerifiedTLSOnBothLegs(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			catalog := physicalWithController(test.change)
 			cluster, _ := catalog.Find(api.ContainerCluster, "metal")
-			reason, remedy := refusedCluster(catalog, cluster)
+			_, reason, remedy := refusedCluster(catalog, cluster)
 			if test.want == "" {
 				if reason != "" {
 					t.Fatalf("safe physical nodes refused: %s (%s)", reason, remedy)

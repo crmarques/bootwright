@@ -250,11 +250,10 @@ in one shape: an absolute remote interpreter run through `sudo -n`, code
 shipped with the selected automation and never authored, data only on the
 worker's standard input, every token of the command string a literal or a
 closed validated token joined by one shared quoting function, and worker output
-read only through its bounded protocol.
-
-Not yet met: two modules each quote their own remote command, and no test
-holds every SSH remote command to one function; tracked as
-[B807](milestones/backlog.md#b807).
+read only through its bounded protocol. That function is the collection's
+`module_utils/remote_command.py`; `test_python_sites.py` refuses shell quoting
+or a `shell=` argument anywhere else under `plugins/`, and lists every file
+that names the SSH client and every file that hands a session a remote command.
 
 A runner hands Ansible every value as data, never as a template. ansible-core
 loads an `--extra-vars @file` document as trusted template text, so each runner

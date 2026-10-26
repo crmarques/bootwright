@@ -19,7 +19,8 @@ const refusalSpec = "../../../specs/container-clusters.md"
 
 // refusalCase is a selected graph that one row of the refusal table refuses:
 // the object its one refusal names, and the value of each placeholder the
-// row's reason and remedy write in angle brackets.
+// row's reason and remedy write in angle brackets. A <field> value is the
+// path the refusal carries, when one field is what it refuses.
 type refusalCase struct {
 	catalog api.Catalog
 	refused string
@@ -68,6 +69,13 @@ func TestContainerClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		n = n.WithSpec(n.Spec().With("network", n.Spec().Get("network").Without("configRef").With("inline", configuration)))
 		return refusalCase{onSNO(n), "ContainerCluster/sno", map[string]string{"<machine>": "Machine/sno-01", "<interface>": "extra"}}
 	}
+	endpointCase := func(slot, name string, value api.Value, port string) refusalCase {
+		values := map[string]string{"<cluster>": "ContainerCluster/sno", "<slot>": slot, "<port>": port,
+			"<field>": "$.spec.install.endpoints." + slot + "." + name}
+		return refusalCase{sno(func(spec api.Value) api.Value {
+			return spec.WithPath(value, "install", "endpoints", slot, name)
+		}), "ContainerCluster/sno", values}
+	}
 	cases := map[string]refusalCase{
 		"An agent OVN section": networkCase(func(v api.Value) api.Value { return v.With("ovn", api.MapValue()) }),
 		"An agent bridge interface": networkCase(func(v api.Value) api.Value {
@@ -101,6 +109,11 @@ func TestContainerClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		"Serving certificates": {sno(func(spec api.Value) api.Value {
 			return spec.WithPath(api.MapValue(text("defaultCertificateRef", "ingress-tls")), "install", "servingCertificates", "ingress")
 		}), "ContainerCluster/sno", onSNOCluster},
+
+		"An endpoint port the installer does not serve":   endpointCase("ingress", "port", api.IntegerValue("80"), "443"),
+		"An endpoint scheme the installer does not serve": endpointCase("api", "scheme", api.StringValue("http"), ""),
+		"An endpoint prefix length":                       endpointCase("api-int", "prefixLength", api.IntegerValue("24"), ""),
+		"Endpoint interface networks":                     endpointCase("api", "interfaceNetworks", api.StringList("198.51.100.0/24"), ""),
 
 		"Several nodes on another platform": {multiNode, "ContainerCluster/ocp", map[string]string{"<cluster>": "ContainerCluster/ocp"}},
 		"More nodes than the run ceiling fits": {largeCatalog(29), "ContainerCluster/ocp",
@@ -145,7 +158,7 @@ func TestContainerClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		delete(cases, row.name)
 		t.Run(row.name, func(t *testing.T) {
 			kind, name, _ := strings.Cut(test.refused, "/")
-			want := []lifecycle.Refusal{{Kind: kind, Name: name, Reason: expand(row.reason, test.values), Remediation: expand(row.remedy, test.values)}}
+			want := []lifecycle.Refusal{{Kind: kind, Name: name, Field: test.values["<field>"], Reason: expand(row.reason, test.values), Remediation: expand(row.remedy, test.values)}}
 			state := compilation.NewState(test.catalog, test.catalog, nil)
 			if got := (MediaCapability{}).Unsupported(state); !reflect.DeepEqual(got, want) {
 				t.Fatalf("the media capability refuses %+v, the table %+v", got, want)

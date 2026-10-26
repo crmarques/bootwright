@@ -298,7 +298,7 @@ class Controller:
             identity=self.material["fleetIdentity"],
             user="root",
             address=self.request["install"]["address"],
-            remote=command,
+            remote_argv=[command],
         )
         code, output = process.run(argv, data, timeout=30, limit=32768)
         return ssh.Outcome(code, output, False, False)

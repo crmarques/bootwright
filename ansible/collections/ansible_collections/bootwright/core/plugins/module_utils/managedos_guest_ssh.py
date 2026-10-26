@@ -16,7 +16,7 @@ import os
 import re
 import stat
 
-from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, ssh_key_policy
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, remote_command, ssh_key_policy
 
 SSH = "/usr/bin/ssh"
 OPTIONS = (
@@ -111,8 +111,8 @@ def require_destination(user, address):
         raise SessionError("the guest address is not valid")
 
 
-def guest_argv(*, ssh_config, known_hosts, host_key_algorithms, policy_host_key_algorithms, identity, user, address, remote):
-    """The pinned session's argv for one remote command string."""
+def guest_argv(*, ssh_config, known_hosts, host_key_algorithms, policy_host_key_algorithms, identity, user, address, remote_argv):
+    """The pinned session's argv for one remote command, given as an argv that remote_command joins."""
     if ssh_config == "/dev/null":
         raise SessionError("the guest session requires the reduced placement-host policy configuration")
     require_file(ssh_config, "client configuration")
@@ -120,7 +120,11 @@ def guest_argv(*, ssh_config, known_hosts, host_key_algorithms, policy_host_key_
     require_file(identity, "fleet identity")
     require_algorithms(host_key_algorithms, policy_host_key_algorithms)
     require_destination(user, address)
-    if not isinstance(remote, str) or not remote or "\0" in remote or len(remote.encode("utf-8", "surrogatepass")) > MAX_REMOTE:
+    try:
+        remote = remote_command.remote_command(remote_argv)
+    except ValueError:
+        raise SessionError("the remote command is not valid") from None
+    if len(remote.encode("utf-8", "surrogatepass")) > MAX_REMOTE:
         raise SessionError("the remote command is not valid")
     options = ["UserKnownHostsFile=" + known_hosts] + list(OPTIONS)
     options.insert(HOST_KEY_SLOT + 1, "HostKeyAlgorithms=" + host_key_algorithms)

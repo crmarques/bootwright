@@ -200,10 +200,6 @@ Every endpoint has this exact shape:
 | `source.loadBalancerRef` | string | conditional | — | Global LoadBalancer; valid only for `loadBalancer`. |
 | `source.bindAddressRef` | string | conditional | sole bind address | LoadBalancer-local `bindAddresses[].name`; valid only for `loadBalancer`. |
 
-Not yet met: the agent path accepts an authored `port`, `scheme`, `prefixLength`
-or `interfaceNetworks` without a diagnostic and installs the cluster without
-it; tracked as [B807](../milestones/backlog.md#b807).
-
 `openshift` and `external` own an authored `address`, which every such slot
 requires: [resolution before boot](../container-clusters.md#installation)
 proves only a frozen address, so a `dnsName` satisfies no slot. An effective

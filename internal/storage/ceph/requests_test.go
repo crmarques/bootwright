@@ -110,7 +110,7 @@ func TestClusterSSHTransportIsFrozenForClusterAndChildren(t *testing.T) {
 				}
 				want := transport
 				if want == "" {
-					want = "native"
+					want = "verified-tunnel"
 				}
 				if err != nil || r.ClusterSSHTransport != want {
 					t.Fatalf("%s transport=%s err=%v", object.Identity(), r.ClusterSSHTransport, err)

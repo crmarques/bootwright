@@ -24,7 +24,7 @@ func contextUpdatePlan() contexts.UpdatePlan {
 			},
 			{
 				Severity: "warning", Code: "lifecycle.state",
-				Message:     "context lab holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back",
+				Message:     "context lab holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back; importing the original files again does not undo this update, because they become a new revision apply refuses the same way",
 				Remediation: "take it back with bootwright destroy --context lab, then run bootwright apply --context lab",
 			},
 		},
@@ -40,7 +40,7 @@ func TestTheContextUpdatePlanNamesItsInputCountsAndWarnings(t *testing.T) {
 	}
 	matchesTextGolden(t, "context-update-plan", out.Bytes())
 	want := "warning api.selection /srv/inputs/lab/clusters/ocp-02/cluster.yaml:4:9 cluster root is excluded by the Environment selection " +
-		"warning lifecycle.state context lab holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back Next: take it back with bootwright destroy --context lab, then run bootwright apply --context lab"
+		"warning lifecycle.state context lab holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back; importing the original files again does not undo this update, because they become a new revision apply refuses the same way Next: take it back with bootwright destroy --context lab, then run bootwright apply --context lab"
 	if strings.Join(strings.Fields(errOut.String()), " ") != want {
 		t.Fatalf("standard error = %q, want %q", errOut.String(), want)
 	}

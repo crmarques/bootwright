@@ -1915,8 +1915,9 @@ func TestAuthorizationTokenAndBorrowedCredentialsRefuseBeforeAnyRead(t *testing.
 // Each object a capability refuses is its own diagnostic, carrying the object,
 // the reason the capability gave and its remedy, so plan and apply say why a
 // cluster or Machine is refused and what to change rather than only naming it.
-// An object two capabilities refuse alike is reported once, and a refusal that
-// names no remedy directs the operator to the object itself.
+// An object two capabilities refuse alike is reported once, a refusal that
+// names no remedy directs the operator to the object itself, and a refusal of
+// one field carries that field's path.
 func TestUnsupportedObjectsRefuseBeforeRegistration(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	cluster := Refusal{
@@ -1925,7 +1926,7 @@ func TestUnsupportedObjectsRefuseBeforeRegistration(t *testing.T) {
 		Remediation: "remove spec.os.installProfileRef from Machine/sno-01 or drop it from ContainerCluster/sno",
 	}
 	h.capability.unsupported = []Refusal{
-		{Kind: "Machine", Name: "guest", Reason: "the install profile selects spec.subscription"},
+		{Kind: "Machine", Name: "guest", Field: "$.spec.os.installProfileRef", Reason: "the install profile selects spec.subscription"},
 		cluster, cluster,
 	}
 	_, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
@@ -1935,7 +1936,7 @@ func TestUnsupportedObjectsRefuseBeforeRegistration(t *testing.T) {
 			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "ContainerCluster", Name: "sno"},
 		},
 		{
-			Severity: "error", Code: "lifecycle.unsupported", Message: "the install profile selects spec.subscription", Remediation: "correct Machine/guest",
+			Severity: "error", Code: "lifecycle.unsupported", Message: "the install profile selects spec.subscription", Field: "$.spec.os.installProfileRef", Remediation: "correct Machine/guest",
 			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: "Machine", Name: "guest"},
 		},
 	}

@@ -184,11 +184,10 @@ registration:
 import inspect
 import json
 import os
-import shlex
 import stat
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.bootwright.core.plugins.module_utils import managedos_guest_ssh, managedos_rhsm_worker as worker
+from ansible_collections.bootwright.core.plugins.module_utils import managedos_guest_ssh, managedos_rhsm_worker as worker, remote_command
 from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 
 MAX_MATERIAL = 257
@@ -320,12 +319,12 @@ def execute(params, run=managedos_guest_ssh.run):
         payload = payload_of(params)
     except worker.Refused as refused:
         return {"changed": False, "ok": False, "reason": refused.reason, "detail": refused.detail}
-    remote = shlex.join(["/usr/bin/sudo", "-n", "/usr/bin/python3", "-I", "-c", worker_source()])
+    remote_argv = remote_command.fixed_worker_argv(worker_source())
     try:
         argv = managedos_guest_ssh.guest_argv(
             ssh_config=params["ssh_config"], known_hosts=params["known_hosts"],
             host_key_algorithms=params["host_key_algorithms"], policy_host_key_algorithms=params["policy_host_key_algorithms"],
-            identity=params["identity"], user=params["user"], address=params["address"], remote=remote)
+            identity=params["identity"], user=params["user"], address=params["address"], remote_argv=remote_argv)
     except managedos_guest_ssh.SessionError as error:
         return dict(refusal("transport", "session"), detail=str(error))
     return interpret(params["operation"], run(argv, payload, params["timeout"]))

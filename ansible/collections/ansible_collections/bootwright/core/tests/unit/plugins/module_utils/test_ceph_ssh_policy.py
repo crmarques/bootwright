@@ -137,7 +137,7 @@ def test_ceph_transport_option_set_matches_the_managed_os_guest_session(core_req
         (tmp_path / name).write_text(name)
     files = {"ssh_config": str(tmp_path / "config"), "known_hosts": str(tmp_path / "known"), "identity": str(tmp_path / "identity")}
     guest = managedos_guest_ssh.guest_argv(host_key_algorithms="rsa-sha2-512,rsa-sha2-256", policy_host_key_algorithms=DEFAULT,
-                                           user="operator", address="192.0.2.1", remote="true", **files)
+                                           user="operator", address="192.0.2.1", remote_argv=["true"], **files)
     argv = ceph_core.ssh_argv(core_request["hosts"][0], files["identity"], files["known_hosts"], "print('fixed')",
                               ssh_config=files["ssh_config"], host_key_algorithms="rsa-sha2-512,rsa-sha2-256")
     assert options(argv) == options(guest)

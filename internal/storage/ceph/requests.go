@@ -334,7 +334,7 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 	}
 	r.ClusterSSHTransport = spec.Get("cephadm", "clusterSSH", "transport").Text()
 	if r.ClusterSSHTransport == "" {
-		r.ClusterSSHTransport = "native"
+		r.ClusterSSHTransport = PinnedTransport
 	}
 	if r.ClusterSSHTransport != "native" && r.ClusterSSHTransport != "verified-tunnel" {
 		return Request{}, failure("api.invariant", "unknown Ceph SSH transport", "select native or verified-tunnel; each transport requires artifact qualification")

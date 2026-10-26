@@ -47,7 +47,8 @@ Each file runs at exactly one site; know which before editing it.
   `isinstance` admits `True`; check a Boolean with `type(value) is bool`.
 - Start a process only with an absolute executable and an argv list, never a
   shell; bound its output and its time, and reap it. A remote command string
-  carries only literals and validated, quoted tokens.
+  carries only literals and validated tokens, joined by
+  `plugins/module_utils/remote_command.py`.
 - Encode canonical JSON through `plugins/module_utils/canonical_json.py` and
   start a process through `plugins/module_utils/bounded_process.py`, which the
   shipped Ceph and package bundles carry, instead of writing another. A file

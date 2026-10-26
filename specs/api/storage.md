@@ -227,11 +227,6 @@ The three-node example selects `verified-tunnel` explicitly; its protected
 mounts and staged bootstrap remain subject to
 [release qualification](../storage-coverage.md#release-qualification).
 
-Not yet met: omission still selects `native`, and `native` or an omitted
-transport refuses at plan in the
-[refusal table](../storage.md#refusal-table) instead of `validate`; tracked as
-[B807](../milestones/backlog.md#b807).
-
 Core request v11 refuses continuation of v10 operations, image request v2 and
 package request v2 refuse continuation of older operations, and core
 evidence v3 and host request v2 refuse continuation of operations an

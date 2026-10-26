@@ -1,35 +1,14 @@
 row: U07
 base: libvirt-3-nodes-ceph
-phase: unsupported
+phase: admission
 edits:
 - file: storage/cluster.yaml
   replace: "        transport: verified-tunnel\n"
   with: "        transport: native\n"
 expect:
-- kind: StorageCluster
+- code: api.invariant
+  kind: StorageCluster
   name: ceph-lab
-  refusalRow: Incomplete or unsafe Ceph coordinates or transport
-- kind: StoragePlacementPolicy
-  name: ssd-hosts
-  refusalRow: Incomplete or unsafe Ceph coordinates or transport
-- kind: StoragePool
-  name: rbd-data
-  refusalRow: Incomplete or unsafe Ceph coordinates or transport
-- kind: StoragePool
-  name: cephfs-metadata
-  refusalRow: Incomplete or unsafe Ceph coordinates or transport
-- kind: StoragePool
-  name: cephfs-data
-  refusalRow: Incomplete or unsafe Ceph coordinates or transport
-- kind: StorageFilesystem
-  name: files
-  refusalRow: Incomplete or unsafe Ceph coordinates or transport
-- kind: StorageClient
-  name: rbd-canary
-  refusalRow: Incomplete or unsafe Ceph coordinates or transport
-- kind: StorageRBDImage
-  name: rbd-disk
-  refusalRow: Incomplete or unsafe Ceph coordinates or transport
-- kind: StorageSubvolume
-  name: docs
-  refusalRow: Incomplete or unsafe Ceph coordinates or transport
+  field: $.spec.ceph.cephadm.clusterSSH.transport
+  message: the native cluster SSH transport is reserved, and no build realizes it
+  remediation: set spec.ceph.cephadm.clusterSSH.transport to verified-tunnel, or omit it

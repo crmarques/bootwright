@@ -67,7 +67,7 @@ func TestPushedInstallerProjectionGolden(t *testing.T) {
 			}
 			assertPushedInterfaceWiring(t, agent)
 			matchesGolden(t, name, []byte(encoded(t, map[string]any{"agentConfig": agent, "installConfig": install})))
-			if reason, _ := refusedCluster(catalog, cluster); reason == "" {
+			if _, reason, _ := refusedCluster(catalog, cluster); reason == "" {
 				t.Fatal("projection qualified an unrealized provider")
 			}
 		})

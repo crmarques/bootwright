@@ -163,7 +163,7 @@ def guest_argv(paths, **values):
     arguments = {"ssh_config": paths["ssh_config"], "known_hosts": paths["known_hosts"],
                  "host_key_algorithms": "ecdsa-sha2-nistp256",
                  "policy_host_key_algorithms": "ecdsa-sha2-nistp256,rsa-sha2-512",
-                 "identity": paths["identity"], "user": "fleet", "address": "192.0.2.10", "remote": "true"}
+                 "identity": paths["identity"], "user": "fleet", "address": "192.0.2.10", "remote_argv": ["true"]}
     arguments.update(values)
     return managedos_guest_ssh.guest_argv(**arguments)
 
@@ -193,7 +193,8 @@ def test_registration_session_intersects_pinned_algorithms_with_placement_policy
                     {"known_hosts": str(spaced)}, {"known_hosts": str(percent)}, {"ssh_config": str(linked)},
                     {"known_hosts": "relative/known_hosts"}, {"identity": str(tmp_path / "missing")},
                     {"user": "Root"}, {"user": "-oProxyCommand"}, {"address": "-oProxyCommand=x"},
-                    {"address": "host_a.example.test"}, {"remote": ""}, {"remote": "a\0b"}):
+                    {"address": "host_a.example.test"}, {"remote_argv": []}, {"remote_argv": [""]}, {"remote_argv": ["a\0b"]},
+                    {"remote_argv": "true"}, {"remote_argv": None}):
         with pytest.raises(managedos_guest_ssh.SessionError):
             guest_argv(paths, **refused)
     assert guest_argv(paths, address="host-a.example.test")[-2] == "fleet@host-a.example.test"

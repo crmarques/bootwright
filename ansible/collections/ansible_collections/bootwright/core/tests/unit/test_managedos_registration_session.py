@@ -33,7 +33,7 @@ def test_registration_argv_matches_guest_yml_option_set(tmp_path):
     argv = managedos_guest_ssh.guest_argv(
         ssh_config=paths["ssh_config"], known_hosts=paths["known_hosts"], host_key_algorithms="ssh-ed25519",
         policy_host_key_algorithms="ssh-ed25519,rsa-sha2-512", identity=paths["identity"], user="fleet",
-        address="192.0.2.10", remote="true")
+        address="192.0.2.10", remote_argv=["true"])
     expected = [value.replace(KNOWN_HOSTS, paths["known_hosts"]).replace(ALGORITHMS, "ssh-ed25519")
                 for value in option_values(task["ansible.builtin.command"]["argv"])]
     assert option_values(argv) == expected

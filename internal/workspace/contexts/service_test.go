@@ -1524,7 +1524,7 @@ func TestChangedInputOverACompletedApplyWarnsBeforeThePrompt(t *testing.T) {
 			warned := func(reported []diagnostics.Diagnostic) bool {
 				return slices.ContainsFunc(reported, func(d diagnostics.Diagnostic) bool {
 					return d.Severity == "warning" && d.Code == "lifecycle.state" &&
-						d.Message == "context example holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back" &&
+						d.Message == "context example holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back; importing the original files again does not undo this update, because they become a new revision apply refuses the same way" &&
 						d.Remediation == "take it back with bootwright destroy --context example, then run bootwright apply --context example"
 				})
 			}

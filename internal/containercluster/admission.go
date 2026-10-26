@@ -278,6 +278,29 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	issues = add(issues, validateEndpoints(o, c)...)
 	issues = add(issues, validateNetworks(o, c)...)
 	issues = add(issues, ValidateNetworkIntent(o, c)...)
+	return add(issues, inertDeclarations(s)...)
+}
+
+func inertDeclarations(s api.Value) []api.Issue {
+	var issues []api.Issue
+	for _, slot := range endpointSlots {
+		if s.Get("install", "endpoints", slot, "dnsName").Text() != "" {
+			path := "spec.install.endpoints." + slot + ".dnsName"
+			issues = add(issues, api.Issue{Code: "api.deferred", Field: "$." + path,
+				Message:     "the agent installer derives every endpoint name from the cluster name and zone, so " + path + " changes no installation",
+				Remediation: "remove " + path + ", or keep it knowing the installation does not read it"})
+		}
+	}
+	for i, node := range s.Get("nodes").Items() {
+		for _, name := range []string{"labels", "taints"} {
+			if node.Get(name).Len() > 0 {
+				path := fmt.Sprintf("spec.nodes[%d].%s", i, name)
+				issues = add(issues, api.Issue{Code: "api.deferred", Field: "$." + path,
+					Message:     "the agent installer has no input for node " + name + ", so " + path + " changes no installation",
+					Remediation: "remove " + path + ", or apply the node " + name + " after the installation"})
+			}
+		}
+	}
 	return issues
 }
 

@@ -2737,6 +2737,7 @@ spec:
       clusterSSH:
         user: cephadm
         keyRef: ceph-multidc-01-cephadm-ssh-key
+        transport: verified-tunnel
       bootstrap:
         node: node-01
         addressRef: ssh

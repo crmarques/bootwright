@@ -148,3 +148,141 @@ def test_a_file_off_its_site_module_and_off_the_list_is_refused():
         assert "gone.py no longer encodes canonical JSON" in str(refused)
     else:
         raise AssertionError("a stale exception was accepted")
+
+
+QUOTING_OWNER = "plugins/module_utils/remote_command.py"
+SSH_CLIENT = "/usr/bin/ssh"
+
+# Each file that names the ssh client builds or checks an ssh argv; the reason says where its remote command, if any, is joined.
+SSH_SITES = {
+    "plugins/module_utils/managedos_guest_ssh.py": "the guest session argv; it takes the remote command as an argv and joins it through remote_command",
+    "plugins/module_utils/ceph_ssh_policy.py": "the Ceph session argv; ceph_core appends a fixed worker remote_command joined",
+    "plugins/module_utils/ceph_tunnel.py": "a -W forward, which carries no remote command",
+    "plugins/module_utils/ssh_key_policy.py": "ssh -G evaluates the policy and opens no session",
+    "plugins/module_utils/ceph_host_route_probe.py": "checks the client argv cephadm runs and builds none",
+}
+
+# Each file that hands an ssh session a remote command, which it joins through the quoting owner.
+REMOTE_COMMAND_SITES = {
+    "plugins/module_utils/ceph_core.py",
+    "plugins/module_utils/managedos_guest_ssh.py",
+}
+
+
+QUOTING_MODULES = ("shlex", "pipes")
+QUOTING_MEMBERS = ("join", "quote")
+DYNAMIC_LOOKUPS = ("getattr", "import_module", "__import__")
+
+
+def quotes_shell(tree):
+    """Any reach for shlex.join, shlex.quote or pipes.quote: an attribute of the module under any alias, a from-import of
+    a member or *, or a getattr or import_module lookup naming the module."""
+    names = set()
+    for module in QUOTING_MODULES:
+        names |= names_of(tree, module)[0]
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in names \
+                and node.attr in QUOTING_MEMBERS:
+            found.append(node)
+        elif isinstance(node, ast.ImportFrom) and node.module in QUOTING_MODULES \
+                and any(alias.name in QUOTING_MEMBERS or alias.name == "*" for alias in node.names):
+            found.append(node)
+        elif isinstance(node, ast.Call) and lookup_name(node.func) in DYNAMIC_LOOKUPS and any(
+                (isinstance(arg, ast.Constant) and arg.value in QUOTING_MODULES) or (isinstance(arg, ast.Name) and arg.id in names)
+                for arg in node.args):
+            found.append(node)
+    return found
+
+
+def lookup_name(function):
+    if isinstance(function, ast.Name):
+        return function.id
+    if isinstance(function, ast.Attribute):
+        return function.attr
+    return None
+
+
+def names_ssh_client(tree):
+    return [node for node in ast.walk(tree) if isinstance(node, ast.Constant) and node.value == SSH_CLIENT]
+
+
+def joins_remote_command(tree):
+    """A call of the quoting owner's remote_command or fixed_worker, through the module or its members."""
+    modules, members = set(), {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "ansible_collections.bootwright.core.plugins.module_utils":
+            modules.update((alias.asname or alias.name) for alias in node.names if alias.name == "remote_command")
+        elif isinstance(node, ast.ImportFrom) and node.module == "ansible_collections.bootwright.core.plugins.module_utils.remote_command":
+            members.update({(alias.asname or alias.name): alias.name for alias in node.names})
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        function = node.func
+        if isinstance(function, ast.Attribute) and isinstance(function.value, ast.Name) and function.value.id in modules \
+                and function.attr in ("remote_command", "fixed_worker"):
+            found.append(node)
+        elif isinstance(function, ast.Name) and members.get(function.id) in ("remote_command", "fixed_worker"):
+            found.append(node)
+    return found
+
+
+def starts_a_shell(tree):
+    """A call passing shell= anything but the literal False, or a ** mapping into a process start or naming shell."""
+    process = {id(node) for node in starts_process(tree)}
+    return [node for node in ast.walk(tree) if isinstance(node, ast.Call) and any(
+        (keyword.arg == "shell" and not (isinstance(keyword.value, ast.Constant) and keyword.value.value is False))
+        or (keyword.arg is None and (id(node) in process or names_shell(keyword.value)))
+        for keyword in node.keywords)]
+
+
+def names_shell(mapping):
+    """A ** operand that spells a shell key: a dict display, or a dict call, holding it."""
+    if isinstance(mapping, ast.Dict):
+        return any(isinstance(key, ast.Constant) and key.value == "shell" for key in mapping.keys)
+    return isinstance(mapping, ast.Call) and any(keyword.arg == "shell" for keyword in mapping.keywords)
+
+
+def matching(finder):
+    """The relative path of each plugin file the finder matches, which may be none."""
+    return {path.relative_to(COLLECTION).as_posix() for path in sorted((COLLECTION / "plugins").rglob("*.py"))
+            if finder(ast.parse(path.read_text()))}
+
+
+def test_shell_commands_are_quoted_in_one_module():
+    check(scan(quotes_shell), QUOTING_OWNER, {}, "quotes a shell command", "join it through module_utils/remote_command.py")
+
+
+def test_no_plugin_starts_a_shell():
+    assert matching(starts_a_shell) == set(), "a plugin passes shell=; start an argv list through module_utils/bounded_process.py"
+
+
+def test_every_ssh_site_is_listed_with_its_reason():
+    found = matching(names_ssh_client)
+    for path in sorted(found - set(SSH_SITES)):
+        raise AssertionError("%s names %s; join any remote command through module_utils/remote_command.py and list the site" % (path, SSH_CLIENT))
+    for path, reason in SSH_SITES.items():
+        assert reason and path in found, "%s no longer names %s; remove its entry" % (path, SSH_CLIENT)
+
+
+def test_every_remote_command_is_joined_by_the_quoting_owner():
+    assert matching(joins_remote_command) == REMOTE_COMMAND_SITES
+
+
+def test_the_quoting_finders_see_aliases_and_nothing_in_strings():
+    quoted = ast.parse("import shlex as s, pipes\ns.join(['a'])\nfrom shlex import quote as q\nq('a')\npipes.quote('a')\n")
+    assert len(quotes_shell(quoted)) == 3
+    for bypass in ("import shlex\nj = shlex.join\nj(['a'])\n", "import shlex\ngetattr(shlex, 'quote')('a')\n",
+                   "from shlex import *\n", "from shlex import join\n", "from pipes import quote\n",
+                   "import importlib\nimportlib.import_module('shlex').join(['a'])\n", "__import__('pipes').quote('a')\n"):
+        assert quotes_shell(ast.parse(bypass)), bypass
+    assert quotes_shell(ast.parse("import shlex\nshlex.split('a b')\nfrom shlex import split\nSOURCE = 'shlex.join([])'\n")) == []
+    shells = ast.parse("import subprocess\nsubprocess.run('x', shell=True)\nf(shell=flag)\nsubprocess.run(['/x'], shell=False)\n")
+    assert len(starts_a_shell(shells)) == 2
+    splatted = ast.parse("import subprocess\nsubprocess.run('x', **{'shell': True})\nsubprocess.Popen(['x'], **options)\n"
+                         "g(**{'shell': 1})\ng(**dict(shell=1))\nf(**options)\nf(a=1)\n")
+    assert len(starts_a_shell(splatted)) == 5
+    joined = ast.parse("from ansible_collections.bootwright.core.plugins.module_utils import remote_command as r\nr.fixed_worker('x')\n"
+                       "from ansible_collections.bootwright.core.plugins.module_utils.remote_command import remote_command as j\nj(['x'])\n")
+    assert len(joins_remote_command(joined)) == 2

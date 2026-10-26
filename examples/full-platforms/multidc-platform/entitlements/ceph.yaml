@@ -1,3 +1,4 @@
+# Review IBM license terms before using this authored example.
 apiVersion: bootwright.io/v1alpha1
 kind: Entitlement
 metadata:

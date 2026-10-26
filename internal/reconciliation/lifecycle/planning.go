@@ -372,7 +372,7 @@ func (s Service) refuseUnsupported(state *compilation.State) error {
 			remediation = "correct " + refusal.identity()
 		}
 		reported = append(reported, diagnostics.Diagnostic{
-			Severity: "error", Code: "lifecycle.unsupported", Message: refusal.Reason, Remediation: remediation,
+			Severity: "error", Code: "lifecycle.unsupported", Message: refusal.Reason, Field: refusal.Field, Remediation: remediation,
 			Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: refusal.Kind, Name: refusal.Name},
 		})
 	}

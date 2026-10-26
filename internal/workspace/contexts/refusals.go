@@ -130,7 +130,7 @@ func orphanRefusal(name string) error {
 func appliedInputWarning(name string) diagnostics.Diagnostic {
 	return diagnostics.Diagnostic{
 		Severity: "warning", Code: "lifecycle.state",
-		Message:     "context " + name + " holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back",
+		Message:     "context " + name + " holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back; importing the original files again does not undo this update, because they become a new revision apply refuses the same way",
 		Remediation: "take it back with bootwright destroy --context " + name + ", then run bootwright apply --context " + name,
 	}
 }

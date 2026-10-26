@@ -563,13 +563,11 @@ before B484's exit.
 | U04a | EC `k+m` above the declared OSD hosts of the pool's device class | [upstream erasure code](https://docs.ceph.com/en/tentacle/rados/operations/erasure-code/) and [upstream CRUSH device classes](https://docs.ceph.com/en/tentacle/rados/operations/crush-map/#device-classes) (one chunk per host under failure domain host; rule semantics, not a vendor statement) | [B81](milestones/m2.md#b81) | admission `api.invariant` on StoragePool `$.spec.erasure` | tested | [U04a.yaml](../cmd/bootwright/testdata/matrix/U04a.yaml) |
 | U05 | EC on a pool role that does not permit it (today only `cephfs-metadata`) | [IBM EC overwrites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-coding-overwrites) | [B81](milestones/m2.md#b81) | admission `api.invariant` on StoragePool `$.spec.role` | tested | [U05.yaml](../cmd/bootwright/testdata/matrix/U05.yaml) |
 | U06 | EC CephFS metadata pool | [IBM EC overwrites](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=overview-erasure-coding-overwrites) | [B81](milestones/m2.md#b81), [B492](milestones/m2.md#b492) | admission `api.invariant` on StoragePool `$.spec.type` | tested | [U06.yaml](../cmd/bootwright/testdata/matrix/U06.yaml) |
-| U07 | `clusterSSH.transport: native`, or the transport omitted | [Release qualification](#release-qualification); [upstream ssh.py v20.2.1](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/ssh.py#L161) | [B79](milestones/m2.md#b79) (refusal), B595 (table) | [Ceph refusal table](storage.md#refusal-table): Incomplete or unsafe Ceph coordinates or transport | tested | [U07.yaml](../cmd/bootwright/testdata/matrix/U07.yaml) |
+| U07 | `clusterSSH.transport: native` | [Release qualification](#release-qualification); [upstream ssh.py v20.2.1](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/ssh.py#L161) | [B79](milestones/m2.md#b79) (refusal), B595 (table), [B807](milestones/delivered.md#x168--audit-lane-f-truthful-admission) (validate) | admission `api.invariant` on StorageCluster `$.spec.ceph.cephadm.clusterSSH.transport` | tested | [U07.yaml](../cmd/bootwright/testdata/matrix/U07.yaml) |
 | U09 | Replicated size above the OSD hosts that could carry the pool rule's declared device class | [upstream CRUSH device classes](https://docs.ceph.com/en/tentacle/rados/operations/crush-map/#device-classes) (rule semantics, not an IBM statement) | [B81](milestones/m2.md#b81) | admission `api.invariant` on StoragePlacementPolicy and StoragePool `$.spec.replicated.size` | tested | [U09.yaml](../cmd/bootwright/testdata/matrix/U09.yaml) |
 
-U07 records the refusal the code makes today. The
-[`clusterSSH.transport` field rule](api/storage.md) states what omission
-selects and which stage refuses `native`, with the gap
-([B807](milestones/backlog.md#b807)).
+An omitted transport is no combination: it selects `verified-tunnel`, as the
+[`clusterSSH.transport` field rule](api/storage.md) states.
 
 ## Physical qualification
 

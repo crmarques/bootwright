@@ -27,6 +27,7 @@ func effectKinds() []api.Kind {
 // whatever object the operator changes, which need not be this one.
 type Refusal struct {
 	Kind, Name  string
+	Field       string
 	Reason      string
 	Remediation string
 }
@@ -54,7 +55,7 @@ func Identities(refusals []Refusal) []string {
 // keeps one of each, which is the order their diagnostics are reported in.
 func SortRefusals(refusals []Refusal) []Refusal {
 	slices.SortFunc(refusals, func(x, y Refusal) int {
-		return cmp.Or(cmp.Compare(x.Kind, y.Kind), cmp.Compare(x.Name, y.Name),
+		return cmp.Or(cmp.Compare(x.Kind, y.Kind), cmp.Compare(x.Name, y.Name), cmp.Compare(x.Field, y.Field),
 			cmp.Compare(x.Reason, y.Reason), cmp.Compare(x.Remediation, y.Remediation))
 	})
 	return slices.Compact(refusals)

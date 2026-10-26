@@ -39,8 +39,10 @@ type Requirements struct {
 func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 	var found []lifecycle.Refusal
 	for _, cluster := range catalog.OfKind(api.ContainerCluster) {
-		if reason, remediation := refusedCluster(catalog, cluster); reason != "" {
-			found = append(found, lifecycle.RefusalOf(cluster, reason, remediation))
+		if field, reason, remediation := refusedCluster(catalog, cluster); reason != "" {
+			refused := lifecycle.RefusalOf(cluster, reason, remediation)
+			refused.Field = field
+			found = append(found, refused)
 		}
 	}
 	return lifecycle.SortRefusals(found)
@@ -49,13 +51,57 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 // refusedCluster says why one cluster is not installable and what an operator
 // changes, or nothing when it is installable. Correcting the cluster is the
 // remedy unless the reason names another object to change, so selection and
-// derivation give the one remedy the refusal table states.
-func refusedCluster(catalog api.Catalog, cluster api.Object) (reason, remediation string) {
+// derivation give the one remedy the refusal table states. The field is the
+// refused declaration's path when one endpoint field is what it refuses.
+func refusedCluster(catalog api.Catalog, cluster api.Object) (field, reason, remediation string) {
 	reason, remediation = unsupportedReason(catalog, cluster)
+	if reason == "" {
+		field, reason, remediation = unusedEndpointField(cluster)
+	}
 	if reason != "" && remediation == "" {
 		remediation = "correct " + cluster.Identity()
 	}
-	return reason, remediation
+	return field, reason, remediation
+}
+
+// nativeEndpoints are the port the agent installer serves each endpoint slot
+// on, always over https. No installer input carries another port or protocol,
+// so an authored value that differs would be declared and never honored.
+var nativeEndpoints = []struct {
+	slot string
+	port int64
+}{
+	{"api", 6443},
+	{"api-int", 6443},
+	{"ingress", 443},
+}
+
+// unusedEndpointField refuses the first endpoint declaration the agent
+// installer would not follow, in slot order: a port or scheme other than the
+// native one, any prefix length, and a non-empty interface-network list.
+func unusedEndpointField(cluster api.Object) (field, reason, remediation string) {
+	for _, native := range nativeEndpoints {
+		endpoint := cluster.Spec().Get("install", "endpoints", native.slot)
+		path := "spec.install.endpoints." + native.slot
+		port := strconv.FormatInt(native.port, 10)
+		if declared, ok := endpoint.Get("port").Int64(); endpoint.Has("port") && (!ok || declared != native.port) {
+			return "$." + path + ".port", "the agent installer serves endpoint " + native.slot + " on port " + port + " and has no input for another",
+				"remove " + path + ".port from " + cluster.Identity() + ", or set it to " + port
+		}
+		if endpoint.Has("scheme") && endpoint.Get("scheme").Text() != "https" {
+			return "$." + path + ".scheme", "the agent installer serves endpoint " + native.slot + " over https and has no input for another protocol",
+				"remove " + path + ".scheme from " + cluster.Identity() + ", or set it to https"
+		}
+		if endpoint.Has("prefixLength") {
+			return "$." + path + ".prefixLength", "no agent installer input consumes endpoint " + native.slot + "'s prefixLength",
+				"remove " + path + ".prefixLength from " + cluster.Identity()
+		}
+		if endpoint.Get("interfaceNetworks").Len() > 0 {
+			return "$." + path + ".interfaceNetworks", "no agent installer input consumes endpoint " + native.slot + "'s interfaceNetworks",
+				"remove " + path + ".interfaceNetworks from " + cluster.Identity() + ", or leave it empty"
+		}
+	}
+	return "", "", ""
 }
 
 // unsupportedReason says why one cluster is not installable, or nothing when
@@ -242,8 +288,8 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	if !substrate.SafeSegment(name) {
 		return empty(refusalAt("lifecycle.state", "$.metadata.name", "the cluster name is not a safe host identifier", "rename "+cluster.Identity()))
 	}
-	if reason, remediation := refusedCluster(catalog, cluster); reason != "" {
-		return empty(refusal("lifecycle.unsupported", reason, remediation))
+	if field, reason, remediation := refusedCluster(catalog, cluster); reason != "" {
+		return empty(refusalAt("lifecycle.unsupported", field, reason, remediation))
 	}
 	needs := Requirements{}
 	nodes, err := nodeProjections(catalog, cluster, contextName, controllerMachine, &needs)

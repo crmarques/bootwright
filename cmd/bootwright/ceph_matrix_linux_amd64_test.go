@@ -318,6 +318,20 @@ func runCombinationFixture(t *testing.T, id string) {
 	}
 }
 
+// An omitted cluster SSH transport selects the verified tunnel, so the
+// example without it compiles and no capability refuses it.
+func TestAnOmittedCephTransportCompilesAndPlans(t *testing.T) {
+	fixture := matrixFixture{Row: "omitted transport", Base: "libvirt-3-nodes-ceph",
+		Edits: []matrixEdit{{File: "storage/cluster.yaml", Replace: "        transport: verified-tunnel\n", With: ""}}}
+	state, _, err := wireCompiler().Compile(context.Background(), fixture.sources(t))
+	if err != nil {
+		t.Fatalf("an omitted transport refuses: %v", diagnostics.Of(err))
+	}
+	if refused := productionUnsupported(t, state); len(refused) != 0 {
+		t.Fatalf("an omitted transport plans with refusals %+v", refused)
+	}
+}
+
 // TestEveryCephMatrixFixtureHasATestedRow lists the fixture directory, which a
 // test that docs-check runs may not, so its name stays outside that pattern.
 func TestEveryCephMatrixFixtureHasATestedRow(t *testing.T) {

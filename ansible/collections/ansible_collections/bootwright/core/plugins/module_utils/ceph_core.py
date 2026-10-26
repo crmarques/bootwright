@@ -12,7 +12,6 @@ import ipaddress
 import json
 import os
 import re
-import shlex
 import socket
 import ssl
 import tempfile
@@ -26,7 +25,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_native_resources, ceph_native_observe, ceph_native_units, ceph_native_object, ceph_native_worker, ceph_package_sources, ceph_package_worker,
     ceph_packages, ceph_registry_discovery, ceph_smb_native, ceph_replication_native, ceph_ssh_policy, ceph_tunnel,
     ceph_tunnel_staging, ceph_tunnel_custody, native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
-    physical_machine_identity, ceph_export_native, ceph_export_dns,
+    physical_machine_identity, ceph_export_native, ceph_export_dns, remote_command,
 )
 
 # Every id the shipped specialization registry declares; a worker answer or a record naming any other id is refused.
@@ -393,11 +392,11 @@ def bootstrap_launcher(supervisor_source, host_source):
 def ssh_argv(host, key, known_hosts, source, worker_budget=None, *, worker_ceiling=640, ssh_config, host_key_algorithms):
     """SSH remote execution requires one string; quote only fixed worker code."""
     argv = ceph_ssh_policy.session_argv(ssh_config, known_hosts, host_key_algorithms, key, host["port"])
-    python = ["/usr/bin/sudo", "-n", "/usr/bin/python3", "-I", "-c", source]
+    arguments = ()
     if worker_budget is not None:
         ceph_native.require(worker_ceiling in WORKER_CEILINGS and type(worker_budget) in (int, float) and 0 < worker_budget <= worker_ceiling, "transport")
-        python.append(str(worker_budget))
-    argv.extend(["--", host["user"] + "@" + host["address"], shlex.join(python)])
+        arguments = (str(worker_budget),)
+    argv.extend(["--", host["user"] + "@" + host["address"], remote_command.fixed_worker(source, *arguments)])
     return argv
 
 

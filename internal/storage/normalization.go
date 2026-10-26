@@ -62,7 +62,7 @@ func normalizeCluster(object api.Object, catalog api.Catalog) api.Value {
 		ceph = ceph.WithPath(value, "community", "checksum")
 	}
 	if ceph.Has("cephadm") {
-		ssh := ceph.Get("cephadm", "clusterSSH").Default("user", api.StringValue("cephadm"))
+		ssh := ceph.Get("cephadm", "clusterSSH").Default("user", api.StringValue("cephadm")).Default("transport", api.StringValue("verified-tunnel"))
 		ceph = ceph.WithPath(ssh, "cephadm", "clusterSSH")
 	}
 	for _, key := range []string{"publicCIDRs", "clusterCIDRs"} {
