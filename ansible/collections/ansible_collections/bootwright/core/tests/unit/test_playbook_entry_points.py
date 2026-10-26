@@ -10,7 +10,9 @@ playbook through ansible-core's own loader and require the first task each play
 reaches to be that validation, against its entry point's own specification;
 then they run every playbook's play through ansible-playbook with a request of
 a version its role does not admit, and require the validation to refuse it
-before any task of the entry point runs.
+before any task of the entry point runs. A later play of a multi-play playbook
+may import only a declared entry point or a task file the allowance for that
+playbook names.
 
 Loading and running a playbook needs Ansible's controller, which ansible-test
 does not offer to unit tests under tests/unit/plugins, so these checks live
@@ -37,6 +39,18 @@ PLAYBOOKS = COLLECTION / "playbooks"
 ROLES = COLLECTION / "roles"
 ROLE_IMPORTS = ("ansible.builtin.import_role", "ansible.builtin.include_role")
 VALIDATION = "ansible.builtin.validate_argument_spec"
+SECTIONS = ("pre_tasks", "tasks", "post_tasks", "handlers")
+
+# The internal task files a later play of a multi-play playbook may import
+# without a declared entry point, by playbook and role: the first play validated
+# the request through a declared one and the later plays read only values
+# derived from it (specs/architecture.md, Playbooks). The set only shrinks.
+LATER_PLAY_TASK_FILES = {
+    "containercluster/install_apply.yml": (
+        "containercluster_install_agent",
+        frozenset(("after_release", "finish", "node_boot", "node_release", "node_state", "phase_failures", "prepare_boot", "waits")),
+    ),
+}
 
 # Every playbook the collection ships. Finding fewer means the walk stopped
 # seeing them, which would pass these rules vacuously.
@@ -53,10 +67,43 @@ def playbooks():
     return found
 
 
+def role_imports(play):
+    """Each role import a play holds as (role, tasks_from), in every task section and block around a task."""
+    found = []
+
+    def visit(tasks):
+        for task in tasks or []:
+            for name in ROLE_IMPORTS:
+                if name in task:
+                    found.append((str(task[name]["name"]).rsplit(".", 1)[-1], str(task[name].get("tasks_from", "main"))))
+            for section in ("block", "rescue", "always"):
+                visit(task.get(section))
+
+    for section in SECTIONS:
+        visit(play.get(section))
+    assert "roles" not in play, "a play lists roles, which imports an entry point nothing here walks"
+    return found
+
+
+def undeclared_imports(plays, declared, allowed):
+    """The role imports of the later plays that name a task file no entry point declares and no allowance admits,
+    and the allowed files no later play imports any more."""
+    refused, used = [], set()
+    for play in plays[1:]:
+        for role, entry in role_imports(play):
+            if entry in declared(role):
+                continue
+            if role == allowed[0] and entry in allowed[1]:
+                used.add(entry)
+            else:
+                refused.append("%s:%s" % (role, entry))
+    return refused, sorted(allowed[1] - used)
+
+
 def imported(playbook):
     """The first role entry point, before the fixed node-phase plays."""
     plays = yaml.safe_load((PLAYBOOKS / playbook).read_text())
-    assert len(plays) == (9 if playbook == "containercluster/install_apply.yml" else 1), "%s has an unexpected phase count" % playbook
+    assert len(plays) == 1 or playbook in LATER_PLAY_TASK_FILES, "%s has later plays no allowance names" % playbook
     found = [task[name] for task in plays[0]["tasks"] for name in ROLE_IMPORTS if name in task]
     assert len(found) == 1, "%s imports %d roles" % (playbook, len(found))
     return found[0]["name"].rsplit(".", 1)[-1], str(found[0].get("tasks_from", "main"))
@@ -83,7 +130,7 @@ def first_task(playbook):
     loader = DataLoader()
     plays = Playbook.load(str(PLAYBOOKS / playbook), variable_manager=VariableManager(loader=loader),
                           loader=loader).get_plays()
-    assert len(plays) == (9 if playbook == "containercluster/install_apply.yml" else 1), "%s has an unexpected phase count" % playbook
+    assert len(plays) == len(yaml.safe_load((PLAYBOOKS / playbook).read_text())), "%s lost a play to the loader" % playbook
     return next(task for task in reached(plays[0].compile()) if task.action != "meta")
 
 
@@ -98,6 +145,42 @@ def test_the_first_task_of_every_playbook_validates_its_entry_points_arguments(p
     assert task.args["validate_args_context"]["name"] == role
     assert task.args["validate_args_context"]["argument_spec_name"] == entry
     assert task.args["argument_spec"] == options
+
+
+def declared_entries(role):
+    return yaml.safe_load((ROLES / role / "meta" / "argument_specs.yml").read_text())["argument_specs"]
+
+
+@pytest.mark.parametrize("playbook", playbooks())
+def test_a_later_play_imports_only_declared_entry_points_or_allowed_task_files(playbook):
+    plays = yaml.safe_load((PLAYBOOKS / playbook).read_text())
+    allowed = LATER_PLAY_TASK_FILES.get(playbook, ("", frozenset()))
+    refused, stale = undeclared_imports(plays, declared_entries, allowed)
+    assert refused == [], "%s imports task files no argument specification declares and no allowance names" % playbook
+    assert stale == [], "%s no longer imports %s; remove them from LATER_PLAY_TASK_FILES" % (playbook, stale)
+    for play in plays:
+        for _role, entry in role_imports(play):
+            assert "{{" not in entry, "%s selects a task file by a template" % playbook
+
+
+def test_the_seeded_undeclared_and_stale_task_files_are_refused():
+    def play(*entries):
+        return {"tasks": [{"ansible.builtin.import_role": {"name": "bootwright.core.demo", "tasks_from": entry}} for entry in entries],
+                "post_tasks": [{"block": [{"ansible.builtin.include_role": {"name": "bootwright.core.demo", "tasks_from": "inner"}}]}]}
+
+    def declared(role):
+        return {"apply": {}}
+
+    assert undeclared_imports([play("apply"), play("apply")], declared, ("demo", frozenset(("inner",)))) == ([], [])
+    assert undeclared_imports([play("apply"), play("sneak")], declared, ("demo", frozenset(("inner",)))) == (["demo:sneak"], [])
+    assert undeclared_imports([play("apply"), play("sneak")], declared, ("other", frozenset(("inner", "sneak")))) == (
+        ["demo:sneak", "demo:inner"], ["inner", "sneak"])
+    assert undeclared_imports([play("apply"), play("apply")], declared, ("demo", frozenset(("inner", "gone")))) == ([], ["gone"])
+
+
+def test_only_the_allowed_playbooks_have_later_plays():
+    many = [name for name in playbooks() if len(yaml.safe_load((PLAYBOOKS / name).read_text())) > 1]
+    assert many == sorted(LATER_PLAY_TASK_FILES), "a playbook with later plays needs an allowance, and an allowance needs later plays"
 
 
 def mismatched():

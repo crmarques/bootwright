@@ -6,6 +6,7 @@ import base64
 import json
 
 from ansible.errors import AnsibleFilterError
+from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 
 DOCUMENTATION = r"""
 name: registry_pull_secret
@@ -69,7 +70,7 @@ def registry_pull_secret(original, mirror, credential="", password=""):
         if host in config["auths"] and config["auths"][host] != entry:
             raise AnsibleFilterError("registry pull secret conflicts with the selected mirror credential")
         config["auths"][host] = entry
-        return json.dumps(config, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        return canonical(config).decode("ascii")
     except (KeyError, TypeError, ValueError):
         raise AnsibleFilterError("registry pull secret or selected mirror credential is invalid") from None
 

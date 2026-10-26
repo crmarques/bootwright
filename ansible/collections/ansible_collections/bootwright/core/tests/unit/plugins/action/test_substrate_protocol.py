@@ -9,7 +9,7 @@ import pytest
 from ansible_collections.bootwright.core.plugins.action import (
     managedos_install_protocol,
     substrate_host_protocol,
-    substrate_machine_protocol,
+    substrate_libvirt_machine_protocol,
 )
 from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt import observe_host
 
@@ -161,7 +161,7 @@ def machine_observation(**overrides):
 
 
 def test_a_machine_postcondition_needs_every_proof():
-    assert substrate_machine_protocol.presence(machine_observation(), "Off", "uuid", DIGEST)["postcondition"]
+    assert substrate_libvirt_machine_protocol.presence(machine_observation(), "Off", "uuid", DIGEST)["postcondition"]
     for observation, power, system in (
         (machine_observation(domain=""), "Off", "uuid"),
         (machine_observation(owned=False), "Off", "uuid"),
@@ -172,23 +172,23 @@ def test_a_machine_postcondition_needs_every_proof():
         (machine_observation(), "", "uuid"),
         (machine_observation(), "Off", ""),
     ):
-        assert not substrate_machine_protocol.presence(observation, power, system, DIGEST)["postcondition"]
+        assert not substrate_libvirt_machine_protocol.presence(observation, power, system, DIGEST)["postcondition"]
 
 
 def test_a_power_state_the_controller_never_reported_is_refused():
     with pytest.raises(ValueError):
-        substrate_machine_protocol.presence(machine_observation(), "Spinning", "uuid", DIGEST)
+        substrate_libvirt_machine_protocol.presence(machine_observation(), "Spinning", "uuid", DIGEST)
 
 
 def test_machine_disk_publishes_complete_observed_ssd_presentation():
     row = {"name": "data", "present": True, "sizeGiB": 20, "bus": "scsi", "target": "sda", "rotationRate": 1}
-    assert substrate_machine_protocol.disk_evidence(row) == row
+    assert substrate_libvirt_machine_protocol.disk_evidence(row) == row
     for missing in ("bus", "target", "rotationRate"):
         with pytest.raises(ValueError, match="disk evidence"):
-            substrate_machine_protocol.disk_evidence({key: value for key, value in row.items() if key != missing})
+            substrate_libvirt_machine_protocol.disk_evidence({key: value for key, value in row.items() if key != missing})
     for field, value in (("bus", True), ("target", 1), ("rotationRate", True)):
         with pytest.raises(ValueError, match="disk media"):
-            substrate_machine_protocol.disk_evidence(dict(row, **{field: value}))
+            substrate_libvirt_machine_protocol.disk_evidence(dict(row, **{field: value}))
 
 
 # A refused postcondition publishes no evidence, and its message names fields,
@@ -197,19 +197,19 @@ def test_machine_disk_publishes_complete_observed_ssd_presentation():
 # so the message reaches no output, and its names keep it safe should it be
 # printed.
 def test_an_unmet_machine_removal_names_what_is_still_there():
-    assert substrate_machine_protocol.remaining({"domain": "", "unit": "", "controller": "", "disks": []}) == []
-    assert substrate_machine_protocol.remaining(machine_observation()) == ["domain", "unit", "controller", "listener", "disks"]
+    assert substrate_libvirt_machine_protocol.remaining({"domain": "", "unit": "", "controller": "", "disks": []}) == []
+    assert substrate_libvirt_machine_protocol.remaining(machine_observation()) == ["domain", "unit", "controller", "listener", "disks"]
     only_unit = {"domain": "", "unit": "inactive", "controller": "", "disks": [{"present": False}]}
-    assert substrate_machine_protocol.remaining(only_unit) == ["unit"]
+    assert substrate_libvirt_machine_protocol.remaining(only_unit) == ["unit"]
 
 
 def test_an_unmet_machine_realization_names_what_is_unproved():
-    complete = substrate_machine_protocol.presence(machine_observation(), "Off", "uuid", DIGEST)
-    assert substrate_machine_protocol.unproved(complete) == []
-    bare = substrate_machine_protocol.presence(
+    complete = substrate_libvirt_machine_protocol.presence(machine_observation(), "Off", "uuid", DIGEST)
+    assert substrate_libvirt_machine_protocol.unproved(complete) == []
+    bare = substrate_libvirt_machine_protocol.presence(
         machine_observation(domain="", owned=False, unit="failed", controller="", disks=[]), "Off", "uuid", DIGEST,
     )
-    assert substrate_machine_protocol.unproved(bare) == [
+    assert substrate_libvirt_machine_protocol.unproved(bare) == [
         "domain", "ownership", "unit", "controller", "disks",
     ]
 
@@ -313,7 +313,7 @@ def test_bounded_values_refuse_anything_oversized():
 # engine resolves an unknown effect from exactly the evidence an observation
 # reports, and a target part way realized is what it most needs to see.
 def test_only_an_observation_publishes_an_unmet_postcondition():
-    for protocol in (substrate_host_protocol, substrate_machine_protocol, managedos_install_protocol):
+    for protocol in (substrate_host_protocol, substrate_libvirt_machine_protocol, managedos_install_protocol):
         assert protocol.publishes({"postcondition": True}, False)
         assert protocol.publishes({"postcondition": True}, True)
         assert protocol.publishes({"postcondition": False}, True)
@@ -326,18 +326,18 @@ def test_only_an_observation_publishes_an_unmet_postcondition():
 # absence reports no state at all, because a domain that is gone has none, and
 # one that still reports a state is not gone.
 def test_a_machine_carries_the_state_its_hypervisor_reports():
-    evidence = substrate_machine_protocol.presence(machine_observation(), "Off", "uuid", DIGEST)
+    evidence = substrate_libvirt_machine_protocol.presence(machine_observation(), "Off", "uuid", DIGEST)
     assert evidence["state"] == "shut off"
-    running = substrate_machine_protocol.presence(machine_observation(state="running"), "On", "uuid", DIGEST)
+    running = substrate_libvirt_machine_protocol.presence(machine_observation(state="running"), "On", "uuid", DIGEST)
     assert running["state"] == "running"
     # A machine that is running is still completely realized, so the state is
     # evidence for the removal gate rather than another postcondition.
     assert running["postcondition"]
-    assert substrate_machine_protocol.absence(GONE, None, None, DIGEST)["state"] == ""
-    stated = substrate_machine_protocol.absence(dict(GONE, state="shut off"), None, None, DIGEST)
+    assert substrate_libvirt_machine_protocol.absence(GONE, None, None, DIGEST)["state"] == ""
+    stated = substrate_libvirt_machine_protocol.absence(dict(GONE, state="shut off"), None, None, DIGEST)
     assert (stated["state"], stated["postcondition"]) == ("shut off", False)
     with pytest.raises(ValueError):
-        substrate_machine_protocol.presence(machine_observation(state="bananas"), "Off", "uuid", DIGEST)
+        substrate_libvirt_machine_protocol.presence(machine_observation(state="bananas"), "Off", "uuid", DIGEST)
 
 
 GONE = {"answered": True, "controller": "", "disks": [], "domain": "", "listener": False, "owned": False, "state": "", "unit": ""}
@@ -346,40 +346,40 @@ GONE = {"answered": True, "controller": "", "disks": [], "domain": "", "listener
 # A silent hypervisor reports no domain either, so whether it answered travels
 # with the evidence, and only an answer proves the domain gone.
 def test_a_machine_removal_is_proved_only_when_the_hypervisor_answered():
-    removed = substrate_machine_protocol.absence(GONE, None, None, DIGEST)
+    removed = substrate_libvirt_machine_protocol.absence(GONE, None, None, DIGEST)
     assert removed["answered"] is True
     assert removed["postcondition"] is True
-    silent = substrate_machine_protocol.absence(dict(GONE, answered=False), None, None, DIGEST)
+    silent = substrate_libvirt_machine_protocol.absence(dict(GONE, answered=False), None, None, DIGEST)
     assert silent["answered"] is False
     assert silent["postcondition"] is False
     unreported = {key: value for key, value in GONE.items() if key != "answered"}
-    assert substrate_machine_protocol.absence(unreported, None, None, DIGEST)["postcondition"] is False
+    assert substrate_libvirt_machine_protocol.absence(unreported, None, None, DIGEST)["postcondition"] is False
 
 
 # Removal evidence reports what the removal observed, so a leftover disk or a
 # socket something still listens on reaches the engine, and the refusal names it.
 def test_a_machine_absence_publishes_what_it_observed():
     leftover = dict(GONE, disks=[{"name": "root", "present": True, "sizeGiB": 60}], listener=True)
-    evidence = substrate_machine_protocol.absence(leftover, None, None, DIGEST)
+    evidence = substrate_libvirt_machine_protocol.absence(leftover, None, None, DIGEST)
     assert evidence["disks"] == [{"name": "root", "present": True, "sizeGiB": 60}]
     assert evidence["listener"] is True
     assert evidence["postcondition"] is False
-    assert substrate_machine_protocol.remaining(leftover) == ["listener", "disks"]
-    whole = substrate_machine_protocol.absence(machine_observation(), "Off", "uuid", DIGEST)
+    assert substrate_libvirt_machine_protocol.remaining(leftover) == ["listener", "disks"]
+    whole = substrate_libvirt_machine_protocol.absence(machine_observation(), "Off", "uuid", DIGEST)
     assert {name: whole[name] for name in ("controller", "domain", "owned", "power", "state", "system", "unit")} == {
         "controller": "quay.io/x@sha256:" + "0" * 64, "domain": "bootwright-lab-rhel-01", "owned": True,
         "power": "Off", "state": "shut off", "system": "uuid", "unit": "active",
     }
     assert whole["postcondition"] is False
     # A controller that still answers for a system or a power state is not gone.
-    assert substrate_machine_protocol.absence(GONE, "On", None, DIGEST)["postcondition"] is False
-    assert substrate_machine_protocol.absence(GONE, None, "uuid", DIGEST)["postcondition"] is False
+    assert substrate_libvirt_machine_protocol.absence(GONE, "On", None, DIGEST)["postcondition"] is False
+    assert substrate_libvirt_machine_protocol.absence(GONE, None, "uuid", DIGEST)["postcondition"] is False
 
 
 def test_a_machine_observation_carries_whether_the_hypervisor_answered():
-    answered = substrate_machine_protocol.presence(machine_observation(), "Off", "uuid", DIGEST)
+    answered = substrate_libvirt_machine_protocol.presence(machine_observation(), "Off", "uuid", DIGEST)
     assert answered["answered"] is True
-    silent = substrate_machine_protocol.presence(
+    silent = substrate_libvirt_machine_protocol.presence(
         machine_observation(answered=False, domain="", owned=False, state=""), "On", "", DIGEST,
     )
     assert silent["answered"] is False
@@ -389,14 +389,14 @@ def test_a_machine_observation_carries_whether_the_hypervisor_answered():
 
 
 def machine_action(args):
-    module = substrate_machine_protocol.ActionModule.__new__(substrate_machine_protocol.ActionModule)
+    module = substrate_libvirt_machine_protocol.ActionModule.__new__(substrate_libvirt_machine_protocol.ActionModule)
     module._task = SimpleNamespace(args=args)
     return module
 
 
 def test_a_removal_the_hypervisor_did_not_answer_for_publishes_nothing(monkeypatch):
     published = []
-    monkeypatch.setattr(substrate_machine_protocol, "emit", lambda message, **kwargs: published.append(message))
+    monkeypatch.setattr(substrate_libvirt_machine_protocol, "emit", lambda message, **kwargs: published.append(message))
     arguments = {"phase": "completed", "outcome": "changed", "digest": DIGEST, "removed": True}
     result = machine_action(dict(arguments, observation=dict(GONE, answered=False))).run(task_vars={})
     assert result["failed"] is True
@@ -422,7 +422,7 @@ def observed(action, protocol, monkeypatch, observation, **extra):
 # hypervisor reach the engine as what they are.
 def test_a_machine_observation_is_absence_only_when_everything_is_gone(monkeypatch):
     def publish(observation, power=""):
-        return observed(machine_action, substrate_machine_protocol, monkeypatch, observation, power=power, system="")
+        return observed(machine_action, substrate_libvirt_machine_protocol, monkeypatch, observation, power=power, system="")
 
     clean = publish(GONE)
     assert (clean["absent"], clean["postcondition"]) == (True, True)
@@ -557,7 +557,7 @@ def test_a_provider_host_a_driver_did_not_answer_for_proves_no_removal(monkeypat
 # so an observation that does not report one publishes nothing.
 def test_an_observation_missing_the_listener_or_the_directory_is_not_published(monkeypatch):
     published = []
-    for protocol in (substrate_host_protocol, substrate_machine_protocol):
+    for protocol in (substrate_host_protocol, substrate_libvirt_machine_protocol):
         monkeypatch.setattr(protocol, "emit", lambda message, **kwargs: published.append(message))
     arguments = {"phase": "completed", "outcome": "unchanged", "digest": DIGEST, "observed": True, "power": "", "system": ""}
     for action, observation in (
@@ -574,9 +574,9 @@ def test_an_observation_missing_the_listener_or_the_directory_is_not_published(m
     assert published == []
     for arguments in ((machine_observation(listener=None), "Off", "uuid", DIGEST), (dict(GONE, listener=None), None, None, DIGEST)):
         with pytest.raises(ValueError):
-            substrate_machine_protocol.presence(*arguments)
+            substrate_libvirt_machine_protocol.presence(*arguments)
         with pytest.raises(ValueError):
-            substrate_machine_protocol.absence(*arguments)
+            substrate_libvirt_machine_protocol.absence(*arguments)
     for protocol_call in (substrate_host_protocol.presence, substrate_host_protocol.absence):
         with pytest.raises(ValueError):
             protocol_call(host_observation(directory=None), DIGEST)
@@ -586,7 +586,7 @@ def test_an_observation_missing_the_listener_or_the_directory_is_not_published(m
 # a malformed call rather than a way to publish unproved absence.
 def test_an_observation_takes_no_removed_argument(monkeypatch):
     published = []
-    for protocol in (substrate_host_protocol, substrate_machine_protocol):
+    for protocol in (substrate_host_protocol, substrate_libvirt_machine_protocol):
         monkeypatch.setattr(protocol, "emit", lambda message, **kwargs: published.append(message))
     arguments = {"phase": "completed", "outcome": "unchanged", "digest": DIGEST, "observed": True, "removed": True}
     for action, observation in ((machine_action, GONE), (host_action, HOST_GONE)):

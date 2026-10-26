@@ -91,8 +91,8 @@ type systemClock struct{}
 
 func (systemClock) Now() time.Time { return time.Now() }
 
-// capabilityResolver is the immutable, ordered set of lifecycle capabilities
-// this build offers. There is no registry, discovery or runtime plugin path.
+// capabilityResolver is the immutable, ordered, allowlisted registry of the
+// lifecycle capabilities this build offers, with no discovery or plugin path.
 type capabilityResolver []boundCapability
 
 type boundCapability struct {
@@ -162,10 +162,10 @@ func operationPlaybook() map[string]string {
 		ceph.Implementation + "/apply":                  "storage/core_apply.yml",
 		ceph.Implementation + "/observe":                "storage/core_observe.yml",
 		ceph.Implementation + "/destroy":                "storage/core_destroy.yml",
-		ceph.ImageImplementation + "/apply":             "storage/image_resolve.yml",
+		ceph.ImageImplementation + "/apply":             "storage/image_apply.yml",
 		ceph.ImageImplementation + "/observe":           "storage/image_observe.yml",
 		ceph.ImageImplementation + "/destroy":           "storage/image_destroy.yml",
-		ceph.HostImplementation + "/apply":              "storage/host_prepare.yml",
+		ceph.HostImplementation + "/apply":              "storage/host_apply.yml",
 		ceph.HostImplementation + "/observe":            "storage/host_observe.yml",
 		ceph.HostImplementation + "/destroy":            "storage/host_destroy.yml",
 		ceph.ReplicationImplementation + "/apply":       "storage/replication_apply.yml",

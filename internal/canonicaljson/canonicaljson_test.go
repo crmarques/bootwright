@@ -1,7 +1,11 @@
 package canonicaljson
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -107,5 +111,56 @@ func TestProveObjectRequiresEscapedHTML(t *testing.T) {
 	}
 	if err := ProveObject([]byte(`{"a":"\u003c"}`)); err != nil {
 		t.Fatalf("an escaped < refused: %v", err)
+	}
+}
+
+// canonicalVectors is read by the collection's test_canonical_json.py and by
+// internal/adapterprotocol's decoder test: each line is the exact bytes
+// module_utils/canonical_json.py writes for one record.
+const canonicalVectors = "../../ansible/collections/ansible_collections/bootwright/core/tests/unit/goldens/canonical_json_records.json"
+
+// TestEncodeEqualsThePythonVectorsWhereTheEscapingAgrees holds Encode to the
+// bytes the Python encoder writes for every ASCII-only record without <, > or &,
+// and pins the one divergence: json.Marshal escapes those three and writes
+// non-ASCII raw, which the Python encoder escapes the other way round.
+func TestEncodeEqualsThePythonVectorsWhereTheEscapingAgrees(t *testing.T) {
+	data, err := os.ReadFile(canonicalVectors)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var vectors []struct{ Admission, Line string }
+	if err := json.Unmarshal(data, &vectors); err != nil || len(vectors) == 0 {
+		t.Fatalf("read %s: %v", canonicalVectors, err)
+	}
+	diverged := 0
+	for _, vector := range vectors {
+		decoder := json.NewDecoder(strings.NewReader(vector.Line))
+		decoder.UseNumber()
+		var value any
+		if err := decoder.Decode(&value); err != nil {
+			t.Fatalf("%s: %v", vector.Line, err)
+		}
+		got, err := Encode(value, Bare)
+		if err != nil {
+			t.Fatalf("%s: %v", vector.Line, err)
+		}
+		if !strings.ContainsAny(vector.Line, "<>&") && !strings.Contains(vector.Line, `\u`) {
+			if !bytes.Equal(got, []byte(vector.Line)) {
+				t.Errorf("Encode = %s, want the Python bytes %s", got, vector.Line)
+			}
+			continue
+		}
+		diverged++
+		if bytes.Equal(got, []byte(vector.Line)) {
+			t.Errorf("Encode = %s, want Go's escaping, which differs from the Python bytes %s", got, vector.Line)
+		}
+		for _, want := range []string{"café", "☃", `\u003cb\u003e`, `\u0026`} {
+			if !strings.Contains(string(got), want) {
+				t.Errorf("Encode = %s, want it to hold %s", got, want)
+			}
+		}
+	}
+	if diverged != 1 {
+		t.Fatalf("%d vectors hold <, >, & or an escape, want the one that pins the divergence", diverged)
 	}
 }

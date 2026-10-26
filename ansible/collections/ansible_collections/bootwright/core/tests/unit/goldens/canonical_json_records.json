@@ -1,0 +1,30 @@
+[
+ {
+  "admission": "lifecycle",
+  "line": "{\"phase\":\"loaded\"}"
+ },
+ {
+  "admission": "lifecycle",
+  "line": "{\"group\":\"pull-image\",\"phase\":\"group\",\"status\":\"running\"}"
+ },
+ {
+  "admission": "lifecycle",
+  "line": "{\"phase\":\"refused\",\"reason\":\"identity-mismatch\"}"
+ },
+ {
+  "admission": "lifecycle",
+  "line": "{\"detail\":\"native-refusal:packages@ceph_package_sources.metadata_member:207\",\"phase\":\"refused\",\"reason\":\"remote-refusal\"}"
+ },
+ {
+  "admission": "controller",
+  "line": "{\"phase\":\"prepared\",\"preparation\":{\"addedSources\":[\"native-one\"],\"afterInventorySHA256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"inventorySHA256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"planDigest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"transitionsSHA256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}}"
+ },
+ {
+  "admission": "controller",
+  "line": "{\"phase\":\"refused\",\"reason\":\"timeout\",\"source\":\"tool-helm\"}"
+ },
+ {
+  "admission": "controller",
+  "line": "{\"evidence\":{\"added\":[],\"after\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"before\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"note\":\"caf\\u00e9 <b> & \\u2603 \\\"q\\\" \\\\ \\n\",\"planDigest\":\"\",\"postcondition\":true,\"request\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"tools\":[]},\"outcome\":\"unchanged\",\"phase\":\"completed\"}"
+ }
+]

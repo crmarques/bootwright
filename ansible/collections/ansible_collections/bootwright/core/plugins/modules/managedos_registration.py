@@ -189,6 +189,7 @@ import stat
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils import managedos_guest_ssh, managedos_rhsm_worker as worker
+from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 
 MAX_MATERIAL = 257
 MAX_TIMEOUT = 900
@@ -247,7 +248,7 @@ def payload_of(params):
         for option, key, name in MATERIAL:
             payload[key] = read_material(params[option], name)
         payload["enable"], payload["disable"] = worker.repositories(list(params["enable"] or []), list(params["disable"] or []))
-    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return canonical(payload)
 
 
 def refusal(reason, cause=None):
@@ -298,6 +299,8 @@ def parse_answer(operation, stdout):
 def interpret(operation, outcome):
     if outcome.timed_out:
         return refusal("transport", "timeout")
+    if outcome.cause is not None:
+        return refusal("transport", outcome.cause)
     if outcome.code == 255:
         return refusal("transport", "host-key") if outcome.host_key else refusal("registration-unreachable")
     if outcome.code != 0:

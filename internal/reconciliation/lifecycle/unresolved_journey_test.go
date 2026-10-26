@@ -45,7 +45,7 @@ func lostMachineRequest() libvirt.MachineRequest {
 
 // hypervisor is the machine adapter double: what one observation, removal or
 // lost apply of the frozen machine returns, from what the provider host holds.
-// Each evidence form is what substrate_machine_protocol.py publishes for that
+// Each evidence form is what substrate_libvirt_machine_protocol.py publishes for that
 // state, as the libvirt package's goldens pin.
 type hypervisor struct {
 	mutex   sync.Mutex

@@ -2,14 +2,9 @@
 
 from __future__ import annotations
 
-import json
 import os
 
-
-def canonical(value):
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    ).encode()
+from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 
 
 def emit(value, acknowledge=False):

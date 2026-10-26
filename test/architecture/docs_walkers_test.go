@@ -34,27 +34,20 @@ var (
 // walk the working tree; the backticked tests between it and walkingDocsEnd.
 const walkingDocsChecks, walkingDocsEnd = "The docs checks that list production Go source, ", " walk the working tree"
 
-// docsCheckRun returns the -run pattern of the Makefile's docs-check target
-// and the directories of the packages it tests.
+// docsCheckRun returns the -run pattern of the Makefile's docs-check target,
+// the anchored names of the list it selects, and the directories of the
+// packages it tests.
 func docsCheckRun(t *testing.T) (*regexp.Regexp, []string) {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "..", "Makefile"))
-	if err != nil {
-		t.Fatal(err)
+	list := docsCheckList(t)
+	var names, directories []string
+	for _, directory := range sortedKeys(list) {
+		directories = append(directories, directory)
+		for _, name := range list[directory] {
+			names = append(names, regexp.QuoteMeta(name))
+		}
 	}
-	recipe := regexp.MustCompile(`(?m)^docs-check:\n\t\$\(GO\) test -count=1 -run '([^']+)'((?: \./\S+)+)$`).FindSubmatch(data)
-	if recipe == nil {
-		t.Fatal("the Makefile docs-check target no longer runs one go test -run pattern over named packages")
-	}
-	pattern, err := regexp.Compile(string(recipe[1]))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var directories []string
-	for _, name := range strings.Fields(string(recipe[2])) {
-		directories = append(directories, strings.TrimPrefix(name, "./"))
-	}
-	return pattern, directories
+	return regexp.MustCompile("^(" + strings.Join(names, "|") + ")$"), directories
 }
 
 // directoryGoFiles parses each named Go file, sources and tests alike, that

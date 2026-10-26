@@ -137,7 +137,7 @@ CASES = {
         ("observed gone", completed(observed=True, observation=HOST_GONE)),
         ("removal observed", completed(removed=True, observed=True, observation=HOST_GONE)),
     ],
-    "substrate_machine_protocol": common([]) + completions(
+    "substrate_libvirt_machine_protocol": common([]) + completions(
         {"observation": MACHINE, "power": "Off", "system": "uuid"},
         {"observation": dict(MACHINE, unit="failed", owned=False), "power": "Off", "system": ""},
         {"observation": MACHINE_GONE},

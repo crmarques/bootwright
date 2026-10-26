@@ -12,7 +12,7 @@ import time
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_worker, native_diagnostics
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, canonical_json, ceph_native, ceph_native_worker, native_diagnostics
 
 
 DESCENDANT = '''
@@ -107,6 +107,7 @@ def test_actual_shipped_command_works_inside_supervised_remote_group(tmp_path):
     effect = tmp_path / "effect"
     invocation = [sys.executable, "-I", "-c", DESCENDANT, str(effect)]
     sources = {"native_diagnostics": inspect.getsource(native_diagnostics), "ceph_pull_broker": '"""Fixed fixture."""\n',
+               "canonical_json": inspect.getsource(canonical_json), "bounded_process": inspect.getsource(bounded_process),
                "ceph_tunnel": '"""Fixed fixture."""\n', "ceph_tunnel_staging": '"""Fixed fixture."""\n', "ceph_tunnel_custody": '"""Fixed fixture."""\n',
                "ceph_native_observe": '"""Fixed fixture."""\n', "ceph_host_route_probe": '"""Fixed fixture."""\n',
                "physical_machine_identity": '"""Fixed fixture."""\n',

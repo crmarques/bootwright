@@ -180,6 +180,10 @@ request and runs it through the same adapter. The section carries every
 approval policy and Secret placement source the built-in packages use, so a
 later package moves no program version.
 
+The native client reads each `oc` answer within 16 MiB of standard output and
+error together and 30 seconds, killing the call at the first limit, and reads
+an answer past either, or one that is not UTF-8, as a failed call.
+
 ## Ownership receipts
 
 Bootwright creates an object only when it is absent and never patches,

@@ -19,6 +19,8 @@ import re
 import shlex
 import uuid
 
+from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
+
 ROOT = "/var/lib/bootwright/ceph"
 CONTAINER_ROOT = "/run/bootwright-ceph-ssh"
 NAME = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
@@ -36,10 +38,6 @@ class StageRefusal(ValueError):
 def require(condition):
     if not condition:
         raise StageRefusal("native-tunnel-stage-unproved")
-
-
-def canonical(value):
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
 
 
 def named(value):

@@ -12,12 +12,12 @@
   no_log: true
 
 - name: Complete the qualified execution handoff
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: loaded
   no_log: true
 
 - name: Report controller removal
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: group
     group: stop-controller
     status: running
@@ -125,14 +125,14 @@
   changed_when: substrate_libvirt_machine_state_parent.rc == 0
 
 - name: Report controller removal completion
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: group
     group: stop-controller
     status: ok
   no_log: true
 
 - name: Report domain removal
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: group
     group: remove-domain
     status: running
@@ -155,14 +155,14 @@
   changed_when: substrate_libvirt_machine_undefined.rc == 0
 
 - name: Report domain removal completion
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: group
     group: remove-domain
     status: ok
   no_log: true
 
 - name: Report disk removal
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: group
     group: remove-disks
     status: running
@@ -194,14 +194,14 @@
   changed_when: substrate_libvirt_machine_disks_parent.rc == 0
 
 - name: Report disk removal completion
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: group
     group: remove-disks
     status: ok
   no_log: true
 
 - name: Report absence verification
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: group
     group: verify-absence
     status: running
@@ -213,14 +213,14 @@
   register: substrate_libvirt_machine_after
 
 - name: Report absence verification completion
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: group
     group: verify-absence
     status: ok
   no_log: true
 
 - name: Publish bounded machine removal evidence
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: completed
     outcome: >-
       {{ 'changed'

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 DOCUMENTATION = r"""
-module: substrate_machine_protocol
+module: substrate_libvirt_machine_protocol
 short_description: Publish one machine capability phase
 version_added: "0.1.0"
 description:
@@ -67,7 +67,7 @@ author:
 EXAMPLES = r"""
 # Invoked by bootwright.core.substrate_libvirt_machine using its frozen request.
 - name: Complete the qualified execution handoff
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: loaded
 """
 

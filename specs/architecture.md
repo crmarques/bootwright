@@ -757,10 +757,21 @@ A Python site is where its code runs: the controller runtime for action
 plugins, a managed host for modules and shipped workers, and a native image
 for its scripts.
 [Python guidance](../.agents/skills/code-implementation/references/python.md)
-owns the idioms of each. Not yet met: collection modules repeat canonical JSON
-encoders and bounded process runners within one site, and no test maps each
-tracked source file under the collection's plugins and `scripts/` to a row of
-this table; tracked as [B818](milestones/backlog.md#b818).
+owns the idioms of each. Controller and managed-host code encodes canonical
+JSON only in `module_utils/canonical_json.py` and starts processes only in
+`module_utils/bounded_process.py`, which the shipped Ceph and package bundles
+carry. Starting a process is a subprocess call, `os.system`, `os.popen`,
+`os.fork`, `os.forkpty`, an `os.exec*` or `os.spawn*` function, `posix_spawn` or
+`pty.spawn`; `test_python_sites.py` finds each in the syntax tree through any
+import alias, so a command string inside a shipped source constant is not a
+call. A file that runs alone, such as a script shipped as source or a worker in
+an image, a supervisor that forks or replaces itself on purpose, or an encoding
+that differs on purpose is a named exception with its reason in that test, and
+the lists only shrink. Repository tools
+under `scripts/tools/` are Python outside the collection; the
+[Python reference](../.agents/skills/code-implementation/references/python.md#repository-tools)
+owns them. `TestEveryCollectionAndScriptSourceMapsToALanguageRow` fails on a
+tracked source under the collection's plugins or `scripts/` that no row holds.
 
 ## Ansible collection structure
 
@@ -794,12 +805,11 @@ normalizes one result/evidence set. The domain directory identifies its owner;
 the file name joins the capability and the Go port operation it binds.
 Playbooks do not choose workflows or providers from authored data or ambient
 facts, dynamically select another playbook, or coordinate independent domain
-operations. Not yet met: the Ceph image and host apply operations bind
-`storage/image_resolve.yml` and `storage/host_prepare.yml`, some roles name
-the implementation after the capability or carry no domain, the arm-neutral
-`substrate_machine_protocol` plugin speaks libvirt's vocabulary, and no
-structural test holds role, plugin and playbook names to these rules;
-tracked as [B834](milestones/backlog.md#b834).
+operations. `TestEveryBoundPlaybookIsNamedForItsCapabilityAndOperation` holds
+every binding to that pattern, and `test_collection_names.py` holds role and
+action-plugin names to the [role pattern](#ansible-collection-structure); the
+roles and plugins that predate the patterns are an exact allowance in that
+test that only shrinks.
 
 A playbook imports its role's entry point by the key the role's argument
 specification declares, never by its task file's name, which ansible-core runs
@@ -817,12 +827,15 @@ freezes is either mirrored as a choice or named as checked only by an
 assertion. A later play of a multi-play playbook may import a role's internal
 task file only when its first play validated the request and material through
 a declared entry point and the later play reads only values derived from
-them; `containercluster/install_apply.yml` is the one such playbook. Not yet
-met: the entry-point test checks only the first play and counts the install
-playbook's plays rather than naming its permitted task files, no test refuses
-an entry point that reads an undeclared variable, and some roles declare
-nested members as bare mappings or read an undeclared variable; tracked as
-[B818](milestones/backlog.md#b818).
+them; `containercluster/install_apply.yml` is the one such playbook, and
+`test_a_later_play_imports_only_declared_entry_points_or_allowed_task_files`
+holds every later play to a declared entry point or the eight task files its
+allowance names. `test_entry_point_reads.py` refuses an entry point whose task
+files read a `bootwright_*` variable that its specification, the role's defaults
+and the task files do not define. Not yet met: some roles declare nested
+members as bare mappings, and the digests and run scratch that entry points read
+beside their request are an exact allowance in that test that only shrinks;
+tracked as [B431](milestones/backlog.md#b431).
 
 Every `observe` entrypoint runs only the modules the read-only allowlist
 names, each for a stated reason; `TestEveryObservePlaybookRunsOnlyAllowedTasks`
@@ -1216,7 +1229,15 @@ owning spec, which names the check.
   refuse, so it excuses no other outcome. An ignored guidance path fails once
   no guidance outside the ignored paths cites it, and a guidance byte budget
   once it exceeds its file's size by more than a tenth of itself; each
-  `.claude/rules` page has a budget of its own. The docs checks that list
+  `.claude/rules` page has a budget of its own. `make docs-check` runs the
+  tests listed in `test/architecture/testdata/docs-checks.txt`, and
+  `TestDocsChecksListIsComplete` fails on a listed test no file declares and on
+  a test that the convention names and the list omits: one whose name begins
+  with Docs, CephMatrix or CephProfile after Test, one that ends in
+  RefusalTableMatchesUnsupported or ObservableFieldTableMatchesProjector, and
+  the diagnostic, bounds, command catalog, transition and unclaimed-object
+  checks by name; `TestDocsCheckRecipeReadsTheList` fails on a Makefile recipe
+  that names a test or does not read the list. The docs checks that list
   production Go source, `TestDocsPackageTableNamesEveryTestOnlyPackage` and
   `TestDiagnosticCodesMatchOutputSpec`, walk the working tree's sources,
   tracked or not, as a build reads them.

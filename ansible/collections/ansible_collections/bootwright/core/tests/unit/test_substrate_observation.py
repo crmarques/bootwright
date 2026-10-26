@@ -17,7 +17,7 @@ ROLES = pathlib.Path(__file__).resolve().parents[2] / "roles"
 
 OBSERVATIONS = {
     "substrate_libvirt_host": "bootwright.core.substrate_host_protocol",
-    "substrate_libvirt_machine": "bootwright.core.substrate_machine_protocol",
+    "substrate_libvirt_machine": "bootwright.core.substrate_libvirt_machine_protocol",
 }
 
 

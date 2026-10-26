@@ -1,6 +1,7 @@
 """Fixed Ceph worker, sent over the authenticated SSH channel as source.
 
-This file deliberately imports only the target Python standard library. Native
+This file deliberately imports only the target Python standard library and
+the shipped canonical-JSON and bounded-process modules. Native
 output is private until projected into evidence; exceptions never carry command
 arguments, output, credentials or remote input. A successful process is not a
 readiness or ownership proof.
@@ -25,15 +26,15 @@ import os
 import pwd
 import re
 import secrets
-import selectors
-import signal
 import stat
 import string
-import subprocess
 import sys
 import tempfile
 import time
 import uuid
+
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
+from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 
 MAX_INPUT = 2 * 1024 * 1024
 MAX_OUTPUT = 1024 * 1024
@@ -186,10 +187,6 @@ class ManagerRefusal(Refusal):
 def require(condition, reason="request"):
     if not condition:
         raise Refusal(reason)
-
-
-def canonical(value):
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
 
 
 def unique_object(pairs):
@@ -355,91 +352,11 @@ def bounded_command(argv, data=b"", timeout=60, limit=MAX_OUTPUT, environment=No
     require(argv and os.path.isabs(argv[0]), "executable")
     require(all(isinstance(v, str) and "\x00" not in v for v in argv), "executable")
     native_environment = command_environment(environment)
-    owned_session = COMMAND_SESSION
     try:
-        # Bounded fixed-argv helper that kills its own process group; run_command offers neither.
-        # pylint: disable-next=ansible-bad-function
-        process = subprocess.Popen(
-            argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            env=native_environment,
-            start_new_session=owned_session,
-        )
-    except OSError:
-        raise Refusal("native-command") from None
-    output = bytearray()
-    stderr = bytearray()
-    total = 0
-    pending = memoryview(data)
-    deadline = time.monotonic() + timeout
-    try:
-        with selectors.DefaultSelector() as selector:
-            for pipe in (process.stdout, process.stderr):
-                os.set_blocking(pipe.fileno(), False)
-                selector.register(pipe, selectors.EVENT_READ)
-            if pending:
-                os.set_blocking(process.stdin.fileno(), False)
-                selector.register(process.stdin, selectors.EVENT_WRITE)
-            else:
-                process.stdin.close()
-            while selector.get_map():
-                remaining = deadline - time.monotonic()
-                require(remaining > 0, "native-timeout")
-                for key, unused in selector.select(min(remaining, 1)):
-                    if key.fileobj is process.stdin:
-                        try:
-                            count = os.write(key.fd, pending[:65536])
-                        except BrokenPipeError:
-                            count = len(pending)
-                        pending = pending[count:]
-                        if not pending:
-                            selector.unregister(key.fileobj)
-                            key.fileobj.close()
-                    else:
-                        block = os.read(key.fd, 65536)
-                        if not block:
-                            selector.unregister(key.fileobj)
-                            key.fileobj.close()
-                            continue
-                        total += len(block)
-                        require(total <= limit, "native-output")
-                        if key.fileobj is process.stdout:
-                            output.extend(block)
-                        else:
-                            stderr.extend(block)
-        # Observe exit without reaping: an exited leader still reserves the
-        # group identifier until cleanup stops every inherited descendant.
-        while True:
-            remaining = deadline - time.monotonic()
-            require(remaining > 0, "native-timeout")
-            status = os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
-            if status is not None:
-                require(status.si_pid == process.pid, "native-command")
-                code = status.si_status if status.si_code == os.CLD_EXITED else -status.si_status
-                require(time.monotonic() < deadline, "native-timeout")
-                return code, NativeOutput(bytes(output), bytes(stderr))
-            time.sleep(min(remaining, 0.02))
-    except (subprocess.TimeoutExpired, OSError):
-        raise Refusal("native-command") from None
-    finally:
-        try:
-            if owned_session:
-                # No poll/wait may release this PID before killpg. Verify that
-                # it remains our child even on time/output/refusal paths.
-                os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
-                with contextlib.suppress(ProcessLookupError):
-                    os.killpg(process.pid, signal.SIGKILL)
-            else:
-                # The remote supervisor owns the shared worker group. Kill
-                # only this command; it stops descendants before publication.
-                with contextlib.suppress(ProcessLookupError):
-                    process.kill()
-            process.wait(timeout=1)
-        except (subprocess.TimeoutExpired, OSError):
-            raise Refusal("native-command") from None
-        finally:
-            for pipe in (process.stdin, process.stdout, process.stderr):
-                with contextlib.suppress(OSError):
-                    pipe.close()
+        code, output, stderr = bounded_process.run(argv, data, timeout, limit, environment=native_environment, session=COMMAND_SESSION)
+    except bounded_process.Failure as failure:
+        raise Refusal("native-" + failure.kind) from None
+    return code, NativeOutput(output, stderr)
 
 
 def prove_fips(request):

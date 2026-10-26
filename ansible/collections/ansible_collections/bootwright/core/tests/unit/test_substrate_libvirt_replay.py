@@ -474,10 +474,10 @@ def controller_attempt(material, newer=(), changed=(), start=None, unit="active"
     variables[restart["register"]] = {"changed": True} if restarted else SKIPPED
     completion = only(
         tasks,
-        lambda task: (task.get("bootwright.core.substrate_machine_protocol") or {}).get("phase") == "completed",
+        lambda task: (task.get("bootwright.core.substrate_libvirt_machine_protocol") or {}).get("phase") == "completed",
         "publishes the completion",
     )
-    outcome = Templar(loader=LOADER, variables=variables).template(completion["bootwright.core.substrate_machine_protocol"]["outcome"])
+    outcome = Templar(loader=LOADER, variables=variables).template(completion["bootwright.core.substrate_libvirt_machine_protocol"]["outcome"])
     return restarted, outcome
 
 

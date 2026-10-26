@@ -5,27 +5,22 @@ from __future__ import annotations
 import fcntl
 import functools
 import hashlib
-import json
 import os
 from pathlib import Path
 import re
 import shutil
 import stat
 import struct
-import subprocess
 import tempfile
 import urllib.parse
+
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
+from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 
 FORMAT = "bootwright.native-plan-v1"
 MAX_PACKAGES = 512
 MAX_INVENTORY = 32768
 MAX_DATABASE = 512 << 20
-
-
-def canonical(value):
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    ).encode("ascii")
 
 
 def digest(value):
@@ -498,32 +493,32 @@ def verified_files(platform, root, identities, scratch):
     """
     for value in identities:
         nevra = "{name}-{epoch}:{version}-{release}.{architecture}".format(**value)
-        # Standalone supplied-platform probe; no remote module execution.
-        # pylint: disable-next=ansible-bad-function
-        result = subprocess.run(
-            [
-                "/usr/bin/rpm",
-                "--dbpath",
-                str(Path(root) / db_path(platform).lstrip("/")),
-                "--verify",
-                "--noconfig",
-                "--noghost",
-                "--noscripts",
-                "--",
-                nevra,
-            ],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-            timeout=30,
-            env={
-                "PATH": "/usr/sbin:/usr/bin",
-                "LANG": "C",
-                "LC_ALL": "C",
-                "HOME": str(Path(scratch) / "home"),
-            },
-        )
-        if result.returncode != 0:
+        try:
+            code, unused, unused_error = bounded_process.run(
+                [
+                    "/usr/bin/rpm",
+                    "--dbpath",
+                    str(Path(root) / db_path(platform).lstrip("/")),
+                    "--verify",
+                    "--noconfig",
+                    "--noghost",
+                    "--noscripts",
+                    "--",
+                    nevra,
+                ],
+                timeout=30,
+                limit=1 << 20,
+                environment={
+                    "PATH": "/usr/sbin:/usr/bin",
+                    "LANG": "C",
+                    "LC_ALL": "C",
+                    "HOME": str(Path(scratch) / "home"),
+                },
+            )
+        except bounded_process.Failure as failure:
+            if failure.kind != "output":
+                raise
+            return False
+        if code != 0:
             return False
     return True

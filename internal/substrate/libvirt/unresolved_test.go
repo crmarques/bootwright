@@ -53,7 +53,7 @@ func goldenEvidence(t *testing.T, name string) json.RawMessage {
 // did not answer, named by its connection; a listener with nothing of the
 // machine behind it, named by its socket; and an observation that returned
 // nothing, named by the host it ran against. Each foreign and silent golden is
-// what substrate_machine_protocol.py's presence() publishes for an
+// what substrate_libvirt_machine_protocol.py's presence() publishes for an
 // observation of that state, which every validator refuses, so its
 // resolution is unknown. Evidence of an owned machine part way realized, or
 // evidence that cannot be read, is left to the engine's general reason.

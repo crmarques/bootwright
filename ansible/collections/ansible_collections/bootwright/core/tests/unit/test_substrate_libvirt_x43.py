@@ -380,7 +380,7 @@ def test_a_machine_destroy_removes_each_empty_context_parent():
             assert argv == ["/usr/bin/rmdir", expected], removal
         assert parent["environment"] == {"LC_ALL": "C"}
         outcome = tasks[named(tasks, "Publish bounded machine removal evidence")]
-        assert parent["register"] + " is changed" in str(outcome["bootwright.core.substrate_machine_protocol"]["outcome"])
+        assert parent["register"] + " is changed" in str(outcome["bootwright.core.substrate_libvirt_machine_protocol"]["outcome"])
         for result, failed in (
             ({"rc": 0, "stderr": ""}, False),
             ({"rc": 1, "stderr": "rmdir: failed to remove 'x': Directory not empty"}, False),

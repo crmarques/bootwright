@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
+    bounded_process,
     native_resolution as native,
 )
 
@@ -144,12 +145,12 @@ class NativeResolution(unittest.TestCase):
 
         def run(command, **_):
             commands.append(command)
-            return SimpleNamespace(returncode=0)
+            return bounded_process.Result(0, b"", b"")
 
         def inspect(inventory):
             with patch.object(native, "setup_dnf4", lambda *_, **__: None):
                 with patch.object(native, "inventory4", lambda _: inventory):
-                    with patch.object(native.subprocess, "run", run):
+                    with patch.object(native.bounded_process, "run", run):
                         return native.inspect(request, "/scratch")
 
         result = inspect([installed])
@@ -170,11 +171,11 @@ class NativeResolution(unittest.TestCase):
         def verify(returncode):
             def run(command, **_):
                 commands.append(command)
-                return SimpleNamespace(returncode=returncode)
+                return bounded_process.Result(returncode, b"", b"")
 
             return run
 
-        with patch.object(native.subprocess, "run", verify(0)):
+        with patch.object(native.bounded_process, "run", verify(0)):
             self.assertTrue(
                 native.verified_files(platform, "/snapshot", [installed], "/scratch")
             )
@@ -186,12 +187,12 @@ class NativeResolution(unittest.TestCase):
         for option in ("--verify", "--noconfig", "--noghost", "--noscripts"):
             self.assertIn(option, commands[0])
         self.assertEqual(commands[0][-1], "cephadm-0:20.2.1-405.el9cp.x86_64")
-        with patch.object(native.subprocess, "run", verify(1)):
+        with patch.object(native.bounded_process, "run", verify(1)):
             self.assertFalse(
                 native.verified_files(platform, "/snapshot", [installed], "/scratch")
             )
         # Nothing installed is nothing to prove.
-        with patch.object(native.subprocess, "run", verify(1)):
+        with patch.object(native.bounded_process, "run", verify(1)):
             self.assertTrue(
                 native.verified_files(platform, "/snapshot", [], "/scratch")
             )

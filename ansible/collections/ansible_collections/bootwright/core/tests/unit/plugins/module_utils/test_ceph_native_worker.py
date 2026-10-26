@@ -19,6 +19,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, 
 
 def source_bundle():
     return {"native_diagnostics": inspect.getsource(native_diagnostics), "native_specializations": inspect.getsource(native_specializations),
+            "canonical_json": '"""Fixed fixture."""\n', "bounded_process": '"""Fixed fixture."""\n',
             "ceph_pull_broker": '"""Fixed fixture."""\n',
             "ceph_tunnel": '"""Fixed fixture."""\n', "ceph_tunnel_staging": '"""Fixed fixture."""\n', "ceph_tunnel_custody": '"""Fixed fixture."""\n',
             "ceph_native_observe": '"""Fixed fixture."""\n', "ceph_native_resources": '"""Fixed fixture."""\n',
@@ -45,6 +46,8 @@ def test_specialization_registry_ships_in_the_closed_bundle_after_diagnostics():
     names = ceph_native_worker.MODULES
     assert names.index("native_specializations") == names.index("native_diagnostics") + 1
     assert names.index("physical_machine_identity") < names.index("ceph_host_runtime")
+    for shared in ("canonical_json", "bounded_process"):
+        assert all(names.index(shared) < names.index(user) for user in ("ceph_tunnel_staging", "ceph_tunnel_custody", "ceph_native"))
     sources = ceph_core.Transport.native_sources()
     assert tuple(sources) == names and sources["native_specializations"] == inspect.getsource(native_specializations)
 

@@ -19,6 +19,8 @@ import os
 import stat
 import uuid
 
+from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
+
 ROOT = "/var/lib/bootwright/ceph"
 ROOT_UID = 0
 MAX_MATERIAL = 4 * 1024 * 1024
@@ -37,10 +39,6 @@ class CustodyRefusal(ValueError):
 def require(condition):
     if not condition:
         raise CustodyRefusal("native-tunnel-custody-unproved")
-
-
-def canonical(value):
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
 
 
 def metadata(info, reserved=False):

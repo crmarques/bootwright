@@ -18,7 +18,7 @@ import time
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_pull_broker as broker
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, ceph_pull_broker as broker
 
 REGISTRY = "registry.example.test"
 REPOSITORY = REGISTRY + "/vendor/ceph"
@@ -545,14 +545,14 @@ def test_fixed_dns_exec_uses_bounded_owner_without_live_dns():
 def test_hung_dns_exec_is_killed_and_reaped(monkeypatch):
     fake = "import socket, time\nsocket.getaddrinfo = lambda *a, **k: time.sleep(60)\n"
     processes = []
-    popen = broker.ceph_native.subprocess.Popen
+    popen = bounded_process.subprocess.Popen
 
     def tracked(*args, **kwargs):
         process = popen(*args, **kwargs)
         processes.append(process)
         return process
 
-    monkeypatch.setattr(broker.ceph_native.subprocess, "Popen", tracked)
+    monkeypatch.setattr(bounded_process.subprocess, "Popen", tracked)
     started = time.monotonic()
     with pytest.raises(broker.ceph_native.Refusal):
         broker.ceph_native.bounded_command([sys.executable, "-I", "-B", "-c", fake + broker.DNS_SOURCE],

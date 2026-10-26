@@ -8388,6 +8388,47 @@ M2 as prerequisites of B485, and adds B837 to lane I.
 **Guard tests:** the tests above, each proved by a seeded mismatch; the
 delivering commit records the gates.
 
+### X162 — Audit lane K: language and adapter contracts
+
+**Items:** B818 and B834 (2026-10-26 spec audit step P1-K and batch L12),
+lane K of the [audit remediation](backlog.md#lane-order-and-progress) under
+D182. **Kind:** enabling. **Owners:** Architecture and Verification tooling.
+Delivered on 2026-10-26.
+
+The collection has one canonical-JSON encoder (`module_utils/canonical_json.py`)
+and one bounded process runner (`module_utils/bounded_process.py`), shipped in
+the Ceph worker and package bundles; every other site is a declared exception
+with its reason, and `test_python_sites.py` refuses a new one. The runner's
+byte bound covers stdout and stderr together; the guest-SSH helper refuses
+instead of raising on a start or overrun failure, and the cluster-objects
+native runner gains a 16 MiB bound. Go's record decoder admits the bytes the
+Python encoder writes, held by shared golden vectors; Go's `json.Marshal`
+escapes `<`, `>` and `&` and writes non-ASCII raw, unlike the Python encoder,
+and `internal/canonicaljson` pins that divergence. The pylint
+`ansible-bad-function` gate the item named is replaced by the AST unit test
+`test_python_sites.py`, which adds no lint dependency and meets the item's
+requirement. `TestEveryCollectionAndScriptSourceMapsToALanguageRow`
+maps every tracked collection and script source to a row of
+[language responsibility](../architecture.md#language-responsibility).
+`make docs-check` selects its tests from `test/architecture/testdata/docs-checks.txt`,
+which `TestDocsChecksListIsComplete` holds complete. The playbook entry-point
+test allows exactly the install playbook's eight task files, and
+`test_entry_point_reads.py` refuses undeclared `bootwright_*` reads, with the
+existing ones allowed under [B431](backlog.md#b431).
+
+The libvirt machine-protocol plugin is named `substrate_libvirt_machine_protocol`;
+the Ceph image and host playbooks are `image_apply.yml` and `host_apply.yml`;
+`test_collection_names.py` and `TestEveryBoundPlaybookIsNamedForItsCapabilityAndOperation`
+hold role, plugin and playbook names to the patterns, with exact shrinking
+allowances of existing misfits. `TestDocsNativeErrorOptInsMatchTheCephInvocations`
+holds the `nativeError` opt-in list to the code. Specs quote no internal
+request or format version. No contract digest moved; the embedded collection
+changed, so a live host needs `make build` and `setup` before it applies.
+
+**Guard tests:** the tests above, each proved by a seeded mismatch; the
+delivering commit records the gates. No live Ceph run exercised the new
+bundle modules.
+
 ## M3 independent in-tree completion
 
 The owner's 2026-10-23 request (D181) delivers the independent implementation

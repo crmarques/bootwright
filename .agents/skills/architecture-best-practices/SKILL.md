@@ -25,7 +25,10 @@ its [conventions](../../../specs/index.md#conventions) own placement.
   interface catalogs into prose; point at the code, or add a test that holds a
   table to it. A hand-copied inventory or a process rule a tool can check
   becomes a test, and the copy goes; a required behavior stays in its owning
-  spec and names the test that holds it.
+  spec and names the test that holds it. A spec quotes no internal request or
+  format version: it names the code symbol that holds it, because a quoted
+  literal drifts when the version moves. Literals already quoted give way to a
+  code reference when their page is next edited.
 - Describe the smallest authorized slice through its observable outcome, owner,
   changed boundary and failure behavior. Add an interface or variation only at
   its first concrete consumer. Follow the

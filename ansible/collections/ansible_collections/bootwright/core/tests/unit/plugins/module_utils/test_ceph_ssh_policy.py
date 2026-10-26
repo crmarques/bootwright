@@ -12,13 +12,11 @@ from __future__ import annotations
 
 import base64
 import os
-import subprocess
-from types import SimpleNamespace
 
 import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    adapter_protocol, ceph_core, ceph_native, ceph_ssh_policy, ceph_tunnel, managedos_guest_ssh, ssh_key_policy,
+    adapter_protocol, bounded_process, ceph_core, ceph_native, ceph_ssh_policy, ceph_tunnel, managedos_guest_ssh, ssh_key_policy,
 )
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_core as core_fixtures
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_ceph_host_execution as host_fixtures
@@ -58,10 +56,10 @@ def policy(listed):
 
 def native(listed):
     """A fake ssh -G evaluation, as test_ssh_key_policy.py fakes it."""
-    def run(argv, **kwargs):
+    def run(argv, data, timeout, limit, environment, **options):
         assert argv == ["/usr/bin/ssh", "-G", "-F", "/dev/stdin", "-o", "CanonicalizeHostname=no", "localhost"]
-        assert kwargs["timeout"] == 10 and not kwargs["check"] and kwargs["stderr"] == subprocess.DEVNULL
-        return SimpleNamespace(returncode=0, stdout="hostkeyalgorithms %s\npubkeyacceptedalgorithms %s\n" % (listed, FLEET))
+        assert timeout == 10 and options == {"capture_stderr": False}
+        return bounded_process.Result(0, ("hostkeyalgorithms %s\npubkeyacceptedalgorithms %s\n" % (listed, FLEET)).encode(), b"")
     return run
 
 

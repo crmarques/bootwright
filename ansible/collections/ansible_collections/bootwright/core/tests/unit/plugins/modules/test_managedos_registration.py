@@ -6,12 +6,11 @@ import io
 import json
 import os
 import shlex
-import subprocess
 import types
 
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import managedos_guest_ssh
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, managedos_guest_ssh
 from ansible_collections.bootwright.core.plugins.module_utils import managedos_rhsm_worker as worker
 from ansible_collections.bootwright.core.plugins.modules import managedos_registration as module
 
@@ -25,35 +24,28 @@ ANSWER = {"ok": True, "result": {"changed": True, "consumer": U1, "owned": True,
 
 
 class FakePopen:
-    """A recording ssh process that answers with fixed bytes."""
+    """A recording bounded runner that answers with fixed bytes."""
 
-    def __init__(self, stdout=b"", stderr=b"", code=0, timeout=False):
+    def __init__(self, stdout=b"", stderr=b"", code=0, timeout=False, failure=None):
         self.calls = []
         self.stdout = stdout
         self.stderr = stderr
         self.code = code
         self.timeout = timeout
-        self.returncode = None
-        self.pid = 0
+        self.failure = failure
 
-    def __call__(self, argv, **options):
-        self.calls.append({"argv": list(argv), "options": options, "stdin": None})
-        return self
-
-    def communicate(self, input=None, timeout=None):  # pylint: disable=redefined-builtin
-        if input is not None:
-            self.calls[-1]["stdin"] = input
-        if self.timeout and timeout is not None:
-            raise subprocess.TimeoutExpired("ssh", timeout)
-        self.returncode = self.code
-        return self.stdout, self.stderr
+    def __call__(self, argv, data, timeout, limit, environment, **options):
+        self.calls.append({"argv": list(argv), "options": dict(options, env=environment, timeout=timeout, limit=limit), "stdin": data})
+        if self.timeout:
+            raise bounded_process.Failure("timeout")
+        if self.failure:
+            raise bounded_process.Failure(self.failure)
+        return bounded_process.Result(self.code, self.stdout, self.stderr)
 
 
 def session(tmp_path, popen, monkeypatch=None):
-    """The module's run, through the shared session runner, with Popen recorded."""
-    if monkeypatch is not None:
-        monkeypatch.setattr(managedos_guest_ssh.os, "killpg", lambda pid, sig: None)
-    return lambda argv, data, timeout: managedos_guest_ssh.run(argv, data, timeout, popen=popen)
+    """The module's run, through the shared session runner, with the bounded runner recorded."""
+    return lambda argv, data, timeout: managedos_guest_ssh.run(argv, data, timeout, runner=popen)
 
 
 def files(tmp_path, organization=ORG.encode() + b"\n", key=KEY.encode() + b"\n"):
@@ -210,6 +202,8 @@ def test_registration_session_intersects_pinned_algorithms_with_placement_policy
 
 @pytest.mark.parametrize("popen,expected", [
     (FakePopen(timeout=True), {"changed": False, "ok": False, "reason": "transport", "cause": "timeout"}),
+    (FakePopen(failure="command"), {"changed": False, "ok": False, "reason": "transport", "cause": "session"}),
+    (FakePopen(failure="output"), {"changed": False, "ok": False, "reason": "transport", "cause": "answer"}),
     (FakePopen(code=255, stderr=b"@@@\nREMOTE HOST IDENTIFICATION HAS CHANGED!\n"),
      {"changed": False, "ok": False, "reason": "transport", "cause": "host-key"}),
     (FakePopen(code=255, stderr=b"Host key verification failed.\n"),
@@ -236,7 +230,7 @@ def test_registration_session_intersects_pinned_algorithms_with_placement_policy
      {"changed": False, "ok": False, "reason": "registration-unavailable", "cause": "service"}),
     (FakePopen(stdout=encoded({"ok": False, "reason": "registration-foreign"})),
      {"changed": False, "ok": False, "reason": "registration-foreign"}),
-], ids=["timeout", "changed-key", "unverified-key", "unreachable", "exit", "non-json", "unknown-reason", "extra-key",
+], ids=["timeout", "start-failure", "output-overrun", "changed-key", "unverified-key", "unreachable", "exit", "non-json", "unknown-reason", "extra-key",
         "wrong-cause", "missing-cause", "wrong-state", "bad-consumer", "oversized", "unavailable", "foreign"])
 def test_module_accepts_only_the_closed_worker_answer(tmp_path, monkeypatch, popen, expected):
     paths = files(tmp_path)

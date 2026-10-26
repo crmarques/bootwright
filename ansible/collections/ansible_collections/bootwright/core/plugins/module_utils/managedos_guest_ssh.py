@@ -14,11 +14,9 @@ import collections
 import ipaddress
 import os
 import re
-import signal
 import stat
-import subprocess
 
-from ansible_collections.bootwright.core.plugins.module_utils import ssh_key_policy
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, ssh_key_policy
 
 SSH = "/usr/bin/ssh"
 OPTIONS = (
@@ -47,6 +45,7 @@ OPTIONS = (
 HOST_KEY_SLOT = OPTIONS.index("StrictHostKeyChecking=yes") + 1
 ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C"}
 MAX_OUTPUT = 65536
+MAX_DIAGNOSTIC = 65536
 MAX_REMOTE = 1 << 20
 HOST_KEY_MARKERS = (
     b"Host key verification failed.",
@@ -56,7 +55,7 @@ HOST_KEY_MARKERS = (
 USER = re.compile(r"[a-z_][a-z0-9_-]{0,31}")
 LABEL = re.compile(r"[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
 
-Outcome = collections.namedtuple("Outcome", ("code", "stdout", "host_key", "timed_out"))
+Outcome = collections.namedtuple("Outcome", ("code", "stdout", "host_key", "timed_out", "cause"), defaults=(None,))
 
 
 class SessionError(ValueError):
@@ -131,22 +130,14 @@ def guest_argv(*, ssh_config, known_hosts, host_key_algorithms, policy_host_key_
     return argv + ["-i", identity, user + "@" + address, remote]
 
 
-def run(argv, data, timeout, popen=subprocess.Popen):
+def run(argv, data, timeout, runner=bounded_process.run):
     """Run the session once; stderr only reports whether the pinned key refused it."""
-    # A fixed ssh argv whose stdin carries the only data; run_command would read stderr into a result.
-    # pylint: disable-next=ansible-bad-function
-    process = popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                    env=dict(ENVIRONMENT), cwd="/", close_fds=True, start_new_session=True)
     try:
-        stdout, stderr = process.communicate(input=data, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except OSError:
-            pass
-        process.communicate()
-        return Outcome(None, b"", False, True)
-    host_key = any(marker in (stderr or b"") for marker in HOST_KEY_MARKERS)
-    if stdout is None or len(stdout) > MAX_OUTPUT:
-        stdout = None
-    return Outcome(process.returncode, stdout, host_key, False)
+        code, stdout, stderr = runner(argv, data, timeout, MAX_OUTPUT + MAX_DIAGNOSTIC, environment=dict(ENVIRONMENT), cwd="/")
+    except bounded_process.Failure as failure:
+        if failure.kind == "timeout":
+            return Outcome(None, b"", False, True)
+        # The runner drains stderr itself, so a refused key cannot be told from a start or overrun failure.
+        return Outcome(None, None, False, False, "answer" if failure.kind == "output" else "session")
+    host_key = any(marker in stderr for marker in HOST_KEY_MARKERS)
+    return Outcome(code, None if len(stdout) > MAX_OUTPUT else stdout, host_key, False)

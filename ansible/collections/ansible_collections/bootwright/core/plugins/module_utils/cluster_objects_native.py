@@ -5,10 +5,12 @@ import copy
 import json
 import os
 import re
-import subprocess
 import time
 
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
 from ansible_collections.bootwright.core.plugins.module_utils.cluster_objects_model import OWNER
+
+MAX_NATIVE_OUTPUT = 16 << 20
 
 # Kubernetes Go templates have no JSON encoder. This closed recursive template
 # emits only the subtrees selected below, with strings escaped by printf.
@@ -90,13 +92,11 @@ def run(oc, kubeconfig, argv, deadline, body=None):
     environment = {"HOME": "/nonexistent", "PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}
     try:
         # A process timeout must kill oc, including when its HTTP timeout cannot progress.
-        # pylint: disable-next=ansible-bad-function
-        result = subprocess.run(command, input=body, stdin=subprocess.DEVNULL if body is None else None,
-                                capture_output=True, text=True,
-                                timeout=min(30, remaining), env=environment, check=False)
-    except (OSError, subprocess.TimeoutExpired):
+        code, output, error = bounded_process.run(
+            command, b"" if body is None else body.encode("utf-8"), min(30, remaining), MAX_NATIVE_OUTPUT, environment=environment)
+        return code, output.decode("utf-8"), error.decode("utf-8")
+    except (bounded_process.Failure, UnicodeError):
         return 1, "", ""
-    return result.returncode, result.stdout, result.stderr
 
 
 def decode(output, secret=False):

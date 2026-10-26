@@ -48,9 +48,11 @@ Each file runs at exactly one site; know which before editing it.
 - Start a process only with an absolute executable and an argv list, never a
   shell; bound its output and its time, and reap it. A remote command string
   carries only literals and validated, quoted tokens.
-- Reuse the canonical JSON encoder and the bounded process runner already at
-  the file's site instead of writing another; their consolidation is tracked as
-  [B818](../../../../specs/milestones/backlog.md#b818).
+- Encode canonical JSON through `plugins/module_utils/canonical_json.py` and
+  start a process through `plugins/module_utils/bounded_process.py`, which the
+  shipped Ceph and package bundles carry, instead of writing another. A file
+  that runs alone, such as a script shipped as source, needs a named exception
+  with its reason in `test_python_sites.py`, which fails on any other copy.
 - Publish adapter records only through `plugins/module_utils/adapter_protocol.py`.
 - Take every endpoint, trust anchor and credential from the request or the
   runner, never from ambient proxy variables or user configuration: an opener

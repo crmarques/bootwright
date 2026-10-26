@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 import re
 import stat
-import subprocess
+
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
 
 POLICY_PATH = "/etc/crypto-policies/back-ends/openssh.config"
 MAX_POLICY = 64 * 1024
@@ -74,23 +75,21 @@ def configuration(data):
     return "\n".join(lines) + ("\n" if lines else "")
 
 
-def effective_policy(data, run=subprocess.run):
+def effective_policy(data, run=bounded_process.run):
     """OpenSSH -G computes policy/default lists; no endpoint, key or shell is used."""
     config = configuration(data)
     try:
-        # Injected bounded OpenSSH -G evaluation of a fixed argv; the module_utils layer has no AnsibleModule.
-        # pylint: disable-next=ansible-bad-function
-        result = run(
+        code, output, unused = run(
             ["/usr/bin/ssh", "-G", "-F", "/dev/stdin", "-o", "CanonicalizeHostname=no", "localhost"],
-            input=config, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"}, timeout=10, check=False,
+            config.encode("utf-8"), 10, 256 * 1024, environment={"PATH": "/usr/bin:/bin", "LC_ALL": "C"}, capture_stderr=False,
         )
-    except (OSError, UnicodeError, subprocess.SubprocessError) as exc:
+        text = output.decode("utf-8")
+    except (bounded_process.Failure, UnicodeError) as exc:
         raise PolicyError("cannot evaluate the placement host SSH crypto policy before installation") from exc
-    if result.returncode != 0 or len(result.stdout) > 256 * 1024:
+    if code != 0:
         raise PolicyError("cannot evaluate the placement host SSH crypto policy before installation")
     values = {}
-    for line in result.stdout.splitlines():
+    for line in text.splitlines():
         fields = line.split(None, 1)
         if len(fields) != 2:
             continue

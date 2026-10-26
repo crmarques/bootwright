@@ -14,12 +14,12 @@
   no_log: true
 
 - name: Complete the qualified execution handoff
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: loaded
   no_log: true
 
 - name: Report disk creation
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: group
     group: create-disks
     status: running
@@ -77,14 +77,14 @@
     label: '{{ item.name }}'
 
 - name: Report disk creation completion
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: group
     group: create-disks
     status: ok
   no_log: true
 
 - name: Report domain definition
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: group
     group: define-domain
     status: running
@@ -126,14 +126,14 @@
       when: substrate_libvirt_machine_scratch is succeeded
 
 - name: Report domain definition completion
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: group
     group: define-domain
     status: ok
   no_log: true
 
 - name: Report controller start
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: group
     group: start-controller
     status: running
@@ -341,14 +341,14 @@
   changed_when: true
 
 - name: Report controller start completion
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: group
     group: start-controller
     status: ok
   no_log: true
 
 - name: Report controller verification
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: group
     group: verify-controller
     status: running
@@ -386,7 +386,7 @@
     quiet: true
 
 - name: Report controller verification completion
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: group
     group: verify-controller
     status: ok
@@ -398,7 +398,7 @@
   register: substrate_libvirt_machine_after
 
 - name: Publish bounded machine completion evidence
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: completed
     outcome: >-
       {{ 'changed'

@@ -63,7 +63,7 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		"storage_ceph_export":            "ceph_export_protocol",
 		"substrate_baremetal_machine":    "substrate_physical_protocol",
 		"substrate_libvirt_host":         "substrate_host_protocol",
-		"substrate_libvirt_machine":      "substrate_machine_protocol",
+		"substrate_libvirt_machine":      "substrate_libvirt_machine_protocol",
 	} {
 		add(role, "observe.yml", observeCollection+protocol, "publishes the handoff and evidence on the runner's own channel", read)
 	}

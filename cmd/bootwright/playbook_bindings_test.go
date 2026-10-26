@@ -1,6 +1,10 @@
 package main
 
 import (
+	"fmt"
+	"maps"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -61,5 +65,81 @@ func TestBoundPlaybooksCoverExactlyTheOfferedCapabilities(t *testing.T) {
 			continue
 		}
 		t.Errorf("%s is bound but no capability resolves it", implementation)
+	}
+}
+
+// capabilityNamedPlaybooks are the entrypoints of a capability with one
+// operation, named for the capability alone. The list only shrinks.
+var capabilityNamedPlaybooks = map[string]string{
+	"machine/power.yml": "power",
+}
+
+// playbookNameViolations reports each binding whose playbook is off the
+// playbooks/<domain>/<capability>_<operation>.yml pattern or whose file names
+// an operation other than the one the binding is for, and each capability-only
+// name that no longer fits.
+func playbookNameViolations(bindings map[string]string, capabilityNamed map[string]string) []string {
+	var violations []string
+	used := map[string]bool{}
+	for _, key := range slices.Sorted(maps.Keys(bindings)) {
+		_, operation, _ := strings.Cut(key, "/")
+		playbook := bindings[key]
+		domain, file, found := strings.Cut(playbook, "/")
+		stem, yml := strings.CutSuffix(file, ".yml")
+		if !found || !yml || strings.Contains(file, "/") || !playbookStem.MatchString(stem) || !playbookStem.MatchString(domain) {
+			violations = append(violations, fmt.Sprintf("%s binds %q, which is not playbooks/<domain>/<capability>_<operation>.yml", key, playbook))
+			continue
+		}
+		if capabilityNamed[playbook] == operation {
+			used[playbook] = true
+			continue
+		}
+		if !strings.HasSuffix(stem, "_"+operation) {
+			violations = append(violations, fmt.Sprintf("%s binds %q, whose file does not end in the bound operation _%s", key, playbook, operation))
+		}
+	}
+	for _, playbook := range slices.Sorted(maps.Keys(capabilityNamed)) {
+		if !used[playbook] {
+			violations = append(violations, fmt.Sprintf("%s is named for its capability alone but no binding uses it that way; remove it from capabilityNamedPlaybooks", playbook))
+		}
+	}
+	return violations
+}
+
+var playbookStem = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
+
+// TestEveryBoundPlaybookIsNamedForItsCapabilityAndOperation holds Composition's
+// bindings to the playbook pattern, so an entrypoint named for what it does
+// internally (image_resolve, host_prepare) instead of the port operation it
+// binds fails here.
+func TestEveryBoundPlaybookIsNamedForItsCapabilityAndOperation(t *testing.T) {
+	for _, violation := range playbookNameViolations(operationPlaybook(), capabilityNamedPlaybooks) {
+		t.Error(violation)
+	}
+}
+
+func TestPlaybookNamePatternRefusesAnOffPatternBinding(t *testing.T) {
+	bindings := map[string]string{
+		"a/apply":   "storage/image_resolve.yml",
+		"b/apply":   "storage/host_apply.yml",
+		"c/observe": "storage/core_apply.yml",
+		"d/power":   "machine/power.yml",
+		"e/apply":   "flat.yml",
+		"f/apply":   "storage/sub/core_apply.yml",
+		"g/apply":   "Storage/core_apply.yml",
+	}
+	want := []string{
+		`a/apply binds "storage/image_resolve.yml", whose file does not end in the bound operation _apply`,
+		`c/observe binds "storage/core_apply.yml", whose file does not end in the bound operation _observe`,
+		`e/apply binds "flat.yml", which is not playbooks/<domain>/<capability>_<operation>.yml`,
+		`f/apply binds "storage/sub/core_apply.yml", which is not playbooks/<domain>/<capability>_<operation>.yml`,
+		`g/apply binds "Storage/core_apply.yml", which is not playbooks/<domain>/<capability>_<operation>.yml`,
+	}
+	if got := playbookNameViolations(bindings, map[string]string{"machine/power.yml": "power"}); !slices.Equal(got, want) {
+		t.Fatalf("violations = %q, want %q", got, want)
+	}
+	stale := playbookNameViolations(map[string]string{"x/apply": "storage/core_apply.yml"}, map[string]string{"machine/power.yml": "power"})
+	if len(stale) != 1 || !strings.HasPrefix(stale[0], "machine/power.yml is named for its capability alone") {
+		t.Fatalf("a stale capability-only name gave %q", stale)
 	}
 }

@@ -1,6 +1,8 @@
 package adapterprotocol
 
 import (
+	"encoding/json"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -273,6 +275,25 @@ func TestDecodeAcceptsWhatThePluginsEmit(t *testing.T) {
 	)
 	if len(records) != 6 || records[5].Outcome != "unchanged" || !strings.Contains(string(records[5].Evidence), `"note":"caf\u00e9 <b>"`) {
 		t.Fatalf("records = %+v, want the evidence bytes as written", records)
+	}
+}
+
+// canonicalVectors is shared with the collection's test_canonical_json.py: each
+// line is the exact bytes module_utils/canonical_json.py writes for a record.
+const canonicalVectors = "../../ansible/collections/ansible_collections/bootwright/core/tests/unit/goldens/canonical_json_records.json"
+
+func TestDecodeAcceptsTheCanonicalVectorsThePythonEncoderWrites(t *testing.T) {
+	data, err := os.ReadFile(canonicalVectors)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var vectors []struct{ Admission, Line string }
+	if err := json.Unmarshal(data, &vectors); err != nil || len(vectors) == 0 {
+		t.Fatalf("read %s: %v", canonicalVectors, err)
+	}
+	for _, vector := range vectors {
+		admission := map[string]Admission{"lifecycle": Lifecycle, "controller": Controller}[vector.Admission]
+		accepts(t, admission, vector.Line)
 	}
 }
 

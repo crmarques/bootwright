@@ -10,7 +10,6 @@ import gzip
 import hashlib
 import io
 import ipaddress
-import json
 import os
 import posixpath
 import re
@@ -20,6 +19,8 @@ import stat
 import tarfile
 import time
 import urllib.parse
+
+from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 
 MAX_SOURCE = 1 << 30
 MAX_EXPANDED = 2 << 30
@@ -148,12 +149,6 @@ def detail(error):
 def refused(error, message):
     """The AcquisitionRefused that replaces error, keeping message."""
     return AcquisitionRefused(message, reason=classify(error), detail=detail(error))
-
-
-def canonical(value):
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    ).encode()
 
 
 def sha256(data):

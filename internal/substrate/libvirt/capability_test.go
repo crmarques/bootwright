@@ -576,7 +576,7 @@ func TestAMachineRemovalReadsWhatItTakesBackNotWhatTheApplyProves(t *testing.T) 
 
 // publishedMachinePostcondition is the postcondition the adapter's presence
 // form carries, as presence() in
-// ansible/collections/ansible_collections/bootwright/core/plugins/action/substrate_machine_protocol.py
+// ansible/collections/ansible_collections/bootwright/core/plugins/action/substrate_libvirt_machine_protocol.py
 // computes it from an observation: the domain owned, its controller unit
 // active, a controller image, a system and a power state reported, and at
 // least one disk with every disk present. The image, the system and each

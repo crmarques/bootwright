@@ -8,7 +8,7 @@
   no_log: true
 
 - name: Complete the qualified execution handoff
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: loaded
   no_log: true
 
@@ -30,7 +30,7 @@
   no_log: true
 
 - name: Publish bounded machine observation evidence
-  bootwright.core.substrate_machine_protocol:
+  bootwright.core.substrate_libvirt_machine_protocol:
     phase: completed
     observed: true
     outcome: unchanged

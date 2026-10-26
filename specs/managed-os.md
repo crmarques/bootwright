@@ -1157,10 +1157,12 @@ unregistration at 300 seconds.
 
 For a hosted package source, Managed OS plans one block per context and
 referenced install profile in the `machines` stage. It realizes the
-`MachineInstallProfile` publication under implementation and request version
-`os-package-tree-v1`; each machine installation requires that profile
+`MachineInstallProfile` publication under the tree implementation and request
+version (`TreeImplementation` in `internal/managedos/installation/tree.go`);
+each machine installation requires that profile
 publication alongside its own Machine realization and referenced services.
-An installation uses request version `os-install-anaconda-v16`. Profiles using
+An installation uses the request version `requestVersion` in
+`internal/managedos/installation/catalog.go`. Profiles using
 a URL package source contribute no publication block.
 
 The request freezes only context and profile identity, artifact-server
@@ -1188,8 +1190,9 @@ no longer a regular file of the frozen size and SHA-256, whose remedy is the
 path names another source identity, whose remedy takes the context back,
 which withdraws that tree, then applies.
 
-**Evidence and continuation.** Evidence version
-`os-package-tree-evidence-v1` binds the frozen request digest and reports
+**Evidence and continuation.** The evidence version
+(`TreeEvidenceVersion` in `internal/managedos/installation/tree.go`) binds the
+frozen request digest and reports
 complete tree, source identity, content and staging presence, absence and
 postcondition. A complete tree with matching source identity, content present
 and no staging proves completion; no content or staging proves no effect;
@@ -1229,7 +1232,7 @@ owns exact identities, private RAM boot, direct I/O, receipt acknowledgement and
 failure recovery. Omission retains disks. An original installation proved never
 started removes its unused policy without booting or writing a disk.
 
-Installation request version `os-install-anaconda-v16` freezes the optional
+The installation request version freezes the optional
 `eraseOnRemoval` Boolean so recovery guidance agrees with the separate policy.
 An erasing recovery names data-loss authorization and the overwritten disks;
 a retaining recovery continues to name the retained installed system. Version

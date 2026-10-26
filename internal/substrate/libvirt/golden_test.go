@@ -101,7 +101,7 @@ func lineDiff(want, got string) string {
 // The protocol plugin publishes evidence through a channel that encodes with
 // sorted keys and no spaces (plugins/module_utils/controller_channel.py), which
 // Freeze proves is also how Go encodes it. Each golden is what
-// substrate_machine_protocol.py publishes for one state of the lab machine:
+// substrate_libvirt_machine_protocol.py publishes for one state of the lab machine:
 // the validator of that state accepts exactly those bytes, every other
 // validator refuses them, and the removal gate reads them as the quiescence
 // they prove.
@@ -118,7 +118,7 @@ func TestMachineEvidenceMatchesItsGoldens(t *testing.T) {
 		"absence":  func(data []byte) error { return ValidateMachineAbsence(data, evidenceDigest) },
 		"partial":  func(data []byte) error { return ValidateMachinePartial(data, evidenceDigest) },
 	}
-	// Each case names the substrate_machine_protocol.py call it mirrors.
+	// Each case names the substrate_libvirt_machine_protocol.py call it mirrors.
 	for name, test := range map[string]struct {
 		evidence   MachineEvidence
 		accepts    string

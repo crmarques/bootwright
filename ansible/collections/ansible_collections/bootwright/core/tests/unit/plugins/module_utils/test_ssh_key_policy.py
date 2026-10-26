@@ -1,23 +1,23 @@
 """Policy rejection happens without SSH sessions, credentials or installer effects."""
 
-from types import SimpleNamespace
-import subprocess
-
 import pytest
 
-from ansible_collections.bootwright.core.plugins.module_utils import ssh_key_policy as policy
+from ansible_collections.bootwright.core.plugins.module_utils import bounded_process, ssh_key_policy as policy
 
 HOST = "rsa-sha2-512,ecdsa-sha2-nistp256"
 FLEET = "rsa-sha2-512,rsa-sha2-256,ecdsa-sha2-nistp256"
 
 
-def native(argv, **kwargs):
+def answer(code, text):
+    return bounded_process.Result(code, text.encode(), b"")
+
+
+def native(argv, data, timeout, limit, environment, **options):
     assert argv == ["/usr/bin/ssh", "-G", "-F", "/dev/stdin", "-o", "CanonicalizeHostname=no", "localhost"]
-    assert kwargs["timeout"] == 10 and not kwargs["check"]
-    assert kwargs["stderr"] == subprocess.DEVNULL
-    assert kwargs["env"] == {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
-    assert "PRIVATE" not in kwargs["input"]
-    return SimpleNamespace(returncode=0, stdout="hostkeyalgorithms %s\npubkeyacceptedalgorithms %s\n" % (HOST, FLEET))
+    assert timeout == 10 and limit == 256 * 1024 and options == {"capture_stderr": False}
+    assert environment == {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
+    assert b"PRIVATE" not in data
+    return answer(0, "hostkeyalgorithms %s\npubkeyacceptedalgorithms %s\n" % (HOST, FLEET))
 
 
 @pytest.mark.parametrize("usage", ["host", "fleet"])
@@ -51,9 +51,9 @@ def test_check_keys_names_the_machine_for_a_generated_key():
 def test_native_default_and_modifier_evaluation_is_used_without_overriding_policy():
     calls = []
 
-    def run(argv, **kwargs):
-        calls.append(kwargs["input"])
-        return native(argv, **kwargs)
+    def run(argv, data, *args, **kwargs):
+        calls.append(data.decode())
+        return native(argv, data, *args, **kwargs)
 
     for data in ("", "# native policy\nHostKeyAlgorithms -ssh-ed25519\nPubkeyAcceptedAlgorithms=^rsa-sha2-512\n"):
         result = policy.effective_policy(data, run)
@@ -76,9 +76,8 @@ def test_unsupported_policy_never_starts_a_native_process(data):
 
 
 @pytest.mark.parametrize("result", [
-    SimpleNamespace(returncode=1, stdout="PRIVATE DIAGNOSTIC"),
-    SimpleNamespace(returncode=0, stdout="hostkeyalgorithms ssh-ed25519\n"),
-    SimpleNamespace(returncode=0, stdout="x" * (256 * 1024 + 1)),
+    answer(1, "PRIVATE DIAGNOSTIC"),
+    answer(0, "hostkeyalgorithms ssh-ed25519\n"),
 ])
 def test_unavailable_policy_refuses_without_disclosing_native_output(result):
     with pytest.raises(policy.PolicyError) as refused:
@@ -86,12 +85,13 @@ def test_unavailable_policy_refuses_without_disclosing_native_output(result):
     assert "PRIVATE" not in str(refused.value)
 
 
-def test_native_timeout_is_bounded_and_sanitized():
-    def timeout(*_args, **_kwargs):
-        raise subprocess.TimeoutExpired("PRIVATE", 10)
+@pytest.mark.parametrize("kind", bounded_process.KINDS)
+def test_native_failure_is_bounded_and_sanitized(kind):
+    def failed(*_args, **_kwargs):
+        raise bounded_process.Failure(kind)
 
     with pytest.raises(policy.PolicyError, match="cannot evaluate") as refused:
-        policy.effective_policy("", timeout)
+        policy.effective_policy("", failed)
     assert "PRIVATE" not in str(refused.value)
 
 

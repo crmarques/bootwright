@@ -50,9 +50,14 @@ ansible-check:
 # share with code: diagnostics, bounds, the command catalog and transitions, the
 # capabilities' and the engine's refusal tables, the Ceph matrix catalog and
 # combination table, and the destinations the operator guide lists for a
-# proxied network.
+# proxied network. The tests it runs are the list in $(DOCS_CHECKS), which
+# TestDocsChecksListIsComplete holds complete: every test named TestDocs*, the
+# *RefusalTableMatchesUnsupported and *ObservableFieldTableMatchesProjector
+# tests and the other names that test lists is listed, and every listed test
+# exists. TestDocsCheckRecipeReadsTheList holds this recipe to the list.
+DOCS_CHECKS := test/architecture/testdata/docs-checks.txt
 docs-check:
-	$(GO) test -count=1 -run '^(TestDocs|TestDiagnosticCodesMatchOutputSpec|TestDocumentedBoundsMatchCode|TestCommandCatalogMatchesSpec|TestTransitionTablesMatchSpec|TestUnclaimedObjectTableMatchesTheEngine|Test[A-Za-z]*RefusalTableMatchesUnsupported|Test[A-Za-z]*ObservableFieldTableMatchesProjector|TestCephMatrix|TestCephProfile)' ./test/architecture ./internal/cli ./internal/reconciliation/lifecycle ./internal/controller/bundlelocal ./internal/containercluster/agentinstall ./internal/controller/clients ./internal/infrastructureservices/artifactserver ./internal/managedos/installation ./internal/substrate/libvirt ./internal/storage/ceph ./cmd/bootwright
+	$(GO) test -count=1 -run '^($(shell awk '{print $$2}' $(DOCS_CHECKS) | paste -sd'|' -))$$' $(shell awk '{print "./" $$1}' $(DOCS_CHECKS) | sort -u)
 
 # The probe tier: the narrowest checks of each file this branch changed, which
 # stop at the first failure. It is no gate; make check is.

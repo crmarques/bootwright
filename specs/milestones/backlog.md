@@ -285,7 +285,6 @@ Alias cell.
 | [B815](#b815) | new, 2026-10-26 (spec audit P1-H) | enabling | Milestones | Portfolio separated from envelope; Requires state real dependencies; one clause queue | Audit roadmap work; implemented only on an explicit lane request |
 | [B816](#b816) | new, 2026-10-26 (spec audit P1-I) | safety | State reconciliation and Controller setup | Recovery refusals, partial-removal readings and host probes match the rules | Audit roadmap work; implemented only on an explicit lane request |
 | [B817](#b817) | new, 2026-10-26 (spec audit P1-J) | safety | Secrets and CLI | Bounded exec sessions, tool digest refusal test and settled custody reveals | Audit roadmap work; implemented only on an explicit lane request |
-| [B818](#b818) | new, 2026-10-26 (spec audit P1-K) | enabling | Architecture and Verification tooling | Language placement test, one Python runner and encoder, deeper role-spec checks | Audit roadmap work; implemented only on an explicit lane request |
 | [B819](#b819) | new, 2026-10-26 (spec audit P2-A) | enabling | Milestones and Agent guidance | Milestone page openings budgeted, waiver history in decisions, per-decision anchors | Audit roadmap work; implemented only on an explicit lane request |
 | [B820](#b820) | new, 2026-10-26 (spec audit P2-B) | enabling | Agent guidance and Verification tooling | Section-level index rows and docs gates for budgets, reachability and history links | Audit roadmap work; implemented only on an explicit lane request |
 | [B821](#b821) | new, 2026-10-26 (spec audit P2-C) | enabling | Storage and Workspace | Each storage kind's fields on one page; restated lifecycle rules reduced to links | Audit roadmap work; implemented only on an explicit lane request |
@@ -301,7 +300,6 @@ Alias cell.
 | [B831](#b831) | new, 2026-10-26 (spec audit L9) | safety | Controller setup and CLI | Elevation re-executes a root-owned install by path and refuses foreign variables | Audit roadmap work; implemented only on an explicit lane request |
 | [B832](#b832) | new, 2026-10-26 (spec audit L10) | defect | Workspace and CLI | Controller-record refusals name real exits; context list shows unfinished operations | Audit roadmap work; implemented only on an explicit lane request |
 | [B833](#b833) | new, 2026-10-26 (spec audit L11) | enabling | Desired state | Examples drop defaulted values, gain an external-services scenario, distinct Environment names | Audit roadmap work; implemented only on an explicit lane request |
-| [B834](#b834) | new, 2026-10-26 (spec audit L12) | enabling | Architecture | Role, plugin and playbook names follow the stated patterns under structural tests | Audit roadmap work; implemented only on an explicit lane request |
 | [B835](#b835) | new, 2026-10-26 (spec audit L13) | safety | Storage and CLI | Plan and status show a StorageExport's realm-wide grant | Audit roadmap work; implemented only on an explicit lane request |
 | [B836](#b836) | split from B103 on 2026-10-26 (spec audit L10) | safety | Workspace and Controller setup | Contexts survive a controller host whose machine, DMI or root filesystem identity changed | No milestone relocates a controller; implemented only on an explicit request |
 | [B837](#b837) | new, 2026-10-26 (D183, Q118) | product | Add-ons and CLI | Authored add-on ordering and an apply that stops after a named add-on | Lane I work under D182; implemented in its lane |
@@ -830,7 +828,11 @@ leave what their entry points read undeclared or untyped:
 declaring it, `storage_ceph_core`'s nested request mappings carry no options
 for the members its tasks read, and `physical_erase` neither mirrors the erase
 method and target bounds Go freezes as choices nor names them as checked only
-by asserts. **Exit evidence:** each covered or removed by a test that fails
+by asserts. Since 2026-10-26 (X162) `test_entry_point_reads.py` refuses an
+entry point reading an undeclared `bootwright_*` variable and names 29
+existing reads in an exact shrinking allowance under this item: the digest
+variables the runner passes and `bootwright_run_scratch`, in nearly every
+role; declaring them empties it. **Exit evidence:** each covered or removed by a test that fails
 when its guard is removed, `nativeStaging` typed `int` with the role-spec test
 taught the type, and those three specifications declaring what their entry
 points read.
@@ -3718,45 +3720,6 @@ exec bound; their Not yet met lines point here.
 **Exit evidence:** the P1-J roadmap exit; the tests above pass;
 `make check` passes.
 
-### B818
-
-**Owner:** Architecture and Verification tooling. **Kind:** enabling.
-**Requires:** none. **Definition:** Specified. Roadmap step P1-K of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F08-06,
-F08-07, F08-10, V2-14, V2-15 (F08-02, F08-03, F08-04, F08-05, F08-08, F08-09
-applied). Each tracked source file maps to one language row, and Python and
-role-spec rules have tests.
-
-**Specs:** [language responsibility](../architecture.md#language-responsibility)
-holds the language table with a Python row,
-[playbooks](../architecture.md#playbooks) the multi-play exception and the
-argument-spec depth rule; the code-implementation python.md, formatting.md
-and ansible.md references carry the procedures. The Not yet met lines there
-point here.
-
-**Work:**
-
-- F08-06 (Medium), extending B461: one canonical-JSON module and one bounded
-  process runner per Python site with a declared exception list (request
-  signing); a pylint `ansible-bad-function` gate with an allowlist; shared
-  golden vectors read by Go and Python tests where Go compares digests.
-- F08-07 (Medium): a `test/architecture` test mapping each tracked source
-  under the collection plugins and `scripts/` to a language row, failing on an
-  unmapped file.
-- F08-10 (Low): `make docs-check` selects its tests by a naming convention or
-  a list one Go test owns instead of the regex in the Makefile; optionally
-  move quick-test's selection behind a tested launcher.
-- V2-14 (Low): `test_playbook_entry_points.py` checks every `import_role` and
-  `include_role` in every play, failing on a `tasks_from` neither declared nor
-  in the allowlist (`containercluster/install_apply.yml` with its eight task
-  files), replacing the bare `9 if ... else 1` count.
-- V2-15 (Low): the role-spec test fails on an entry point reading an
-  undeclared `bootwright_*` variable; it lands with B431's three instances
-  fixed or as an exact shrinking allowlist naming B431.
-
-**Exit evidence:** the P1-K roadmap exit; `./scripts/ansible-check --suite
-units`, `make docs-check` and `make check` pass.
-
 ### B819
 
 **Owner:** Milestones and Agent guidance. **Kind:** enabling. **Requires:**
@@ -4374,44 +4337,6 @@ only.
 distinct-name test passes; no authored value equals its default without a
 comment; every StoragePlacementPolicy is referenced or noted; `make check`.
 
-### B834
-
-**Owner:** Architecture. **Kind:** enabling. **Requires:** none.
-**Definition:** Specified. Batch L12 of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F07-08,
-F07-10, V2-16, V2-17, V2-18. Collection names and code comments follow the
-patterns [architecture.md](../architecture.md) now states.
-
-**Specs:** architecture.md states the role pattern
-`roles/<domain>_[<implementation>_]<capability>/`, the playbook pattern
-`playbooks/<domain>/<capability>_<operation>.yml`, the six Ceph `nativeError`
-opt-ins and cites `buildCapabilitiesWith`, with a Not yet met line here.
-[substrates.md](../substrates.md) quotes no request version.
-
-**Work:**
-
-- F07-08: rename `substrate_machine_protocol` to
-  `substrate_libvirt_machine_protocol`; a collection structural test checks
-  role and action-plugin names against the pattern with a shrinking allowlist
-  of existing misfits.
-- V2-18: rename `storage/image_resolve.yml` to `image_apply.yml` and
-  `storage/host_prepare.yml` to `host_apply.yml` with their Go bindings; a
-  test walks `operationPlaybook` and fails on a path off the pattern or an
-  operation that differs from the bound one.
-- F07-10: the comment in `cmd/bootwright/wiring_reconciliation.go` calls the
-  static list the allowlisted registry.
-- V2-16: the spec-writing guidance states that specs quote no internal
-  request or format version; [managed-os.md](../managed-os.md)'s
-  `os-install-anaconda-v16`, `os-package-tree-v1` and
-  `os-package-tree-evidence-v1` become code references.
-- V2-17, optional: a docs-check comparing the named opt-in set with the
-  `NativeErrors: true` sites.
-
-**Exit evidence:** both structural tests pass and fail on a seeded misfit;
-the moved playbooks and contract digests pass
-`TestEveryImplementationMovesItsContentDigestWithItsContract`;
-architecture.md's Not yet met line is removed; `make check`.
-
 ### B835
 
 **Owner:** Storage and CLI. **Kind:** safety. **Requires:** none.
@@ -4522,7 +4447,7 @@ decision stay open while its other parts land.
 | H Cross-build continuation | [B813](#b813) | B801 | none | Q76 |
 | I API shape and grammar | [B814](#b814), [B826](#b826), [B827](#b827), [B828](#b828), [B824](#b824), [B821](#b821), [B837](#b837) | B808 | B, F, G | Q77, Q78, Q79, Q80, Q81, Q82, Q83, Q84, Q85, Q86, Q87, Q88, Q105, Q106, Q107, Q110, Q111, Q112, Q113, Q114, Q115, Q118 |
 | J Reconciliation rules | [B816](#b816), [B830](#b830) | B800 to B807 | E, G | Q92, Q93, Q94, Q95, Q96, Q117, Q118 |
-| K Language and adapter contracts | [B818](#b818), [B834](#b834) | none | G | none |
+| K Language and adapter contracts | B818 (X162), B834 (X162) | none | G | none |
 | L Corpus structure and skills | [B815](#b815), [B819](#b819), [B820](#b820), [B822](#b822) | B801; B822 after B813 and B818 | none | Q89, Q90, Q91, Q102, Q103 |
 | M CLI and examples | [B825](#b825), [B833](#b833), [B823](#b823) | none | none | Q104, Q108, Q109 |
 
@@ -4537,7 +4462,7 @@ also updates this table.
 | Order | Lane | State |
 | --- | --- | --- |
 | 1 | A Harness and guards | merged (X161) |
-| 2 | K Language and adapter contracts | not started |
+| 2 | K Language and adapter contracts | merged (X162) |
 | 3 | H Cross-build continuation | not started |
 | 4 | E Store durability and controller records | not started |
 | 5 | B Physical targets and shared hosts | not started |
