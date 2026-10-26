@@ -137,14 +137,19 @@ func trackedGlob(t *testing.T, pattern string) []string {
 	return matches
 }
 
-// guidanceFiles reads every Markdown file the repository tracks.
+// datedRecords holds reports that cite the repository at the commit they
+// audited, so links and paths they name may no longer resolve.
+const datedRecords = "audits/"
+
+// guidanceFiles reads every Markdown file the repository tracks outside the
+// dated records.
 func guidanceFiles(t *testing.T) []markdownFile {
 	t.Helper()
 	files, err := trackedMarkdown(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatalf("read guidance: %v", err)
 	}
-	return files
+	return slices.DeleteFunc(files, func(file markdownFile) bool { return strings.HasPrefix(file.path, datedRecords) })
 }
 
 func TestTrackedMarkdownSkipsUntrackedAndIgnoredFiles(t *testing.T) {

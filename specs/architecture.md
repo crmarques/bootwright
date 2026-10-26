@@ -1071,7 +1071,9 @@ reviewers retain semantic judgments that source checks cannot prove.
   never an untracked or ignored one: the guidance checks of
   `test/architecture/docs_test.go`, the milestone checker of
   `test/architecture/milestones_test.go` and the operator command lines of
-  `internal/cli/docs_commands_test.go`. A link or cited path resolves only to
+  `internal/cli/docs_commands_test.go`. The guidance checks skip the dated
+  reports under `audits/`, which cite the repository at the commit they
+  audited. A link or cited path resolves only to
   a tracked file or a directory that holds one, a budgeted file Git does not
   track fails, and a tracked file a check reads that the working tree lacks
   fails until its removal is staged. Each clause of the effect boundary is
