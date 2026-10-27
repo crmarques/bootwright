@@ -216,6 +216,6 @@ func TestAnUnavailableSecretStoreTypeIsRefusedUnderItsContextFile(t *testing.T) 
 	if err := os.WriteFile(file, []byte("apiVersion: bootwright.io/v1alpha1\nkind: Context\nmetadata:\n  name: demo\nspec:\n  secretStore:\n    type: vault\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	requireContextRefusal(t, services, "  error  secret.store.implementation\n    "+file+"\n    requested secret store type is unavailable\n", "context", "init", "--name", "demo", "-f", file)
+	requireContextRefusal(t, services, "  error  secret.store.implementation\n    "+file+"\n    requested secret store type is unavailable\n    Next: configure the Secret store implementation the message names\n", "context", "init", "--name", "demo", "-f", file)
 	requireContextRefusal(t, services, strings.ReplaceAll(absentGhost, "ghost", "demo"), "context", "use", "--name", "demo")
 }

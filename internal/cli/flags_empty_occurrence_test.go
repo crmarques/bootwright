@@ -72,7 +72,7 @@ func TestMachineTrustFingerprintsAreNamedPerMachine(t *testing.T) {
 		{"machine", "trust", "--expect", "node-a"},
 		{"machine", "trust", "--expect", "node-a=MD5:aa"},
 		{"machine", "trust", "--replace", "node-a=" + fingerprint, "--expect", "node-a=" + other},
-		{"machine", "trust", "--machines", "node-b", "--replace", "node-a=" + fingerprint},
+		{"machine", "trust", "--name", "node-b", "--replace", "node-a=" + fingerprint},
 	} {
 		if code, _, _, record := runRecorded(args); code != 2 || record.calls != 0 {
 			t.Fatalf("%v: code=%d calls=%d, want a usage error", args, code, record.calls)

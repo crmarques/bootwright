@@ -72,7 +72,7 @@ func TestUnknownHostKeyObservationNeverContinuesWithCredentials(t *testing.T) {
 			return nil, UntrustedKey{Fingerprint: "SHA256:synthetic"}
 		})}
 		rows, err := checker.CheckGuest(context.Background(), "synthetic", host, PreflightRequest{TrustOnFirstUse: observe})
-		if err != nil || calls != 1 || len(rows) != 1 || rows[0].Status != capacity.Unknown || rows[0].ID != "host.trust" || !strings.Contains(rows[0].Next, "--machines guest") {
+		if err != nil || calls != 1 || len(rows) != 1 || rows[0].Status != capacity.Unknown || rows[0].ID != "host.trust" || !strings.Contains(rows[0].Next, "--name guest") {
 			t.Fatalf("%+v %d %v", rows, calls, err)
 		}
 	}

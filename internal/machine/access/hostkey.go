@@ -107,7 +107,7 @@ func recordedHostKey(record trust.Record, selected target, contextName string) (
 			"the trusted host key for "+selected.object.Identity()+" was recorded for "+
 				trust.HostToken(record.Address, record.Port)+", not for "+
 				trust.HostToken(selected.address, selected.port),
-			"re-trust it with bootwright machine trust --context "+contextName+" --machines "+selected.name+
+			"re-trust it with bootwright machine trust --context "+contextName+" --name "+selected.name+
 				" --replace "+selected.name)
 	}
 	return record.HostKey(), nil
@@ -122,7 +122,7 @@ func recordedHostKey(record trust.Record, selected target, contextName string) (
 // refuses before anything is asked.
 func (s Service) firstUse(ctx context.Context, contextName string, selected target,
 	records trust.Store, previous []byte, machines declaredTrust) (trust.HostKey, error) {
-	remedy := "record it with bootwright machine trust --context " + contextName + " --machines " + selected.name
+	remedy := "record it with bootwright machine trust --context " + contextName + " --name " + selected.name
 	interactive, err := s.interactive()
 	if err != nil || !interactive {
 		return trust.HostKey{}, failure("trust.identity",

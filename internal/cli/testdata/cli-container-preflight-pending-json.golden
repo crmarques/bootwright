@@ -26,7 +26,8 @@
     {
       "severity": "error",
       "code": "preflight.unknown",
-      "message": "container-cluster readiness is not proved"
+      "message": "container-cluster readiness is not proved",
+      "remediation": "resolve the unknown and pending checks and repeat the preflight"
     }
   ],
   "logs": []

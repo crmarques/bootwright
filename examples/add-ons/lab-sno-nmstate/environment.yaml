@@ -1,7 +1,7 @@
 apiVersion: bootwright.io/v1alpha1
 kind: Environment
 metadata:
-  name: lab-sno
+  name: lab-sno-nmstate
 
 spec:
   domains:

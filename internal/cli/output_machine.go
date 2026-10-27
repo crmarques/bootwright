@@ -47,15 +47,15 @@ func presentablePower(reading string) bool {
 	return reading == "" || slices.Contains([]string{machine.PowerOn, machine.PowerOff, machine.PowerUnknown}, reading)
 }
 
-func writeMachineList(out io.Writer, command string, result *inventory.ListResult, silent, jsonMode bool) error {
+func writeMachineList(out io.Writer, command string, result *inventory.ListResult, short, jsonMode bool) error {
 	if jsonMode {
 		return writeEnvelope(out, commandEnvelope{
 			SchemaVersion: "v1alpha1", Command: escapeDisplayLine(command), OK: true, ExitCode: 0,
 			Result: displayMachineList(result), Diagnostics: []diagnostic{}, Logs: []string{},
 		})
 	}
-	if silent {
-		// A silent invocation is read by another program, so it carries the
+	if short {
+		// A short invocation is read by another program, so it carries the
 		// names alone: no status, no layout and no surrounding prose. An empty
 		// selection writes nothing at all rather than one empty line.
 		names := displayNames(inventory.Names(result.Machines))

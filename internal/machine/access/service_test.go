@@ -587,7 +587,7 @@ func TestAFirstUseThatWouldPinTwoKeysRefusesBeforeAsking(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 	if reported := diagnostics.Of(err)[0]; !strings.Contains(reported.Message, "[192.0.2.10]:2222") ||
-		reported.Remediation != "verify the new fingerprint out of band, then re-trust secured with bootwright machine trust --context lab --machines secured --replace secured" {
+		reported.Remediation != "verify the new fingerprint out of band, then re-trust secured with bootwright machine trust --context lab --name secured --replace secured" {
 		t.Fatalf("refusal = %+v", reported)
 	}
 	if len(h.prompt.asked) != 0 || len(h.trust.written) != 0 || len(h.client.sessions) != 0 {
@@ -651,10 +651,10 @@ func TestEveryHostKeyRemedyNamesTheContext(t *testing.T) {
 		{"unknown name", "absent", nil, "bootwright machine list --context lab"},
 		{"recorded endpoint mismatch", "host", func(h *harness) {
 			h.trust.data = recorded(t, "host", "192.0.2.10", 22, publicKey)
-		}, "bootwright machine trust --context lab --machines host --replace host"},
+		}, "bootwright machine trust --context lab --name host --replace host"},
 		{"non-interactive first use", "host", func(h *harness) {
 			h.service.options.Terminal = func() (bool, error) { return false, nil }
-		}, "bootwright machine trust --context lab --machines host"},
+		}, "bootwright machine trust --context lab --name host"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			h := newHarness(t, nil)

@@ -295,6 +295,9 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 	options.ApplyAdmission = fipsApplyAdmission(controller.Host, libvirtCapacityAdmission(deps.Capacity))
 	options.ListenerAdmission = firewallApplyAdmission(controller.Firewall)
 	options.PlanInspection = fipsPlanInspection(controller.Host, firewallPlanInspection(controller.Firewall))
+	if binder != nil {
+		options.Readiness = statusReadiness(binder, lifecycleMedia(deps))
+	}
 	if controller.Lock != nil {
 		options.Lock = lifecycle.RuntimeLock{Digest: controller.Lock.Digest, AnsibleCore: controller.Lock.AnsibleCore}
 		if controller.Setup != nil && controller.Python != nil {

@@ -199,6 +199,7 @@ func displayDiagnosticsInOrder(values []diagnostic) []diagnostic {
 
 func escapeDiagnostics(values []diagnostic) []diagnostic {
 	for i, d := range values {
+		d = diagnostics.WithRemediation(d)
 		d.Severity = escapeDisplayLine(d.Severity)
 		d.Code = escapeDisplayLine(d.Code)
 		d.Message = escapeDisplayLine(d.Message)

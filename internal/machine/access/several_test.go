@@ -156,7 +156,7 @@ func TestARefusalForAnyMemberOpensNoSession(t *testing.T) {
 			code:    "access.unavailable", want: "Machine/secured authenticates with a password"},
 		{name: "unproved host key", names: []string{"host", "declared"},
 			adjust: func(h *harness) { h.service.options.Terminal = func() (bool, error) { return false, nil } },
-			code:   "trust.identity", want: "--machines host"},
+			code:   "trust.identity", want: "--name host"},
 		{name: "unowned installation", names: []string{"peer", "guest"},
 			adjust: func(h *harness) { h.service.options.Ownership = owner{realized: false} },
 			code:   "access.target", want: "Machine/guest"},

@@ -92,7 +92,7 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		}
 	case "machine list":
 		if validMachineList(result.machines) {
-			return true, writeMachineList(out, path, result.machines, boolValue(command.Flags(), "silent"), selectedJSON(command))
+			return true, writeMachineList(out, path, result.machines, boolValue(command.Flags(), "short"), selectedJSON(command))
 		}
 	case "machine trust":
 		if validTrustReport(result.trust) {
@@ -164,7 +164,9 @@ func (r *Runner) writeLifecycleInspection(ctx context.Context, command *cobra.Co
 	case path == "status" && result.lifecycleStatus != nil:
 		return true, writeLifecycleStatus(out, result.lifecycleStatus, selectedJSON(command))
 	case path == "diff" && result.lifecycleDiff != nil:
-		return true, writeDiff(ctx, out, result.lifecycleDiff, selectedJSON(command), r.config.EncodeEffectiveYAML, r.config.EncodeEffectiveJSON)
+		status, err := writeDiffStatus(ctx, out, result.lifecycleDiff, selectedJSON(command), boolValue(command.Flags(), "exit-code"), r.config.EncodeEffectiveYAML, r.config.EncodeEffectiveJSON)
+		r.resultStatus = status
+		return true, err
 	}
 	return false, nil
 }

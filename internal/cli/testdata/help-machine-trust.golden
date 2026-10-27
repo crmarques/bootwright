@@ -9,12 +9,12 @@
     bootwright machine trust [flags]
 
   Command flags
-      --dry-run   Limit work to the command's dry-run boundary
-      --expect    Name comma-separated verified fingerprints as <machine>=SHA256:<fingerprint>
-      --machines  Select comma-separated machine names (default: all)
-      --replace   Select comma-separated replacements, each optionally
-                  <machine>=SHA256:<fingerprint> (default: none)
-      --yes       Confirm the command's ordinary confirmation
+      --dry-run  Limit work to the command's dry-run boundary
+      --expect   Name comma-separated verified fingerprints as <machine>=SHA256:<fingerprint>
+      --name     Select comma-separated machine names (default: all)
+      --replace  Select comma-separated replacements, each optionally
+                 <machine>=SHA256:<fingerprint> (default: none)
+      --yes      Confirm the command's ordinary confirmation
 
   Common flags
       --ascii       Use ASCII status markers

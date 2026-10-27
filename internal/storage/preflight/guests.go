@@ -53,7 +53,7 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 			if untrusted.Fingerprint != "" {
 				reason += "; observed " + untrusted.Fingerprint
 			}
-			return []Check{{ID: "host.trust", Target: host.Name(), Status: capacity.Unknown, Reason: reason, Next: "run bootwright machine trust --context " + contextName + " --machines " + host.Name()}}, nil
+			return []Check{{ID: "host.trust", Target: host.Name(), Status: capacity.Unknown, Reason: reason, Next: "run bootwright machine trust --context " + contextName + " --name " + host.Name()}}, nil
 		}
 		if probe.id == "host.privilege" && err == nil && strings.TrimSpace(string(data)) != "0" {
 			clear(data)

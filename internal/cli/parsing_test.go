@@ -110,7 +110,7 @@ func FuzzRawBounds(f *testing.F) {
 }
 
 func FuzzInvocation(f *testing.F) {
-	for _, args := range [][]string{{"machine", "list", "--silent", "--output", "json"}, {"cluster", "oc", "--name", "demo", "--", "--help"}, {"help", "render"}, {"__bootwright_complete", "cluster", ""}, {"context", "init", "--name=", "--help"}} {
+	for _, args := range [][]string{{"machine", "list", "--short", "--output", "json"}, {"cluster", "oc", "--name", "demo", "--", "--help"}, {"help", "render"}, {"__bootwright_complete", "cluster", ""}, {"context", "init", "--name=", "--help"}} {
 		f.Add(strings.Join(args, "\x00"))
 	}
 	f.Fuzz(func(t *testing.T, encoded string) {

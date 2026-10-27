@@ -64,10 +64,9 @@ Selectors and flags that play one role share one spelling. `--name <list>`
 selects instances of the command's own noun, a plural `--<noun>s <list>` filters
 by a related noun, and `--short` is the one flag that prints names only.
 
-Not yet met: `machine trust` still selects with `--machines` and `machine list`
-prints names only with `--silent`; they take `--name` and `--short`, with no
-alias, and `machine trust --name` keeps the empty and comma-only rules of
-`--machines`; tracked as [B825](../milestones/backlog.md#b825).
+`TestCatalogFlagSpellingsFollowTheSelectorRules` holds the catalog to the three
+rules: no command has a plural flag of its own noun, no flag but `--short`
+prints names only, and a plural flag names a noun other than its command's.
 
 ### Setup commands
 
@@ -112,8 +111,8 @@ The three `media` commands follow the host-wide
 | `bootwright preflight add-ons` | `--clusters <list>` default all OpenShiftClusters | add-on prerequisite checks | bounded observation |
 | `bootwright preflight all` | `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | all controller, infrastructure, cluster, storage, and add-on checks | observe unless `--dry-run` |
 | `bootwright plan` | `--stage <list>` default all stages; `--until <cluster>.<package>` | next legal full-context plan or exact continuation point, with the steps each block waits for, how wide the plan is and how many blocks this build starts at a time, and the blocks a stage or `--until` selection would start | none |
-| `bootwright status` | none | controller setup readiness, lifecycle state, and next safe commands; it checks neither Secret material nor media, which `secret check` and `media list` report | read local state |
-| `bootwright diff` | `--observe` false | each object's desired state beside what the context's apply realized, from its records or, with `--observe`, read live, as a [comparison](../cli.md#desired-and-realized-state-comparison) | read local state; with `--observe`, a bounded read-only observation of each block the context's apply realized, on the host that block froze, after the store-internal [cache-only rebuild](../controller.md#the-controller-runtime) of this build's runtime when its directory is missing |
+| `bootwright status` | none | controller setup readiness, lifecycle state, and next safe commands; beside no operation it also names each declared Secret whose material is missing or stale and each named installer image the media store lacks, with the remedy command ahead of `plan`, from keyring metadata and media records alone; it checks neither Secret material nor image bytes, which `secret check` and `media list --checksums` report | read local state, keyring metadata and media records under shared locks |
+| `bootwright diff` | `--observe` false; `--exit-code` false | each object's desired state beside what the context's apply realized, from its records or, with `--observe`, read live, as a [comparison](../cli.md#desired-and-realized-state-comparison) | read local state; with `--observe`, a bounded read-only observation of each block the context's apply realized, on the host that block froze, after the store-internal [cache-only rebuild](../controller.md#the-controller-runtime) of this build's runtime when its directory is missing |
 | `bootwright render` | `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--clusters <list>` default all; `--sensitive` false | whole external-tool artifact manifest, or render help when neither path flag is supplied | local artifact writes only |
 | `bootwright render effective` | `--origins` false | normalized effective desired state and object counts; with `--origins`, the [origin of each effective field](../cli.md#effective-field-origins) instead of the YAML | none |
 | `bootwright render installer` | `--clusters <list>` default all OpenShiftClusters; `--sensitive` false | installer artifact manifest | local placeholder files and optional sensitive files |
@@ -130,16 +129,18 @@ contracts are intent; `render installer` is tracked as
 [B825](../milestones/backlog.md#b825). `render effective`, `preflight
 controller`, `preflight container-cluster` and `preflight storage-cluster` are
 available.
+`TestUnavailableCommandsMatchTheStubWiring` holds this list to the services
+`cmd/bootwright/wiring_stubs.go` binds.
 
 ### Resource, access, and general commands
 
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
-| `bootwright machine list` | `--clusters <list>` default all; `--power-status` false; `--silent` false | Machines with their declared contact and addresses and the evidence-backed lifecycle position each reached, their management-controller-reported power with `--power-status`, or sorted names with `--silent` | read local state; with `--power-status`, read each machine's power through its management controller |
+| `bootwright machine list` | `--clusters <list>` default all; `--power-status` false; `--short` false | Machines with their declared contact and addresses and the evidence-backed lifecycle position each reached, their management-controller-reported power with `--power-status`, or sorted names with `--short` | read local state; with `--power-status`, read each machine's power through its management controller |
 | `bootwright machine info` | `--name <list>` default all; an unknown name refuses | selected machine placement, contact, addresses, and recorded lifecycle evidence | read local inventory only; no host or power contact |
 | `bootwright machine rsh` | required `--name <machine>` | an interactive SSH session on the exact Machine as its resolved identity; the client's exit status is the result | read state, open the session's credential for its duration, read or record host trust, run one pinned SSH client |
 | `bootwright machine exec` | required `--name <list>` and `<command>...` | the exact argument vector runs on the Machine, or on every listed Machine concurrently, at most the lifecycle bound at a time, with [each line prefixed by its Machine](../cli.md#machine-ssh-sessions); the remote command's exit status is the result, the highest of them for several | same |
-| `bootwright machine trust` | `--machines <list>` default all; `--replace <list>` default none, each member `<machine>` or `<machine>=SHA256:<fingerprint>`; `--expect <machine>=SHA256:<fingerprint>[,...]` default none; `--dry-run` false; `--yes` false | exact host-key trust plan, and the recorded result unless dry-run | bounded SSH host-key observation of the selected Machines; context trust-store write unless dry-run |
+| `bootwright machine trust` | `--name <list>` default all; `--replace <list>` default none, each member `<machine>` or `<machine>=SHA256:<fingerprint>`; `--expect <machine>=SHA256:<fingerprint>[,...]` default none; `--dry-run` false; `--yes` false | exact host-key trust plan, and the recorded result unless dry-run | bounded SSH host-key observation of the selected Machines; context trust-store write unless dry-run |
 | `bootwright machine start` | required `--name <list>` | the power state each Machine's management controller proved once the operation settled | bounded power operation through that management controller, one concurrent [batch](../cli.md#machine-power-operations) for several Machines |
 | `bootwright machine stop` | required `--name <list>`; `--force` false; `--yes` false | same, after the operating system is asked to shut down | same |
 | `bootwright machine restart` | required `--name <list>`; `--force` false; `--yes` false | same, after a proved stop and a proved start | same |
@@ -428,11 +429,11 @@ and requires `--output-dir`. A non-empty `--context` or
 `--sensitive=true` conflicts with `--input-dir`. Context-backed whole render
 requires `--output-dir` and `--sensitive`.
 
-`machine list --silent=true` emits only sorted names as text and conflicts
+`machine list --short=true` emits only sorted names as text and conflicts
 with resolved JSON or YAML output and with `--power-status`, because a reading it
 could never print would contact every management controller for nothing. Each
 conflict is `cli.usage` with exit `2` and the normal selected structured failure envelope;
-`--silent=false` permits both. These relationships use final scalar values and
+`--short=false` permits both. These relationships use final scalar values and
 follow explicit-help precedence.
 
 `machine start`, `machine stop` and `machine restart` each resolve every exact

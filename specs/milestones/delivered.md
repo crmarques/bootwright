@@ -8850,6 +8850,43 @@ the example identity and JSON-schema equivalence tests, and the refusal-table,
 stage-token and retired-kind continuation tests named in the delivering commit,
 each proved by a seeded mismatch; the commit records the gates.
 
+### X172 — Audit lane M: CLI and examples
+
+**Items:** B833 and B842 (2026-10-26 spec audit batch L11 and D183's answer
+to Q108), and B823 (batch L1), which closes with no edit because Q104 (b)
+keeps the State reconciliation name.
+**Kind:** product. **Owners:** CLI, Desired state and State reconciliation.
+Delivered on 2026-10-27 as lane M of the
+[audit remediation](backlog.md#lane-order-and-progress) under D182, with
+D183's answers to Q104, Q108 and Q109; the lane also partly delivered
+[B825](backlog.md#b825).
+
+`diff`'s Input line no longer promises what apply does and names `status` for
+the next step; an opt-in `diff --exit-code` exits 3 when any object differs or
+is unknown. Every error diagnostic but `cli.usage` reaches the operator with a
+remediation, from its emitter or the code's registered default. `machine trust
+--machines` is `--name` and `machine list --silent` is `--short`, with no
+alias, and a catalog test holds the selector spelling rules. A parity test
+derives every `status` next step from the verbs' own decisions, and a
+docs-check ties the unavailable-command list to the stub wiring. Beside no
+operation, `status` reports a `readiness` member: declared Secrets whose
+stored material is missing or stale and installer images the media store does
+not hold, each with its `secret` or `media add` remedy ahead of the plan step.
+
+The examples stop authoring values normalization injects (the pull secret and
+node SSH key references), say where a placement policy only creates its CRUSH
+rule, use distinct Environment names, and gain
+`machines/lab-rhel-external-services`, a lab-rhel variant with external DNS,
+NTP and proxy.
+
+**Guard tests:** the diff goldens, `TestEveryErrorCodeHasADefaultRemediation`,
+`TestEveryErrorDiagnosticIsWrittenWithARemediation`,
+`TestCatalogFlagSpellingsFollowTheSelectorRules`,
+`TestStatusStepsAreExactlyWhatTheVerbsDecisionsDerive`,
+`TestUnavailableCommandsMatchTheStubWiring`,
+`TestExampleEnvironmentNamesAreDistinct` and the status readiness tests, each
+proved by a seeded mismatch; the delivering commit records the gates.
+
 ## M3 independent in-tree completion
 
 The owner's 2026-10-23 request (D181) delivers the independent implementation

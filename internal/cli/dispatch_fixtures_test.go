@@ -350,7 +350,7 @@ func dispatchFlags() *pflag.FlagSet {
 	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	for name, value := range map[string]string{
 		"context": "example", "name": "demo", "client": "vm-disks", "ssh-id-file": "key.pem",
-		"ssh-user": "operator", "clusters": "first,second", "machines": "node-a,node-b",
+		"ssh-user": "operator", "clusters": "first,second",
 		"replace": "node-b", "expect": "", "object-user": "", "node": "node-a", "version": "", "part": "private-key",
 		"from-file": "", "from-url": "https://example.invalid/image.iso", "from-url-file": "",
 		"sha256":     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
@@ -363,7 +363,7 @@ func dispatchFlags() *pflag.FlagSet {
 	}
 	for _, name := range []string{
 		"yes", "purge", "allow-orphans", "short", "renew", "checksums", "dry-run",
-		"trust-on-first-use", "sensitive", "silent", "secrets", "power-status",
+		"trust-on-first-use", "sensitive", "secrets", "power-status",
 		"ssh-ask-sudo-password", "ssh-user-for-provisioned", "observe", "download-only", "origins",
 	} {
 		flags.Bool(name, true, "")

@@ -32,10 +32,8 @@ spec:
           serverRef: lab-artifacts
           endpointRef: ip-https
 
-    pullSecretRef: openshift-pull-secret
-
-    nodeSSH:
-      keyPairRef: features-cluster-admin-ssh-key
+    # pullSecretRef and nodeSSH take their conventional values, the Secrets
+    # openshift-pull-secret and features-cluster-admin-ssh-key.
 
     ntp:
       - serverRef: lab-ntp

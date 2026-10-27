@@ -20,7 +20,8 @@
         "kind": "Environment",
         "name": "lab-rhel"
       },
-      "field": "$.spec.domains.base"
+      "field": "$.spec.domains.base",
+      "remediation": "add base (string)"
     },
     {
       "severity": "error",
@@ -37,7 +38,8 @@
         "kind": "Machine",
         "name": "rhel-01"
       },
-      "field": "$.spec.network.adresses"
+      "field": "$.spec.network.adresses",
+      "remediation": "rename the field to addresses"
     }
   ],
   "logs": []

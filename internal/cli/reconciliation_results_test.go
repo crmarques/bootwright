@@ -471,7 +471,7 @@ func TestFailedOperationKeepsItsResultLogAndReceipt(t *testing.T) {
 			if !strings.HasSuffix(rendered, "next: continue-"+path+"\n") {
 				t.Fatalf("result does not end with its receipt: %q", rendered)
 			}
-			if errOut.String() != "  error  lifecycle.state\n    the operation did not complete\n" {
+			if errOut.String() != "  error  lifecycle.state\n    the operation did not complete\n    Next: run bootwright status to see the records and the next step\n" {
 				t.Fatalf("stderr = %q", errOut.String())
 			}
 		})
@@ -486,7 +486,7 @@ func TestRefusedOperationPresentsOnlyItsDiagnostic(t *testing.T) {
 	if code != 1 || out.String() != "" {
 		t.Fatalf("refusal code=%d stdout=%q", code, out.String())
 	}
-	if errOut.String() != "  error  lifecycle.stage\n    no block carries the selected stage\n" {
+	if errOut.String() != "  error  lifecycle.stage\n    no block carries the selected stage\n    Next: select a stage that has a startable block\n" {
 		t.Fatalf("stderr = %q", errOut.String())
 	}
 }
@@ -930,7 +930,7 @@ func TestLifecyclePlanPresenterWritesBeforeConfirmationAndStopsOnFailure(t *test
 			code := New(Config{Out: &stdout, ErrOut: &stderr, Services: dispatchSpies(record)}).Run(context.Background(), []string{"apply", "--yes"})
 			wantErr := ""
 			if presenter == nil {
-				wantErr = "  error  runtime.internal\n    lifecycle plan presentation is not configured\n"
+				wantErr = "  error  runtime.internal\n    lifecycle plan presentation is not configured\n    Next: repeat the command; a repeated failure is a Bootwright defect to report\n"
 			}
 			if code != 1 || stdout.Len() != 0 || stderr.String() != wantErr {
 				t.Fatalf("exit %d, stdout %q, stderr %q, want stderr %q", code, stdout.String(), stderr.String(), wantErr)

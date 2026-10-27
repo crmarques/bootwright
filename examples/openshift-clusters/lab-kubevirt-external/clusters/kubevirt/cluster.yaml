@@ -32,10 +32,8 @@ spec:
         source:
           type: external
 
-    pullSecretRef: openshift-pull-secret
-
-    nodeSSH:
-      keyPairRef: kubevirt-cluster-admin-ssh-key
+    # pullSecretRef and nodeSSH take their conventional values, the Secrets
+    # openshift-pull-secret and kubevirt-cluster-admin-ssh-key.
 
     ntp:
       - serverRef: lab-ntp

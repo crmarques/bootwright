@@ -180,7 +180,7 @@ func TestDiffSaysNothingIsRealizedWhenTheContextHoldsNoOperation(t *testing.T) {
 	text := writeDiffText(t, result)
 	for _, want := range []string{
 		"Against:  nothing; this context holds no operation, so nothing is realized\n",
-		"Input:    not applied yet; bootwright apply --context lab realizes it\n",
+		"Input:    not applied yet; bootwright status --context lab names the next step\n",
 		"Plan:     no apply froze a plan to compare with\n",
 		"No differences: 0 objects compared.\n",
 	} {
@@ -225,5 +225,82 @@ func TestDiffShowsAPresentSideWithoutADocumentAsUnknown(t *testing.T) {
 	}
 	if !strings.Contains(text, "# the real side holds no document to show\n") || strings.Contains(text, "/dev/null") {
 		t.Fatalf("a present side with no document was shown as a hunk or without a reason:\n%s", text)
+	}
+}
+
+func TestDiffInputNeverNamesAnApplyAsTheNextStep(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(*lifecycle.DiffResult)
+		want   string
+	}{
+		{"not applied", func(r *lifecycle.DiffResult) { r.Input, r.Operation = "none", lifecycle.DiffOperation{} }, "Input:    not applied yet; bootwright status --context lab names the next step\n"},
+		{"unchanged done", func(r *lifecycle.DiffResult) {}, "Input:    unchanged since op-3f9a0c12; bootwright status --context lab names the next step\n"},
+		{"unchanged running", func(r *lifecycle.DiffResult) { r.Operation.State = "running" }, "Input:    unchanged since op-3f9a0c12; bootwright status --context lab names the next step\n"},
+		{"destroy in progress", func(r *lifecycle.DiffResult) { r.Operation.Verb = "destroy" }, "Input:    unchanged since op-3f9a0c12, which the removal in progress takes back; bootwright status --context lab names the next step\n"},
+		{"changed", func(r *lifecycle.DiffResult) { r.Input = "changed" }, "Input:    changed since op-3f9a0c12; bootwright apply refuses it until bootwright destroy --context lab takes back what that apply owns\n"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result := diffNone()
+			test.mutate(result)
+			if text := writeDiffText(t, result); !strings.Contains(text, test.want) {
+				t.Fatalf("Input line differs: want %q in %q", test.want, text)
+			}
+		})
+	}
+}
+
+func TestDiffExitCodeExitsThreeOnlyOnADifferingOrUnknownObject(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		result func() *lifecycle.DiffResult
+		args   []string
+		want   int
+	}{
+		{"differences without the flag", diffRecorded, []string{"diff"}, 0},
+		{"differences with the flag", diffRecorded, []string{"diff", "--exit-code"}, 3},
+		{"an unknown object with the flag", diffUnknown, []string{"diff", "--exit-code"}, 3},
+		{"no difference with the flag", diffNone, []string{"diff", "--exit-code"}, 0},
+		{"differences in JSON with the flag", diffRecorded, []string{"diff", "--exit-code", "--output", "json"}, 3},
+		{"differences in JSON without the flag", diffRecorded, []string{"diff", "--output", "json"}, 0},
+		{"no difference in JSON with the flag", diffNone, []string{"diff", "--exit-code", "--output", "json"}, 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			record := &dispatchRecord{}
+			record.result.lifecycleDiff = test.result()
+			var out, errOut bytes.Buffer
+			code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record), EncodeEffectiveYAML: stateencoding.YAML, EncodeEffectiveJSON: stateencoding.JSON}).Run(context.Background(), test.args)
+			if code != test.want || errOut.Len() != 0 || out.Len() == 0 {
+				t.Fatalf("exit = %d, want %d; stdout %d bytes, stderr %q", code, test.want, out.Len(), errOut.String())
+			}
+			if !slices.Contains(test.args, "json") {
+				return
+			}
+			var envelope struct {
+				OK          bool
+				ExitCode    int
+				Result      map[string]any
+				Diagnostics []diagnostic
+			}
+			if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
+				t.Fatal(err)
+			}
+			if envelope.ExitCode != test.want || envelope.OK != (test.want == 0) || envelope.Result == nil || len(envelope.Diagnostics) != 0 {
+				t.Fatalf("envelope ok=%v exitCode=%d result=%v diagnostics=%v", envelope.OK, envelope.ExitCode, envelope.Result != nil, envelope.Diagnostics)
+			}
+		})
+	}
+}
+
+func TestDiffExitCodeLeavesTheComparisonUnchanged(t *testing.T) {
+	run := func(args ...string) string {
+		record := &dispatchRecord{}
+		record.result.lifecycleDiff = diffMixed()
+		var out, errOut bytes.Buffer
+		New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record), EncodeEffectiveYAML: stateencoding.YAML, EncodeEffectiveJSON: stateencoding.JSON}).Run(context.Background(), args)
+		return out.String()
+	}
+	if with, without := run("diff", "--exit-code"), run("diff"); with != without {
+		t.Fatalf("--exit-code changed the text comparison:\n%s\nversus\n%s", with, without)
 	}
 }

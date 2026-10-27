@@ -49,7 +49,7 @@ func (c *Confirmation) ConfirmHostKey(ctx context.Context, contextName, name, ad
 	refuse := func(reason string) error {
 		return diagnostics.NewFailureWithRemediation("trust.identity",
 			"host key confirmation "+reason, "",
-			"record it with bootwright machine trust --context "+contextName+" --machines "+name)
+			"record it with bootwright machine trust --context "+contextName+" --name "+name)
 	}
 	if c == nil || c.read == nil || c.out == nil || c.isTerminal == nil {
 		return refuse("is not configured")
@@ -174,7 +174,7 @@ func (c *Confirmation) remedy(asked confirmation) string {
 // carries the flag.
 func (c *Confirmation) confirm(ctx context.Context, asked confirmation) error {
 	refuse := func(reason string) error {
-		reported := diagnostics.Diagnostic{Severity: "error", Code: asked.code, Message: asked.label + " confirmation " + reason, Object: asked.object}
+		reported := diagnostics.Diagnostic{Severity: "error", Code: asked.code, Message: asked.label + " confirmation " + reason, Object: asked.object, Remediation: "repeat the command to be asked again"}
 		if reason != canceled {
 			reported.Remediation = c.remedy(asked)
 		}

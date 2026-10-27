@@ -27,6 +27,7 @@ const (
 	sidePresent       = "present"
 	devNull           = "/dev/null"
 	diffContextLines  = 3
+	diffDiffersStatus = 3
 )
 
 type diffResult struct {
@@ -117,27 +118,40 @@ type diffRow struct {
 type catalogEncoder func(context.Context, api.Catalog) ([]byte, error)
 
 func writeDiff(ctx context.Context, out io.Writer, result *lifecycle.DiffResult, jsonMode bool, yamlEncode, jsonEncode catalogEncoder) error {
+	_, err := writeDiffStatus(ctx, out, result, jsonMode, false, yamlEncode, jsonEncode)
+	return err
+}
+
+func writeDiffStatus(ctx context.Context, out io.Writer, result *lifecycle.DiffResult, jsonMode, exitCode bool, yamlEncode, jsonEncode catalogEncoder) (int, error) {
 	if err := ctx.Err(); err != nil {
-		return encodingFailure(ctx, err)
+		return 0, encodingFailure(ctx, err)
 	}
 	if yamlEncode == nil || (jsonMode && jsonEncode == nil) {
-		return &resultFailure{"runtime.encode", "effective state encoder is not configured", 1}
+		return 0, &resultFailure{"runtime.encode", "effective state encoder is not configured", 1}
 	}
 	rows, err := diffRows(ctx, result, jsonMode, yamlEncode, jsonEncode)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if err := ctx.Err(); err != nil {
-		return encodingFailure(ctx, err)
+		return 0, encodingFailure(ctx, err)
+	}
+	status := 0
+	if exitCode && diffDiffers(diffSummaryOf(rows, result.Observed)) {
+		status = diffDiffersStatus
 	}
 	if jsonMode {
-		return writeEnvelope(out, commandEnvelope{
-			SchemaVersion: "v1alpha1", Command: "diff", OK: true, ExitCode: 0,
+		return status, writeEnvelope(out, commandEnvelope{
+			SchemaVersion: "v1alpha1", Command: "diff", OK: status == 0, ExitCode: status,
 			Result: displayDiff(result, rows), Diagnostics: []diagnostic{}, Logs: []string{},
 		})
 	}
 	_, err = io.WriteString(out, diffText(result, rows))
-	return err
+	return status, err
+}
+
+func diffDiffers(summary diffSummary) bool {
+	return summary.Changed+summary.Added+summary.Removed+summary.Unknown != 0
 }
 
 func diffRows(ctx context.Context, result *lifecycle.DiffResult, jsonMode bool, yamlEncode, jsonEncode catalogEncoder) ([]diffRow, error) {
@@ -371,17 +385,16 @@ func diffAgainst(result *lifecycle.DiffResult) string {
 
 func diffInput(result *lifecycle.DiffResult) string {
 	name, operation := result.Context.Name, result.Operation
+	next := "; bootwright status --context " + name + " names the next step"
 	switch {
 	case result.Input == "none":
-		return "not applied yet; bootwright apply --context " + name + " realizes it"
+		return "not applied yet" + next
 	case result.Input == "changed":
 		return "changed since " + operation.Apply + "; bootwright apply refuses it until bootwright destroy --context " + name + " takes back what that apply owns"
 	case operation.Verb == "destroy":
-		return "unchanged since " + operation.Apply + ", which bootwright destroy --context " + name + " takes back"
-	case operation.State == "done":
-		return "unchanged since " + operation.Apply + "; bootwright apply settles over it and repairs nothing shown here"
+		return "unchanged since " + operation.Apply + ", which the removal in progress takes back" + next
 	}
-	return "unchanged since " + operation.Apply + ", which bootwright apply --context " + name + " continues"
+	return "unchanged since " + operation.Apply + next
 }
 
 func diffPlanLine(plan lifecycle.DiffPlan) string {
@@ -426,7 +439,7 @@ func diffObjectLines(row diffRow) []string {
 
 func diffSummaryLine(result *lifecycle.DiffResult, summary diffSummary, objects int) string {
 	differing := summary.Changed + summary.Added + summary.Removed + summary.Unknown
-	if differing == 0 {
+	if !diffDiffers(summary) {
 		line := "No differences: " + strconv.Itoa(objects) + " " + plural(objects, "object", "objects") + " compared"
 		if result.Observed {
 			line += ", " + strconv.Itoa(summary.Applied) + " as applied"

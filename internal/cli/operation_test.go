@@ -92,7 +92,7 @@ func assertInterruptOutput(t *testing.T, code int, out, errOut string, jsonMode 
 		if err := json.Unmarshal([]byte(out), &envelope); err != nil || envelope.OK || envelope.ExitCode != 130 || envelope.Result != nil || len(envelope.Diagnostics) != 1 || envelope.Diagnostics[0].Code != "runtime.interrupted" || len(envelope.Logs) != 0 || errOut != "" || strings.Count(out, "\n") != 1 {
 			t.Fatalf("interrupt JSON: %s stderr=%q error=%v", out, errOut, err)
 		}
-	} else if out != "" || errOut != "  error  runtime.interrupted\n    operation interrupted\n" {
+	} else if out != "" || errOut != "  error  runtime.interrupted\n    operation interrupted\n    Next: repeat the command\n" {
 		t.Fatalf("interrupt text: stdout=%q stderr=%q", out, errOut)
 	}
 }

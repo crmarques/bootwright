@@ -27,7 +27,7 @@ func TestAnInteractiveProcessRepeatsItsInvocationWhenItsConfirmationIsRefused(t 
 			args   []string
 		}{
 			{"apply", []string{"apply", "--stage", "infrastructure-services", "--authorize", "data-loss"}},
-			{"trust", []string{"machine", "trust", "--machines", "rhel-01", "--replace", "rhel-01"}},
+			{"trust", []string{"machine", "trust", "--name", "rhel-01", "--replace", "rhel-01"}},
 		} {
 			process, _ := interactiveProcess(cli.ClassifyInvocation(invocation.args), invocation.args, io.Discard, io.Discard, controller.Route{})
 			for _, reported := range diagnostics.Of(process.Confirmer.Confirm(context.Background(), invocation.action, "lab")) {
@@ -40,7 +40,7 @@ func TestAnInteractiveProcessRepeatsItsInvocationWhenItsConfirmationIsRefused(t 
 	helper.Env = append(os.Environ(), "BOOTWRIGHT_CONFIRMATION_HELPER=1")
 	output, err := helper.Output()
 	want := "review the plan, then repeat bootwright apply --context lab --authorize data-loss=<digest bootwright plan prints> --stage infrastructure-services with --yes\n" +
-		"review the plan, then repeat bootwright machine trust --context lab --machines rhel-01 --replace rhel-01 with --yes\n"
+		"review the plan, then repeat bootwright machine trust --context lab --name rhel-01 --replace rhel-01 with --yes\n"
 	if err != nil || string(output) != want {
 		t.Fatalf("the refused confirmations named %q (%v), want %q", strings.TrimSpace(string(output)), err, want)
 	}

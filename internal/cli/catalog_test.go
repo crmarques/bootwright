@@ -18,8 +18,8 @@ func TestPublicCatalog(t *testing.T) {
 		"secret encryption init": "", "secret encryption status": "", "secret encryption rotate": "yes",
 		"media add": "from-file from-url from-url-file name sha256 yes", "media list": "checksums", "media delete": "name yes",
 		"validate": "file", "preflight controller": "", "preflight infra": "clusters dry-run trust-on-first-use", "preflight clusters": "clusters dry-run trust-on-first-use", "preflight container-cluster": "clusters dry-run", "preflight storage-cluster": "clusters dry-run trust-on-first-use", "preflight add-ons": "clusters", "preflight all": "dry-run trust-on-first-use",
-		"plan": "stage until", "status": "", "diff": "observe", "render": "clusters input-dir output-dir sensitive", "render effective": "origins", "render installer": "clusters sensitive", "render storage": "clusters", "apply": "authorize stage until yes", "destroy": "authorize unregistered yes",
-		"machine list": "clusters power-status silent", "machine info": "name", "machine rsh": "name", "machine exec": "name", "machine start": "name", "machine stop": "force name yes", "machine restart": "force name yes", "machine trust": "dry-run expect machines replace yes", "setup": "dest-dir download-only dry-run wheel-mirror yes", "controller rebind": "machine-id product-uuid recorded-host-retired root-uuid yes",
+		"plan": "stage until", "status": "", "diff": "exit-code observe", "render": "clusters input-dir output-dir sensitive", "render effective": "origins", "render installer": "clusters sensitive", "render storage": "clusters", "apply": "authorize stage until yes", "destroy": "authorize unregistered yes",
+		"machine list": "clusters power-status short", "machine info": "name", "machine rsh": "name", "machine exec": "name", "machine start": "name", "machine stop": "force name yes", "machine restart": "force name yes", "machine trust": "dry-run expect name replace yes", "setup": "dest-dir download-only dry-run wheel-mirror yes", "controller rebind": "machine-id product-uuid recorded-host-retired root-uuid yes",
 		"cluster list": "", "cluster info": "name object-user secrets", "cluster rsh": "name node", "cluster exec": "name node", "cluster oc": "name", "cluster kubectl": "name", "cluster kubeconfig": "name", "cluster keyring": "client name",
 		"version": "", "schema": "format", "help": "", "completion bash": "no-descriptions", "completion zsh": "no-descriptions", "completion fish": "no-descriptions", "completion powershell": "no-descriptions",
 	}
@@ -82,6 +82,33 @@ func TestPublicCatalog(t *testing.T) {
 		flag := root.PersistentFlags().Lookup(expected.name)
 		if flag == nil || flag.DefValue != expected.initial || !slices.Equal(flag.Annotations["bootwright.enum"], expected.values) {
 			t.Errorf("global --%s: %#v", expected.name, flag)
+		}
+	}
+}
+
+func TestCatalogFlagSpellingsFollowTheSelectorRules(t *testing.T) {
+	checked := 0
+	for _, spec := range commandCatalog() {
+		own := strings.Fields(spec.path)[0]
+		for _, flag := range spec.flags {
+			checked++
+			if flag.name == own+"s" {
+				t.Errorf("%s has --%s, the plural of its own noun; --name selects its own instances", spec.path, flag.name)
+			}
+			names := strings.Contains(strings.ToLower(flag.help), "only") && strings.Contains(strings.ToLower(flag.help), "name")
+			if names && flag.name != "short" {
+				t.Errorf("%s has --%s printing names only; --short is the one flag that does", spec.path, flag.name)
+			}
+		}
+	}
+	if checked < 100 {
+		t.Fatalf("read %d flags; the catalog has changed shape", checked)
+	}
+	for path, flags := range map[string][]string{"machine trust": {"name"}, "machine list": {"clusters", "short"}, "context current": {"short"}} {
+		for _, want := range flags {
+			if !slices.ContainsFunc(specFor(path).flags, func(flag flagSpec) bool { return flag.name == want }) {
+				t.Errorf("%s lacks --%s", path, want)
+			}
 		}
 	}
 }

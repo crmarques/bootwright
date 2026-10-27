@@ -155,8 +155,37 @@ func diffObserved() *lifecycle.DiffResult {
 	}
 }
 
+func diffRebuilt() *lifecycle.DiffResult {
+	result := diffNone()
+	result.Plan = lifecycle.DiffPlan{State: "differs", Changed: 1, Rebuilt: []string{"ceph-pool-rbd-data"}}
+	return result
+}
+
+func diffLostRecord() *lifecycle.DiffResult {
+	result := diffUnknown()
+	result.Operation.State = "failed"
+	result.Objects[0].Real.Reason = "its blocks read failed: ceph-client-rbd-fenced; the block record is lost"
+	return result
+}
+
+func diffPaused() *lifecycle.DiffResult {
+	result := diffNone()
+	result.Operation.State = "paused"
+	return result
+}
+
+func diffDoneWithFailedBlock() *lifecycle.DiffResult {
+	result := diffUnknown()
+	result.Operation.State = "done"
+	return result
+}
+
 func diffGoldens() []cliGolden {
 	return []cliGolden{
+		{golden: "cli-diff-build", args: "diff", record: func(r *dispatchRecord) { r.result.lifecycleDiff = diffRebuilt() }},
+		{golden: "cli-diff-lost-record", args: "diff", record: func(r *dispatchRecord) { r.result.lifecycleDiff = diffLostRecord() }},
+		{golden: "cli-diff-paused", args: "diff", record: func(r *dispatchRecord) { r.result.lifecycleDiff = diffPaused() }},
+		{golden: "cli-diff-done-failed-block", args: "diff", record: func(r *dispatchRecord) { r.result.lifecycleDiff = diffDoneWithFailedBlock() }},
 		{golden: "cli-diff", args: "diff", record: func(r *dispatchRecord) { r.result.lifecycleDiff = diffRecorded() }},
 		{golden: "cli-diff-json", args: "diff --output json", record: func(r *dispatchRecord) { r.result.lifecycleDiff = diffMixed() }},
 		{golden: "cli-diff-none", args: "diff", record: func(r *dispatchRecord) { r.result.lifecycleDiff = diffNone() }},

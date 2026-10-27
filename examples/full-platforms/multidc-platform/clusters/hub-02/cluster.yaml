@@ -56,9 +56,11 @@ spec:
 
         interfaceNetworks: []
 
+    # Equals the default; kept as an authoring reference.
     pullSecretRef: openshift-pull-secret
 
     nodeSSH:
+      # Equals the default (<cluster>-cluster-admin-ssh-key); kept as an authoring reference.
       keyPairRef: hub-multidc-02-cluster-admin-ssh-key
 
     additionalTrustBundleRefs:

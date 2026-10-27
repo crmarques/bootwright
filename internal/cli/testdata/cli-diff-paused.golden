@@ -1,0 +1,6 @@
+Context:  lab at input revision rev-1b7e55a0
+Against:  apply op-3f9a0c12 (paused) of input revision rev-1b7e55a0, as its records prove; no host was contacted
+Input:    unchanged since op-3f9a0c12; bootwright status --context lab names the next step
+Plan:     this executable plans the same blocks
+
+No differences: 1 object compared.

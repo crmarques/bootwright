@@ -22,6 +22,7 @@ spec:
   defaults:
     OpenShiftCluster:
       install:
+        # Equals the default; kept as an authoring reference.
         pullSecretRef: openshift-pull-secret
 
         proxy:

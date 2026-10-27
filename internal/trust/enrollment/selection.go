@@ -64,8 +64,8 @@ func classify(object api.Object) candidate {
 func replaceable(selection []candidate, selected, replace []string, contextName string) error {
 	for _, name := range replace {
 		if len(selected) != 0 && !slices.Contains(selected, name) {
-			return failure("cli.usage", "--replace names "+name+", which --machines does not select",
-				"add it to --machines, or drop it from --replace")
+			return failure("cli.usage", "--replace names "+name+", which --name does not select",
+				"add it to --name, or drop it from --replace")
 		}
 		index := slices.IndexFunc(selection, func(c candidate) bool { return c.name == name })
 		if index < 0 {

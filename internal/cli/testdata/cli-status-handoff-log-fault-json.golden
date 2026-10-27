@@ -24,6 +24,7 @@
       "declared": 0,
       "bindings": 0
     },
+    "readiness": [],
     "nextSteps": [
       "bootwright apply --context example"
     ],

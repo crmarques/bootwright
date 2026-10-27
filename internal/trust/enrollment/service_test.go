@@ -642,7 +642,7 @@ func TestADivergentPinRefusesBeforeTheDryRunReturns(t *testing.T) {
 		reported := diagnostics.Of(err)[0]
 		if !strings.Contains(reported.Message, "192.0.2.10") || !strings.Contains(reported.Message, "node-a") ||
 			!strings.Contains(reported.Message, "node-b") ||
-			!strings.Contains(reported.Remediation, "--context lab --machines node-b --replace node-b") {
+			!strings.Contains(reported.Remediation, "--context lab --name node-b --replace node-b") {
 			t.Fatalf("dry run %t: refusal = %+v", request.DryRun, reported)
 		}
 		if h.prompt.asked != 0 || len(h.presenter.shown) != 0 || len(h.trust.written) != 0 {
@@ -755,7 +755,7 @@ func TestEveryHostKeyRemedyNamesTheContext(t *testing.T) {
 	}{
 		{"unknown Machine", newHarness(t), EnrollRequest{Machines: []string{"absent"}}, "bootwright machine list --context lab"},
 		{"unknown replacement", newHarness(t), EnrollRequest{Replace: []string{"absent"}}, "bootwright machine list --context lab"},
-		{"changed key", changed, EnrollRequest{Machines: []string{"node-a"}}, "bootwright machine trust --context lab --machines node-a --replace node-a"},
+		{"changed key", changed, EnrollRequest{Machines: []string{"node-a"}}, "bootwright machine trust --context lab --name node-a --replace node-a"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := enroll(t, test.h, test.request)
@@ -797,9 +797,9 @@ func TestAStoredDivergentPinIsRepairedByTheMachineTrustItsRefusalNames(t *testin
 		{
 			name:    "both in use",
 			records: []trust.Record{storedRecord("node-a", "192.0.2.10", 22, otherKey), storedRecord("node-b", "192.0.2.10", 22, publicKey)},
-			remedy:  "re-trust node-a and node-b with bootwright machine trust --context lab --machines node-a,node-b",
+			remedy:  "re-trust node-a and node-b with bootwright machine trust --context lab --name node-a,node-b",
 			request: EnrollRequest{Machines: []string{"node-a", "node-b"}},
-			changed: "verify the new fingerprint out of band, then rerun bootwright machine trust --context lab --machines node-a --replace node-a",
+			changed: "verify the new fingerprint out of band, then rerun bootwright machine trust --context lab --name node-a --replace node-a",
 			repair:  EnrollRequest{Machines: []string{"node-a", "node-b"}, Replace: []string{"node-a", "node-b"}},
 			check: func(t *testing.T, h *harness, _ *Report) {
 				after, _ := trust.Decode(h.trust.data)
@@ -813,7 +813,7 @@ func TestAStoredDivergentPinIsRepairedByTheMachineTrustItsRefusalNames(t *testin
 		{
 			name:    "one in use",
 			records: []trust.Record{storedRecord("declared", "192.0.2.10", 22, otherKey), storedRecord("node-a", "192.0.2.10", 22, publicKey)},
-			remedy: "re-trust node-a with bootwright machine trust --context lab --machines node-a; " +
+			remedy: "re-trust node-a with bootwright machine trust --context lab --name node-a; " +
 				"its confirmed write removes the record of declared, which no longer uses this context's SSH trust",
 			request: EnrollRequest{Machines: []string{"node-a"}},
 			check: func(t *testing.T, h *harness, report *Report) {
@@ -835,10 +835,10 @@ func TestAStoredDivergentPinIsRepairedByTheMachineTrustItsRefusalNames(t *testin
 			name:     "one in use whose key changed",
 			records:  []trust.Record{storedRecord("declared", "192.0.2.10", 22, otherKey), storedRecord("node-a", "192.0.2.10", 22, publicKey)},
 			observed: otherKey,
-			remedy: "re-trust node-a with bootwright machine trust --context lab --machines node-a; " +
+			remedy: "re-trust node-a with bootwright machine trust --context lab --name node-a; " +
 				"its confirmed write removes the record of declared, which no longer uses this context's SSH trust",
 			request: EnrollRequest{Machines: []string{"node-a"}},
-			changed: "verify the new fingerprint out of band, then rerun bootwright machine trust --context lab --machines node-a --replace node-a",
+			changed: "verify the new fingerprint out of band, then rerun bootwright machine trust --context lab --name node-a --replace node-a",
 			repair:  EnrollRequest{Machines: []string{"node-a"}, Replace: []string{"node-a"}},
 			check: func(t *testing.T, h *harness, report *Report) {
 				after, _ := trust.Decode(h.trust.data)

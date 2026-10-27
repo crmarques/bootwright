@@ -35,6 +35,7 @@ type Options struct {
 	ApplyAdmission    ApplyAdmission
 	ListenerAdmission ListenerAdmission
 	PlanInspection    PlanInspection
+	Readiness         Readiness
 	EffectBearing     EffectBearing
 	// Concurrency bounds how many of an operation's blocks run at once. It is
 	// how much this host is asked to do at the same time, never what the plan

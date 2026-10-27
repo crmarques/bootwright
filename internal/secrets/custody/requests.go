@@ -95,6 +95,14 @@ type CheckResult struct {
 	Secrets []CheckRow          `json:"secrets"`
 }
 
+type ReadinessRequest struct{ ContextName string }
+
+type ReadinessRow struct {
+	Name   string
+	Status string
+	Remedy string
+}
+
 type ListRow struct {
 	Name           string         `json:"name"`
 	Type           string         `json:"type"`

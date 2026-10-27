@@ -175,7 +175,7 @@ func evaluate(entry candidate, observed observation, records trust.Store, replac
 			"the SSH host key for "+entry.name+" at "+trust.HostToken(entry.address, entry.port)+
 				" changed from "+previous.Fingerprint+" to "+host.Fingerprint,
 			"verify the new fingerprint out of band, then rerun bootwright machine trust --context "+contextName+
-				" --machines "+entry.name+" --replace "+entry.name)
+				" --name "+entry.name+" --replace "+entry.name)
 	}
 	host.Action = ActionReplace
 	if moved {

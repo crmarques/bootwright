@@ -207,7 +207,7 @@ func TestAFailureWithNoSettledBatchWritesDiagnosticsOnly(t *testing.T) {
 			record.result.power = tc.result
 			var out, errOut bytes.Buffer
 			code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), strings.Fields(tc.args))
-			if code != 1 || out.Len() != 0 || errOut.String() != "  error  machine.power\n    refused\n" {
+			if code != 1 || out.Len() != 0 || errOut.String() != "  error  machine.power\n    refused\n    Next: resolve the refusal the message names and repeat the power command\n" {
 				t.Fatalf("code=%d out=%q err=%q", code, out.String(), errOut.String())
 			}
 		})

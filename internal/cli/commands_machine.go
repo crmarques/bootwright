@@ -21,7 +21,7 @@ func machineCommands() []commandSpec {
 				"controller, which is the only part of this command that contacts a host.",
 			flags: []flagSpec{
 				clustersFlag(), boolFlag("power-status", "Read each machine's power state from its management controller"),
-				boolFlag("silent", "Print only sorted machine names"),
+				boolFlag("short", "Print only sorted machine names"),
 			},
 		}),
 		available(commandSpec{

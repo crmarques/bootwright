@@ -3,6 +3,7 @@ package cli
 import (
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -15,6 +16,7 @@ type statusResult struct {
 	StorageClusters []statusStorageCluster `json:"storageClusters"`
 	Shared          []statusService        `json:"shared"`
 	Secrets         statusSecrets          `json:"secrets"`
+	Readiness       []statusReadiness      `json:"readiness"`
 	NextSteps       []string               `json:"nextSteps"`
 	Lifecycle       *statusLifecycle       `json:"lifecycle"`
 	Handoff         statusHandoff          `json:"handoff"`
@@ -65,6 +67,13 @@ type statusService struct {
 	Status  string `json:"status"`
 }
 
+type statusReadiness struct {
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
+	State  string `json:"state"`
+	Remedy string `json:"remedy"`
+}
+
 type statusSecrets struct {
 	Declared int `json:"declared"`
 	Bindings int `json:"bindings"`
@@ -108,6 +117,7 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 		StorageClusters: displayStatusStorageClusters(result.StorageClusters),
 		Shared:          make([]statusService, 0, len(result.Shared)),
 		Secrets:         statusSecrets{Declared: result.Secrets.Declared, Bindings: result.Secrets.Bindings},
+		Readiness:       displayStatusReadiness(result.Readiness),
 		NextSteps:       displayLines(result.NextSteps),
 		Handoff:         statusHandoff{Ready: result.Handoff.Ready, Reasons: displayLines(result.Handoff.Reasons)},
 		Contradictions:  displayLines(result.Contradictions),
@@ -138,6 +148,17 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 			State: escapeDisplayLine(summary.State), Next: escapeDisplayLine(summary.Next),
 			AnotherBuild: summary.AnotherBuild, Blocks: blocks, Logs: displayLines(summary.Logs),
 		}
+	}
+	return out
+}
+
+func displayStatusReadiness(gaps []lifecycle.ReadinessGap) []statusReadiness {
+	out := make([]statusReadiness, 0, len(gaps))
+	for _, gap := range gaps {
+		out = append(out, statusReadiness{
+			Kind: escapeDisplayLine(gap.Kind), Name: escapeDisplayLine(gap.Name),
+			State: escapeDisplayLine(gap.State), Remedy: escapeDisplayLine(gap.Remedy),
+		})
 	}
 	return out
 }
@@ -190,6 +211,7 @@ func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMod
 		field{Label: "Declared", Value: strconv.Itoa(result.Secrets.Declared)},
 		field{Label: "Bindings", Value: strconv.Itoa(result.Secrets.Bindings)},
 	)
+	writeStatusReadiness(&text, result.Readiness)
 	if len(result.NextSteps) != 0 {
 		text.section("Next steps")
 		text.lines(result.NextSteps)
@@ -222,6 +244,18 @@ func writeStatusSetup(text *display, checks []lifecycle.SetupCheck) {
 			row = append(row, "bound by the first apply")
 		}
 		rows = append(rows, row)
+	}
+	text.rows(rows)
+}
+
+func writeStatusReadiness(text *display, gaps []lifecycle.ReadinessGap) {
+	if len(gaps) == 0 {
+		return
+	}
+	text.section("Readiness")
+	rows := make([][]string, 0, len(gaps))
+	for _, gap := range gaps {
+		rows = append(rows, []string{gap.State, strings.ToUpper(gap.Kind[:1]) + gap.Kind[1:] + "/" + gap.Name})
 	}
 	text.rows(rows)
 }

@@ -179,7 +179,7 @@ func TestTheHostKeyPromptNamesTheContext(t *testing.T) {
 		io.Discard, func() (bool, error) { return false, nil })
 	err = unattended.ConfirmHostKey(context.Background(), "lab", "rhel-01", "198.51.100.11", "ssh-ed25519", "SHA256:aaa")
 	if reported := diagnostics.Of(err); len(reported) != 1 ||
-		reported[0].Remediation != "record it with bootwright machine trust --context lab --machines rhel-01" {
+		reported[0].Remediation != "record it with bootwright machine trust --context lab --name rhel-01" {
 		t.Fatalf("refusal = %+v", reported)
 	}
 }
@@ -305,8 +305,8 @@ func TestARefusedConfirmationRepeatsTheExactInvocation(t *testing.T) {
 			args:   []string{"--context", "lab", "destroy", "--authorize", "rebind=login, data-loss"},
 			remedy: "review the plan, then repeat bootwright destroy --context lab --authorize rebind=login,data-loss=<digest bootwright plan prints> with --yes"},
 		{name: "a trust selection and replacement", action: "trust", object: "lab",
-			args:   []string{"machine", "trust", "--machines", "rhel-01", "--replace", "rhel-01", "--output", "json"},
-			remedy: "review the plan, then repeat bootwright machine trust --context lab --machines rhel-01 --output json --replace rhel-01 with --yes"},
+			args:   []string{"machine", "trust", "--name", "rhel-01", "--replace", "rhel-01", "--output", "json"},
+			remedy: "review the plan, then repeat bootwright machine trust --context lab --name rhel-01 --output json --replace rhel-01 with --yes"},
 		{name: "a setup", action: "setup", object: "this host",
 			args:   []string{"setup"},
 			remedy: "review the plan, then repeat bootwright setup with --yes"},
@@ -343,14 +343,14 @@ func TestARefusedConfirmationRepeatsTheExactInvocation(t *testing.T) {
 	}
 }
 
-// A canceled confirmation names no remedy: nothing about the command was
-// refused, and repeating it with --yes is not what the operator asked for.
-func TestACanceledConfirmationKeepsItsCodeAndNamesNoRemedy(t *testing.T) {
+// A canceled confirmation names no --yes remedy: nothing about the command
+// was refused, and repeating it with --yes is not what the operator asked for.
+func TestACanceledConfirmationKeepsItsCodeAndNamesNoYesRemedy(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	err := NewConfirmation(func(context.Context, []byte) (int, error) { return 0, errors.New("unexpected read") }, io.Discard,
 		func() (bool, error) { return true, nil }).ConfirmIn(ctx, "stop machine", "rhel-01", "lab")
-	want := []diagnostics.Diagnostic{{Severity: "error", Code: "machine.power", Message: "power confirmation was canceled"}}
+	want := []diagnostics.Diagnostic{{Severity: "error", Code: "machine.power", Message: "power confirmation was canceled", Remediation: "repeat the command to be asked again"}}
 	if reported := diagnostics.Of(err); !reflect.DeepEqual(reported, want) {
 		t.Fatalf("cancellation = %+v", reported)
 	}

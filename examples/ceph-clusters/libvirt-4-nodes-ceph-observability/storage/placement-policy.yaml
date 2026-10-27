@@ -3,6 +3,8 @@ kind: CephPlacementPolicy
 metadata:
   name: ssd-hosts
 
+# No pool in this scenario selects ssd-hosts with placementPolicyRef, so this
+# policy only creates the CRUSH rule on the cluster.
 spec:
   clusterRef: ceph-lab
   ruleName: ssd-hosts

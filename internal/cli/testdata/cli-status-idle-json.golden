@@ -40,6 +40,7 @@
       "declared": 3,
       "bindings": 0
     },
+    "readiness": [],
     "nextSteps": [
       "bootwright plan --context lab",
       "bootwright apply --context lab"

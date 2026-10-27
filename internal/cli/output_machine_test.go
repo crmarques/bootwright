@@ -89,7 +89,7 @@ func TestMachineListSilentPrintsOnlyNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	if out.String() != "guest\nnode\n" {
-		t.Fatalf("silent output = %q", out.String())
+		t.Fatalf("short output = %q", out.String())
 	}
 	var empty bytes.Buffer
 	if err := writeMachineList(&empty, "machine list", &inventory.ListResult{Context: "lab"}, true, false); err != nil {

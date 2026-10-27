@@ -35,7 +35,10 @@ type Config struct {
 	CompletionPaths PathCandidates
 }
 
-type Runner struct{ config Config }
+type Runner struct {
+	config       Config
+	resultStatus int
+}
 
 type checkedWriter struct {
 	writer io.Writer
@@ -259,7 +262,7 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 		return r.failureNaming(command, path, "runtime.interrupted", "operation interrupted", 130, selectedJSON(command), logs)
 	}
 	if errors.Is(err, availability.ErrNotImplemented) {
-		return r.failure(command, path, "cli.not-implemented", "bootwright "+path+" is not implemented", refused, selectedJSON(command))
+		return r.unavailable(path, refused, selectedJSON(command))
 	}
 	if errors.Is(err, context.Canceled) {
 		return r.failureNaming(command, path, "runtime.canceled", "operation canceled", refused, selectedJSON(command), logs)
@@ -272,6 +275,7 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 		return r.writeServiceDiagnostics(command, path, result, reported, usage, logs)
 	}
 	if err == nil {
+		r.resultStatus = 0
 		handled, presentErr := r.writeResult(ctx, command, path, result)
 		var failure *resultFailure
 		if errors.As(presentErr, &failure) {
@@ -281,7 +285,7 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 			return 1
 		}
 		if handled {
-			return 0
+			return r.resultStatus
 		}
 	}
 	return r.failureNaming(command, path, "runtime.internal", "application service returned an unsupported result", refused, selectedJSON(command), logs)
@@ -336,6 +340,17 @@ func refusalStatus(path string) int {
 
 func selectedJSON(command *cobra.Command) bool {
 	return selectedStructured(command)
+}
+
+func (r *Runner) unavailable(path string, exitCode int, jsonMode bool) int {
+	d := diagnostic{Severity: "error", Code: "cli.not-implemented", Message: "bootwright " + path + " is not implemented"}
+	if cut := strings.LastIndex(path, " "); cut > 0 {
+		d.Remediation = "run bootwright help " + path[:cut] + " to see which commands this build runs"
+	}
+	if err := writeDiagnostics(r.config.Out, r.config.ErrOut, path, []diagnostic{d}, exitCode, jsonMode, nil); err != nil {
+		return 1
+	}
+	return exitCode
 }
 
 func (r *Runner) failure(command *cobra.Command, path, code, message string, exitCode int, jsonMode bool) int {

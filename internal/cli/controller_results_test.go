@@ -93,7 +93,7 @@ func TestControllerSetupReportsItsWarningsOnStandardError(t *testing.T) {
 	}
 	declined := controllerReport("planned", false)
 	declined.Warnings = []diagnostics.Diagnostic{warning}
-	if code, out, errOut := run(declined, diagnostics.NewFailure("controller.setup", "setup was declined", "")); code != 1 || errOut != want+"  error  controller.setup\n    setup was declined\n" || !strings.Contains(out, "Outcome  planned") {
+	if code, out, errOut := run(declined, diagnostics.NewFailure("controller.setup", "setup was declined", "")); code != 1 || errOut != want+"  error  controller.setup\n    setup was declined\n    Next: resolve the failed action the message names and repeat setup\n" || !strings.Contains(out, "Outcome  planned") {
 		t.Fatal(code, out, errOut)
 	}
 	misfiled := controllerReport("changed", false)
@@ -484,7 +484,7 @@ func TestTheSetupPlanCarriesItsResolutionWarningsBeforeThePrompt(t *testing.T) {
 	}
 	stopped := controllerReport("planned", false)
 	stopped.ProgressPresented, stopped.Warnings = true, []diagnostics.Diagnostic{warning}
-	if errOut := run(stopped, diagnostics.NewFailure("controller.setup", "publisher metadata is unavailable", "")); errOut != printed+"  error  controller.setup\n    publisher metadata is unavailable\n" {
+	if errOut := run(stopped, diagnostics.NewFailure("controller.setup", "publisher metadata is unavailable", "")); errOut != printed+"  error  controller.setup\n    publisher metadata is unavailable\n    Next: resolve the failed action the message names and repeat setup\n" {
 		t.Fatalf("a setup that stopped before its plan printed %q", errOut)
 	}
 }

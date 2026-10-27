@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -700,6 +701,51 @@ func TestBindingsListsIdentitiesWithoutMaterial(t *testing.T) {
 	access.session = nil
 	if listed, err := service.Bindings(context.Background(), BindingsRequest{ContextName: "fixture"}); err != nil || len(listed) != 0 {
 		t.Fatalf("an uninitialized store lists %v (%v)", listed, err)
+	}
+}
+
+func TestReadinessNamesMissingAndStaleSecretsFromTheListingAlone(t *testing.T) {
+	ctx := context.Background()
+	s, a, m, _ := serviceFixture(t, declarationYAML("stored", "")+declarationYAML("generated", "  source: {generated: {bytes: 32}}\n"))
+	session := a.session
+	a.session = nil
+	rows, err := s.Readiness(ctx, ReadinessRequest{})
+	storedRemedy := secrets.Remedy("fixture", secrets.Declaration{Name: "stored", Type: "token", Source: "contextStore"}, false)
+	if err != nil || len(rows) != 2 || rows[0] != (ReadinessRow{Name: "generated", Status: "missing", Remedy: "bootwright secret generate --context fixture --name generated"}) ||
+		rows[1] != (ReadinessRow{Name: "stored", Status: "missing", Remedy: storedRemedy}) || !strings.Contains(storedRemedy, "bootwright secret set --context fixture --name stored") {
+		t.Fatal("an uninitialized store did not read as missing with the remedies secret check names", rows, err)
+	}
+	a.session = session
+	if _, err := s.Set(ctx, SetRequest{Name: "stored", Input: secrets.Input{ValueStdin: true}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Generate(ctx, GenerateRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	reads, writes, validated, transactions := session.reads, session.writes, m.validated, a.transactions
+	a.unlocks = nil
+	if rows, err := s.Readiness(ctx, ReadinessRequest{}); err != nil || len(rows) != 0 {
+		t.Fatal("stored material was reported as a gap", rows, err)
+	}
+	m.refused = map[string]error{"stored": errors.New("rejected")}
+	if rows, err := s.Readiness(ctx, ReadinessRequest{}); err != nil || len(rows) != 0 {
+		t.Fatal("material secret check calls invalid was reported as a gap", rows, err)
+	}
+	source := a.snapshot.Inputs.Files[0]
+	a.snapshot.Inputs.Files = []desiredstate.SourceFile{desiredstate.NewSourceFile(source.Path(), []byte(strings.Replace(string(source.Bytes()), "bytes: 32", "bytes: 48", 1)))}
+	rows, err = s.Readiness(ctx, ReadinessRequest{})
+	if err != nil || len(rows) != 1 || rows[0] != (ReadinessRow{Name: "generated", Status: "stale", Remedy: "bootwright secret generate --context fixture --name generated"}) {
+		t.Fatal("a changed declaration was not reported stale", rows, err)
+	}
+	if session.reads != reads || session.writes != writes || m.validated != validated || a.transactions != transactions {
+		t.Fatal("readiness read material, validated it or wrote", session.reads-reads, session.writes-writes, m.validated-validated, a.transactions-transactions)
+	}
+	if len(a.unlocks) != 3 || slices.Contains(a.unlocks, true) {
+		t.Fatal("readiness reads metadata alone, yet it opened the store with unlock", a.unlocks)
+	}
+	a.failure = secretstore.Failure("store.corrupt", "tampered")
+	if rows, err := s.Readiness(ctx, ReadinessRequest{}); err == nil || rows != nil {
+		t.Fatal("a corrupt store produced a partial listing", rows, err)
 	}
 }
 

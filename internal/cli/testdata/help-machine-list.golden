@@ -9,7 +9,7 @@
   Command flags
       --clusters      Select comma-separated cluster names (default: all)
       --power-status  Read each machine's power state from its management controller
-      --silent        Print only sorted machine names
+      --short         Print only sorted machine names
 
   Common flags
       --ascii       Use ASCII status markers

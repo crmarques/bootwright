@@ -294,28 +294,17 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*CheckResult,
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			row := CheckRow{Name: d.Name, Type: d.Type, Source: d.Source, Parts: d.Parts(), Status: "available"}
+			row, version, refused := presence(selected.Name, snapshot, d)
 			var material secrets.Material
-			var refused error
-			if version, exists := currentVersion(snapshot, d.Name); !exists {
-				row.Status = "missing"
-				refused = missingMaterial(selected.Name, d)
-			} else {
-				id := version.ID
-				row.Version, row.Sequence = &id, version.Sequence
-				if !d.Current(version.Declaration.Fingerprint) {
-					row.Status = "stale"
-					refused = staleMaterial(selected.Name, d)
-				} else {
-					var err error
-					material, err = session.Read(ctx, version.ID)
-					if err != nil {
-						return err
-					}
-					if err = s.material.Validate(ctx, d, material); err != nil {
-						row.Status = "invalid"
-						refused = secrets.Attribute(err, selected.Name, d.Name, secrets.Remedy(selected.Name, d, true))
-					}
+			if row.Status == "available" {
+				var err error
+				material, err = session.Read(ctx, version.ID)
+				if err != nil {
+					return err
+				}
+				if err = s.material.Validate(ctx, d, material); err != nil {
+					row.Status = "invalid"
+					refused = secrets.Attribute(err, selected.Name, d.Name, secrets.Remedy(selected.Name, d, true))
 				}
 			}
 			material.Clear()
@@ -335,6 +324,33 @@ func (s Service) Check(ctx context.Context, request CheckRequest) (*CheckResult,
 		return result, &diagnostics.Failure{Diagnostics: found}
 	}
 	return result, nil
+}
+
+func (s Service) Readiness(ctx context.Context, request ReadinessRequest) ([]ReadinessRow, error) {
+	selected, declarations, err := s.resolve(ctx, request.ContextName)
+	if err != nil {
+		return nil, err
+	}
+	rows := []ReadinessRow{}
+	err = s.access.View(ctx, selected, false, func(session secretstore.StoreSession, _ secretstore.Selection) error {
+		var snapshot secretstore.Snapshot
+		if session != nil {
+			var err error
+			if snapshot, err = session.Inspect(ctx); err != nil {
+				return err
+			}
+		}
+		for _, d := range declarations {
+			if row, _, _ := presence(selected.Name, snapshot, d); row.Status != "available" {
+				rows = append(rows, ReadinessRow{Name: d.Name, Status: row.Status, Remedy: secrets.Remedy(selected.Name, d, false)})
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 func (s Service) List(ctx context.Context, request ListRequest) (*ListResult, error) {
@@ -585,6 +601,22 @@ func wrongPart(contextName string, d secrets.Declaration, part secrets.Part) err
 		remedy = secrets.Command(contextName, "show") + " --name " + d.Name + " --part " + names[0]
 	}
 	return secrets.Refusal("part", "Secret "+d.Name+" ("+d.Type+") has no "+string(part)+" part; its parts are "+strings.Join(names, ", "), contextName, d.Name, remedy)
+}
+
+func presence(contextName string, snapshot secretstore.Snapshot, d secrets.Declaration) (CheckRow, secretstore.Version, error) {
+	row := CheckRow{Name: d.Name, Type: d.Type, Source: d.Source, Parts: d.Parts(), Status: "available"}
+	version, exists := currentVersion(snapshot, d.Name)
+	if !exists {
+		row.Status = "missing"
+		return row, version, missingMaterial(contextName, d)
+	}
+	id := version.ID
+	row.Version, row.Sequence = &id, version.Sequence
+	if !d.Current(version.Declaration.Fingerprint) {
+		row.Status = "stale"
+		return row, version, staleMaterial(contextName, d)
+	}
+	return row, version, nil
 }
 
 func currentVersion(snapshot secretstore.Snapshot, name string) (secretstore.Version, bool) {

@@ -1,0 +1,33 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rhel-01
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: rhel
+
+  hardware:
+    rootDevice:
+      deviceName: /dev/vda
+
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+
+    # The install profile's NTP selections, here the Environment default,
+    # apply; a Machine list overrides them, and [] clears them.
+
+  network:
+    configRef: lab-guests
+    # attachmentRef defaults to the configRef name, lab-guests.
+    installAddressRef: ip
+
+    # The fqdn contact derives as rhel-01.lab.example.test; an authored fqdn
+    # entry in addresses overrides it.
+    addresses:
+      - name: ip
+        address: 198.51.100.11/24
+        interface: enp1s0

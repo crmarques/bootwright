@@ -369,6 +369,7 @@ type StatusResult struct {
 	StorageClusters []ClusterSummary
 	Shared          []ServiceSummary
 	Secrets         SecretSummary
+	Readiness       []ReadinessGap
 	NextSteps       []string
 	Lifecycle       *LifecycleSummary
 	Handoff         HandoffSummary

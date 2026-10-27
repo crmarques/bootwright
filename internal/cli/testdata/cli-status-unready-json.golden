@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "status",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": {
+      "name": "lab",
+      "mode": "ready"
+    },
+    "setupChecks": [
+      {
+        "id": "controller-binding",
+        "status": "pending"
+      },
+      {
+        "id": "execution-bundle",
+        "status": "ready"
+      }
+    ],
+    "desired": {
+      "revision": "rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f",
+      "environment": "lab-rhel",
+      "counts": {
+        "filesSeen": 14,
+        "objectsDecoded": 14
+      }
+    },
+    "clusters": [],
+    "storageClusters": [],
+    "shared": [
+      {
+        "kind": "ArtifactServer",
+        "name": "lab-artifacts",
+        "machine": "controller",
+        "status": "pending"
+      }
+    ],
+    "secrets": {
+      "declared": 3,
+      "bindings": 0
+    },
+    "readiness": [
+      {
+        "kind": "secret",
+        "name": "ssh-key",
+        "state": "stale",
+        "remedy": "bootwright secret generate --context lab --name ssh-key"
+      },
+      {
+        "kind": "secret",
+        "name": "token",
+        "state": "missing",
+        "remedy": "bootwright secret set --context lab --name token --value-file <path>"
+      },
+      {
+        "kind": "media",
+        "name": "rhel-9.iso",
+        "state": "missing",
+        "remedy": "bootwright media add --name rhel-9.iso --from-file <path>"
+      }
+    ],
+    "nextSteps": [
+      "bootwright secret generate --context lab --name ssh-key",
+      "bootwright secret set --context lab --name token --value-file <path>",
+      "bootwright media add --name rhel-9.iso --from-file <path>",
+      "bootwright plan --context lab",
+      "bootwright apply --context lab"
+    ],
+    "lifecycle": null,
+    "handoff": {
+      "ready": false,
+      "reasons": [
+        "no apply is recorded"
+      ]
+    },
+    "contradictions": []
+  },
+  "diagnostics": [],
+  "logs": []
+}

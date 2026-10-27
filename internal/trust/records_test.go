@@ -182,7 +182,7 @@ func TestARecordTakingOverAnUndeclaredEndpointRemovesIt(t *testing.T) {
 		t.Fatalf("refusal = %+v", reported)
 	}
 	restated := diagnostics.Of(pin.Retrust("lab", func(name string) bool { return name == "node-a" }, nil))
-	if len(restated) != 1 || restated[0].Remediation != "verify the new fingerprint out of band, then re-trust node-b with bootwright machine trust --context lab --machines node-b --replace node-b" {
+	if len(restated) != 1 || restated[0].Remediation != "verify the new fingerprint out of band, then re-trust node-b with bootwright machine trust --context lab --name node-b --replace node-b" {
 		t.Fatalf("restated = %+v", restated)
 	}
 }
@@ -283,16 +283,16 @@ func TestAStoredPinNamesTheMachineTrustThatRepairsIt(t *testing.T) {
 	only := func(names ...string) func(string) bool {
 		return func(name string) bool { return slices.Contains(names, name) }
 	}
-	oneUsed := "re-trust node-a with bootwright machine trust --context lab --machines node-a; " +
+	oneUsed := "re-trust node-a with bootwright machine trust --context lab --name node-a; " +
 		"its confirmed write removes the record of node-b, which no longer uses this context's SSH trust"
 	for name, test := range map[string]struct {
 		writing, uses func(string) bool
 		remedy        string
 	}{
 		"both used": {nil, only("node-a", "node-b"),
-			"re-trust node-a and node-b with bootwright machine trust --context lab --machines node-a,node-b"},
+			"re-trust node-a and node-b with bootwright machine trust --context lab --name node-a,node-b"},
 		"every Machine uses a nil predicate": {nil, nil,
-			"re-trust node-a and node-b with bootwright machine trust --context lab --machines node-a,node-b"},
+			"re-trust node-a and node-b with bootwright machine trust --context lab --name node-a,node-b"},
 		"one used": {nil, only("node-a"), oneUsed},
 		"none used": {nil, only(),
 			"repair it with bootwright machine trust --context lab; its confirmed write removes the records of node-a and node-b, which no longer use this context's SSH trust"},

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -17,11 +18,11 @@ func TestFailureRepresentations(t *testing.T) {
 			t.Fatal(err)
 		}
 		if jsonMode {
-			want := "{\"schemaVersion\":\"v1alpha1\",\"command\":\"validate\",\"ok\":false,\"exitCode\":1,\"result\":null,\"diagnostics\":[{\"severity\":\"error\",\"code\":\"cli.not-implemented\",\"message\":\"bootwright validate is not implemented\"}],\"logs\":[]}\n"
+			want := "{\"schemaVersion\":\"v1alpha1\",\"command\":\"validate\",\"ok\":false,\"exitCode\":1,\"result\":null,\"diagnostics\":[{\"severity\":\"error\",\"code\":\"cli.not-implemented\",\"message\":\"bootwright validate is not implemented\",\"remediation\":\"run bootwright help <command> to see which forms this build runs\"}],\"logs\":[]}\n"
 			if out.String() != want || errOut.Len() != 0 {
 				t.Fatalf("JSON output = %q, stderr = %q", out.String(), errOut.String())
 			}
-		} else if out.Len() != 0 || errOut.String() != "  error  cli.not-implemented\n    bootwright validate is not implemented\n" {
+		} else if out.Len() != 0 || errOut.String() != "  error  cli.not-implemented\n    bootwright validate is not implemented\n    Next: run bootwright help <command> to see which forms this build runs\n" {
 			t.Fatalf("human output = %q, stderr = %q", out.String(), errOut.String())
 		}
 	}
@@ -99,5 +100,42 @@ func TestFailureWriterDoesNotFallback(t *testing.T) {
 	}
 	if out.calls != 1 || errOut.Len() != 0 {
 		t.Fatalf("writes = %d, fallback = %q", out.calls, errOut.String())
+	}
+}
+
+func TestEveryErrorDiagnosticIsWrittenWithARemediation(t *testing.T) {
+	codes := diagnostics.DefaultRemediationCodes()
+	if len(codes) < 60 {
+		t.Fatalf("read %d codes with a default remediation", len(codes))
+	}
+	for _, code := range codes {
+		var out, errOut bytes.Buffer
+		reported := []diagnostic{{Severity: "error", Code: code, Message: "m"}, {Severity: "error", Code: code, Message: "n", Remediation: "given"}}
+		if err := writeDiagnostics(&out, &errOut, "plan", reported, 1, true, nil); err != nil {
+			t.Fatal(err)
+		}
+		var envelope struct{ Diagnostics []diagnostic }
+		if err := json.Unmarshal(out.Bytes(), &envelope); err != nil || len(envelope.Diagnostics) != 2 {
+			t.Fatalf("%s: %v %s", code, err, out.String())
+		}
+		for _, written := range envelope.Diagnostics {
+			if written.Remediation == "" {
+				t.Errorf("%s: an error diagnostic was written with no remediation", code)
+			}
+		}
+		if got := envelope.Diagnostics[1].Remediation; got != "given" {
+			t.Errorf("%s: an emitter's own remediation was replaced by %q", code, got)
+		}
+	}
+}
+
+func TestUsageAndWarningDiagnosticsKeepNoDefaultRemediation(t *testing.T) {
+	var out, errOut bytes.Buffer
+	reported := []diagnostic{{Severity: "error", Code: "cli.usage", Message: "m"}, {Severity: "warning", Code: "runtime.internal", Message: "n"}}
+	if err := writeDiagnostics(&out, &errOut, "plan", reported, 2, true, nil); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "remediation") {
+		t.Fatalf("a usage error or a warning was given a default remediation: %s", out.String())
 	}
 }

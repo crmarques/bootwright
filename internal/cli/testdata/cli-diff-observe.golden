@@ -1,6 +1,6 @@
 Context:  lab at input revision rev-1b7e55a0
 Against:  what apply op-3f9a0c12 (done) realized, read live: 3 blocks observed, 1 unknown, 1 not projected
-Input:    unchanged since op-3f9a0c12; bootwright apply settles over it and repairs nothing shown here
+Input:    unchanged since op-3f9a0c12; bootwright status --context lab names the next step
 Plan:     this executable plans the same blocks
 
 diff real/Machine/rhel-01 desired/Machine/rhel-01

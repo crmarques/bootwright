@@ -185,6 +185,13 @@ lab-rhel-3-nodes:
   os-package-tree-rhel-9-8
   proxy-lab-proxy
   substrate-host-lab-libvirt
+lab-rhel-external-services:
+  artifact-server-lab-artifacts
+  controller-prerequisites
+  machine-rhel-01
+  os-install-rhel-01
+  os-package-tree-rhel-9-8
+  substrate-host-lab-libvirt
 lab-services:
   artifact-server-lab-artifacts
   dns-lab-dns

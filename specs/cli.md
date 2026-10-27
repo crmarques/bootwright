@@ -128,7 +128,7 @@ operands fail semantic validation after explicit-help precedence, as on other
 runnable commands. An explicit `help` path still requires exact subcommands.
 
 Scalar flags follow command-line order and the last occurrence wins, including
-the scalar comma-list flags `--clusters`, `--machines`, `--replace`, `--stage`,
+the scalar comma-list flags `--clusters`, `--replace`, `--stage`,
 the `--name` that names several Machines and the `--name` and `--node` that name
 several clusters and nodes.
 Collection flags aggregate in command-line order only where this contract says
@@ -147,8 +147,8 @@ erase an earlier explicitly empty occurrence. The named empty exceptions remain
 valid occurrences; enum and format validation otherwise applies to the final
 resolved scalar value under the last-occurrence-wins rule.
 
-`--clusters`, `--machines`, `--replace`, and `--stage` are comma-separated
-lists, and so are the required `--name` of `machine start`, `machine stop`,
+`--clusters`, `--replace`, and `--stage` are comma-separated
+lists, and so are the optional `--name` of `machine trust`, the required `--name` of `machine start`, `machine stop`,
 `machine restart` and `machine exec`, the required `--name` and the `--node` of
 `cluster exec`, and the optional `--name` of `cluster info`, `machine info` and `secret info`.
 Whitespace around a member is ignored, empty members are ignored, and duplicate
@@ -163,7 +163,7 @@ preserve these command-specific compatibility rules:
   OpenShiftCluster or CephCluster the context selects fails
   `access.target`, naming every such member and the clusters it can select;
   and
-- `machine trust --machines` treats an empty or comma-only value as omission,
+- `machine trust --name` treats an empty or comma-only value as omission,
   while an empty or comma-only `--replace` selects no replacement; and
 - a supplied `--stage` must resolve to at least one member, so a comma-only
   value is a usage error, and every member must be a declared stage name; and
@@ -699,7 +699,9 @@ refuses, the exit its refusal names (setup, or the deletion) is offered in its
 place when `status` can run it, and otherwise no step. The decisions belong to
 [state reconciliation](state-reconciliation.md#continuation-and-removal); the
 cases below apply that rule and restate no decision, and a change of a decision
-changes the case it governs:
+changes the case it governs
+(`TestStatusStepsAreExactlyWhatTheVerbsDecisionsDerive` derives each candidate
+by running its verb over the records and holds the steps to exactly them):
 
 - beside no operation, `bootwright setup` alone while the host's controller
   setup has not completed, because an apply claims the host only after it
@@ -763,6 +765,22 @@ changes the case it governs:
   blocks are all `done` reopens none, because the `destroy` offered above
   finalizes it.
 
+Beside no operation, where the first `plan` and `apply` are offered, `status`
+also reads what they would stop on from the selected input and the host,
+without an effect, an exclusive lock or a flag: each declared Secret whose
+material is missing or stale as `secret check` decides it, and each installer
+image the input names that the media store `media list` reads does not hold.
+It names each in the `readiness` member of its
+[result](cli/output.md#lifecycle-and-status-results) and, ahead of the
+`plan` step, offers each one's remedy, `bootwright secret set` or
+`generate` for a Secret and `bootwright media add --name <image>` for an
+image, in the order of the rows. These steps are the one place a next step
+carries a placeholder the operator fills, because the material or file is the
+operator's. They are omitted when nothing is missing, over an operation, where
+the frozen plan and its Secret binding decide, and when the only step is
+`bootwright setup` or a deletion. A read that fails adds no row, because
+`secret check` and `media list` report that failure when run.
+
 An apply that has not completed owns every block it started, whichever state
 it stopped in, so taking them back is as legitimate a way forward as
 continuing. A completed apply is the exception, for the reason above. These are
@@ -791,7 +809,16 @@ observes, so an `apply` or `destroy` started meanwhile refuses
 `lifecycle.lease`. What it cannot read, such as a collected input revision
 or an object whose blocks failed, is shown as unknown beside the object and is
 never a refusal. It exits `0` whenever it renders a comparison, whatever the
-comparison found, and writes no [lifecycle receipt](#lifecycle-receipt).
+comparison found, unless `--exit-code` is set, and writes no
+[lifecycle receipt](#lifecycle-receipt).
+
+`--exit-code` changes nothing about the comparison or what it writes. It makes
+the exit status say whether the comparison found anything: `3` when any object
+is `changed`, `added`, `removed` or `unknown`, and `0` when none is, so a script
+can test for drift. Status `3` is not a failure: standard error stays empty,
+the result is the one the command writes without the flag, and a structured
+result carries `ok` `false` and `exitCode` `3` with no diagnostic
+(`TestDiffExitCodeExitsThreeOnlyOnADifferingOrUnknownObject`).
 
 The text result opens with these header lines, each value starting at column 11:
 
@@ -805,9 +832,6 @@ The text result opens with these header lines, each value starting at column 11:
 
 No `Input` value says that `apply` continues, settles or realizes the input,
 because only `status` decides which command passes over the records.
-
-Not yet met: the `Input` line names `bootwright apply` as continuing, settling or
-realizing the input; tracked as [B825](milestones/backlog.md#b825).
 
 Each object whose difference is not `none`, or whose real side is `partial` or
 `unknown`, follows after a blank line, in API kind order and then name:
@@ -1358,7 +1382,7 @@ Machine with `--replace`, after its new fingerprint is verified out of band.
 A stored trust file that already pins one endpoint to two keys, which only a
 hand edit produces, is refused by every reader, an SSH session included, with
 `trust.identity` naming both Machines, the endpoint and the repair: `machine
-trust` with `--machines` naming each of the two Machines that still uses
+trust` with `--name` naming each of the two Machines that still uses
 context trust, or plain `machine trust` when neither does. That repair never
 names `--replace`: a named Machine whose observed key differs from its record
 refuses it as a changed key, writing nothing, until its new fingerprint is

@@ -275,11 +275,9 @@ Alias cell.
 | [B819](#b819) | new, 2026-10-26 (spec audit P2-A) | enabling | Milestones and Agent guidance | Milestone page openings budgeted, waiver history in decisions, per-decision anchors | Audit roadmap work; implemented only on an explicit lane request |
 | [B820](#b820) | new, 2026-10-26 (spec audit P2-B) | enabling | Agent guidance and Verification tooling | Section-level index rows and docs gates for budgets, reachability and history links | Audit roadmap work; implemented only on an explicit lane request |
 | [B822](#b822) | new, 2026-10-26 (spec audit P2-D) | enabling | Agent guidance and Verification tooling | Wrapper parity test fails on gaps; focus reports flaky lanes and bounds lane time | Audit roadmap work; implemented only on an explicit lane request |
-| [B823](#b823) | new, 2026-10-26 (spec audit L1) | enabling | Architecture and State reconciliation | The State reconciliation context's display name settled by the owner | Audit roadmap work; implemented only on an explicit lane request |
 | [B825](#b825) | new, 2026-10-26 (spec audit L3) | product | CLI | CLI diff, settled, remediation, flag spellings and stub catalog match cli specs | Audit roadmap work; implemented only on an explicit lane request |
 | [B826](#b826) | new, 2026-10-26 (spec audit L4) | defect | Desired state | Admission enforces closed Entitlement arms, authored indexes, retired names and reserved-directory warning | Audit roadmap work; implemented only on an explicit lane request |
 | [B829](#b829) | new, 2026-10-26 (spec audit L7) | safety | Secrets | Work-area incarnation check, pipelined material payloads and fixed producer identity | Audit roadmap work; implemented only on an explicit lane request |
-| [B833](#b833) | new, 2026-10-26 (spec audit L11) | enabling | Desired state | Examples drop defaulted values, gain an external-services scenario, distinct Environment names | Audit roadmap work; implemented only on an explicit lane request |
 | [B838](#b838) | new, 2026-10-26 (lane A review) | safety | Storage | U03's replica-safety refusal applies to every Ceph distribution, not only IBM | Widening adds a refusal; needs an owner decision |
 | [B839](#b839) | new, 2026-10-26 (lane B) | safety | Substrate and Workspace | A shared host claim taken while a removal's effect runs refuses | Found closing B803; the window is the removal's effect itself |
 | [B840](#b840) | new, 2026-10-26 (lane B) | safety | Managed OS | `%pre` compares the resolved root disk's WWN and serial with the frozen values | The follow-up the F10-01 choice left after the by-id path rule |
@@ -3321,32 +3319,6 @@ carry the two Not yet met lines that point here.
 test; focus_test.py proves FLAKY reporting and the lane timeout; grep under
 `.agents/skills` finds no model product name; `make docs-check`.
 
-### B823
-
-**Owner:** Architecture and State reconciliation. **Kind:** enabling.
-**Requires:** owner decision [Q104](#audit-remediation-decisions).
-**Definition:** Needs definition. Batch L1 of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); finding F01-10. The
-context named State reconciliation either keeps its name or takes a display
-name that no longer contradicts its no-reconciliation contract.
-
-**Specs:** [state-reconciliation.md](../state-reconciliation.md) now
-disclaims reconciliation of changed desired state or of drift, and
-[architecture.md](../architecture.md)'s context row lists `diff`.
-[project.md](../project.md) states the scope, operator utilities and
-networking boundary; the other L1 findings need nothing more.
-
-**Work:**
-
-- Waits for [Q104](#audit-remediation-decisions): when the owner renames,
-  the architecture.md row label, the state-reconciliation.md H1 and the
-  [specs/index.md](../index.md) link text change in one edit, the file path
-  stays, and every inbound link to the H1 anchor (found with grep) is
-  retargeted. When the owner keeps the name, the item closes with no edit.
-
-**Exit evidence:** after a rename, grep finds no link to the old H1 anchor;
-`make docs-check`.
-
 ### B825
 
 **Owner:** CLI. **Kind:** product. **Requires:** owner decisions
@@ -3384,15 +3356,17 @@ first five are tracked here.
 - F16-01: a docs-check ties the unavailable list to
   `cmd/bootwright/wiring_stubs.go`. Running the five stub commands here
   needs a definition of each (`preflight add-ons` is [B770](#b770)).
-- Waits for [Q109](#audit-remediation-decisions): an opt-in `diff --exit-code` with its
-  commands.md row, exit-status row and the `ok`/`exitCode` rule.
-- Waits for [Q108](#audit-remediation-decisions): only if the owner widens `status`,
-  read-only Secret and media readiness rows and their `nextSteps` remedies,
-  as a separate item.
 
 **Exit evidence:** the Not yet met lines of cli.md (diff Input),
 cli/output.md (remediation) and cli/commands.md (flag renames) are removed;
 the parity, emitter, catalog and stub docs-check tests pass; `make check`.
+
+**Partly delivered** on 2026-10-27 by X172: F12-09, F16-06, F16-07, F16-04
+and F16-01 above, and Q109 (a)'s `diff --exit-code`; Q108 (a) became
+[B842](delivered.md#x172--audit-lane-m-cli-and-examples). **Remains:** running the five stub commands, each once
+defined (`preflight add-ons` is [B770](#b770)). `diff` reads no context mode, so an
+incomplete controller setup has no diff reading; `status` names `setup`, and
+diff's Input line points at it.
 
 ### B826
 
@@ -3521,38 +3495,6 @@ as a class, not each area and its Machine; no test holds a remote file
 transfer free of material, and the media role still writes
 `install-config.yaml` with `copy: content:`; the Ceph outputs present no
 recapture identity.
-
-### B833
-
-**Owner:** Desired state. **Kind:** enabling. **Requires:** none.
-**Definition:** Specified. Batch L11 of the
-[2026-10-26 spec audit](../../audits/spec/2026-10-26.md); findings F05-10,
-R2-05-03, R2-05-10, R2-05-08, F16-09. Examples teach the minimal input and
-the external-service shapes.
-
-**Specs:** [api/environment.md](../api/environment.md) says the Environment
-name labels the effective graph and is no identity. examples/README.md and
-the runbooks already show `plan` before the first `apply` and state outcomes
-only.
-
-**Work:**
-
-- F05-10: in the storage and container-cluster examples, omit or comment
-  values equal to their normalized default (lab-compact's `pullSecretRef` and
-  `nodeSSH`), and reference `ssd-hosts` from a pool or note that it only
-  creates a rule.
-- R2-05-03: one runnable scenario declaring external NTPServer, DNSServer and
-  Proxy consumed by a MachineInstallProfile and the controller Machine's proxy
-  choice, using Environment `spec.defaults`, compiled by the golden test,
-  listed in examples/README.md, its README linking the api/environment.md
-  controller refusal table; no managed variant before [B439](#b439).
-- R2-05-10: the reused Environment names in the lab-sno and libvirt Ceph
-  example families become distinct, with a test that example Environment
-  names are distinct.
-
-**Exit evidence:** examples validate and compile in the golden test; the
-distinct-name test passes; no authored value equals its default without a
-comment; every StoragePlacementPolicy is referenced or noted; `make check`.
 
 ### B838
 
@@ -3832,7 +3774,7 @@ decision stay open while its other parts land.
 | J Reconciliation rules | [B816](#b816), B830 (X170) | B800 to B807 | E, G | Q92, Q93, Q94, Q95, Q96, Q117, Q118 |
 | K Language and adapter contracts | B818 (X162), B834 (X162) | none | G | none |
 | L Corpus structure and skills | [B815](#b815), [B819](#b819), [B820](#b820), [B822](#b822) | B801; B822 after B813 and B818 | none | Q89, Q90, Q91, Q102, Q103 |
-| M CLI and examples | [B825](#b825), [B833](#b833), [B823](#b823) | none | none | Q104, Q108, Q109 |
+| M CLI and examples | [B825](#b825), B833 (X172), B823 (X172), B842 (X172) | none | none | Q104, Q108, Q109 |
 
 ### Lane order and progress
 
@@ -3855,7 +3797,7 @@ also updates this table.
 | 9 | G Extension architecture | merged (X169) |
 | 10 | J Reconciliation rules | merged (X170) |
 | 11 | I API shape and grammar | merged (X171) |
-| 12 | M CLI and examples | not started |
+| 12 | M CLI and examples | merged (X172) |
 | 13 | L Corpus structure and skills | not started |
 
 To continue, take the first row not `merged`. If its branch exists, resume it:
@@ -3920,7 +3862,7 @@ blocks.
 | Q101 | What does cluster info --secrets emit for a dashboard password whose apply never proved the dashboard reachable? | (a) No warning: dashboard.status unproved and its reason convey it.; (b) A distinct registered warning code such as access.unreachable. | **Answered by D183: a.** a, the smaller change; either way access.unproved keeps only the D124 custody meaning. | [B817](delivered.md#x166--audit-lane-d-credentials-and-trust) |
 | Q102 | Does the decision log stay in backlog.md (with per-decision anchors and status tokens) or move to its own page? | (a) Keep the log in backlog.md#decisions and add #d<n> anchors, status tokens and an order check.; (b) Move the log to specs/milestones/decisions.md, retarget every backlog.md#decisions link and amend milestones.md's D<n> bullet. | **Answered by D183: a.** a: the smallest change; anchors and status tokens need no move. | [B819](#b819) |
 | Q103 | May a pre-existing defect that blocks the authorized outcome or its gates be fixed inside the slice? | (a) AGENTS.md admits the fix in its own commit after the defect is recorded as an item the Refs line names; other defects are reported.; (b) Keep the unqualified ban; a blocking defect stops the slice until the owner authorizes its item. | **Answered by D183: a.** a, as the report drafts it; its only precedent (D152 clause 13) still awaits the owner's review. | [B822](#b822) |
-| Q104 | Does the State reconciliation context keep its display name, given its contract disclaims reconciliation? | (a) Rename the display name (architecture row, H1, index link text), keeping the file path and retargeting inbound anchors.; (b) Keep the name; the disclaimer now applied in state-reconciliation.md is the whole change. | **Answered by D183: b.** b is smallest; a if the owner wants the name fixed before 1.0. | [B823](#b823) |
+| Q104 | Does the State reconciliation context keep its display name, given its contract disclaims reconciliation? | (a) Rename the display name (architecture row, H1, index link text), keeping the file path and retargeting inbound anchors.; (b) Keep the name; the disclaimer now applied in state-reconciliation.md is the whole change. | **Answered by D183: b.** b is smallest; a if the owner wants the name fixed before 1.0. | [B823](delivered.md#x172--audit-lane-m-cli-and-examples) |
 | Q105 | Which single casing do Bootwright-owned enum values use, and are Secret type names an exception? | (a) lowerCamel: renames the kebab outliers (container-runtime, import-certificate, install-only, read-only, verified-tunnel).; (b) kebab-case: renames redfishVirtualMedia, loadBalancer, logicalOverwrite, dataFoundation, certManager and the Secret types.; (c) State the rule per page and leave existing values unchanged. | **Answered by D183: a.** The convention with the smaller rename count, likely lowerCamel; native spellings exempt; decide Secret types as an explicit exception. | [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
 | Q106 | Is the --stage token infra-components renamed to match 'infrastructure services'? | (a) Rename it (for example infrastructure-services) in the CLI, plan goldens, completion, examples and specs.; (b) Keep the token; the glossary entry defines it. | **Answered by D183: a.** a, cheap before 1.0, together with stating what preflight infra checks. | [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |
 | Q107 | Is StorageExport (a per-consumer Data Foundation attachment) renamed, and does its shape change? | (a) Rename to StorageAttachment or StorageConsumer with per-protocol arms, drop spec.type, move external details to StorageCluster's external arm (B107).; (b) Rename the kind and fdf.storageExportRef only; keep spec.type unless api.md's union list is amended.; (c) Keep the name with the clarification now in api/ceph.md. | **Answered by D183: b.** b at least, keeping the D173 decomposition; ask with B814's storage naming questions. | [B824](delivered.md#x171--audit-lane-i-api-shape-and-grammar) |

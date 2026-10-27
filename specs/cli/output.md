@@ -10,6 +10,7 @@ output.
 | Condition | Standard output | Standard error | Exit status |
 | --- | --- | --- | --- |
 | Human success | result or help, LF-terminated | ordered warnings, and the prompt of an interactive confirmation or input | `0` |
+| `diff --exit-code` that found a `changed`, `added`, `removed` or `unknown` object | the comparison, as without the flag | empty | `3` |
 | Human operational or validation failure | empty, except a complete negative secret check, controller readiness report, or already presented setup plan/progress or lifecycle state | ordered diagnostics, each LF-terminated | `1` |
 | Human usage failure | empty | usage diagnostic and concise help, LF-terminated | `2` |
 | JSON or YAML success or failure | exactly one document in the selected format followed by one LF | empty | the document's required `exitCode` |
@@ -216,7 +217,7 @@ schemas, ordering and escaping remain stable.
 | `schemaVersion` | Exact string `v1alpha1`; changing it is a public output-version change. |
 | `command` | Canonical resolved command path without the executable. |
 | `ok` | `true` if and only if `exitCode` is `0`. |
-| `exitCode` | Exact Bootwright process exit status: `0`, `1`, `2`, or `130`. |
+| `exitCode` | Exact Bootwright process exit status: `0`, `1`, `2`, or `130`, and `3` only for a `diff --exit-code` that found a difference, whose `result` is the comparison and whose `diagnostics` are empty. |
 | `result` | Command-specific object, or JSON `null` when no trustworthy result exists. |
 | `diagnostics` | Ordered diagnostic objects; empty when none. |
 | `logs` | Ordered safe paths relative to the state root for private logs actually created; empty when none. |
@@ -244,7 +245,7 @@ Successful result objects have stable top-level fields:
 | `media list` | `media` |
 | `validate` | `counts`, `excludedContainerClusters`, `excludedStorageClusters`, `advisories` |
 | `preflight infra`, `preflight clusters`, `preflight container-cluster`, `preflight storage-cluster`, `preflight add-ons`, `preflight all` | `context`, `target`, `checks`, `summary` |
-| `status` | `context`, `setupChecks`, `desired`, `clusters`, `storageClusters`, `shared`, `secrets`, `nextSteps`, `lifecycle`, `handoff`, `contradictions` |
+| `status` | `context`, `setupChecks`, `desired`, `clusters`, `storageClusters`, `shared`, `secrets`, `readiness`, `nextSteps`, `lifecycle`, `handoff`, `contradictions` |
 | `diff` | `context`, `operation`, `input`, `plan`, `observed`, `blocks`, `objects`, `summary` |
 | `render` | `inputDir`, `outputDir`, `effectiveStatePath`, `lockPath`, `inventoryPath`, `varsPath`, `installer`, `storage` |
 | `render effective` | `counts`, `effectiveState`, and with `--origins` `origins` |
@@ -405,9 +406,12 @@ exactly that command, with `--context` for a context-backed one. A present sourc
 `column`; positive coordinates are one-based and `0` means unavailable.
 Sensitive explicit-result bytes never appear in this structure.
 
-Not yet met: some `error` diagnostics other than `cli.usage` carry no
-`remediation`, and no test holds every emitter to the rule; tracked as
-[B825](../milestones/backlog.md#b825).
+An emitter that gives a remediation of its own keeps it. One that gives none has
+its code's default written, which `internal/diagnostics` holds for every
+registered code that can be an error
+(`TestEveryErrorCodeHasADefaultRemediation`,
+`TestEveryErrorDiagnosticIsWrittenWithARemediation`); a `cli.usage` error and a
+warning get none.
 
 Safe display text preserves printable UTF-8 and escapes backslash, control
 characters, ESC, newline, and invalid UTF-8 bytes with deterministic `\\`,
@@ -734,7 +738,8 @@ probe. Its result orders these fields:
 | `storageClusters` | Ordered `{name, kind, status, resources}` rows for selected CephClusters. `resources` holds one `{kind, name, status}` row for each selected storage child object (a kind whose `clusterRef` names a CephCluster) whose `clusterRef` names this cluster, ordered by API kind order then name, `status` in the realization vocabulary below; it is `[]` for an external CephCluster and for one with no such object. |
 | `shared` | Ordered `{kind, name, machine, status}` rows for selected managed shared services, `status` in the realization vocabulary below. |
 | `secrets` | `declared`, the Secret objects the selected input declares, and `bindings`, the Secret bindings the current operation's record holds: one per operation however many Secrets it covers, and 0 beside no operation and once a completed removal finalized, which its pristine evidence proves without reading the keyring. |
-| `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. |
+| `readiness` | Ordered `{kind, name, state, remedy}` rows for what the next `plan` and `apply` read from the selected input and the host does not hold: each declared Secret whose material is `missing` or `stale` as [`secret check`](../secrets.md) reports it (`kind` `secret`, ordered by name), then each installer image a MachineImage's `bootMedia` or a MachineInstallProfile's `hostedTree.fromMedia` names that [`media list`](../managed-os.md) does not show (`kind` `media`, `state` `missing`, ordered by name). `remedy` is the command that supplies it: `bootwright secret set --context <name> --name <secret> ...` or `bootwright secret generate ...` as `secret check` names it, and `bootwright media add --name <image> --from-file <path>`, with `<path>` left for the operator. The rows come from the keyring's metadata and the media store's records alone, never from Secret material or image bytes, under the shared reads those commands take, and run no effect. `[]` beside an operation, where the frozen plan and its Secret binding decide, while a deletion or `bootwright setup` is the only step, when nothing is missing, and when a read fails (`secret check` and `media list` report the failure); a failed read leaves only its own rows out. Human output has a Readiness section listing each row's state and `Kind/name`, omitted when empty. |
+| `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. Each `readiness` remedy, in row order, precedes the `plan` step. |
 | `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next`, `anotherBuild` (boolean: the build in hand is not the one that registered the operation, by the rule of [another build](../state-reconciliation.md#dependency-safety-during-recovery)), ordered `blocks` of `{id, description, stage, state, attempts}`, and `logs` of safe paths relative to the state root, in the order and form the envelope's [`logs`](#private-operation-logs) list them. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does, which for a block no resolution observed is the exact command, with `--context` and the frozen plan's `--authorize` tokens, that observes it, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
 | `handoff` | `{ready, reasons}` derived from the [handoff predicate](../state-reconciliation.md#bootstrap-completion-and-gitops-readiness), with a boolean `ready` and ordered reason strings; `reasons` is `[]` when ready. Human output has a Handoff section with `ready`, or `not ready` followed by each reason. A completed apply with a latched log fault over unchanged input offers the settled apply in `nextSteps` as the invocation that [restores](../state-reconciliation.md#converging-an-effect) that boundary. |
 | `contradictions` | Ordered strings naming what the context's durable records contradict, each worded as the [refusal](../state-reconciliation.md#continuation-and-removal) over those records names it, and last an operation whose continuation or removal reopens a frozen Secret binding the context's keyring no longer lists, or whose keyring listing fails reporting the material corrupt or undecryptable; empty when nothing does. |

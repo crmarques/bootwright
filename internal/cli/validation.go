@@ -122,19 +122,23 @@ func validateSharedFlags(command *cobra.Command, path string) string {
 	if flags.Lookup("until") != nil && flags.Changed("until") && !untilObject.MatchString(stringValue(flags, "until")) {
 		return "--until must name an add-on instance as <cluster>.<package>"
 	}
-	for _, name := range []string{"clusters", "machines", "replace", "stage"} {
+	normalized := []string{"clusters", "replace", "stage"}
+	if path == "machine trust" {
+		normalized = append(normalized, "name")
+	}
+	for _, name := range normalized {
 		if flags.Lookup(name) == nil {
 			continue
 		}
 		raw := stringValue(flags, name)
-		normalized := normalizeNames(raw)
-		if name == "clusters" && len(normalized) == 0 && strings.TrimSpace(raw) != "" {
+		names := normalizeNames(raw)
+		if name == "clusters" && len(names) == 0 && strings.TrimSpace(raw) != "" {
 			if path != "machine list" {
 				return "--clusters must not contain only separators"
 			}
 			normalizeScalar(flags, name, ",")
 		} else {
-			normalizeScalar(flags, name, strings.Join(normalized, ","))
+			normalizeScalar(flags, name, strings.Join(names, ","))
 		}
 	}
 	if strings.HasPrefix(path, "context ") && flags.Lookup("name") != nil && !dnsLabel(stringValue(flags, "name")) {
@@ -229,13 +233,13 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 	case "render":
 		return validateRenderDirectories(flags)
 	case "machine list":
-		if boolValue(flags, "silent") && selectedJSON(command) {
-			return "--silent conflicts with " + structuredLabel(command) + " output"
+		if boolValue(flags, "short") && selectedJSON(command) {
+			return "--short conflicts with " + structuredLabel(command) + " output"
 		}
-		// A silent invocation carries names alone, so a reading it could never
+		// A short invocation carries names alone, so a reading it could never
 		// print would contact every management controller for nothing.
-		if boolValue(flags, "silent") && boolValue(flags, "power-status") {
-			return "--silent conflicts with --power-status"
+		if boolValue(flags, "short") && boolValue(flags, "power-status") {
+			return "--short conflicts with --power-status"
 		}
 	case "machine stop", "machine restart":
 		if selectedJSON(command) && !boolValue(flags, "yes") {
@@ -251,7 +255,7 @@ func validateMachineTrust(command *cobra.Command, flags *pflag.FlagSet) string {
 	if selectedJSON(command) && !boolValue(flags, "yes") && !boolValue(flags, "dry-run") {
 		return structuredLabel(command) + " trust changes require --yes or --dry-run"
 	}
-	machines := normalizeNames(stringValue(flags, "machines"))
+	machines := normalizeNames(stringValue(flags, "name"))
 	expected := map[string]string{}
 	for _, flag := range []string{"replace", "expect"} {
 		for _, member := range normalizeNames(stringValue(flags, flag)) {
@@ -262,7 +266,7 @@ func validateMachineTrust(command *cobra.Command, flags *pflag.FlagSet) string {
 			case named && expected[name] != "" && expected[name] != fingerprint:
 				return "--expect and --replace name two fingerprints for " + name
 			case flag == "replace" && len(machines) != 0 && !contains(machines, name):
-				return "every --replace name must belong to --machines"
+				return "every --replace name must belong to --name"
 			}
 			if named {
 				expected[name] = fingerprint
@@ -309,7 +313,7 @@ func validateRenderDirectories(flags *pflag.FlagSet) string {
 }
 
 func allowsEmpty(path, name string) bool {
-	return name == "context" || name == "sha256" || name == "clusters" || name == "machines" || name == "replace"
+	return name == "context" || name == "sha256" || name == "clusters" || name == "replace" || (path == "machine trust" && name == "name")
 }
 
 func dnsLabel(value string) bool {

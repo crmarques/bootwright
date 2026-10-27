@@ -8,6 +8,7 @@ validate or import that directory, rather than its category or all of
 | Type | Example | Outcome |
 | --- | --- | --- |
 | `machines/` | [lab-rhel](machines/lab-rhel/README.md) | Install RHEL on one libvirt guest through an emulated Redfish BMC. |
+| `machines/` | [lab-rhel-external-services](machines/lab-rhel-external-services/README.md) | Install RHEL on one libvirt guest against an external proxy, DNS resolver and time source chosen through Environment kind defaults. |
 | `machines/` | [lab-rhel-3-nodes](machines/lab-rhel-3-nodes/README.md) | Install three RHEL guests concurrently using a shared package tree. |
 | `machines/` | [lab-baremetal-substrate](machines/lab-baremetal-substrate/README.md) | Create an installer-provisioned guest with a CA-issued emulated BMC for a separately owned physical-install rehearsal. |
 | `machines/` | [lab-baremetal](machines/lab-baremetal/README.md) | Install RHEL on one physical server through its Redfish BMC. |

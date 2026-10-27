@@ -2,13 +2,15 @@
       Compare the context's desired state with what its apply realized, object by object.
       Without --observe it reads durable records only and contacts no host; with --observe it
       reads each realized block's target through that block's read-only observation. It changes
-      nothing.
+      nothing. It exits 0 whenever it renders a comparison; with --exit-code it exits 3 instead
+      when any object differs or is unknown.
 
   Usage
     bootwright diff [flags]
 
   Command flags
-      --observe  Read each realized block's target through its read-only observation
+      --exit-code  Exit 3 when any object differs or is unknown
+      --observe    Read each realized block's target through its read-only observation
 
   Common flags
       --ascii       Use ASCII status markers

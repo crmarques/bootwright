@@ -8,7 +8,8 @@
     {
       "severity": "error",
       "code": "cli.not-implemented",
-      "message": "bootwright status is not implemented"
+      "message": "bootwright status is not implemented",
+      "remediation": "run bootwright help <command> to see which forms this build runs"
     }
   ],
   "logs": []

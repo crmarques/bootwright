@@ -25,9 +25,10 @@ func (s Service) Status(ctx context.Context, request StatusRequest) (*StatusResu
 	}
 	var result *StatusResult
 	var frozen frozenReopen
+	var desired *api.Catalog
 	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
-		value, err := s.status(ctx, view)
-		result = value
+		value, selected, err := s.status(ctx, view)
+		result, desired = value, selected
 		if err != nil {
 			return err
 		}
@@ -38,6 +39,9 @@ func (s Service) Status(ctx context.Context, request StatusRequest) (*StatusResu
 		return nil, err
 	}
 	s.nameLostBinding(ctx, name, result, frozen)
+	if desired != nil {
+		s.nameReadiness(ctx, name, result, *desired)
+	}
 	return result, nil
 }
 
@@ -167,21 +171,24 @@ func settlement(state string) int {
 	return 0
 }
 
-func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
+func (s Service) status(ctx context.Context, view View) (*StatusResult, *api.Catalog, error) {
 	result := &StatusResult{
 		Context:         view.Identity(),
 		Clusters:        []ClusterSummary{},
 		StorageClusters: []ClusterSummary{},
 		Shared:          []ServiceSummary{},
 		NextSteps:       []string{},
+		Readiness:       []ReadinessGap{},
 		Contradictions:  []string{},
 	}
 	state, report, err := s.compiler.Compile(ctx, view.Inputs())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	var selected *api.Catalog
 	if state != nil && report != nil {
 		catalog := state.Effective()
+		selected = &catalog
 		environment := ""
 		if environments := catalog.OfKind(api.Environment); len(environments) == 1 {
 			environment = environments[0].Name()
@@ -199,34 +206,34 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	store := s.store(view)
 	index, err := store.Index(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	result.SetupChecks = setupChecks(view, index.Current != "")
 	if index.Current == "" {
 		result.Handoff = handoff("", operationstore.Operation{}, reconciliation.Plan{}, nil, "")
 		if result.Contradictions, err = unindexed(ctx, view, store); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		result.NextSteps = idleSteps(view, result.Contradictions)
-		return result, nil
+		return result, selected, nil
 	}
 	operation, err := store.ReadOperation(ctx, index.Current)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	plan, err := store.ReadPlan(ctx, operation.ID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// A block retried after it failed again reads the state it found, so only
 	// its record's count shows the retry.
 	states, attempts, err := blockRecords(ctx, store, operation.ID, plan)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	result.Handoff = handoff(view.Identity().Name, operation, plan, states, inputDrift(view, operation))
 	if result.Contradictions, err = recordContradictions(ctx, store, operation, plan, states, attempts); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	logs, err := store.LogPaths(ctx, operation.ID, plan)
 	if err != nil {
@@ -237,7 +244,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 		blocks[index].Attempts = attempts[blocks[index].ID]
 	}
 	if err := s.explainUnproved(ctx, store, operation, plan, blocks, continuationCommand(view.Identity().Name, operation, plan, states)); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	summary := &LifecycleSummary{
 		Operation: operation.ID, Verb: string(operation.Verb), State: string(operation.State),
@@ -250,19 +257,19 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 	result.Lifecycle = summary
 	result.LogLocation = store.LogDirectory(operation.ID)
 	if result.Secrets.Bindings, err = bindingsHeld(view, operation); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	realized, err := realizations(ctx, store, operation, plan, states)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	result.Clusters = realizedClusters(result.Clusters, realized)
 	result.StorageClusters = realizedStorage(result.StorageClusters, realized)
 	result.Shared = realizedServices(result.Shared, realized)
 	if result.NextSteps, err = s.offered(ctx, view, store, operation, plan, states, summary.Next, result.Contradictions); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return result, nil
+	return result, selected, nil
 }
 
 // bindingsHeld counts the Secret bindings the current operation's record

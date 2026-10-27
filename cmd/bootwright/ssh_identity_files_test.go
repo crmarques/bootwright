@@ -71,7 +71,7 @@ func TestAnOfferedKeyResolvesOnlyThroughTheBoundOpener(t *testing.T) {
 	}
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || reported[0].Code != "trust.identity" ||
-		reported[0].Remediation != "record it with bootwright machine trust --context alpha --machines node" {
+		reported[0].Remediation != "record it with bootwright machine trust --context alpha --name node" {
 		t.Fatalf("after resolving the key the session reported %#v (%v), want the unproved host key", reported, err)
 	}
 }

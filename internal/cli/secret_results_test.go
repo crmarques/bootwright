@@ -67,7 +67,7 @@ func TestCompleteNegativeSecretCheckKeepsStructuredResult(t *testing.T) {
 			t.Fatalf("%s code=%d calls=%d", mode, code, record.calls)
 		}
 		if mode == "text" {
-			if !strings.Contains(strings.Join(strings.Fields(out), " "), "token token contextStore value missing -") || errOut != "  error  secret.input\n    secret token is missing\n" {
+			if !strings.Contains(strings.Join(strings.Fields(out), " "), "token token contextStore value missing -") || errOut != "  error  secret.input\n    secret token is missing\n    Next: supply valid Secret input or material and repeat the command\n" {
 				t.Fatalf("text stdout=%q stderr=%q", out, errOut)
 			}
 			continue

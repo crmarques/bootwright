@@ -386,6 +386,19 @@ func cliGoldens() []cliGolden {
 		result.NextSteps = []string{"bootwright setup"}
 		return result
 	}
+	// An idle context whose input declares a Secret with no stored material,
+	// a stale one and an installer image the media store lacks: the readiness
+	// rows and their remedies ahead of the plan step.
+	unready := func() *lifecycle.StatusResult {
+		result := idle()
+		result.Readiness = []lifecycle.ReadinessGap{
+			{Kind: "secret", Name: "ssh-key", State: "stale", Remedy: "bootwright secret generate --context lab --name ssh-key"},
+			{Kind: "secret", Name: "token", State: "missing", Remedy: "bootwright secret set --context lab --name token --value-file <path>"},
+			{Kind: "media", Name: "rhel-9.iso", State: "missing", Remedy: "bootwright media add --name rhel-9.iso --from-file <path>"},
+		}
+		result.NextSteps = append(lifecycleRemedies(result.Readiness), result.NextSteps...)
+		return result
+	}
 	validation := func() *compilation.Report {
 		return &compilation.Report{
 			Counts:                    compilation.Counts{FilesSeen: 15, ObjectsDecoded: 15},
@@ -398,13 +411,13 @@ func cliGoldens() []cliGolden {
 			Severity: "error", Code: "api.required", Message: "required field is absent",
 			Source: &diagnostics.SourceLocation{Path: "environment.yaml", Document: 1, Line: 6, Column: 3},
 			Object: &diagnostics.ObjectIdentity{APIVersion: "bootwright.io/v1alpha1", Kind: "Environment", Name: "lab-rhel"},
-			Field:  "$.spec.domains.base",
+			Field:  "$.spec.domains.base", Remediation: "add base (string)",
 		},
 		{
 			Severity: "error", Code: "api.field", Message: "field is not permitted by this schema",
 			Source: &diagnostics.SourceLocation{Path: "infra/machines/rhel-01.yaml", Document: 1, Line: 12, Column: 5},
 			Object: &diagnostics.ObjectIdentity{APIVersion: "bootwright.io/v1alpha1", Kind: "Machine", Name: "rhel-01"},
-			Field:  "$.spec.network.adresses",
+			Field:  "$.spec.network.adresses", Remediation: "rename the field to addresses",
 		},
 	}}
 	checked := func() *custody.CheckResult {
@@ -545,7 +558,7 @@ func cliGoldens() []cliGolden {
 	unauthorized := diagnostics.NewFailureWithRemediation("lifecycle.authorization",
 		"this plan has data-loss consequences that are not authorized: step 3 (install the operating system of metal-01)", "",
 		"repeat it with the authorization: bootwright apply --context lab --stage machines --authorize data-loss")
-	noInput := diagnostics.NewFailure("context.input", "context has no desired state; run context update --name lab --input-dir <dir>", "")
+	noInput := diagnostics.NewFailureWithRemediation("context.input", "context lab has no desired state", "", "import input with bootwright context update --name lab --input-dir <dir>")
 	stateRootRefused := func(r *dispatchRecord) {
 		r.result.controller = setupDryRun(platform)
 		r.result.controller.Route = "direct (no HTTPS_PROXY)"
@@ -817,6 +830,8 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-status-idle-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = idle() }},
 		{golden: "cli-status-destroyed", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = destroyed() }},
 		{golden: "cli-status-destroyed-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = destroyed() }},
+		{golden: "cli-status-unready", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = unready() }},
+		{golden: "cli-status-unready-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = unready() }},
 		{golden: "cli-status-unprepared", args: "status", record: func(r *dispatchRecord) { r.result.lifecycleStatus = unprepared() }},
 		{golden: "cli-status-unprepared-json", args: "status --output json", record: func(r *dispatchRecord) { r.result.lifecycleStatus = unprepared() }},
 
@@ -845,12 +860,14 @@ func cliGoldens() []cliGolden {
 				"    environment.yaml:6:3\n" +
 				"    required field is absent\n" +
 				"    Field: $.spec.domains.base\n" +
+				"    Next: add base (string)\n" +
 				"\n" +
 				"  error  Machine/rhel-01\n" +
 				"    api.field\n" +
 				"    infra/machines/rhel-01.yaml:12:5\n" +
 				"    field is not permitted by this schema\n" +
-				"    Field: $.spec.network.adresses\n",
+				"    Field: $.spec.network.adresses\n" +
+				"    Next: rename the field to addresses\n",
 		},
 		{golden: "cli-validate-failed-json", args: "validate -f inputs --output json", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid }},
 		{golden: "cli-render-effective", args: "render effective", record: func(r *dispatchRecord) { r.result.effective = effective() }},
@@ -933,7 +950,8 @@ func cliGoldens() []cliGolden {
 		{
 			args: "secret list --context lab", code: 1, record: func(r *dispatchRecord) { r.err = noInput },
 			stderr: "  error  context.input\n" +
-				"    context has no desired state; run context update --name lab --input-dir <dir>\n",
+				"    context lab has no desired state\n" +
+				"    Next: import input with bootwright context update --name lab --input-dir <dir>\n",
 		},
 		{golden: "cli-secret-list-refused-json", args: "secret list --context lab --output json", code: 1, record: func(r *dispatchRecord) { r.err = noInput }},
 		// An explicit sensitive result is the requested bytes with no added
@@ -1012,7 +1030,7 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-machine-info-json", args: "machine info --output json", record: func(r *dispatchRecord) { r.result.machines = machines(false) }},
 		{golden: "cli-machine-list", args: "machine list --power-status", record: func(r *dispatchRecord) { r.result.machines = machines(true) }},
 		{golden: "cli-machine-list-json", args: "machine list --power-status --output json", record: func(r *dispatchRecord) { r.result.machines = machines(true) }},
-		{golden: "cli-machine-list-silent", args: "machine list --silent", record: func(r *dispatchRecord) { r.result.machines = machines(false) }},
+		{golden: "cli-machine-list-short", args: "machine list --short", record: func(r *dispatchRecord) { r.result.machines = machines(false) }},
 		{golden: "cli-machine-start", args: "machine start --name rhel-01", record: func(r *dispatchRecord) { r.result.power = powered("start", "on", "off", true) }},
 		{golden: "cli-machine-start-json", args: "machine start --name rhel-01 --output json", record: func(r *dispatchRecord) { r.result.power = powered("start", "on", "off", true) }},
 		{golden: "cli-machine-stop", args: "machine stop --name rhel-01 --yes", record: func(r *dispatchRecord) { r.result.power = powered("stop", "off", "off", false) }},
@@ -1053,7 +1071,8 @@ func cliGoldens() []cliGolden {
 		{
 			args: "status", code: 1, record: func(r *dispatchRecord) { r.err = availability.ErrNotImplemented },
 			stderr: "  error  cli.not-implemented\n" +
-				"    bootwright status is not implemented\n",
+				"    bootwright status is not implemented\n" +
+				"    Next: run bootwright help <command> to see which forms this build runs\n",
 		},
 		{golden: "cli-not-implemented-json", args: "status --output json", code: 1, record: func(r *dispatchRecord) { r.err = availability.ErrNotImplemented }},
 	}, append(append(clusterGoldens(), diffGoldens()...), handoffGoldens()...)...)
@@ -1349,6 +1368,14 @@ func unfinishedContexts(r *dispatchRecord) {
 
 func rebound(r *dispatchRecord) {
 	r.result.rebind = &prerequisites.RebindResult{Outcome: "rebound", Bindings: 2, Reservations: 5}
+}
+
+func lifecycleRemedies(gaps []lifecycle.ReadinessGap) []string {
+	remedies := make([]string, 0, len(gaps))
+	for _, gap := range gaps {
+		remedies = append(remedies, gap.Remedy)
+	}
+	return remedies
 }
 
 func untilPlanFixture(revision string) *lifecycle.PlanResult {

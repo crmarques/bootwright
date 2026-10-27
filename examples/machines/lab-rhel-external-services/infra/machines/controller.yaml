@@ -1,0 +1,26 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: controller
+
+spec:
+  os:
+    provided: true
+
+  proxy:
+    proxyRef: lab-proxy
+
+    noProxy:
+      - localhost
+      - 127.0.0.1
+      - .lab.example.test
+      - 192.0.2.0/24
+      - 198.51.100.0/24
+
+  network:
+    addresses:
+      - name: ip
+        address: 192.0.2.1
+
+  access:
+    local: true

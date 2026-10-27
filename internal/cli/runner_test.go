@@ -43,7 +43,11 @@ func TestRunnerDispatchesEveryApplicationCommand(t *testing.T) {
 			if slices.Contains([]string{"machine rsh", "machine exec", "cluster rsh", "cluster exec"}, record.path) {
 				want = 255
 			}
-			if code != want || out != "" || record.calls != 1 || errOut != "  error  cli.not-implemented\n    bootwright "+record.path+" is not implemented\n" {
+			remedy := "run bootwright help <command> to see which forms this build runs"
+			if cut := strings.LastIndex(record.path, " "); cut > 0 {
+				remedy = "run bootwright help " + record.path[:cut] + " to see which commands this build runs"
+			}
+			if code != want || out != "" || record.calls != 1 || errOut != "  error  cli.not-implemented\n    bootwright "+record.path+" is not implemented\n    Next: "+remedy+"\n" {
 				t.Fatalf("code=%d out=%q err=%q calls=%d", code, out, errOut, record.calls)
 			}
 		})
@@ -56,11 +60,11 @@ func TestHelpPrecedenceAndClosedSyntax(t *testing.T) {
 		code int
 	}{
 		{"", 0}, {"help", 0}, {"completion", 0}, {"context", 2}, {"secret encryption", 2}, {"context --help", 0}, {"--help context init", 0}, {"help context init", 0},
-		{"context init --name= --help", 0}, {"context init -f a -f b --help", 0}, {"secret show --part invalid --help", 0}, {"status --output invalid --help", 0}, {"machine list --silent --output json --help", 0}, {"machine list --help --output invalid", 0},
+		{"context init --name= --help", 0}, {"context init -f a -f b --help", 0}, {"secret show --part invalid --help", 0}, {"status --output invalid --help", 0}, {"machine list --short --output json --help", 0}, {"machine list --help --output invalid", 0},
 		{"render --output json", 0}, {"render --clusters one --output json", 0}, {"render --output invalid", 2}, {"render --input-dir= --help", 0},
 		{"version --help=false", 0}, {"version --help=invalid", 2}, {"render effective --input-dir input", 2},
 		{"example --help", 2}, {"help example", 2}, {"container-cluster --help", 2}, {"help container-cluster", 2}, {"clu list", 2}, {"VERSION", 2}, {"--version", 2}, {"version --format json", 2}, {"__complete", 2}, {"__completeNoDesc", 2}, {"help __bootwright_complete", 2},
-		{"version --", 2}, {"version --help --bad", 2}, {"machine list --silent invalid --help", 0}, {"machine list --silent=invalid --help", 2}, {"version -vh", 2},
+		{"version --", 2}, {"version --help --bad", 2}, {"machine list --short invalid --help", 0}, {"machine list --short=invalid --help", 2}, {"version -vh", 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.args, func(t *testing.T) {
@@ -159,14 +163,14 @@ func TestJSONUsageUsesFinalOutputAndScalarValues(t *testing.T) {
 		json  bool
 		calls int
 	}{
-		{[]string{"machine", "list", "--silent=true", "--output", "json"}, 2, true, 0},
-		{[]string{"machine", "list", "--output", "json", "--silent=true"}, 2, true, 0},
-		{[]string{"machine", "list", "--silent=true", "--silent=false", "--output", "json"}, 1, true, 1},
-		{[]string{"machine", "list", "--silent=false", "--silent=true", "--output", "json"}, 2, true, 0},
+		{[]string{"machine", "list", "--short=true", "--output", "json"}, 2, true, 0},
+		{[]string{"machine", "list", "--output", "json", "--short=true"}, 2, true, 0},
+		{[]string{"machine", "list", "--short=true", "--short=false", "--output", "json"}, 1, true, 1},
+		{[]string{"machine", "list", "--short=false", "--short=true", "--output", "json"}, 2, true, 0},
 		{[]string{"machine", "list", "--bad", "--output", "json"}, 2, true, 0},
 		{[]string{"machine", "list", "--output", "json", "--bad"}, 2, true, 0},
-		{[]string{"machine", "list", "--silent=invalid", "--output", "json"}, 2, true, 0},
-		{[]string{"machine", "list", "--output", "json", "--silent=invalid"}, 2, true, 0},
+		{[]string{"machine", "list", "--short=invalid", "--output", "json"}, 2, true, 0},
+		{[]string{"machine", "list", "--output", "json", "--short=invalid"}, 2, true, 0},
 		{[]string{"machine", "list", "--output", "json", "--bad", "--output", "invalid"}, 2, false, 0},
 		{[]string{"machine", "list", "--output", "invalid", "--bad", "--output", "json"}, 2, true, 0},
 		{[]string{"machine", "list", "--output=", "--output=json"}, 2, true, 0},
@@ -199,7 +203,7 @@ func TestJSONUsageUsesFinalOutputAndScalarValues(t *testing.T) {
 
 func TestRawFlagParseFailureRemainsPrivate(t *testing.T) {
 	const privateValue = "do-not-display-private-value"
-	code, out, errOut, record := runRecorded([]string{"machine", "list", "--silent=" + privateValue, "--output", "json"})
+	code, out, errOut, record := runRecorded([]string{"machine", "list", "--short=" + privateValue, "--output", "json"})
 	var envelope commandEnvelope
 	if err := json.Unmarshal([]byte(out), &envelope); err != nil {
 		t.Fatal(err)
@@ -412,11 +416,11 @@ func TestASessionRefusalExitsTwoFiftyFive(t *testing.T) {
 			{name: "trust.identity", err: refusal("trust.identity"), code: 255, report: "  error  trust.identity\n    the session cannot open\n    Next: do what it says\n"},
 			{name: "access.target", err: refusal("access.target"), code: 255, report: "  error  access.target\n    the session cannot open\n    Next: do what it says\n"},
 			{name: "access.unavailable", err: refusal("access.unavailable"), code: 255, report: "  error  access.unavailable\n    the session cannot open\n    Next: do what it says\n"},
-			{name: "canceled", err: context.Canceled, code: 255, report: "  error  runtime.canceled\n    operation canceled\n"},
-			{name: "deadline", err: context.DeadlineExceeded, code: 255, report: "  error  runtime.deadline\n    operation deadline exceeded\n"},
-			{name: "unsupported", code: 255, report: "  error  runtime.internal\n    application service returned an unsupported result\n"},
+			{name: "canceled", err: context.Canceled, code: 255, report: "  error  runtime.canceled\n    operation canceled\n    Next: repeat the command\n"},
+			{name: "deadline", err: context.DeadlineExceeded, code: 255, report: "  error  runtime.deadline\n    operation deadline exceeded\n    Next: repeat the command\n"},
+			{name: "unsupported", code: 255, report: "  error  runtime.internal\n    application service returned an unsupported result\n    Next: repeat the command; a repeated failure is a Bootwright defect to report\n"},
 			{name: "usage", err: &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "access.target", Message: "the session cannot open"}}, Usage: true}, code: 2},
-			{name: "interrupted", err: context.Canceled, interrupt: true, code: 130, report: "  error  runtime.interrupted\n    operation interrupted\n"},
+			{name: "interrupted", err: context.Canceled, interrupt: true, code: 130, report: "  error  runtime.interrupted\n    operation interrupted\n    Next: repeat the command\n"},
 		} {
 			t.Run(invocation+"/"+test.name, func(t *testing.T) {
 				var out, errOut bytes.Buffer

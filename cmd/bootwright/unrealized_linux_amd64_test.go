@@ -57,8 +57,8 @@ func unrealizedFixtures(t *testing.T) map[string]desiredstate.Sources {
 			map[string]string{"root-password.yaml": secret("root-password", "usernamePassword")}),
 		"installOnly retention": patchedSources(t, exampleDirectory(t, "lab-rhel"), server, "retention: persistent", "retention: installOnly", nil),
 		"a disconnected cluster": patchedSources(t, patchedSources(t, exampleDirectory(t, "lab-features"), "clusters/features/cluster.yaml",
-			"    mode: connected\n", "    mode: disconnected\n", nil), "clusters/features/cluster.yaml", "          endpointRef: ip-https\n\n    pullSecretRef",
-			"          endpointRef: ip-https\n\n      bootArtifacts:\n        artifactServerEndpoint:\n          serverRef: lab-artifacts\n          endpointRef: ip-https\n\n    pullSecretRef", nil),
+			"    mode: connected\n", "    mode: disconnected\n", nil), "clusters/features/cluster.yaml", "          endpointRef: ip-https\n\n    # pullSecretRef",
+			"          endpointRef: ip-https\n\n      bootArtifacts:\n        artifactServerEndpoint:\n          serverRef: lab-artifacts\n          endpointRef: ip-https\n\n    # pullSecretRef", nil),
 		"serving certificates": patchedSources(t, exampleDirectory(t, "lab-sno"), cluster, "    mode: connected\n",
 			"    mode: connected\n\n    servingCertificates:\n      ingress:\n        defaultCertificateRef: artifact-server-tls\n", nil),
 	}
