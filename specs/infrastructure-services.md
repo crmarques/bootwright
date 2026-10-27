@@ -512,9 +512,6 @@ matches its definition. The three kinds freeze one request version, so
 a request an earlier build froze for one kind refuses by naming its version,
 and its remedy is to destroy the context with the build that applied it.
 
-Not yet met: the role's table and the selection are keyed by kind alone;
-tracked as [B810](milestones/backlog.md#b810).
-
 **Implementation.** One container image per kind, selected, pinned and acquired
 exactly as the [artifact server's](#managed-artifact-serving) is. The unit
 never uses the image's own entrypoint: the frozen request alone decides what
@@ -579,10 +576,9 @@ endpoint record through [the export DNS contract](storage-resources.md#attached-
 The declaration owns the contribution and this service owns its publication and
 inverse, using the same frozen-record and content ownership as other names. The
 storage domain owns the derivation of that record from the export's attached
-gateway, and this service reads no storage field path.
-
-Not yet met: this service reads the export's gateway reference itself; tracked
-as [B810](milestones/backlog.md#b810).
+gateway, and this service reads no storage field path: composition binds the
+storage derivation to the DNS definition, and the DNS server imports no storage
+or container-cluster package.
 
 **Readiness.** Completion requires a positive answer on every address the
 service serves: the declared bind address, or every declared endpoint address

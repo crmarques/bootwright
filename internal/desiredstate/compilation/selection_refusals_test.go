@@ -16,32 +16,18 @@ type selectionRefusal struct {
 }
 
 func selectionRefusals() []selectionRefusal {
-	const literal = "resource paths are literal; glob patterns are not expanded"
-	const skipped = "resource path is inside a directory discovery skips (dot-prefixed, vendor, node_modules, playbooks, roles, collections, manifests or secrets)"
-	const remedy = "list a .yaml or .yml file, or a directory holding them, below the Environment's directory, and include it in the input you pass"
-	secret := refusalSecret + "  type: opaque\n"
 	clusters := "apiVersion: bootwright.io/v1alpha1\nkind: ContainerCluster\nmetadata: {name: b}\nspec: {}\n---\napiVersion: bootwright.io/v1alpha1\nkind: ContainerCluster\nmetadata: {name: a}\nspec: {}\n"
+	// The add-on is retained only through cluster a's binding, so its static
+	// target is a cluster-retained reference to the excluded cluster b.
+	excludedReferrer := "---\napiVersion: bootwright.io/v1alpha1\nkind: ClusterAddonBinding\nmetadata: {name: a-addons}\nspec: {clusterRef: a, addonRefs: [tune]}\n" +
+		"---\napiVersion: bootwright.io/v1alpha1\nkind: ClusterAddon\nmetadata: {name: tune}\nspec:\n  manifestSet: {manifests: [{path: manifests/a.yaml}]}\n  steps:\n  - name: configure\n    gates: apply\n    playbook: configure.yaml\n    target: {static: {clusters: [b]}}\n"
 	return []selectionRefusal{
-		{"typo in the second entry", environmentYAML + "  resources:\n  - environment.yaml\n  - envronment.yaml\n", "",
-			"$.spec.resources[1]", "api.reference", "resource path selects no discovered desired-state file", remedy, 11, 1},
-		{"empty resource list", environmentYAML + "  resources: []\n", secret,
-			"$.spec.resources", "api.value", "list must contain at least one entry", "add at least one entry, or omit the field", 9, 1},
-		{"identical repeated entry", environmentYAML + "  resources: [environment.yaml, environment.yaml]\n", "",
-			"$.spec.resources[1]", "api.duplicate", "entry repeats an earlier entry", "remove or rename the repeated entry", 9, 1},
-		{"entry repeated after cleaning", environmentYAML + "  resources: [environment.yaml, ./environment.yaml]\n", "",
-			"$.spec.resources[1]", "api.duplicate", "resource path repeats entry [0] after cleaning", "remove the repeated entry", 9, 1},
-		{"entry outside the directory", environmentYAML + "  resources: [environment.yaml, ../environment.yaml]\n", "",
-			"$.spec.resources[1]", "api.value", "resource path must stay inside the Environment directory", "use a relative path below the Environment's directory", 9, 1},
-		{"dot-prefixed directory", environmentYAML + "  resources: [environment.yaml, .hidden/x.yaml]\n", "",
-			"$.spec.resources[1]", "api.reference", skipped, remedy, 9, 1},
-		{"payload directory", environmentYAML + "  resources: [environment.yaml, secrets/x.yaml]\n", "",
-			"$.spec.resources[1]", "api.reference", skipped, remedy, 9, 1},
-		{"glob pattern", environmentYAML + "  resources: [environment.yaml, infra/*.yaml]\n", "",
-			"$.spec.resources[1]", "api.reference", literal, remedy, 9, 1},
 		{"unresolved cluster", environmentYAML + "  containerClusters: [missing]\n", clusters,
 			"$.spec.containerClusters[0]", "api.reference", "no ContainerCluster named missing is declared", "select one of: a, b", 9, 0},
 		{"cluster entry that is not a name", environmentYAML + "  containerClusters: [" + refusalSentinel + ".]\n", "",
 			"$.spec.containerClusters[0]", "api.reference", "cluster selection entry is not a cluster name", "declare the ContainerCluster or remove the entry", 9, 1},
+		{"reference to an excluded root", environmentYAML + "  containerClusters: [a]\n", clusters + excludedReferrer,
+			"$.spec.steps[0].target.static.clusters[0]", "api.reference", "ContainerCluster/b is excluded by the Environment's cluster selection", "add b to Environment spec.containerClusters, or correct the reference", 25, 0},
 		{"empty cluster list", environmentYAML + "  containerClusters: []\n", "",
 			"$.spec.containerClusters", "api.value", "list must contain at least one entry", "add at least one entry, or omit the field", 9, 1},
 	}

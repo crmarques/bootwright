@@ -15,6 +15,7 @@ import (
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 )
 
@@ -157,7 +158,7 @@ func TestPhysicalEraseOrdersAfterClaimAndBeforeInstallation(t *testing.T) {
 	machine := eraseMachine()
 	catalog := labCatalog(metalProvider(), machine, sshKeySecret(api.MapValue(field("generated", api.MapValue()))))
 	input.State = compilation.NewState(catalog, catalog, nil)
-	erase, err := NewErase(nil).WithClaims(baremetal.BlockID).WithMedia(labMedia()).Plan(context.Background(), input)
+	erase, err := NewErase(nil).WithMedia(labMedia()).Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -175,7 +176,7 @@ func TestPhysicalEraseOrdersAfterClaimAndBeforeInstallation(t *testing.T) {
 	dependencies := realizing(target.Requires)
 	for index := range dependencies {
 		if dependencies[index].Kind == "Machine" && dependencies[index].Object == machine.Name() {
-			dependencies[index].ID = baremetal.BlockID(machine.Name())
+			dependencies[index].ID, dependencies[index].Family = baremetal.BlockID(machine.Name()), substrate.MachineFamily
 		}
 	}
 	definitions = append(definitions, dependencies...)
@@ -209,6 +210,46 @@ func TestPhysicalEraseOrdersAfterClaimAndBeforeInstallation(t *testing.T) {
 	removal, err := NewErase(nil).Removal(context.Background(), plan.Blocks[erasure])
 	if err != nil || !slices.Contains(removal.Consumes, reconciliation.AuthorizationDataLoss) {
 		t.Fatal("erase did not require data-loss")
+	}
+}
+
+type retiringPolicy struct{ family string }
+
+func (p retiringPolicy) PhysicalRetirement(_ api.Catalog, machine string) ([]reconciliation.ObjectRef, error) {
+	return []reconciliation.ObjectRef{{Kind: "StorageCluster", Object: "holds-" + machine, Family: p.family}}, nil
+}
+
+// Installation and erasure wait for the retirement of every policy composition
+// binds, each named by its API object and family, never by a block identity.
+func TestPhysicalInstallationAndEraseWaitForEveryRetirementPolicy(t *testing.T) {
+	input := planInput(reconciliation.Apply)
+	machine := eraseMachine()
+	catalog := labCatalog(metalProvider(), machine, sshKeySecret(api.MapValue(field("generated", api.MapValue()))))
+	input.State = compilation.NewState(catalog, catalog, nil)
+	policies := []RetirementPolicy{retiringPolicy{"first-retirement"}, retiringPolicy{"second-retirement"}}
+	erase, err := NewErase(nil).WithMedia(labMedia()).WithRetirementPolicies(policies...).Plan(context.Background(), input)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	install, err := New(nil).WithMedia(labMedia()).WithRetirementPolicies(policies...).Plan(context.Background(), input)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	checked := 0
+	for _, definition := range append(erase.Definitions, install.Definitions...) {
+		if definition.Object != machine.Name() {
+			continue
+		}
+		checked++
+		for _, family := range []string{"first-retirement", "second-retirement"} {
+			want := reconciliation.ObjectRef{Kind: "StorageCluster", Object: "holds-" + machine.Name(), Family: family}
+			if !slices.Contains(definition.Requires, want) || len(definition.Dependencies) != 0 {
+				t.Fatalf("%s requires %v and depends on %v", definition.ID, definition.Requires, definition.Dependencies)
+			}
+		}
+	}
+	if checked != 2 {
+		t.Fatalf("checked %d blocks of %s", checked, machine.Name())
 	}
 }
 

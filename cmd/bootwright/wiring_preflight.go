@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"math"
-	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	containerpreflight "github.com/crmarques/bootwright/internal/containercluster/preflight"
@@ -22,7 +20,7 @@ import (
 )
 
 func wireStoragePreflight(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) preflight.Service {
-	return preflight.Service{Graph: effectiveGraph{state: state}, Ownership: machineOwnership{reconciler: reconciler}, Project: libvirtAllocations, Capacity: capacity.Budget{Observer: preflightlocal.Observer{}}, Guests: preflight.GuestChecks{Commands: preflightCommands(state, reconciler, deps)}, Selection: currentSelection(deps.Selection)}
+	return preflight.Service{Graph: effectiveGraph{state: state}, Ownership: machineOwnership{reconciler: reconciler}, Project: libvirt.CapacityAllocations, Capacity: capacity.Budget{Observer: preflightlocal.Observer{}}, Guests: preflight.GuestChecks{Commands: preflightCommands(state, reconciler, deps)}, Selection: currentSelection(deps.Selection)}
 }
 
 func libvirtCapacityAdmission(checker capacity.CapacityChecker) lifecycle.ApplyAdmission {
@@ -30,64 +28,8 @@ func libvirtCapacityAdmission(checker capacity.CapacityChecker) lifecycle.ApplyA
 		checker = capacity.Budget{Observer: preflightlocal.Observer{}}
 	}
 	return func(ctx context.Context, contextName string, catalog api.Catalog, owned map[string]lifecycle.ObjectOwnership, starting []reconciliation.Block) error {
-		return admitLibvirtCapacity(ctx, contextName, catalog, owned, starting, checker)
+		return libvirt.AdmitCapacity(ctx, contextName, catalog, owned, starting, checker)
 	}
-}
-
-func admitLibvirtCapacity(ctx context.Context, contextName string, catalog api.Catalog, owned map[string]lifecycle.ObjectOwnership, starting []reconciliation.Block, checker capacity.CapacityChecker) error {
-	allocations, err := libvirtAllocations(catalog, contextName)
-	if err != nil {
-		return err
-	}
-	if !slices.ContainsFunc(starting, func(block reconciliation.Block) bool {
-		return block.Kind == libvirt.MachineKind && slices.ContainsFunc(allocations, func(a preflight.Allocation) bool { return a.Machine == block.Object })
-	}) {
-		return nil
-	}
-	reserves := capacity.ReservesFromCatalog(catalog, allocations)
-	for i := range allocations {
-		a := &allocations[i]
-		state, found := owned["Machine/"+a.Machine]
-		a.Allocated = found && !(state.Verb == "destroy" && state.State == "done")
-		a.Reserve = reserves(preflight.Target{Host: a.Host, Pool: a.Pool, Local: a.Local})
-	}
-	return capacity.Admit(ctx, checker, allocations)
-}
-
-func libvirtAllocations(catalog api.Catalog, contextName string) ([]preflight.Allocation, error) {
-	controller, err := lifecycle.ControllerMachine(catalog)
-	if err != nil {
-		return nil, err
-	}
-	requests, err := libvirt.MachineRequests(catalog, controller, contextName)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]preflight.Allocation, 0, len(requests))
-	for _, request := range requests {
-		object, _ := catalog.Find(api.Machine, request.Identity.Object)
-		allocation := preflight.Allocation{Machine: request.Identity.Object, Provider: object.Spec().Get("substrate", "providerRef").Text(), Host: request.Placement.Machine, Pool: request.Directory, Domain: request.Domain, UUID: request.UUID, Local: request.Placement.Local(), Quantities: preflight.Quantities{CPU: int64(request.VCPU)}}
-		if int64(request.MemoryMiB) > math.MaxInt64/(1<<20) {
-			return nil, capacityProjectionFailure()
-		}
-		allocation.Quantities.Memory = int64(request.MemoryMiB) * (1 << 20)
-		for _, disk := range request.Disks {
-			allocation.Disks = append(allocation.Disks, disk.Path)
-			if int64(disk.SizeGiB) > math.MaxInt64/(1<<30) {
-				return nil, capacityProjectionFailure()
-			}
-			size := int64(disk.SizeGiB) * (1 << 30)
-			if allocation.Quantities.Disk > math.MaxInt64-size {
-				return nil, capacityProjectionFailure()
-			}
-			allocation.Quantities.Disk += size
-		}
-		result = append(result, allocation)
-	}
-	return result, nil
-}
-func capacityProjectionFailure() error {
-	return errors.New("the aggregate declared resource budget overflows its supported quantity")
 }
 
 func preflightCommands(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) preflight.Commands {
@@ -119,7 +61,7 @@ func preflightCommands(state inventory.EffectiveState, reconciler lifecycle.Serv
 }
 
 func wireContainerPreflight(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) containerpreflight.Service {
-	return containerpreflight.Service{Graph: effectiveGraph{state: state}, Selection: currentSelection(deps.Selection), Ownership: machineOwnership{reconciler: reconciler}, Project: libvirtAllocations, Capacity: capacity.Budget{Observer: preflightlocal.Observer{}}, Resolver: containerpreflightlocal.Resolver{}, Blocks: func(ctx context.Context, name string) (map[string]string, error) {
+	return containerpreflight.Service{Graph: effectiveGraph{state: state}, Selection: currentSelection(deps.Selection), Ownership: machineOwnership{reconciler: reconciler}, Project: libvirt.CapacityAllocations, Capacity: capacity.Budget{Observer: preflightlocal.Observer{}}, Resolver: containerpreflightlocal.Resolver{}, DNSBlock: dnsServerDefinition().BlockID, Blocks: func(ctx context.Context, name string) (map[string]string, error) {
 		result, err := reconciler.Status(ctx, lifecycle.StatusRequest{ContextName: name})
 		if err != nil {
 			return nil, err

@@ -88,6 +88,7 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	var definitions []reconciliation.BlockDefinition
 	var placed []SSHReservation
 	binding := capabilityBinding{controller: controller}
+	var claimed claims
 	for _, bound := range bindings {
 		capability, ok := s.capabilities.Resolve(bound.Kind, bound.Implementation)
 		if !ok {
@@ -97,7 +98,14 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 		if err != nil {
 			return reconciliation.Plan{}, capabilityBinding{}, err
 		}
-		definitions = append(definitions, contribution.Definitions...)
+		claimed.record(bound, contribution.Definitions)
+		for _, definition := range contribution.Definitions {
+			if definition.Family != "" && definition.Family != bound.family() {
+				return reconciliation.Plan{}, capabilityBinding{}, failure("lifecycle.state", "the "+bound.Implementation+" capability planned a block of another family", "")
+			}
+			definition.Family = bound.family()
+			definitions = append(definitions, definition)
+		}
 		binding.reservations = append(binding.reservations, contribution.Reservations...)
 		placed = append(placed, contribution.SSHReservations...)
 		for _, reference := range contribution.Secrets {
@@ -107,6 +115,9 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 		}
 	}
 	slices.Sort(binding.secrets)
+	if err := claimed.failure(); err != nil {
+		return reconciliation.Plan{}, capabilityBinding{}, err
+	}
 	if err := RefuseTemplateDelimiters(view.Identity().Name, definitions); err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
@@ -365,6 +376,10 @@ func (s Service) refuseUnsupported(state *compilation.State) error {
 	if len(refused) == 0 {
 		return nil
 	}
+	return unsupportedFailure(refused)
+}
+
+func unsupportedFailure(refused []Refusal) error {
 	reported := make([]diagnostics.Diagnostic, 0, len(refused))
 	for _, refusal := range refused {
 		remediation := refusal.Remediation
@@ -394,7 +409,7 @@ func (s Service) unsupportedRefusals(state *compilation.State) []Refusal {
 			refused = append(refused, reporter.Unsupported(state)...)
 		}
 	}
-	return SortRefusals(append(refused, Unrealizable(state.Effective(), s.capabilityKinds())...))
+	return SortRefusals(append(refused, Unrealizable(state.Effective(), s.capabilityKinds(), s.options.EffectBearing)...))
 }
 
 const supportedExample = "examples/machines/lab-rhel"

@@ -20,7 +20,6 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
@@ -185,7 +184,7 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 func TestLabRHELExampleIsRealizableInFull(t *testing.T) {
 	state, _ := compileAcceptance(t, labExampleSources(t))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
-	if unsupported := lifecycle.Unrealizable(state.Effective(), claimedKinds(resolver)); len(unsupported) != 0 {
+	if unsupported := lifecycle.Unrealizable(state.Effective(), claimedKinds(resolver), effectBearing); len(unsupported) != 0 {
 		t.Fatalf("the example declares objects no capability claims: %v", unsupported)
 	}
 	for _, capability := range []lifecycle.UnsupportedReporter{libvirt.NewHost(nil), installation.New(nil)} {
@@ -402,7 +401,7 @@ func TestLabRHELRequestsCarryTheirDerivedIntent(t *testing.T) {
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	requests := map[string]managedservice.Request{}
 	for kind, definition := range map[string]managedservice.Definition{
-		"Proxy": proxy.Definition(), "DNSServer": dnsserver.Definition(), "NTPServer": ntpserver.Definition(),
+		"Proxy": proxy.Definition(), "DNSServer": dnsServerDefinition(), "NTPServer": ntpserver.Definition(),
 	} {
 		capability, ok := resolver.Resolve(kind, definition.Implementation)
 		if !ok {

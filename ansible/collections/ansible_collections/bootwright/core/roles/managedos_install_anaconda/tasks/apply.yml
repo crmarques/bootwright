@@ -25,28 +25,26 @@
     phase: loaded
   no_log: true
 
-# The boot, await and identity task files bind the frozen substrate and
-# identity channel only after the tree, the image and any private key are
-# published, and await.yml only after the installer wait and the eject. A
-# target none of them binds refuses here, before the first of those effects.
-# Each of those files also ends its dispatch in a terminal fail, which this
-# refusal leaves unreachable from here.
-- name: Refuse a target this installation has no boot or identity binding for
+# The boot, await and identity task files reach the frozen substrate only after
+# the tree, the image and any private key are published, and await.yml only
+# after the installer wait and the eject. A target whose arm the substrate has
+# no machine port for refuses here, before the first of those effects; the
+# substrate's own dispatch refuses it again at each entry point.
+- name: Refuse a target the substrate has no machine port for
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_machine
+    tasks_from: admit
+  vars:
+    bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
+
+- name: Refuse an identity channel this installation does not read
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.target.substrate in managedos_install_anaconda_pre_boot
-      - bootwright_os_install_request.target.substrate in managedos_install_anaconda_boot_media_bindings
-      - bootwright_os_install_request.target.substrate in managedos_install_anaconda_boot_disk
-      - bootwright_os_install_request.target.substrate in managedos_install_anaconda_identity_read
-      - bootwright_os_install_request.target.substrate in managedos_install_anaconda_state_read
-      - bootwright_os_install_request.target.substrate in managedos_install_anaconda_media_insert
-      - bootwright_os_install_request.target.substrate in managedos_install_anaconda_media_eject
       - bootwright_os_install_request.target.channel in ['guest-agent', 'delivered-key']
     fail_msg: >-
-      Machine {{ bootwright_os_install_request.identity.object }} names substrate
-      {{ bootwright_os_install_request.target.substrate }} and identity channel
-      {{ bootwright_os_install_request.target.channel }}, but this installation
-      lacks one of the required machine port or identity channel bindings, so nothing was published or booted; plan the
+      Machine {{ bootwright_os_install_request.identity.object }} names identity
+      channel {{ bootwright_os_install_request.target.channel }}, which this
+      installation does not read, so nothing was published or booted; plan the
       installation again with this release
     quiet: true
 
@@ -493,10 +491,7 @@
             phase: refused
             reason: '{{ managedos_install_anaconda_refusal }}'
           vars:
-            managedos_install_anaconda_refusal: >-
-              {{ substrate_libvirt_machine_refusal | default('')
-                 if bootwright_os_install_request.target.substrate == 'libvirt'
-                 else substrate_baremetal_machine_refusal | default('') }}
+            managedos_install_anaconda_refusal: "{{ substrate_machine_refusal | default('') }}"
           when: managedos_install_anaconda_refusal | length > 0
           no_log: true
 
@@ -558,9 +553,10 @@
 
     - name: Eject any installer media still inserted and read the machine's power
       ansible.builtin.include_role:
-        name: "{{ managedos_install_anaconda_media_eject[bootwright_os_install_request.target.substrate] }}"
+        name: bootwright.core.substrate_machine
         tasks_from: media_eject
       vars:
+        bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
         bootwright_machine_port: >-
           {{ managedos_install_anaconda_port_access | combine({'restore_verification': managedos_install_anaconda_media_trust.restoreVerification,
              'remove_certificate': managedos_install_anaconda_media_trust.removeCertificate,
@@ -568,7 +564,7 @@
 
     - name: Retain the machine port answer
       ansible.builtin.set_fact:
-        managedos_install_anaconda_ejected: "{{ vars[managedos_install_anaconda_port_result[bootwright_os_install_request.target.substrate]] }}"
+        managedos_install_anaconda_ejected: "{{ substrate_machine_port_result }}"
       no_log: true
 
     # ansible-core keeps nothing of a failure under no_log but that it failed, so

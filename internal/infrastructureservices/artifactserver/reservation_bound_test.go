@@ -36,7 +36,7 @@ func addressedEndpoints(listener string, n int) api.Value {
 func boundRowGraph(row string, kind api.Kind) (api.Catalog, map[string]string, bool) {
 	switch {
 	case row == "Endpoint addresses beyond the host reservation" && kind != api.ArtifactServer:
-		service := api.NewObject(kind, "lab-service", api.Value{}, api.MapValue(text("management", "managed"), text("machineRef", "controller"), text("bindAddress", "0.0.0.0"), number("port", "3128"), field("endpoints", addressedEndpoints("", 62))))
+		service := api.NewObject(kind, "lab-service", api.Value{}, api.MapValue(text("management", "managed"), text("machineRef", "controller"), selectedImplementation(kind), text("bindAddress", "0.0.0.0"), number("port", "3128"), field("endpoints", addressedEndpoints("", 62))))
 		return catalogOf(crowdedController(62), service), map[string]string{"<server>": service.Identity()}, true
 	case row == "Artifact sockets beyond the host reservation" && kind == api.ArtifactServer:
 		server := artifactServer(text("bindAddress", "0.0.0.0"),

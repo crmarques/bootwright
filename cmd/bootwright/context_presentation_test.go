@@ -37,8 +37,8 @@ func (c *snapshotConfirmer) Confirm(_ context.Context, action, name string) erro
 // before anything is written. Declined, they change nothing.
 func TestUpdateAndDeletePresentWhatTheyChangeBeforeThePrompt(t *testing.T) {
 	_, repository, input, root := contextFixture(t)
-	addSecretInput(t, input, "environment.yaml", syntheticEnvironment+"  resources:\n    - controller.yaml\n")
-	addSecretInput(t, input, "excluded.yaml", strings.Replace(serviceHost, "name: service-host", "name: excluded-host", 1))
+	addSecretInput(t, input, "environment.yaml", syntheticEnvironment)
+	addSecretInput(t, input, "reserved.yaml", "apiVersion: bootwright.io/v1alpha1\nkind: CustomPlaybook\nmetadata: {name: reserved}\nspec:\n  enabled: false\n  gates: base\n  playbook: playbooks/site.yaml\n  target: {machines: [service-host]}\n")
 	var out, errOut bytes.Buffer
 	confirmer := &snapshotConfirmer{t: t, root: root, out: &out, errOut: &errOut}
 	deps := testContextWiring(t, root)
@@ -49,7 +49,7 @@ func TestUpdateAndDeletePresentWhatTheyChangeBeforeThePrompt(t *testing.T) {
 	if code := runServices(t.Context(), []string{"context", "init", "--name", "alpha", "--input-dir", input}, &out, &errOut, services); code != 0 || confirmer.asked != 0 {
 		t.Fatalf("init = %d, asked %d times\n%s%s", code, confirmer.asked, out.String(), errOut.String())
 	}
-	addSecretInput(t, input, "environment.yaml", strings.ReplaceAll(syntheticEnvironment, "example.test", "changed.test")+"  resources:\n    - controller.yaml\n")
+	addSecretInput(t, input, "environment.yaml", strings.ReplaceAll(syntheticEnvironment, "example.test", "changed.test"))
 	out.Reset()
 	errOut.Reset()
 	before := stateFingerprint(t, root)
@@ -61,7 +61,7 @@ func TestUpdateAndDeletePresentWhatTheyChangeBeforeThePrompt(t *testing.T) {
 			t.Fatalf("before the update prompt standard output lacks %q:\n%s", line, confirmer.stdout)
 		}
 	}
-	if !strings.Contains(humanContent(confirmer.stderr), humanContent("  warning  api.selection\n    "+filepath.Join(input, "excluded.yaml"))) || !sameFingerprints(before, confirmer.fingerprint) || !sameFingerprints(before, stateFingerprint(t, root)) {
+	if !strings.Contains(humanContent(confirmer.stderr), humanContent("  warning  CustomPlaybook/reserved\n    api.deferred\n    "+filepath.Join(input, "reserved.yaml"))) || !sameFingerprints(before, confirmer.fingerprint) || !sameFingerprints(before, stateFingerprint(t, root)) {
 		t.Fatalf("before the update prompt standard error held %q, or the store changed", confirmer.stderr)
 	}
 	out.Reset()

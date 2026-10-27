@@ -206,7 +206,8 @@ blocks, native inputs, target identities, impacts, authorization and exclusive
 resources. Readiness is a proved block postcondition, never an ordering hint.
 
 The graph includes the following dependencies where the desired graph needs
-them:
+them; the [reference edges](state-reconciliation.md#reference-edges) catalog
+lists the requirements each storage family emits:
 
 - Verified Machine and managed-OS completion, declared host networks, name and
   time services, trusted remote access, package and registry access, and
@@ -762,7 +763,12 @@ or replace the bound disk set. See the
 This code path has synthetic coverage; live physical acceptance remains unrun.
 
 Physical retirement requires the original opt-in logical-overwrite policy to
-cover the root disk and every selected data, DB and WAL WWN. Without it, a
+cover the root disk and every selected data, DB and WAL WWN. Ceph contributes
+the retirement policy Managed OS installation and erasure honor through
+[their retirement port](managed-os.md#physical-removal): each physical node's
+Machine waits for its cluster's retirement verification, named as the
+StorageCluster in the storage physical-retirement family, and the verification
+waits for each node's substrate claim the same way. Without it, a
 realized cluster's removal refuses before registration. Storage first records a pending-erasure disposition
 so consumer removal and managed-OS cleanup can precede the offline erase worker.
 A separate terminal verification block then matches every complete original-policy

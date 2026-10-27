@@ -142,10 +142,9 @@ CONTROLLER_FILES = {
     "containercluster_install_agent/tasks/boot.yml",
     "containercluster_install_agent/tasks/release.yml",
     "containercluster_install_agent/tasks/node_state.yml",
-    "machine_power_read_redfish/tasks/read.yml",
-    "machine_power_redfish/tasks/power.yml",
-    "machine_power_redfish/tasks/start.yml",
-    "machine_power_redfish/tasks/stop.yml",
+    "machine_power/tasks/power.yml",
+    "machine_power/tasks/start.yml",
+    "machine_power/tasks/stop.yml",
     "managedos_install_anaconda/tasks/apply.yml",
     "managedos_install_anaconda/tasks/await.yml",
     "managedos_install_anaconda/tasks/boot.yml",
@@ -543,7 +542,8 @@ def controller_walk(tasks):
     for task in walk(tasks):
         facts = task.get("ansible.builtin.set_fact", {})
         forwarded = [(name, value) for name, value in facts.items()
-                     if isinstance(value, str) and ("_port_result[" in value or value == "{{ containercluster_install_agent_port_result }}")]
+                     if isinstance(value, str) and name != "containercluster_install_agent_port_result"
+                     and value in ("{{ substrate_machine_port_result }}", "{{ containercluster_install_agent_port_result }}")]
         if len(forwarded) == 1:
             yield {"name": task.get("name"), "bootwright.core.redfish_port_answer": {},
                    "register": forwarded[0][0], "failed_when": False, "no_log": True}

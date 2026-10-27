@@ -24,7 +24,6 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/controller/runtimelock"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
@@ -65,7 +64,7 @@ func contractVersions() []contractVersion {
 		{ceph.ReplicationImplementation, ceph.ReplicationContentDigest(), reflect.TypeFor[ceph.ReplicationRequest](), reflect.TypeFor[ceph.ReplicationEvidence]()},
 		{ceph.ExportImplementation, ceph.ExportContentDigest(), reflect.TypeFor[ceph.ExportRequest](), reflect.TypeFor[ceph.ExportEvidence]()},
 	}
-	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
+	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsServerDefinition(), ntpserver.Definition()} {
 		versions = append(versions, contractVersion{definition.Implementation, definition.ContentDigest(),
 			reflect.TypeFor[managedservice.Request](), reflect.TypeFor[managedservice.Evidence]()})
 	}
@@ -227,11 +226,11 @@ func automationFormats() map[string]automationFormat {
 		"cluster-media-agent-v9":    {class: formatMirrored},
 		"cluster-install-agent-v7":  {class: formatMirrored},
 		"artifact-server-nginx-v2":  {class: formatMirrored},
-		"managed-service-v3":        {class: formatMirrored},
+		"managed-service-v4":        {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power
 		// content digest these implementations feed, and nothing is retained.
-		"machine-power-redfish-v2": {class: formatMirrored},
-		"machine-power-read-v2":    {class: formatMirrored},
+		"machine-power-v3":      {class: formatMirrored},
+		"machine-power-read-v3": {class: formatMirrored},
 
 		"controller-prerequisites-v6": {class: formatController, reason: "the controller stage's request, which setup applies and no plan block retains"},
 	}

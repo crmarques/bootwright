@@ -97,10 +97,9 @@ def test_the_installer_wait_reads_its_frozen_budget():
 def test_the_identity_wait_reads_its_frozen_budget():
     wait = one("identity_until_answered.yml", lambda task: task.get("ansible.builtin.include_tasks") == "identity.yml")
     assert rendered(wait["vars"]["managedos_install_anaconda_identity_retries"]) == BUDGETS["identity"]["attempts"]
-    for role in ("substrate_libvirt_machine", "substrate_baremetal_machine"):
-        read = one("identity.yml", lambda task, role=role: (task.get("ansible.builtin.include_role") or {}).get(
-            "name") == "bootwright.core." + role)
-        assert rendered(read["vars"][role + "_identity_delay"]) == BUDGETS["identity"]["delaySeconds"]
+    read = one("identity.yml", lambda task: (task.get("ansible.builtin.include_role") or {}).get(
+        "name") == "bootwright.core.substrate_machine")
+    assert rendered(read["vars"]["bootwright_machine_identity"]["delay"]) == BUDGETS["identity"]["delaySeconds"]
 
 
 def test_the_reachability_wait_reads_its_frozen_budget():

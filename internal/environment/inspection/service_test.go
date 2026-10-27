@@ -10,6 +10,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
@@ -27,7 +28,7 @@ type fixture struct {
 	catalog        api.Catalog
 	asked          []string
 	cephCalls      int
-	cephFor        map[string]CephProof
+	cephFor        map[string]StorageProof
 	installed      map[string]bool
 	installs       int
 	proved         map[string]bool
@@ -85,7 +86,7 @@ func newFixture(t *testing.T) *fixture {
 			storageCluster("storage", "managed", "rhel-01", nodes...),
 			storageCluster("archive", "external", ""),
 		}),
-		cephFor: map[string]CephProof{"storage": {
+		cephFor: map[string]StorageProof{"storage": {
 			FSID: testFSID, Image: Image{Reference: "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9:v9.9.1-25074", Digest: "sha256:" + strings.Repeat("a", 64), Platform: "linux/amd64"},
 			Monitors: []Monitor{{Host: "rhel-01", FQDN: "rhel-01.lab.test", Address: "192.0.2.11"}}, Dashboard: testDashboard(),
 			Specializations: []string{"ceph-bootstrap-license-call-continues"},
@@ -101,13 +102,32 @@ func (f *fixture) Effective(_ context.Context, contextName string) (api.Catalog,
 	return f.catalog, f.failure
 }
 
-func (f *fixture) ManagedCeph(_ context.Context, _ string, _ api.Catalog, cluster api.Object) (CephProof, error) {
+func (f *fixture) ManagedStorage(_ context.Context, selected string, _ api.Catalog, cluster api.Object) (StorageProof, error) {
 	f.cephCalls++
+	declared := cluster.Spec().Get("ceph")
+	release, node := declared.Get("release").Text(), declared.Get("cephadm", "bootstrap", "node").Text()
 	proof, found := f.cephFor[cluster.Name()]
 	if !found {
-		return CephProof{Reason: "no apply has completed the cluster's bootstrap"}, nil
+		return StorageProof{Release: release, AdminNode: node, Reason: "no apply has completed the cluster's bootstrap"}, nil
+	}
+	proof.Release, proof.AdminNode = release, node
+	if proof.FSID != "" {
+		root := "/var/lib/bootwright/ceph/" + proof.FSID
+		proof.AdminCommand = "bootwright cluster exec --context " + selected + " --name " + cluster.Name() + " --node " + node +
+			" -- sudo -n ceph --conf " + root + "/ceph.conf --keyring " + root + "/ceph.client.admin.keyring"
 	}
 	return proof, nil
+}
+
+func (f *fixture) ObjectUserGateway(user api.Object) string {
+	return user.Spec().Get("objectGatewayRef").Text()
+}
+
+func storageMembers(object api.Object) (environment.Membership, bool) {
+	if object.Kind() != api.StorageCluster {
+		return environment.Membership{}, false
+	}
+	return environment.MembersOf("$.spec.ceph.topology.nodes", object.Spec().Get("ceph", "topology", "nodes")), true
 }
 
 func (f *fixture) Resources(_ context.Context, _ string, _ api.Catalog) (map[string][]Resource, error) {
@@ -148,7 +168,7 @@ func (f *fixture) ObjectUserProved(context.Context, string, api.Catalog, api.Obj
 }
 
 func (f *fixture) service(current string) Service {
-	return New(f, f, f, f, func(context.Context) (string, error) { return current, nil }, f)
+	return New(f, f, f, f, func(context.Context) (string, error) { return current, nil }, f).WithMembers(storageMembers)
 }
 
 func (f *fixture) untouched() {
@@ -317,7 +337,7 @@ func TestMissingEvidenceReportsUnavailableWithTheApplyRemedy(t *testing.T) {
 
 func TestIncompleteProofsNeverReportReady(t *testing.T) {
 	for name, edit := range map[string]func(*fixture){
-		"no fsid": func(f *fixture) { f.cephFor["storage"] = CephProof{} },
+		"no fsid": func(f *fixture) { f.cephFor["storage"] = StorageProof{} },
 		"no bootstrap": func(f *fixture) {
 			f.catalog = api.NewCatalog([]api.Object{storageCluster("storage", "managed", "", node("rhel-01", "a", "machine-a"))})
 		},

@@ -3,7 +3,9 @@ package installation
 import (
 	"context"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -36,4 +38,22 @@ type MediaRecord struct {
 // store name, so a plan freezes each image an installation uses at its record.
 type MediaRecords interface {
 	MediaRecords(context.Context) (map[string]MediaRecord, error)
+}
+
+// RetirementPolicy names what retires a physical Machine's content first;
+// composition binds one from every implementation that has one.
+type RetirementPolicy interface {
+	PhysicalRetirement(catalog api.Catalog, machine string) ([]reconciliation.ObjectRef, error)
+}
+
+func retirementRequirements(policies []RetirementPolicy, catalog api.Catalog, machine string) ([]reconciliation.ObjectRef, error) {
+	var found []reconciliation.ObjectRef
+	for _, policy := range policies {
+		references, err := policy.PhysicalRetirement(catalog, machine)
+		if err != nil {
+			return nil, err
+		}
+		found = append(found, references...)
+	}
+	return found, nil
 }

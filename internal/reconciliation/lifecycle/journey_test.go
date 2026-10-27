@@ -1703,7 +1703,7 @@ func newPlannedHarness(t *testing.T, definitions []reconciliation.BlockDefinitio
 	h.service = New(workspace, nil, testCompiler{state: compilation.NewState(catalog, catalog, nil)}, binder,
 		testHost{identity: host}, testAutomation{digest: testAutomaton}, guard, testResolver{capability: capability},
 		Options{
-			Confirmer: confirmer, Presenter: presenter, Clock: clock,
+			Confirmer: confirmer, Presenter: presenter, Clock: clock, EffectBearing: domainEffects,
 			Entropy: func(buffer []byte) (int, error) {
 				for index := range buffer {
 					buffer[index] = h.entropy[0]

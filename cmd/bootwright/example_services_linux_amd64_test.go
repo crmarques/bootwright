@@ -22,8 +22,8 @@ func TestExampleServicesPlansAllProtocols(t *testing.T) {
 	if budget != (profileBudget{guests: 7, cpu: 26, memoryMiB: 83 * 1024, root: 400, data: 360}) {
 		t.Fatalf("budget: %+v", budget)
 	}
-	if len(state.Effective().OfKind(api.Machine)) != 7 {
-		t.Fatal("storage closure must retain controller and six hosts, pruning independent client")
+	if len(state.Effective().OfKind(api.Machine)) != 8 {
+		t.Fatal("storage closure must retain controller, six hosts and the standalone client")
 	}
 	if refused := productionUnsupported(t, state); len(refused) != 0 {
 		t.Fatalf("capabilities refuse %+v", refused)

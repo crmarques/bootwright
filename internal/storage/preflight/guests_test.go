@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/substrate/capacity"
 )
 
 func TestGuestPrerequisitesUseFixedReadsAndNeverReturnRawOutput(t *testing.T) {
@@ -43,7 +44,7 @@ func TestGuestPrerequisitesUseFixedReadsAndNeverReturnRawOutput(t *testing.T) {
 		t.Fatalf("%d %v", calls, err)
 	}
 	for _, row := range rows {
-		if row.Status != Passed || strings.Contains(row.Reason, "synthetic-") {
+		if row.Status != capacity.Passed || strings.Contains(row.Reason, "synthetic-") {
 			t.Fatalf("%+v", row)
 		}
 	}
@@ -53,7 +54,7 @@ func TestGuestPrerequisitesUseFixedReadsAndNeverReturnRawOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, row := range rows {
-		if row.Status != Unknown || strings.Contains(row.Reason, "secret") {
+		if row.Status != capacity.Unknown || strings.Contains(row.Reason, "secret") {
 			t.Fatalf("%+v", row)
 		}
 	}
@@ -71,7 +72,7 @@ func TestUnknownHostKeyObservationNeverContinuesWithCredentials(t *testing.T) {
 			return nil, UntrustedKey{Fingerprint: "SHA256:synthetic"}
 		})}
 		rows, err := checker.CheckGuest(context.Background(), "synthetic", host, PreflightRequest{TrustOnFirstUse: observe})
-		if err != nil || calls != 1 || len(rows) != 1 || rows[0].Status != Unknown || rows[0].ID != "host.trust" || !strings.Contains(rows[0].Next, "--machines guest") {
+		if err != nil || calls != 1 || len(rows) != 1 || rows[0].Status != capacity.Unknown || rows[0].ID != "host.trust" || !strings.Contains(rows[0].Next, "--machines guest") {
 			t.Fatalf("%+v %d %v", rows, calls, err)
 		}
 	}

@@ -95,7 +95,10 @@ and interface names
 ([vSphere machine realization](../substrates.md#vsphere-machine-realization)).
 A KubeVirt interface carries a pinned `macAddress`
 ([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization))
-whose source, authored or derived, B87's definition settles.
+that the provider derives from the context, Machine and interface names, as
+libvirt's does, and that is never authored: a KubeVirt Machine's
+`hardware.nics[].macAddress` refuses, and it authors no `interfaceBinding`
+([B87](../milestones/m1.md#b87), D183, Q79).
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |

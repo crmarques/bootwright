@@ -70,7 +70,7 @@ spec:
 
 func TestAPlacementMachineRouteRefusesWhatTheProxyGrammarRefuses(t *testing.T) {
 	compiler := compilation.NewCompiler(yamlstream.Parser{}, nil,
-		compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate},
+		compilation.Rules{Normalize: environment.Normalize, Validate: testEnvironmentValidate},
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, Validate: secrets.Validate},
 		compilation.Rules{Normalize: machine.Normalize, ValidateAuthored: machine.ValidateAuthored, Validate: machine.Validate},
 		compilation.Rules{Normalize: infrastructureservices.Normalize, ValidateAuthored: infrastructureservices.ValidateAuthored, Validate: infrastructureservices.Validate},

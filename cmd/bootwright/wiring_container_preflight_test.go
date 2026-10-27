@@ -11,7 +11,6 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/containercluster"
 	containerpreflight "github.com/crmarques/bootwright/internal/containercluster/preflight"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -40,7 +39,7 @@ func (f containerCapacityFacts) Observe(context.Context, capacity.Target) (capac
 func TestContainerPreflightUsesCompletedDNSAndApplyCapacityRows(t *testing.T) {
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno"))
 	catalog := state.Effective()
-	allocations, err := libvirtAllocations(catalog, "lab-sno")
+	allocations, err := libvirt.CapacityAllocations(catalog, "lab-sno")
 	if err != nil || len(allocations) != 1 {
 		t.Fatalf("allocations %v %v", allocations, err)
 	}
@@ -75,7 +74,7 @@ func TestContainerPreflightUsesCompletedDNSAndApplyCapacityRows(t *testing.T) {
 				return gateRows, err
 			})
 			identity := "Machine/" + allocation.Machine
-			if err := admitLibvirtCapacity(context.Background(), "lab-sno", catalog, map[string]lifecycle.ObjectOwnership{identity: owned}, []reconciliation.Block{block}, checker); err != nil {
+			if err := libvirt.AdmitCapacity(context.Background(), "lab-sno", catalog, map[string]lifecycle.ObjectOwnership{identity: owned}, []reconciliation.Block{block}, checker); err != nil {
 				t.Fatal(err)
 			}
 			if gateAllocations[0].Allocated != (owned.Verb == "apply") {
@@ -87,7 +86,7 @@ func TestContainerPreflightUsesCompletedDNSAndApplyCapacityRows(t *testing.T) {
 			service.Blocks = func(context.Context, string) (map[string]string, error) {
 				blocks := map[string]string{}
 				for _, server := range catalog.OfKind(api.DNSServer) {
-					blocks[dnsserver.Definition().BlockID(server.Name())] = "done"
+					blocks[dnsServerDefinition().BlockID(server.Name())] = "done"
 				}
 				if len(blocks) == 0 {
 					t.Fatal("fixture has no managed DNS")

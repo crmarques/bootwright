@@ -37,6 +37,19 @@ recorded before D165 keep their cells as written. For the log digest, set
 find "$LOGS" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum
 ```
 
+## Shared qualification rules
+
+Every coverage page applies these two rules, links them and states only its
+additions.
+
+- **Versions.** When a slice moves a frozen request version, a row accepted on
+  an earlier build is repeated, and a context an earlier build applied is
+  destroyed with that build first.
+- **Evidence, not approval.** A run proves its profile on its release only. A
+  release whose native mechanics differ gets its own row for the affected
+  profile and a registered specialization; no row or specialization approves
+  or refuses a release.
+
 ## Setup v2 fresh-install row
 
 [B555](../specs/milestones/delivered.md#x93--the-owner-run-of-2026-10-14)'s owner gate is one row per host, a

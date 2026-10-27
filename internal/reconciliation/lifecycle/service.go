@@ -34,6 +34,7 @@ type Options struct {
 	ApplyAdmission    ApplyAdmission
 	ListenerAdmission ListenerAdmission
 	PlanInspection    PlanInspection
+	EffectBearing     EffectBearing
 	// Concurrency bounds how many of an operation's blocks run at once. It is
 	// how much this host is asked to do at the same time, never what the plan
 	// permits, so it is not frozen with the plan. Zero takes the default.
@@ -70,7 +71,7 @@ func (s Service) available(ctx context.Context) error {
 	if s.workspace == nil || s.compiler == nil || s.binder == nil || s.host == nil || s.automation == nil || s.guard == nil || s.capabilities == nil {
 		return availability.ErrNotImplemented
 	}
-	if s.options.Clock == nil || s.options.Entropy == nil || s.options.Operations == nil {
+	if s.options.Clock == nil || s.options.Entropy == nil || s.options.Operations == nil || s.options.EffectBearing == nil {
 		return availability.ErrNotImplemented
 	}
 	return nil

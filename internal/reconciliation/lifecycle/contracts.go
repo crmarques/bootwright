@@ -345,9 +345,11 @@ func (q Quiescence) Settled() bool { return q.State == Quiescent }
 // CapabilityBinding is one implementation this executable offers for one API
 // kind. Several capabilities may realize the same kind through different
 // implementations, so a binding, not a kind alone, identifies one of them.
+// Bindings of one Family, empty meaning the kind, are alternatives.
 type CapabilityBinding struct {
 	Kind           string
 	Implementation string
+	Family         string
 }
 
 // CapabilityResolver is the immutable set of capabilities this executable

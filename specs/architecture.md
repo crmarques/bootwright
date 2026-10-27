@@ -65,11 +65,18 @@ further implementation and any generality beyond that seam.
 Container cluster and Storage are families: an implementation is selected from
 validated input as [implementation selection](#implementation-selection)
 states, and the rules general to the family, and every context outside it,
-name no implementation. Not yet met: Environment selection, admission and
-compilation read Ceph and libvirt field paths, Environment inspection declares
-a Ceph-named evidence port, and general-flow packages hard-code kind lists and
-implementation identities; tracked as
-[B810](milestones/backlog.md#b810).
+name no implementation. The domain that owns each cluster kind publishes the
+kind's node membership, and composition binds it into Environment selection,
+admission, access and inspection and into compilation, which read no cluster
+field path; Environment inspection reads storage evidence through a neutral
+`StorageEvidence` port whose Ceph adapter composition binds. Kind facts are
+read from the schema registry, such as the kinds that exist only within one
+cluster, or held to the kind catalog by exhaustiveness tests, such as each
+kind's effect-bearing owner, its selection class and its normalization rank,
+and the CLI labels each planned action with its block's frozen description.
+An architecture test refuses a substrate arm, an implementation identity or a
+Ceph field path or host layout in `internal/reconciliation`,
+`internal/desiredstate`, `internal/environment` and `internal/cli`.
 
 Security constrains every context and effect boundary; it is not a component to
 which other contexts delegate safety. Public API kinds are boundary contracts,
@@ -454,14 +461,19 @@ installation method touches only this list:
    entries, as steps 2 and 3 above.
 3. Its rows in its domain's supported-shape and refusal tables, and in the
    observable-field table when it projects.
-4. Its `boundCapability` in `buildCapabilitiesWith` and its playbooks in
-   `operationPlaybook`, as step 4 above.
+4. Its `boundCapability` in `buildCapabilitiesWith`, naming the capability
+   family it shares with the implementations it is an alternative to, and its
+   playbooks in `operationPlaybook`, as step 4 above.
 5. Its role, playbooks and protocol plugin, named as the
    [collection](#ansible-collection-structure) states. A substrate arm's role
-   provides the substrate's machine entry points, and each consumer dispatch
-   table gains one row per entry point it uses.
+   provides the substrate's machine entry points, and the substrate's
+   dispatcher role gains its row and its arm in each entry point's argument
+   choices; no consumer changes.
 6. Its tests, which run the shared contract suites of every port it
-   implements.
+   implements: for `Capability`, its row in
+   `TestEveryCapabilityHonoursTheCapabilityContract`, which holds every
+   binding and one synthetic double to planning, removal, failure, unknown
+   outcome, cancellation, replay and evidence.
 
 It answers, from their owners, what it converges
 ([converging an effect](state-reconciliation.md#converging-an-effect)), when
@@ -477,10 +489,7 @@ its process and remote boundaries
 
 An edit to another domain or to the general flow means a seam is missing. The
 seam lands in the same slice as its first consumer, as a separate reviewed
-step, and never as a branch on the new implementation. Not yet met: no shared
-suite exercises the `Capability` port's failure, unknown outcome,
-cancellation, replay and removal paths against every implementation; tracked
-as [B808](milestones/backlog.md#b808).
+step, and never as a branch on the new implementation.
 
 ### Context admission and compilation
 
@@ -617,11 +626,13 @@ learns another's block identities.
 A consumer that needs a policy several implementations contribute, such as the
 retirement policies Managed OS installation and erasure honor, owns that port
 as a list composition aggregates from every bound implementation; it never
-receives one implementation's policy or block identity by name. Not yet met:
-composition binds Ceph's physical retirement policies into the Managed OS
-installation and erase capabilities, and the bare-metal block identity into
-erasure and Ceph's physical retirement; tracked as
-[B810](milestones/backlog.md#b810).
+receives one implementation's policy or block identity by name. Each policy
+answers with API objects and their capability family, which Reconciliation
+resolves like any other requirement, and a capability that waits for another
+family's claim on an object, such as erasure waiting for the substrate's claim
+on its Machine, requires that object from that family. A composition test
+refuses any binding that hands a capability another package's block-identity
+function.
 
 Workspace owns the durable boundary: the lifecycle transaction, the operation
 area and the reservation record are Workspace primitives, and Reconciliation
@@ -870,16 +881,21 @@ authored variables, gathered facts, and arbitrary role/task/plugin names cannot
 select executable code. Do not use implicit role dependencies or shared mutable
 facts to communicate across capability boundaries.
 
-A consumer of a realized Machine dispatches on the substrate arm or identity
-channel Go froze into its request, through that substrate role's entry points,
-and each dispatch ends in a terminal fail for a value it has no entry point
-for. The substrate owns the machine port as role entry points validated by
-their argument specs (decision D1), and consumers compose only those. Each
-consumer's dispatch table holds one row per arm for each entry point it uses,
-so an arm a consumer installs on adds a row to that table. Not yet met: the
-power role reads its arm from material values set after the request is
-digested, and an arm it does not list fails on an undefined key rather than a
-terminal fail; tracked as [B809](milestones/backlog.md#b809).
+A consumer of a realized Machine hands the substrate arm Go froze into its
+request to the substrate's one dispatcher role, `substrate_machine`, at an
+entry point of the machine port, and composes nothing else of the substrate.
+The substrate owns the machine port as role entry points validated by their
+argument specs (decision D1). The dispatcher's table is the only place an
+arm's role is named: its argument specs carry no arm choices, an arm it does
+not list ends in a named terminal fail before any lookup by it, and it
+republishes the arm's answer under its own names. Adding an arm edits the
+dispatcher's table and the argument-spec choices of the two power roles,
+`machine_power` and `machine_power_read`, and nothing else. A consumer also refuses such
+an arm through the dispatcher's `admit` entry point before its own first
+effect. An arm added to the table reaches every consumer, machine power
+included, and no consumer changes. Go consumers likewise read the
+[realized target](substrates.md#selection-and-refusal) and the substrate's
+capability facts rather than an arm name.
 
 ### Ansible collection plugins and results
 
@@ -1089,11 +1105,9 @@ A release difference that would change a block's request, evidence shape,
 plan, intent or ordering is not a specialization: it is a new implementation
 identity, selected by artifact facts or authored intent as
 [implementation selection](#implementation-selection) states, never by a
-version label. Each registry carries a marker the catalog test discovers, so a
-registry the catalog does not name fails. Not yet met: the catalog test reads
-two fixed registry paths, and the container-cluster topology registry's
-override hook is keyed by the authored release version, the shape that test
-expects; tracked as [B811](milestones/backlog.md#b811).
+version label. Each registry carries a marker the catalog test discovers, the
+`Specialization` constructor, so a registry the catalog does not name fails
+wherever it lives.
 
 ### Implementation selection
 
@@ -1118,18 +1132,26 @@ Each domain names, in its supported-shape section, the selector its
 implementations claim objects by: the InfraProvider arm, a ContainerCluster's
 `spec.distribution.type` and `spec.install.method`, a StorageCluster's
 `spec.type` and `spec.management`, or a service kind with its
-`spec.implementation`. Every selected object of a block family is claimed by
-exactly one bound implementation or refused by its domain's refusal table, and
-two bindings that claim one object refuse before registration, naming both
-implementations. Outside its owning implementation or substrate package,
-composition and its domain's admission refusals, production code reaches an
-arm's or an implementation's specifics only through a capability the owner
-publishes, such as a substrate-declared media delivery mode; an exact
-allowlist that only shrinks names any other use and its reason. Not yet met:
-each capability plans over the whole state and filters its own objects while
-the engine checks only that some binding claims each kind, and no fitness test
-rejects implementation-identity and arm constants, literals or arm field paths
-outside those packages; tracked as [B808](milestones/backlog.md#b808).
+`spec.implementation`. Each binding names the capability family it realizes,
+and bindings of one family are alternatives. Every selected object of a block
+family is claimed by exactly one bound implementation or refused by its
+domain's refusal table: two bindings of one family that plan blocks for one
+object refuse before registration with `lifecycle.unsupported`, naming both
+implementations, and an effect-bearing object of a kind no binding claims is
+refused by the [unclaimed-object table](state-reconciliation.md#stages-and-the-pause-boundary).
+`TestEveryExampleObjectIsClaimedOncePerFamily` holds every example to this.
+Outside its owning implementation or substrate package, the API schema that
+declares the arms, composition and its domain's admission refusals,
+production code reaches an arm's or an implementation's specifics only through
+a capability the owner publishes, such as a substrate-declared media delivery
+mode. `TestNoProductionCodeBranchesOnAnArmOrImplementationOutsideItsOwner`
+rejects any other arm constant, arm value or arm field path and any other
+package's implementation identity constant or value, except where its exact
+allowlist, which only shrinks, names the item that removes the use. Not yet
+met: the engine checks per kind, not per object, that a binding claims an
+effect-bearing object, so one of a claimed kind that no binding plans and no
+refusal names is left out silently; tracked as
+[B808](milestones/backlog.md#b808).
 
 Each domain contract names the facts and authored arms its implementations
 select on. When an operation is

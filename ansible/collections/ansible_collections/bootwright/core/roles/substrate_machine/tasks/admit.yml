@@ -1,0 +1,8 @@
+---
+- name: Refuse an arm the substrate has no machine port for before any effect
+  ansible.builtin.fail:
+    msg: >-
+      the substrate has no machine port for arm
+      '{{ bootwright_machine_arm | string | bootwright.core.printable }}', so
+      nothing was done; plan the installation again with this release
+  when: bootwright_machine_arm not in substrate_machine_arms

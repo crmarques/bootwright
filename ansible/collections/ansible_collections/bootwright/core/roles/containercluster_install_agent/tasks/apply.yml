@@ -13,24 +13,16 @@
     phase: loaded
   no_log: true
 
-# The boot and release task files bind each node's substrate only inside
-# their loops, after the nodes before it were booted or released, and
-# release.yml only after it ejected that node's media. A node no task file
-# binds refuses here, before any node is touched. Each of those files also ends
-# its dispatch in a terminal fail, which this refusal leaves unreachable.
-- name: Refuse a node substrate this installation has no boot binding for
-  ansible.builtin.assert:
-    that:
-      - containercluster_install_agent_node.substrate in containercluster_install_agent_ports
-      - containercluster_install_agent_node.substrate in containercluster_install_agent_pre_boot_bindings
-      - containercluster_install_agent_node.substrate in containercluster_install_agent_boot_media_bindings
-      - containercluster_install_agent_node.substrate in containercluster_install_agent_boot_disk_bindings
-    fail_msg: >-
-      node {{ containercluster_install_agent_node.name }} names substrate
-      {{ containercluster_install_agent_node.substrate }}, which this cluster
-      installation has no boot binding for, so no node's Machine was booted;
-      plan the installation again with this release
-    quiet: true
+# The boot and release task files reach each node's substrate only inside
+# their loops, after the nodes before it were booted or released. A node whose
+# arm the substrate has no machine port for refuses here, before any node is
+# touched; the substrate's own dispatch refuses it again at each entry point.
+- name: Refuse a node substrate the substrate has no machine port for
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_machine
+    tasks_from: admit
+  vars:
+    bootwright_machine_arm: '{{ containercluster_install_agent_node.substrate }}'
   loop: '{{ bootwright_cluster_install_request.nodes }}'
   loop_control:
     loop_var: containercluster_install_agent_node

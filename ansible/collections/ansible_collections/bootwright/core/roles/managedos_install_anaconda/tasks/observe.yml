@@ -145,16 +145,17 @@
 
 - name: Read the power state and media its controller reports
   ansible.builtin.include_role:
-    name: "{{ managedos_install_anaconda_state_read[bootwright_os_install_request.target.substrate] }}"
+    name: bootwright.core.substrate_machine
     tasks_from: state_read
   vars:
+    bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
     bootwright_machine_port: >-
       {{ managedos_install_anaconda_port_access | combine({'media': true}) }}
   when: not (managedos_install_anaconda_observes_removal | bool)
 
 - name: Retain the machine port answer
   ansible.builtin.set_fact:
-    managedos_install_anaconda_controller: "{{ vars[managedos_install_anaconda_port_result[bootwright_os_install_request.target.substrate]] }}"
+    managedos_install_anaconda_controller: "{{ substrate_machine_port_result }}"
   no_log: true
   when: not (managedos_install_anaconda_observes_removal | bool)
 

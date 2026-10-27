@@ -23,9 +23,7 @@ Flag order gives no precedence and distinct source files never override one
 another. The combined universe undergoes one Environment selection, and the
 selected documents enter one graph. A duplicate authored object identity in
 that graph is an API error under the
-[graph rules](../api.md#graph-validation). A resource path declared by
-the one `Environment` resolves relative to that Environment's actual source
-file, independent of which input operand discovered it.
+[graph rules](../api.md#graph-validation).
 
 For each directory source, Bootwright recursively discovers descendant regular
 files ending in lowercase `.yaml` or `.yml`. Before reading a file, discovery
@@ -59,22 +57,20 @@ sets the complete desired-state scope:
    `Environment`; always select its declaring file. Validate its authored kind
    defaults and apply `defaults.Environment` once before checking its required
    spec fields and selections. Envelope identity fields cannot be defaulted.
-2. Apply its resulting `resources` list, or select all discovered files when omitted.
-   Every resource must be covered by an acquired file/directory source or
-   selected context input; authored YAML never widens filesystem authority.
-   [Environment selection](environment.md#resource-and-cluster-selection)
-   owns path rules, the marker-proven add-on snapshot exception, and cluster
-   root closure.
+2. Select every discovered file: the Environment's directory is the scope, and
+   authored YAML never widens filesystem authority.
+   [Environment selection](environment.md#cluster-selection) owns the cluster
+   root closure, the only narrowing.
 3. Strictly decode selected files in lexical path/document order and follow
    [the compilation phases](../api.md#yaml-streams-and-decoding). Resolve references only
    inside the retained graph after cluster selection and normalization.
 
-An authored empty resource or cluster-selection list is invalid. It is
-reported once, at its field, and selection otherwise proceeds as if it were
-omitted. A refused resource or cluster-selection entry is reported at its own
-index. Operations all consume the same complete selected state; selection is
-not a partial operation flag. `validate` warns deterministically for excluded files declaring
-Bootwright objects and for excluded cluster roots. `render effective` has no
+An authored empty cluster-selection list is invalid. It is reported once, at
+its field, and selection otherwise proceeds as if it were omitted. A refused
+cluster-selection entry is reported at its own index. Operations all consume
+the same complete selected state; selection is not a partial operation flag.
+`validate` warns deterministically for excluded cluster roots and for an
+excluded Machine or InfraProvider no excluded root accounts for. `render effective` has no
 success-warning channel.
 
 `validate` also warns deterministically for a skipped `secrets` directory that
@@ -89,8 +85,8 @@ unresolved-Secret remedy does not name it; tracked as
 
 Non-YAML files are not desired-state documents. The five payload basenames
 above are exact, case-sensitive path-segment rules. A corresponding co-located
-playbook or add-on field must use its schema's reserved segment, and
-`resources` cannot select that root or a descendant. `secrets` stays reserved
+playbook or add-on field must use its schema's reserved segment. `secrets`
+stays reserved
 so that raw secret files kept beside the input are never read during
 discovery; a Secret descriptor placed under it is not a desired-state input.
 A lowercase YAML file elsewhere under an input root remains a desired-state
@@ -188,9 +184,8 @@ character, names the line and column of the first such character, as invalid
 UTF-8 does, and no document. A reason the composer reports without a position,
 such as an alias naming no anchor, names no line. Invalid UTF-8 names the line and column of the first invalid byte. An `input.limit` message names its resource and inclusive
 ceiling. Syntax failure metadata is bounded to one record per acquired file.
-Apply the returned-diagnostic ceiling after resource selection; syntax errors
-from excluded files do not consume that allowance. Structural limits remain
-global.
+Apply the returned-diagnostic ceiling to every selected file's diagnostics.
+Structural limits remain global.
 For open native maps, diagnostics name the containing typed field and retain
 source coordinates without repeating arbitrary native keys as field paths.
 

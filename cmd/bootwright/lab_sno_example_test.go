@@ -238,7 +238,7 @@ func TestLabSNOExamplePlansTheWholeGraph(t *testing.T) {
 		Verb: reconciliation.Apply, State: state, Controller: "controller",
 		Context: lifecycle.ContextIdentity{Name: "lab-sno"},
 	}
-	if unsupported := lifecycle.Unrealizable(state.Effective(), claimedKinds(resolver)); len(unsupported) != 0 {
+	if unsupported := lifecycle.Unrealizable(state.Effective(), claimedKinds(resolver), effectBearing); len(unsupported) != 0 {
 		t.Fatalf("the example declares objects no capability claims: %v", unsupported)
 	}
 	var definitions []reconciliation.BlockDefinition

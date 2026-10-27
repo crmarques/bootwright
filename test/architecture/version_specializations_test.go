@@ -1,6 +1,7 @@
 package architecture_test
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -10,12 +11,11 @@ import (
 )
 
 const (
-	specializationRegistry = "ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/native_specializations.py"
-	specializationPlugins  = "ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/"
-	specializationTests    = "ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/"
-	specializationCatalog  = ".agents/knowledge/version-specializations.md"
-	topologySource         = "internal/containercluster/topology.go"
-	generalTopologyID      = "openshift-general-topology"
+	specializationPlugins = "ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/"
+	specializationTests   = "ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/"
+	specializationCatalog = ".agents/knowledge/version-specializations.md"
+	topologySource        = "internal/containercluster/topology.go"
+	generalTopologyID     = "openshift-general-topology"
 )
 
 var (
@@ -28,8 +28,7 @@ var (
 	specializationName     = regexp.MustCompile("`((?:test_|Test)[A-Za-z0-9_]+)`")
 	specializationQuoted   = regexp.MustCompile("`([^`]+)`")
 	specializationHeading  = regexp.MustCompile(`(?m)^#### (\S+)\s*$`)
-	topologyOverride       = regexp.MustCompile(`(?m)^var topologyOverrides = map\[string\]releaseTopology\{`)
-	topologyOverrideKey    = regexp.MustCompile(`(?m)^\t"([^"]+)": \{`)
+	specializationMarker   = regexp.MustCompile(`\bSpecialization[({]`)
 )
 
 type registrySeam struct {
@@ -54,7 +53,44 @@ func specializationFile(t *testing.T, name string) string {
 	return string(data)
 }
 
-func specializationPythonRegistry(t *testing.T) ([]registryRecord, map[string]registrySeam) {
+// specializationRegistries names every tracked source that constructs a
+// Specialization: a Python or Go file outside the tests whose text calls the
+// constructor or writes its literal. That constructor is the registry marker,
+// so a registry is found wherever it lives, not at a path this test knows.
+func specializationRegistries(paths []string, read func(string) string) []string {
+	var found []string
+	for _, path := range paths {
+		extension := filepath.Ext(path)
+		if extension != ".py" && extension != ".go" || strings.HasSuffix(path, "_test.go") ||
+			strings.HasPrefix(path, "test/") || strings.Contains(path, "/tests/") {
+			continue
+		}
+		if specializationMarker.MatchString(read(path)) {
+			found = append(found, path)
+		}
+	}
+	slices.Sort(found)
+	return found
+}
+
+// registryViolations holds the registries the catalog names to the ones the
+// marker finds.
+func registryViolations(marked, cataloged []string) []string {
+	var violations []string
+	for _, path := range marked {
+		if !slices.Contains(cataloged, path) {
+			violations = append(violations, path+" constructs Specialization records, but no Active specializations row names it as its registry")
+		}
+	}
+	for _, path := range cataloged {
+		if !slices.Contains(marked, path) {
+			violations = append(violations, "the catalog names the registry "+path+", which constructs no Specialization record")
+		}
+	}
+	return violations
+}
+
+func specializationPythonRegistry(t *testing.T, specializationRegistry string) ([]registryRecord, map[string]registrySeam) {
 	t.Helper()
 	text := specializationFile(t, specializationRegistry)
 	matches := specializationRecord.FindAllStringSubmatch(text, -1)
@@ -181,28 +217,40 @@ func checkSpecializationCell(t *testing.T, tracked map[string]bool, id, column, 
 }
 
 func TestDocsVersionSpecializationCatalogMatchesRegistries(t *testing.T) {
-	records, seams := specializationPythonRegistry(t)
 	catalog := specializationFile(t, specializationCatalog)
 	tables := specializationTables(catalog)
-	tracked := trackedPaths(repositoryFiles(t))
+	files := repositoryFiles(t)
+	tracked := trackedPaths(files)
 	headings := map[string]bool{}
 	for _, match := range specializationHeading.FindAllStringSubmatch(catalog, -1) {
 		headings[match[1]] = true
 	}
 
-	topology := specializationFile(t, topologySource)
-	overrides := map[string]bool{}
-	if topologyOverride.MatchString(topology) {
-		block := topology[topologyOverride.FindStringIndex(topology)[1]:]
-		block = block[:strings.Index(block, "\n}\n")]
-		for _, key := range topologyOverrideKey.FindAllStringSubmatch(block, -1) {
-			overrides[key[1]] = true
+	active := specializationTable(t, tables, "Active specializations")
+	var cataloged []string
+	for _, row := range active.rows {
+		if len(row) > 1 && !slices.Contains(cataloged, expandSpecializationPath(row[1])) {
+			cataloged = append(cataloged, expandSpecializationPath(row[1]))
 		}
 	}
+	slices.Sort(cataloged)
+	marked := specializationRegistries(files, func(path string) string { return specializationFile(t, path) })
+	for _, violation := range registryViolations(marked, cataloged) {
+		t.Error(violation)
+	}
+	var records []registryRecord
+	seams := map[string]registrySeam{}
+	for _, registry := range cataloged {
+		if filepath.Ext(registry) != ".py" {
+			t.Errorf("%s: this test reads only Python registries; teach it this registry's layout", registry)
+			continue
+		}
+		read, declared := specializationPythonRegistry(t, registry)
+		records = append(records, read...)
+		maps.Copy(seams, declared)
+	}
 
-	active := specializationTable(t, tables, "Active specializations")
 	byID := map[string][]string{}
-	catalogGo := map[string]bool{}
 	for _, row := range active.rows {
 		if len(row) != 12 {
 			t.Fatalf("an Active specializations row has %d cells, want 12: %q", len(row), row[0])
@@ -215,13 +263,6 @@ func TestDocsVersionSpecializationCatalogMatchesRegistries(t *testing.T) {
 			t.Errorf("%s: two Active specializations rows share the id", id)
 		}
 		byID[id] = row
-		switch row[1] {
-		case "python":
-		case "go:containercluster":
-			catalogGo[id] = true
-		default:
-			t.Errorf("%s: the registry %q is neither python nor go:containercluster", id, row[1])
-		}
 		if !headings[id] {
 			t.Errorf("%s: the page has no #### %s heading, so the anchor %s#%s does not resolve", id, id, specializationCatalog, id)
 		}
@@ -244,8 +285,6 @@ func TestDocsVersionSpecializationCatalogMatchesRegistries(t *testing.T) {
 		case !ok:
 			t.Errorf("%s: the registry has the record but the catalog has no Active specializations row", record.id)
 			continue
-		case row[1] != "python":
-			t.Errorf("%s: the registry is python but the catalog row says %q", record.id, row[1])
 		}
 		quoted := specializationQuotes(row[6])
 		if len(quoted) != 2 || quoted[0] != record.seam || quoted[1] != record.variant {
@@ -257,21 +296,9 @@ func TestDocsVersionSpecializationCatalogMatchesRegistries(t *testing.T) {
 			t.Errorf("%s: the variant %s is not a variant of the seam %s", record.id, record.variant, record.seam)
 		}
 	}
-	for id, row := range byID {
-		if row[1] == "python" {
-			if _, ok := registered[id]; !ok {
-				t.Errorf("%s: the catalog has a python row but the registry has no such record", id)
-			}
-		}
-	}
-	for id := range overrides {
-		if !catalogGo[id] {
-			t.Errorf("%s: %s declares the override but the catalog has no go:containercluster row", id, topologySource)
-		}
-	}
-	for id := range catalogGo {
-		if !overrides[id] {
-			t.Errorf("%s: the catalog has a go:containercluster row but %s declares no such override", id, topologySource)
+	for id := range byID {
+		if _, ok := registered[id]; !ok {
+			t.Errorf("%s: the catalog has a row but its registry has no such record", id)
 		}
 	}
 
@@ -311,17 +338,45 @@ func TestDocsVersionSpecializationCatalogMatchesRegistries(t *testing.T) {
 		t.Fatalf("%s: the General topology rule table holds one 7-cell row with the id %s", specializationCatalog, generalTopologyID)
 	}
 	row := general.rows[0]
-	if row[1] != "go:containercluster" {
-		t.Errorf("%s: the registry is go:containercluster but the catalog says %q", generalTopologyID, row[1])
+	if row[1] != "none" {
+		t.Errorf("%s: a general rule has no registry, but the catalog says %q", generalTopologyID, row[1])
 	}
 	if !strings.Contains(row[5], topologySource) {
 		t.Errorf("%s: the code cell cites %q, not %s", generalTopologyID, row[5], topologySource)
 	}
 	checkSpecializationCell(t, tracked, generalTopologyID, "code", row[5], true, false)
 	checkSpecializationCell(t, tracked, generalTopologyID, "test", row[6], true, true)
-	for _, symbol := range []string{"var generalTopology = releaseTopology{", "func topologyFor(version string) releaseTopology {"} {
-		if !strings.Contains(topology, symbol) {
-			t.Errorf("%s: %s no longer declares %q, the one rule the catalog row describes", generalTopologyID, topologySource, symbol)
-		}
+	if topology := specializationFile(t, topologySource); !strings.Contains(topology, "var generalTopology = releaseTopology{") {
+		t.Errorf("%s: %s no longer declares generalTopology, the one rule the catalog row describes", generalTopologyID, topologySource)
+	}
+}
+
+// A registry outside every path the catalog names, here a Python module under
+// internal/, is found by its Specialization constructor and fails until a
+// catalog row names it; a test file that writes the literal is no registry,
+// and a cataloged path that declares no record fails too.
+func TestTheCatalogTestFindsARegistryByItsMarker(t *testing.T) {
+	known := specializationPlugins + "native_specializations.py"
+	sources := map[string]string{
+		known:                                  "SPECIALIZATIONS = (\n    Specialization(\n        id=\"a-b\",\n",
+		"internal/storage/fixture/registry.py": "RECORDS = (Specialization(id=\"c-d\"),)\n",
+		"internal/containercluster/registry_test.go":   "var _ = Specialization{}\n",
+		"internal/containercluster/topology.go":        "var generalTopology = releaseTopology{}\n",
+		"ansible/collections/x/tests/unit/registry.py": "Specialization(id=\"e-f\")\n",
+	}
+	read := func(path string) string { return sources[path] }
+	marked := specializationRegistries(slices.Sorted(maps.Keys(sources)), read)
+	if want := []string{known, "internal/storage/fixture/registry.py"}; !slices.Equal(marked, want) {
+		t.Fatalf("marked registries = %q, want %q", marked, want)
+	}
+	if got := registryViolations(marked, []string{known}); !slices.Equal(got, []string{
+		"internal/storage/fixture/registry.py constructs Specialization records, but no Active specializations row names it as its registry",
+	}) {
+		t.Fatalf("violations = %q", got)
+	}
+	if got := registryViolations([]string{known}, []string{known, "internal/gone.py"}); !slices.Equal(got, []string{
+		"the catalog names the registry internal/gone.py, which constructs no Specialization record",
+	}) {
+		t.Fatalf("violations = %q", got)
 	}
 }

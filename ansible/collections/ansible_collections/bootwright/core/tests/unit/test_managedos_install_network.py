@@ -146,16 +146,11 @@ def test_restart_boots_the_installed_disk_through_the_substrate():
     assert len(disks) == 1
     include = tasks[disks[0]]
     assert include["vars"]["bootwright_machine_port"]["power_on"] is True
+    assert include["ansible.builtin.include_role"]["name"] == "bootwright.core.substrate_machine"
+    assert "when" not in include
     for arm in ("libvirt", "baremetal"):
         variables = dict(defaults(), bootwright_os_install_request={"target": {"substrate": arm}})
-        templar = Templar(loader=LOADER, variables=variables)
-        assert templar.template(include["ansible.builtin.include_role"]["name"]) == "bootwright.core.substrate_%s_machine" % arm
-        assert templar.evaluate_conditional(include["when"])
-    refusal = tasks[disks[0] + 1]
-    for arm in ("libvirt", "baremetal", "unknown"):
-        templar = Templar(loader=LOADER, variables=dict(defaults(), bootwright_os_install_request={"target": {"substrate": arm}}))
-        assert templar.evaluate_conditional(refusal["when"]) is (arm == "unknown")
-    assert refusal[FAIL]["msg"].strip().endswith(REPLAN)
+        assert Templar(loader=LOADER, variables=variables).template(include["vars"]["bootwright_machine_arm"]) == arm
 
 
 def failing_scope(**overrides):
@@ -167,7 +162,7 @@ def failing_scope(**overrides):
         "bootwright_os_install_digest": DIGEST,
         "bootwright_os_install_request": {
             "identity": {"object": MACHINE}, "address": ADDRESS, "placement": {"machine": "controller"},
-            "target": {"substrate": "libvirt"},
+            "target": {"substrate": "libvirt", "physical": False},
             "network": {"checkpointSeconds": 300, "document": DOCUMENT, "documentPath": "/etc/bootwright/network.yml",
                         "markerPath": "/etc/bootwright/network-marker.json"},
             "budgets": {name: {"attempts": 12, "delaySeconds": 5} for name in ("networkApply", "networkReconnect", "reboot")},
@@ -220,7 +215,7 @@ def test_a_physical_machine_is_told_to_power_off_after_destroy():
     next apply install it again."""
     tasks = flattened("network.yml")
     scope = failing_scope()
-    scope["bootwright_os_install_request"]["target"] = {"substrate": "baremetal"}
+    scope["bootwright_os_install_request"]["target"] = {"substrate": "baremetal", "physical": True}
     templar = Templar(loader=LOADER, variables=dict(defaults(), **scope))
     for name in DESTROYING:
         message = templar.template(trust_as_template(tasks[index_of(tasks, named(name), name)][FAIL]["msg"]))
@@ -233,7 +228,7 @@ def test_a_physical_machine_is_told_to_power_off_after_destroy():
 def test_opt_in_physical_erase_recovery_names_the_destructive_policy_and_authorization():
     tasks = flattened("network.yml")
     scope = failing_scope()
-    scope["bootwright_os_install_request"]["target"] = {"substrate": "baremetal"}
+    scope["bootwright_os_install_request"]["target"] = {"substrate": "baremetal", "physical": True}
     scope["bootwright_os_install_request"]["eraseOnRemoval"] = True
     templar = Templar(loader=LOADER, variables=dict(defaults(), **scope))
     for name in DESTROYING:
@@ -480,7 +475,7 @@ class Guest:
             "bootwright_os_install_digest": DIGEST,
             "bootwright_os_install_request": {
                 "identity": {"object": MACHINE}, "address": ADDRESS, "placement": {"machine": "controller"},
-                "target": {"substrate": "libvirt"}, "network": NETWORK,
+                "target": {"substrate": "libvirt", "physical": False}, "network": NETWORK,
                 "budgets": {"networkApply": {"attempts": 24, "delaySeconds": 5},
                             "networkReconnect": {"attempts": 12, "delaySeconds": 5},
                             "reboot": {"attempts": 60, "delaySeconds": 10}},
@@ -536,8 +531,8 @@ class Guest:
             self.scope[task["register"]] = {"matched": self.matched,
                                             "differences": [] if self.matched else ["bond0 is down, declared up"]}
         elif (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "state_read":
-            result = self.scope["managedos_install_anaconda_port_result"]["libvirt"]
-            self.scope[result] = {"power": self.power}
+            assert task["ansible.builtin.include_role"]["name"] == "bootwright.core.substrate_machine"
+            self.scope["substrate_machine_port_result"] = {"power": self.power}
         elif "ansible.builtin.pause" in task:
             self.ran.append("pause")
         elif PROTOCOL in task:

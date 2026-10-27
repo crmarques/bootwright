@@ -12,9 +12,6 @@
       "ocp-02"
     ],
     "excludedStorageClusters": [],
-    "excludedResourceFiles": [
-      "clusters/ocp-02/cluster.yaml"
-    ],
     "advisories": [
       {
         "severity": "warning",

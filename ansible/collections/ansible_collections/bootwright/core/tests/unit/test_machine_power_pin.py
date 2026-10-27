@@ -30,14 +30,14 @@ import pytest
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
-ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "machine_power_redfish"
+ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "machine_power"
 LOADER = DataLoader()
 
 INSPECT = "bootwright.core.redfish_system_inspect"
 PROTOCOL = "bootwright.core.machine_power_protocol"
 ASSERT = "ansible.builtin.assert"
 INCLUDES = ("ansible.builtin.include_tasks", "ansible.builtin.import_tasks")
-IDENTITY = "machine_power_redfish_identity"
+IDENTITY = "machine_power_identity"
 PIN = "pinnedUUIDBase64"
 
 ENDPOINT = "https://bmc.example.test/redfish/v1/Systems/1"
@@ -96,12 +96,13 @@ def scope(tmp_path, observation=None, pin_uuid=None, pin_serial=None, **raw):
         "bootwright_machine_power_digest": "d" * 64,
         "bootwright_machine_power_material": material,
         "bootwright_machine_power_request": {
+            "arm": "baremetal",
             "controller": {"credentialsRef": "metal-bmc", "endpoint": ENDPOINT, "tlsVerify": True},
             "force": False,
             "identity": {"context": "lab", "object": "metal"},
             "placement": {"machine": "controller"},
             "verb": "stop",
-            "version": "machine-power-redfish-v2",
+            "version": "machine-power-v3",
         },
     }))
     variables = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
@@ -134,15 +135,15 @@ def test_the_identity_is_read_and_compared_before_any_power_request():
     stopped = indexed(lambda task: ASSERT in task and IDENTITY + ".msg" in json.dumps(task[ASSERT]),
                       "stop at a read the controller did not answer")
     compared = indexed(compares, "compare the pin")
-    before = indexed(lambda task: "machine_power_redfish_before" in task.get("ansible.builtin.set_fact", {}), "read the power state")
+    before = indexed(lambda task: "machine_power_before" in task.get("ansible.builtin.set_fact", {}), "read the power state")
     includes = [index for index, task in enumerate(loaded) if any(action in task for action in INCLUDES)]
     assert len(includes) == 2, "the walk no longer sees both power task files included"
     assert before < read < stopped < compared < min(includes)
     arguments = loaded[read]["vars"]["bootwright_machine_port"]
-    assert "machine_power_redfish_access" in arguments and "'inspect': true" in arguments
+    assert "machine_power_access" in arguments and "'inspect': true" in arguments
     retained = loaded[read + 1]
     assert IDENTITY in retained["ansible.builtin.set_fact"] and retained["no_log"] is True
-    assert retained["when"] == loaded[read]["when"] == "machine_power_redfish_physical | bool"
+    assert retained["when"] == loaded[read]["when"] == "machine_power_physical | bool"
     assert loaded[compared][ASSERT]["quiet"] is True
     assert "no_log" not in loaded[compared]
     # The read tolerates its own failure only so that the controller's message
@@ -297,7 +298,7 @@ HOST = {
 # MAC addresses refuses before any power request, and names the refusal first.
 @pytest.mark.parametrize("observation, foreign", HOST.values(), ids=HOST.keys())
 def test_a_machine_reporting_the_controller_hosts_identity_refuses(tmp_path, observation, foreign):
-    variables = scope(tmp_path, observation, substrate="baremetal", controllerHostUUIDBase64=encoded(HOST_UUID),
+    variables = scope(tmp_path, observation, controllerHostUUIDBase64=encoded(HOST_UUID),
                       controllerHostMACsBase64=encoded(HOST_MACS))
     named, asserted = check("controller-host")
     assert holds(variables, asserted) is foreign
@@ -322,7 +323,7 @@ PROVED = {
 # power request: a complete inventory reporting exactly its declared MAC set.
 @pytest.mark.parametrize("observation, proved", PROVED.values(), ids=PROVED.keys())
 def test_an_unpinned_machine_must_report_exactly_its_declared_set(tmp_path, observation, proved):
-    variables = scope(tmp_path, observation, substrate="baremetal", expectedMACsBase64=encoded(DECLARED),
+    variables = scope(tmp_path, observation, expectedMACsBase64=encoded(DECLARED),
                       controllerHostMACsBase64=encoded(HOST_MACS))
     named, asserted = check("hardware-mismatch")
     assert holds(variables, asserted) is proved
@@ -331,6 +332,6 @@ def test_an_unpinned_machine_must_report_exactly_its_declared_set(tmp_path, obse
 
 
 def test_a_pinned_machine_skips_the_unpinned_proof(tmp_path):
-    variables = scope(tmp_path, dict(reported(), addresses=["52:54:00:9a:1b:09"]), UUID, SERIAL, substrate="baremetal",
+    variables = scope(tmp_path, dict(reported(), addresses=["52:54:00:9a:1b:09"]), UUID, SERIAL,
                       controllerHostMACsBase64=encoded(HOST_MACS))
     assert holds(variables, check("hardware-mismatch")[1]) is None

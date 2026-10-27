@@ -9,7 +9,32 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/addons"
+	"github.com/crmarques/bootwright/internal/containercluster"
+	"github.com/crmarques/bootwright/internal/desiredstate/customplaybooks"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
+	"github.com/crmarques/bootwright/internal/managedos"
+	"github.com/crmarques/bootwright/internal/storage"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
+
+// domainEffects composes every domain root's effect-bearing predicate as
+// composition does, so the engine's tests read the domains' own answers.
+func domainEffects(object api.Object) (Bearing, bool) {
+	if reason, bears := infrastructureservices.EffectBearing(object); bears {
+		machine, installOnly := infrastructureservices.Placement(object)
+		return Bearing{Reason: reason, Shared: true, Machine: machine, InstallOnly: installOnly}, true
+	}
+	for _, predicate := range []func(api.Object) (string, bool){
+		substrate.EffectBearing, managedos.EffectBearing, containercluster.EffectBearing,
+		storage.EffectBearing, addons.EffectBearing, customplaybooks.EffectBearing,
+	} {
+		if reason, bears := predicate(object); bears {
+			return Bearing{Reason: reason}, true
+		}
+	}
+	return Bearing{}, false
+}
 
 // unclaimedCase is a selected graph one row of the unclaimed-object table
 // refuses, the kinds this build claims, and the object and kind its row names.
@@ -62,10 +87,10 @@ func TestUnclaimedObjectTableMatchesTheEngine(t *testing.T) {
 				return strings.NewReplacer("<kind>", string(test.object.Kind()), "<object>", test.object.Identity()).Replace(text)
 			}
 			want := []Refusal{RefusalOf(test.object, expand(specCode(t, row[2])), expand(specCode(t, row[3])))}
-			if got := Unrealizable(test.catalog, test.claimed); !reflect.DeepEqual(got, want) {
+			if got := Unrealizable(test.catalog, test.claimed, domainEffects); !reflect.DeepEqual(got, want) {
 				t.Fatalf("the engine refuses %+v, the table %+v", got, want)
 			}
-			if got := Unrealizable(test.catalog, []string{string(test.object.Kind())}); len(got) != 0 {
+			if got := Unrealizable(test.catalog, []string{string(test.object.Kind())}, domainEffects); len(got) != 0 {
 				t.Fatalf("a claimed kind is still refused: %+v", got)
 			}
 		})

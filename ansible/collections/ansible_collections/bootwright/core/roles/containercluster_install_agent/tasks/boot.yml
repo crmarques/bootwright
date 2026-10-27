@@ -5,8 +5,8 @@
 # carries no rule that is true of only one of them. The boot entry point is
 # told that this installer reboots into what it wrote rather than powering the
 # machine off, so a substrate whose selection outlives a reboot selects
-# nothing. Each dispatch ends in a terminal fail for a substrate it has no
-# entry point for, and the proof dispatch's fail comes before the media is
+# nothing. The substrate's dispatch ends in a terminal fail for an arm it has
+# no machine port for, and the proof's refusal comes before the media is
 # inserted, rather than inserting it and booting nothing.
 - name: Retain a missing boot image as a typed node refusal
   ansible.builtin.set_fact:
@@ -68,9 +68,10 @@
         # no media and is not booted.
         - name: Prove the exact node through its substrate before inserting media
           ansible.builtin.include_role:
-            name: '{{ containercluster_install_agent_pre_boot_bindings[containercluster_install_agent_node.substrate] }}'
+            name: bootwright.core.substrate_machine
             tasks_from: pre_boot
           vars:
+            bootwright_machine_arm: '{{ containercluster_install_agent_node.substrate }}'
             bootwright_machine_port:
               endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
               verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
@@ -83,17 +84,6 @@
                 {{ bootwright_cluster_install_material['pinnedUUIDBase64Node' ~ containercluster_install_agent_index] | default('') }}
               pinned_serial_base64: >-
                 {{ bootwright_cluster_install_material['pinnedSerialBase64Node' ~ containercluster_install_agent_index] | default('') }}
-
-        - name: Refuse a substrate this installation has no pre-boot binding for
-          ansible.builtin.fail:
-            msg: >-
-              node {{ containercluster_install_agent_node.name }} names substrate
-              {{ containercluster_install_agent_node.substrate }}, which this cluster
-              installation has no pre_boot binding for, so Machine
-              {{ containercluster_install_agent_node.machine }} was not proved, no
-              media was inserted into it and it was not booted; plan the
-              installation again with this release
-          when: containercluster_install_agent_node.substrate not in containercluster_install_agent_pre_boot_bindings
 
         - name: Publish a fresh private link for this insert
           bootwright.core.containercluster_media_token:
@@ -190,9 +180,10 @@
 
         - name: Boot the node through its selected substrate
           ansible.builtin.include_role:
-            name: '{{ containercluster_install_agent_boot_media_bindings[containercluster_install_agent_node.substrate] }}'
+            name: bootwright.core.substrate_machine
             tasks_from: boot_media
           vars:
+            bootwright_machine_arm: '{{ containercluster_install_agent_node.substrate }}'
             bootwright_machine_port:
               endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
               verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
@@ -201,20 +192,10 @@
               password: '{{ containercluster_install_agent_password }}'
               installer_powers_off: false
 
-        - name: Refuse a substrate this installation has no media-boot binding for
-          ansible.builtin.fail:
-            msg: >-
-              node {{ containercluster_install_agent_node.name }} names substrate
-              {{ containercluster_install_agent_node.substrate }}, which this cluster
-              installation has no boot_media binding for, so Machine
-              {{ containercluster_install_agent_node.machine }} was not booted from
-              the inserted image; plan the installation again with this release
-          when: containercluster_install_agent_node.substrate not in containercluster_install_agent_boot_media_bindings
-
       # A step the timeout stopped fails with ansible-core's own message, so the
       # budget is named here; any other failure stays a failure, and its own
       # step above, not this one, says what refused. A refusal of the node's
-      # pre-boot proof is left in its substrate's own fact, because this role
+      # pre-boot proof is left in the substrate's refusal fact, because this role
       # holds the result channel, and is named to the runner under the node's
       # position, so the operator's diagnostic is the installation's own for
       # that Machine. The rescue therefore ends in a fail with no condition,
@@ -284,10 +265,7 @@
           ansible.builtin.set_fact:
             containercluster_install_agent_lifecycle_refusal: '{{ containercluster_install_agent_refusal }}'
           vars:
-            containercluster_install_agent_refusal: >-
-              {{ substrate_libvirt_machine_refusal | default('')
-                 if containercluster_install_agent_node.substrate == 'libvirt'
-                 else substrate_baremetal_machine_refusal | default('') }}
+            containercluster_install_agent_refusal: "{{ substrate_machine_refusal | default('') }}"
           when: containercluster_install_agent_refusal | length > 0
           no_log: true
 

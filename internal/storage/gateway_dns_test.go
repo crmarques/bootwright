@@ -53,3 +53,28 @@ func TestGatewayDNSRefusesNondeterministicDaemonPlacement(t *testing.T) {
 		t.Fatalf("partial placement = %v (%v)", addresses, err)
 	}
 }
+
+func attachedGatewayCatalog() api.Catalog {
+	cluster := api.NewObject(api.StorageCluster, "storage", api.Value{}, m("ceph", m("services", api.ListValue(m("service_type", "ingress", "spec", m("backend_service", "rgw.objects", "virtual_ip", "192.0.2.80/24"))))))
+	gateway := api.NewObject(api.StorageObjectGateway, "objects", api.Value{}, m("clusterRef", "storage", "serviceRef", "rgw.objects", "endpoint", m("fqdn", "s3.example.test")))
+	objects := []api.Object{cluster, gateway}
+	for _, name := range []string{"one", "two"} {
+		objects = append(objects, api.NewObject(api.StorageExport, name, api.Value{}, m("dataFoundation", m("objectGatewayRef", "objects"))))
+	}
+	return api.NewCatalog(objects)
+}
+
+func TestAttachedGatewayRecordsAreSharedAndNoUnattachedGatewayContributesOne(t *testing.T) {
+	records, err := AttachedGatewayRecords(attachedGatewayCatalog())
+	if err != nil || !reflect.DeepEqual(records, []GatewayRecord{{Name: "s3.example.test", Addresses: []string{"192.0.2.80"}}}) {
+		t.Fatalf("records = %v (%v)", records, err)
+	}
+	records, err = AttachedGatewayRecords(api.NewCatalog(attachedGatewayCatalog().Objects()[:2]))
+	if err != nil || len(records) != 0 {
+		t.Fatalf("unattached gateway records = %v (%v)", records, err)
+	}
+	missing := api.NewCatalog(append(attachedGatewayCatalog().Objects()[2:], attachedGatewayCatalog().Objects()[0]))
+	if _, err := AttachedGatewayRecords(missing); err == nil {
+		t.Fatal("an export attached to no retained gateway contributed a record")
+	}
+}

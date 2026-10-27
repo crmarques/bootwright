@@ -134,7 +134,7 @@ func compiler() compilation.Compiler {
 
 func compilerWithSelection(selection compilation.SelectGraph) compilation.Compiler {
 	return compilation.NewCompiler(yamlstream.Parser{}, selection,
-		compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate},
+		compilation.Rules{Normalize: environment.Normalize, Validate: testEnvironmentValidate},
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, Validate: secrets.Validate},
 		compilation.Rules{Normalize: substrate.Normalize, ValidateAuthored: substrate.ValidateAuthored, Validate: substrate.Validate},
 		compilation.Rules{Normalize: machine.Normalize, ValidateAuthored: machine.ValidateAuthored, Validate: machine.Validate},
@@ -146,8 +146,8 @@ func compilerWithSelection(selection compilation.SelectGraph) compilation.Compil
 
 func TestExcludedMachineServiceReferencesDoNotFailSelectedGraph(t *testing.T) {
 	selection := func(catalog api.Catalog) compilation.Selection {
-		selected := environment.Select(catalog, nil)
-		result := compilation.Selection{Catalog: selected.Catalog, ExcludedContainerClusters: selected.ExcludedContainerClusters, ExcludedStorageClusters: selected.ExcludedStorageClusters}
+		selected := environment.Select(catalog, nil, testClusterMembers)
+		result := compilation.Selection{Catalog: selected.Catalog, ExcludedContainerClusters: selected.ExcludedContainerClusters, ExcludedStorageClusters: selected.ExcludedStorageClusters, Excluded: selected.Excluded}
 		for _, problem := range selected.Problems {
 			result.Problems = append(result.Problems, compilation.ObjectIssue{Object: problem.Object, Issue: problem.Issue, Target: problem.Target})
 		}
@@ -172,13 +172,14 @@ spec:
 			if tc.name == "proxy" {
 				deferred += "  os: {provided: false, installProfileRef: deferred-profile}\n"
 			}
+			deferred += "---\napiVersion: bootwright.io/v1alpha1\nkind: ContainerCluster\nmetadata:\n  name: deferred-cluster\nspec:\n  nodes: [{name: deferred, role: master, machineRef: deferred}]\n"
 			content := strings.Replace(clusterYAML, "spec:\n  domains:", "spec:\n  containerClusters: [cluster]\n  domains:", 1) + deferred
 			state, _, err := c.Compile(context.Background(), sources(content))
 			if err != nil {
 				t.Fatal("excluded Machine references failed selected graph", diagnostics.Of(err))
 			}
 			if _, retained := state.Effective().Find(api.Machine, "deferred"); retained {
-				t.Fatal("unconsumed Machine was retained by cluster selection")
+				t.Fatal("a node of an excluded cluster was retained by cluster selection")
 			}
 			_, _, err = c.Compile(context.Background(), sources(clusterYAML+deferred))
 			found := false

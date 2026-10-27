@@ -148,8 +148,7 @@ func (d *display) lifecycleSteps(result lifecycle.PlanResult) {
 					detail += " · " + waiting
 				}
 			}
-			label, target := lifecycleAction(planned, result.Verb)
-			action := lifecycleActionLabel(label, target, planned.Object, r.options)
+			action := lifecycleActionLabel(planned.Description, planned.Object, r.options)
 			r.styledParagraph(action+styleMuted(" · "+escapeDisplayLine(detail), r.options), fmt.Sprintf("    %s %d. ", marker, index+1), "plain")
 			for _, impact := range planned.Impacts {
 				r.paragraph(impact, "      ", "muted")
@@ -192,16 +191,15 @@ func (p quietInvocationProgress) ReportLogLocation(ctx context.Context, location
 }
 func (p quietInvocationProgress) Finish() { p.presenter.Finish() }
 
-func (p *lifecyclePresentation) action(id string) (string, string, string) {
+func (p *lifecyclePresentation) action(id string) (string, string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, step := range p.steps {
 		if step.ID == id {
-			label, target := lifecycleAction(step, p.verb)
-			return label, target, step.Object
+			return step.Description, step.Object
 		}
 	}
-	return "", "", ""
+	return "", ""
 }
 
 // lifecycleOutcomes retains durable order regardless of callback order.

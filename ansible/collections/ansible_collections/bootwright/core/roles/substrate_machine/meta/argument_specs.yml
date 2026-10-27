@@ -1,0 +1,87 @@
+argument_specs:
+  admit:
+    short_description: Refuse an arm the substrate has no machine port for, before any effect.
+    options:
+      bootwright_machine_arm:
+        type: str
+        required: true
+
+  pre_boot:
+    short_description: Prove the exact machine through its arm before media is inserted.
+    options:
+      bootwright_machine_arm:
+        type: str
+        required: true
+      bootwright_machine_port:
+        type: dict
+        required: true
+
+  boot_media:
+    short_description: Boot the machine once from the media inserted in its controller.
+    options:
+      bootwright_machine_arm:
+        type: str
+        required: true
+      bootwright_machine_port:
+        type: dict
+        required: true
+
+  boot_disk:
+    short_description: Point the machine at its installed disk.
+    options:
+      bootwright_machine_arm:
+        type: str
+        required: true
+      bootwright_machine_port:
+        type: dict
+        required: true
+
+  identity_read:
+    short_description: Read the install marker and host key through the arm's identity channel.
+    options:
+      bootwright_machine_arm:
+        type: str
+        required: true
+      bootwright_machine_identity:
+        type: dict
+        required: true
+
+  state_read:
+    short_description: Read the machine's power and presented media.
+    options:
+      bootwright_machine_arm:
+        type: str
+        required: true
+      bootwright_machine_port:
+        type: dict
+        required: true
+
+  media_insert:
+    short_description: Insert media into the machine's controller.
+    options:
+      bootwright_machine_arm:
+        type: str
+        required: true
+      bootwright_machine_port:
+        type: dict
+        required: true
+
+  media_eject:
+    short_description: Eject media from the machine's controller.
+    options:
+      bootwright_machine_arm:
+        type: str
+        required: true
+      bootwright_machine_port:
+        type: dict
+        required: true
+
+  power:
+    short_description: Bring the machine to a power state.
+    options:
+      bootwright_machine_arm:
+        type: str
+        required: true
+      bootwright_machine_port:
+        type: dict
+        required: true

@@ -1,6 +1,6 @@
 implementation: proxy-squid-v1
-content-digest: bb0e7600497436c24dd6101980f3421e4d9784fb4b08c69eedf352e7c3f75272
-request-version: managed-service-v3
+content-digest: c2118bb0e06acbda094170f4d4ee281d0bdab8724191818ca36266730001a8ed
+request-version: managed-service-v4
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -35,6 +35,7 @@ request-schema:
   identity.context string
   identity.service string
   image string
+  implementation string
   ingressHosts []string omitempty
   kind string
   placement struct machine.Placement

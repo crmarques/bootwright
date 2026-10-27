@@ -14,7 +14,7 @@ func TestUnwiredOrEndedClusterSessionsOpenNothing(t *testing.T) {
 		t.Fatalf("unwired rsh = %v", err)
 	}
 	sessions := &recordingSessions{}
-	service := New(&fixedGraph{catalog: sessionCatalog(labNodes()...)}, sessions, nil)
+	service := New(&fixedGraph{catalog: sessionCatalog(labNodes()...)}, sessions, nil).WithMembers(storageMembers)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := service.ClusterExec(ctx, ClusterExecRequest{ContextName: "lab", Names: []string{"ceph"}, Command: []string{"true"}}); !errors.Is(err, context.Canceled) {

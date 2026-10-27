@@ -43,7 +43,7 @@ aliases or translation paths from the proposal.
 
 | Earlier proposed shape | Then-aligned authored shape |
 | --- | --- |
-| `Environment` without selection, access, or service defaults | `Environment` with `resources`, cluster selection, domains, access/install defaults, service catalogs, Secret references, mirror/trust, rescue, and component-image intent. |
+| `Environment` without selection, access, or service defaults | `Environment` with cluster selection, domains, access/install defaults, service catalogs, Secret references, mirror/trust, rescue, and component-image intent. |
 | `RedHatSubscription`, `IBMStorageCephSubscription` | One type-discriminated `Entitlement`. |
 | `Machine` with inline NMState only | `Machine` plus reusable `NetworkConfig`. |
 | `InfrastructureProvider` | `InfraProvider`. |

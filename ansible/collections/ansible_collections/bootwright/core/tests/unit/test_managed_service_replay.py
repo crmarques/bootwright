@@ -30,11 +30,12 @@ IMAGE = "registry.example/service@sha256:" + "0" * 64
 SERVER = "infra_artifact_server_nginx"
 
 MANAGED = "infra_managed_service"
+IMPLEMENTATIONS = {"DNSServer": "dns-server-dnsmasq-v1", "NTPServer": "ntp-server-chrony-v1", "Proxy": "proxy-squid-v1"}
 
-# The one managed-service role selects its templates by the frozen kind.
+# The one managed-service role selects its templates by the frozen implementation.
 MANAGED_SOURCES = {
-    "configuration": "{{ infra_managed_service_kind.configuration_template }}",
-    "unitSource": "{{ infra_managed_service_kind.unit_template }}",
+    "configuration": "{{ infra_managed_service_implementation.configuration_template }}",
+    "unitSource": "{{ infra_managed_service_implementation.unit_template }}",
     "request": "bootwright_managed_service_request", "digest": "bootwright_managed_service_digest",
 }
 
@@ -134,6 +135,7 @@ def scope(role, tls):
                "identity": {"context": "lab", "service": service["service"]}}
     if "kind" in service:
         request["kind"] = service["kind"]
+        request["implementation"] = IMPLEMENTATIONS[service["kind"]]
     if role == SERVER:
         request["tls"] = {"minVersion": "TLSv1.2"} if tls else {}
         variables["bootwright_artifact_server_material"] = MATERIAL if tls else {}

@@ -623,7 +623,7 @@ func TestEveryExampleReleaseHasATopologyRow(t *testing.T) {
 					masters++
 				}
 			}
-			if _, ok := releaseMinor(version); !ok || !slices.Contains(topologyFor(version).controlPlane, masters) {
+			if _, ok := releaseMinor(version); !ok || !slices.Contains(generalTopology.controlPlane, masters) {
 				t.Errorf("%s declares release %q with %d masters, which its topology rule does not accept", path, version, masters)
 			}
 		}

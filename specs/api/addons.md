@@ -81,7 +81,7 @@ known arm:
 
 Validation checks effect compatibility and resolves supplied object names.
 The storage attachment also defines the relationship used by
-[Environment cluster selection](environment.md#resource-and-cluster-selection).
+[Environment cluster selection](environment.md#cluster-selection).
 An empty effect list declares no such built-in relationship or operation.
 Effects never grant execution authority. The
 [add-on lifecycle](../add-ons.md#refusal-table) refuses every bound authored

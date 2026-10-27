@@ -155,8 +155,8 @@ func TestAReadingFollowsTheMachineBlockNotTheInstallation(t *testing.T) {
 // answered with the account another target's controller was authored for.
 func TestEveryTargetInOneSurveyNamesItsOwnMaterial(t *testing.T) {
 	survey := ReadSurvey{Targets: []ReadTarget{
-		{Controller: Controller{CredentialsRef: "bmc"}, Object: "first", UserVariable: "controllerUser0", PasswordVariable: "controllerPassword0"},
-		{Controller: Controller{CredentialsRef: "bmc"}, Object: "second", UserVariable: "controllerUser1", PasswordVariable: "controllerPassword1"},
+		{Controller: Access{CredentialsRef: "bmc"}, Object: "first", UserVariable: "controllerUser0", PasswordVariable: "controllerPassword0"},
+		{Controller: Access{CredentialsRef: "bmc"}, Object: "second", UserVariable: "controllerUser1", PasswordVariable: "controllerPassword1"},
 	}}
 	names, variables := []string{}, []string{}
 	for _, file := range readMaterials(survey) {

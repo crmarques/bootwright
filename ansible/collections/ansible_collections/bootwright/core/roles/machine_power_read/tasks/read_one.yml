@@ -1,0 +1,22 @@
+---
+- name: Read the state one machine's substrate machine port reports
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_machine
+    tasks_from: state_read
+  vars:
+    bootwright_machine_arm: '{{ machine_power_read_target.arm }}'
+    bootwright_machine_port:
+      endpoint: '{{ machine_power_read_target.controller.endpoint }}'
+      user: '{{ bootwright_machine_power_read_material[machine_power_read_target.userVariable] }}'
+      password: '{{ bootwright_machine_power_read_material[machine_power_read_target.passwordVariable] }}'
+      verify: '{{ machine_power_read_target.controller.tlsVerify }}'
+      ca: >-
+        {{ bootwright_machine_power_read_material[machine_power_read_target.caVariable]
+           if machine_power_read_target.caVariable | default('') | length > 0 else '' }}
+      media: false
+
+- name: Retain the reading in survey order
+  ansible.builtin.set_fact:
+    machine_power_read_readings: >-
+      {{ machine_power_read_readings + [substrate_machine_port_result | combine({'item': machine_power_read_target})] }}
+  no_log: true

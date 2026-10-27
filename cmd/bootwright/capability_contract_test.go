@@ -39,7 +39,6 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
@@ -136,6 +135,9 @@ type contractRow struct {
 	// runner-driven row names exactly one of the two.
 	drift            map[string]any
 	driftUnreachable string
+	// synthetic says why a row's implementation has no collection role, so
+	// the suite holds its requests to everything but role admission.
+	synthetic string
 }
 
 // contractStoppedService leaves a managed service's unit stopped and its
@@ -155,6 +157,12 @@ var contractStoppedController = map[string]any{"unit": "inactive", "controller":
 
 func (r contractRow) binding() lifecycle.CapabilityBinding {
 	return lifecycle.CapabilityBinding{Kind: r.kind, Implementation: r.implementation}
+}
+
+// contractIdentity is a binding by its kind and implementation alone, the key a
+// row names it by.
+func contractIdentity(binding lifecycle.CapabilityBinding) lifecycle.CapabilityBinding {
+	return lifecycle.CapabilityBinding{Kind: binding.Kind, Implementation: binding.Implementation}
 }
 
 func contractRows() []contractRow {
@@ -205,7 +213,7 @@ func contractRows() []contractRow {
 			removalKeepsPresence: true, drift: map[string]any{"release": "0.0.0"}},
 		{kind: string(proxy.Definition().Kind), implementation: proxy.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence,
 			readiness: "answers", removalPartial: contractStoppedService, drift: contractFailedUnit},
-		{kind: string(dnsserver.Definition().Kind), implementation: dnsserver.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence,
+		{kind: string(dnsServerDefinition().Kind), implementation: dnsServerDefinition().Implementation, example: "lab-rhel", presence: contractServicePresence,
 			readiness: "answers", removalPartial: contractStoppedService, drift: contractFailedUnit},
 		{kind: string(ntpserver.Definition().Kind), implementation: ntpserver.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence,
 			readiness: "answers", removalPartial: contractStoppedService, drift: contractFailedUnit},
@@ -325,6 +333,8 @@ var contractProperties = []string{
 	"observe-removal-proves-absence", "observe-removal-reads-presence", "observe-removal-reads-partial",
 	"observe-removal-ignores-readiness", "produced-only-on-proved-completion", "role-admits-request",
 	"observe-unknown-explained", "observation-read-only", "probe-read-only",
+	"apply-outcome-of-cancellation", "destroy-outcome-of-cancellation", "cancellation-reaches-runner",
+	"observe-cancellation-unproved", "apply-replay-identical", "destroy-replay-identical",
 }
 
 // contractRunner is a scripted runner: it records every request and answers
@@ -333,15 +343,17 @@ var contractProperties = []string{
 type contractRunner struct {
 	mutex    sync.Mutex
 	requests []lifecycle.RunRequest
+	canceled []bool
 	result   lifecycle.RunResult
 	err      error
 }
 
-func (r *contractRunner) Run(_ context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
+func (r *contractRunner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	request.Canonical = slices.Clone(request.Canonical)
 	r.requests = append(r.requests, request)
+	r.canceled = append(r.canceled, ctx.Err() != nil)
 	var produced []lifecycle.Produced
 	if r.err == nil {
 		for _, output := range request.Outputs {
@@ -356,7 +368,15 @@ func (r *contractRunner) Run(_ context.Context, request lifecycle.RunRequest) (l
 func (r *contractRunner) script(result lifecycle.RunResult, err error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	r.requests, r.result, r.err = nil, result, err
+	r.requests, r.canceled, r.result, r.err = nil, nil, result, err
+}
+
+// sentCanceled reports, per request since the last script, whether its
+// context was already canceled when the runner received it.
+func (r *contractRunner) sentCanceled() []bool {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	return slices.Clone(r.canceled)
 }
 
 func (r *contractRunner) sent() []lifecycle.RunRequest {
@@ -404,7 +424,7 @@ func contractExampleOf(t *testing.T, resolver capabilityResolver, name string) c
 			// A binding may refuse an example it has no row for.
 			continue
 		}
-		example.plans[binding] = contribution
+		example.plans[contractIdentity(binding)] = contribution
 		definitions = append(definitions, contribution.Definitions...)
 	}
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, definitions)
@@ -466,9 +486,10 @@ func (f *contractFindings) record(row contractRow, property, message string) {
 func TestEveryCapabilityHonoursTheCapabilityContract(t *testing.T) {
 	runner := &contractRunner{}
 	resolver := buildCapabilitiesWith(systemClock{}, exampleControllerPorts(t), runner, exampleMediaRecords{})
+	resolver = append(resolver, boundCapability{kind: string(api.Machine), implementation: contractDoubleImplementation, family: "contract-double", capability: contractDouble{adapter: runner.Run}})
 	examples := map[string]contractExample{}
 	findings := &contractFindings{failures: map[string][]string{}}
-	for _, row := range contractRows() {
+	for _, row := range append(contractRows(), contractDoubleRow()) {
 		example, built := examples[row.example]
 		if !built {
 			example = contractExampleOf(t, resolver, row.example)
@@ -645,7 +666,68 @@ func contractEffects(t *testing.T, row contractRow, example contractExample, cap
 		contractUnresolved(t, row, block, capability, execution, runner, findings)
 		contractProduced(t, row, execution, capability, runner, findings)
 		contractReadOnly(row, block, capability, execution, runner, findings)
+		contractCancellation(row, block, capability, execution, runner, findings)
+		contractReplay(row, block, capability, execution, runner, findings)
 	}
+}
+
+// contractCancellation proves an invocation's cancellation reaches the runner
+// and proves nothing (specs/state-reconciliation.md, Attempt outcomes): an
+// attempt it interrupts returns its error and never reports changed or
+// unchanged, which the engine records canceled whatever else it reports, and
+// an observation it interrupts stays unknown.
+func contractCancellation(row contractRow, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner, findings *contractFindings) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	operations := append(contractMutationOperations(row), "observe")
+	if row.removalObservesNothing == "" {
+		operations = append(operations, "observe-removal")
+	}
+	for _, operation := range operations {
+		runner.script(lifecycle.RunResult{}, context.Canceled)
+		result, observation, err := contractCallIn(ctx, capability, operation, execution)
+		for _, canceled := range runner.sentCanceled() {
+			if !canceled {
+				findings.record(row, "cancellation-reaches-runner", block.ID+": "+operation+" handed the runner a context its invocation's cancellation does not reach")
+			}
+		}
+		switch operation {
+		case "apply", "destroy":
+			if result.Outcome == reconciliation.OutcomeChanged || result.Outcome == reconciliation.OutcomeUnchanged || err == nil {
+				findings.record(row, operation+"-outcome-of-cancellation", fmt.Sprintf("%s: a canceled %s gave %q (%v)", block.ID, operation, result.Outcome, err))
+			}
+		default:
+			if observation.Effect != reconciliation.EffectUnknown {
+				findings.record(row, "observe-cancellation-unproved", fmt.Sprintf("%s: a canceled %s proved %q", block.ID, operation, observation.Effect))
+			}
+		}
+	}
+}
+
+// contractReplay proves an attempt repeated over one frozen block sends the
+// adapter the same request again (specs/state-reconciliation.md, Converging an
+// effect): a retry converges what the first attempt left only because it
+// crosses the very bytes, identity and outputs the first one did.
+func contractReplay(row contractRow, block reconciliation.Block, capability lifecycle.Capability, execution lifecycle.Execution, runner *contractRunner, findings *contractFindings) {
+	for _, operation := range contractMutationOperations(row) {
+		var sent [][]lifecycle.RunRequest
+		for range 2 {
+			runner.script(lifecycle.RunResult{Outcome: "changed", Evidence: json.RawMessage(`{}`)}, nil)
+			_, _, _ = contractCall(capability, operation, execution)
+			sent = append(sent, runner.sent())
+		}
+		if !slices.EqualFunc(sent[0], sent[1], contractSameRequest) {
+			findings.record(row, operation+"-replay-identical", block.ID+": a repeated "+operation+" sent another request")
+		}
+	}
+}
+
+// contractSameRequest compares what crosses the boundary of two requests.
+func contractSameRequest(x, y lifecycle.RunRequest) bool {
+	return x.Implementation == y.Implementation && x.Operation == y.Operation && x.Variable == y.Variable &&
+		x.Digest == y.Digest && bytes.Equal(x.Canonical, y.Canonical) && x.Deadline == y.Deadline &&
+		reflect.DeepEqual(x.Placement, y.Placement) && reflect.DeepEqual(x.Materials, y.Materials) &&
+		maps.Equal(x.MaterialValues, y.MaterialValues) && reflect.DeepEqual(x.Outputs, y.Outputs)
 }
 
 // contractReadOnly proves a resolution's observations and a quiescence probe
@@ -724,7 +806,11 @@ func contractProduced(t *testing.T, row contractRow, execution lifecycle.Executi
 // records or the effect an observation proves. An operation it does not name
 // panics, so a forgotten case can never silently measure another method.
 func contractCall(capability lifecycle.Capability, operation string, execution lifecycle.Execution) (lifecycle.Result, lifecycle.Observation, error) {
-	ctx := context.Background()
+	return contractCallIn(context.Background(), capability, operation, execution)
+}
+
+// contractCallIn is contractCall under the invocation's own context.
+func contractCallIn(ctx context.Context, capability lifecycle.Capability, operation string, execution lifecycle.Execution) (lifecycle.Result, lifecycle.Observation, error) {
 	switch operation {
 	case "apply":
 		result, err := capability.Apply(ctx, execution)
@@ -781,6 +867,9 @@ func contractRequests(row contractRow, block reconciliation.Block, capability li
 			findings.record(row, property, block.ID+" crossed other bytes than its frozen request")
 		case request.Deadline < 0 || request.Deadline > lifecycle.MaxDeadline:
 			findings.record(row, property, fmt.Sprintf("%s asked for a %s deadline", block.ID, request.Deadline))
+		}
+		if row.synthetic != "" {
+			continue
 		}
 		for _, problem := range roleRefusals(request) {
 			findings.record(row, "role-admits-request", block.ID+" "+operation+": "+problem)
@@ -1281,7 +1370,7 @@ func contractServicePresence(t *testing.T, execution lifecycle.Execution) map[st
 // contractServiceVersion is the request version the managed service bound to
 // implementation writes, which is not its implementation's own name.
 func contractServiceVersion(implementation string) string {
-	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
+	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsServerDefinition(), ntpserver.Definition()} {
 		if definition.Implementation == implementation {
 			return definition.Version
 		}
@@ -1525,10 +1614,10 @@ func TestEveryBindingJoinsTheCapabilityContractSuite(t *testing.T) {
 		rows[row.binding()] = true
 	}
 	for _, binding := range buildCapabilities(systemClock{}, controllerDependencies{}, nil).Bindings() {
-		if !rows[binding] {
+		if !rows[contractIdentity(binding)] {
 			t.Errorf("%s/%s is offered by this build but has no row in the capability contract suite", binding.Kind, binding.Implementation)
 		}
-		delete(rows, binding)
+		delete(rows, contractIdentity(binding))
 	}
 	for binding := range rows {
 		t.Errorf("the capability contract suite has a row for %s/%s, which this build does not offer", binding.Kind, binding.Implementation)

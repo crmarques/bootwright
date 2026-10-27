@@ -34,15 +34,16 @@ Which arm realizes a Machine is settled once, from the substrate its provider
 declares, and frozen into the realized target every consumer reads: the
 Machine's substrate arm, its management controller, its identity channel, the
 interfaces the machine presents with the hardware addresses they report, and
-the block that realizes it. No consumer derives any of it again. Consumers
-dispatch on the frozen arm through the substrate's fixed port entry points, and
-an arm a consumer has no entry point for fails closed before anything is
-published, inserted or booted. A substrate added later supplies those entry
-points, and each consumer that dispatches on the arm, such as the
-[cluster installation](container-clusters.md#installation) and the
-[managed-OS installation](managed-os.md#installation), gains one row per entry
-point in its dispatch tables ([roles](architecture.md#roles)), a branch for
-the arm's identity channel, and any rule it keys on the arm.
+the block that realizes it, and the arm whose port reaches it. No consumer
+derives any of it again. Consumers hand the frozen arm to the substrate's one
+machine port dispatcher, and an arm it has no machine port for fails closed
+before anything is published, inserted or booted. A substrate added later
+supplies those entry points, one row in the dispatcher's table, the matching
+arm choice in the argument specs of `machine_power` and `machine_power_read`
+and its answers to the capability facts Go consumers ask the substrate, and no
+consumer, such as the [cluster installation](container-clusters.md#installation) or the
+[managed-OS installation](managed-os.md#installation), changes
+([roles](architecture.md#roles)).
 
 The KubeVirt and vSphere arms realize installer-provisioned Machines, those
 with `os.provided: false` and no install profile, as
@@ -734,7 +735,10 @@ annotated `cdi.kubevirt.io/storage.bind.immediate.requested: "true"` so a
 stopped machine's claim binds on a WaitForFirstConsumer class. The root disk
 is the first `virtio` disk, presented as `/dev/vda`, with `bootOrder: 1`. Each
 NMState `ethernet` interface becomes one interface with the `bridge` binding
-and a pinned `macAddress`, on the network its attachment's `networkRef`
+and a pinned `macAddress` derived from the context, Machine and interface
+names, never authored (the
+[Machine API](api/machines.md#os-lifecycle-and-substrate-invariants) refuses an authored
+one), on the network its attachment's `networkRef`
 names: for a `Localnet` ClusterUserDefinedNetwork the derived
 NetworkAttachmentDefinition of the same name in the provider's namespace, and
 for a NetworkAttachmentDefinition of type `bridge` that object in the
@@ -906,8 +910,8 @@ releases the media.
 Machine power commands, admitted operator utilities
 ([project](project.md#design-priorities-and-non-goals)), consume exactly these
 operations. `machine start`, `machine stop` and `machine restart` freeze one
-request naming the Machine's BMC endpoint and the declaration whose credential
-answers it, then cross the same adapter boundary a lifecycle block does, under
+request naming the Machine's arm, its management endpoint and the declaration
+whose credential answers it, then cross the same adapter boundary a lifecycle block does, under
 the context's shared lock. They register no operation and publish no ownership, because a power
 state is not desired state. On the libvirt and bare-metal arms, where the
 endpoint comes from is the only difference: a Machine that authors
@@ -930,9 +934,6 @@ the Environment's controller Machine refuses, and so does one whose BMC reports
 the controller host's own `UUID` or one of its MAC addresses, read locally and
 compared as a pin is, because no power command may stop the host that runs Bootwright.
 The [CLI journey](cli.md#machine-power-operations) owns the rest.
-
-Not yet met: machine power commands run only the Redfish power role; tracked as
-[B809](milestones/backlog.md#b809).
 
 Every BMC leg carries the trust its declaration sets. The
 controller-to-BMC leg follows `bmc.tls.verify` and, when the Machine declares
@@ -1073,8 +1074,8 @@ power state and whether the media presented is the consumer's own, another
 or none, `media_insert` presents an image, from the published address on a
 fetching arm or the image file on a pushing one, `media_eject` takes it back
 and settles what the insert needed, and `power` powers on, off or restarts.
-A consumer selects among them by the frozen arm through one dispatch table
-per entry point, as [selection](#selection-and-refusal) states, and a
+A consumer reaches them through the substrate's one dispatcher by the frozen
+arm, as [selection](#selection-and-refusal) states, and a
 substrate supplies them or its installation path is not promoted. Because
 they are named entry points of a role rather than free variables, the
 binding is allowlisted and frozen: authored data can never select which of

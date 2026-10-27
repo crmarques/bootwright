@@ -206,8 +206,7 @@ occurrence is one path; commas are filename characters. Cleaned path strings
 are deduplicated and discovered files are globally sorted by cleaned path. The
 combined universe undergoes one Environment selection; its selected documents
 are decoded and validated as one graph without staging, copying, override, or
-flag-order precedence. An `Environment.spec.resources` path resolves only from
-the directory containing that Environment's actual source file. Discovery,
+flag-order precedence. Discovery,
 Environment selection, duplicate-object rules, and source provenance remain
 API-owned.
 
@@ -934,7 +933,7 @@ run in this order, each before the next:
 
 | Condition | Diagnostic, exit `1` | Next action |
 | --- | --- | --- |
-| No selected ContainerCluster or StorageCluster has the name, including one only an excluded file declares | `access.target`, naming the context and the name | name a ContainerCluster the context selects; `bootwright cluster info --context <context>` lists them |
+| No selected ContainerCluster or StorageCluster has the name, including one the cluster lists exclude | `access.target`, naming the context and the name | name a ContainerCluster the context selects; `bootwright cluster info --context <context>` lists them |
 | The name is a managed or external Ceph StorageCluster | `cluster.not-applicable`, naming `bootwright cluster kubeconfig`, the cluster, its kind and the applicable targets, OpenShift and OKD ContainerClusters | `bootwright cluster info --context <context>` lists the clusters the context selects and their kinds |
 | The context's custody holds no kubeconfig for the ContainerCluster | `access.unavailable`, naming the cluster | `bootwright apply --context <context>` |
 
@@ -1127,7 +1126,7 @@ The checks run in this order, each before the next, and every refusal exits
 
 | Condition | Diagnostic | Next action |
 | --- | --- | --- |
-| No selected ContainerCluster or StorageCluster has the name, including one only an excluded file declares | `access.target`, naming the context and the name | name a cluster the context selects; `bootwright cluster info --context <context>` lists them |
+| No selected ContainerCluster or StorageCluster has the name, including one the cluster lists exclude | `access.target`, naming the context and the name | name a cluster the context selects; `bootwright cluster info --context <context>` lists them |
 | The name is an external Ceph StorageCluster, which declares no node roster | `cluster.not-applicable`, naming the command, the cluster, its kind and the applicable target, a managed Ceph StorageCluster | `bootwright cluster info --context <context>` lists the clusters the context selects and their kinds |
 | The name is an OpenShift or OKD ContainerCluster | `access.unavailable`, naming the cluster and saying sessions are not available for its kind | none; the cluster is reached through `cluster kubeconfig` |
 | `--node` matches no node, or its FQDN match is shared by several nodes | `access.target`, naming the requested selector and the cluster | choose one declared node name; `bootwright cluster info --context <context> --name <cluster>` lists the nodes |

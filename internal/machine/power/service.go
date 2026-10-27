@@ -281,7 +281,7 @@ func (s Service) execute(ctx context.Context, name string, resolved target, posi
 func (s Service) run(ctx context.Context, runtime lifecycle.Runtime, resolved target, canonical []byte, digest string,
 	step lifecycle.ProgressEvent) (Evidence, error) {
 	frozen := resolved.frozen
-	request := invocation(runtime, frozen, canonical, digest, resolved.pin, s.groups(step, frozen.Force), resolved.arm)
+	request := invocation(runtime, frozen, canonical, digest, resolved.pin, s.groups(step, frozen.Force))
 	physicalProofs(&request, resolved)
 	run, err := s.runner.Run(ctx, request)
 	if err != nil {
@@ -408,7 +408,7 @@ func readInvocation(runtime lifecycle.Runtime, frozen ReadSurvey, canonical []by
 }
 
 func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, digest string, pin machine.HardwareIdentity,
-	progress func(context.Context, string, string), arm string) lifecycle.RunRequest {
+	progress func(context.Context, string, string)) lifecycle.RunRequest {
 	materials := []lifecycle.MaterialFile{
 		{Name: "bmc-user", Part: secrets.UsernamePart, Secret: frozen.Controller.CredentialsRef, Variable: "controllerUser"},
 		{Name: "bmc-password", Part: secrets.PasswordPart, Secret: frozen.Controller.CredentialsRef, Variable: "controllerPassword"},
@@ -438,7 +438,6 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 	if request.MaterialValues == nil {
 		request.MaterialValues = map[string]string{}
 	}
-	request.MaterialValues["substrate"] = arm
 	if pin.Present() {
 		request.Refusals = map[string]error{identityMismatch: identityRefusal(frozen, runtime.OutputRemediation)}
 	}
@@ -446,7 +445,7 @@ func invocation(runtime lifecycle.Runtime, frozen Request, canonical []byte, dig
 }
 
 func physicalProofs(request *lifecycle.RunRequest, resolved target) {
-	if resolved.arm != "baremetal" {
+	if !resolved.physical {
 		return
 	}
 	encode := func(value string) string { return base64.StdEncoding.EncodeToString([]byte(value)) }

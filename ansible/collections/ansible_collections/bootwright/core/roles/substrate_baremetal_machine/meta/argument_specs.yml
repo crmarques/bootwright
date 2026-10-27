@@ -209,6 +209,8 @@ argument_specs:
   identity_read:
     short_description: Read the install marker over SSH pinned to the host key this installation delivered.
     options:
+      bootwright_machine_identity:
+        type: dict
       substrate_baremetal_machine_identity_address:
         type: str
         required: true

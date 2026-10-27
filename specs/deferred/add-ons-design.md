@@ -41,7 +41,9 @@ An executable package freezes:
 - canonical manifest of every selected regular payload file and content digest;
 - catalog origin and immutable snapshot identity;
 - driver capability, implementation identity, version and digest;
-- exact target-product/version constraints; and
+- the constraints it declares, each a predicate over facts detected from the
+  selected artifacts or over an authored arm, never a version range, matrix or
+  pairing ([implementation selection](../architecture.md#implementation-selection)); and
 - every consumed native tool, collection, image, chart and other dependency pin.
 
 One package ID/version must always identify the same descriptor and payload
@@ -70,16 +72,16 @@ verify source, publisher/trust root, authenticity, integrity and immutable
 identity before publication. Discovery never fetches, installs or updates content.
 
 Enumeration and composition are canonical and bounded. Package ID/version
-pairs are unique; records for an add-on may coexist only with non-overlapping
-target/version constraints. Duplicate definitions, aliases, case collisions,
-shadowing and contradictory metadata fail before payload access or operation
-registration. There is no precedence or last-writer rule, and unselected
+pairs are unique; records for an add-on may coexist only when no assignment of
+facts satisfies the declared constraints of two of them. Duplicate
+definitions, aliases, case collisions, shadowing and contradictory metadata
+fail before payload access or operation registration. There is no precedence or last-writer rule, and unselected
 packages are not opened.
 
 For each API-selected normalized descriptor, resolution requires exactly one
 matching package and one driver. API version, kind, name and canonical
 descriptor digest must match the package exactly. No match or ambiguity fails
-before planning. Freeze package, catalog, driver, dependencies and target
+before planning. Freeze package, catalog, driver, dependencies and declared
 constraints in the operation; apply, observation, continuation and destroy
 never reload or re-resolve them. Drift causes safe refusal.
 

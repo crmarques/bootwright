@@ -1,0 +1,7 @@
+---
+# The one machine port table: each arm this collection realizes, by the key Go
+# freezes into a request, and the role that answers its entry points. A
+# consumer names neither; an arm added here reaches every consumer.
+substrate_machine_arms:
+  baremetal: bootwright.core.substrate_baremetal_machine
+  libvirt: bootwright.core.substrate_libvirt_machine

@@ -2,10 +2,12 @@ package managedservice_test
 
 import (
 	"encoding/json"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
@@ -16,7 +18,7 @@ import (
 
 func definitions() map[string]managedservice.Definition {
 	return map[string]managedservice.Definition{
-		"proxy-squid": proxy.Definition(), "dns-server-dnsmasq": dnsserver.Definition(), "ntp-server-chrony": ntpserver.Definition(),
+		"proxy-squid": proxy.Definition(), "dns-server-dnsmasq": dnsserver.Definition(nil), "ntp-server-chrony": ntpserver.Definition(),
 	}
 }
 
@@ -34,7 +36,7 @@ func refusal(t *testing.T, err error) diagnostics.Diagnostic {
 // refuses by naming its version and the build that can still destroy it.
 func TestAnOlderManagedServiceRequestRefusesNamingItsVersion(t *testing.T) {
 	for kind, definition := range definitions() {
-		for _, retired := range []string{kind + "-v1", kind + "-v2"} {
+		for _, retired := range []string{kind + "-v1", kind + "-v2", "managed-service-v3"} {
 			t.Run(retired, func(t *testing.T) {
 				request := managedservice.Request{
 					Kind:      string(definition.Kind),
@@ -93,6 +95,17 @@ func TestEveryManagedServiceKindSharesTheOneRoleContract(t *testing.T) {
 	for kind, implementation := range want {
 		if implementations[kind] != implementation {
 			t.Errorf("%s implementation = %q, want %q", kind, implementations[kind], implementation)
+		}
+	}
+}
+
+// Each definition selects the spec.implementation value the schema admits for
+// its kind, so a managed service authored with that value is planned by it.
+func TestEachDefinitionSelectsAnImplementationItsKindAdmits(t *testing.T) {
+	for _, definition := range definitions() {
+		field, found := api.Schema(definition.Kind).Field("implementation")
+		if !found || definition.Selects == "" || !slices.Contains(field.Shape.Enums, definition.Selects) {
+			t.Errorf("%s selects %q, which %s's spec.implementation does not admit", definition.Implementation, definition.Selects, definition.Kind)
 		}
 	}
 }

@@ -73,7 +73,7 @@ author:
 """
 
 EXAMPLES = r"""
-# Invoked by bootwright.core.machine_power_redfish using its frozen request.
+# Invoked by bootwright.core.machine_power using its frozen request.
 - name: Complete the qualified execution handoff
   bootwright.core.machine_power_protocol:
     phase: loaded

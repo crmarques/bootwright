@@ -1,0 +1,48 @@
+argument_specs:
+  power:
+    short_description: Drive one machine to a requested power state through its substrate machine port.
+    options:
+      bootwright_machine_power_request:
+        type: dict
+        required: true
+        options:
+          arm:
+            type: str
+            required: true
+            choices: [baremetal, libvirt]
+          controller:
+            type: dict
+            required: true
+            options:
+              credentialsRef:
+                type: str
+                required: true
+              endpoint:
+                type: str
+                required: true
+              tlsVerify:
+                type: bool
+                required: true
+              trustBundleRef:
+                type: str
+                required: false
+          force:
+            type: bool
+            required: true
+          identity:
+            type: dict
+            required: true
+          placement:
+            type: dict
+            required: true
+          verb:
+            type: str
+            required: true
+            choices: [start, stop, restart]
+          version:
+            type: str
+            required: true
+            choices: [machine-power-v3]
+      bootwright_machine_power_material:
+        type: dict
+        required: true

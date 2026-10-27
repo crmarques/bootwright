@@ -4,6 +4,7 @@ import (
 	"net/netip"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 type VirtualIP struct{ Slot, Address, Bridge string }
@@ -25,14 +26,14 @@ func VirtualIPs(catalog api.Catalog, cluster api.Object, controller string) []Vi
 		}
 		if address.Is4() && controller != "" {
 			for _, provider := range catalog.OfKind(api.InfraProvider) {
-				if provider.Spec().Get("libvirt", "machineRef").Text() != controller {
+				if substrate.HostMachine(provider) != controller {
 					continue
 				}
 				for _, attachment := range provider.Spec().Get("networkAttachments").Items() {
-					arm := attachment.Get("libvirt")
-					prefix, err := netip.ParsePrefix(arm.Get("address").Text())
-					if arm.Get("management").Text() == "managed" && err == nil && prefix.Contains(address) {
-						ip.Bridge = arm.Get("bridge").Text()
+					network, managed := substrate.ManagedAttachment(attachment)
+					prefix, err := netip.ParsePrefix(network.Prefix)
+					if managed && err == nil && prefix.Contains(address) {
+						ip.Bridge = network.Bridge
 					}
 				}
 			}

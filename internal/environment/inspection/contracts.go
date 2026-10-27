@@ -13,7 +13,10 @@ type Graph interface {
 	Effective(ctx context.Context, contextName string) (api.Catalog, error)
 }
 
-type CephProof struct {
+type StorageProof struct {
+	Release         string
+	AdminNode       string
+	AdminCommand    string
 	Reason          string
 	FSID            string
 	Image           Image
@@ -42,9 +45,10 @@ type Custody interface {
 	ObjectUserCredentials(ctx context.Context, contextName, user string) (Custodied, bool, error)
 }
 
-type CephEvidence interface {
-	ManagedCeph(ctx context.Context, contextName string, catalog api.Catalog, cluster api.Object) (CephProof, error)
+type StorageEvidence interface {
+	ManagedStorage(ctx context.Context, contextName string, catalog api.Catalog, cluster api.Object) (StorageProof, error)
 	Resources(ctx context.Context, contextName string, catalog api.Catalog) (map[string][]Resource, error)
+	ObjectUserGateway(user api.Object) string
 	ObjectUserProved(ctx context.Context, contextName string, catalog api.Catalog, user api.Object) (bool, error)
 }
 

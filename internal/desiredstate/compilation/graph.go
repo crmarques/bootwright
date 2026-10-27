@@ -1,6 +1,7 @@
 package compilation
 
 import (
+	"maps"
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -33,7 +34,7 @@ func (g GraphSelector) Select(catalog api.Catalog) Selection {
 		attachments = append(attachments, environment.Attachment{ClusterRef: attachment.ClusterRef, ExportRef: attachment.ExportRef})
 	}
 	selection := g.environment(catalog, attachments)
-	result := Selection{Catalog: selection.Catalog, ExcludedContainerClusters: slices.Clone(selection.ExcludedContainerClusters), ExcludedStorageClusters: slices.Clone(selection.ExcludedStorageClusters)}
+	result := Selection{Catalog: selection.Catalog, ExcludedContainerClusters: slices.Clone(selection.ExcludedContainerClusters), ExcludedStorageClusters: slices.Clone(selection.ExcludedStorageClusters), Excluded: maps.Clone(selection.Excluded)}
 	for _, problem := range selection.Problems {
 		result.Problems = append(result.Problems, ObjectIssue{Object: problem.Object, Issue: problem.Issue, Target: problem.Target})
 	}

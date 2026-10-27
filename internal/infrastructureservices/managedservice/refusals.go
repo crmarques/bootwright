@@ -83,7 +83,7 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 		return nil
 	}
 	var refused []lifecycle.Refusal
-	for _, service := range ManagedObjects(state.Effective(), c.definition.Kind) {
+	for _, service := range ManagedObjects(state.Effective(), c.definition) {
 		refused = append(refused, PlacementRefusals(state.Effective(), service)...)
 		refused = append(refused, ReservationRefusals(state.Effective(), service)...)
 	}

@@ -33,6 +33,10 @@ argument_specs:
           image:
             type: str
             required: true
+          implementation:
+            type: str
+            required: true
+            choices: [dns-server-dnsmasq-v1, ntp-server-chrony-v1, proxy-squid-v1]
           ingressHosts:
             type: list
             elements: str
@@ -61,7 +65,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [managed-service-v3]
+            choices: [managed-service-v4]
       bootwright_managed_service_material:
         type: dict
         required: true

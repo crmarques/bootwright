@@ -11,7 +11,6 @@ import (
 	"github.com/crmarques/bootwright/internal/containercluster"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/environment"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/machine"
 	storage "github.com/crmarques/bootwright/internal/storage/preflight"
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
@@ -24,6 +23,7 @@ type Service struct {
 	Project   storage.Projector
 	Capacity  capacity.CapacityChecker
 	Blocks    func(context.Context, string) (map[string]string, error)
+	DNSBlock  func(server string) string
 	Resolver  Resolver
 }
 
@@ -70,7 +70,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 		for _, node := range cluster.Spec().Get("nodes").Items() {
 			nodes[node.Get("machineRef").Text()] = true
 		}
-		dns, pending := clusterDNS(catalog, cluster, blocks)
+		dns, pending := clusterDNS(catalog, cluster, blocks, s.DNSBlock)
 		for _, endpoint := range containercluster.ResolutionNames(catalog, cluster) {
 			result.Checks = append(result.Checks, s.resolve(ctx, request, selected, endpoint.Name, endpoint.Address, endpoint.Slot, dns, pending))
 		}
@@ -161,7 +161,7 @@ func (s Service) resolve(ctx context.Context, request PreflightRequest, contextN
 	return check
 }
 
-func clusterDNS(catalog api.Catalog, cluster api.Object, blocks map[string]string) (string, bool) {
+func clusterDNS(catalog api.Catalog, cluster api.Object, blocks map[string]string, dnsBlock func(string) string) (string, bool) {
 	for _, node := range cluster.Spec().Get("nodes").Items() {
 		host, found := catalog.Find(api.Machine, node.Get("machineRef").Text())
 		if !found {
@@ -186,7 +186,7 @@ func clusterDNS(catalog api.Catalog, cluster api.Object, blocks map[string]strin
 			if address == "" {
 				address = server.Spec().Get("bindAddress").Text()
 			}
-			return server.Name() + " at " + address + " for " + cluster.Name() + "." + environment.ContainerClusterDomain(catalog), blocks[dnsserver.Definition().BlockID(server.Name())] != "done"
+			return server.Name() + " at " + address + " for " + cluster.Name() + "." + environment.ContainerClusterDomain(catalog), dnsBlock == nil || blocks[dnsBlock(server.Name())] != "done"
 		}
 	}
 	return "", false

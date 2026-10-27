@@ -7,6 +7,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
 	addonpackages "github.com/crmarques/bootwright/internal/addons/packages"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // ToolRequest describes a declarative tool requirement and publisher family.
@@ -99,11 +100,12 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 		if !providers[provider.Name()] {
 			continue
 		}
-		if provider.Spec().Has("vsphere") {
-			result = append(result, ToolRequest{Kind: "govc", Version: versions["govc"]})
-		}
-		if provider.Spec().Has("kubevirt") {
-			result = append(result, virtctl)
+		for _, tool := range substrate.ProviderTools(provider) {
+			if tool == virtctl.Kind {
+				result = append(result, virtctl)
+			} else {
+				result = append(result, ToolRequest{Kind: tool, Version: versions[tool]})
+			}
 		}
 	}
 	slices.SortFunc(result, CompareToolRequests)

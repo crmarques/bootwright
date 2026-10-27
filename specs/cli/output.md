@@ -241,7 +241,7 @@ Successful result objects have stable top-level fields:
 | `secret check`, `secret list`, `secret info` | `context`, `secrets` |
 | `secret encryption status` | `initialized`, `implementation`, `activeKey`, `keys`, `items` |
 | `media list` | `media` |
-| `validate` | `counts`, `excludedContainerClusters`, `excludedStorageClusters`, `excludedResourceFiles`, `advisories` |
+| `validate` | `counts`, `excludedContainerClusters`, `excludedStorageClusters`, `advisories` |
 | `preflight infra`, `preflight clusters`, `preflight container-cluster`, `preflight storage-cluster`, `preflight add-ons`, `preflight all` | `context`, `target`, `checks`, `summary` |
 | `status` | `context`, `setupChecks`, `desired`, `clusters`, `storageClusters`, `shared`, `secrets`, `nextSteps`, `lifecycle`, `handoff`, `contradictions` |
 | `diff` | `context`, `operation`, `input`, `plan`, `observed`, `blocks`, `objects`, `summary` |
@@ -334,19 +334,14 @@ The `validate` result orders its fields as listed above and has this exact
 shape:
 
 ```json
-{"counts":{"filesSeen":2,"objectsDecoded":4},"excludedContainerClusters":[],"excludedStorageClusters":[],"excludedResourceFiles":[],"advisories":[]}
+{"counts":{"filesSeen":2,"objectsDecoded":4},"excludedContainerClusters":[],"excludedStorageClusters":[],"advisories":[]}
 ```
 
 `counts` contains only `filesSeen` and `objectsDecoded`, in that order, with
 [the API loader's counting semantics](../api.md#yaml-streams-and-decoding).
 The cluster-exclusion arrays contain unique names in ascending bytewise order.
-`excludedResourceFiles` contains unique, sorted paths of resource-excluded files
-that declare Bootwright objects. These slash-separated display paths are
-relative to the selected Environment file's directory; an informational `..`
-segment grants no filesystem or resource-selection authority. A file outside
-that directory receives remediation to place its declaration within the
-directory before adding it to `resources`, never an invalid traversal selector.
-Exclusion diagnostics carry the object identities and safe remediation.
+Exclusion diagnostics carry the object identities and the selection list to
+extend.
 
 `advisories` contains the ordered `api.deferred` warning subset using the
 diagnostic shape below. Those warnings also remain in envelope `diagnostics`;
@@ -906,7 +901,7 @@ it to a variable.
 | `controller.runtime-retention` | Informational: after a setup, a controller runtime a running command holds was kept ("kept: 3 runtimes (1 in use)"), or older runtimes and wheels could not all be removed; the next setup retries. Never a refusal and never changes the setup's outcome. |
 | `controller.unknown` | A local controller prerequisite action has an unresolved effect outcome. |
 | `lifecycle.state` | Durable lifecycle state does not permit the requested transition or continuation. |
-| `lifecycle.unsupported` | This executable cannot realize a selected object: no capability claims its kind, or its capability reports the shape unsupported. |
+| `lifecycle.unsupported` | This executable cannot realize a selected object: no capability claims its kind, its capability reports the shape unsupported, or two implementations of one capability claim it. |
 | `lifecycle.stage` | The stage selection admits no startable block, excludes every block the operation must retry, or is given to a `plan` that previews a `destroy`. |
 | `lifecycle.authorization` | The frozen plan requires an authorization that was not validly supplied, or a supplied one it does not require. |
 | `lifecycle.lease` | The context root lock or mutation lease cannot be safely acquired or recovered. |

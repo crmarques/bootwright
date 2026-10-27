@@ -47,7 +47,7 @@ func fixture(t *testing.T, managed bool) Service {
 	return Service{Graph: graph{api.NewCatalog(objects)}, Project: func(api.Catalog, string) ([]capacity.Allocation, error) { return nil, nil }, Capacity: checker(func(context.Context, []capacity.Allocation, bool) ([]capacity.Check, error) {
 		t.Fatal("capacity called without libvirt guests")
 		return nil, nil
-	}), Blocks: func(context.Context, string) (map[string]string, error) {
+	}), DNSBlock: func(server string) string { return "dns-" + server }, Blocks: func(context.Context, string) (map[string]string, error) {
 		return map[string]string{"dns-dns": "done"}, nil
 	}}
 }

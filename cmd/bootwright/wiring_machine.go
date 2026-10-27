@@ -73,7 +73,7 @@ func wireMachine(deps machineDependencies) cli.Services {
 }
 
 func clusterSessions(state inventory.EffectiveState, sessions machineaccess.Service, selection func(context.Context) (string, error)) environmentaccess.Service {
-	return environmentaccess.New(effectiveGraph{state: state}, machineSessions{access: sessions}, selection)
+	return environmentaccess.New(effectiveGraph{state: state}, machineSessions{access: sessions}, selection).WithMembers(clusterMembers())
 }
 
 type effectiveGraph struct{ state inventory.EffectiveState }

@@ -20,10 +20,10 @@ type Identity struct {
 	Object  string `json:"object"`
 }
 
-// Controller is the Redfish endpoint this Machine is managed through, the
+// Access is the management endpoint the Machine's arm reaches it through, the
 // declaration whose credential answers it, and how its transport is verified.
 // No material is named here.
-type Controller struct {
+type Access struct {
 	CredentialsRef string `json:"credentialsRef"`
 	Endpoint       string `json:"endpoint"`
 	// TLSVerify and TrustBundleRef carry the Machine's declared trust to the
@@ -39,7 +39,9 @@ type Controller struct {
 // secret value: the controller credential reaches the adapter as an
 // operation-scoped file at execution.
 type Request struct {
-	Controller Controller           `json:"controller"`
+	// Arm keys the substrate machine port that answers this request.
+	Arm        string               `json:"arm"`
+	Controller Access               `json:"controller"`
 	Force      bool                 `json:"force"`
 	Identity   Identity             `json:"identity"`
 	Placement  machineref.Placement `json:"placement"`

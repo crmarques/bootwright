@@ -5,21 +5,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
-
-// effectKinds are the API kinds whose selected objects need a lifecycle
-// capability before an operation can realize them. A kind no capability claims
-// refuses the whole operation rather than silently leaving its objects out.
-func effectKinds() []api.Kind {
-	return []api.Kind{
-		api.InfraProvider,
-		api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer,
-		api.ContainerCluster, api.StorageCluster, api.StoragePlacementPolicy, api.StoragePool, api.StorageRBDImage, api.StorageClient,
-		api.StorageFilesystem, api.StorageSubvolume, api.StorageObjectGateway, api.StorageObjectUser, api.StorageObjectBucket, api.StorageNFSExport, api.StorageSMBResource, api.StorageNVMeoFSubsystem, api.StorageReplication, api.StorageExport,
-		api.ClusterAddonBinding,
-	}
-}
 
 // Refusal is one selected object this executable cannot realize, why, and what
 // an operator changes so that it can. It names the object by kind and name, so
@@ -67,41 +53,30 @@ func unclaimedRemediation(identity string) string {
 	return "remove " + identity + " from the selected Environment, or use an example within the supported shape such as " + supportedExample
 }
 
-// Unrealizable refuses every selected object of an unclaimed effect-bearing
-// kind, in canonical order. External services and declaration-only objects are
-// inputs and never appear here.
-func Unrealizable(catalog api.Catalog, claimed []string) []Refusal {
-	var found []Refusal
-	refuse := func(object api.Object, reason string) {
-		found = append(found, RefusalOf(object, reason, unclaimedRemediation(object.Identity())))
+// Bearing is the unclaimed refusal's reason and a listed service's placement.
+type Bearing struct {
+	Reason      string
+	Shared      bool
+	Machine     string
+	InstallOnly bool
+}
+
+// EffectBearing is every domain root's predicate, composed, so the engine
+// names no kind or field of a domain itself.
+type EffectBearing func(api.Object) (Bearing, bool)
+
+// Unrealizable refuses each selected effect-bearing object of an unclaimed kind.
+func Unrealizable(catalog api.Catalog, claimed []string, bearing EffectBearing) []Refusal {
+	if bearing == nil {
+		return nil
 	}
-	for _, kind := range effectKinds() {
-		if slices.Contains(claimed, string(kind)) {
+	var found []Refusal
+	for _, object := range catalog.Objects() {
+		if slices.Contains(claimed, string(object.Kind())) {
 			continue
 		}
-		for _, object := range catalog.OfKind(kind) {
-			if infrastructureservices.IsService(kind) && object.Spec().Get("management").Text() != "managed" {
-				continue
-			}
-			reason := "no capability of this executable realizes the " + string(kind) + " kind"
-			if infrastructureservices.IsService(kind) {
-				reason = "no capability of this executable manages the " + string(kind) + " kind"
-			}
-			refuse(object, reason)
-		}
-	}
-	if !slices.Contains(claimed, string(api.Machine)) {
-		for _, machine := range catalog.OfKind(api.Machine) {
-			if provided := machine.Spec().Get("os", "provided"); provided.Type() == api.Boolean && !provided.Bool() {
-				refuse(machine, "no capability of this executable realizes a Machine whose operating system is not provided")
-			}
-		}
-	}
-	if !slices.Contains(claimed, string(api.CustomPlaybook)) {
-		for _, playbook := range catalog.OfKind(api.CustomPlaybook) {
-			if enabled := playbook.Spec().Get("enabled"); enabled.Type() == api.Boolean && enabled.Bool() {
-				refuse(playbook, "no capability of this executable runs an enabled CustomPlaybook")
-			}
+		if effect, bears := bearing(object); bears {
+			found = append(found, RefusalOf(object, effect.Reason, unclaimedRemediation(object.Identity())))
 		}
 	}
 	return SortRefusals(found)

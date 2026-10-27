@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/environment"
 )
 
 type nodeMatch int
@@ -26,64 +27,68 @@ func canonicalNames(requested []string) []string {
 	return slices.Compact(names)
 }
 
-func sortedNodes(cluster api.Object) []api.Value {
-	nodes := cluster.Spec().Get("ceph", "topology", "nodes").Items()
-	slices.SortStableFunc(nodes, func(a, b api.Value) int {
-		return strings.Compare(a.Get("name").Text(), b.Get("name").Text())
-	})
+type roster func(api.Object) (environment.Membership, bool)
+
+func (r roster) sorted(cluster api.Object) []environment.Member {
+	var nodes []environment.Member
+	if r != nil {
+		membership, _ := r(cluster)
+		nodes = slices.Clone(membership.Nodes)
+	}
+	slices.SortStableFunc(nodes, func(a, b environment.Member) int { return strings.Compare(a.Name, b.Name) })
 	return nodes
 }
 
-func nodeNames(nodes []api.Value) []string {
+func nodeNames(nodes []environment.Member) []string {
 	names := make([]string, 0, len(nodes))
 	for _, node := range nodes {
-		names = append(names, node.Get("name").Text())
+		names = append(names, node.Name)
 	}
 	return names
 }
 
-func nodeRemedy(cluster api.Object, contextName string, nodes []api.Value) string {
+func nodeRemedy(cluster api.Object, contextName string, nodes []environment.Member) string {
 	return "choose one declared node name (" + strings.Join(nodeNames(nodes), ", ") + "); bootwright cluster info --context " +
 		contextName + " --name " + cluster.Name() + " lists the nodes"
 }
 
-func matchNode(nodes []api.Value, selector string) (api.Value, nodeMatch) {
+func matchNode(nodes []environment.Member, selector string) (environment.Member, nodeMatch) {
 	if index := slices.Index(nodeNames(nodes), selector); index >= 0 {
 		return nodes[index], nodeFound
 	}
-	var matched []api.Value
+	var matched []environment.Member
 	for _, node := range nodes {
-		if node.Get("fqdn").Text() == selector {
+		if node.FQDN == selector {
 			matched = append(matched, node)
 		}
 	}
 	switch len(matched) {
 	case 0:
-		return api.Value{}, nodeMissing
+		return environment.Member{}, nodeMissing
 	case 1:
 		return matched[0], nodeFound
 	}
-	return api.Value{}, nodeShared
+	return environment.Member{}, nodeShared
 }
 
-func firstNode(cluster api.Object, contextName string) (api.Value, error) {
-	nodes := sortedNodes(cluster)
+func firstNode(cluster api.Object, contextName string, nodesOf roster) (environment.Member, error) {
+	nodes := nodesOf.sorted(cluster)
 	if len(nodes) == 0 {
-		return api.Value{}, failure("access.target", "StorageCluster "+cluster.Name()+" declares no node", nodeRemedy(cluster, contextName, nodes))
+		return environment.Member{}, failure("access.target", "StorageCluster "+cluster.Name()+" declares no node", nodeRemedy(cluster, contextName, nodes))
 	}
 	return nodes[0], nil
 }
 
-func selectMachines(clusters []api.Object, contextName string, selectors []string) ([]string, error) {
+func selectMachines(clusters []api.Object, contextName string, selectors []string, nodesOf roster) ([]string, error) {
 	var machines []string
-	add := func(node api.Value) {
-		if ref := node.Get("machineRef").Text(); !slices.Contains(machines, ref) {
+	add := func(node environment.Member) {
+		if ref := node.Machine; !slices.Contains(machines, ref) {
 			machines = append(machines, ref)
 		}
 	}
 	if len(selectors) == 0 {
 		for _, cluster := range clusters {
-			node, err := firstNode(cluster, contextName)
+			node, err := firstNode(cluster, contextName, nodesOf)
 			if err != nil {
 				return nil, err
 			}
@@ -94,7 +99,7 @@ func selectMachines(clusters []api.Object, contextName string, selectors []strin
 	declared := make(map[string]bool, len(selectors))
 	var idle []string
 	for _, cluster := range clusters {
-		nodes, hit := sortedNodes(cluster), false
+		nodes, hit := nodesOf.sorted(cluster), false
 		for _, selector := range selectors {
 			node, match := matchNode(nodes, selector)
 			switch match {
@@ -110,10 +115,10 @@ func selectMachines(clusters []api.Object, contextName string, selectors []strin
 			idle = append(idle, cluster.Name())
 		}
 	}
-	return machines, unselectedNodes(clusters, contextName, selectors, declared, idle)
+	return machines, unselectedNodes(clusters, contextName, selectors, declared, idle, nodesOf)
 }
 
-func unselectedNodes(clusters []api.Object, contextName string, selectors []string, declared map[string]bool, idle []string) error {
+func unselectedNodes(clusters []api.Object, contextName string, selectors []string, declared map[string]bool, idle []string, nodesOf roster) error {
 	var missing []string
 	for _, selector := range selectors {
 		if !declared[selector] {
@@ -123,7 +128,7 @@ func unselectedNodes(clusters []api.Object, contextName string, selectors []stri
 	if len(missing) > 0 {
 		if len(clusters) == 1 {
 			return failure("access.target", "StorageCluster "+clusters[0].Name()+" declares no node named "+strings.Join(missing, ", ")+" and none with that FQDN",
-				nodeRemedy(clusters[0], contextName, sortedNodes(clusters[0])))
+				nodeRemedy(clusters[0], contextName, nodesOf.sorted(clusters[0])))
 		}
 		return failure("access.target", "none of StorageClusters "+strings.Join(clusterNames(clusters), ", ")+" declares a node named "+
 			strings.Join(missing, ", ")+" or one with that FQDN", "choose declared node names; bootwright cluster info --context "+contextName+" lists the nodes")

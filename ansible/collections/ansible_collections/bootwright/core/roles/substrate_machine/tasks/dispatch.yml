@@ -1,0 +1,31 @@
+---
+# An arm the table does not list ends here, named, before any lookup by it.
+- name: Refuse an arm the substrate has no machine port for
+  ansible.builtin.fail:
+    msg: >-
+      the substrate has no machine port for arm
+      '{{ bootwright_machine_arm | string | bootwright.core.printable }}', so its
+      {{ substrate_machine_entry }} entry point did not run; plan the
+      installation again with this release
+  when: bootwright_machine_arm not in substrate_machine_arms
+
+# The arm publishes its answer under its own names; the substrate republishes
+# it under these, also when the entry point failed, so a consumer's rescue reads
+# the refusal without learning which arm answered.
+- name: Run the arm's entry point
+  block:
+    - name: Enter the arm's machine port
+      ansible.builtin.include_role:
+        name: '{{ substrate_machine_arms[bootwright_machine_arm] }}'
+        tasks_from: '{{ substrate_machine_entry }}'
+  always:
+    - name: Publish the arm's answer under the substrate's names
+      ansible.builtin.set_fact:
+        substrate_machine_port_result: "{{ lookup('ansible.builtin.vars', substrate_machine_prefix ~ '_port_result', default={}) }}"
+        substrate_machine_refusal: "{{ lookup('ansible.builtin.vars', substrate_machine_prefix ~ '_refusal', default='') }}"
+        substrate_machine_identity_answered: "{{ lookup('ansible.builtin.vars', substrate_machine_prefix ~ '_identity_answered', default=false) }}"
+        substrate_machine_identity_marker: "{{ lookup('ansible.builtin.vars', substrate_machine_prefix ~ '_identity_marker', default='') }}"
+        substrate_machine_identity_host_key: "{{ lookup('ansible.builtin.vars', substrate_machine_prefix ~ '_identity_host_key', default='') }}"
+      vars:
+        substrate_machine_prefix: "{{ substrate_machine_arms[bootwright_machine_arm].split('.')[-1] }}"
+      no_log: true

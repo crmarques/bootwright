@@ -4,6 +4,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 const (
@@ -128,7 +129,7 @@ func placementHost(o api.Object, c api.Catalog) bool {
 		if infrastructureservices.IsService(candidate.Kind()) && spec.Get("management").Text() == "managed" && spec.Get("machineRef").Text() == o.Name() {
 			return true
 		}
-		if candidate.Kind() == api.InfraProvider && spec.Get("libvirt", "machineRef").Text() == o.Name() {
+		if candidate.Kind() == api.InfraProvider && substrate.HostMachine(candidate) == o.Name() {
 			return true
 		}
 	}

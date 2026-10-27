@@ -15,25 +15,20 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 type EraseCapability struct {
 	runner             Runner
 	identities         Identities
 	media              MediaRecords
-	claim              func(string) string
-	retirementPolicies func(api.Catalog, string) ([]string, error)
+	retirementPolicies []RetirementPolicy
 }
 
 func NewErase(runner Runner) EraseCapability { return EraseCapability{runner: runner} }
 
-func (c EraseCapability) WithClaims(reader func(string) string) EraseCapability {
-	c.claim = reader
-	return c
-}
-
-func (c EraseCapability) WithRetirementPolicies(reader func(api.Catalog, string) ([]string, error)) EraseCapability {
-	c.retirementPolicies = reader
+func (c EraseCapability) WithRetirementPolicies(policies ...RetirementPolicy) EraseCapability {
+	c.retirementPolicies = slices.Clone(policies)
 	return c
 }
 
@@ -66,8 +61,8 @@ func (c EraseCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 	if err != nil {
 		return plan, err
 	}
-	if c.media == nil || c.claim == nil {
-		return plan, refusal("lifecycle.state", "physical erase requires media and original claim readers", "")
+	if c.media == nil {
+		return plan, refusal("lifecycle.state", "physical erase requires a media reader", "")
 	}
 	records, err := c.media.MediaRecords(ctx)
 	if err != nil {
@@ -93,17 +88,13 @@ func (c EraseCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 		}
 		needs := requires(requirements[index])
 		needs = slices.DeleteFunc(needs, func(ref reconciliation.ObjectRef) bool { return ref.Kind == "Machine" })
-		definition := reconciliation.BlockDefinition{ID: EraseBlockID(machine.Name()), Description: "retain the verified physical erase policy of " + machine.Name(), Stage: reconciliation.StageMachines,
-			Requires: needs, Dependencies: []string{c.claim(machine.Name())}, Kind: Kind, Object: machine.Name(), Implementation: EraseImplementation, ContentDigest: EraseContentDigest(), Request: canonical, Exclusive: install.ExclusiveKeys()}
-		if c.retirementPolicies != nil {
-			policies, err := c.retirementPolicies(catalog, machine.Name())
-			if err != nil {
-				return plan, err
-			}
-			definition.Dependencies = append(definition.Dependencies, policies...)
-			slices.Sort(definition.Dependencies)
-			definition.Dependencies = slices.Compact(definition.Dependencies)
+		needs = append(needs, reconciliation.ObjectRef{Kind: "Machine", Object: machine.Name(), Family: substrate.MachineFamily})
+		retirement, err := retirementRequirements(c.retirementPolicies, catalog, machine.Name())
+		if err != nil {
+			return plan, err
 		}
+		definition := reconciliation.BlockDefinition{ID: EraseBlockID(machine.Name()), Description: "retain the verified physical erase policy of " + machine.Name(), Stage: reconciliation.StageMachines,
+			Requires: append(needs, retirement...), Kind: Kind, Object: machine.Name(), Implementation: EraseImplementation, ContentDigest: EraseContentDigest(), Request: canonical, Exclusive: install.ExclusiveKeys()}
 		if input.Verb == reconciliation.Destroy {
 			definition.Description = "overwrite and fully read back the declared physical disks of " + machine.Name()
 			definition.Consumes = []string{reconciliation.AuthorizationDataLoss}

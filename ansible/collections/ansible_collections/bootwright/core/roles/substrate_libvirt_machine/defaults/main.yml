@@ -18,8 +18,12 @@ substrate_libvirt_machine_missing_disks: >-
 # How long an identity read waits for a machine that has not answered yet.
 # Zero is one attempt: only an installation waiting for a machine it just
 # booted sets a budget.
-substrate_libvirt_machine_identity_retries: 0
-substrate_libvirt_machine_identity_delay: 0
+substrate_libvirt_machine_identity_uri: "{{ bootwright_machine_identity.uri }}"
+substrate_libvirt_machine_identity_domain: "{{ bootwright_machine_identity.domain }}"
+substrate_libvirt_machine_identity_marker_path: "{{ bootwright_machine_identity.marker_path }}"
+substrate_libvirt_machine_identity_host_key_path: "{{ bootwright_machine_identity.host_key_path }}"
+substrate_libvirt_machine_identity_retries: "{{ bootwright_machine_identity.retries | default(0) }}"
+substrate_libvirt_machine_identity_delay: "{{ bootwright_machine_identity.delay | default(0) }}"
 
 # Generic machine-port inputs; the native task implementation owns its aliases.
 substrate_libvirt_machine_target_endpoint: "{{ bootwright_machine_port.endpoint }}"

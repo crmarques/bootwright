@@ -1,0 +1,5 @@
+---
+- name: Dispatch power to the machine's arm
+  ansible.builtin.include_tasks: dispatch.yml
+  vars:
+    substrate_machine_entry: power

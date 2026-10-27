@@ -1,59 +1,35 @@
 ---
-# The identity operation belongs to the substrate that realized the machine.
-# Both bindings are that substrate's identity entry point, selected by the
-# frozen request's own channel, so authored data can never choose which one
-# runs, and every input is passed explicitly rather than inherited from a
-# shared fact. A channel with neither binding refuses right after them, before
-# any answer is taken: falling through both would read as a machine that never
-# answered, which is what lets an installation proceed.
-- name: Read the machine through its hypervisor's channel
+# The identity operation belongs to the substrate that realized the machine:
+# its identity entry point, dispatched by the frozen request's own arm, so
+# authored data can never choose which one runs, with every input passed
+# explicitly rather than inherited from a shared fact. An arm the substrate has
+# no machine port for refuses there, before any answer is taken: falling
+# through would read as a machine that never answered, which is what lets an
+# installation proceed.
+- name: Read the machine through its substrate's identity channel
   ansible.builtin.include_role:
-    name: bootwright.core.substrate_libvirt_machine
+    name: bootwright.core.substrate_machine
     tasks_from: identity_read
   vars:
-    substrate_libvirt_machine_identity_uri: '{{ bootwright_os_install_request.target.uri | default("") }}'
-    substrate_libvirt_machine_identity_domain: '{{ bootwright_os_install_request.target.domain | default("") }}'
-    substrate_libvirt_machine_identity_marker_path: '{{ bootwright_os_install_request.markerPath }}'
-    substrate_libvirt_machine_identity_host_key_path: '{{ bootwright_os_install_request.hostKeyPath }}'
-    substrate_libvirt_machine_identity_retries: '{{ managedos_install_anaconda_identity_retries | default(0) | int }}'
-    substrate_libvirt_machine_identity_delay: '{{ bootwright_os_install_request.budgets.identity.delaySeconds | int }}'
-  when: bootwright_os_install_request.target.channel == 'guest-agent'
-
-- name: Read the machine over the key this installation delivered
-  ansible.builtin.include_role:
-    name: bootwright.core.substrate_baremetal_machine
-    tasks_from: identity_read
-  vars:
-    substrate_baremetal_machine_identity_address: '{{ bootwright_os_install_request.address }}'
-    substrate_baremetal_machine_identity_user: '{{ bootwright_os_install_request.user }}'
-    substrate_baremetal_machine_identity_file: '{{ bootwright_os_install_material.fleetIdentity }}'
-    substrate_baremetal_machine_identity_key: '{{ bootwright_os_install_material.hostKey | default("") }}'
-    substrate_baremetal_machine_identity_marker_path: '{{ bootwright_os_install_request.markerPath }}'
-    substrate_baremetal_machine_identity_work: '{{ managedos_install_anaconda_scratch }}'
-    substrate_baremetal_machine_identity_retries: '{{ managedos_install_anaconda_identity_retries | default(0) | int }}'
-    substrate_baremetal_machine_identity_delay: '{{ bootwright_os_install_request.budgets.identity.delaySeconds | int }}'
-  when: bootwright_os_install_request.target.channel == 'delivered-key'
-
-- name: Refuse an identity channel this installation has no binding for
-  ansible.builtin.fail:
-    msg: >-
-      Machine {{ bootwright_os_install_request.identity.object }} names identity
-      channel {{ bootwright_os_install_request.target.channel }}, which this
-      installation has no identity_read binding for, so its identity was not
-      read; plan the installation again with this release
-  when: bootwright_os_install_request.target.channel not in ['guest-agent', 'delivered-key']
+    bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
+    bootwright_machine_identity:
+      uri: '{{ bootwright_os_install_request.target.uri | default("") }}'
+      domain: '{{ bootwright_os_install_request.target.domain | default("") }}'
+      address: '{{ bootwright_os_install_request.address }}'
+      user: '{{ bootwright_os_install_request.user }}'
+      file: '{{ bootwright_os_install_material.fleetIdentity }}'
+      key: '{{ bootwright_os_install_material.hostKey | default("") }}'
+      marker_path: '{{ bootwright_os_install_request.markerPath }}'
+      host_key_path: '{{ bootwright_os_install_request.hostKeyPath }}'
+      work: '{{ managedos_install_anaconda_scratch }}'
+      retries: '{{ managedos_install_anaconda_identity_retries | default(0) | int }}'
+      delay: '{{ bootwright_os_install_request.budgets.identity.delaySeconds | int }}'
 
 # Whichever channel answered, the installation reads one answer under its own
 # names and never learns which mechanism produced it.
 - name: Take the answer this machine's channel produced
   ansible.builtin.set_fact:
-    managedos_install_anaconda_answered: >-
-      {{ substrate_libvirt_machine_identity_answered
-         | default(substrate_baremetal_machine_identity_answered | default(false)) }}
-    managedos_install_anaconda_marker: >-
-      {{ substrate_libvirt_machine_identity_marker
-         | default(substrate_baremetal_machine_identity_marker | default('')) }}
-    managedos_install_anaconda_host_key: >-
-      {{ substrate_libvirt_machine_identity_host_key
-         | default(substrate_baremetal_machine_identity_host_key | default('')) }}
+    managedos_install_anaconda_answered: '{{ substrate_machine_identity_answered | default(false) }}'
+    managedos_install_anaconda_marker: "{{ substrate_machine_identity_marker | default('') }}"
+    managedos_install_anaconda_host_key: "{{ substrate_machine_identity_host_key | default('') }}"
   changed_when: false

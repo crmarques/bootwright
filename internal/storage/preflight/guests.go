@@ -8,6 +8,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/substrate/capacity"
 )
 
 type GuestChecks struct{ Commands Commands }
@@ -23,7 +24,7 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		return nil, err
 	}
 	if g.Commands == nil {
-		return []Check{{ID: "host.prerequisites", Target: host.Name(), Status: Unknown, Reason: "verified host command access is unavailable"}}, nil
+		return []Check{{ID: "host.prerequisites", Target: host.Name(), Status: capacity.Unknown, Reason: "verified host command access is unavailable"}}, nil
 	}
 	hostname := host.Name()
 	for _, address := range host.Spec().Get("network", "addresses").Items() {
@@ -52,7 +53,7 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 			if untrusted.Fingerprint != "" {
 				reason += "; observed " + untrusted.Fingerprint
 			}
-			return []Check{{ID: "host.trust", Target: host.Name(), Status: Unknown, Reason: reason, Next: "run bootwright machine trust --context " + contextName + " --machines " + host.Name()}}, nil
+			return []Check{{ID: "host.trust", Target: host.Name(), Status: capacity.Unknown, Reason: reason, Next: "run bootwright machine trust --context " + contextName + " --machines " + host.Name()}}, nil
 		}
 		if probe.id == "host.privilege" && err == nil && strings.TrimSpace(string(data)) != "0" {
 			clear(data)
@@ -61,12 +62,12 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		check := Check{ID: probe.id, Target: host.Name(), Status: Unknown, Reason: "the bounded prerequisite read did not complete", Next: probe.requirement}
+		check := Check{ID: probe.id, Target: host.Name(), Status: capacity.Unknown, Reason: "the bounded prerequisite read did not complete", Next: probe.requirement}
 		if err == nil {
-			check.Status = Failed
+			check.Status = capacity.Failed
 			check.Reason = probe.requirement
 			if probe.accepts(string(data)) {
-				check.Status = Passed
+				check.Status = capacity.Passed
 				check.Reason = "the host proved this prerequisite"
 				check.Next = ""
 			}

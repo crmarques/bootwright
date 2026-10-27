@@ -41,18 +41,16 @@ PROXIES = ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY")
 # What the terminal refusal of every dispatch ends by telling the operator.
 REPLAN = "plan the installation again with this release"
 
-# The known dispatching files, with the dispatch groups each holds: the boot
-# files dispatch the pre-boot proof and the media boot, the others one entry
-# point. Finding fewer means the walk stopped seeing them, which would pass
-# every rule below vacuously.
+# The known dispatching files, with the dispatch groups each holds: only the
+# substrate's dispatcher selects an arm's role. Finding fewer means the walk
+# stopped seeing it, which would pass every rule below vacuously.
 GROUPS = {
-    "containercluster_install_agent/tasks/boot.yml": 2,
-    "containercluster_install_agent/tasks/release.yml": 1,
-    "managedos_install_anaconda/tasks/await.yml": 1,
-    "managedos_install_anaconda/tasks/boot.yml": 2,
-    "managedos_install_anaconda/tasks/identity.yml": 1,
-    "managedos_install_anaconda/tasks/network.yml": 1,
+    "substrate_machine/tasks/dispatch.yml": 1,
 }
+
+# The substrate's one machine port dispatcher, which consumers include by an
+# entry point key and hand the frozen arm.
+DISPATCHER = "bootwright.core.substrate_machine"
 
 # The files that include a dispatching file, directly or through another file
 # that does. Finding fewer would pass the rule that nothing catches a refusal
@@ -63,6 +61,8 @@ INCLUDERS = {
     "managedos_install_anaconda/tasks/apply.yml",
     "managedos_install_anaconda/tasks/identity_until_answered.yml",
     "managedos_install_anaconda/tasks/observe.yml",
+    "substrate_machine/tasks/power.yml",
+    "substrate_machine/tasks/pre_boot.yml",
 }
 
 # The files that insert virtual media. Finding fewer would pass the proof rule
@@ -72,11 +72,12 @@ INSERTING = {
     "managedos_install_anaconda/tasks/boot.yml",
 }
 
-# The entrypoints that include those files after effects of their own, and the
-# dispatching files each includes. Finding fewer would pass the early-guard rule
-# vacuously.
+# The entrypoints whose run reaches the dispatcher after effects of their own,
+# and the frozen arm each hands it. Finding fewer would pass the early-guard
+# rule vacuously.
 CONSUMED = {
-    "managedos_install_anaconda/tasks/apply.yml": {"identity.yml"},
+    "containercluster_install_agent/tasks/apply.yml": "{{ containercluster_install_agent_node.substrate }}",
+    "managedos_install_anaconda/tasks/apply.yml": "{{ bootwright_os_install_request.target.substrate }}",
 }
 
 
@@ -92,6 +93,17 @@ def mapped(task):
             if match:
                 return match.group(1), match.group(2), task[action].get("tasks_from")
     return None
+
+
+def dispatched(task):
+    """Whether a task includes the substrate's machine port dispatcher."""
+    return any(isinstance(task.get(action), dict) and task[action].get("name") == DISPATCHER for action in ROLE_INCLUDES)
+
+
+def admits(task):
+    """Whether a task is the dispatcher's unconditional refusal of an arm it has no port for."""
+    return (any(task.get(action) == {"name": DISPATCHER, "tasks_from": "admit"} for action in ROLE_INCLUDES)
+            and "when" not in task and not tolerates_failure(task))
 
 
 def mapping_defaults(where):
@@ -403,7 +415,8 @@ def dispatch_problems(where, tasks):
 def reaching(files):
     """The names of one role's task files whose run reaches a dispatch: each one
     that dispatches, and each that includes one of those."""
-    found = {name for name, tasks in files.items() if dispatches(tasks)}
+    found = {name for name, tasks in files.items()
+             if dispatches(tasks) or any(dispatched(task) for task, _names in walk(tasks))}
     while True:
         more = {name for name, tasks in files.items()
                 if name not in found and any(included_file(task) in found for task, _names in walk(tasks))}
@@ -417,8 +430,8 @@ def inclusion_problems(where, tasks, reached):
     problems = []
     for listed, around in task_lists(tasks):
         for task in listed:
-            target = included_file(task)
-            if target not in reached:
+            target = DISPATCHER if dispatched(task) else included_file(task)
+            if target not in reached and target != DISPATCHER:
                 continue
             head = "%s: %r includes %s, whose run ends a dispatch in a refusal," % (where, task.get("name"), target)
             if tolerates_failure(task):
@@ -441,6 +454,8 @@ def proof_before(listed, until, bound):
     refusal."""
     for position, task in enumerate(listed[:until]):
         if proves(task) and mapped(task) and mapped_complete(task, listed[position + 1] if position + 1 < until else {}):
+            return True
+        if proves(task) and dispatched(task) and "when" not in task and not tolerates_failure(task):
             return True
     for field, arms, start, end in groups(listed):
         if (end < until and all(proves(task) for task in listed[start:end])
@@ -629,32 +644,25 @@ def test_the_inclusion_rule_rejects(tasks, reason):
 
 
 def test_every_consumer_refuses_an_arm_it_does_not_bind_before_its_own_first_effect():
+    """Each installation's apply entrypoint asks the dispatcher to refuse an arm
+    it has no machine port for before anything but validation and the handoff,
+    for the very arm every later dispatch of that role hands over."""
     problems = []
-    checked = {}
-    for path in task_files():
-        if path.name != "apply.yml":
-            continue
-        tasks = load(path)
-        closed = leading_guards(tasks)
-        for name, iterations in sorted(included(tasks).items()):
-            target = path.parent / name
-            if not target.is_file():
-                continue
-            arms_by_field = dispatches(load(target))
-            arms_by_field = {field: arms for field, arms in arms_by_field.items() if arms}
-            if arms_by_field:
-                checked.setdefault(label(path), set()).add(name)
-            for field, arms in sorted(arms_by_field.items()):
-                for each in sorted(iterations, key=str):
-                    if closed.get((field, each)) != arms:
-                        problems.append(
-                            "%s includes %s, which dispatches on %s, without closing it to %s before its own "
-                            "first effect, so an arm %s does not bind reaches those effects first"
-                            % (label(path), name, field, sorted(arms), name)
-                        )
-    missing = {entry: sorted(names - checked.get(entry, set())) for entry, names in CONSUMED.items()}
-    missing = {entry: names for entry, names in missing.items() if names}
-    assert not missing, "the walk no longer sees these consumers include %s" % missing
+    for where, arm in sorted(CONSUMED.items()):
+        role = where.split("/")[0]
+        leading = [task for task in load(ROLES / where)
+                   if not hands_off(task) and not (any(guard in task for guard in GUARDS) and "when" not in task)]
+        if not leading or not admits(leading[0]):
+            problems.append("%s does not refuse an arm the substrate has no machine port for before its first effect" % where)
+        elif leading[0]["vars"] != {"bootwright_machine_arm": arm}:
+            problems.append("%s refuses %r, not the arm it dispatches on" % (where, leading[0]["vars"]))
+        handed = set()
+        for path in (ROLES / role / "tasks").glob("*.yml"):
+            for task, _names in walk(load(path)):
+                if dispatched(task):
+                    handed.add(task.get("vars", {}).get("bootwright_machine_arm"))
+        if handed != {arm}:
+            problems.append("%s dispatches on %s, not exactly %s" % (role, sorted(map(str, handed)), arm))
     assert not problems, "\n".join(problems)
 
 
@@ -732,50 +740,26 @@ def test_the_rescue_rule_accepts():
 
 
 def test_every_fixed_map_is_qualified_and_closed_before_installation_effects():
-    required = {
-        "managedos_install_anaconda": {"pre_boot", "boot_media_bindings", "boot_disk", "identity_read", "state_read", "media_insert", "media_eject"},
-        "containercluster_install_agent": {"ports", "pre_boot_bindings", "boot_media_bindings", "boot_disk_bindings"},
-    }
     preparation = collector_plays()[0]
     assert preparation["hosts"] == "bootwright_target" and preparation["any_errors_fatal"] is True
     assert preparation["tasks"][0]["ansible.builtin.import_role"] == {
         "name": "bootwright.core.containercluster_install_agent", "tasks_from": "apply"}
-    for role, suffixes in required.items():
-        bindings = mapping_defaults(role + "/tasks/apply.yml")
-        guards = []
-        for task in load(ROLES / role / "tasks/apply.yml"):
-            if hands_off(task):
-                continue
-            if "ansible.builtin.assert" not in task or "when" in task or tolerates_failure(task):
-                break
-            guards.extend((condition, task) for condition in conditions(task["ansible.builtin.assert"].get("that")))
-        field = "bootwright_os_install_request.target.substrate" if role.startswith("managedos") else "containercluster_install_agent_node.substrate"
-        for suffix in suffixes:
-            binding = role + "_" + suffix
-            assert binding in bindings and set(bindings[binding]) == {"libvirt", "baremetal"}
-            guard = [task for condition, task in guards if condition == field + " in " + binding]
-            assert len(guard) == 1, binding
-            if role.startswith("containercluster"):
-                assert iteration(guard[0]) == ("{{ bootwright_cluster_install_request.nodes }}", "containercluster_install_agent_node")
-            for arm, value in bindings[binding].items():
-                target = value["role"] if isinstance(value, dict) else value
-                assert target == "bootwright.core.substrate_" + arm + "_machine"
-        for path in (ROLES / role / "tasks").glob("*.yml"):
-            for task, _names in walk(load(path)):
-                selected = mapped(task)
-                if not selected:
-                    continue
-                binding, _field, entry = selected
-                assert binding in {role + "_" + suffix for suffix in suffixes}
-                assert _field == field
-                entries = ("state_read", "media_insert", "media_eject", "power") if entry.startswith("{{") else (entry,)
-                if entry.startswith("{{"):
-                    assert entry == "{{ containercluster_install_agent_port_operation }}"
-                    assert ("containercluster_install_agent_port_operation in ['state_read', 'media_insert', 'media_eject', 'power']"
-                            in load(path)[0]["ansible.builtin.assert"]["that"])
-                for arm in bindings[binding]:
-                    specs = yaml.safe_load((ROLES / ("substrate_" + arm + "_machine") / "meta/argument_specs.yml").read_text())["argument_specs"]
-                    assert set(entries) <= set(specs)
+    admit = next(task for task in load(ROLES / "containercluster_install_agent/tasks/apply.yml") if admits(task))
+    assert iteration(admit) == ("{{ bootwright_cluster_install_request.nodes }}", "containercluster_install_agent_node")
+    arms = yaml.safe_load((ROLES / "substrate_machine/defaults/main.yml").read_text())["substrate_machine_arms"]
+    assert arms and all(role == "bootwright.core.substrate_" + arm + "_machine" for arm, role in arms.items())
+    mapped_includes = []
+    for path in task_files():
+        for task, _names in walk(load(path)):
+            selected = mapped(task)
+            if selected:
+                mapped_includes.append((label(path), selected))
+    assert mapped_includes == [("substrate_machine/tasks/dispatch.yml",
+                                ("substrate_machine_arms", "bootwright_machine_arm", "{{ substrate_machine_entry }}"))]
+    for arm in arms:
+        specs = yaml.safe_load((ROLES / ("substrate_" + arm + "_machine") / "meta/argument_specs.yml").read_text())["argument_specs"]
+        entries = yaml.safe_load((ROLES / "substrate_machine/meta/argument_specs.yml").read_text())["argument_specs"]
+        assert set(entries) - {"admit"} <= set(specs), arm
 
 
 @pytest.mark.parametrize("where", sorted(DEFERRED))

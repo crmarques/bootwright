@@ -33,7 +33,7 @@ type hostKeyReader interface {
 
 func wireInspection(state inventory.EffectiveState, reconciler lifecycle.Service, binder *custody.Service, selection contexts.SelectionStore) inspection.Service {
 	return inspection.New(effectiveGraph{state: state}, cephInspection{reconciler: reconciler}, installProofs{reconciler: reconciler},
-		hostKeyProofs{keys: machineHostKeys{reconciler: reconciler}}, currentSelection(selection), inspectionCustody{reader: producedReader{binder: binder}})
+		hostKeyProofs{keys: machineHostKeys{reconciler: reconciler}}, currentSelection(selection), inspectionCustody{reader: producedReader{binder: binder}}).WithMembers(clusterMembers())
 }
 
 type producedEntries interface {
@@ -134,16 +134,20 @@ func (c cephInspection) Resources(ctx context.Context, contextName string, catal
 	return rows, nil
 }
 
-func (c cephInspection) ManagedCeph(ctx context.Context, contextName string, catalog api.Catalog, cluster api.Object) (inspection.CephProof, error) {
+func (cephInspection) ObjectUserGateway(user api.Object) string { return ceph.ObjectUserGateway(user) }
+
+func (c cephInspection) ManagedStorage(ctx context.Context, contextName string, catalog api.Catalog, cluster api.Object) (inspection.StorageProof, error) {
+	administration := ceph.ClusterAdministration(cluster)
 	proofs, err := c.reconciler.Evidence(ctx, contextName, string(api.StorageCluster), cluster.Name())
 	if err != nil {
-		return inspection.CephProof{}, err
+		return inspection.StorageProof{}, err
 	}
 	found, reason := ceph.Inspect(catalog, cluster, proofs)
 	if reason != "" {
-		return inspection.CephProof{Reason: reason}, nil
+		return inspection.StorageProof{Release: administration.Release, AdminNode: administration.Node, Reason: reason}, nil
 	}
-	proof := inspection.CephProof{
+	proof := inspection.StorageProof{
+		Release: administration.Release, AdminNode: administration.Node, AdminCommand: administration.Command(contextName, cluster.Name(), found.FSID),
 		FSID:            found.FSID,
 		Image:           inspection.Image{Reference: found.Image.Reference, Digest: found.Image.Digest, Platform: found.Image.Platform},
 		Specializations: found.Specializations,
@@ -158,7 +162,7 @@ func (c cephInspection) ManagedCeph(ctx context.Context, contextName string, cat
 	}
 	proof.Endpoints, err = c.endpoints(ctx, contextName, cluster.Name(), proofs)
 	if err != nil {
-		return inspection.CephProof{}, err
+		return inspection.StorageProof{}, err
 	}
 	return proof, nil
 }

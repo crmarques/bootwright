@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // DiskEncryption uses only the agent installer's admitted role selectors.
@@ -58,14 +59,8 @@ func encryptionRefusal(catalog api.Catalog, cluster api.Object) (string, string)
 		if !found {
 			continue
 		}
-		provider, found := catalog.Find(api.InfraProvider, machine.Spec().Get("substrate", "providerRef").Text())
-		if !found || !provider.Spec().Has("libvirt") {
-			continue
-		}
-		for _, profile := range provider.Spec().Get("libvirt", "machineProfiles").Items() {
-			if profile.Get("name").Text() == machine.Spec().Get("substrate", "profileRef").Text() && !profile.Has("tpm") {
-				return "an encrypted node's libvirt profile declares no TPM", "add tpm: {} to the selected profile on " + provider.Identity()
-			}
+		if provider, profile, found := substrate.SelectedProfile(catalog, machine); found && !profile.Has("tpm") {
+			return "an encrypted node's machine profile declares no TPM", "add tpm: {} to the selected profile on " + provider.Identity()
 		}
 	}
 	return "", ""

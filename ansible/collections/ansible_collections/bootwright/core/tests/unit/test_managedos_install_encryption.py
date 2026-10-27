@@ -174,12 +174,11 @@ def test_replay_does_not_republish_recovery():
 
 def test_recovery_is_published_inside_the_boot_block_before_insert():
     boot = flattened("boot.yml")
-    refused = only(boot, named("Refuse a substrate this installation has no pre-boot binding for"), "pre-boot refusal")
-    proved = [index for index, task in enumerate(boot) if (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "pre_boot"]
+    proved = only(boot, lambda task: (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "pre_boot", "pre-boot proof")
     published = only(boot, included("private_recovery.yml"), "publish the recovery passphrase")
     inserted = only(boot, lambda task: (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "media_insert", "insert")
-    assert len(proved) == 1 and max(proved) < refused < published < inserted
-    assert published == refused + 1
+    assert proved < published < inserted
+    assert published == proved + 1
 
 
 def published_leaves(shape):

@@ -120,13 +120,14 @@ func digestUnderV1(files map[string][]byte) string {
 // admits one, and its first task asserts one. When a request version moves and
 // only one of them follows, every call through that role fails on the stale
 // assertion before the adapter reports anything, so the two are kept in step
-// here rather than on a host.
+// here rather than on a host. The substrate's machine port dispatcher takes no
+// frozen request of its own, so it states no version.
 func TestRoleVersionAssertionsMatchTheirArgumentSpecs(t *testing.T) {
 	admitted := map[string]string{}
 	asserted := map[string][]string{}
 	for name, data := range Assets() {
 		role, ok := roleOwning(name)
-		if !ok {
+		if !ok || role == "substrate_machine" {
 			continue
 		}
 		switch {

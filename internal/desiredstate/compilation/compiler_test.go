@@ -21,7 +21,7 @@ const environmentYAML = "apiVersion: bootwright.io/v1alpha1\nkind: Environment\n
 const controllerYAML = "\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: controller}\nspec:\n  capabilities: [container-runtime]\n  os: {provided: true}\n  access: {local: true}\n"
 
 func compiler() compilation.Compiler {
-	return compilation.NewCompiler(yamlstream.Parser{}, nil, compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate}, compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, Validate: secrets.Validate})
+	return compilation.NewCompiler(yamlstream.Parser{}, nil, compilation.Rules{Normalize: environment.Normalize, Validate: testEnvironmentValidate}, compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, Validate: secrets.Validate})
 }
 func sources(content string) desiredstate.Sources {
 	return desiredstate.Sources{Files: []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/environment.yaml", []byte(content+controllerYAML))}, Roots: []string{"/synthetic"}}
@@ -34,7 +34,7 @@ func TestCompilerPreservesAuthoredAndDerivedValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Counts != (compilation.Counts{FilesSeen: 1, ObjectsDecoded: 2}) || report.Advisories == nil || report.ExcludedResourceFiles == nil {
+	if report.Counts != (compilation.Counts{FilesSeen: 1, ObjectsDecoded: 2}) || report.Advisories == nil {
 		t.Fatalf("invalid report: %#v", report)
 	}
 	if state.Authored().Objects()[0].Spec().Has("domains", "machines") {
@@ -123,16 +123,20 @@ func TestCompilerRefusesTheRetiredFileSourceWithItsRemedy(t *testing.T) {
 	}
 }
 
-func TestCompilerResourceSelectionAndCancellation(t *testing.T) {
-	env := environmentYAML + "  resources: [environment.yaml]\n"
-	input := sources(env)
-	input.Files = append(input.Files, desiredstate.NewSourceFile("/synthetic/excluded.yaml", []byte("apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: excluded}\nspec: {type: unsupported}\n")))
+func TestCompilerRetiresResourcesAndHonoursCancellation(t *testing.T) {
+	_, _, err := compiler().Compile(context.Background(), sources(environmentYAML+"  resources: [environment.yaml]\n"))
+	found := diagnostics.Of(err)
+	if len(found) != 1 || found[0].Code != "api.field" || found[0].Field != "$.spec.resources" || !strings.Contains(found[0].Message, "spec.containerClusters and spec.storageClusters are the only narrowing") {
+		t.Fatalf("an authored resources list = %#v, want the retired-field refusal naming the cluster lists", found)
+	}
+	input := sources(environmentYAML)
+	input.Files = append(input.Files, desiredstate.NewSourceFile("/synthetic/other.yaml", []byte("apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: other}\nspec: {type: token}\n")))
 	state, report, err := compiler().Compile(context.Background(), input)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatal(diagnostics.Of(err))
 	}
-	if len(state.Effective().Objects()) != 2 || report.Counts.FilesSeen != 2 || report.Counts.ObjectsDecoded != 2 || len(report.Advisories) != 0 || len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "api.selection" || !reflect.DeepEqual(report.ExcludedResourceFiles, []string{"excluded.yaml"}) {
-		t.Fatalf("unexpected report: %#v", report)
+	if len(state.Effective().Objects()) != 3 || report.Counts.FilesSeen != 2 || report.Counts.ObjectsDecoded != 3 {
+		t.Fatalf("every discovered file is not selected: %#v", report)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

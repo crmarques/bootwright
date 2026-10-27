@@ -466,6 +466,8 @@ func (d *decoder) retiredFieldMessage(path, field string) string {
 			return "Environment trustedCAs is retired; reference caBundle Secrets through ContainerCluster.spec.install.additionalTrustBundleRefs or its kind defaults; connection trust remains on the consuming service or Entitlement"
 		case "machineAccess":
 			return "Environment machineAccess is retired; use spec.remoteMachinesAccessKey.keyRef"
+		case "resources":
+			return "Environment resources is retired; the Environment directory is the scope, and spec.containerClusters and spec.storageClusters are the only narrowing"
 		case "safety":
 			return "Environment safety is retired; authorize data loss per command with --authorize data-loss on apply or destroy"
 		}

@@ -46,6 +46,7 @@ type Group struct {
 type ObjectRef struct {
 	Kind   string
 	Object string
+	Family string
 }
 
 // BlockDefinition is what a capability contributes. Reconciliation resolves its
@@ -59,6 +60,7 @@ type BlockDefinition struct {
 	// block carries only the block identities it waits for.
 	Requires     []ObjectRef `json:"-"`
 	Dependencies []string    `json:"dependencies"`
+	Family       string      `json:"-"`
 	// Exclusive names host resources this block does not share while it runs.
 	// Two blocks that name one key never run at the same time, even when the
 	// graph would allow it, because the graph orders what one block needs from
@@ -228,6 +230,10 @@ func resolveRequirements(definitions []BlockDefinition) ([]BlockDefinition, erro
 	for _, definition := range definitions {
 		reference := ObjectRef{Kind: definition.Kind, Object: definition.Object}
 		realized[reference] = append(realized[reference], definition.ID)
+		if definition.Family != "" {
+			reference.Family = definition.Family
+			realized[reference] = append(realized[reference], definition.ID)
+		}
 	}
 	resolved := make([]BlockDefinition, 0, len(definitions))
 	for _, definition := range definitions {
@@ -235,7 +241,11 @@ func resolveRequirements(definitions []BlockDefinition) ([]BlockDefinition, erro
 		for _, requirement := range definition.Requires {
 			blocks, found := realized[requirement]
 			if !found {
-				return nil, planError("lifecycle block requires " + requirement.Kind + "/" + requirement.Object + ", which no block in this plan realizes")
+				subject := requirement.Kind + "/" + requirement.Object
+				if requirement.Family != "" {
+					subject += " from its " + requirement.Family + " family"
+				}
+				return nil, planError("lifecycle block requires " + subject + ", which no block in this plan realizes")
 			}
 			for _, id := range blocks {
 				if id != definition.ID && !slices.Contains(dependencies, id) {
@@ -245,7 +255,7 @@ func resolveRequirements(definitions []BlockDefinition) ([]BlockDefinition, erro
 		}
 		slices.Sort(dependencies)
 		definition.Dependencies = slices.Compact(dependencies)
-		definition.Requires = nil
+		definition.Requires, definition.Family = nil, ""
 		resolved = append(resolved, definition)
 	}
 	return resolved, nil
@@ -492,7 +502,7 @@ func uniqueSorted(values []string) bool {
 }
 
 func clone(definition BlockDefinition) BlockDefinition {
-	definition.Requires = nil
+	definition.Requires, definition.Family = nil, ""
 	definition.Dependencies = slices.Clone(definition.Dependencies)
 	definition.Exclusive = slices.Clone(definition.Exclusive)
 	definition.Impacts = slices.Clone(definition.Impacts)

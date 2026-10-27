@@ -29,6 +29,5 @@ type Report struct {
 	Counts                    Counts                   `json:"counts"`
 	ExcludedContainerClusters []string                 `json:"excludedContainerClusters"`
 	ExcludedStorageClusters   []string                 `json:"excludedStorageClusters"`
-	ExcludedResourceFiles     []string                 `json:"excludedResourceFiles"`
 	Advisories                []diagnostics.Diagnostic `json:"advisories"`
 }

@@ -28,7 +28,7 @@ func TestValidationSuccessHasExactStableRepresentations(t *testing.T) {
 		}
 		want := "  ✓ Desired state is valid (files seen: 2, objects decoded: 4)\n"
 		if jsonMode {
-			want = "{\"schemaVersion\":\"v1alpha1\",\"command\":\"validate\",\"ok\":true,\"exitCode\":0,\"result\":{\"counts\":{\"filesSeen\":2,\"objectsDecoded\":4},\"excludedContainerClusters\":[],\"excludedStorageClusters\":[],\"excludedResourceFiles\":[],\"advisories\":[]},\"diagnostics\":[],\"logs\":[]}\n"
+			want = "{\"schemaVersion\":\"v1alpha1\",\"command\":\"validate\",\"ok\":true,\"exitCode\":0,\"result\":{\"counts\":{\"filesSeen\":2,\"objectsDecoded\":4},\"excludedContainerClusters\":[],\"excludedStorageClusters\":[],\"advisories\":[]},\"diagnostics\":[],\"logs\":[]}\n"
 		}
 		if out.String() != want {
 			t.Fatalf("got %q, want %q", out.String(), want)
@@ -42,7 +42,7 @@ func TestValidationWarningsAreSortedEscapedOnceAndPreserved(t *testing.T) {
 		{Severity: "warning", Code: "api.deferred", Message: raw, Source: &diagnostics.SourceLocation{Path: "z" + raw, Document: 2, Line: 4, Column: 3}, Object: &diagnostics.ObjectIdentity{APIVersion: raw, Kind: raw, Name: raw}, Field: raw, Remediation: raw},
 		{Severity: "warning", Code: "api.excluded", Message: "excluded", Source: &diagnostics.SourceLocation{Path: "a.yaml"}},
 	}
-	report := &compilation.Report{Counts: compilation.Counts{FilesSeen: 3, ObjectsDecoded: 2}, ExcludedContainerClusters: []string{"z", "a", "a"}, ExcludedStorageClusters: []string{raw}, ExcludedResourceFiles: []string{"z.yaml", "a.yaml"}, Advisories: warnings[:1], Diagnostics: warnings}
+	report := &compilation.Report{Counts: compilation.Counts{FilesSeen: 3, ObjectsDecoded: 2}, ExcludedContainerClusters: []string{"z", "a", "a"}, ExcludedStorageClusters: []string{raw}, Advisories: warnings[:1], Diagnostics: warnings}
 	before, _ := json.Marshal(report)
 	var jsonOut, jsonErr bytes.Buffer
 	if err := writeValidation(&jsonOut, &jsonErr, "validate", report, true); err != nil {
@@ -68,7 +68,7 @@ func TestValidationWarningsAreSortedEscapedOnceAndPreserved(t *testing.T) {
 			t.Fatalf("escaping=%q, want %q", value, want)
 		}
 	}
-	if d.Source.Path != "z"+want || !reflect.DeepEqual(envelope.Result.ExcludedContainerClusters, []string{"a", "z"}) || !reflect.DeepEqual(envelope.Result.ExcludedResourceFiles, []string{"a.yaml", "z.yaml"}) {
+	if d.Source.Path != "z"+want || !reflect.DeepEqual(envelope.Result.ExcludedContainerClusters, []string{"a", "z"}) {
 		t.Fatal(envelope)
 	}
 	var out, errOut bytes.Buffer

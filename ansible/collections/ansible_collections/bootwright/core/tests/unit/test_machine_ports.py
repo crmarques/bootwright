@@ -82,8 +82,10 @@ def test_every_realized_role_publishes_all_eight_machine_entrypoints():
 
 def test_machine_consumers_compose_substrate_ports_instead_of_native_modules():
     import re
-    for role in ("managedos_install_anaconda", "containercluster_install_agent", "machine_power_redfish"):
-        for path in (ROOT / "roles" / role / "tasks").glob("*.yml"):
+    for role in ("managedos_install_anaconda", "containercluster_install_agent", "machine_power", "machine_power_read"):
+        tasks = ROOT / "roles" / role / "tasks"
+        assert tasks.is_dir() and any(tasks.glob("*.yml")), role
+        for path in tasks.glob("*.yml"):
             source = path.read_text()
             assert "bootwright.core.redfish_" not in source, str(path)
             assert not re.search(r"(?:not )?in \[['\"]libvirt['\"], ['\"]baremetal['\"]\]", source), str(path)

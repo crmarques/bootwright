@@ -9,5 +9,5 @@
   tasks:
     - name: Execute the machine power reading capability
       ansible.builtin.import_role:
-        name: bootwright.core.machine_power_read_redfish
+        name: bootwright.core.machine_power_read
         tasks_from: read

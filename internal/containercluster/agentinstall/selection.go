@@ -159,7 +159,7 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 				return issues[0].Message, issues[0].Remediation
 			}
 		}
-		if provider, ok := machine.Provider(bound, catalog); ok && substrate.Variant(provider) == substrate.ArmKubeVirt && provider.Spec().Has("kubevirt", "hostClusterRef") {
+		if provider, ok := machine.Provider(bound, catalog); ok && substrate.NamesHostCluster(provider) {
 			return "a declared node's KubeVirt provider names hostClusterRef", "select kubeconfigRef on " + provider.Identity()
 		}
 		target, err := substrate.TargetFor(catalog, bound, cluster.Name(), controllerMachine)

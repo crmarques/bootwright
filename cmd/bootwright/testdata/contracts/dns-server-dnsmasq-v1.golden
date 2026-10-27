@@ -1,6 +1,6 @@
 implementation: dns-server-dnsmasq-v1
-content-digest: c4cbeee432384a8a093ebae8a82909f0da73531a5b9f8f2253c9c30b5f89ba5a
-request-version: managed-service-v3
+content-digest: 0f997394e80156b8e7ba007678704f684d161ab76cd65a8eb03786d800957b13
+request-version: managed-service-v4
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -35,6 +35,7 @@ request-schema:
   identity.context string
   identity.service string
   image string
+  implementation string
   ingressHosts []string omitempty
   kind string
   placement struct machine.Placement

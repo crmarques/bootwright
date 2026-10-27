@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 type addressClaim struct {
@@ -38,12 +39,9 @@ func addressClaims(catalog api.Catalog) []addressClaim {
 				claim(holder, fmt.Sprintf("spec.network.addresses[%d].address", i), entry.Get("address").Text())
 			}
 		case api.InfraProvider:
-			for i, entry := range spec.Get("networkAttachments").Items() {
-				if entry.Get("libvirt", "management").Text() == "managed" {
-					claim(holder, fmt.Sprintf("spec.networkAttachments[%d].libvirt.address", i), entry.Get("libvirt", "address").Text())
-				}
+			for _, held := range substrate.AddressClaims(holder) {
+				claim(holder, held.Path, held.Address)
 			}
-			claim(holder, "spec.libvirt.bmcEmulationDefaults.bindAddress", spec.Get("libvirt", "bmcEmulationDefaults", "bindAddress").Text())
 		case api.LoadBalancer:
 			for i, entry := range spec.Get("bindAddresses").Items() {
 				claim(holder, fmt.Sprintf("spec.bindAddresses[%d].address", i), entry.Get("address").Text())

@@ -25,11 +25,10 @@ provenance markers.
 Nothing is discovered ambiently. Working directories, `PATH`, environment
 variables, user configuration, Ansible paths, network registries and global
 plugin locations contribute no package, and desired state and package fields
-cannot select a hidden catalog. The Environment's `.bootwright-addon` marker
-grants only descriptor selection under
-[Environment selection](api/environment.md#resource-and-cluster-selection); it
-proves no signature, package version, manifest, compatibility or execution
-authority.
+cannot select a hidden catalog. A `.bootwright-addon` marker the input reader
+records under [Environment selection](api/environment.md#cluster-selection)
+grants nothing; it proves no signature, package version, manifest,
+compatibility or execution authority.
 
 Add-ons consume the published capabilities of Container cluster, Storage,
 Machine and Secrets; they cannot bypass those invariants or invoke another
@@ -82,7 +81,7 @@ not waited for.
 
 A package's configuration may name a `StorageExport` it consumes. The
 export, its storage cluster and their chain join the consuming cluster's
-[selection closure](api/environment.md#resource-and-cluster-selection), the
+[selection closure](api/environment.md#cluster-selection), the
 instance requires the export's block, and one export is consumed by at
 most one package instance across the input. The export's external-cluster
 details reach the cluster only as an [owned Secret](#owned-secrets) placed

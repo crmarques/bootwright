@@ -5,18 +5,19 @@
 # The proof runs here rather than at planning time, because a plan proves
 # intent and only an observation taken before the effect proves the target.
 # How a machine is proved and booted is its substrate's answer, so this
-# composes the substrate's pre-boot and boot entry points, each selected by the
-# frozen request's own substrate so authored data can never choose which one
-# runs. Each dispatch ends in a terminal fail for a substrate it has no entry
-# point for, and the proof dispatch's fail comes before anything is inserted or
-# booted. The boot entry point is told that this installer powers the machine
+# composes the substrate's pre-boot and boot entry points, each dispatched by
+# the frozen request's own arm so authored data can never choose which one
+# runs. The substrate's dispatch ends in a terminal fail for an arm it has no
+# machine port for, and the proof's refusal comes before anything is inserted
+# or booted. The boot entry point is told that this installer powers the machine
 # off when it is done, so a substrate may select the media rather than rely on
 # its machine's boot order.
 - name: Prove the exact target through the substrate that realized it
   ansible.builtin.include_role:
-    name: "{{ managedos_install_anaconda_pre_boot[bootwright_os_install_request.target.substrate] }}"
+    name: bootwright.core.substrate_machine
     tasks_from: pre_boot
   vars:
+    bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
     bootwright_machine_port:
       endpoint: '{{ managedos_install_anaconda_endpoint }}'
       verify: '{{ managedos_install_anaconda_verify }}'
@@ -26,17 +27,6 @@
       expected: '{{ managedos_install_anaconda_expected }}'
       pinned_uuid_base64: '{{ bootwright_os_install_material.pinnedUUIDBase64 | default("") }}'
       pinned_serial_base64: '{{ bootwright_os_install_material.pinnedSerialBase64 | default("") }}'
-  when: bootwright_os_install_request.target.substrate in managedos_install_anaconda_pre_boot
-
-- name: Refuse a substrate this installation has no pre-boot binding for
-  ansible.builtin.fail:
-    msg: >-
-      Machine {{ bootwright_os_install_request.identity.object }} names substrate
-      {{ bootwright_os_install_request.target.substrate }}, which this
-      installation has no pre_boot binding for, so it was not proved and
-      nothing was inserted or booted; plan the installation again with this
-      release
-  when: bootwright_os_install_request.target.substrate not in managedos_install_anaconda_pre_boot
 
 # Published only here, after the substrate proved the target and before the
 # media is inserted, so a replay or an apply that finds the machine installed
@@ -61,9 +51,10 @@
 
 - name: Insert the published installer image as virtual media
   ansible.builtin.include_role:
-    name: "{{ managedos_install_anaconda_media_insert[bootwright_os_install_request.target.substrate] }}"
+    name: bootwright.core.substrate_machine
     tasks_from: media_insert
   vars:
+    bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
     bootwright_machine_port: >-
       {{ managedos_install_anaconda_port_access | combine({'image_url_file': bootwright_run_scratch ~ '/managedos-media-url',
          'private': bootwright_os_install_request.private is defined and (bootwright_os_install_request.target.physical | bool),
@@ -72,7 +63,7 @@
 
 - name: Retain the machine port answer
   ansible.builtin.set_fact:
-    managedos_install_anaconda_inserted: "{{ vars[managedos_install_anaconda_port_result[bootwright_os_install_request.target.substrate]] }}"
+    managedos_install_anaconda_inserted: "{{ substrate_machine_port_result }}"
   no_log: true
 
 # ansible-core keeps nothing of a failure under no_log but that it failed, so
@@ -93,9 +84,10 @@
 
 - name: Boot a machine this substrate created from that media
   ansible.builtin.include_role:
-    name: "{{ managedos_install_anaconda_boot_media_bindings[bootwright_os_install_request.target.substrate] }}"
+    name: bootwright.core.substrate_machine
     tasks_from: boot_media
   vars:
+    bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
     bootwright_machine_port:
       endpoint: '{{ managedos_install_anaconda_endpoint }}'
       verify: '{{ managedos_install_anaconda_verify }}'
@@ -103,13 +95,3 @@
       user: '{{ bootwright_os_install_material.controllerUser }}'
       password: '{{ bootwright_os_install_material.controllerPassword }}'
       installer_powers_off: true
-  when: bootwright_os_install_request.target.substrate in managedos_install_anaconda_boot_media_bindings
-
-- name: Refuse a substrate this installation has no media-boot binding for
-  ansible.builtin.fail:
-    msg: >-
-      Machine {{ bootwright_os_install_request.identity.object }} names substrate
-      {{ bootwright_os_install_request.target.substrate }}, which this
-      installation has no boot_media binding for, so it was not booted from the
-      inserted image; plan the installation again with this release
-  when: bootwright_os_install_request.target.substrate not in managedos_install_anaconda_boot_media_bindings

@@ -4,8 +4,10 @@ Each machine role's pre_boot entry point (roles/substrate_*_machine/tasks/
 pre_boot.yml) proves its target immediately before media is inserted. The
 result channel belongs to the installation that composed it, so the proof names
 the refusal each check makes before that check runs, in a fact of its own
-role, and clears it first and once the proof holds. The managed-OS apply and
-the cluster boot name that fact to their runner through their own protocol in
+role, and clears it first and once the proof holds. The substrate's dispatcher
+republishes the dispatched arm's fact under its own name, also when the proof
+failed, and the managed-OS apply and the cluster boot name that fact to their
+runner through their own protocol in
 the rescue that keeps the failure terminal, a node's under its position in the
 frozen order, and the runner reports the diagnostic Go gave that reason
 (internal/substrate/preboot.go, specs/substrates.md) instead of the adapter's
@@ -26,7 +28,9 @@ import pathlib
 
 import pytest
 from ansible.parsing.dataloader import DataLoader
+from ansible.plugins.loader import init_plugin_loader
 from ansible.template import Templar
+from ansible.utils.collection_loader import AnsibleCollectionConfig
 
 from ansible_collections.bootwright.core.plugins.action import containercluster_install_protocol as cluster_protocol
 from ansible_collections.bootwright.core.plugins.action import managedos_install_protocol as managedos_protocol
@@ -190,6 +194,27 @@ def names(task, protocol, variables):
     return {name: rendering.template(value) for name, value in task[protocol].items()}
 
 
+@pytest.fixture(name="plugins")
+def plugins_fixture():
+    """The plugin loader a rendered lookup needs."""
+    if AnsibleCollectionConfig.collection_finder is None:
+        init_plugin_loader()
+
+
+def published(arm, facts):
+    """What the dispatcher republishes once the arm's entry point ran or failed,
+    or nothing when no entry point was reached."""
+    if not facts:
+        return {}
+    dispatch = loaded(ROLES / "substrate_machine" / "tasks" / "dispatch.yml")
+    [republish] = [task for task, _parents in walk(dispatch) if SET_FACT in task]
+    arms = LOADER.load_from_file(str(ROLES / "substrate_machine" / "defaults" / "main.yml"))["substrate_machine_arms"]
+    scope = dict(facts, substrate_machine_arms=arms, bootwright_machine_arm=arm)
+    scope["substrate_machine_prefix"] = Templar(loader=LOADER, variables=scope).template(republish["vars"]["substrate_machine_prefix"])
+    refusal = Templar(loader=LOADER, variables=scope).template(republish[SET_FACT]["substrate_machine_refusal"])
+    return {"substrate_machine_refusal": refusal}
+
+
 def managed_os():
     tasks = loaded(ROLES / "managedos_install_anaconda" / "tasks" / "apply.yml")
     rescue = rescue_of(tasks, lambda task: task.get("ansible.builtin.include_tasks") == "boot.yml", "include boot.yml")
@@ -219,15 +244,15 @@ LEFT = {
 
 
 @pytest.mark.parametrize("arm, facts, refusal", LEFT.values(), ids=LEFT.keys())
-def test_the_managed_os_apply_names_the_refusal_its_targets_proof_left(arm, facts, refusal):
-    variables = dict(facts, bootwright_os_install_request={"identity": {"object": "rhel-01"}, "target": {"substrate": arm}})
+def test_the_managed_os_apply_names_the_refusal_its_targets_proof_left(plugins, arm, facts, refusal):
+    variables = dict(published(arm, facts), bootwright_os_install_request={"identity": {"object": "rhel-01"}, "target": {"substrate": arm}})
     found = names(managed_os(), MANAGED_OS_PROTOCOL, variables)
     assert found == (None if refusal is None else {"phase": "refused", "reason": refusal})
 
 
 @pytest.mark.parametrize("arm, facts, refusal", LEFT.values(), ids=LEFT.keys())
-def test_the_cluster_boot_names_the_refusal_under_the_nodes_position(arm, facts, refusal):
-    variables = dict(facts, containercluster_install_agent_index=2,
+def test_the_cluster_boot_names_the_refusal_under_the_nodes_position(plugins, arm, facts, refusal):
+    variables = dict(published(arm, facts), containercluster_install_agent_index=2,
                      containercluster_install_agent_node={"machine": "metal-03", "substrate": arm})
     kept = names(cluster(), SET_FACT, variables)
     phase = loaded(ROLES / "containercluster_install_agent/tasks/phase_failures.yml")

@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/containercluster"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // Selection contains only the controller prerequisites selected from effective
@@ -144,10 +145,7 @@ func Select(catalog api.Catalog) (Selection, error) {
 // hosts one selects it; a provider reached over SSH installs its own.
 func requiresHypervisor(catalog api.Catalog, controllerMachine api.Object) bool {
 	for _, provider := range catalog.OfKind(api.InfraProvider) {
-		if !provider.Spec().Has("libvirt") {
-			continue
-		}
-		if provider.Spec().Get("libvirt", "machineRef").Text() == controllerMachine.Name() {
+		if substrate.HostMachine(provider) == controllerMachine.Name() {
 			return true
 		}
 	}
@@ -185,7 +183,7 @@ func requiresLibvirtClient(catalog api.Catalog, controllerMachine api.Object) bo
 	}
 	for _, machine := range catalog.OfKind(api.Machine) {
 		provider, found := catalog.Find(api.InfraProvider, machine.Spec().Get("substrate", "providerRef").Text())
-		if found && provider.Spec().Has("libvirt") {
+		if found && substrate.NeedsHypervisorClient(provider) {
 			return true
 		}
 	}

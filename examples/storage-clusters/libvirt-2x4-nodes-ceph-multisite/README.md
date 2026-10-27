@@ -34,15 +34,13 @@ profiles and the two network attachments, both cluster placements, both
 Both pools explicitly select image mode; only the source declares the 1 GiB
 journaling image `replicated-disk`. The receiver's pool starts empty.
 
-The declared client is a budgeted test machine. The storage context closes
-over the eight topology Machines. To realize the client, make a separate
-copy containing the shared infrastructure, Secret descriptors and OS profiles,
-the controller and `client` Machines, and an Environment with `storageClusters`
-omitted. Give that context a distinct name and disjoint ownership of its
-provider network/infrastructure, or bind those resources externally after
-preparing them. Do not apply overlapping managed infrastructure from two
-contexts. An operator-provided client with the same 4 GiB budget can be used
-instead. No root-closure extension is required.
+The declared client is a budgeted test machine. It is a Bootwright-installed
+Machine that is a node of no cluster, so the storage list retains it and this
+context installs it with the eight topology Machines. To use an
+operator-provided client with the same 4 GiB budget instead, remove the
+`client` Machine. A context created under the earlier guidance already
+realizes the client Machine, so remove the client Machine from one of the two
+inputs before applying.
 
 ## IBM entitlement
 
@@ -176,7 +174,7 @@ provider CPU/disk totals, native daemon counts and kernel OOM events.
 
 | Field | Authored value or required observation |
 | --- | --- |
-| Guests | 9: eight Ceph guests and one separately realized client |
+| Guests | 9: eight Ceph guests and one client |
 | Declared vCPU | 34 |
 | Declared RAM GiB | 106; controller reserve 4 additional |
 | Declared disk GiB | 520 root + 480 data |

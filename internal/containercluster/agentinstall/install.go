@@ -503,7 +503,7 @@ func (c InstallCapability) AccessCredentials(block reconciliation.Block) ([]stri
 	}
 	var access []string
 	for _, node := range request.Nodes {
-		if node.Substrate == substrate.ArmBaremetal && node.Controller.CredentialsRef != "" {
+		if substrate.ControllerCredentialIsAccess(node.Substrate) && node.Controller.CredentialsRef != "" {
 			access = append(access, node.Controller.CredentialsRef)
 		}
 	}

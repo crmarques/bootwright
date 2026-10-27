@@ -12,7 +12,7 @@ import (
 
 func mediaLocation(catalog api.Catalog, cluster api.Object, controller, contextName string, needs *Requirements) (string, Publication, string, machine.Placement, error) {
 	arms := clusterArms(catalog, cluster)
-	if len(arms) > 0 && len(arms) == cluster.Spec().Get("nodes").Len() && !slices.ContainsFunc(arms, func(arm string) bool { return arm != substrate.ArmKubeVirt }) {
+	if len(arms) > 0 && len(arms) == cluster.Spec().Get("nodes").Len() && !slices.ContainsFunc(arms, func(arm string) bool { return substrate.DeliveryOf(arm) != substrate.DeliveryPush }) {
 		if cluster.Spec().Has("install", "agent", "redfishVirtualMedia") {
 			return "", Publication{}, "", machine.Placement{}, refusalAt("api.invariant", "$.spec.install.agent.redfishVirtualMedia", "a push-only cluster publishes no Redfish virtual media", "remove spec.install.agent.redfishVirtualMedia")
 		}

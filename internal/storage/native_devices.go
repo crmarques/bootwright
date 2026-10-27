@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 func nativeDevicePaths(selector api.Value) []string {
@@ -84,16 +85,8 @@ func (a *admission) nativeOSD(spec api.Value, field string, nodes []api.Value, p
 			if !ok {
 				continue
 			}
-			provider, ok := a.catalog.Find(api.InfraProvider, textOf(machine.Spec(), "substrate", "providerRef"))
-			if !ok || provider.Spec().Has("baremetal") {
-				continue
-			}
-			for _, variant := range []string{"libvirt", "vsphere", "kubevirt"} {
-				for _, profile := range provider.Spec().Get(variant, "machineProfiles").Items() {
-					if textOf(profile, "name") == textOf(machine.Spec(), "substrate", "profileRef") && !profile.Has("tpm") {
-						a.invalid(field+".tpm2", "every selected virtual Machine profile must declare TPM support", "enable TPM support in every selected virtual Machine profile or remove tpm2")
-					}
-				}
+			if _, profile, found := substrate.SelectedProfile(a.catalog, machine); found && !profile.Has("tpm") {
+				a.invalid(field+".tpm2", "every selected virtual Machine profile must declare TPM support", "enable TPM support in every selected virtual Machine profile or remove tpm2")
 			}
 		}
 	}

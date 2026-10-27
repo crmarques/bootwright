@@ -108,7 +108,7 @@ func TestEveryEnvironmentRefusalNamesItsStep(t *testing.T) {
 			"set spec.machineRef on ArtifactServer/artifacts to a Machine with os.provided: true"},
 	} {
 		t.Run(row.name, func(t *testing.T) {
-			issues := environment.Validate(row.environment, api.NewCatalog(append([]api.Object{row.environment}, row.others...)))
+			issues := environment.Validate(row.environment, api.NewCatalog(append([]api.Object{row.environment}, row.others...)), testClusterMembers)
 			found := false
 			for _, issue := range issues {
 				if issue.Remediation == "" {
@@ -131,7 +131,7 @@ func TestEveryEnvironmentRefusalNamesItsStep(t *testing.T) {
 func TestARescueVersionIsNotRefusedForItsRelease(t *testing.T) {
 	for _, version := range []string{"8.10", "10.1", "9.8"} {
 		env := rescueEnvironment(version, api.Value{})
-		issues := environment.Validate(env, api.NewCatalog([]api.Object{env}))
+		issues := environment.Validate(env, api.NewCatalog([]api.Object{env}), testClusterMembers)
 		if slices.ContainsFunc(issues, func(issue api.Issue) bool { return issue.Field == "$.spec.lifecycle.rescue.os.version" }) {
 			t.Errorf("version %s: issues = %+v, want none at the rescue os.version", version, issues)
 		}
@@ -141,7 +141,7 @@ func TestARescueVersionIsNotRefusedForItsRelease(t *testing.T) {
 func TestARemoteRescueImageIsNotRefusedForItsChecksumAgain(t *testing.T) {
 	env := rescueEnvironment("9.8", api.Value{})
 	image := api.NewObject(api.MachineImage, "media", api.Value{}, api.MapValue(text("bootMedia", "https://example.test/a.iso")))
-	issues := environment.Validate(env, api.NewCatalog([]api.Object{env, image}))
+	issues := environment.Validate(env, api.NewCatalog([]api.Object{env, image}), testClusterMembers)
 	if slices.ContainsFunc(issues, func(issue api.Issue) bool { return issue.Field == "$.spec.lifecycle.rescue.imageRef" }) {
 		t.Fatalf("issues = %+v, want none at the rescue imageRef", issues)
 	}

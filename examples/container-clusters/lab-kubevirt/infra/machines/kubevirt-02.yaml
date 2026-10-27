@@ -23,10 +23,6 @@ spec:
     attachmentRef: lab-guests
     installAddressRef: ip
 
-    interfaceBinding:
-      - nicRef: eth0
-        interfaceName: eth0
-
     addresses:
       - name: fqdn
         address: kubevirt-02.lab.example.test
@@ -34,8 +30,3 @@ spec:
       - name: ip
         address: 198.51.100.22/24
         interface: eth0
-
-  hardware:
-    nics:
-      - name: eth0
-        macAddress: 02:00:00:00:10:02

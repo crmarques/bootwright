@@ -19,7 +19,7 @@ import (
 var managedBlocks = map[api.Kind]func(string) string{
 	api.ArtifactServer: artifactserver.BlockID,
 	api.Proxy:          proxy.Definition().BlockID,
-	api.DNSServer:      dnsserver.Definition().BlockID,
+	api.DNSServer:      dnsserver.Definition(nil).BlockID,
 	api.NTPServer:      ntpserver.Definition().BlockID,
 }
 

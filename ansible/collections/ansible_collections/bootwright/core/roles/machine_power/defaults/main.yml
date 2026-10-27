@@ -1,0 +1,60 @@
+---
+# Derived from the frozen request only. Nothing here is authored by desired
+# state, and no value selects an executable, a role or a task file.
+#
+# A graceful shutdown waits for the operating system rather than for a
+# hypervisor, so the poll bound is the one an ordinary shutdown needs and
+# never becomes an unbounded wait.
+machine_power_attempts: 150
+
+# The controller's trust bundle as PEM, the one anchor its transport is
+# verified against, or empty when the controller declares none and the system
+# trust store anchors it.
+machine_power_ca_data: >-
+  {{ lookup('ansible.builtin.file', bootwright_machine_power_material.controllerCA)
+     if bootwright_machine_power_material.controllerCA | default('') | length > 0 else '' }}
+
+# Whether the machine answers as the system this context's current apply
+# proved: each identity the pin records is the one its controller reports now.
+# It is read only once that identity has been read (tasks/power.yml), and both
+# the refusal the runner is told of and the refusal the run prints decide from
+# this one comparison.
+machine_power_answers_as_pinned: >-
+  {{ ((bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length == 0)
+      or ((machine_power_identity.observation.uuid | default('') | trim | lower)
+          == (bootwright_machine_power_material.pinnedUUIDBase64 | b64decode | trim | lower)))
+     and ((bootwright_machine_power_material.pinnedSerialBase64 | default('') | length == 0)
+      or ((machine_power_identity.observation.serial | default('') | trim)
+          == (bootwright_machine_power_material.pinnedSerialBase64 | b64decode | trim))) }}
+
+# Whether this run reaches a physical machine: the power service hands every
+# such run the controller host's own identity, and no other run any.
+machine_power_physical: >-
+  {{ (bootwright_machine_power_material.controllerHostUUIDBase64 | default('') | length > 0)
+     or (bootwright_machine_power_material.controllerHostMACsBase64 | default('') | length > 0) }}
+
+# Whether the machine answers with the controller host's own identity: its
+# reported UUID, other than in letter case or surrounding space, or any of its
+# reported MAC addresses is one this host reads locally.
+machine_power_is_controller_host: >-
+  {{ ((bootwright_machine_power_material.controllerHostUUIDBase64 | default('') | length > 0)
+      and ((machine_power_identity.observation.uuid | default('') | trim | lower)
+           == (bootwright_machine_power_material.controllerHostUUIDBase64 | b64decode | trim | lower)))
+     or ((machine_power_identity.observation.addresses | default([]))
+         | intersect((bootwright_machine_power_material.controllerHostMACsBase64 | default('') | b64decode).split(',')
+                     | reject('equalto', '') | list) | length > 0) }}
+
+# Whether an unpinned physical machine's complete inventory reports exactly the
+# MAC set it declares.
+machine_power_reports_declared: >-
+  {{ (machine_power_identity.observation.failures | default(['unread']) | length == 0)
+     and ((machine_power_identity.observation.addresses | default([]) | unique | sort)
+          == ((bootwright_machine_power_material.expectedMACsBase64 | default('') | b64decode).split(',')
+              | reject('equalto', '') | unique | sort)) }}
+
+machine_power_access:
+  endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
+  user: '{{ bootwright_machine_power_material.controllerUser }}'
+  password: '{{ bootwright_machine_power_material.controllerPassword }}'
+  ca: "{{ bootwright_machine_power_material.controllerCA | default('') }}"
+  verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'

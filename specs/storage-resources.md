@@ -1285,7 +1285,10 @@ it. Direct RGW placement must put a daemon on every eligible host; a smaller
 count requires an ingress VIP because native scheduling does not freeze which
 hosts terminate the endpoint. An unresolved address refuses planning; two
 contributions for one name must agree, and a conflicting existing record refuses. An unattached gateway
-contributes no record. The export declaration owns the contribution; the DNS
+contributes no record. The storage domain derives these records in one pure
+function, which the add-on export facts read through the same attached-gateway
+lookup; no other package reads `objectGatewayRef`. The export declaration owns
+the contribution; the DNS
 service owns its frozen publication and inverse, so shared gateway contributions
 are deduplicated and retire with that service. Independent export revocation
 while its cluster remains belongs to [B491](milestones/m2.md#b491).

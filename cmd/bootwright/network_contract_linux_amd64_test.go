@@ -99,7 +99,7 @@ func contractNetworkExample(t *testing.T, resolver capabilityResolver) contractE
 		if err != nil {
 			continue
 		}
-		example.plans[binding] = contribution
+		example.plans[contractIdentity(binding)] = contribution
 		definitions = append(definitions, contribution.Definitions...)
 	}
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, definitions)

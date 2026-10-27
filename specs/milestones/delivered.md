@@ -8635,6 +8635,46 @@ quoting, `shell=` and new ssh sites, aliases included.
 the site guards, each proved by a seeded mismatch; the delivering commit
 records the gates.
 
+### X169 — Audit lane G: extension architecture
+
+**Items:** B809, B810, B811 and B812 (2026-10-26 spec audit steps P1-B to P1-E).
+**Kind:** enabling. **Owners:** Architecture, Substrate, Storage, Container
+cluster and Desired state. Delivered on 2026-10-26 as lane G of the
+[audit remediation](backlog.md#lane-order-and-progress) under D182, with
+D183's answers to Q72 to Q75; the lane also partly delivered
+[B808](backlog.md#b808), and moved B810's package split and coverage-page
+renames into [B814](backlog.md#b814).
+
+Implementation selection is enforced: two implementations of one family
+claiming one object refuse before registration, a fitness test keeps arm and
+implementation identities inside their owners with an empty allowlist, and
+the capability contract suite proves cancellation and replay. One
+substrate-owned dispatcher role, `bootwright.core.substrate_machine`, serves
+every machine-port entry point from one table, so cluster installation,
+managed-OS installation and power carry no arm tables; power runs through it
+as `machine_power` with the arm in the frozen request (`machine-power-v3`),
+and an arm's facts live in one substrate row. Managed OS owns a retirement
+fan-in port, managed services are planned by implementation
+(`managed-service-v4`), storage owns its gateway records, cluster domains
+publish their membership, kind facts come from the schema registry, and CLI
+action labels come from frozen descriptions. No registry is keyed by a release
+label, and the catalog test finds registries by their marker.
+
+`Environment.spec.resources` is retired; the directory is the scope and
+cluster lists narrow it. A StorageReplication keeps both ends, standalone
+Bootwright-installed Machines stay selected with their provider closure, a
+cluster root an attachment reaches outside an authored list fails `validate`,
+and a KubeVirt provider's host cluster stays a root once B732 lands. The
+three storage examples with a standalone client now install it. A
+reference-edge catalog in state-reconciliation holds every capability
+requirement (`TestEveryRequirementMatchesTheEdgeCatalog`). The reserved
+CustomPlaybook and add-on step shapes keep validating (Q115), so their legacy
+ordering fields stay as they are.
+
+**Guard tests:** the claim, identity, contract-suite, dispatcher, membership,
+selection and edge-catalog tests, each proved by a seeded mismatch; the
+delivering commit records the gates.
+
 ## M3 independent in-tree completion
 
 The owner's 2026-10-23 request (D181) delivers the independent implementation

@@ -177,13 +177,9 @@ controller or host budget an operator provides.
   independently installed client, and a destroy that proves what it owns
   absent. The public row summarizes these as the ledger defines it; the fields
   it does not carry stay in the private evidence archive.
-- **Versions.** When a slice moves a frozen request version, a row accepted on
-  an earlier build is repeated, and a context an earlier build applied is
-  destroyed with that build first.
-- **Evidence, not approval.** A run proves its profile on its release only.
-  A release minor whose native mechanics differ gets its own row for the
-  affected profile and a registered specialization; no row or specialization
-  approves or refuses a release.
+- **Versions and evidence.** The shared
+  [Versions and Evidence, not approval](../docs/acceptance.md#shared-qualification-rules)
+  rules apply unchanged.
 - **Unverified native facts.** A fact the research left uncertain, or one only
   the earlier implementation observed, is re-verified by the first run that
   meets it and recorded in knowledge: bridges in agent `networkConfig`, bond

@@ -24,8 +24,8 @@ func TestExampleNVMeOFPlansOwnedImageAndGateway(t *testing.T) {
 		}
 		return count
 	}
-	if authored, effective := guests(profileDeclarations(t, sources)), guests(state.Effective()); authored != 6 || effective != 5 {
-		t.Fatalf("P4 requires six budgeted guests and five storage-context guests, got %d/%d", authored, effective)
+	if authored, effective := guests(profileDeclarations(t, sources)), guests(state.Effective()); authored != 6 || effective != 6 {
+		t.Fatalf("P4 requires six budgeted guests, the standalone initiator retained beside five storage guests, got %d/%d", authored, effective)
 	}
 	if refused := productionUnsupported(t, state); len(refused) != 0 {
 		t.Fatalf("refused %+v", refused)

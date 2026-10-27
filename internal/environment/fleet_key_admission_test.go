@@ -21,7 +21,7 @@ func installedMachine(name string) api.Object {
 
 func TestAbsentFleetKeyIsOneRequiredRefusalNamingAnInstalledMachine(t *testing.T) {
 	env := api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue())
-	issues := environment.Validate(env, api.NewCatalog([]api.Object{env, installedMachine("node-b"), installedMachine("node-a")}))
+	issues := environment.Validate(env, api.NewCatalog([]api.Object{env, installedMachine("node-b"), installedMachine("node-a")}), testClusterMembers)
 	if len(issues) != 1 {
 		t.Fatalf("issues = %+v, want one", issues)
 	}
@@ -43,7 +43,7 @@ func TestReusedFleetKeyNamesTheProvidedMachine(t *testing.T) {
 			api.FieldValue{Name: "privateKeyRef", Value: api.StringValue("fleet-key")},
 		)})})},
 	))
-	issues := environment.Validate(env, api.NewCatalog([]api.Object{env, provided, installedMachine("node-a")}))
+	issues := environment.Validate(env, api.NewCatalog([]api.Object{env, provided, installedMachine("node-a")}), testClusterMembers)
 	if len(issues) != 1 {
 		t.Fatalf("issues = %+v, want one", issues)
 	}
@@ -64,7 +64,7 @@ func TestAnOSReadyMachineWithAnInstallProfileNeedsNoFleetKey(t *testing.T) {
 	unset := fleetMachine("bare", api.MapValue(api.FieldValue{Name: "os", Value: api.MapValue(
 		api.FieldValue{Name: "installProfileRef", Value: api.StringValue("rhel")},
 	)}))
-	if issues := environment.Validate(env, api.NewCatalog([]api.Object{env, osReady, unset})); len(issues) != 0 {
+	if issues := environment.Validate(env, api.NewCatalog([]api.Object{env, osReady, unset}), testClusterMembers); len(issues) != 0 {
 		t.Fatalf("issues = %+v, want none", issues)
 	}
 }

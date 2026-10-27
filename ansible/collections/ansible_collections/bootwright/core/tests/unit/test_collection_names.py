@@ -31,8 +31,6 @@ ROLE_MISFITS = {
     "cluster_objects": "opens with no domain",
     "infra_artifact_server_nginx": "opens with infra, not a domain, and names its implementation after the capability",
     "infra_managed_service": "opens with infra, not a domain",
-    "machine_power_read_redfish": "names its implementation after the capability",
-    "machine_power_redfish": "names its implementation after the capability",
     "managedos_install_anaconda": "names its implementation after the capability",
     "physical_erase": "opens with no domain",
 }
@@ -48,7 +46,6 @@ PLUGIN_MISFITS = {
     "cluster_objects_read": "invoked by a role that is itself a misfit",
     "cluster_objects_write": "invoked by a role that is itself a misfit",
     "infra_service_protocol": "invoked by a role that is itself a misfit",
-    "machine_power_protocol": "invoked by roles that are themselves misfits",
     "managedos_install_protocol": "invoked by a role that is itself a misfit",
     "physical_erase_protocol": "invoked by a role that is itself a misfit",
     "substrate_host_protocol": "omits the libvirt implementation of the role that invokes it",

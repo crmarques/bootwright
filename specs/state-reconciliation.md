@@ -831,18 +831,18 @@ in no impact at all. The description of such a block says that it retains.
 
 A capability names what its blocks depend on in domain terms, not by block
 identity: a definition may carry *requirements*, each the kind and name of an
-API object whose realization must be done first. Reconciliation resolves every
-requirement to the blocks that realize that object before it freezes the plan,
+API object whose realization must be done first, optionally narrowed to one
+capability family, such as the substrate family that claims a Machine.
+Reconciliation resolves every requirement to the blocks that realize that
+object, or only that family's blocks, before it freezes the plan,
 and refuses before registration when no block realizes it, so a capability
 never learns another capability's block-identity grammar and a frozen plan
 carries only resolved dependencies. A reference from a block's object to an
 object another block of the plan realizes is a requirement unless the domain
 page that owns the referencing field states why not; a reference to an
-external service, which no block realizes, is the standing exemption.
-
-Not yet met: no check holds each capability's requirements to that rule, and
-domain pages state their requirement sets without it; tracked as
-[B812](milestones/backlog.md#b812).
+external service, which no block realizes, is the standing exemption. The
+[reference edges](#reference-edges) catalog lists every requirement a
+capability emits, and domain pages link it rather than restating their sets.
 
 An apply attempt receives what each block it depends on durably proved in this
 operation: that block's kind, object, implementation, verb and state, and the
@@ -860,6 +860,76 @@ A definition may also name the authorization tokens its effects *consume*,
 frozen with the plan and covered by its digest; the
 [authorization rules](#confirmation-and-authorization) require exactly the
 union a plan consumes.
+
+### Reference edges
+
+Each row is one requirement class a capability family emits: the block (its
+family and block kind), the API object it requires (narrowed to one family
+where stated), and the reference or rule that names that object. A
+requirement resolves only when some block of the plan realizes its target, so
+an external service never orders anything. A reference no row names orders
+nothing for that block; it is still resolved and validated. Destroy inverts
+every edge. Rows within one family that the family orders by its own block
+dependencies, such as a storage child after its cluster, are not requirements
+and are not listed. `TestEveryRequirementMatchesTheEdgeCatalog` plans every
+example and fails when a capability emits a requirement no row names, or omits
+one a row's field path names on its object while a block realizes the target.
+
+| Block | Requires | Named by |
+| --- | --- | --- |
+| `substrate-machine` `Machine` | `InfraProvider` | `spec.substrate.providerRef` |
+| `os-install` `Machine` | `Machine` | the Machine itself, realized by its substrate |
+| `os-install` `Machine` | `MachineInstallProfile` | `spec.os.installProfileRef`, realized when its package tree is hosted |
+| `os-install` `Machine` | `ArtifactServer` | the install profile's and the Machine's artifact endpoints |
+| `os-install` `Machine` | `DNSServer` | the `dns` selections of the Machine's network configuration |
+| `os-install` `Machine` | `NTPServer` | `spec.os.install.ntp[].serverRef` |
+| `os-install` `Machine` | `StorageCluster` from `storage-physical-retirement` | a storage cluster whose retirement must release this physical Machine first |
+| `physical-erase` `Machine` | `Machine` from `substrate-machine` | the Machine itself |
+| `physical-erase` `Machine` | `ArtifactServer` | the erase image's artifact endpoint |
+| `physical-erase` `Machine` | `DNSServer` | the `dns` selections of the Machine's network configuration |
+| `physical-erase` `Machine` | `NTPServer` | `spec.os.install.ntp[].serverRef` |
+| `physical-erase` `Machine` | `StorageCluster` from `storage-physical-retirement` | a storage cluster whose retirement must release this physical Machine first |
+| `os-package-tree` `MachineInstallProfile` | `ArtifactServer` | `spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint.serverRef`, `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint.serverRef` |
+| `os-package-tree` `MachineInstallProfile` | `Environment` | the selected Environment, whose controller stage prepares the host |
+| `managed-service` `ArtifactServer` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
+| `managed-service` `DNSServer` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
+| `managed-service` `NTPServer` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
+| `managed-service` `Proxy` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
+| `cluster-media` `ContainerCluster` | `ArtifactServer` | `spec.install.agent.redfishVirtualMedia.artifactServerEndpoint.serverRef` |
+| `cluster-media` `ContainerCluster` | `Proxy` | `spec.install.proxy.proxyRef` |
+| `cluster-install` `ContainerCluster` | `Machine` | `spec.nodes[].machineRef` |
+| `cluster-install` `ContainerCluster` | `DNSServer` | the `dns` selections of each node's network configuration |
+| `cluster-install` `ContainerCluster` | `NTPServer` | `spec.install.ntp[].serverRef` |
+| `cluster-install` `ContainerCluster` | `Proxy` | `spec.install.proxy.proxyRef` |
+| `cluster-network` `ContainerClusterNetwork` | `ContainerCluster` | the cluster whose secondary networks it configures |
+| `cluster-network` `ContainerClusterNetwork` | `ClusterAddonBinding` | the add-on instance on that cluster that provides `nmstate` |
+| `addon-instance` `ClusterAddonBinding` | `ContainerCluster` | the binding's `spec.clusterRef` |
+| `addon-instance` `ClusterAddonBinding` | `ClusterAddonBinding` | each instance on the same cluster providing a capability the package requires |
+| `addon-instance` `ClusterAddonBinding` | `StorageExport` | the package's `storageExportRef` |
+| `storage-core` `StorageCluster` | `Machine` | `spec.ceph.topology.nodes[].machineRef` |
+| `storage-core` `StoragePool` | `StoragePlacementPolicy` | `spec.placementPolicyRef` |
+| `storage-core` `StorageRBDImage` | `StoragePool` | `spec.poolRef`, `spec.dataPoolRef` |
+| `storage-core` `StorageFilesystem` | `StoragePool` | `spec.metadataPoolRef`, `spec.dataPoolRefs[]` |
+| `storage-core` `StorageSubvolume` | `StorageFilesystem` | `spec.filesystemRef` |
+| `storage-core` `StorageClient` | `StoragePool` | `spec.poolRef` |
+| `storage-core` `StorageClient` | `StorageSubvolume` | `spec.subvolumeRef` |
+| `storage-core` `StorageNFSExport` | `StorageSubvolume` | `spec.subvolumeRef` |
+| `storage-core` `StorageNFSExport` | `StorageObjectUser` | `spec.objectUserRef` |
+| `storage-core` `StorageNVMeoFSubsystem` | `StorageRBDImage` | `spec.namespaces[].imageRef` |
+| `storage-core` `StorageObjectUser` | `StorageObjectGateway` | `spec.objectGatewayRef` |
+| `storage-core` `StorageObjectBucket` | `StorageObjectUser` | `spec.ownerRef` |
+| `storage-export` `StorageExport` | `StorageCluster` | `spec.clusterRef` |
+| `storage-export` `StorageExport` | `StoragePool` | `spec.dataFoundation.rbdPoolRef` |
+| `storage-export` `StorageExport` | `StorageFilesystem` | `spec.dataFoundation.filesystemRef` |
+| `storage-export` `StorageExport` | `StorageObjectGateway` | `spec.dataFoundation.objectGatewayRef` |
+| `storage-export` `StorageExport` | `DNSServer` | every DNSServer of the selection, when the export names an object gateway |
+| `storage-host` `StorageCluster` | `Machine` | `spec.ceph.topology.nodes[].machineRef` |
+| `storage-host` `StorageCluster` | `MachineInstallProfile` | each node Machine's `spec.os.installProfileRef` |
+| `storage-physical-retirement` `StorageCluster` | `Machine` from `substrate-machine` | `spec.ceph.topology.nodes[].machineRef` |
+| `storage-replication` `StorageReplication` | `StoragePool` | `spec.poolRef`, `spec.peerPoolRef` |
+| `storage-replication` `StorageReplication` | `StorageRBDImage` | `spec.imageRefs[]` |
+| `storage-smb` `StorageSMBResource` | `StorageSMBResource` | `spec.smbClusterRef`, `spec.resourceRefs[]` |
+| `storage-smb` `StorageSMBResource` | `StorageSubvolume` | `spec.subvolumeRef` |
 
 ### Stages and the pause boundary
 
@@ -972,9 +1042,12 @@ shape a capability reports unsupported. Each object is its own
 `lifecycle.unsupported` diagnostic, whose object is the refused one and which
 carries the reason its capability gives, or that no capability claims its kind,
 and the remedy, so `plan` says why as `apply` does; an object refused for two
-reasons is two diagnostics. A frozen plan requires a resolved
-implementation for every block; a removal planned from a frozen plan is never
-refused this way.
+reasons is two diagnostics. An object two implementations of one capability
+family both plan blocks for is refused the same way, after planning and before
+registration in a fresh plan of either verb, naming both implementations,
+because binding order never decides which one realizes it. A frozen plan
+requires a resolved implementation for every block; a removal planned from a
+frozen plan is never refused this way.
 
 Which add-on kinds select an effect is owned by
 [add-ons](add-ons.md#built-in-packages-and-selection). The engine consequence
@@ -991,10 +1064,6 @@ the engine, so the engine names no kind or field of a domain itself. Each
 reason and remedy is the diagnostic's message and remediation, in which
 `<kind>` is the refused object's kind and `<object>` its identity;
 `examples/machines/lab-rhel` is the supported shape the remedy names.
-
-Not yet met: the engine itself tests the service kinds' `management`, a
-Machine's `os.provided` and a CustomPlaybook's `enabled`; tracked as
-[B808](milestones/backlog.md#b808).
 
 <!-- unclaimed objects -->
 | Refusal | Path | Reason | Remedy |

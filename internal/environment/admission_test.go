@@ -31,12 +31,12 @@ func TestAdmissionRefusesARescueDeclarationUntilARescueJourneyExists(t *testing.
 		Message:     "no rescue journey exists yet, so no lifecycle can use a rescue declaration",
 		Remediation: "remove spec.lifecycle.rescue from Environment/lab",
 	}
-	issues := environment.Validate(declared, api.NewCatalog([]api.Object{declared, image}))
+	issues := environment.Validate(declared, api.NewCatalog([]api.Object{declared, image}), testClusterMembers)
 	if !slices.Equal(issues, []api.Issue{want}) {
 		t.Fatalf("issues = %+v, want %+v", issues, []api.Issue{want})
 	}
 	undeclared := api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue())
-	if issues := environment.Validate(undeclared, api.NewCatalog([]api.Object{undeclared, image})); len(issues) != 0 {
+	if issues := environment.Validate(undeclared, api.NewCatalog([]api.Object{undeclared, image}), testClusterMembers); len(issues) != 0 {
 		t.Fatalf("an Environment without a rescue declaration refuses %+v", issues)
 	}
 }

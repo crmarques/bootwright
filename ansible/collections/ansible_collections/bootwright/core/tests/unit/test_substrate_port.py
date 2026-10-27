@@ -53,15 +53,20 @@ CLUSTER = "containercluster_install_agent"
 # point, in file order. Finding fewer means the walk stopped seeing them.
 COMPOSED = {
     "containercluster_install_agent/tasks/boot.yml": [
-        ("libvirt", "pre_boot"), ("baremetal", "pre_boot"), ("libvirt", "boot_media"), ("baremetal", "boot_media")],
-    "containercluster_install_agent/tasks/release.yml": [("libvirt", "boot_disk"), ("baremetal", "boot_disk")],
-    "managedos_install_anaconda/tasks/await.yml": [("libvirt", "boot_disk"), ("baremetal", "boot_disk")],
+        ("baremetal", "pre_boot"), ("libvirt", "pre_boot"), ("baremetal", "boot_media"), ("libvirt", "boot_media")],
+    "containercluster_install_agent/tasks/release.yml": [("baremetal", "boot_disk"), ("libvirt", "boot_disk")],
+    "managedos_install_anaconda/tasks/await.yml": [("baremetal", "boot_disk"), ("libvirt", "boot_disk")],
     "managedos_install_anaconda/tasks/boot.yml": [
-        ("libvirt", "pre_boot"), ("baremetal", "pre_boot"), ("libvirt", "boot_media"), ("baremetal", "boot_media")],
-    "managedos_install_anaconda/tasks/identity.yml": [("libvirt", "identity_read"), ("baremetal", "identity_read")],
-    "managedos_install_anaconda/tasks/network.yml": [("libvirt", "boot_disk"), ("baremetal", "boot_disk")],
-    "managedos_install_anaconda/tasks/proved_boot.yml": [("libvirt", "boot_disk"), ("baremetal", "boot_disk")],
+        ("baremetal", "pre_boot"), ("libvirt", "pre_boot"), ("baremetal", "boot_media"), ("libvirt", "boot_media")],
+    "managedos_install_anaconda/tasks/identity.yml": [("baremetal", "identity_read"), ("libvirt", "identity_read")],
+    "managedos_install_anaconda/tasks/network.yml": [("baremetal", "boot_disk"), ("libvirt", "boot_disk")],
+    "managedos_install_anaconda/tasks/proved_boot.yml": [("baremetal", "boot_disk"), ("libvirt", "boot_disk")],
 }
+
+# The substrate's one machine port dispatcher, which every consumer includes,
+# and the input that carries the frozen arm it dispatches on.
+DISPATCHER = "bootwright.core.substrate_machine"
+ARM = "bootwright_machine_arm"
 
 # Only these read the media a machine presents; every other read is a power read.
 # A cluster's boot reads it only after an insert failed, to retire the link
@@ -69,8 +74,6 @@ COMPOSED = {
 MEDIA_READS = {"containercluster_install_agent/tasks/boot.yml", "containercluster_install_agent/tasks/state.yml",
                "managedos_install_anaconda/tasks/observe.yml"}
 READS = MEDIA_READS | {
-    "machine_power_read_redfish/tasks/read.yml",
-    "machine_power_redfish/tasks/power.yml",
     "managedos_install_anaconda/tasks/await.yml",
     "managedos_install_anaconda/tasks/network.yml",
     "managedos_install_anaconda/tasks/proved_boot.yml",
@@ -189,22 +192,28 @@ def one(found, description):
 
 
 def composed():
-    """Every include of a machine role in any role: its file, arm, tasks_from and task."""
-    arms = {role: arm for arm, role in SUBSTRATES.items()}
+    """Every include of a machine role, or of the dispatcher at an entry point
+    that takes more than the generic port, in any role outside the substrate:
+    its file, each arm it reaches, tasks_from and task. The dispatcher reaches
+    every arm its table binds."""
+    bindings = defaults("substrate_machine")["substrate_machine_arms"]
+    for arm, role in bindings.items():
+        assert role == "bootwright.core." + SUBSTRATES[arm]
     found = []
     for path in task_files():
+        if path.relative_to(ROLES).parts[0].startswith("substrate_"):
+            continue
         for task in walk(loaded(path)):
             for action in INCLUDES:
                 arguments = task.get(action)
-                match = MACHINE.match(str(arguments.get("name", ""))) if isinstance(arguments, dict) else None
+                if not isinstance(arguments, dict):
+                    continue
+                match = MACHINE.match(str(arguments.get("name", "")))
                 if match:
-                    found.append((label(path), arms.get(match.group(1)), arguments.get("tasks_from"), task))
-                elif isinstance(arguments, dict) and arguments.get("tasks_from") in ("pre_boot", "boot_media", "boot_disk"):
-                    mapping = re.search(r"{{\s*(\w+)\[", arguments.get("name", ""))
-                    assert mapping, label(path)
-                    bindings = defaults(path.relative_to(ROLES).parts[0])[mapping.group(1)]
-                    for arm, role in bindings.items():
-                        assert role == "bootwright.core." + SUBSTRATES[arm]
+                    found.append((label(path), None, arguments.get("tasks_from"), task))
+                elif arguments.get("name") == DISPATCHER and arguments.get("tasks_from") in (
+                        "pre_boot", "boot_media", "boot_disk", "identity_read"):
+                    for arm in sorted(bindings):
                         found.append((label(path), arm, arguments["tasks_from"], task))
     return found
 
@@ -299,7 +308,7 @@ def test_every_include_passes_exactly_its_entry_points_inputs():
     problems = []
     for name, arm, entry, task in composed():
         options = specs(arm)[entry]["options"]
-        passed = set(task.get("vars") or {})
+        passed = set(task.get("vars") or {}) - {ARM}
         required = {option for option, spec in options.items() if spec.get("required")}
         if passed - set(options):
             problems.append("%s passes %s, which %s does not declare" % (name, sorted(passed - set(options)), entry))
@@ -318,7 +327,8 @@ def test_what_each_include_renders_passes_its_entry_points_validation(consumer):
         rendering = Templar(loader=LOADER, variables=variables)
         assert rendering.evaluate_conditional(task.get("when", True)), "%s: the %s include does not apply to its own arm" % (
             name, arm)
-        values = {option: rendering.template(value) for option, value in task["vars"].items()}
+        assert rendering.template(task["vars"][ARM]) == arm, "%s: the %s include does not hand over its arm" % (name, arm)
+        values = {option: rendering.template(value) for option, value in task["vars"].items() if option != ARM}
         options = specs(arm)[entry]["options"]
         role_defaults = defaults(SUBSTRATES[arm])
         aliases = Templar(loader=LOADER, variables={**role_defaults, **values})
@@ -347,6 +357,8 @@ def test_each_machine_role_declares_exactly_the_port_beside_its_lifecycle(arm):
             expected = dict(OPTIONS[arm][entry])
             if entry != "identity_read":
                 expected["bootwright_machine_port"] = ("dict", False, None)
+            else:
+                expected["bootwright_machine_identity"] = ("dict", False, None)
             if arm == "baremetal" and entry == "pre_boot":
                 expected[BAREMETAL + "_target_require_tpm"] = ("bool", False, None)
             assert found == expected, entry
@@ -359,13 +371,14 @@ def test_each_machine_role_declares_exactly_the_port_beside_its_lifecycle(arm):
 @pytest.mark.parametrize("arm", sorted(SUBSTRATES))
 def test_no_port_input_is_a_version_or_has_a_role_default(arm):
     role_defaults = defaults(SUBSTRATES[arm])
-    assert "bootwright_machine_port" not in role_defaults
+    assert "bootwright_machine_port" not in role_defaults and "bootwright_machine_identity" not in role_defaults
     for entry in sorted(PORT):
         options = specs(arm)[entry]["options"]
         assert "version" not in options
+        source = "bootwright_machine_identity." if entry == "identity_read" else "bootwright_machine_port."
         for name, option in options.items():
             if name in role_defaults and option.get("required"):
-                assert "bootwright_machine_port." in role_defaults[name]
+                assert source in role_defaults[name], name
 
 
 def test_installations_only_insert_and_eject_and_nothing_reads_through_the_boot_module():

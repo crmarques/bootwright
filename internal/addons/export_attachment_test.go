@@ -48,7 +48,7 @@ func TestBuiltinExportClosureRetainsBothSidesAndResourceChain(t *testing.T) {
 			for _, a := range addons.StorageAttachments(c) {
 				attachments = append(attachments, environment.Attachment{ClusterRef: a.ClusterRef, ExportRef: a.ExportRef})
 			}
-			selected := environment.Select(c, attachments).Catalog
+			selected := environment.Select(c, attachments, testClusterMembers).Catalog
 			for _, ref := range []struct {
 				kind api.Kind
 				name string

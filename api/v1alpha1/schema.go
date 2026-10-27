@@ -1,5 +1,10 @@
 package v1alpha1
 
+import (
+	"slices"
+	"sync"
+)
+
 type Field struct {
 	Name     string
 	Shape    *Shape
@@ -111,3 +116,20 @@ func register(kind Kind, factory func() *Shape) {
 	}
 	schemas[kind] = factory
 }
+
+func Children(parent Kind) []Kind { return slices.Clone(children()[parent]) }
+
+var children = sync.OnceValue(func() map[Kind][]Kind {
+	found := map[Kind][]Kind{}
+	for _, kind := range kindOrder {
+		shape := Schema(kind)
+		if shape == nil {
+			continue
+		}
+		if field, ok := shape.Field("clusterRef"); ok && field.Required && len(field.Shape.Reference) == 1 {
+			parent := field.Shape.Reference[0]
+			found[parent] = append(found[parent], kind)
+		}
+	}
+	return found
+})

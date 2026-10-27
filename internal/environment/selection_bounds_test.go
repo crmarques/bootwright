@@ -28,7 +28,7 @@ func TestUnresolvedClusterListsAtMostSixteenDeclaredNames(t *testing.T) {
 				objects = append(objects, selectionContainer(row.declared[index], row.declared[index]+"-n"))
 			}
 			unresolved := []api.Issue{}
-			for _, problem := range environment.Select(api.NewCatalog(objects), nil).Problems {
+			for _, problem := range environment.Select(api.NewCatalog(objects), nil, testClusterMembers).Problems {
 				if problem.Issue.Code == "api.reference" {
 					unresolved = append(unresolved, problem.Issue)
 				}
@@ -58,7 +58,7 @@ func TestClusterSelectionCostGrowsWithTheInputNotItsSquare(t *testing.T) {
 			runtime.GC()
 			var before, after runtime.MemStats
 			runtime.ReadMemStats(&before)
-			selection := environment.Select(catalog, nil)
+			selection := environment.Select(catalog, nil, testClusterMembers)
 			runtime.ReadMemStats(&after)
 			if len(selection.Problems) != row.problems {
 				t.Fatalf("%d problems, want %d", len(selection.Problems), row.problems)

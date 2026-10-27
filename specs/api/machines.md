@@ -198,7 +198,7 @@ refusal.
 | `spec.substrate.profileRef` | string | conditional | — | Provider-local `machineProfiles[].name`; required for a virtual install machine and forbidden for bare metal. |
 | `spec.hardware.nics` | array | conditional | `[]` | Set keyed by `name`; required for a bare-metal install machine. |
 | `spec.hardware.nics[].name` | string | yes | — | Machine-local NIC name. |
-| `spec.hardware.nics[].macAddress` | string | conditional | — | EUI-48; required on every bare-metal install NIC; refused on a libvirt provider's Machine, whose MACs the provider derives. |
+| `spec.hardware.nics[].macAddress` | string | conditional | — | EUI-48; required on every bare-metal install NIC; refused on a libvirt or KubeVirt provider's Machine, whose MACs the provider derives. |
 | `spec.hardware.management.bmc` | object | conditional | — | Required for bare-metal install; refused on a libvirt provider's Machine, whose management controller is its emulated BMC; exact shape below. |
 | `spec.os.provided` | boolean | yes | — | Selects the OS lifecycle with `installProfileRef`. |
 | `spec.os.installProfileRef` | string | conditional | — | Global `MachineInstallProfile`; valid only when `provided: false`. |
@@ -269,6 +269,18 @@ controller as its emulated BMC
 an authored BMC refuses once at `hardware.management.bmc`, however
 complete, and no other BMC rule applies to it. NIC names alone stay admitted,
 and such a Machine's MACs take no part in the graph-wide uniqueness check.
+
+A KubeVirt provider's Machine follows the same MAC rule
+([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization),
+[B87](../milestones/m1.md#b87), D183 and Q79): the arm derives each interface's
+MAC from the context, Machine and interface names, so each
+`hardware.nics[].macAddress` refuses with `api.invariant` at its own path and
+NIC names alone stay admitted. `network.interfaceBinding` exists to inject a
+physical NIC's MAC into the installed OS; a virtual Machine receives no inferred
+bindings and no binding feeds its derived MAC, so a libvirt or KubeVirt Machine
+authors none. Admission still resolves an authored binding against the declared
+NIC names; refusing it outright follows the narrow Machine arm
+([B814](../milestones/backlog.md#b814)).
 
 ### BMC and root-device shape
 
@@ -363,7 +375,7 @@ unless it is a whole block device
 | `interfaceAttachments` | array | no | — | Set of `{interface, attachmentRef}` keyed by `interface`; mutually exclusive with `attachmentRef`. `interface` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. It maps every available ethernet interface exactly once to one of its provider's attachments, on libvirt as on KubeVirt; without it every interface uses `attachmentRef`. |
 | `installAddressRef` | string | when a consumer requires a static install IP | unique eligible address below | Machine-local `addresses[].name`; selects an interface-assigned IP inside a consumed machine network. |
 | `addresses` | array | no | `[]`, plus derived `fqdn` contact | Set keyed by `name`; exact entry shape below. |
-| `interfaceBinding` | array | conditional | exact NIC-name matches for bare-metal install | Set of `{nicRef, interfaceName}`; the field name is singular `interfaceBinding`. `interfaceName` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
+| `interfaceBinding` | array | conditional | exact NIC-name matches for bare-metal install | Set of `{nicRef, interfaceName}`; the field name is singular `interfaceBinding`. Bare-metal only in practice: a libvirt or KubeVirt Machine authors none, since the provider derives its MACs. `interfaceName` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
 | `overrides` | arbitrary map | no | `{}` | Valid only with `configRef`; merged into the selected native NMState template. |
 
 A configured network selects exactly one of `configRef` and `inline`.

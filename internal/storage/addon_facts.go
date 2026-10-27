@@ -10,10 +10,9 @@ type ExportFacts struct {
 func AddonExportFacts(catalog api.Catalog) []ExportFacts {
 	facts := []ExportFacts{}
 	for _, export := range catalog.OfKind(api.StorageExport) {
-		ref := export.Spec().Get("dataFoundation", "objectGatewayRef").Text()
-		gateway, found := catalog.Find(api.StorageObjectGateway, ref)
+		gateway, ref := attachedGateway(catalog, export)
 		tls := false
-		if found {
+		if gateway.Name() != "" {
 			cluster, _ := catalog.Find(api.StorageCluster, gateway.Spec().Get("clusterRef").Text())
 			service, _ := NativeService(cluster, gateway.Spec().Get("serviceRef").Text())
 			tls = service.Get("spec", "ssl").Bool()

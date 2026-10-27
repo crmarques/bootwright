@@ -221,7 +221,7 @@ YAML or marker category. Lengths and digests are verified before compilation.
 Manifest integrity failures never fall back to the original source directory.
 
 Logical compiler paths are original input directory plus manifest-relative
-path. This preserves resource selection, counts, diagnostics and field-level
+path. This preserves selection, counts, diagnostics and field-level
 provenance through recompilation. Import does not rebase typed payload
 references or copy, inspect or expand the paths they name.
 

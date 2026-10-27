@@ -287,6 +287,19 @@ func TestALibvirtMachineAuthorsNoMACOrController(t *testing.T) {
 	}
 }
 
+// A KubeVirt provider derives every interface's MAC exactly as a libvirt one
+// does, so an authored MAC refuses at its own path and a NIC name alone is
+// admitted.
+func TestAKubeVirtMachineAuthorsNoMAC(t *testing.T) {
+	provider := object(api.InfraProvider, "lab", m("kubevirt", m("kubeconfigRef", "host", "namespace", "guests")))
+	guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab"), "os", m("provided", false),
+		"hardware", m("nics", list(m("name", "eth0", "macAddress", "02:00:00:00:10:01"), m("name", "eth1")))))
+	catalog := api.NewCatalog([]api.Object{guest, provider})
+	requireOneIssue(t, validateHardware(guest, catalog, substrate.ArmKubeVirt), api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics[0].macAddress",
+		Message:     "a KubeVirt provider derives every interface's MAC from the context, Machine and interface names, so an authored MAC would be ignored",
+		Remediation: "remove spec.hardware.nics[0].macAddress from Machine/guest"})
+}
+
 // A bare-metal attachment configures nothing, so a bare-metal Machine needs no
 // attachment selection; one it authors still names an attachment of its
 // provider. A libvirt Machine's attachment is its domain's network, so it

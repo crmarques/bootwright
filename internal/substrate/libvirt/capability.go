@@ -159,6 +159,7 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 			Groups:         machineGroups(input.Verb, request),
 			Kind:           MachineKind,
 			Object:         request.Identity.Object,
+			Family:         substrate.MachineFamily,
 			Implementation: MachineImplementation,
 			ContentDigest:  digest,
 			Request:        canonical,

@@ -10,6 +10,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 const PhysicalRetirementImplementation = "storage-ceph-physical-retirement-v1"
@@ -36,18 +37,12 @@ type PhysicalEraseReader func(reconciliation.Block, lifecycle.BlockEvidence, str
 type PhysicalUninstalledReader func([]lifecycle.BlockEvidence, []lifecycle.RemovalEvidence, string) (bool, error)
 
 type PhysicalRetirementCapability struct {
-	claims      func(string) string
 	erasure     PhysicalEraseReader
 	proofs      DependencyProofs
 	uninstalled PhysicalUninstalledReader
 }
 
 func NewPhysicalRetirement() PhysicalRetirementCapability { return PhysicalRetirementCapability{} }
-
-func (c PhysicalRetirementCapability) WithClaims(claims func(string) string) PhysicalRetirementCapability {
-	c.claims = claims
-	return c
-}
 
 func (c PhysicalRetirementCapability) WithProofs(proofs DependencyProofs) PhysicalRetirementCapability {
 	c.proofs = proofs
@@ -103,22 +98,24 @@ func DecodePhysicalRetirementRequest(data []byte) (PhysicalRetirementRequest, er
 	return r, nil
 }
 
-func PhysicalRetirementPolicies(catalog api.Catalog, machineName string) ([]string, error) {
-	ids := []string{}
+const PhysicalRetirementFamily = "storage-physical-retirement"
+
+func (PhysicalRetirementCapability) PhysicalRetirement(catalog api.Catalog, machineName string) ([]reconciliation.ObjectRef, error) {
+	references := []reconciliation.ObjectRef{}
 	machine, found := catalog.Find(api.Machine, machineName)
 	provider, _ := catalog.Find(api.InfraProvider, machine.Spec().Get("substrate", "providerRef").Text())
-	if !found || !provider.Spec().Has("baremetal") {
-		return ids, nil
+	if !found || !substrate.RealizesPhysicalNICs(provider) {
+		return references, nil
 	}
 	for _, cluster := range catalog.OfKind(api.StorageCluster) {
 		for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
 			if node.Get("machineRef").Text() == machineName {
-				ids = append(ids, PhysicalRetirementBlockID(cluster.Name()))
+				references = append(references, reconciliation.ObjectRef{Kind: string(api.StorageCluster), Object: cluster.Name(), Family: PhysicalRetirementFamily})
+				break
 			}
 		}
 	}
-	slices.Sort(ids)
-	return slices.Compact(ids), nil
+	return references, nil
 }
 
 func physicalRetirementRequest(catalog api.Catalog, cluster Request) PhysicalRetirementRequest {
@@ -179,20 +176,16 @@ func (c PhysicalRetirementCapability) Plan(ctx context.Context, input lifecycle.
 			continue
 		}
 		request := physicalRetirementRequest(catalog, cluster)
-		if c.claims == nil {
-			return plan, physicalPolicyFailure()
-		}
-		dependencies := []string{}
+		claims := []reconciliation.ObjectRef{}
 		for _, host := range request.Hosts {
-			dependencies = append(dependencies, c.claims(host.Machine))
+			claims = append(claims, reconciliation.ObjectRef{Kind: string(api.Machine), Object: host.Machine, Family: substrate.MachineFamily})
 		}
-		slices.Sort(dependencies)
 		canonical, err := request.Canonical()
 		if err != nil {
 			return plan, err
 		}
 		definition := reconciliation.BlockDefinition{ID: PhysicalRetirementBlockID(cluster.Cluster), Description: "retain the physical Ceph retirement policy of " + cluster.Cluster,
-			Stage: reconciliation.StageMachines, Dependencies: dependencies, Kind: string(api.StorageCluster), Object: cluster.Cluster, Implementation: PhysicalRetirementImplementation,
+			Stage: reconciliation.StageMachines, Requires: claims, Kind: string(api.StorageCluster), Object: cluster.Cluster, Family: PhysicalRetirementFamily, Implementation: PhysicalRetirementImplementation,
 			ContentDigest: PhysicalRetirementContentDigest(), Request: canonical}
 		if input.Verb == reconciliation.Destroy {
 			definition.Description = "verify physical Ceph retirement before releasing " + cluster.Cluster

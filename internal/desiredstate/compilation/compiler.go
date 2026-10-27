@@ -10,6 +10,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/environment"
 )
 
 // Rules are pure, component-owned transformations and admission constraints.
@@ -20,6 +21,7 @@ type Rules struct {
 	ValidatePartial      func(api.Object, api.Catalog) []api.Issue
 	ValidateAuthored     func(api.Object, api.Catalog) []api.Issue
 	Validate             func(api.Object, api.Catalog) []api.Issue
+	Members              func(api.Object) (environment.Membership, bool)
 }
 
 type Selection struct {
@@ -27,6 +29,7 @@ type Selection struct {
 	ExcludedContainerClusters []string
 	ExcludedStorageClusters   []string
 	Problems                  []ObjectIssue
+	Excluded                  map[string]string
 }
 
 type ObjectIssue struct {
@@ -101,7 +104,7 @@ func (c Compiler) Compile(ctx context.Context, sources desiredstate.Sources) (*S
 		report: &Report{
 			Counts:                    Counts{FilesSeen: len(sources.Files)},
 			ExcludedContainerClusters: []string{}, ExcludedStorageClusters: []string{},
-			ExcludedResourceFiles: []string{}, Advisories: []diagnostics.Diagnostic{},
+			Advisories: []diagnostics.Diagnostic{},
 		},
 	}
 	for _, phase := range []func() bool{

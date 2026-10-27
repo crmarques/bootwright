@@ -722,3 +722,20 @@ func replicationFrozenScope(_ api.Catalog, name string, frozen []reconciliation.
 	r := matched[0]
 	return "rbd " + r.Mode + " mirroring " + r.Primary.Cluster + "/" + r.Primary.Pool.Name + " to " + r.Secondary.Cluster + "/" + r.Secondary.Pool.Name
 }
+
+type Administration struct {
+	Release, Node string
+}
+
+func ClusterAdministration(cluster api.Object) Administration {
+	declared := cluster.Spec().Get("ceph")
+	return Administration{Release: declared.Get("release").Text(), Node: declared.Get("cephadm", "bootstrap", "node").Text()}
+}
+
+func (a Administration) Command(contextName, cluster, fsid string) string {
+	root := "/var/lib/bootwright/ceph/" + fsid
+	return "bootwright cluster exec --context " + contextName + " --name " + cluster + " --node " + a.Node +
+		" -- sudo -n ceph --conf " + root + "/ceph.conf --keyring " + root + "/ceph.client.admin.keyring"
+}
+
+func ObjectUserGateway(user api.Object) string { return user.Spec().Get("objectGatewayRef").Text() }

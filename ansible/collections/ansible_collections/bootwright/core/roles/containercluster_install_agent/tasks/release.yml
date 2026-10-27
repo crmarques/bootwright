@@ -40,9 +40,10 @@
 
 - name: Point the node at its installed disk through its substrate
   ansible.builtin.include_role:
-    name: '{{ containercluster_install_agent_boot_disk_bindings[containercluster_install_agent_node.substrate] }}'
+    name: bootwright.core.substrate_machine
     tasks_from: boot_disk
   vars:
+    bootwright_machine_arm: '{{ containercluster_install_agent_node.substrate }}'
     bootwright_machine_port:
       endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
       verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
@@ -50,16 +51,3 @@
       user: '{{ containercluster_install_agent_user }}'
       password: '{{ containercluster_install_agent_password }}'
       power_on: false
-
-# A substrate with no disk-boot entry point reaches this refusal only after the
-# eject above. That is acceptable only because apply.yml refuses such a node
-# before any node is touched, which leaves this unreachable from there.
-- name: Refuse a substrate this installation has no disk-boot binding for
-  ansible.builtin.fail:
-    msg: >-
-      node {{ containercluster_install_agent_node.name }} names substrate
-      {{ containercluster_install_agent_node.substrate }}, which this cluster
-      installation has no boot_disk binding for, so Machine
-      {{ containercluster_install_agent_node.machine }} was not pointed at its
-      installed disk; plan the installation again with this release
-  when: containercluster_install_agent_node.substrate not in containercluster_install_agent_boot_disk_bindings

@@ -6,7 +6,6 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
-	"github.com/crmarques/bootwright/internal/storage"
 )
 
 const Implementation = "dns-server-dnsmasq-v1"
@@ -15,15 +14,17 @@ const Kind = string(api.DNSServer)
 
 const defaultImage = "docker.io/4km3/dnsmasq@sha256:52e25fb2601156ab66f6a0872c180b285df7cafaa41267d8d65689f066490641"
 
-// Definition binds the shared managed-service behavior to dnsmasq. The records
-// it answers are derived from the retained Machines and the container clusters
-// they install, plus attached export gateways. Forwarders are authored; with none declared
-// the resolver answers only its own records rather than silently reaching an
-// ambient upstream.
-func Definition() managedservice.Definition {
+type GatewayRecords func(api.Catalog) ([]managedservice.Record, error)
+
+// Definition binds the shared managed-service behavior to dnsmasq. It answers
+// for retained Machines, their container clusters and the storage-derived
+// gateway records. Forwarders are authored; with none declared the resolver
+// answers only its own records rather than silently reaching an upstream.
+func Definition(gateways GatewayRecords) managedservice.Definition {
 	return managedservice.Definition{
 		Kind:           api.DNSServer,
 		Implementation: Implementation,
+		Selects:        "dnsmasq",
 		Version:        managedservice.RequestVersion,
 		Slug:           "dns",
 		Variable:       managedservice.Variable,
@@ -32,7 +33,7 @@ func Definition() managedservice.Definition {
 		Image:          defaultImage,
 		Extend: func(catalog api.Catalog, spec api.Value, request *managedservice.Request) error {
 			request.Records = append(managedservice.MachineRecords(catalog), managedservice.ClusterRecords(catalog)...)
-			records, err := exportRecords(catalog, request.Records)
+			records, err := exportRecords(catalog, request.Records, gateways)
 			if err != nil {
 				return err
 			}
@@ -44,38 +45,31 @@ func Definition() managedservice.Definition {
 	}
 }
 
-func exportRecords(catalog api.Catalog, records []managedservice.Record) ([]managedservice.Record, error) {
-	for _, export := range catalog.OfKind(api.StorageExport) {
-		ref := export.Spec().Get("dataFoundation", "objectGatewayRef").Text()
-		if ref == "" {
-			continue
-		}
-		gateway, found := catalog.Find(api.StorageObjectGateway, ref)
-		if !found {
-			return nil, fmt.Errorf("%s has no retained gateway", export.Identity())
-		}
-		name := gateway.Spec().Get("endpoint", "fqdn").Text()
-		if name == "" {
-			return nil, fmt.Errorf("%s has no gateway endpoint FQDN", export.Identity())
-		}
-		addresses, err := storage.GatewayDNSAddresses(catalog, gateway)
-		if err != nil {
-			return nil, err
-		}
+func exportRecords(catalog api.Catalog, records []managedservice.Record, gateways GatewayRecords) ([]managedservice.Record, error) {
+	if gateways == nil {
+		return records, nil
+	}
+	contributed, err := gateways(catalog)
+	if err != nil {
+		return nil, err
+	}
+	for _, gateway := range contributed {
+		addresses := slices.Clone(gateway.Addresses)
+		slices.Sort(addresses)
 		duplicate := false
 		for _, record := range records {
-			if record.Name != name {
+			if record.Name != gateway.Name {
 				continue
 			}
 			existing := slices.Clone(record.Addresses)
 			slices.Sort(existing)
 			if record.Subtree || !slices.Equal(existing, addresses) {
-				return nil, fmt.Errorf("gateway DNS record %s conflicts with another retained record", name)
+				return nil, fmt.Errorf("gateway DNS record %s conflicts with another retained record", gateway.Name)
 			}
 			duplicate = true
 		}
 		if !duplicate {
-			records = append(records, managedservice.Record{Name: name, Addresses: addresses})
+			records = append(records, managedservice.Record{Name: gateway.Name, Addresses: addresses})
 		}
 	}
 	return records, nil

@@ -190,9 +190,7 @@ admitted, and a managed one refuses at plan as an unclaimed managed service
 
 Not yet met: validate admits an external ArtifactServer that no consumer reads,
 and a managed Registry or LoadBalancer although nothing realizes it; tracked as
-[B827](../milestones/backlog.md#b827). A managed service's lifecycle definition
-is selected by its kind alone, not by its kind and `spec.implementation`;
-tracked as [B810](../milestones/backlog.md#b810).
+[B827](../milestones/backlog.md#b827).
 
 ## Consumer selections
 
@@ -255,9 +253,9 @@ image-source mapping.
 
 ## Selection and bootstrap
 
-Resource-selected services remain desired roots even when unconsumed, and a
+Selected services remain desired roots even when unconsumed, and a
 managed service retains its placement closure under
-[Environment selection](environment.md#resource-and-cluster-selection).
+[Environment selection](environment.md#cluster-selection).
 External services add no managed host or removal obligation. Managed service
 placement on the controller is explicit and obeys the same capability and
 endpoint rules as other hosts. Controller selection does not imply placement,
@@ -271,7 +269,9 @@ external service uses its declared `address` or connection and gains no
 readiness edge, because no block of this product realizes it. The runtime edges between a
 service, its host and its consumers belong to
 [infrastructure services](../infrastructure-services.md#selection-and-refusal)
-and the [dependency DAG](../state-reconciliation.md#plan-and-execution).
+and the [dependency DAG](../state-reconciliation.md#plan-and-execution), whose
+[reference edges](../state-reconciliation.md#reference-edges) catalog lists
+them.
 Admission rejects a proven self-hosted artifact bootstrap cycle at the
 consuming field when the service requires the very Machine OS installation it
 serves. It does not equate every declaration-reference cycle with an executable

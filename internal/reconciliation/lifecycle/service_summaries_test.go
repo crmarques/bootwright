@@ -25,7 +25,7 @@ func TestStatusSummarizesOnlyManagedServices(t *testing.T) {
 		object(api.NTPServer, "time", "management", "managed", "machineRef", "services"),
 		object(api.Machine, "services", "management", "managed"),
 	})
-	got := serviceSummaries(catalog, []string{string(api.Proxy), string(api.ArtifactServer)})
+	got := serviceSummaries(catalog, []string{string(api.Proxy), string(api.ArtifactServer)}, domainEffects)
 	want := []ServiceSummary{
 		{Kind: "ArtifactServer", Name: "media", Machine: "controller", Status: "unsupported"},
 		{Kind: "NTPServer", Name: "time", Machine: "services", Status: "unsupported"},

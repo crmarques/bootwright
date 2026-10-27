@@ -6,6 +6,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/substrate/capacity"
 )
 
 type graphStub struct{ catalog api.Catalog }
@@ -95,7 +96,7 @@ func TestProvidedGuestWithPendingOwnershipUsesActualChecks(t *testing.T) {
 	called := false
 	s.Guests = guestFunc(func(context.Context, string, api.Object, PreflightRequest) ([]Check, error) {
 		called = true
-		return []Check{{ID: "host.prerequisites", Target: "guest", Status: Failed, Reason: "a native prerequisite is missing"}}, nil
+		return []Check{{ID: "host.prerequisites", Target: "guest", Status: capacity.Failed, Reason: "a native prerequisite is missing"}}, nil
 	})
 	report, err := s.Check(context.Background(), PreflightRequest{ContextName: "synthetic"})
 	if !called || err == nil || report == nil || report.Summary != (Summary{Failed: 1, Passed: 3}) {

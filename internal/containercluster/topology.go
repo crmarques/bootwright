@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/environment"
 )
 
 // releaseTopology is the cluster shape one release's agent installer accepts,
@@ -38,10 +39,6 @@ var generalTopology = releaseTopology{
 	},
 }
 
-func topologyFor(version string) releaseTopology {
-	return generalTopology
-}
-
 // validateTopology checks the node roster and endpoint ownership against what
 // the declared release installs. It runs on effective state, where the
 // platform is already derived, and never on a partial fragment.
@@ -55,9 +52,6 @@ func validateTopology(s api.Value, partial bool) []api.Issue {
 	if !ok {
 		minor = version
 	}
-	// A release pinned by image alone declares no minor to look up; the
-	// container-cluster selection refuses it before anything is planned.
-	row := topologyFor(version)
 	nodes := s.Get("nodes").Items()
 	if len(nodes) == 0 {
 		return issues
@@ -74,8 +68,8 @@ func validateTopology(s api.Value, partial bool) []api.Issue {
 	if masters == 0 {
 		return add(issues, invariantRemediation("$.spec.nodes", "a container cluster requires at least one master node", "declare at least one master in spec.nodes"))
 	}
-	if version != "" && !slices.Contains(row.controlPlane, masters) {
-		accepted := countList(row.controlPlane)
+	if version != "" && !slices.Contains(generalTopology.controlPlane, masters) {
+		accepted := countList(generalTopology.controlPlane)
 		issue := invariant("$.spec.nodes", fmt.Sprintf("release %s accepts %s master nodes, not %d", minor, accepted, masters))
 		issue.Remediation = "declare " + accepted + " master nodes"
 		issues = add(issues, issue)
@@ -118,4 +112,11 @@ func countList(counts []int) string {
 		return strings.Join(words, "")
 	}
 	return strings.Join(words[:len(words)-1], ", ") + " or " + words[len(words)-1]
+}
+
+func MemberMachines(object api.Object) (environment.Membership, bool) {
+	if object.Kind() != api.ContainerCluster {
+		return environment.Membership{}, false
+	}
+	return environment.MembersOf("$.spec.nodes", object.Spec().Get("nodes")), true
 }

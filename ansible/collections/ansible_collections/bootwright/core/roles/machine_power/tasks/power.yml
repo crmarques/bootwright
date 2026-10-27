@@ -1,0 +1,236 @@
+---
+# Power goes through the power and state_read entry points of the substrate
+# machine port, dispatched by the arm the frozen request carries, so every arm
+# the substrate realizes takes exactly this path. Every step polls the
+# resource to the state it asked for.
+- name: Validate the frozen power request
+  ansible.builtin.assert:
+    that:
+      - bootwright_machine_power_request.version == 'machine-power-v3'
+      - bootwright_machine_power_request.arm is string
+      - bootwright_machine_power_request.verb in ['start', 'stop', 'restart']
+      - bootwright_machine_power_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.machine_power_protocol:
+    phase: loaded
+  no_log: true
+
+# An arm the substrate has no machine port for refuses here, named, before
+# any entry point is looked up by it.
+- name: Refuse an arm the substrate has no machine port for
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_machine
+    tasks_from: admit
+  vars:
+    bootwright_machine_arm: '{{ bootwright_machine_power_request.arm }}'
+
+- name: Report the power state read
+  bootwright.core.machine_power_protocol:
+    phase: group
+    group: read-state
+    status: running
+  no_log: true
+
+- name: Read the state the management controller reports
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_machine
+    tasks_from: state_read
+  vars:
+    bootwright_machine_arm: '{{ bootwright_machine_power_request.arm }}'
+    bootwright_machine_port: >-
+      {{ machine_power_access | combine({'media': false}) }}
+
+- name: Retain the machine port answer
+  ansible.builtin.set_fact:
+    machine_power_before: "{{ substrate_machine_port_result }}"
+  no_log: true
+
+# ansible-core keeps nothing of a failure under no_log but that it failed, so
+# each of the controller's own refusals is reported by a step of its own,
+# where no credential is.
+- name: Stop at a read the management controller did not answer
+  ansible.builtin.assert:
+    that:
+      - machine_power_before.msg is not defined
+    fail_msg: >-
+      reading the power state of Machine/{{ bootwright_machine_power_request.identity.object }}
+      failed:
+      {{ (machine_power_before.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
+
+- name: Publish the state that was read
+  bootwright.core.machine_power_protocol:
+    phase: group
+    group: read-state
+    status: ok
+  no_log: true
+
+# A physical machine is read before any power request: it must not be the host
+# that runs Bootwright, it is held to the identity the context's current apply
+# proved, and with no such pin it must report exactly its declared MAC set.
+# Each value arrives base64-encoded, because this run's variables are rendered
+# as templates when they are read, and is decoded only inside a comparison,
+# where a decoded value is data and never a template.
+- name: Read the identity the management controller reports
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_machine
+    tasks_from: state_read
+  vars:
+    bootwright_machine_arm: '{{ bootwright_machine_power_request.arm }}'
+    bootwright_machine_port: >-
+      {{ machine_power_access | combine({'media': false, 'inspect': true}) }}
+  when: machine_power_physical | bool
+
+- name: Retain the machine port answer
+  ansible.builtin.set_fact:
+    machine_power_identity: "{{ substrate_machine_port_result }}"
+  when: machine_power_physical | bool
+  no_log: true
+
+- name: Stop at an identity read the management controller did not answer
+  ansible.builtin.assert:
+    that:
+      - machine_power_identity.msg is not defined
+    fail_msg: >-
+      reading the identity of Machine/{{ bootwright_machine_power_request.identity.object }}
+      failed, so no power request was sent:
+      {{ (machine_power_identity.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
+
+- name: Name the refusal of a machine that is this controller host to the runner
+  bootwright.core.machine_power_protocol:
+    phase: refused
+    reason: controller-host
+  when:
+    - machine_power_physical | bool
+    - machine_power_is_controller_host | bool
+  no_log: true
+
+- name: Refuse a machine that reports this controller host's own identity
+  ansible.builtin.assert:
+    that:
+      - not (machine_power_is_controller_host | bool)
+    quiet: true
+    fail_msg: >-
+      Machine/{{ bootwright_machine_power_request.identity.object }} answers at
+      {{ bootwright_machine_power_request.controller.endpoint }} with the system
+      UUID or a MAC address of this controller host itself, so no power request
+      was sent.
+  when: machine_power_physical | bool
+
+- name: Name the refusal of an unpinned machine that is not the declared one to the runner
+  bootwright.core.machine_power_protocol:
+    phase: refused
+    reason: hardware-mismatch
+  when:
+    - bootwright_machine_power_material.expectedMACsBase64 | default('') | length > 0
+    - not (machine_power_reports_declared | bool)
+  no_log: true
+
+- name: Refuse an unpinned machine that does not report exactly its declared MAC set
+  ansible.builtin.assert:
+    that:
+      - machine_power_reports_declared | bool
+    quiet: true
+    fail_msg: >-
+      Machine/{{ bootwright_machine_power_request.identity.object }} at
+      {{ bootwright_machine_power_request.controller.endpoint }} does not report
+      exactly the hardware addresses it declares in a complete inventory, so no
+      power request was sent.
+  when: bootwright_machine_power_material.expectedMACsBase64 | default('') | length > 0
+
+# The runner is told of the refusal before the run fails, so the operator's
+# diagnostic names the Machine, the refusal and its remedy rather than only the
+# output below; the identities themselves stay in that output.
+- name: Name the refusal of a machine that answers as another system to the runner
+  bootwright.core.machine_power_protocol:
+    phase: refused
+    reason: identity-mismatch
+  when: >-
+    ((bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length > 0)
+    or (bootwright_machine_power_material.pinnedSerialBase64 | default('') | length > 0))
+    and not (machine_power_answers_as_pinned | bool)
+  no_log: true
+
+# The refusal prints what a management controller reported, then or now, and
+# a controller promises neither printable text nor a length: each identity
+# keeps only its printable characters and is then cut to the 128 characters
+# the evidence path bounds an identity to, so the run's retained output carries
+# no terminal escape, no bidi override and no unbounded value.
+- name: Refuse a machine that answers as another system
+  ansible.builtin.assert:
+    that:
+      - machine_power_answers_as_pinned | bool
+    quiet: true
+    fail_msg: >-
+      Machine/{{ bootwright_machine_power_request.identity.object }} answers at
+      {{ bootwright_machine_power_request.controller.endpoint }} as UUID
+      '{{ (machine_power_identity.observation.uuid | default('') | string
+      | bootwright.core.printable)[:128] }}' and serial
+      '{{ (machine_power_identity.observation.serial | default('') | string
+      | bootwright.core.printable)[:128] }}', but this
+      context's current apply proved UUID
+      '{{ (bootwright_machine_power_material.pinnedUUIDBase64 | default('') | b64decode
+      | bootwright.core.printable)[:128] }}' and serial
+      '{{ (bootwright_machine_power_material.pinnedSerialBase64 | default('') | b64decode
+      | bootwright.core.printable)[:128] }}', so no
+      power request was sent. Correct spec.hardware.management.bmc.address, or destroy and apply
+      this context so the machine is proved again.
+  when: >-
+    (bootwright_machine_power_material.pinnedUUIDBase64 | default('') | length > 0)
+    or (bootwright_machine_power_material.pinnedSerialBase64 | default('') | length > 0)
+
+- name: Stop the machine and poll it to off
+  ansible.builtin.include_tasks: stop.yml
+  when:
+    - bootwright_machine_power_request.verb in ['stop', 'restart']
+    - machine_power_before.power == 'On'
+
+- name: Start the machine and poll it to on
+  ansible.builtin.include_tasks: start.yml
+  when: bootwright_machine_power_request.verb in ['start', 'restart']
+
+- name: Read the state the operation settled at
+  ansible.builtin.include_role:
+    name: bootwright.core.substrate_machine
+    tasks_from: state_read
+  vars:
+    bootwright_machine_arm: '{{ bootwright_machine_power_request.arm }}'
+    bootwright_machine_port: >-
+      {{ machine_power_access | combine({'media': false}) }}
+
+- name: Retain the machine port answer
+  ansible.builtin.set_fact:
+    machine_power_after: "{{ substrate_machine_port_result }}"
+  no_log: true
+
+- name: Stop at a settled read the management controller did not answer
+  ansible.builtin.assert:
+    that:
+      - machine_power_after.msg is not defined
+    fail_msg: >-
+      reading the power state Machine/{{ bootwright_machine_power_request.identity.object }}
+      settled at failed:
+      {{ (machine_power_after.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
+
+- name: Publish bounded power evidence
+  bootwright.core.machine_power_protocol:
+    phase: completed
+    outcome: >-
+      {{ 'changed' if machine_power_after.power != machine_power_before.power
+         or bootwright_machine_power_request.verb == 'restart'
+         and machine_power_before.power == 'On' else 'unchanged' }}
+    digest: '{{ bootwright_machine_power_digest }}'
+    machine: '{{ bootwright_machine_power_request.identity.object }}'
+    verb: '{{ bootwright_machine_power_request.verb }}'
+    power: '{{ machine_power_after.power }}'
+    previous: '{{ machine_power_before.power }}'
+    changed: >-
+      {{ machine_power_after.power != machine_power_before.power
+         or bootwright_machine_power_request.verb == 'restart'
+         and machine_power_before.power == 'On' }}
+  no_log: true

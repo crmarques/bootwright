@@ -62,7 +62,8 @@ def checked_keys(channel, generated="ssh-ed25519"):
 def test_actual_bound_key_policy_is_checked_before_publication_or_boot(channel):
     tasks, check = policy_check()
     for task in tasks[:check]:
-        assert "ansible.builtin.assert" in task or task.get(PROTOCOL, {}).get("phase") == "loaded"
+        admit = task.get("ansible.builtin.include_role") == {"name": "bootwright.core.substrate_machine", "tasks_from": "admit"}
+        assert "ansible.builtin.assert" in task or admit or task.get(PROTOCOL, {}).get("phase") == "loaded"
     rescue = tasks[check]["rescue"]
     assert rescue[0][PROTOCOL] == {"phase": "refused", "reason": '{{ ansible_failed_result.reason | default("ssh-policy-unavailable") }}'}
     assert "ansible.builtin.fail" in rescue[1]

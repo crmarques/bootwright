@@ -23,13 +23,14 @@ Qualify clustered SMB and all gateway features against those exact images.
 Configure guest firewalls for the declared listeners and VRRP before applying.
 Use independently allocated VIPs, addresses and DNS in the adjusted input.
 
-The declared `client` Machine documents the allocation budget but is pruned
-from the storage Environment's root closure. Supply an operator-owned RHEL
-client with its own independently allocated network and BMC resources. Do not
-initialize a second context from this storage input to provision the client:
-two contexts must never manage the same bridge or BMC port. Adapt the NFS
-allowed-client entry to that client's address. Install `ceph-common`,
-`nfs-utils`, `cifs-utils`, `samba-client`, `curl` and an S3 client there.
+The declared `client` Machine is a Bootwright-installed Machine that is a node
+of no cluster, so the storage list retains it and this context installs it
+beside the six hosts. To use an operator-owned RHEL client instead, remove the
+`client` Machine. A context created under the earlier guidance already
+realizes the client Machine, so remove the client Machine from one of the two
+inputs before applying. Adapt the NFS allowed-client entry to the client's address.
+Install `ceph-common`, `nfs-utils`, `cifs-utils`, `samba-client`, `curl` and an
+S3 client there.
 
 ## Initial setup
 
@@ -77,7 +78,7 @@ adjusted counts too.
 
 Before clusters, inspect every guest's `free -m`, `lsblk -o NAME,SIZE,ROTA,SERIAL`
 and `ip -br address` read-only. Require exactly the owned root and data devices,
-SSD presentation and correct addresses; prove the independent client separately.
+SSD presentation and correct addresses; prove the client separately.
 Start the memory sampler below, then run:
 
 ```sh

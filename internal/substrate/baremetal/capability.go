@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // MachineCapability claims one operator-owned physical machine and proves it is
@@ -52,6 +53,7 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 			Groups:         groups(input.Verb, request),
 			Kind:           Kind,
 			Object:         request.Identity.Object,
+			Family:         substrate.MachineFamily,
 			Implementation: Implementation,
 			ContentDigest:  digest,
 			Request:        canonical,

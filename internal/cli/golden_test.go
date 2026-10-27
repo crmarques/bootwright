@@ -390,8 +390,7 @@ func cliGoldens() []cliGolden {
 		return &compilation.Report{
 			Counts:                    compilation.Counts{FilesSeen: 15, ObjectsDecoded: 15},
 			ExcludedContainerClusters: []string{"ocp-02"}, ExcludedStorageClusters: []string{},
-			ExcludedResourceFiles: []string{"clusters/ocp-02/cluster.yaml"},
-			Advisories:            []diagnostic{deferred}, Diagnostics: []diagnostic{deferred, excluded},
+			Advisories: []diagnostic{deferred}, Diagnostics: []diagnostic{deferred, excluded},
 		}
 	}
 	invalid := &diagnostics.Failure{Diagnostics: []diagnostic{

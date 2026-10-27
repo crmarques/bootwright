@@ -118,7 +118,8 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("managedos_install_anaconda", "observe.yml", "ansible.builtin.set_fact", "names, in memory, a removal's read of a machine holding nothing of this installation", read)
 	add("managedos_install_anaconda", "work.yml", "ansible.builtin.stat", "reads a work-area ancestor without following links", read)
 	add("managedos_install_anaconda", "work.yml", "ansible.builtin.assert", "refuses an ancestor that is not private to root", read)
-	add("managedos_install_anaconda", "identity.yml", "ansible.builtin.fail", "refuses an identity channel with no binding", read)
+	add("substrate_machine", "dispatch.yml", "ansible.builtin.fail", "refuses an arm with no machine port before any lookup", read)
+	add("substrate_machine", "dispatch.yml", "ansible.builtin.set_fact", "republishes the arm's answer in memory", read)
 	add("managedos_install_anaconda", "identity.yml", "ansible.builtin.set_fact", "takes the channel's answer in memory", read)
 	add("managedos_install_anaconda", "reachable.yml", observeCollection+"ssh_key_policy", "reads the host's effective crypto policy", read)
 	add("managedos_install_anaconda", "reachable.yml", "ansible.builtin.set_fact", "names the pinned key's algorithms in memory", read)
@@ -215,6 +216,7 @@ type observeWalk struct {
 	allow         map[observeTaskKey]observeAllowance
 	used          map[observeTaskKey]bool
 	portOperation string
+	portEntry     string
 	visited       map[string]bool
 	errs          []string
 }
@@ -260,10 +262,11 @@ func (w *observeWalk) role(key, role, entry string) {
 
 func (w *observeWalk) file(key, role, file string) {
 	path := observeRoleRoot + role + "/tasks/" + file
-	if w.visited[path+"/"+w.portOperation] {
+	visit := path + "/" + w.portOperation + "/" + w.portEntry
+	if w.visited[visit] {
 		return
 	}
-	w.visited[path+"/"+w.portOperation] = true
+	w.visited[visit] = true
 	data, ok := w.assets[path]
 	if !ok {
 		w.reportf("%s: %s/tasks/%s is not in the embedded collection", key, role, file)
@@ -309,18 +312,24 @@ func (w *observeWalk) task(key, role, file string, task map[string]any) {
 	module := modules[0]
 	switch {
 	case slices.Contains(observeImports, module):
-		previous := w.portOperation
+		previous, previousEntry := w.portOperation, w.portEntry
 		if vars, ok := task["vars"].(map[string]any); ok {
 			if operation, ok := vars["containercluster_install_agent_port_operation"].(string); ok {
 				w.portOperation = operation
 			}
+			if entry, ok := vars["substrate_machine_entry"].(string); ok {
+				w.portEntry = entry
+			}
 		}
 		w.include(key, role, file, task[module])
-		w.portOperation = previous
+		w.portOperation, w.portEntry = previous, previousEntry
 	case slices.Contains(observeRoles, module):
 		params := observeParams(task, module)
 		name, _ := params["name"].(string)
 		entry, _ := params["tasks_from"].(string)
+		if entry == "{{ containercluster_install_agent_port_operation }}" && w.portOperation != "" && !strings.Contains(name, "{{") {
+			entry = w.portOperation
+		}
 		if strings.Contains(name, "{{") {
 			w.fixedReadRoles(key, role, name, entry)
 		} else {
@@ -458,10 +467,8 @@ func (w *observeWalk) fixedReadRoles(key, role, name, entry string) {
 	mapping := ""
 	nested := false
 	switch {
-	case role == "containercluster_install_agent" && name == "{{ containercluster_install_agent_ports[containercluster_install_agent_node.substrate].role }}" && entry == "{{ containercluster_install_agent_port_operation }}" && w.portOperation == "state_read":
-		mapping, entry, nested = "containercluster_install_agent_ports", "state_read", true
-	case role == "managedos_install_anaconda" && name == "{{ managedos_install_anaconda_state_read[bootwright_os_install_request.target.substrate] }}" && entry == "state_read":
-		mapping = "managedos_install_anaconda_state_read"
+	case role == "substrate_machine" && name == "{{ substrate_machine_arms[bootwright_machine_arm] }}" && entry == "{{ substrate_machine_entry }}" && w.portEntry != "":
+		mapping, entry = "substrate_machine_arms", w.portEntry
 	default:
 		w.reportf("%s: unresolved dynamic role %q entry %q", key, name, entry)
 		return
@@ -497,7 +504,7 @@ func (w *observeWalk) fixedReadRoles(key, role, name, entry string) {
 func TestObserveDispatchRefusesMutationAndUnresolvedBindings(t *testing.T) {
 	for _, test := range []struct{ path, before, after string }{
 		{"containercluster_install_agent/tasks/state_node_serial.yml", "containercluster_install_agent_port_operation: state_read", "containercluster_install_agent_port_operation: media_insert"},
-		{"managedos_install_anaconda/defaults/main.yml", "bootwright.core.substrate_libvirt_machine", "{{ untrusted_role }}"},
+		{"substrate_machine/defaults/main.yml", "bootwright.core.substrate_libvirt_machine", "{{ untrusted_role }}"},
 		{"substrate_baremetal_machine/tasks/state_read.yml", "bootwright.core.redfish_system_read:", "bootwright.core.redfish_power:"},
 	} {
 		assets := maps.Clone(ansible.Assets())

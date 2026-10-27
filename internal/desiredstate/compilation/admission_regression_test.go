@@ -19,8 +19,8 @@ import (
 )
 
 func environmentSelection(catalog api.Catalog) compilation.Selection {
-	selected := environment.Select(catalog, nil)
-	result := compilation.Selection{Catalog: selected.Catalog, ExcludedContainerClusters: selected.ExcludedContainerClusters, ExcludedStorageClusters: selected.ExcludedStorageClusters}
+	selected := environment.Select(catalog, nil, testClusterMembers)
+	result := compilation.Selection{Catalog: selected.Catalog, ExcludedContainerClusters: selected.ExcludedContainerClusters, ExcludedStorageClusters: selected.ExcludedStorageClusters, Excluded: selected.Excluded}
 	for _, problem := range selected.Problems {
 		result.Problems = append(result.Problems, compilation.ObjectIssue{Object: problem.Object, Issue: problem.Issue, Target: problem.Target})
 	}
@@ -29,7 +29,7 @@ func environmentSelection(catalog api.Catalog) compilation.Selection {
 
 func regressionCompiler() compilation.Compiler {
 	return compilation.NewCompiler(yamlstream.Parser{}, environmentSelection,
-		compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate},
+		compilation.Rules{Normalize: environment.Normalize, Validate: testEnvironmentValidate},
 		compilation.Rules{Normalize: infrastructureservices.Normalize, ValidateAuthored: infrastructureservices.ValidateAuthored, ValidatePartial: infrastructureservices.ValidatePartial, Validate: infrastructureservices.Validate},
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidatePartial, Validate: secrets.Validate},
 		compilation.Rules{RetiredField: storage.RetiredField, Normalize: storage.Normalize, ValidateAuthored: storage.ValidateAuthored, ValidatePartial: storage.ValidatePartial, Validate: storage.Validate},
@@ -111,27 +111,15 @@ func TestSelectedDuplicateRootsRemainAmbiguousAndEachReceiveDiagnostics(t *testi
 
 func TestEnvironmentSelectionUsesBootwrightAPIVersion(t *testing.T) {
 	native := desiredstate.NewSourceFile("/synthetic/native.yaml", []byte("apiVersion: other.example/v1\nkind: Environment\nmetadata: {name: native}\nspec: {}\n"))
-	for _, selected := range []bool{false, true} {
-		body := environmentYAML
-		if !selected {
-			body += "  resources: [environment.yaml]\n"
-		}
-		input := sources(body)
-		input.Files = append(input.Files, native)
-		state, report, err := regressionCompiler().Compile(context.Background(), input)
-		if !selected {
-			if err != nil || report.Counts != (compilation.Counts{FilesSeen: 2, ObjectsDecoded: 2}) || len(report.Diagnostics) != 0 || len(state.Effective().Objects()) != 2 {
-				t.Fatalf("foreign excluded Environment affected selecting identity: %v %#v", err, report)
-			}
-			continue
-		}
-		sink := requireCompilationFailure(t, state, report, err)
-		if len(sink) != 1 || sink[0].Code != "api.version" || sink[0].Source.Path != native.Path() {
-			t.Fatalf("selected foreign document escaped strict admission: %#v", sink)
-		}
-	}
-	state, report, err := regressionCompiler().Compile(context.Background(), desiredstate.Sources{Files: []desiredstate.SourceFile{native}})
+	input := sources(environmentYAML)
+	input.Files = append(input.Files, native)
+	state, report, err := regressionCompiler().Compile(context.Background(), input)
 	sink := requireCompilationFailure(t, state, report, err)
+	if len(sink) != 1 || sink[0].Code != "api.version" || sink[0].Source.Path != native.Path() {
+		t.Fatalf("selected foreign document escaped strict admission: %#v", sink)
+	}
+	state, report, err = regressionCompiler().Compile(context.Background(), desiredstate.Sources{Files: []desiredstate.SourceFile{native}})
+	sink = requireCompilationFailure(t, state, report, err)
 	if len(sink) != 1 || sink[0].Code != "api.version" {
 		t.Fatalf("sole malformed Environment lost its version error: %#v", sink)
 	}
@@ -255,7 +243,7 @@ spec:
 `
 	input := sources(environmentYAML + "  containerClusters: [kept]\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: node}\nspec: {os: {provided: true}}\n" +
 		strings.Replace(cluster, "NAME", "kept", 1) + strings.Replace(cluster, "NAME", "dropped", 1))
-	compiler := compilation.NewCompiler(yamlstream.Parser{}, environmentSelection, compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate})
+	compiler := compilation.NewCompiler(yamlstream.Parser{}, environmentSelection, compilation.Rules{Normalize: environment.Normalize, Validate: testEnvironmentValidate})
 	state, report, err := compiler.Compile(context.Background(), input)
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))

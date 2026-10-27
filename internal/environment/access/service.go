@@ -7,6 +7,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/machine"
 )
 
@@ -14,10 +15,16 @@ type Service struct {
 	graph     Graph
 	sessions  Sessions
 	selection CurrentSelection
+	members   roster
 }
 
 func New(graph Graph, sessions Sessions, selection CurrentSelection) Service {
 	return Service{graph: graph, sessions: sessions, selection: selection}
+}
+
+func (s Service) WithMembers(members func(api.Object) (environment.Membership, bool)) Service {
+	s.members = members
+	return s
 }
 
 func (s Service) ClusterRsh(ctx context.Context, request ClusterRshRequest) (*machine.SessionResult, error) {
@@ -62,7 +69,7 @@ func (s Service) resolve(ctx context.Context, command, contextName string, names
 	if err != nil {
 		return "", nil, err
 	}
-	machines, err := selectMachines(clusters, selected, selectors)
+	machines, err := selectMachines(clusters, selected, selectors, s.members)
 	if err != nil {
 		return "", nil, err
 	}

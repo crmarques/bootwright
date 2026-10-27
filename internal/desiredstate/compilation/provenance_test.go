@@ -138,34 +138,20 @@ func TestEnvironmentCardinalityIsAGraphInvariant(t *testing.T) {
 	}
 }
 
-func TestSyntaxDiagnosticBudgetFollowsResourceSelection(t *testing.T) {
-	for _, excluded := range []bool{false, true} {
-		t.Run(map[bool]string{false: "selected", true: "excluded"}[excluded], func(t *testing.T) {
-			env := environmentYAML
-			if excluded {
-				env += "  resources: [environment.yaml]\n"
-			}
-			input := sources(env)
-			for i := 0; i < desiredstate.MaxDiagnostics; i++ {
-				input.Files = append(input.Files, desiredstate.NewSourceFile(fmt.Sprintf("/synthetic/bad%04d.yaml", i), []byte("[")))
-			}
-			state, report, err := compiler().Compile(context.Background(), input)
-			if excluded {
-				if err != nil || state == nil || report.Counts.FilesSeen != 1001 {
-					t.Fatalf("excluded syntax consumed diagnostics: %v", err)
-				}
-			} else {
-				sink := diagnostics.Of(err)
-				if state != nil || report != nil || len(sink) != 1000 || sink[999].Code != "input.limit" || sink[999].Source != nil {
-					t.Fatalf("wrong returned diagnostic budget: %d %v", len(sink), err)
-				}
-				for _, d := range sink[:999] {
-					if d.Code != "yaml.syntax" {
-						t.Fatalf("lost syntax diagnostics: %+v", d)
-					}
-				}
-			}
-		})
+func TestSyntaxDiagnosticBudgetBoundsReturnedDiagnostics(t *testing.T) {
+	input := sources(environmentYAML)
+	for i := 0; i < desiredstate.MaxDiagnostics; i++ {
+		input.Files = append(input.Files, desiredstate.NewSourceFile(fmt.Sprintf("/synthetic/bad%04d.yaml", i), []byte("[")))
+	}
+	state, report, err := compiler().Compile(context.Background(), input)
+	sink := diagnostics.Of(err)
+	if state != nil || report != nil || len(sink) != 1000 || sink[999].Code != "input.limit" || sink[999].Source != nil {
+		t.Fatalf("wrong returned diagnostic budget: %d %v", len(sink), err)
+	}
+	for _, d := range sink[:999] {
+		if d.Code != "yaml.syntax" {
+			t.Fatalf("lost syntax diagnostics: %+v", d)
+		}
 	}
 }
 

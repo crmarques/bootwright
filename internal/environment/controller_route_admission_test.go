@@ -56,7 +56,7 @@ func TestTheControllerRouteGrammarIsHeldAtItsOwnObjects(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			declared, catalog := controllerRouteCatalog(test.choice, test.proxy)
-			if issues := environment.Validate(declared, catalog); len(issues) != 0 {
+			if issues := environment.Validate(declared, catalog, testClusterMembers); len(issues) != 0 {
 				t.Fatalf("the Environment refused the route itself: %+v", issues)
 			}
 			var issues []api.Issue

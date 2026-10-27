@@ -24,11 +24,12 @@ const maxReadingBytes = 64 << 10
 // controllers and no two may resolve to the same material. CAVariable is set
 // only for a controller that declares a bundle.
 type ReadTarget struct {
-	CAVariable       string     `json:"caVariable,omitempty"`
-	Controller       Controller `json:"controller"`
-	Object           string     `json:"object"`
-	PasswordVariable string     `json:"passwordVariable"`
-	UserVariable     string     `json:"userVariable"`
+	Arm              string `json:"arm"`
+	CAVariable       string `json:"caVariable,omitempty"`
+	Controller       Access `json:"controller"`
+	Object           string `json:"object"`
+	PasswordVariable string `json:"passwordVariable"`
+	UserVariable     string `json:"userVariable"`
 }
 
 // ReadSurvey is the complete frozen intent for one bounded reading: every
@@ -96,7 +97,7 @@ func readSurveysFor(catalog api.Catalog, contextName string, names []string, rea
 		survey.Context, survey.Placement, survey.Version = contextName, placement, ReadImplementation
 		index := strconv.Itoa(len(survey.Targets))
 		target := ReadTarget{
-			Controller: controller, Object: object.Name(),
+			Arm: managed.Port, Controller: controller, Object: object.Name(),
 			PasswordVariable: "controllerPassword" + index,
 			UserVariable:     "controllerUser" + index,
 		}

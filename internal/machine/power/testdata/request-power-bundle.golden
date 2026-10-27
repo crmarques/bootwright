@@ -1,4 +1,5 @@
 {
+  "arm": "baremetal",
   "controller": {
     "credentialsRef": "metal-bmc",
     "endpoint": "https://bmc.example.test/redfish/v1/Systems/1",
@@ -15,5 +16,5 @@
     "machine": "controller"
   },
   "verb": "stop",
-  "version": "machine-power-redfish-v2"
+  "version": "machine-power-v3"
 }

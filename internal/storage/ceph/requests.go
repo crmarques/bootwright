@@ -401,7 +401,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 		}
 		ssh, ok := machine.SSH(m)
 		provider, _ := c.Find(api.InfraProvider, m.Spec().Get("substrate", "providerRef").Text())
-		if !ok || !machine.Installed(m) || (!provider.Spec().Has("libvirt") && !provider.Spec().Has("baremetal")) || ssh.PrivateKeyRef == "" || ssh.PasswordRef != "" || ssh.OperatorIdentity || ssh.User != r.ClusterSSHUser || ssh.PrivateKeyRef == r.ClusterKeyRef {
+		if !ok || !machine.Installed(m) || !substrate.IsRealized(provider) || ssh.PrivateKeyRef == "" || ssh.PasswordRef != "" || ssh.OperatorIdentity || ssh.User != r.ClusterSSHUser || ssh.PrivateKeyRef == r.ClusterKeyRef {
 			return failure("lifecycle.unsupported", "core Ceph requires installed managed hosts and separate fleet and cluster SSH keys", "use the three-node libvirt Ceph example and distinct fleet and orchestration identities")
 		}
 		if len(r.Hosts) > 0 && ssh.PrivateKeyRef != r.Hosts[0].SSHKeyRef {
@@ -428,12 +428,12 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 		if len(h.Location) != 0 {
 			return failure("lifecycle.unsupported", "native host CRUSH locations require release qualification", "omit topology.nodes[].location for the core virtual profile")
 		}
-		h.Physical = provider.Spec().Has("baremetal")
+		h.Physical = substrate.RealizesPhysicalNICs(provider)
 		var err error
 		if h.Physical {
 			h.Devices, err = physicalDevices(cluster, name)
 		} else {
-			h.Devices, err = virtualDevices(provider, m, contextName)
+			h.Devices, err = virtualDevices(c, m, contextName)
 		}
 		if err != nil {
 			return err
@@ -651,14 +651,9 @@ func securityPolicy(c api.Catalog, spec api.Value, keyRef string) (*Security, er
 	return policy, nil
 }
 
-func virtualDevices(provider, m api.Object, contextName string) ([]Device, error) {
+func virtualDevices(c api.Catalog, m api.Object, contextName string) ([]Device, error) {
 	devices := []Device{}
-	profile := api.Value{}
-	for _, p := range provider.Spec().Get("libvirt", "machineProfiles").Items() {
-		if p.Get("name").Text() == m.Spec().Get("substrate", "profileRef").Text() {
-			profile = p
-		}
-	}
+	_, profile, _ := substrate.SelectedProfile(c, m)
 	dataDisks := profile.Get("dataDisks").Items()
 	presentations, valid := substrate.DataDiskPresentations(dataDisks)
 	if !valid {

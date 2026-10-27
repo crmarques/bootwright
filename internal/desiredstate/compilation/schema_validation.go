@@ -67,6 +67,12 @@ func validateReference(record *objectRecord, name string, shape *api.Shape, path
 	}
 	switch {
 	case matches == 0:
+		for _, declaration := range declarations {
+			if remedy, excluded := sink.excluded[declaration]; excluded {
+				sink.issue(record, api.Issue{Code: "api.reference", Field: path, Message: declaration + " is excluded by the Environment's cluster selection", Remediation: remedy + ", or correct the reference"})
+				return
+			}
+		}
 		sink.issue(record, api.Issue{Code: "api.reference", Field: path, Message: "no " + boundedList(kinds, " or ") + " named " + name + " is in the selected input",
 			Remediation: "declare " + boundedList(declarations, " or ") + ", add its file to the selection, or correct the reference"})
 	case matches > 1:

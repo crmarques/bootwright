@@ -10,13 +10,14 @@ The API validates this profile, but the KubeVirt realization and native port
 implementation remain [B87](../../../specs/milestones/m1.md#b87). Runtime
 planning refuses that unqualified provider. B88's pushed-media preparation
 alone does not make this profile runnable. Do not bypass the refusal.
-The explicit locally administered MACs are synthetic input facts, not a new
-MAC-allocation algorithm or qualification of B87's machine realization.
+The provider derives each interface's MAC from the context, Machine and
+interface name, so no Machine authors a MAC or an `interfaceBinding`
+([B87](../../../specs/milestones/m1.md#b87)).
 
 ## Host prerequisites
 
-Customize a private copy before any live rehearsal. All names, addresses,
-MACs and storage identifiers in this directory are documentation fixtures.
+Customize a private copy before any live rehearsal. All names, addresses
+and storage identifiers in this directory are documentation fixtures.
 The three profiles request 6 vCPU, 16 GiB memory and a 120 GiB root disk each;
 provide that capacity plus the host's own reserve and upload-image storage.
 The installer owns each guest OS (`provided: false`) and targets `/dev/vda`.

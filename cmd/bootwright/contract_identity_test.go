@@ -140,7 +140,7 @@ func contractRecipes() map[string]digestRecipe {
 			partPin(ceph.PhysicalRetirementImplementation)),
 		ceph.ExportImplementation: digestOf(partImplementation(ceph.ExportImplementation), partRequest(ceph.ExportVersion), partVersion(ceph.ExportEvidenceVersion)),
 	}
-	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
+	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsServerDefinition(), ntpserver.Definition()} {
 		recipes[definition.Implementation] = digestOf(partDomain("bootwright.infrastructureservices.managed-service-v1"), partImplementation(definition.Implementation),
 			partRequest(definition.Version), partPin(definition.Image), partPin(managedservice.ContentRootPrefix), partPin(managedservice.UnitPrefix))
 	}
@@ -186,7 +186,7 @@ func requestIdentities() map[string][]string {
 			"secondary.poolObject", "secondary.scope", "images[].name"},
 		ceph.ExportImplementation: {"cluster", "name", "scope", "principals"},
 	}
-	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
+	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsServerDefinition(), ntpserver.Definition()} {
 		identities[definition.Implementation] = service
 	}
 	return identities

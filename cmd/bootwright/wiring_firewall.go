@@ -9,7 +9,6 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/firewall"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
@@ -25,7 +24,7 @@ func controllerSockets(catalog api.Catalog, name string) ([]firewall.Socket, err
 	}
 	machine := selected.MachineName()
 	var sockets []firewall.Socket
-	for _, definition := range []managedservice.Definition{dnsserver.Definition(), ntpserver.Definition(), proxy.Definition()} {
+	for _, definition := range []managedservice.Definition{dnsServerDefinition(), ntpserver.Definition(), proxy.Definition()} {
 		requests, err := managedservice.NewCapability(definition, nil).Requests(catalog, machine, name)
 		if err != nil {
 			return nil, err

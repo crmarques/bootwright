@@ -108,23 +108,3 @@ containercluster_install_agent_reach_hint: >-
 containercluster_install_agent_unclassified_hint: >-
   this give-up is not one the installer can be resumed after, so the wait ran
   once and stopped. Read the installer output before repeating the apply.
-
-containercluster_install_agent_ports:
-  libvirt:
-    role: bootwright.core.substrate_libvirt_machine
-    result: substrate_libvirt_machine_port_result
-  baremetal:
-    role: bootwright.core.substrate_baremetal_machine
-    result: substrate_baremetal_machine_port_result
-
-containercluster_install_agent_pre_boot_bindings:
-  libvirt: bootwright.core.substrate_libvirt_machine
-  baremetal: bootwright.core.substrate_baremetal_machine
-
-containercluster_install_agent_boot_media_bindings:
-  libvirt: bootwright.core.substrate_libvirt_machine
-  baremetal: bootwright.core.substrate_baremetal_machine
-
-containercluster_install_agent_boot_disk_bindings:
-  libvirt: bootwright.core.substrate_libvirt_machine
-  baremetal: bootwright.core.substrate_baremetal_machine

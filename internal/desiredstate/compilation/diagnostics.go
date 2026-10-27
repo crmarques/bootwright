@@ -16,6 +16,7 @@ type diagnosticSink struct {
 	seen        map[diagnosticKey]bool
 	limited     bool
 	undecodable map[string]bool
+	excluded    map[string]string
 }
 
 // Comparable keys retain shared strings rather than re-encoding whole

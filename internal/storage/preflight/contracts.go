@@ -2,18 +2,10 @@ package preflight
 
 import (
 	"context"
-	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/machine"
-)
-
-const (
-	Passed       = "passed"
-	Failed       = "failed"
-	Unknown      = "unknown"
-	Pending      = "pending"
-	ProbeTimeout = 10 * time.Second
+	"github.com/crmarques/bootwright/internal/substrate/capacity"
 )
 
 type Graph interface {
@@ -38,11 +30,11 @@ func (r *Report) summarize() {
 	r.Summary = Summary{}
 	for _, check := range r.Checks {
 		switch check.Status {
-		case Passed:
+		case capacity.Passed:
 			r.Summary.Passed++
-		case Failed:
+		case capacity.Failed:
 			r.Summary.Failed++
-		case Pending:
+		case capacity.Pending:
 			r.Summary.Pending++
 		default:
 			r.Summary.Unknown++

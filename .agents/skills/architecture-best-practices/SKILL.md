@@ -29,6 +29,13 @@ its [conventions](../../../specs/index.md#conventions) own placement.
   format version: it names the code symbol that holds it, because a quoted
   literal drifts when the version moves. Literals already quoted give way to a
   code reference when their page is next edited.
+- A domain page whose capability has implementations states their selection
+  under three headings, adopted on the page's next edit: Selection (the
+  selector its implementations claim objects by, as
+  [implementation selection](../../../specs/architecture.md#implementation-selection)
+  requires), Implementations (each identity and the block families it
+  realizes) and Refusal table (each shape no implementation realizes, with its
+  reason and remedy).
 - Describe the smallest authorized slice through its observable outcome, owner,
   changed boundary and failure behavior. Add an interface or variation only at
   its first concrete consumer. Follow the

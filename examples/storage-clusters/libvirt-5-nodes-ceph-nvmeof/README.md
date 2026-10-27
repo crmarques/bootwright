@@ -24,8 +24,8 @@ example addresses, provider bridge and artifact references before use. The
 provider CPU must satisfy the IBM NVMe-oF requirement recorded in
 [storage coverage](../../../specs/storage-coverage.md). The six guests request
 30 vCPU and 70 GiB RAM, 340 GiB root disks and 300 GiB data disks, before the
-provider reserve. The initiator's `nvme-cli` installation and I/O are operator
-acceptance steps; Bootwright does not install or connect an initiator.
+provider reserve. Bootwright installs the initiator's operating system only;
+its `nvme-cli` installation and I/O are operator acceptance steps.
 
 ## IBM entitlement
 
@@ -43,15 +43,12 @@ bootwright validate -f examples/storage-clusters/libvirt-5-nodes-ceph-nvmeof
 bootwright context init --name nvmeof-lab --input-dir examples/storage-clusters/libvirt-5-nodes-ceph-nvmeof
 ```
 
-The storage context selects five guests; its root closure excludes the
-unattached initiator. For the client, copy this example to a separate input
-directory and replace its `environment.yaml` with
-`environment-client.yaml.in`, which selects only the initiator and shared
-infrastructure declarations. Use a separate `nvmeof-initiator` context and an
-independently owned provider/network allocation: never let two contexts manage
-the same libvirt bridge, domain, or service. Alternatively supply an existing
-operator-owned RHEL initiator. The aggregate six-guest budget above includes
-that separately managed client. Its package installation is operator-run.
+The initiator is a Bootwright-installed Machine that is a node of no cluster,
+so the storage list retains it and this context installs it beside the five
+storage guests. To use an existing operator-owned RHEL initiator instead,
+remove the `initiator` Machine. A context created under the earlier guidance
+already realizes the initiator Machine, so remove the initiator Machine from
+one of the two inputs before applying. Its package installation is operator-run.
 
 ## Apply by stage
 
@@ -119,7 +116,7 @@ not infer them from the declared budgets:
 
 | Field | Result |
 | --- | --- |
-| Guests | unrun; declared 5 storage + 1 separate client |
+| Guests | unrun; declared 5 storage + 1 initiator |
 | Declared vCPU | 30 aggregate |
 | Declared RAM GiB | 70 aggregate |
 | Declared disk GiB | 340 root + 300 data |

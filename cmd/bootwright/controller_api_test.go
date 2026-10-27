@@ -93,7 +93,7 @@ spec:
 	})
 }
 
-func TestControllerRetentionRespectsResourceSelection(t *testing.T) {
+func TestControllerRetentionRespectsClusterSelection(t *testing.T) {
 	env := serviceEnvironment + "  containerClusters: [trust-cluster]\n"
 	inputs := trustInputs(env, "")
 	excludedLocal := strings.Replace(serviceHost, "name: service-host", "name: excluded-local", 1)
@@ -104,10 +104,6 @@ func TestControllerRetentionRespectsResourceSelection(t *testing.T) {
 	if _, found := state.Effective().Find(api.Machine, "excluded-local"); found {
 		t.Fatal("an unselected local Machine became a second controller")
 	}
-	filtered := trustInputs(env+"  resources: [cluster.yaml, dependencies.yaml]\n", "")
-	trustFailure(t, filtered, "api.reference", "$.spec.controller.machineRef")
-	included := trustInputs(env+"  resources: [cluster.yaml, dependencies.yaml, controller.yaml]\n", "")
-	compileAcceptance(t, included)
 }
 
 func TestExcludedClusterControllerMembershipDoesNotAffectSelectedGraph(t *testing.T) {

@@ -126,11 +126,12 @@ func Port(spec api.Value, identity string) (int, error) {
 	return int(value), nil
 }
 
-// ManagedObjects lists the managed objects of one kind in canonical name order.
-func ManagedObjects(catalog api.Catalog, kind api.Kind) []api.Object {
+// ManagedObjects lists, in canonical name order, the managed objects of the
+// definition's kind whose spec.implementation selects it.
+func ManagedObjects(catalog api.Catalog, definition Definition) []api.Object {
 	var found []api.Object
-	for _, object := range catalog.OfKind(kind) {
-		if object.Spec().Get("management").Text() == "managed" {
+	for _, object := range catalog.OfKind(definition.Kind) {
+		if definition.Selects != "" && object.Spec().Get("management").Text() == "managed" && object.Spec().Get("implementation").Text() == definition.Selects {
 			found = append(found, object)
 		}
 	}

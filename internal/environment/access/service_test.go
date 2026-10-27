@@ -87,7 +87,7 @@ func TestClusterSessionsOpenTheSelectedNodesMachine(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			graph, sessions := &fixedGraph{catalog: sessionCatalog(tt.nodes...)}, &recordingSessions{}
-			service := New(graph, sessions, func(context.Context) (string, error) { return "lab", nil })
+			service := New(graph, sessions, func(context.Context) (string, error) { return "lab", nil }).WithMembers(storageMembers)
 			result, err := service.ClusterExec(context.Background(), ClusterExecRequest{Names: []string{"ceph"}, Nodes: []string{tt.node}, Command: []string{"hostname", "--node", "rhel-03"}})
 			if err != nil {
 				t.Fatal(err)
@@ -129,7 +129,7 @@ func TestClusterSessionRefusalsOpenNothing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			sessions := &recordingSessions{}
-			service := New(&fixedGraph{catalog: sessionCatalog(tt.nodes...)}, sessions, nil)
+			service := New(&fixedGraph{catalog: sessionCatalog(tt.nodes...)}, sessions, nil).WithMembers(storageMembers)
 			_, err := service.ClusterExec(context.Background(), ClusterExecRequest{ContextName: "lab", Names: []string{tt.cluster}, Nodes: []string{tt.node}, Command: []string{"true"}})
 			if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != tt.code {
 				t.Fatalf("exec refusal = %v, want %s", err, tt.code)

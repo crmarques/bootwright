@@ -33,12 +33,12 @@ func requestFor(catalog api.Catalog, contextName, name, verb string, force bool,
 	if err != nil {
 		return Request{}, false, err
 	}
-	controller, placement, physical, err := controllerFor(catalog, object, contextName, controllerMachine, realized)
+	arm, controller, placement, physical, err := controllerFor(catalog, object, contextName, controllerMachine, realized)
 	if err != nil {
 		return Request{}, false, err
 	}
 	return Request{
-		Controller: controller, Force: force,
+		Arm: arm, Controller: controller, Force: force,
 		Identity:  Identity{Context: contextName, Object: object.Name()},
 		Placement: placement, Verb: verb, Version: Implementation,
 	}, physical, nil
@@ -67,23 +67,24 @@ func undeclared(catalog api.Catalog, contextName string, names []string) error {
 // substrate realizes is reached through the controller that realization
 // created, so it answers only while that realization stands; a physical
 // Machine's controller exists without Bootwright and is never asked about.
-func controllerFor(catalog api.Catalog, object api.Object, contextName, controllerMachine string, realized realizations) (Controller, machine.Placement, bool, error) {
+func controllerFor(catalog api.Catalog, object api.Object, contextName, controllerMachine string, realized realizations) (string, Access, machine.Placement, bool, error) {
 	target, err := managedTarget(catalog, object, contextName, controllerMachine)
 	if err != nil {
-		return Controller{}, machine.Placement{}, false, err
+		return "", Access{}, machine.Placement{}, false, err
 	}
 	if !target.Physical {
 		admitted, err := reachable(realized, object.Name())
 		if err != nil {
-			return Controller{}, machine.Placement{}, false, err
+			return "", Access{}, machine.Placement{}, false, err
 		}
 		if !admitted {
-			return Controller{}, machine.Placement{}, false, failure("access.unavailable",
+			return "", Access{}, machine.Placement{}, false, failure("access.unavailable",
 				"this Machine's emulated management controller is not realized",
 				"bootwright apply --context "+contextName+" realizes "+object.Identity()+" and its controller")
 		}
 	}
-	return endpointFor(target, controllerMachine)
+	access, placement, physical, err := endpointFor(target, controllerMachine)
+	return target.Port, access, placement, physical, err
 }
 
 // managedTarget resolves the realized target whose controller manages a
@@ -118,12 +119,12 @@ func reachable(realized realizations, name string) (bool, error) {
 	return false, nil
 }
 
-func endpointFor(target substrate.Target, controllerMachine string) (Controller, machine.Placement, bool, error) {
+func endpointFor(target substrate.Target, controllerMachine string) (Access, machine.Placement, bool, error) {
 	placement, err := machine.PlacementFor(target.PlacementMachine, controllerMachine)
 	if err != nil {
-		return Controller{}, machine.Placement{}, false, err
+		return Access{}, machine.Placement{}, false, err
 	}
-	return Controller{
+	return Access{
 		CredentialsRef: target.Controller.CredentialsRef,
 		Endpoint:       target.Controller.Endpoint,
 		TLSVerify:      target.Controller.TLSVerify,

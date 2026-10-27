@@ -1,0 +1,106 @@
+package substrate
+
+import (
+	"slices"
+	"strconv"
+	"time"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
+)
+
+type facts struct {
+	delivery         string
+	accessCredential bool
+	bridgedGuests    bool
+	tools            []string
+}
+
+var armFacts = map[string]facts{
+	ArmBaremetal: {delivery: DeliveryFetch, accessCredential: true},
+	ArmLibvirt:   {delivery: DeliveryFetch, bridgedGuests: true},
+	ArmVSphere:   {delivery: DeliveryFetch, tools: []string{"govc"}},
+	ArmKubeVirt:  {delivery: DeliveryPush, tools: []string{"virtctl"}},
+}
+
+func DeliveryOf(arm string) string {
+	if fact, ok := armFacts[arm]; ok {
+		return fact.delivery
+	}
+	return DeliveryFetch
+}
+
+func ControllerCredentialIsAccess(arm string) bool { return armFacts[arm].accessCredential }
+
+func BridgedGuests(arm string) bool { return armFacts[arm].bridgedGuests }
+
+func ProviderTools(provider api.Object) []string { return armFacts[Variant(provider)].tools }
+
+func IsRealized(provider api.Object) bool { return slices.Contains(Realized(), Variant(provider)) }
+
+func HostMachine(provider api.Object) string {
+	return provider.Spec().Get(ArmLibvirt, "machineRef").Text()
+}
+
+func NeedsHypervisorClient(provider api.Object) bool { return provider.Spec().Has(ArmLibvirt) }
+
+func NamesHostCluster(provider api.Object) bool {
+	return Variant(provider) == ArmKubeVirt && provider.Spec().Has(ArmKubeVirt, "hostClusterRef")
+}
+
+type ManagedNetwork struct{ Prefix, Bridge string }
+
+func ManagedAttachment(attachment api.Value) (ManagedNetwork, bool) {
+	arm := attachment.Get(ArmLibvirt)
+	if arm.Get("management").Text() != "managed" {
+		return ManagedNetwork{}, false
+	}
+	return ManagedNetwork{Prefix: arm.Get("address").Text(), Bridge: arm.Get("bridge").Text()}, true
+}
+
+func AttachmentMTU(attachment api.Value) (int64, bool) {
+	return attachment.Get(ArmLibvirt, "mtu").Int64()
+}
+
+type AddressClaim struct{ Path, Address string }
+
+func AddressClaims(provider api.Object) []AddressClaim {
+	var claims []AddressClaim
+	for index, entry := range provider.Spec().Get("networkAttachments").Items() {
+		if network, managed := ManagedAttachment(entry); managed {
+			claims = append(claims, AddressClaim{Path: "spec.networkAttachments[" + strconv.Itoa(index) + "]." + ArmLibvirt + ".address", Address: network.Prefix})
+		}
+	}
+	return append(claims, AddressClaim{Path: "spec." + ArmLibvirt + ".bmcEmulationDefaults.bindAddress",
+		Address: provider.Spec().Get(ArmLibvirt, "bmcEmulationDefaults", "bindAddress").Text()})
+}
+
+func SelectedProfile(catalog api.Catalog, machine api.Object) (api.Object, api.Value, bool) {
+	provider, found := catalog.Find(api.InfraProvider, machine.Spec().Get("substrate", "providerRef").Text())
+	arm := Variant(provider)
+	if !found || arm == "" {
+		return provider, api.Value{}, false
+	}
+	for _, profile := range provider.Spec().Get(arm, "machineProfiles").Items() {
+		if profile.Get("name").Text() == machine.Spec().Get("substrate", "profileRef").Text() {
+			return provider, profile, true
+		}
+	}
+	return provider, api.Value{}, false
+}
+
+func ClusterBounds(arms ...string) (fanout int, allowance, margin time.Duration) {
+	if len(arms) == 0 {
+		arms = []string{ArmLibvirt}
+	}
+	fanout = 16
+	for _, arm := range arms {
+		bounds, ok := MachineBoundsFor(arm)
+		if !ok {
+			continue
+		}
+		fanout = min(fanout, bounds.Fanout)
+		allowance = max(allowance, bounds.BootAllowance)
+		margin = max(margin, bounds.NodeMargin)
+	}
+	return fanout, allowance, margin
+}

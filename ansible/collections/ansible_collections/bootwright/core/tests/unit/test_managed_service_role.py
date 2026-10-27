@@ -1,9 +1,10 @@
-"""One role realizes every managed network service, keyed by the request's frozen kind.
+"""One role realizes every managed network service, keyed by the request's frozen implementation.
 
 The DNS server, NTP server and proxy were one role copied three times. The one
-role's argument spec admits exactly the frozen kinds and the one request
-version they share, and each kind selects only its own daemon configuration and
-unit templates from a fixed table, so every task is shared.
+role's argument spec admits exactly the frozen kinds, their implementation
+identities and the one request version they share, and each implementation
+selects only its own daemon configuration and unit templates from a fixed
+table, so every task is shared.
 
 The proxy refuses loopback, unspecified and link-local destinations and its
 cache manager before it admits any derived client, and it stops within
@@ -38,8 +39,8 @@ LOADER = DataLoader()
 PODMAN_STOP_TIMEOUT = 10
 
 
-def kinds():
-    return yaml.safe_load((ROLE / "vars" / "main.yml").read_text())["infra_managed_service_kinds"]
+def implementations():
+    return yaml.safe_load((ROLE / "vars" / "main.yml").read_text())["infra_managed_service_implementations"]
 
 
 def imported_roles(playbook):
@@ -64,22 +65,24 @@ def test_no_copied_managed_service_role_remains(retired):
     assert not (COLLECTION / "roles" / retired).exists()
 
 
-def test_the_argument_spec_keys_the_request_by_its_frozen_kind():
+def test_the_argument_spec_keys_the_request_by_its_frozen_implementation():
     specs = yaml.safe_load((ROLE / "meta" / "argument_specs.yml").read_text())["argument_specs"]
     assert sorted(specs) == sorted(OPERATIONS)
     options = [specs[operation]["options"] for operation in OPERATIONS]
     assert options[0] == options[1] == options[2]
     request = options[0]["bootwright_managed_service_request"]["options"]
-    assert request["kind"]["choices"] == sorted(kinds()) == ["DNSServer", "NTPServer", "Proxy"]
-    assert request["version"]["choices"] == ["managed-service-v3"]
+    assert request["kind"]["choices"] == ["DNSServer", "NTPServer", "Proxy"]
+    assert request["implementation"]["choices"] == sorted(implementations()) == [
+        "dns-server-dnsmasq-v1", "ntp-server-chrony-v1", "proxy-squid-v1"]
+    assert request["version"]["choices"] == ["managed-service-v4"]
 
 
-def test_each_kind_selects_only_its_own_templates():
+def test_each_implementation_selects_only_its_own_templates():
     selected = []
-    for kind in kinds().values():
-        selected += [kind["configuration_template"], kind["unit_template"]]
+    for row in implementations().values():
+        selected += [row["configuration_template"], row["unit_template"]]
     carried = sorted(path.name for path in (ROLE / "templates").iterdir())
-    assert len(selected) == len(set(selected)), "two kinds share a template: %s" % selected
+    assert len(selected) == len(set(selected)), "two implementations share a template: %s" % selected
     assert sorted(selected) == carried
 
 
@@ -143,8 +146,9 @@ def validate_of(tasks):
 
 
 MANAGED = {
-    "version": "managed-service-v3",
+    "version": "managed-service-v4",
     "kind": "DNSServer",
+    "implementation": "dns-server-dnsmasq-v1",
     "unit": "bootwright-lab-dns-resolver",
     "identity": {"context": "lab"},
     "contentRoot": "/var/lib/bootwright-services/lab/dns/resolver",
@@ -166,7 +170,7 @@ DESTROYS = [
 def variables(prefix, request):
     found = {prefix + "_request": request, prefix + "_digest": "0" * 64}
     if prefix == "bootwright_managed_service":
-        found["infra_managed_service_kinds"] = kinds()
+        found["infra_managed_service_implementations"] = implementations()
     return found
 
 

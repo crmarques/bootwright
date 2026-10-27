@@ -613,18 +613,29 @@ func derivesHardware(o api.Object, c api.Catalog) bool {
 	return found && substrate.Variant(provider) == substrate.ArmLibvirt
 }
 
-// validateDerivedHardware refuses each MAC and the management controller a
-// libvirt provider's Machine authors, since realization would ignore them.
-func validateDerivedHardware(o api.Object) []api.Issue {
+// derivesMACs is a Machine whose libvirt or KubeVirt provider derives its MACs.
+func derivesMACs(o api.Object, c api.Catalog) bool {
+	provider, found := Provider(o, c)
+	return found && (substrate.Variant(provider) == substrate.ArmLibvirt || substrate.Variant(provider) == substrate.ArmKubeVirt)
+}
+
+// validateDerivedMACs refuses each MAC such a Machine authors.
+func validateDerivedMACs(o api.Object, arm string) []api.Issue {
 	issues := []api.Issue{}
 	for i, nic := range o.Spec().Get("hardware", "nics").Items() {
 		if nic.Has("macAddress") {
 			path := fmt.Sprintf("spec.hardware.nics[%d].macAddress", i)
 			issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: "$." + path,
-				Message:     "a libvirt provider derives every interface's MAC from the context, Machine and interface names, so an authored MAC would be ignored",
+				Message:     "a " + arm + " provider derives every interface's MAC from the context, Machine and interface names, so an authored MAC would be ignored",
 				Remediation: "remove " + path + " from " + o.Identity()})
 		}
 	}
+	return issues
+}
+
+// validateDerivedHardware also refuses a libvirt Machine's management controller.
+func validateDerivedHardware(o api.Object) []api.Issue {
+	issues := validateDerivedMACs(o, "libvirt")
 	if o.Spec().Has("hardware", "management", "bmc") {
 		issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.hardware.management.bmc",
 			Message:     "a libvirt provider realizes this Machine's management controller as its emulated BMC, so an authored one would be ignored",
@@ -636,6 +647,9 @@ func validateDerivedHardware(o api.Object) []api.Issue {
 func validateHardware(o api.Object, c api.Catalog, variant string) []api.Issue {
 	if variant == substrate.ArmLibvirt {
 		return validateDerivedHardware(o)
+	}
+	if variant == substrate.ArmKubeVirt {
+		return validateDerivedMACs(o, "KubeVirt")
 	}
 	issues := []api.Issue{}
 	seen := map[string]bool{}
@@ -653,7 +667,7 @@ func validateHardware(o api.Object, c api.Catalog, variant string) []api.Issue {
 			issues = appendIssues(issues, invariant(path, "vSphere MAC must be in the manual assignment range", "set "+path[2:]+" to a MAC from 00:50:56:00:00:00 to 00:50:56:3f:ff:ff"))
 		}
 		for _, other := range c.OfKind(api.Machine) {
-			if other.Identity() == o.Identity() || derivesHardware(other, c) {
+			if other.Identity() == o.Identity() || derivesMACs(other, c) {
 				continue
 			}
 			for _, peer := range other.Spec().Get("hardware", "nics").Items() {

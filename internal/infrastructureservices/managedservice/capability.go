@@ -21,6 +21,7 @@ import (
 type Definition struct {
 	Kind           api.Kind
 	Implementation string
+	Selects        string
 	Version        string
 	Slug           string
 	Variable       string
@@ -123,7 +124,7 @@ func (c Capability) Requests(catalog api.Catalog, controllerMachine, contextName
 		return nil, Refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
 	}
 	var requests []Request
-	for _, object := range ManagedObjects(catalog, c.definition.Kind) {
+	for _, object := range ManagedObjects(catalog, c.definition) {
 		request, err := c.requestFor(catalog, object, controllerMachine, contextName)
 		if err != nil {
 			return nil, err
@@ -168,17 +169,18 @@ func (c Capability) requestFor(catalog api.Catalog, object api.Object, controlle
 		return Request{}, err
 	}
 	request := Request{
-		BindAddress: bind,
-		ContentRoot: ContentRoot(contextName, c.definition.Slug, name),
-		Egress:      egress,
-		Endpoints:   endpoints,
-		Identity:    Identity{Block: c.definition.BlockID(name), Context: contextName, Service: name},
-		Image:       image,
-		Kind:        string(c.definition.Kind),
-		Placement:   placement,
-		Port:        port,
-		Unit:        UnitName(contextName, c.definition.Slug, name),
-		Version:     c.definition.Version,
+		BindAddress:    bind,
+		ContentRoot:    ContentRoot(contextName, c.definition.Slug, name),
+		Egress:         egress,
+		Endpoints:      endpoints,
+		Identity:       Identity{Block: c.definition.BlockID(name), Context: contextName, Service: name},
+		Image:          image,
+		Implementation: c.definition.Implementation,
+		Kind:           string(c.definition.Kind),
+		Placement:      placement,
+		Port:           port,
+		Unit:           UnitName(contextName, c.definition.Slug, name),
+		Version:        c.definition.Version,
 	}
 	if c.definition.Extend != nil {
 		if err := c.definition.Extend(catalog, spec, &request); err != nil {

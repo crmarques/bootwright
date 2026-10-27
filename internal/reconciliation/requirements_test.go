@@ -137,3 +137,30 @@ func TestTheInversePreservesWhatEachBlockConsumes(t *testing.T) {
 		t.Fatalf("a block acquired an authorization through the inverse: %v", network.Consumes)
 	}
 }
+
+// A requirement naming a family waits only for that family's blocks, so a
+// consumer waits for the substrate's claim on a Machine without naming the
+// claim's block or waiting on every other block that realizes the Machine.
+func TestAFamilyRequirementResolvesOnlyThatFamilysBlocks(t *testing.T) {
+	claim := realizing("machine-metal-01", "Machine", "metal-01")
+	claim.Family = "substrate-machine"
+	install := realizing("os-install-metal-01", "Machine", "metal-01", ObjectRef{Kind: "Machine", Object: "metal-01"})
+	erase := realizing("physical-erase-metal-01", "Machine", "metal-01", ObjectRef{Kind: "Machine", Object: "metal-01", Family: "substrate-machine"})
+	erase.Family = "physical-erase"
+	plan, err := NewPlan(Apply, []BlockDefinition{claim, install, erase})
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	block, _ := plan.Block("physical-erase-metal-01")
+	if !slices.Equal(block.Dependencies, []string{"machine-metal-01"}) {
+		t.Fatalf("dependencies = %v", block.Dependencies)
+	}
+	installed, _ := plan.Block("os-install-metal-01")
+	if !slices.Equal(installed.Dependencies, []string{"machine-metal-01", "physical-erase-metal-01"}) {
+		t.Fatalf("an unqualified requirement lost a realizing block: %v", installed.Dependencies)
+	}
+	_, err = NewPlan(Apply, []BlockDefinition{install, erase})
+	if reported := diagnostics.Of(err); len(reported) != 1 || !strings.Contains(reported[0].Message, "Machine/metal-01 from its substrate-machine family") {
+		t.Fatalf("an unrealized family requirement = %#v", reported)
+	}
+}

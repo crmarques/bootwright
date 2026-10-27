@@ -9,20 +9,6 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-func storageChildKinds() []api.Kind {
-	var kinds []api.Kind
-	for _, kind := range api.Kinds() {
-		schema := api.Schema(kind)
-		if schema == nil {
-			continue
-		}
-		if field, found := schema.Field("clusterRef"); found && field.Shape != nil && slices.Contains(field.Shape.Reference, api.StorageCluster) {
-			kinds = append(kinds, kind)
-		}
-	}
-	return kinds
-}
-
 func declaredStatus(kind api.Kind, object api.Object, claimed, refused []string) RealizationStatus {
 	if !slices.Contains(claimed, string(kind)) || slices.Contains(refused, object.Identity()) {
 		return RealizationUnsupported
@@ -32,7 +18,7 @@ func declaredStatus(kind api.Kind, object api.Object, claimed, refused []string)
 
 func storageSummaries(catalog api.Catalog, claimed, refused []string) []ClusterSummary {
 	clusters := clusterSummaries(catalog, api.StorageCluster, claimed, refused)
-	kinds := storageChildKinds()
+	kinds := api.Children(api.StorageCluster)
 	for index, cluster := range clusters {
 		clusters[index].Resources = []ResourceSummary{}
 		declared, _ := catalog.Find(api.StorageCluster, cluster.Name)
@@ -113,7 +99,7 @@ func (s Service) storageResources(ctx context.Context, view View, result *Storag
 		return err
 	}
 	result.Clusters = realizedStorage(result.Clusters, realized)
-	kinds := storageChildKinds()
+	kinds := api.Children(api.StorageCluster)
 	for _, block := range plan.Blocks {
 		if block.Kind == string(api.StorageCluster) || slices.Contains(kinds, api.Kind(block.Kind)) {
 			result.Frozen = append(result.Frozen, block)

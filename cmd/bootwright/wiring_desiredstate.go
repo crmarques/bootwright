@@ -28,8 +28,13 @@ import (
 func wireCompiler() compilation.Compiler { return wireCompilerWithRegistry(addonpackages.Builtin()) }
 
 func wireCompilerWithRegistry(registry addons.Registry) compilation.Compiler {
-	selection := compilation.NewGraphSelector(addons.StorageAttachments, environment.Select)
-	return compilation.NewCompiler(yamlstream.Parser{}, selection.Select, compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate},
+	members := clusterMembers()
+	selection := compilation.NewGraphSelector(addons.StorageAttachments, func(catalog api.Catalog, attachments []environment.Attachment) environment.Selection {
+		return environment.Select(catalog, attachments, members)
+	})
+	return compilation.NewCompiler(yamlstream.Parser{}, selection.Select, compilation.Rules{Normalize: environment.Normalize, Validate: func(o api.Object, c api.Catalog) []api.Issue {
+		return environment.Validate(o, c, members)
+	}},
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidatePartial, Validate: secrets.Validate},
 		compilation.Rules{Normalize: func(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 			normalized, issues := addons.Normalize(o, c)
@@ -39,14 +44,18 @@ func wireCompilerWithRegistry(registry addons.Registry) compilation.Compiler {
 			return addons.ValidateWithRegistry(o, c, registry, addonFacts(c, o.Spec().Get("clusterRef").Text()))
 		}},
 		compilation.Rules{Normalize: customplaybooks.Normalize, ValidateAuthored: customplaybooks.ValidateAuthored, ValidatePartial: customplaybooks.ValidatePartial, Validate: customplaybooks.Validate},
-		compilation.Rules{RetiredField: storage.RetiredField, Normalize: storage.Normalize, ValidateAuthored: storage.ValidateAuthored, ValidatePartial: storage.ValidatePartial, Validate: storage.Validate},
+		compilation.Rules{RetiredField: storage.RetiredField, Normalize: storage.Normalize, ValidateAuthored: storage.ValidateAuthored, ValidatePartial: storage.ValidatePartial, Validate: storage.Validate, Members: storage.MemberMachines},
 		compilation.Rules{Normalize: machine.Normalize, NormalizationOrigins: machine.NormalizationOrigins, ValidateAuthored: machine.ValidateAuthored, ValidatePartial: machine.ValidatePartial, Validate: machine.Validate},
 		compilation.Rules{Normalize: substrate.Normalize, ValidateAuthored: substrate.ValidateAuthored, ValidatePartial: substrate.ValidatePartial, Validate: substrate.Validate},
 		compilation.Rules{Normalize: managedos.Normalize, ValidateAuthored: managedos.ValidateAuthored, ValidatePartial: managedos.ValidatePartial, Validate: managedos.Validate},
 		compilation.Rules{Normalize: containercluster.Normalize, ValidateAuthored: containercluster.ValidateAuthored, ValidatePartial: containercluster.ValidatePartial, Validate: func(o api.Object, c api.Catalog) []api.Issue {
 			return append(containercluster.Validate(o, c), containercluster.ValidateNetworkProviders(o, c, registry)...)
-		}},
+		}, Members: containercluster.MemberMachines},
 		compilation.Rules{Normalize: infrastructureservices.Normalize, ValidateAuthored: infrastructureservices.ValidateAuthored, ValidatePartial: infrastructureservices.ValidatePartial, Validate: infrastructureservices.Validate})
+}
+
+func clusterMembers() func(api.Object) (environment.Membership, bool) {
+	return environment.Members(containercluster.MemberMachines, storage.MemberMachines)
 }
 
 func addonFacts(c api.Catalog, cluster string) addons.ClusterFacts {

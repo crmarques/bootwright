@@ -22,7 +22,7 @@ type selectionRow struct {
 func TestSelectionRetainsExactlyWhatTheClosureTableNames(t *testing.T) {
 	for _, row := range selectionRows() {
 		t.Run(row.name, func(t *testing.T) {
-			selection := environment.Select(api.NewCatalog(row.objects), row.attachments)
+			selection := environment.Select(api.NewCatalog(row.objects), row.attachments, testClusterMembers)
 			kept := selectionIdentities(selection.Catalog.Objects())
 			if dropped := selectionDropped(t, selectionIdentities(row.objects), kept); !slices.Equal(dropped, sortedSelection(row.dropped)) {
 				t.Errorf("dropped = %v, want %v", dropped, sortedSelection(row.dropped))
@@ -49,11 +49,11 @@ func TestSelectionDoesNotDependOnInputOrder(t *testing.T) {
 			reversed := slices.Clone(row.objects)
 			slices.Reverse(reversed)
 			input := api.NewCatalog(reversed)
-			backward := environment.Select(input, row.attachments)
+			backward := environment.Select(input, row.attachments, testClusterMembers)
 			if !slices.Equal(selectionIdentities(input.Objects()), selectionIdentities(reversed)) {
 				t.Fatalf("selection changed its input catalog to %v", selectionIdentities(input.Objects()))
 			}
-			forward := environment.Select(api.NewCatalog(row.objects), row.attachments)
+			forward := environment.Select(api.NewCatalog(row.objects), row.attachments, testClusterMembers)
 			got := selectionIdentities(backward.Catalog.Objects())
 			if row.asGiven {
 				if !slices.Equal(got, selectionIdentities(reversed)) {
@@ -85,49 +85,51 @@ func selectionRows() []selectionRow {
 	withoutStorageOne := []string{"StorageCluster/s1", "Machine/s1-n", "StoragePlacementPolicy/s1-policy", "StoragePool/s1-rbd", "StoragePool/s1-meta", "StoragePool/s1-other", "StorageFilesystem/s1-fs", "StorageNFSExport/s1-nfs", "StorageExport/e1"}
 	withoutContainers := append([]string{"ContainerCluster/c0", "Machine/c0-n"}, withoutContainerOne...)
 	excludedContainerOne := "ContainerCluster/c1 api.selection $.metadata.name"
+	orphan := "Machine/orphan api.selection $.metadata.name"
+	omittedContainer, omittedStorage := "Environment/env api.invariant $.spec.containerClusters", "Environment/env api.invariant $.spec.storageClusters"
 	return []selectionRow{
 		{name: "1 no Environment", objects: selectionFixture(), asGiven: true},
 		{name: "2 two Environments", objects: selectionFixture(selectionEnvironment("env", "containerClusters", []string{"c0"}), selectionEnvironment("other")), asGiven: true},
 		{name: "3 both lists omitted", objects: selectionFixture(selectionEnvironment("env")), asGiven: true},
 		{
 			name: "4 one container cluster", objects: selectionFixture(selectionEnvironment("env", "containerClusters", []string{"c0"})),
-			dropped: withoutContainerOne, excludedContainer: []string{"c1"}, problems: []string{excludedContainerOne},
+			dropped: withoutContainerOne, excludedContainer: []string{"c1"}, problems: []string{excludedContainerOne, orphan},
 		},
 		{
 			name: "5 one storage cluster", objects: selectionFixture(selectionEnvironment("env", "storageClusters", []string{"s2"})),
 			dropped: append([]string{"Machine/orphan", "ClusterAddon/a3"}, withoutStorageOne...), excludedStorage: []string{"s1"},
-			problems: []string{"StorageCluster/s1 api.selection $.metadata.name"},
+			problems: []string{"StorageCluster/s1 api.selection $.metadata.name", orphan},
 		},
 		{name: "6 empty container list", objects: selectionFixture(selectionEnvironment("env", "containerClusters", []string{})), asGiven: true},
 		{
 			name: "7 unresolved container name", objects: selectionFixture(selectionEnvironment("env", "containerClusters", []string{"missing"})),
 			dropped: withoutContainers, excludedContainer: []string{"c0", "c1"},
-			problems: []string{"Environment/env api.reference $.spec.containerClusters[0]", "ContainerCluster/c0 api.selection $.metadata.name", excludedContainerOne},
+			problems: []string{"Environment/env api.reference $.spec.containerClusters[0]", "ContainerCluster/c0 api.selection $.metadata.name", excludedContainerOne, orphan},
 		},
 		{
 			name:    "8 duplicate container root",
 			objects: selectionFixture(selectionEnvironment("env", "containerClusters", []string{"c0"}), selectionContainer("c0", "c0-n")),
-			dropped: withoutContainerOne, excludedContainer: []string{"c1"}, problems: []string{excludedContainerOne},
+			dropped: withoutContainerOne, excludedContainer: []string{"c1"}, problems: []string{excludedContainerOne, orphan},
 		},
 		{
 			name:              "9 an attached export keeps its storage cluster's nodes but not its other children",
 			objects:           selectionFixture(selectionEnvironment("env", "containerClusters", []string{"c1"}, "storageClusters", []string{"s2"})),
 			attachments:       []environment.Attachment{c1e1},
 			dropped:           []string{"Machine/orphan", "ContainerCluster/c0", "Machine/c0-n", "StoragePool/s1-other", "ClusterAddon/a3"},
-			excludedContainer: []string{"c0"}, problems: []string{"ContainerCluster/c0 api.selection $.metadata.name"},
+			excludedContainer: []string{"c0"}, problems: []string{"ContainerCluster/c0 api.selection $.metadata.name", omittedStorage, orphan},
 		},
 		{
 			name:            "10 a full storage root keeps its attached container root",
 			objects:         selectionFixture(selectionEnvironment("env", "containerClusters", []string{"c0"}, "storageClusters", []string{"s1"})),
 			attachments:     []environment.Attachment{c1e1},
 			dropped:         []string{"Machine/orphan", "StorageCluster/s2", "Machine/s2-n", "StoragePool/s2-rbd", "StorageExport/e2", "ClusterAddon/a3"},
-			excludedStorage: []string{"s2"}, problems: []string{"StorageCluster/s2 api.selection $.metadata.name"},
+			excludedStorage: []string{"s2"}, problems: []string{"StorageCluster/s2 api.selection $.metadata.name", omittedContainer, orphan},
 		},
 		{
 			name:        "11 an attached container root keeps its other attached exports",
 			objects:     selectionFixture(selectionEnvironment("env", "containerClusters", []string{"c0"}, "storageClusters", []string{"s1"})),
 			attachments: []environment.Attachment{c1e1, c1e2},
-			dropped:     []string{"Machine/orphan", "ClusterAddon/a3"},
+			dropped:     []string{"Machine/orphan", "ClusterAddon/a3"}, problems: []string{omittedContainer, omittedStorage, orphan},
 		},
 		{
 			name:              "12 an attachment to an excluded root keeps nothing",
@@ -135,19 +137,19 @@ func selectionRows() []selectionRow {
 			attachments:       []environment.Attachment{c1e1},
 			dropped:           append(slices.Clone(withoutContainerOne), withoutStorageOne...),
 			excludedContainer: []string{"c1"}, excludedStorage: []string{"s1"},
-			problems: []string{excludedContainerOne, "StorageCluster/s1 api.selection $.metadata.name"},
+			problems: []string{excludedContainerOne, "StorageCluster/s1 api.selection $.metadata.name", orphan},
 		},
 		{
 			name:        "13 a storage root kept through an export keeps no other attached root",
 			objects:     selectionFixture(selectionEnvironment("env", "containerClusters", []string{"c0"}, "storageClusters", []string{"s1"})),
 			attachments: []environment.Attachment{c0e2, c1e2},
-			dropped:     withoutContainerOne, excludedContainer: []string{"c1"}, problems: []string{excludedContainerOne},
+			dropped:     withoutContainerOne, excludedContainer: []string{"c1"}, problems: []string{excludedContainerOne, omittedStorage, orphan},
 		},
 		{
 			name:    "14 an empty container list beside a storage selection selects as if omitted",
 			objects: selectionFixture(selectionEnvironment("env", "containerClusters", []string{}, "storageClusters", []string{"s2"})),
 			dropped: append([]string{"Machine/orphan", "ClusterAddon/a3"}, withoutStorageOne...), excludedStorage: []string{"s1"},
-			problems: []string{"StorageCluster/s1 api.selection $.metadata.name"},
+			problems: []string{"StorageCluster/s1 api.selection $.metadata.name", orphan},
 		},
 	}
 }
@@ -157,7 +159,7 @@ func TestStorageClosureRetainsSMBResources(t *testing.T) {
 		return selectionObject(api.StorageSMBResource, name, "clusterRef", cluster, "secrets", api.ListValue(selectionValue("path", "/auth/password", "secretRef", "smb-pass")), "native", selectionValue("resource_type", api.SMBJoinAuth))
 	}
 	objects := selectionFixture(selectionEnvironment("env", "storageClusters", []string{"s2"}), selectionObject(api.Secret, "smb-pass"), smb("s1-join", "s1"), smb("s2-join", "s2"))
-	kept := selectionIdentities(environment.Select(api.NewCatalog(objects), nil).Catalog.Objects())
+	kept := selectionIdentities(environment.Select(api.NewCatalog(objects), nil, testClusterMembers).Catalog.Objects())
 	for _, identity := range []string{"StorageSMBResource/s2-join", "Secret/smb-pass"} {
 		if !slices.Contains(kept, identity) {
 			t.Errorf("the storage closure dropped %s: %v", identity, kept)

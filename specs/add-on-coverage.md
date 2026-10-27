@@ -351,15 +351,12 @@ operator provides, its packages and its operator gate.
   contacts no cluster, and a fresh `destroy` completing by retirement. The
   public row summarizes these as the ledger defines it; the fields it does not
   carry stay in the private evidence archive.
-- **Versions.** When a slice moves a frozen request version, a row accepted on
-  an earlier build is repeated, and a context an earlier build applied is
-  destroyed with that build first. A package's rendering change moves only
-  its instance requests; a fix to the cluster objects role or modules alone
-  continues a live operation.
-- **Evidence, not approval.** A run proves its profile on its release only.
-  A release minor whose native mechanics differ gets its own row for the
-  affected profile and a registered specialization; no row or specialization
-  approves or refuses a release, a channel or a CSV.
+- **Versions and evidence.** The shared
+  [Versions and Evidence, not approval](../docs/acceptance.md#shared-qualification-rules)
+  rules apply, with two additions: a package's rendering change moves only its
+  instance requests, and a fix to the cluster objects role or modules alone
+  continues a live operation; and no row or specialization approves or
+  refuses a channel or a CSV either.
 - **Unverified native facts.** A fact the research left uncertain, or one only
   the earlier implementation observed, is re-verified by the first run that
   meets it and recorded in knowledge: `--ignore-not-found` classifying only

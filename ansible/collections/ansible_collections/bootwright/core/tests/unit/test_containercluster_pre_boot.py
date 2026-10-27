@@ -121,8 +121,10 @@ def test_each_arm_is_proved_before_the_insert_under_the_skip_and_the_boot_budget
                if step.get("ansible.builtin.include_tasks") == "port.yml"
                and step.get("vars", {}).get("containercluster_install_agent_port_operation") == "media_insert"]
     assert len(inserts) == 1 and bounded["block"].index(task) < inserts[0]
-    defaults = LOADER.load_from_file(str(ROLE / "defaults/main.yml"), trusted_as_template=True)
-    assert defaults["containercluster_install_agent_pre_boot_bindings"][arm] == ARMS[arm]
+    assert task[INCLUDE]["name"] == "bootwright.core.substrate_machine"
+    assert task["vars"]["bootwright_machine_arm"] == "{{ containercluster_install_agent_node.substrate }}"
+    dispatcher = LOADER.load_from_file(str(ROLE.parent / "substrate_machine/defaults/main.yml"), trusted_as_template=True)
+    assert dispatcher["substrate_machine_arms"][arm] == ARMS[arm]
 
 
 def test_a_physical_node_is_proved_against_the_nics_its_request_froze(tmp_path):

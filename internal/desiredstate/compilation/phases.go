@@ -7,6 +7,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/environment"
 )
 
 // run is one compilation in flight. The phases below advance it in the order
@@ -23,6 +24,14 @@ type run struct {
 	defaults    api.Value
 	selected    map[string]bool
 	records     []*objectRecord
+}
+
+func (r *run) members() func(api.Object) (environment.Membership, bool) {
+	owners := []func(api.Object) (environment.Membership, bool){}
+	for _, rules := range r.compiler.rules {
+		owners = append(owners, rules.Members)
+	}
+	return environment.Members(owners...)
 }
 
 // selectEnvironment reads the one Environment that selects this compilation,
@@ -56,8 +65,8 @@ func (r *run) selectEnvironment() bool {
 // decodeSelected reads every document the selected Environment admits, so a
 // diagnostic from a file outside the selection never reaches the report.
 func (r *run) decodeSelected() bool {
-	selected, excluded := selectResources(r.sources, r.documents, r.environment, r.ds)
-	r.selected, r.report.ExcludedResourceFiles = selected, excluded
+	selected := selectResources(r.sources, r.environment)
+	r.selected = selected
 	for _, d := range r.parsed {
 		if d.Source == nil || selected[d.Source.Path] {
 			r.ds.add(d)
@@ -136,6 +145,7 @@ func (r *run) closeGraph() {
 	selection := r.compiler.selectGraph(catalogOf(r.records))
 	r.report.ExcludedContainerClusters = SortedNames(selection.ExcludedContainerClusters)
 	r.report.ExcludedStorageClusters = SortedNames(selection.ExcludedStorageClusters)
+	r.ds.excluded = selection.Excluded
 	for _, problem := range selection.Problems {
 		if r.ds.undecodable[problem.Target] {
 			continue
@@ -176,7 +186,7 @@ func normalizationOrder() []api.Kind {
 // normalize applies each kind's normalizer in dependency order, recording where
 // a normalized value came from and what it reordered.
 func (r *run) normalize() bool {
-	validateIdentities(r.records, r.ds)
+	validateIdentities(r.records, r.ds, r.members())
 	byIdentity := make(map[string]*objectRecord, len(r.records))
 	for _, record := range r.records {
 		identity := record.object.Identity()

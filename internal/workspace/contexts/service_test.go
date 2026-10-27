@@ -12,6 +12,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/desiredstate/customplaybooks"
 	"github.com/crmarques/bootwright/internal/desiredstate/yamlstream"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/environment"
@@ -476,6 +477,10 @@ func TestInitAndUpdateNameTheirContextInTheRetiredFileSourceRemedy(t *testing.T)
 	}
 }
 
+// reservedPlaybook declares a disabled CustomPlaybook, which admission accepts
+// with one api.deferred warning.
+const reservedPlaybook = "apiVersion: bootwright.io/v1alpha1\nkind: CustomPlaybook\nmetadata: {name: reserved}\nspec:\n  enabled: false\n  gates: base\n  playbook: playbooks/site.yaml\n  target: {machines: [controller]}\n"
+
 func sourceFixture(directory string) desiredstate.Sources {
 	return desiredstate.Sources{Roots: []string{directory}, Files: []desiredstate.SourceFile{
 		desiredstate.NewSourceFile(filepath.Join(directory, "environment.yaml"), []byte(environmentInput)),
@@ -493,8 +498,9 @@ func service(t *testing.T, r *repository, input desiredstate.Sources) contexts.S
 func serviceWith(t *testing.T, r *repository, input desiredstate.Sources, confirmation contexts.Confirmer, presentation contexts.Presenter) contexts.Service {
 	t.Helper()
 	realCompiler := compilation.NewCompiler(yamlstream.Parser{}, nil,
-		compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate},
-		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, Validate: secrets.Validate})
+		compilation.Rules{Normalize: environment.Normalize, Validate: testEnvironmentValidate},
+		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, Validate: secrets.Validate},
+		compilation.Rules{ValidateAuthored: customplaybooks.ValidateAuthored, ValidatePartial: customplaybooks.ValidatePartial, Validate: customplaybooks.Validate})
 	reader := directoryReader(func(ctx context.Context, path string) (desiredstate.Sources, error) {
 		if r.locked || slices.Contains(r.calls, "transaction") || slices.Contains(r.calls, "view") || !slices.Contains(r.calls, "preflight") {
 			t.Fatal("input acquisition must follow read-only preflight and precede repository access")
@@ -555,10 +561,6 @@ func TestInitCompilesBeforeTransactionAndPublishesOriginalAcquisition(t *testing
 	r := newRepository(t)
 	input := sourceFixture("/synthetic/input")
 	env := environmentInput + `
-  resources:
-    - declared.yaml
-    - controller.yaml
-
   defaults:
     Secret:
       type: opaque
@@ -566,16 +568,15 @@ func TestInitCompilesBeforeTransactionAndPublishesOriginalAcquisition(t *testing
         contextStore: {}
 `
 	input.Files[0] = desiredstate.NewSourceFile(input.Files[0].Path(), []byte(env))
-	for _, item := range []struct{ file, name, spec string }{{"declared.yaml", "material", " {}"}, {"excluded.yaml", "excluded", "\n  type: unsupported"}} {
-		content := "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: " + item.name + "\n\nspec:" + item.spec + "\n"
-		input.Files = append(input.Files, desiredstate.NewSourceFile(filepath.Join(input.Roots[0], item.file), []byte(content)))
-	}
+	input.Files = append(input.Files,
+		desiredstate.NewSourceFile(filepath.Join(input.Roots[0], "declared.yaml"), []byte("apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: material\n\nspec: {}\n")),
+		desiredstate.NewSourceFile(filepath.Join(input.Roots[0], "reserved.yaml"), []byte(reservedPlaybook)))
 	input.Markers = []desiredstate.SourceFile{desiredstate.NewSourceFile("/synthetic/input/add-ons/_store/example/.bootwright-addon", []byte("example\n"))}
 	got, err := service(t, r, input).Init(context.Background(), contexts.InitRequest{Name: "example", InputDirectory: "/synthetic/input"})
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	if got.Counts != (compilation.Counts{FilesSeen: 4, ObjectsDecoded: 3}) || got.FilesCopied != 5 || len(got.Diagnostics) != 1 || got.Diagnostics[0].Source.Path != "/synthetic/input/excluded.yaml" {
+	if got.Counts != (compilation.Counts{FilesSeen: 4, ObjectsDecoded: 4}) || got.FilesCopied != 5 || len(got.Diagnostics) != 1 || got.Diagnostics[0].Source.Path != "/synthetic/input/reserved.yaml" {
 		t.Fatalf("admission result lost counts or warnings: %#v", got)
 	}
 	if !got.Context.Current || got.Context.Mode != contexts.Ready || got.Context.Name != "example" || !r.create || !reflect.DeepEqual(r.roots, []string{"/synthetic/input"}) {
@@ -586,7 +587,7 @@ func TestInitCompilesBeforeTransactionAndPublishesOriginalAcquisition(t *testing
 	}
 	published := r.published[r.registry.Contexts[0].Revision]
 	if !reflect.DeepEqual(published, input) || strings.Contains(string(published.Files[2].Bytes()), "source:") {
-		t.Fatal("publication changed authored bytes or omitted excluded acquisition")
+		t.Fatal("publication changed authored bytes or omitted part of the acquisition")
 	}
 }
 
@@ -1468,8 +1469,7 @@ func TestAnUpdateChecksItsControllerInputThroughTheTransaction(t *testing.T) {
 func TestAnIdenticalUpdateKeepsTheSelectedRevisionAndAsksNothing(t *testing.T) {
 	applied := `{"version":1,"operation":"applied","ownership":"retained"}`
 	excluding := sourceFixture("/synthetic/input")
-	excluding.Files[0] = desiredstate.NewSourceFile(excluding.Files[0].Path(), []byte(environmentInput+"\n  resources:\n    - controller.yaml\n"))
-	excluding.Files = append(excluding.Files, desiredstate.NewSourceFile("/synthetic/input/excluded.yaml", []byte("apiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: excluded}\nspec:\n  os: {provided: true}\n")))
+	excluding.Files = append(excluding.Files, desiredstate.NewSourceFile("/synthetic/input/reserved.yaml", []byte(reservedPlaybook)))
 	for name, row := range map[string]struct {
 		evidence string
 		input    desiredstate.Sources
@@ -1478,7 +1478,7 @@ func TestAnIdenticalUpdateKeepsTheSelectedRevisionAndAsksNothing(t *testing.T) {
 	}{
 		"pristine": {evidence: pristineEvidence, input: sourceFixture("/synthetic/input"), seen: 2},
 		"applied":  {evidence: applied, input: sourceFixture("/synthetic/input"), seen: 2},
-		"warned":   {evidence: applied, input: excluding, seen: 3, warned: []string{"/synthetic/input/excluded.yaml"}},
+		"warned":   {evidence: applied, input: excluding, seen: 3, warned: []string{"/synthetic/input/reserved.yaml"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := existingRepository(t)
@@ -1492,7 +1492,7 @@ func TestAnIdenticalUpdateKeepsTheSelectedRevisionAndAsksNothing(t *testing.T) {
 			}
 			var warned []string
 			for _, diagnostic := range got.Diagnostics {
-				if diagnostic.Severity != "warning" || diagnostic.Code != "api.selection" || diagnostic.Source == nil {
+				if diagnostic.Severity != "warning" || diagnostic.Code != "api.deferred" || diagnostic.Source == nil {
 					t.Fatalf("the identical update reported %#v", got.Diagnostics)
 				}
 				warned = append(warned, diagnostic.Source.Path)

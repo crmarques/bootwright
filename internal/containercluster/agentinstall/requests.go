@@ -198,19 +198,7 @@ var mediaBudgets = MediaBudgets{BuildSeconds: 1800}
 const minBootSeconds = 900
 
 func installBudgets(nodes int, arms ...string) InstallBudgets {
-	if len(arms) == 0 {
-		arms = []string{substrate.ArmLibvirt}
-	}
-	fanout, allowance, margin := 16, time.Duration(0), time.Duration(0)
-	for _, arm := range arms {
-		bounds, ok := substrate.MachineBoundsFor(arm)
-		if !ok {
-			continue
-		}
-		fanout = min(fanout, bounds.Fanout)
-		allowance = max(allowance, bounds.BootAllowance)
-		margin = max(margin, bounds.NodeMargin)
-	}
+	fanout, allowance, margin := substrate.ClusterBounds(arms...)
 	rounds := (nodes + fanout - 1) / fanout
 	return InstallBudgets{FanOut: fanout, RoundMarginSeconds: int(margin / time.Second),
 		BootSeconds: max(minBootSeconds, rounds*int(allowance/time.Second)), BootstrapSeconds: 5400, InstallSeconds: 5400}

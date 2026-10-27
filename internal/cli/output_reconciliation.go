@@ -81,13 +81,13 @@ func (p *LifecycleProgressPresenter) ReportProgress(ctx context.Context, event l
 	if p == nil || p.progress.out == nil || ctx.Err() != nil || event.Block == "" {
 		return
 	}
-	target, identity := "", ""
+	identity := ""
 	label, detail := event.Description, event.Detail
 	if p.model != nil {
 		p.model.report(event)
 		if event.Phase == lifecycle.EffectPhase {
-			if action, object, knownIdentity := p.model.action(event.Block); action != "" {
-				label, target, identity = action, object, knownIdentity
+			if action, object := p.model.action(event.Block); action != "" {
+				label, identity = action, object
 			}
 		}
 	}
@@ -98,7 +98,7 @@ func (p *LifecycleProgressPresenter) ReportProgress(ctx context.Context, event l
 		detail = event.Group
 	}
 	p.progress.report(ctx, progressEvent{
-		Heading: lifecyclePhaseHeading(event.Phase), Label: label, Target: target, Identity: identity, Detail: detail, Status: event.Status,
+		Heading: lifecyclePhaseHeading(event.Phase), Label: label, Identity: identity, Detail: detail, Status: event.Status,
 		Position: event.Position, Total: event.Total, Nested: event.Group != "",
 		Completed: event.Completed, Declared: event.Declared,
 	})

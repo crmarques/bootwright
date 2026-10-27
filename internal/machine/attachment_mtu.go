@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 func validateLibvirtAttachmentMTUs(o, provider api.Object, native api.Value) []api.Issue {
@@ -32,7 +33,7 @@ func validateLibvirtAttachmentMTUs(o, provider api.Object, native api.Value) []a
 			reference = entry.Get("attachmentRef").Text()
 		}
 		attachment, _ := namedValue(provider.Spec().Get("networkAttachments"), reference)
-		if mtu, ok := attachment.Get("libvirt", "mtu").Int64(); ok {
+		if mtu, ok := substrate.AttachmentMTU(attachment); ok {
 			return mtu
 		}
 		return 1500

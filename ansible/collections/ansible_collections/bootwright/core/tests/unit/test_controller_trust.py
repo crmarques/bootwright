@@ -41,7 +41,7 @@ PORT_BUNDLE = {"pre_boot": "substrate_baremetal_machine_target_ca", "boot_media"
 # The roles that reach a controller a bundle can anchor, and how many Redfish
 # module tasks each holds. Finding another number means the walk or a role
 # changed, and either must be looked at.
-BUNDLED = {"substrate_baremetal_machine": 13, "machine_power_read_redfish": 1, "substrate_libvirt_machine": 14}
+BUNDLED = {"substrate_baremetal_machine": 13, "substrate_libvirt_machine": 14}
 # The roles that make Redfish calls without a bundle, and why.
 UNBUNDLED = {
     "containercluster_media_agent": "it makes no Redfish call",
@@ -107,7 +107,7 @@ def test_every_redfish_call_passes_the_controller_bundle(role):
 @pytest.mark.parametrize("role, material, variable", [
     ("managedos_install_anaconda", "bootwright_os_install_material", "managedos_install_anaconda_ca_data"),
     ("substrate_baremetal_machine", "bootwright_substrate_physical_material", "substrate_baremetal_machine_ca_data"),
-    ("machine_power_redfish", "bootwright_machine_power_material", "machine_power_redfish_ca_data"),
+    ("machine_power", "bootwright_machine_power_material", "machine_power_ca_data"),
 ])
 def test_each_lifecycle_role_reads_the_bundle_it_was_handed(lookups, tmp_path, role, material, variable):
     bundle = tmp_path / "bmc-ca"
@@ -126,18 +126,17 @@ def test_each_lifecycle_role_reads_the_bundle_it_was_handed(lookups, tmp_path, r
                 assert Templar(loader=LOADER, variables=scope).template(arguments["ca_data"]) == expected
 
 
-# Each target of a reading reads its own bundle under its own variable, and a
-# target that declares none reads nothing.
+# Each target of a reading hands its machine port its own bundle's path under
+# its own variable, and a target that declares none hands it nothing.
 def test_each_read_target_reads_its_own_bundle(lookups, tmp_path):
-    [(_name, _module, arguments, _task)] = calls("machine_power_read_redfish")
+    [port] = [task["vars"]["bootwright_machine_port"] for task in walk(loaded(ROLES / "machine_power_read" / "tasks" / "read_one.yml"))
+              if "ansible.builtin.include_role" in task]
     first, second = tmp_path / "bmc-ca-0", tmp_path / "bmc-ca-1"
-    first.write_text("FIRST")
-    second.write_text("SECOND")
     material = {"controllerCA0": str(first), "controllerCA2": str(second)}
-    for item, expected in (({"caVariable": "controllerCA0"}, "FIRST"), ({"caVariable": "controllerCA2"}, "SECOND"),
-                           ({}, "")):
-        variables = {"bootwright_machine_power_read_material": material, "item": item}
-        assert Templar(loader=LOADER, variables=variables).template(arguments["ca_data"]) == expected
+    for target, expected in (({"caVariable": "controllerCA0"}, str(first)), ({"caVariable": "controllerCA2"}, str(second)),
+                             ({}, "")):
+        variables = {"bootwright_machine_power_read_material": material, "machine_power_read_target": target}
+        assert Templar(loader=LOADER, variables=variables).template(port["ca"]) == expected
 
 
 # Every include of the bare-metal port hands it the path of the controller's
@@ -169,12 +168,12 @@ def test_the_argument_specs_admit_the_frozen_bundle():
     controllers = {
         "substrate_baremetal_machine": spec("substrate_baremetal_machine")["apply"]["options"][
             "bootwright_substrate_physical_request"]["options"]["controller"],
-        "machine_power_redfish": spec("machine_power_redfish")["power"]["options"][
+        "machine_power": spec("machine_power")["power"]["options"][
             "bootwright_machine_power_request"]["options"]["controller"],
     }
-    targets = spec("machine_power_read_redfish")["read"]["options"]["bootwright_machine_power_read_request"][
+    targets = spec("machine_power_read")["read"]["options"]["bootwright_machine_power_read_request"][
         "options"]["targets"]
-    controllers["machine_power_read_redfish"] = targets["options"]["controller"]
+    controllers["machine_power_read"] = targets["options"]["controller"]
     for role, controller in controllers.items():
         assert controller["options"]["trustBundleRef"] == {"type": "str", "required": False}, role
     assert targets["options"]["caVariable"] == {"type": "str", "required": False}

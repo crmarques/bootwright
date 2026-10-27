@@ -1,0 +1,55 @@
+---
+# A reading observes every machine this host reaches a management controller
+# for and changes nothing, so it is safe to repeat. One controller that does
+# not answer leaves its own machine unknown rather than denying the reading
+# every other controller already gave.
+- name: Validate the frozen reading survey
+  ansible.builtin.assert:
+    that:
+      - bootwright_machine_power_read_request.version == 'machine-power-read-v3'
+      - bootwright_machine_power_read_request.targets | length > 0
+      - bootwright_machine_power_read_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.machine_power_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Report the power states being read
+  bootwright.core.machine_power_protocol:
+    phase: group
+    group: read-state
+    status: running
+  no_log: true
+
+- name: Start the readings empty
+  ansible.builtin.set_fact:
+    machine_power_read_readings: []
+  no_log: true
+
+# Each machine is read through its own arm's state_read entry point, which
+# leaves a controller that does not answer unknown rather than failing the
+# reading every other controller already gave.
+- name: Read the state each machine's substrate machine port reports
+  ansible.builtin.include_tasks: read_one.yml
+  loop: '{{ bootwright_machine_power_read_request.targets }}'
+  loop_control:
+    loop_var: machine_power_read_target
+    label: '{{ machine_power_read_target.object }}'
+
+- name: Publish the states that were read
+  bootwright.core.machine_power_protocol:
+    phase: group
+    group: read-state
+    status: ok
+  no_log: true
+
+- name: Publish bounded reading evidence
+  bootwright.core.machine_power_protocol:
+    phase: completed
+    outcome: unchanged
+    digest: '{{ bootwright_machine_power_read_digest }}'
+    readings: '{{ machine_power_read_readings }}'
+  no_log: true

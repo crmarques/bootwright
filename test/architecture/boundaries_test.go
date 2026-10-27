@@ -130,8 +130,9 @@ func applicationDependencies() map[string][]string {
 		// compiler that produced their input.
 		"internal/controller/clients": {"internal/controller/prerequisites", "internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
 		// The emulated BMC's image acquisition uses the host Machine's egress
-		// exactly as a managed service's does.
-		"internal/substrate/libvirt":   append(capabilityDependencies(), "internal/infrastructureservices/managedservice"),
+		// exactly as a managed service's does; the arm projects its Machines
+		// into the capacity budget's allocations.
+		"internal/substrate/libvirt":   append(capabilityDependencies(), "internal/infrastructureservices/managedservice", "internal/substrate/capacity"),
 		"internal/substrate/baremetal": {"internal/controller/prerequisites", "internal/reconciliation/lifecycle"},
 		// Storage derives its DVD package endpoint through ArtifactServer's
 		// published selection/path rules rather than reconstructing publication.
@@ -172,7 +173,7 @@ func applicationDependencies() map[string][]string {
 		"internal/infrastructureservices/ntpserver": {"internal/infrastructureservices/managedservice"},
 		"internal/infrastructureservices/proxy":     {"internal/infrastructureservices/managedservice"},
 		// Container preflight reuses storage's report and capacity port.
-		"internal/containercluster/preflight": {"internal/storage/preflight", "internal/substrate/capacity", "internal/infrastructureservices/dnsserver"},
+		"internal/containercluster/preflight": {"internal/storage/preflight", "internal/substrate/capacity"},
 		"internal/storage/preflight":          {"internal/substrate/capacity"},
 		// Cluster access resolves a name in the compiled graph before it reads
 		// the custody the install block filled.

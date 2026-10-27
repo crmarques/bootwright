@@ -60,7 +60,6 @@ func systemProgressClock() progressClock {
 type progressEvent struct {
 	Heading   string
 	Label     string
-	Target    string
 	Identity  string
 	Detail    string
 	Status    string
@@ -97,7 +96,6 @@ type progressPresenter struct {
 
 type progressStep struct {
 	label     string
-	target    string
 	identity  string
 	position  int
 	total     int
@@ -130,7 +128,6 @@ func (p *progressPresenter) report(ctx context.Context, event progressEvent) {
 		p.steps = append(p.steps, step)
 	}
 	step.ctx = ctx
-	step.target = event.Target
 	step.identity = event.Identity
 	if event.Declared > 0 {
 		step.completed, step.declared = event.Completed, event.Declared
@@ -384,7 +381,7 @@ func (p *progressPresenter) row(status string, step *progressStep, detail, suffi
 	token := progressStatusToken(status)
 	opts := presentationFor(p.out)
 	lead := displayIndent + styleState(token, opts) + strings.Repeat(" ", max(progressTokenWidth-len(token), 0)+displayGap)
-	subject := progressPosition(step.position, step.total) + lifecycleActionLabel(step.label, step.target, step.identity, opts)
+	subject := progressPosition(step.position, step.total) + lifecycleActionLabel(step.label, step.identity, opts)
 	if detail != "" {
 		subject += styleMuted(": "+escapeDisplayLine(detail), opts)
 		if step.declared > 0 {

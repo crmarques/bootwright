@@ -25,7 +25,7 @@ type Capability struct {
 	runner             Runner
 	identities         Identities
 	media              MediaRecords
-	retirementPolicies func(api.Catalog, string) ([]string, error)
+	retirementPolicies []RetirementPolicy
 }
 
 func New(runner Runner) Capability { return Capability{runner: runner} }
@@ -44,8 +44,8 @@ func (c Capability) WithMedia(records MediaRecords) Capability {
 	return c
 }
 
-func (c Capability) WithRetirementPolicies(reader func(api.Catalog, string) ([]string, error)) Capability {
-	c.retirementPolicies = reader
+func (c Capability) WithRetirementPolicies(policies ...RetirementPolicy) Capability {
+	c.retirementPolicies = slices.Clone(policies)
 	return c
 }
 
@@ -102,10 +102,11 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			ContentDigest:  digest,
 			Request:        canonical,
 		}
-		definition.Dependencies, err = c.retirementDependencies(catalog, request)
+		retirement, err := c.retirementRequires(catalog, request)
 		if err != nil {
 			return lifecycle.CapabilityPlan{}, err
 		}
+		definition.Requires = append(definition.Requires, retirement...)
 		// A machine its substrate created holds nothing until this installs
 		// something, and its disks are acknowledged when that substrate
 		// destroys them. A physical machine already holds whatever it holds,
@@ -132,17 +133,11 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	return plan, nil
 }
 
-func (c Capability) retirementDependencies(catalog api.Catalog, request Request) ([]string, error) {
-	if !request.Target.Physical || c.retirementPolicies == nil {
+func (c Capability) retirementRequires(catalog api.Catalog, request Request) ([]reconciliation.ObjectRef, error) {
+	if !request.Target.Physical {
 		return nil, nil
 	}
-	ids, err := c.retirementPolicies(catalog, request.Identity.Object)
-	if err != nil {
-		return nil, err
-	}
-	ids = slices.Clone(ids)
-	slices.Sort(ids)
-	return slices.Compact(ids), nil
+	return retirementRequirements(c.retirementPolicies, catalog, request.Identity.Object)
 }
 
 func installationRequires(needs Requirements, request Request) []reconciliation.ObjectRef {
@@ -730,7 +725,7 @@ func (c Capability) AccessCredentials(block reconciliation.Block) ([]string, err
 }
 
 func controllerAccessCredentials(target Target) []string {
-	if target.Substrate != substrate.ArmBaremetal || target.Controller.CredentialsRef == "" {
+	if !substrate.ControllerCredentialIsAccess(target.Substrate) || target.Controller.CredentialsRef == "" {
 		return nil
 	}
 	return []string{target.Controller.CredentialsRef}

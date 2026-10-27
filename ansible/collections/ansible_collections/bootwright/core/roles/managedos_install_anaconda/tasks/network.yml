@@ -363,9 +363,10 @@
 
     - name: Wait for the machine to power off
       ansible.builtin.include_role:
-        name: "{{ managedos_install_anaconda_state_read[bootwright_os_install_request.target.substrate] }}"
+        name: bootwright.core.substrate_machine
         tasks_from: state_read
       vars:
+        bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
         bootwright_machine_port: >-
           {{ managedos_install_anaconda_port_access | combine({'media': false,
              'retries': bootwright_os_install_request.budgets.reboot.attempts | int,
@@ -374,7 +375,7 @@
 
     - name: Retain the machine port answer
       ansible.builtin.set_fact:
-        managedos_install_anaconda_powered_off: "{{ vars[managedos_install_anaconda_port_result[bootwright_os_install_request.target.substrate]] }}"
+        managedos_install_anaconda_powered_off: "{{ substrate_machine_port_result }}"
       no_log: true
 
     # ansible-core keeps nothing of a failure under no_log but that it failed,
@@ -396,9 +397,10 @@
 
     - name: Boot the installed disk of a machine this substrate created
       ansible.builtin.include_role:
-        name: "{{ managedos_install_anaconda_boot_disk[bootwright_os_install_request.target.substrate] }}"
+        name: bootwright.core.substrate_machine
         tasks_from: boot_disk
       vars:
+        bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
         bootwright_machine_port:
           endpoint: '{{ managedos_install_anaconda_endpoint }}'
           verify: '{{ managedos_install_anaconda_verify }}'
@@ -406,18 +408,6 @@
           user: '{{ bootwright_os_install_material.controllerUser }}'
           password: '{{ bootwright_os_install_material.controllerPassword }}'
           power_on: true
-      when: bootwright_os_install_request.target.substrate in managedos_install_anaconda_boot_disk
-
-    # apply.yml refuses such a substrate before its first effect, which leaves
-    # this unreachable from there.
-    - name: Refuse a substrate this installation has no disk-boot binding for
-      ansible.builtin.fail:
-        msg: >-
-          Machine {{ bootwright_os_install_request.identity.object }} names substrate
-          {{ bootwright_os_install_request.target.substrate }}, which this installation has
-          no boot_disk binding for, so its installed disk was not booted after the network
-          change; plan the installation again with this release
-      when: bootwright_os_install_request.target.substrate not in managedos_install_anaconda_boot_disk
 
     - name: Wait for the restarted machine to answer on the key it reported
       ansible.builtin.include_tasks: guest.yml

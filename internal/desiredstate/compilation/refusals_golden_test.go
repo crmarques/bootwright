@@ -34,7 +34,7 @@ type refusalRow struct{ name, environment, probe string }
 
 func refusalCompiler() compilation.Compiler {
 	return compilation.NewCompiler(yamlstream.Parser{}, environmentSelection,
-		compilation.Rules{Normalize: environment.Normalize, Validate: environment.Validate},
+		compilation.Rules{Normalize: environment.Normalize, Validate: testEnvironmentValidate},
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidatePartial, Validate: secrets.Validate},
 		compilation.Rules{Normalize: managedos.Normalize, ValidateAuthored: managedos.ValidateAuthored, ValidatePartial: managedos.ValidatePartial, Validate: managedos.Validate},
 		compilation.Rules{RetiredField: storage.RetiredField, Normalize: storage.Normalize, ValidateAuthored: storage.ValidateAuthored, ValidatePartial: storage.ValidatePartial, Validate: storage.Validate},
@@ -320,7 +320,7 @@ func TestEmptyListRemedyFollowsWhetherTheListIsRequired(t *testing.T) {
 	loadBalancer := "apiVersion: bootwright.io/v1alpha1\nkind: LoadBalancer\nmetadata: {name: probe}\nspec:\n  management: external\n  bindAddresses: []\n"
 	for _, probe := range []struct{ name, environment, probe, field, remediation string }{
 		{"required", environmentYAML, loadBalancer, "$.spec.bindAddresses", "add at least one entry"},
-		{"optional", environmentYAML + "  resources: []\n", "", "$.spec.resources", "add at least one entry, or omit the field"},
+		{"optional", environmentYAML + "  containerClusters: []\n", "", "$.spec.containerClusters", "add at least one entry, or omit the field"},
 		{"kind defaults", environmentYAML + "  defaults:\n    LoadBalancer: {bindAddresses: []}\n", "", "$.spec.defaults.LoadBalancer.bindAddresses", "add at least one entry, or omit the field"},
 	} {
 		t.Run(probe.name, func(t *testing.T) {

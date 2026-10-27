@@ -17,9 +17,9 @@ One installation contract covers every substrate, as
 [managed-OS installation](managed-os.md#installation) does. Each node's
 [realized target](substrates.md#selection-and-refusal) supplies its substrate
 arm, the management controller to boot through, the NICs the node reports, and
-whether the machine is physical. The installation dispatches on the frozen arm
-through the substrate's port entry points and fails closed on an arm it has
-none for, before any media is inserted.
+whether the machine is physical. The installation hands the frozen arm to
+the substrate's machine port dispatcher, which fails closed on an arm it has no
+port for, before any media is inserted.
 
 ## Selection and refusal
 
@@ -520,7 +520,9 @@ watches the cluster install. It depends on the media block, and requires every
 node `Machine` and the managed name and time services the cluster and its
 nodes select, and the managed `Proxy` its installation proxy selects. An
 external one is used at its declared `address` and adds no requirement,
-because no block of this product realizes it.
+because no block of this product realizes it. The
+[reference edges](state-reconciliation.md#reference-edges) catalog lists both
+blocks' requirements.
 
 **One installation at a time.** Every installation block of a context holds the
 exclusive key `container-cluster-install`, so a context installs one cluster at

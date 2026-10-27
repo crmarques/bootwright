@@ -26,7 +26,7 @@ func severalCatalog() api.Catalog {
 func execSeveral(t *testing.T, names, nodes []string) (*recordingSessions, error) {
 	t.Helper()
 	sessions := &recordingSessions{}
-	service := New(&fixedGraph{catalog: severalCatalog()}, sessions, nil)
+	service := New(&fixedGraph{catalog: severalCatalog()}, sessions, nil).WithMembers(storageMembers)
 	_, err := service.ClusterExec(context.Background(), ClusterExecRequest{ContextName: "lab", Names: names, Nodes: nodes, Command: []string{"uptime"}})
 	return sessions, err
 }
@@ -142,7 +142,7 @@ func TestClusterExecSingleRefusalsKeepTheirMessages(t *testing.T) {
 
 func TestClusterRshStaysOneSessionOnTheSelectedNode(t *testing.T) {
 	sessions := &recordingSessions{}
-	service := New(&fixedGraph{catalog: severalCatalog()}, sessions, nil)
+	service := New(&fixedGraph{catalog: severalCatalog()}, sessions, nil).WithMembers(storageMembers)
 	if _, err := service.ClusterRsh(context.Background(), ClusterRshRequest{ContextName: "lab", Name: "beta", Node: "b2"}); err != nil {
 		t.Fatal(err)
 	}

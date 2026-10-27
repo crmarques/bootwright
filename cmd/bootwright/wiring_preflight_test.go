@@ -23,7 +23,7 @@ func TestStorageCapacityAdmissionSkipsTransitionsThatAllocateNoGuest(t *testing.
 	})
 	state, _ := compileAcceptance(t, sources)
 	catalog := state.Effective()
-	allocations, err := libvirtAllocations(catalog, "lab")
+	allocations, err := libvirt.CapacityAllocations(catalog, "lab")
 	if err != nil || len(allocations) == 0 {
 		t.Fatalf("allocations = %v, %v", allocations, err)
 	}
@@ -67,7 +67,7 @@ func TestContainerOnlyApplyProvesAllDeclaredLibvirtGuestsBeforeAdmission(t *test
 	if len(catalog.OfKind(api.StorageCluster)) != 0 {
 		t.Fatal("test must have no storage cluster")
 	}
-	allocations, err := libvirtAllocations(catalog, "lab")
+	allocations, err := libvirt.CapacityAllocations(catalog, "lab")
 	if err != nil || len(allocations) != 1 {
 		t.Fatalf("projection: %v %v", allocations, err)
 	}
@@ -80,10 +80,10 @@ func TestContainerOnlyApplyProvesAllDeclaredLibvirtGuestsBeforeAdmission(t *test
 		return []capacity.Check{{ID: "capacity.memory", Target: got[0].Host, Status: capacity.Failed, Reason: "declared guests exceed available memory"}}, nil
 	})
 	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Kind: libvirt.MachineKind, Object: allocations[0].Machine}}
-	if err := admitLibvirtCapacity(context.Background(), "lab", catalog, nil, []reconciliation.Block{block}, checker); err == nil {
+	if err := libvirt.AdmitCapacity(context.Background(), "lab", catalog, nil, []reconciliation.Block{block}, checker); err == nil {
 		t.Fatal("insufficient container-only host capacity admitted")
 	}
-	if err := admitLibvirtCapacity(context.Background(), "lab", catalog, nil, nil, checker); err != nil {
+	if err := libvirt.AdmitCapacity(context.Background(), "lab", catalog, nil, nil, checker); err != nil {
 		t.Fatal(err)
 	}
 	if called != 1 {

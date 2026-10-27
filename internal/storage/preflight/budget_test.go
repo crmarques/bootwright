@@ -32,7 +32,7 @@ func TestCapacityAggregatesSharedHostAndFilesystem(t *testing.T) {
 		t.Fatalf("shared budgets: %+v", rows)
 	}
 	for _, row := range rows {
-		if row.Status != Passed || row.Capacity.Deficit != 0 {
+		if row.Status != capacity.Passed || row.Capacity.Deficit != 0 {
 			t.Fatalf("exact fit: %+v", row)
 		}
 	}
@@ -42,7 +42,7 @@ func TestCapacityAggregatesSharedHostAndFilesystem(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, row := range rows {
-		if row.ID == "capacity.disk" && (row.Status != Failed || row.Capacity.Deficit != 1) {
+		if row.ID == "capacity.disk" && (row.Status != capacity.Failed || row.Capacity.Deficit != 1) {
 			t.Fatalf("deficit: %+v", row)
 		}
 	}
@@ -80,7 +80,7 @@ func TestCapacityNeverPassesUnprovedFactsOrReserve(t *testing.T) {
 				t.Fatal("dry-run observed a host")
 			}
 			for _, row := range rows {
-				if row.Status != Unknown {
+				if row.Status != capacity.Unknown {
 					t.Fatalf("unproved check passed: %+v", row)
 				}
 			}
@@ -115,7 +115,7 @@ func TestAllocatedCapacityNeedsLiveCreditAndNeverDoubleCharges(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, row := range rows {
-		if row.Status != Passed {
+		if row.Status != capacity.Passed {
 			t.Fatalf("reusable allocation double charged: %+v", row)
 		}
 	}
@@ -147,9 +147,9 @@ func TestFailedOrPartialMachineWithoutReuseProofUsesOnlyFreeCapacity(t *testing.
 		status   string
 		deficit  int64
 	}{
-		{"failed-before-domain-sufficient", Quantities{CPU: 7, Memory: 90, Disk: 900}, Passed, 0},
-		{"partial-disks-sufficient", Quantities{CPU: 7, Memory: 80, Disk: 800}, Passed, 0},
-		{"partial-disks-insufficient", Quantities{CPU: 7, Memory: 91, Disk: 901}, Failed, 1},
+		{"failed-before-domain-sufficient", Quantities{CPU: 7, Memory: 90, Disk: 900}, capacity.Passed, 0},
+		{"partial-disks-sufficient", Quantities{CPU: 7, Memory: 80, Disk: 800}, capacity.Passed, 0},
+		{"partial-disks-insufficient", Quantities{CPU: 7, Memory: 91, Disk: 901}, capacity.Failed, 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			rows, err := fixtureBudget().Check(context.Background(), []Allocation{{Machine: "attempted", Host: "host", Pool: "/pool", Allocated: true, Quantities: test.required}}, false)
@@ -178,11 +178,11 @@ func TestUnprovedReuseMakesADeficitUnknownNotFailed(t *testing.T) {
 		required Quantities
 		statuses map[string]string
 	}{
-		{"runtime-unproved-deficit", map[string]Quantities{"m1": {Disk: 900}}, Quantities{CPU: 7, Memory: 91, Disk: 900}, map[string]string{"capacity.memory": Unknown, "capacity.disk": Passed}},
-		{"runtime-unproved-ample", map[string]Quantities{"m1": {Disk: 900}}, Quantities{CPU: 7, Memory: 90, Disk: 900}, map[string]string{"capacity.memory": Passed, "capacity.disk": Passed}},
-		{"runtime-unproved-disk-deficit", map[string]Quantities{"m1": {Disk: 900}}, Quantities{CPU: 7, Memory: 90, Disk: 1801}, map[string]string{"capacity.memory": Passed, "capacity.disk": Failed}},
-		{"config-unproved-deficit", nil, Quantities{CPU: 7, Memory: 91, Disk: 901}, map[string]string{"capacity.memory": Unknown, "capacity.disk": Unknown}},
-		{"config-unproved-ample", nil, Quantities{CPU: 7, Memory: 90, Disk: 900}, map[string]string{"capacity.memory": Passed, "capacity.disk": Passed}},
+		{"runtime-unproved-deficit", map[string]Quantities{"m1": {Disk: 900}}, Quantities{CPU: 7, Memory: 91, Disk: 900}, map[string]string{"capacity.memory": capacity.Unknown, "capacity.disk": capacity.Passed}},
+		{"runtime-unproved-ample", map[string]Quantities{"m1": {Disk: 900}}, Quantities{CPU: 7, Memory: 90, Disk: 900}, map[string]string{"capacity.memory": capacity.Passed, "capacity.disk": capacity.Passed}},
+		{"runtime-unproved-disk-deficit", map[string]Quantities{"m1": {Disk: 900}}, Quantities{CPU: 7, Memory: 90, Disk: 1801}, map[string]string{"capacity.memory": capacity.Passed, "capacity.disk": capacity.Failed}},
+		{"config-unproved-deficit", nil, Quantities{CPU: 7, Memory: 91, Disk: 901}, map[string]string{"capacity.memory": capacity.Unknown, "capacity.disk": capacity.Unknown}},
+		{"config-unproved-ample", nil, Quantities{CPU: 7, Memory: 90, Disk: 900}, map[string]string{"capacity.memory": capacity.Passed, "capacity.disk": capacity.Passed}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			b := fixtureBudget()
@@ -201,10 +201,10 @@ func TestUnprovedReuseMakesADeficitUnknownNotFailed(t *testing.T) {
 				if row.Status != want {
 					t.Fatalf("%s: %+v", row.ID, row)
 				}
-				if want == Failed && (row.Capacity.Deficit != 1 || row.Next != "increase available capacity or reduce the declared guest budget") {
+				if want == capacity.Failed && (row.Capacity.Deficit != 1 || row.Next != "increase available capacity or reduce the declared guest budget") {
 					t.Fatalf("proved disk shortfall not refused: %+v", row)
 				}
-				if want == Unknown && (row.Reason != "live provider inventory has not proved Machine m1's reusable allocation: the runtime process changed during observation" || row.Next != "repeat once the Machine's domain and process are stable" || row.Capacity.Deficit != 0) {
+				if want == capacity.Unknown && (row.Reason != "live provider inventory has not proved Machine m1's reusable allocation: the runtime process changed during observation" || row.Next != "repeat once the Machine's domain and process are stable" || row.Capacity.Deficit != 0) {
 					t.Fatalf("unproved deficit reported as a capacity refusal: %+v", row)
 				}
 			}
@@ -218,8 +218,8 @@ func TestUnprovedReuseInALaterPoolMakesTheSharedDeficitUnknown(t *testing.T) {
 		shared   bool
 		statuses map[string]string
 	}{
-		{"shared-filesystem", true, map[string]string{"host/capacity.memory": Unknown, "host:/a/capacity.disk": Unknown}},
-		{"separate-filesystems", false, map[string]string{"host/capacity.memory": Unknown, "host:/a/capacity.disk": Passed, "host:/b/capacity.disk": Unknown}},
+		{"shared-filesystem", true, map[string]string{"host/capacity.memory": capacity.Unknown, "host:/a/capacity.disk": capacity.Unknown}},
+		{"separate-filesystems", false, map[string]string{"host/capacity.memory": capacity.Unknown, "host:/a/capacity.disk": capacity.Passed, "host:/b/capacity.disk": capacity.Unknown}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			b := fixtureBudget()
@@ -248,7 +248,7 @@ func TestUnprovedReuseInALaterPoolMakesTheSharedDeficitUnknown(t *testing.T) {
 				if row.Status != want {
 					t.Fatalf("%s %s: %+v", row.Target, row.ID, row)
 				}
-				if want == Unknown && (row.Reason != "live provider inventory has not proved Machine m1's reusable allocation: the domain definition changed during observation" || row.Next != "repeat once the Machine's domain and process are stable" || row.Capacity.Deficit != 0) {
+				if want == capacity.Unknown && (row.Reason != "live provider inventory has not proved Machine m1's reusable allocation: the domain definition changed during observation" || row.Next != "repeat once the Machine's domain and process are stable" || row.Capacity.Deficit != 0) {
 					t.Fatalf("unproved deficit reported as a capacity refusal: %+v", row)
 				}
 			}

@@ -4,7 +4,7 @@ func environmentSchema() *Shape {
 	return record(
 		required("domains", record(required("base", dns()), field("machines", dns()), field("clusters", dns()), field("containerClusters", dns()), field("storageClusters", dns()))),
 		field("sites", named(record(required("name", name()), field("description", text())))),
-		field("resources", nonemptyArray(set(nonempty()))), field("containerClusters", nonemptyArray(set(nonempty()))), field("storageClusters", nonemptyArray(set(nonempty()))),
+		field("containerClusters", nonemptyArray(set(nonempty()))), field("storageClusters", nonemptyArray(set(nonempty()))),
 		field("remoteMachinesAccessKey", record(required("keyRef", secret("sshKeyPair")))),
 		field("defaults", &Shape{Type: Mapping, KindDefaults: true}),
 		field("downloads", record(field("openshiftClientsMirror", lexical("mirror-url")), field("virtctlMirror", lexical("mirror-url")), field("helmMirror", lexical("mirror-url")))),

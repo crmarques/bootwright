@@ -125,8 +125,8 @@ One installation contract covers every substrate. The
 [realized target](substrates.md#selection-and-refusal) supplies the substrate
 arm, the management controller to boot through, the identity channel to prove
 completion with, and whether the machine is physical. The installation
-dispatches on the frozen arm and channel through the substrate's port entry
-points and fails closed on one it has no entry point for, as the
+hands the frozen arm to the substrate's machine port dispatcher, which fails
+closed on an arm it has no port for, as the
 [adapter boundary](#adapter-boundary) states.
 
 **Supported shape.** The profile's `anaconda` arm, with `packageSource` absent
@@ -1257,6 +1257,15 @@ changes refuse earlier frozen requests rather than silently reinterpret them.
 Source and host-independent tests do not qualify any physical model; B70's
 real-hardware identity, interruption and cache/readback gates remain unrun.
 
+**Retirement port.** A physical installation and its erase policy wait for
+every retirement the bound implementations name. Managed OS owns that port,
+`RetirementPolicy`, and composition aggregates one entry from every bound
+capability that implements it, so Managed OS names no storage implementation
+and no block identity: each entry answers with the API objects, and their
+capability family, whose retirement a Machine's content waits for. Erasure
+waits for the Machine's substrate claim by requiring the Machine from the
+substrate family, never by the claim's block identity.
+
 ### Physical installation
 
 An installation that delivers private material hands its management
@@ -1464,12 +1473,12 @@ under [the adapter result protocol](architecture.md#the-adapter-result-protocol)
 and the [process](security.md#process-boundary) and
 [Secret-material](security.md#sensitive-material) rules, composing the
 substrate's pre-boot, boot, disk-boot and identity entry points by fixed
-qualified name. The frozen target's substrate and identity channel select those
-entry points. A substrate or channel that selects none refuses as soon as the
+qualified name through the substrate's dispatcher. The frozen target's arm
+selects those entry points. An arm the dispatcher has no port for, or an
+identity channel the installation does not read, refuses as soon as the
 entrypoint has loaded, before the tree, the image or any private material is
-published and before the machine is read, given media or booted, and each
-dispatching task file refuses it again with a terminal fail after its
-dispatch. The
+published and before the machine is read, given media or booted, and the
+dispatcher refuses such an arm again at each entry point. The
 adapter renders the frozen Kickstart, invokes `mkksiso` and the archive tooling
 with exact argument vectors, the installer arguments reaching `mkksiso` as one
 `--cmdline` argument, and returns bounded structured evidence. The fleet

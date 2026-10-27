@@ -18,12 +18,12 @@ func (s Service) revealObjectUser(ctx context.Context, selected string, catalog 
 			"bootwright cluster info --context "+selected+" --name "+entry.Name+" lists its object users")
 	}
 	for _, user := range []api.Object{user} {
-		gatewayName := user.Spec().Get("objectGatewayRef").Text()
+		gatewayName := s.storage.ObjectUserGateway(user)
 		gateway, exists := catalog.Find(api.StorageObjectGateway, gatewayName)
 		if !exists || gateway.Spec().Get("clusterRef").Text() != entry.Name {
 			return failure("access.unavailable", "the object user's gateway does not belong to the selected cluster", "restore the context's original storage graph")
 		}
-		proved, err := s.ceph.ObjectUserProved(ctx, selected, catalog, user)
+		proved, err := s.storage.ObjectUserProved(ctx, selected, catalog, user)
 		if err != nil {
 			return err
 		}

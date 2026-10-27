@@ -613,12 +613,12 @@ func TestAnIdenticalReimportOverACompletedApplyPublishesNothing(t *testing.T) {
 // standard error, while it publishes nothing and asks nothing.
 func TestAnIdenticalReimportReportsItsWarningsOnce(t *testing.T) {
 	services, _, input, root := contextFixture(t)
-	addSecretInput(t, input, "environment.yaml", syntheticEnvironment+"  resources:\n    - controller.yaml\n")
-	addSecretInput(t, input, "excluded.yaml", strings.Replace(serviceHost, "name: service-host", "name: excluded-host", 1))
+	addSecretInput(t, input, "environment.yaml", syntheticEnvironment)
+	addSecretInput(t, input, "reserved.yaml", "apiVersion: bootwright.io/v1alpha1\nkind: CustomPlaybook\nmetadata: {name: reserved}\nspec:\n  enabled: false\n  gates: base\n  playbook: playbooks/site.yaml\n  target: {machines: [service-host]}\n")
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	before := stateFingerprint(t, root)
 	out, stderr := contextRun(t, services, 0, "context", "update", "--name", "alpha", "--input-dir", input)
-	warning := "  warning  api.selection\n    " + filepath.Join(input, "excluded.yaml")
+	warning := "  warning  CustomPlaybook/reserved\n    api.deferred\n    " + filepath.Join(input, "reserved.yaml")
 	if !strings.HasPrefix(out, "  ✓ Context unchanged\n") || strings.Count(stderr, "  warning  ") != 1 || !strings.HasPrefix(humanContent(stderr), humanContent(warning)) || !sameFingerprints(before, stateFingerprint(t, root)) {
 		t.Fatalf("the identical re-import lost or repeated its warning, or changed the store: %s %q", out, stderr)
 	}

@@ -61,7 +61,7 @@ func TestBoundPlaybooksCoverExactlyTheOfferedCapabilities(t *testing.T) {
 		}
 		// Day-2 power and inspection are bound without a lifecycle
 		// capability of their own.
-		if implementation == "machine-power-redfish-v2" || implementation == "machine-power-read-v2" {
+		if implementation == "machine-power-v3" || implementation == "machine-power-read-v3" {
 			continue
 		}
 		t.Errorf("%s is bound but no capability resolves it", implementation)

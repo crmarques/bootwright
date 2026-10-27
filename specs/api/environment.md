@@ -16,7 +16,6 @@ Environment fields emit in this order:
 | --- | --- | --- | --- | --- |
 | `spec.domains` | object | yes | — | Fleet DNS zones; closed shape below. |
 | `spec.sites` | array of objects | no | omitted | Estate site registry, keyed by `name`. |
-| `spec.resources` | array of strings | no | all discovered YAML | Non-empty ordered file/directory allow-list relative to the Environment file. |
 | `spec.containerClusters` | array of strings | no | all loaded container clusters | Non-empty unique `ContainerCluster` root selection. |
 | `spec.storageClusters` | array of strings | no | all loaded storage clusters | Non-empty unique `StorageCluster` root selection. |
 | `spec.remoteMachinesAccessKey` | object | conditional | — | Fleet key for the `bootwright` account installed on managed machines. |
@@ -137,63 +136,36 @@ Every site named by Machine placement, storage topology, stretch or service
 placement must resolve here. Without such uses the registry may be omitted;
 unused declared sites are valid and silent.
 
-## Resource and cluster selection
+## Cluster selection
 
-`spec.resources` refines the YAML universe acquired through the CLI and
-discovered under [the API input rules](input.md#discovery):
+The Environment's directory is the scope: every YAML file discovery acquires
+under [the API input rules](input.md#discovery) is selected, and the cluster
+lists below are the only narrowing. `spec.resources` is
+[retired](../api.md#retired-fields); an authored one refuses naming the
+cluster lists that replace it. For example, an Environment that installs
+`ocp-01` and its storage while a second declared cluster waits authors:
 
-- every value is non-empty, has no surrounding whitespace, is relative to the
-  Environment file, and remains within that file's directory after cleaning;
-- a value names a lowercase `.yaml`/`.yml` file or a directory containing at
-  least one discoverable such file; skipped directories, reserved payload
-  roots, and their descendants from [discovery](input.md#discovery) are
-  outside this universe, and directory traversal and selected-file ordering
-  are lexical;
-- the Environment file is always selected;
-- a listed YAML file is selected as a complete multi-document stream;
-- a listed file or directory must not be a symlink, descendant directory
-  symlinks are not followed, and a selected YAML symlink is an input error;
-- duplicate cleaned paths are invalid; and
-- omission selects every discovered YAML file, while an authored empty list is
-  invalid.
+```yaml
+spec:
+  containerClusters:
+    - ocp-01
+```
 
-A native add-on descriptor under the `_store` directory of `add-ons/` is the
-sole selection exception; no registration journey publishes one, and its
-removal is parked as [B771](../milestones/backlog.md#b771).
-`add-ons/_store/<name>/add-on.yaml` is selected when it contains exactly one
-`ClusterAddon/<name>` and the same directory contains the exact sibling basename
-`.bootwright-addon`. `<name>` is a DNS label of at most 63 ASCII bytes, and the
-marker's complete UTF-8 content is exactly `<name>` followed by one LF. A
-byte-order mark, carriage return, missing or additional LF, or any other
-leading, trailing, or internal whitespace is invalid. The directory segment,
-marker content, and `ClusterAddon.metadata.name` must be identical.
-
-Markers obey [input ceilings and processing order](input.md#fixed-input-ceilings).
-Open each relative to its held verified sibling directory with no-follow
-semantics; the opened handle must prove a stable regular file with link count
-one. A missing, linked, non-regular, unstable, oversized, malformed,
-mismatched, duplicate or ambiguous marker grants no exception. It grants
-selection only, never package authenticity or execution authority; see
-[the add-on boundary](../add-ons.md#trust-boundary).
+The input reader still reads, bounds and records the
+`add-ons/_store/<name>/.bootwright-addon` markers, although with every
+discovered file selected they grant nothing; their removal is parked as
+[B771](../milestones/backlog.md#b771).
 
 Not yet met: a hard-linked marker refuses the whole input read as
-`input.symlink` rather than only withholding the selection exception; tracked
-as [B771](../milestones/backlog.md#b771).
-
-An excluded-file warning identifies its relative path, Bootwright object
-identities and safe recovery guidance under the
-[validation-report contract](../cli/output.md#json-output). Only a path within
-the Environment directory can be suggested for `resources`; an outside file
-requires relocating its declaration first. Non-Bootwright files produce no
-such warning.
+`input.symlink`; tracked as [B771](../milestones/backlog.md#b771).
 
 `spec.containerClusters` and `spec.storageClusters` select effective cluster
-roots after resource decoding and reference-independent normalization. Each
+roots after decoding and reference-independent normalization. Each
 authored list must be non-empty, contain unique names, and resolve to its
 corresponding kind. Omission of either list selects every loaded root of that
 class. Objects outside the selected cluster-owned graph are absent from
-effective state, while resource-selected fleet-global objects and
-resource-selected shared services remain available. Each excluded cluster
+effective state, while fleet-global objects and shared services remain
+available. Each excluded cluster
 root produces a deterministic `validate` warning. These fields are selection
 lists, not `Ref` fields, and no CLI flag can further narrow them.
 
@@ -201,8 +173,8 @@ The cluster-selection closure is authoritative and independent of file layout:
 
 | Starting selection | Retained objects |
 | --- | --- |
-| Every selection | The selected `Environment`, its required controller Machine and that Machine's provider/provider-host closure, plus resource-selected `Entitlement`, `MachineImage`, `MachineInstallProfile`, `NetworkConfig`, `Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer`, `CustomPlaybook`, and `Secret` objects; every retained managed service also retains its placement Machine and that Machine's `InfraProvider` and provider-host Machine closure. |
-| One `ContainerCluster` | That root; its node Machines; the Machines' `InfraProvider` objects and any libvirt provider-host Machines; Machines hosting managed infrastructure services consumed by the root; bindings for the root plus their recursively expanded profiles and add-ons; and each `StorageExport` attached through a selected add-on's `storageExportAttachment` effect or named by a selected package's configuration, its referenced storage cluster, policy/pool/filesystem/gateway chain, and every `StorageNFSExport` on that retained storage cluster. |
+| Every selection | The selected `Environment`, its required controller Machine and that Machine's provider/provider-host closure, plus every `Entitlement`, `MachineImage`, `MachineInstallProfile`, `NetworkConfig`, `Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer`, `CustomPlaybook`, and `Secret` objects; every retained managed service also retains its placement Machine and that Machine's `InfraProvider` and provider-host Machine closure; and every Bootwright-installed Machine (`os.provided: false` with `installProfileRef`) that is neither a node nor a node's provider host of any declared cluster, as a root with its provider and provider-host closure. |
+| One `ContainerCluster` | That root; its node Machines; the Machines' `InfraProvider` objects and any libvirt provider-host Machines; each KubeVirt provider's `hostClusterRef` `ContainerCluster`, retained as a root with its own row; Machines hosting managed infrastructure services consumed by the root; bindings for the root plus their recursively expanded profiles and add-ons; and each `StorageExport` attached through a selected add-on's `storageExportAttachment` effect or named by a selected package's configuration, its referenced storage cluster, policy/pool/filesystem/gateway chain, and every `StorageNFSExport` on that retained storage cluster. |
 | One `StorageCluster` | That root and every storage child whose `clusterRef` names it, which is every `Storage*` kind except `StorageCluster`, `StorageExport` included; its node, provider, provider-host, and consumed-service Machines; and each `ContainerCluster` attached to one of those exports through a `storageExportAttachment` effect or a package's configuration, together with that container root's bindings, recursively expanded profiles, and add-ons. |
 
 Closures for all listed roots are unioned and then emitted in canonical API
@@ -211,30 +183,31 @@ retained through an attachment brings everything its own row names, its node
 Machines and its other attached exports and their chains included. A
 `StorageCluster` retained only through a `StorageExport` keeps its node
 Machines and their provider and provider-host closure, but not every object
-naming it and no other attached `ContainerCluster`. A cluster root retained
-this way is not excluded, but when an authored list omits it `validate` warns,
-naming the list to extend and stating that the root is retained with its export
-chain only. A retained `StorageReplication` retains both its clusters as full
-roots, and selecting either end of the relationship retains it;
-this widens nothing else, so a `StorageCluster` retained only through a
-`StorageExport` still keeps its node closure alone. A `Machine` or
-`InfraProvider` not reached by the rules above is excluded; when no excluded
-cluster root accounts for it, `validate` warns, naming it and stating that no
+naming it and no other attached `ContainerCluster`. When an attachment reaches
+a cluster root that its authored list omits, `validate` refuses with an error
+on that list naming the root and the export that reached it, because the
+selection of a completed apply cannot change
+([D153](../state-reconciliation.md#lifecycle-unit)); a cluster retained only
+through an attachment is therefore always refused by that omitted-root rule.
+A retained
+`StorageReplication` retains both its clusters as full roots, and selecting
+either end of the relationship retains it; this widens nothing else, so a
+`StorageCluster` retained only through a `StorageExport` still keeps its node
+closure alone. A `Machine` or `InfraProvider` not reached by the rules above is
+excluded; when no excluded cluster root accounts for it as a node, a node's
+provider or a provider host, `validate` warns, naming it and stating that no
 selection field retains it. A reference from any retained object to an excluded
 object is not an implicit retention edge unless a row above lists it; it is an
-unresolved-reference error that tells the author to make the selections
-consistent. Omission of both cluster lists skips this filtering and retains
-every resource-selected object.
+unresolved-reference error naming the selection field that would retain the
+target: an excluded cluster root names its own list, and any other excluded
+object names the authored lists. Omission of both cluster lists skips this filtering and retains
+every selected object.
 
 Not yet met: a package's configuration retains no export; tracked as
 [B760](../milestones/m4.md#b760).
 
-Not yet met: the closure follows no `StorageReplication` reference, so
-selecting the primary cluster retains the relationship without its peer and
-selecting only the peer retains no relationship; and `validate` warns neither
-for a cluster root retained only through an export nor for an excluded
-`Machine` or `InfraProvider`; tracked as
-[B812](../milestones/backlog.md#b812).
+Not yet met: admission refuses a KubeVirt provider, so the `hostClusterRef`
+row takes effect only once [B732](../milestones/m3.md#b732) lifts that refusal.
 
 ## Remote-machine access and install defaults
 
@@ -285,11 +258,11 @@ Defaults obey these rules in order:
    and references are checked after application. An unused entry must still be
    a valid partial spec; it creates no object or retention edge by itself.
 2. Apply `defaults.Environment`, if present, once to the selected Environment's
-   other spec fields before resource and cluster selection. That entry cannot
+   other spec fields before cluster selection. That entry cannot
    contain `defaults`. It cannot widen the acquired filesystem source universe
    or change the selected Environment identity. The authored defaults map is
    never itself defaulted or recursively reloaded.
-3. Apply each other kind entry once to each resource-selected object before
+3. Apply each other kind entry once to each selected object before
    provider, conventional, built-in, or reference-derived fallbacks.
    Explicit object values win over Environment values; the owning kind's
    existing fallback order applies only to values still absent.
@@ -379,8 +352,7 @@ authored source or copy material, and a retired `file` source it supplies is
 ## Controller Machine
 
 `spec.controller` is a required closed record containing only required
-`machineRef`, a scalar reference to one Machine in the resource-selected
-input. Kind defaults may supply the reference, but a conventional name,
+`machineRef`, a scalar reference to one Machine in the selected input. Kind defaults may supply the reference, but a conventional name,
 sole Machine, hostname, capability or local-access declaration never selects
 it implicitly. Controller egress belongs to the selected Machine's
 [proxy choice](machines.md#machine-proxy).
@@ -401,7 +373,7 @@ cluster's nodes; or select another controller Machine.
 
 The controller is retained even when no service consumes it or cluster
 selection excludes every other use. Its declaration must still be in the
-selected resource universe; a reference does not load excluded files. The
+selected input; a reference does not load a file outside it. The
 controller Machine's provider and provider-host closure is retained normally.
 These are Environment relationships, not a new Machine role, type, capability
 or API kind. A Machine may represent the controller in more than one context;

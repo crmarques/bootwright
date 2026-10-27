@@ -43,10 +43,6 @@ spec:
   substrate:
     providerRef: lab-kubevirt
     profileRef: kubevirt
-  hardware:
-    nics:
-      - name: eth0
-        macAddress: 02:00:00:00:10:01
   os:
     provided: false
     install:
@@ -62,9 +58,6 @@ spec:
       - name: ip
         address: 198.51.100.21/24
         interface: eth0
-    interfaceBinding:
-      - nicRef: eth0
-        interfaceName: eth0
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -76,10 +69,6 @@ spec:
   substrate:
     providerRef: lab-kubevirt
     profileRef: kubevirt
-  hardware:
-    nics:
-      - name: eth0
-        macAddress: 02:00:00:00:10:02
   os:
     provided: false
     install:
@@ -95,9 +84,6 @@ spec:
       - name: ip
         address: 198.51.100.22/24
         interface: eth0
-    interfaceBinding:
-      - nicRef: eth0
-        interfaceName: eth0
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -109,10 +95,6 @@ spec:
   substrate:
     providerRef: lab-kubevirt
     profileRef: kubevirt
-  hardware:
-    nics:
-      - name: eth0
-        macAddress: 02:00:00:00:10:03
   os:
     provided: false
     install:
@@ -128,9 +110,6 @@ spec:
       - name: ip
         address: 198.51.100.23/24
         interface: eth0
-    interfaceBinding:
-      - nicRef: eth0
-        interfaceName: eth0
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig

@@ -1,6 +1,6 @@
 implementation: ntp-server-chrony-v1
-content-digest: 826e9dcae8e4f7187d0e268d4403db8b6895770020b03daaca789a828e0a920a
-request-version: managed-service-v3
+content-digest: ebcd47d6f25f5c97d9be5f4d25b7dec00377ed5b209eb614e6e2eff39e4c4380
+request-version: managed-service-v4
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -35,6 +35,7 @@ request-schema:
   identity.context string
   identity.service string
   image string
+  implementation string
   ingressHosts []string omitempty
   kind string
   placement struct machine.Placement

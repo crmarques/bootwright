@@ -142,7 +142,7 @@ func TestColoredProgressFitsResizedTerminal(t *testing.T) {
 	width := 48
 	clock := newManualClock()
 	presenter := &progressPresenter{out: WithPresentation(&out, PresentationOptions{Color: "always"}), clock: clock.clock(), columns: func() int { return width }}
-	step := &progressStep{label: "Observe the declared machine readiness and prove completion", target: "example-machine", position: 1, total: 2}
+	step := &progressStep{label: "Observe the declared machine readiness and prove completion", identity: "example-machine", position: 1, total: 2}
 	for _, columns := range []int{48, 24, 80} {
 		width = columns
 		row := presenter.row("running", step, "waiting for evidence", "still running, 1m")

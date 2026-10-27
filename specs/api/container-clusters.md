@@ -469,9 +469,6 @@ There is no specialization. The rule is `generalTopology` in
 first differs, is a record with its own row in this table and a row of the
 [version-specialization catalog](../../.agents/knowledge/version-specializations.md).
 
-Not yet met: `topologyFor` looks a rule up by the authored `release.version` in
-admission instead of reading the frozen installer artifact at plan; tracked as
-[B811](../milestones/backlog.md#b811).
 `TestTopologyTableMatchesSpec` keeps this table and the code one, and
 `TestDocsVersionSpecializationCatalogMatchesRegistries` keeps the code and the
 catalog one.

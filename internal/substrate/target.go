@@ -19,6 +19,8 @@ const (
 	ArmKubeVirt  = "kubevirt"
 )
 
+const MachineFamily = "substrate-machine"
+
 // Arms lists every arm an InfraProvider may declare, in the order admission
 // reads them. Declaring more than one selects none.
 func Arms() []string { return []string{ArmBaremetal, ArmLibvirt, ArmVSphere, ArmKubeVirt} }
@@ -111,14 +113,15 @@ const (
 // the machine, which channel proves what it holds, whether it is operator-owned
 // hardware, and which Machine's host reaches that controller.
 //
-// Consumers read this and name no substrate, so an arm added later reaches
-// every one of them without changing any. Placement is named rather than
+// Consumers read this, the arm facts and the Port they dispatch on, and name no
+// arm, so an arm added here changes no consumer. Placement is named rather than
 // resolved because deriving it is application work over a Machine's access
 // declaration, which this domain does not own.
 type Target struct {
 	Delivery  string
 	Provider  string
 	Substrate string
+	Port      string
 	// Physical is an operator-owned machine that exists before Bootwright and
 	// outlives this context: its installation erases what is already there and
 	// its removal retains it.
@@ -162,7 +165,7 @@ func TargetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 		return Target{}, refusal("lifecycle.state", "this executable does not realize the substrate of "+provider.Identity(),
 			"place "+machine.Identity()+" on a libvirt or bare-metal provider")
 	}
-	target := Target{Provider: provider.Name(), Substrate: arm, Delivery: DeliveryFetch}
+	target := Target{Provider: provider.Name(), Substrate: arm, Port: arm, Delivery: DeliveryOf(arm)}
 	if arm == ArmBaremetal {
 		return physicalTarget(catalog, provider, machine, controllerMachine, target)
 	}
@@ -182,7 +185,7 @@ func authoredTarget(catalog api.Catalog, machine api.Object, controllerMachine s
 		return Target{}, refusal("api.reference", "the Environment's controller Machine is not in the selected graph",
 			"declare it or correct spec.controller.machineRef")
 	}
-	return Target{Physical: true, Delivery: DeliveryFetch, Controller: controller, PlacementMachine: host}, nil
+	return Target{Physical: true, Delivery: DeliveryFetch, Port: ArmBaremetal, Controller: controller, PlacementMachine: host}, nil
 }
 
 // authoredController reads the management controller a Machine declares. It is

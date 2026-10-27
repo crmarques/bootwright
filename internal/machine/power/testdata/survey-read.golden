@@ -6,6 +6,7 @@
   },
   "targets": [
     {
+      "arm": "baremetal",
       "controller": {
         "credentialsRef": "metal-bmc",
         "endpoint": "https://bmc.example.test/redfish/v1/Systems/1",
@@ -16,6 +17,7 @@
       "userVariable": "controllerUser0"
     },
     {
+      "arm": "baremetal",
       "controller": {
         "credentialsRef": "rack-bmc",
         "endpoint": "https://rack.example.test/redfish/v1/Systems/7",
@@ -26,5 +28,5 @@
       "userVariable": "controllerUser1"
     }
   ],
-  "version": "machine-power-read-v2"
+  "version": "machine-power-read-v3"
 }

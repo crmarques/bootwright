@@ -604,7 +604,9 @@ plan digests, qualification tier, prerequisites, command sequence, per-feature
 result, health/placement observations, client data checks, interruption and
 exact continuation, failover/recovery where applicable, removal result and
 operation-log digest. The [acceptance rules](milestones.md#completion-and-verification)
-govern owner acceptance. Local machine inventories, addresses, credentials,
+govern owner acceptance, and the shared
+[Versions and Evidence, not approval](../docs/acceptance.md#shared-qualification-rules)
+rules apply to every M2 row. Local machine inventories, addresses, credentials,
 firmware captures and test-site mappings are not part of the public profile.
 
 For [B484](milestones/m2.md#b484), each catalog profile P1 to P7 needs its own

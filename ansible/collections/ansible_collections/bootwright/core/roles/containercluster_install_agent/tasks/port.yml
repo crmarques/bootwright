@@ -1,17 +1,17 @@
 ---
-- name: Refuse a node without a substrate port binding
+- name: Refuse an operation the substrate machine port does not offer
   ansible.builtin.assert:
     that:
-      - containercluster_install_agent_node.substrate in containercluster_install_agent_ports
       - containercluster_install_agent_port_operation in ['state_read', 'media_insert', 'media_eject', 'power']
     quiet: true
-    fail_msg: The declared node has no substrate machine port binding; plan again with this release.
+    fail_msg: The node's operation is no substrate machine port entry point; plan again with this release.
 
 - name: Invoke the selected substrate machine port
   ansible.builtin.include_role:
-    name: '{{ containercluster_install_agent_ports[containercluster_install_agent_node.substrate].role }}'
+    name: bootwright.core.substrate_machine
     tasks_from: '{{ containercluster_install_agent_port_operation }}'
   vars:
+    bootwright_machine_arm: '{{ containercluster_install_agent_node.substrate }}'
     bootwright_machine_port: >-
       {{ containercluster_install_agent_port_access
          | combine(containercluster_install_agent_port_arguments[containercluster_install_agent_port_operation]) }}
@@ -42,7 +42,5 @@
 
 - name: Retain the substrate port answer for this node
   ansible.builtin.set_fact:
-    containercluster_install_agent_port_result: >-
-      {{ lookup('ansible.builtin.vars',
-         containercluster_install_agent_ports[containercluster_install_agent_node.substrate].result) }}
+    containercluster_install_agent_port_result: '{{ substrate_machine_port_result }}'
   no_log: true

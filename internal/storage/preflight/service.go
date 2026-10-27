@@ -9,6 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/substrate/capacity"
 )
 
 type Service struct {
@@ -90,7 +91,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 			continue
 		}
 		if cluster.Spec().Get("management").Text() == "external" {
-			result.Checks = append(result.Checks, Check{ID: "cluster.prerequisites", Target: cluster.Name(), Status: Unknown, Reason: "external cluster prerequisite observation is unavailable", Next: "verify the external cluster through its owner"})
+			result.Checks = append(result.Checks, Check{ID: "cluster.prerequisites", Target: cluster.Name(), Status: capacity.Unknown, Reason: "external cluster prerequisite observation is unavailable", Next: "verify the external cluster through its owner"})
 			continue
 		}
 		for _, node := range cluster.Spec().Get("ceph", "topology", "nodes").Items() {
@@ -138,14 +139,14 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 
 func (s Service) guestChecks(ctx context.Context, selected string, catalog api.Catalog, name string, owned map[string]machine.OwnershipState, request PreflightRequest) ([]Check, error) {
 	host, found := catalog.Find(api.Machine, name)
-	check := Check{ID: "host.prerequisites", Target: name, Status: Unknown, Next: "prove this Machine's installed OS and prerequisites before Ceph enrollment"}
+	check := Check{ID: "host.prerequisites", Target: name, Status: capacity.Unknown, Next: "prove this Machine's installed OS and prerequisites before Ceph enrollment"}
 	state, recorded := owned["Machine/"+name]
 	provided := host.Spec().Get("os", "provided").Bool()
 	switch {
 	case !found:
 		check.Reason = "the declared Machine is missing"
 	case !provided && s.Ownership != nil && (!recorded || state.Verb == machine.VerbApply && state.State == machine.BlockPending):
-		check.Status = Pending
+		check.Status = capacity.Pending
 		check.Reason = "the Machine has not been installed"
 		check.Next = "run bootwright apply --context " + selected + " --stage machines"
 	case !provided && (!recorded || !state.Realized()):
@@ -155,7 +156,7 @@ func (s Service) guestChecks(ctx context.Context, selected string, catalog api.C
 	case s.Guests == nil:
 		check.Reason = "live guest prerequisite observation is unavailable"
 	default:
-		probe, cancel := context.WithTimeout(ctx, ProbeTimeout)
+		probe, cancel := context.WithTimeout(ctx, capacity.ProbeTimeout)
 		checks, err := s.Guests.CheckGuest(probe, selected, host, request)
 		expired := probe.Err()
 		cancel()

@@ -8,20 +8,27 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/machine"
 )
 
 type Service struct {
 	graph     Graph
-	ceph      CephEvidence
+	storage   StorageEvidence
 	installs  InstallEvidence
 	keys      HostKeys
 	selection CurrentSelection
 	custody   Custody
+	members   func(api.Object) (environment.Membership, bool)
 }
 
-func New(graph Graph, ceph CephEvidence, installs InstallEvidence, keys HostKeys, selection CurrentSelection, custody Custody) Service {
-	return Service{graph: graph, ceph: ceph, installs: installs, keys: keys, selection: selection, custody: custody}
+func New(graph Graph, storage StorageEvidence, installs InstallEvidence, keys HostKeys, selection CurrentSelection, custody Custody) Service {
+	return Service{graph: graph, storage: storage, installs: installs, keys: keys, selection: selection, custody: custody}
+}
+
+func (s Service) WithMembers(members func(api.Object) (environment.Membership, bool)) Service {
+	s.members = members
+	return s
 }
 
 type ListClustersRequest struct {
@@ -138,7 +145,7 @@ func (s Service) read(ctx context.Context, contextName string) (string, api.Cata
 	if err := ctx.Err(); err != nil {
 		return "", api.Catalog{}, err
 	}
-	if s.graph == nil || s.ceph == nil || s.installs == nil || s.keys == nil {
+	if s.graph == nil || s.storage == nil || s.installs == nil || s.keys == nil {
 		return "", api.Catalog{}, availability.ErrNotImplemented
 	}
 	selected, err := machine.SelectedContext(ctx, s.selection, contextName)
@@ -254,7 +261,7 @@ func (s Service) resources(ctx context.Context, selected string, catalog api.Cat
 	if !slices.ContainsFunc(storages, func(cluster api.Object) bool { return !external(cluster) }) {
 		return nil, nil
 	}
-	return s.ceph.Resources(ctx, selected, catalog)
+	return s.storage.Resources(ctx, selected, catalog)
 }
 
 func (s Service) storageEntry(ctx context.Context, selected string, catalog api.Catalog, cluster api.Object, resources []Resource) (StorageEntry, error) {
@@ -307,14 +314,16 @@ func keyringAccess(selected, cluster string, resources []Resource) AccessCommand
 }
 
 func (s Service) sessionAccess(ctx context.Context, selected string, cluster api.Object) (AccessCommand, error) {
-	nodes := cluster.Spec().Get("ceph", "topology", "nodes").Items()
+	var nodes []environment.Member
+	if s.members != nil {
+		membership, _ := s.members(cluster)
+		nodes = slices.Clone(membership.Nodes)
+	}
 	if len(nodes) == 0 {
 		return AccessCommand{Status: StatusUnavailable, Reason: "the StorageCluster " + cluster.Name() + " declares no node to open a session on"}, nil
 	}
-	slices.SortStableFunc(nodes, func(a, b api.Value) int {
-		return strings.Compare(a.Get("name").Text(), b.Get("name").Text())
-	})
-	node, host := nodes[0].Get("name").Text(), nodes[0].Get("machineRef").Text()
+	slices.SortStableFunc(nodes, func(a, b environment.Member) int { return strings.Compare(a.Name, b.Name) })
+	node, host := nodes[0].Name, nodes[0].Machine
 	proved, err := s.keys.HostKeyProved(ctx, selected, host)
 	if err != nil {
 		return AccessCommand{}, err
@@ -327,17 +336,13 @@ func (s Service) sessionAccess(ctx context.Context, selected string, cluster api
 }
 
 func (s Service) cephEntry(ctx context.Context, selected string, catalog api.Catalog, cluster api.Object, resources []Resource) (ManagedCeph, error) {
-	ceph := cluster.Spec().Get("ceph")
-	entry := ManagedCeph{
-		Management: ManagementManaged, Release: ceph.Get("release").Text(),
-		AdminNode: ceph.Get("cephadm", "bootstrap", "node").Text(), Resources: []Resource{}, Endpoints: []Endpoint{},
-	}
-	if resources != nil {
-		entry.Resources = resources
-	}
-	proof, err := s.ceph.ManagedCeph(ctx, selected, catalog, cluster)
+	proof, err := s.storage.ManagedStorage(ctx, selected, catalog, cluster)
 	if err != nil {
 		return ManagedCeph{}, err
+	}
+	entry := ManagedCeph{Management: ManagementManaged, Release: proof.Release, AdminNode: proof.AdminNode, Resources: []Resource{}, Endpoints: []Endpoint{}}
+	if resources != nil {
+		entry.Resources = resources
 	}
 	reason := proof.Reason
 	if reason == "" && (proof.FSID == "" || entry.AdminNode == "") {
@@ -348,7 +353,6 @@ func (s Service) cephEntry(ctx context.Context, selected string, catalog api.Cat
 		entry.Remedy = "bootwright apply --context " + selected + " --stage clusters"
 		return entry, nil
 	}
-	root := "/var/lib/bootwright/ceph/" + proof.FSID
 	entry.Status, entry.FSID = StatusReady, proof.FSID
 	entry.Image = &proof.Image
 	entry.Specializations = proof.Specializations
@@ -358,8 +362,7 @@ func (s Service) cephEntry(ctx context.Context, selected string, catalog api.Cat
 	if proof.Endpoints != nil {
 		entry.Endpoints = proof.Endpoints
 	}
-	entry.CephCommand = "bootwright cluster exec --context " + selected + " --name " + cluster.Name() + " --node " + entry.AdminNode +
-		" -- sudo -n ceph --conf " + root + "/ceph.conf --keyring " + root + "/ceph.client.admin.keyring"
+	entry.CephCommand = proof.AdminCommand
 	return entry, nil
 }
 

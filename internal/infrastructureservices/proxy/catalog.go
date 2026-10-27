@@ -23,6 +23,7 @@ func Definition() managedservice.Definition {
 	return managedservice.Definition{
 		Kind:           api.Proxy,
 		Implementation: Implementation,
+		Selects:        "squid",
 		Version:        managedservice.RequestVersion,
 		Slug:           "proxy",
 		Variable:       managedservice.Variable,

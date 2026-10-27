@@ -24,13 +24,13 @@ func Normalize(object api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 	return object.WithSpec(spec), nil
 }
 
-func Validate(object api.Object, catalog api.Catalog) []api.Issue {
+func Validate(object api.Object, catalog api.Catalog, members func(api.Object) (Membership, bool)) []api.Issue {
 	if object.Kind() != api.Environment {
 		return nil
 	}
 	spec := object.Spec()
 	issues := fleetKeyIssues(spec.Get("remoteMachinesAccessKey", "keyRef"), catalog)
-	issues = append(issues, validateController(object, catalog)...)
+	issues = append(issues, validateController(object, catalog, Members(members))...)
 	if rescue := spec.Get("lifecycle", "rescue"); rescue.Present() {
 		// The schema keeps the declaration for a later journey; until one
 		// exists, no lifecycle could act on it.
@@ -86,7 +86,7 @@ func fleetKeyIssues(fleetKey api.Value, catalog api.Catalog) []api.Issue {
 	return append(issues, api.Issue{Code: "api.required", Field: field, Message: message, Remediation: "set spec.remoteMachinesAccessKey.keyRef to an sshKeyPair Secret"})
 }
 
-func validateController(environment api.Object, catalog api.Catalog) []api.Issue {
+func validateController(environment api.Object, catalog api.Catalog, members func(api.Object) (Membership, bool)) []api.Issue {
 	name := environment.Spec().Get("controller", "machineRef").Text()
 	controller, found := catalog.Find(api.Machine, name)
 	if !found || !api.ValidLexical("name", name) {
@@ -114,20 +114,15 @@ func validateController(environment api.Object, catalog api.Catalog) []api.Issue
 			add("only the controller Machine may declare local access; Machine/"+machine.Name()+" also declares access.local: true", "remove spec.access.local from "+machine.Identity())
 		}
 	}
-	for _, kind := range []api.Kind{api.ContainerCluster, api.StorageCluster} {
-		for _, cluster := range catalog.OfKind(kind) {
-			if !api.ValidLexical("name", cluster.Name()) {
-				continue
-			}
-			nodes := cluster.Spec().Get("nodes")
-			if kind == api.StorageCluster {
-				nodes = cluster.Spec().Get("ceph", "topology", "nodes")
-			}
-			for _, node := range nodes.Items() {
-				if node.Get("machineRef").Text() == name {
-					add("controller must remain outside cluster node membership; it is a node of "+cluster.Identity(), "remove "+controller.Identity()+" from the nodes of "+cluster.Identity()+", or set spec.controller.machineRef to a Machine outside cluster membership")
-					break
-				}
+	for _, cluster := range catalog.Objects() {
+		membership, bound := members(cluster)
+		if !bound || !api.ValidLexical("name", cluster.Name()) {
+			continue
+		}
+		for _, node := range membership.Nodes {
+			if node.Machine == name {
+				add("controller must remain outside cluster node membership; it is a node of "+cluster.Identity(), "remove "+controller.Identity()+" from the nodes of "+cluster.Identity()+", or set spec.controller.machineRef to a Machine outside cluster membership")
+				break
 			}
 		}
 	}

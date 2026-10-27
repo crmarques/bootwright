@@ -9,7 +9,6 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
@@ -194,7 +193,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, error) {
 		claimed, refused := s.capabilityKinds(), Identities(s.unsupportedRefusals(state))
 		result.Clusters = clusterSummaries(catalog, api.ContainerCluster, claimed, refused)
 		result.StorageClusters = storageSummaries(catalog, claimed, refused)
-		result.Shared = refusedServices(serviceSummaries(catalog, claimed), refused)
+		result.Shared = refusedServices(serviceSummaries(catalog, claimed, s.options.EffectBearing), refused)
 		result.Secrets = SecretSummary{Declared: len(catalog.OfKind(api.Secret))}
 	}
 	store := s.store(view)
@@ -467,21 +466,22 @@ func clusterSummaries(catalog api.Catalog, kind api.Kind, claimed, refused []str
 // serviceSummaries reports what a managed service's lifecycle would do. A kind
 // this executable claims is pending until its block proves otherwise;
 // everything else stays unsupported.
-func serviceSummaries(catalog api.Catalog, claimed []string) []ServiceSummary {
+func serviceSummaries(catalog api.Catalog, claimed []string, bearing EffectBearing) []ServiceSummary {
 	out := []ServiceSummary{}
+	if bearing == nil {
+		return out
+	}
 	for _, object := range catalog.Objects() {
 		kind := object.Kind()
-		if !infrastructureservices.IsService(kind) || object.Spec().Get("management").Text() != "managed" {
+		effect, bears := bearing(object)
+		if !bears || !effect.Shared {
 			continue
 		}
 		status := RealizationUnsupported
-		if slices.Contains(claimed, string(kind)) && object.Spec().Get("retention").Text() != "install-only" {
+		if slices.Contains(claimed, string(kind)) && !effect.InstallOnly {
 			status = RealizationPending
 		}
-		out = append(out, ServiceSummary{
-			Kind: string(kind), Name: object.Name(),
-			Machine: object.Spec().Get("machineRef").Text(), Status: status,
-		})
+		out = append(out, ServiceSummary{Kind: string(kind), Name: object.Name(), Machine: effect.Machine, Status: status})
 	}
 	slices.SortFunc(out, func(x, y ServiceSummary) int {
 		if order := strings.Compare(x.Kind, y.Kind); order != 0 {

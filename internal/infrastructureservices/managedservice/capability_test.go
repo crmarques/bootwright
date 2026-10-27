@@ -40,7 +40,7 @@ func controller() api.Object {
 
 func service(kind api.Kind, name string, extra ...api.FieldValue) api.Object {
 	fields := append([]api.FieldValue{
-		text("management", "managed"), text("machineRef", "controller"),
+		text("management", "managed"), text("machineRef", "controller"), text("implementation", "squid"),
 		text("bindAddress", "192.0.2.1"), field("port", api.IntegerValue("3128")),
 		field("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("addressRef", "ip")))),
 	}, extra...)
@@ -51,7 +51,7 @@ func catalogOf(objects ...api.Object) api.Catalog { return api.NewCatalog(object
 
 func testDefinition() Definition {
 	return Definition{
-		Kind: api.Proxy, Implementation: "proxy-squid-v1", Version: RequestVersion,
+		Kind: api.Proxy, Implementation: "proxy-squid-v1", Selects: "squid", Version: RequestVersion,
 		Slug: "proxy", Variable: Variable, Purpose: "proxy egress",
 		Image: "registry.example.test/squid@sha256:" + strings.Repeat("a", 64),
 		Extend: func(catalog api.Catalog, _ api.Value, request *Request) error {
@@ -139,7 +139,7 @@ func TestSSHPlacementRequiresKeyAndHostKeyAndClaimsOnItsHostAlone(t *testing.T) 
 	))
 	placed := service(api.Proxy, "lab-proxy")
 	placed = api.NewObject(api.Proxy, "lab-proxy", api.Value{}, api.MapValue(
-		text("management", "managed"), text("machineRef", "services"),
+		text("management", "managed"), text("machineRef", "services"), text("implementation", "squid"),
 		text("bindAddress", "192.0.2.9"), field("port", api.IntegerValue("3128")),
 		field("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("addressRef", "ip")))),
 	))
@@ -207,7 +207,7 @@ func TestReservationKeysCoverTheUnitPathAndSocket(t *testing.T) {
 	}
 	// A wildcard bind takes the port on every declared endpoint address too.
 	wildcard := api.NewObject(api.Proxy, "lab-proxy", api.Value{}, api.MapValue(
-		text("management", "managed"), text("machineRef", "controller"),
+		text("management", "managed"), text("machineRef", "controller"), text("implementation", "squid"),
 		text("bindAddress", "0.0.0.0"), field("port", api.IntegerValue("3128")),
 		field("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("addressRef", "ip")))),
 	))
@@ -796,5 +796,38 @@ func TestAnObservationReturnsTheRunnersFailure(t *testing.T) {
 	}
 	if logged != 0 {
 		t.Fatalf("the capability logged %d records, want none", logged)
+	}
+}
+
+// Two definitions of one kind each plan only the objects whose
+// spec.implementation selects them, so every object is planned exactly once
+// and its frozen request names the implementation the role keys its table by.
+func TestTwoDefinitionsOfOneKindPlanEachObjectExactlyOnce(t *testing.T) {
+	squid := testDefinition()
+	other := testDefinition()
+	other.Implementation, other.Selects, other.Slug = "proxy-other-v1", "other", "other-proxy"
+	catalog := catalogOf(controller(),
+		service(api.Proxy, "squid-proxy", field("port", api.IntegerValue("3128"))),
+		api.NewObject(api.Proxy, "other-proxy", api.Value{}, service(api.Proxy, "other-proxy").Spec().With("implementation", api.StringValue("other")).With("port", api.IntegerValue("3129"))))
+	planned := map[string][]string{}
+	for _, definition := range []Definition{squid, other} {
+		plan, err := NewCapability(definition, nil).Plan(context.Background(), lifecycle.PlanInput{
+			Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: testContext},
+			State: compilation.NewState(catalog, catalog, nil), Controller: "controller",
+		})
+		if err != nil {
+			t.Fatal(diagnostics.Of(err))
+		}
+		for _, block := range plan.Definitions {
+			request, err := DecodeRequest(block.Request, definition.Version)
+			if err != nil || request.Implementation != definition.Implementation || block.Implementation != definition.Implementation {
+				t.Fatalf("%s froze %+v (%v)", block.ID, request, err)
+			}
+			planned[block.Object] = append(planned[block.Object], definition.Implementation)
+		}
+	}
+	want := map[string][]string{"squid-proxy": {"proxy-squid-v1"}, "other-proxy": {"proxy-other-v1"}}
+	if len(planned) != len(want) || !slices.Equal(planned["squid-proxy"], want["squid-proxy"]) || !slices.Equal(planned["other-proxy"], want["other-proxy"]) {
+		t.Fatalf("planned = %v", planned)
 	}
 }

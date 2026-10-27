@@ -212,6 +212,8 @@ argument_specs:
   identity_read:
     short_description: Read the install marker and host key through the hypervisor's guest channel.
     options:
+      bootwright_machine_identity:
+        type: dict
       substrate_libvirt_machine_identity_uri:
         type: str
         required: true

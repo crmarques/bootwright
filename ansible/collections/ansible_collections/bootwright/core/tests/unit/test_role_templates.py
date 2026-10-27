@@ -49,11 +49,12 @@ def service(kind, slug, name, port, **fields):
         "endpoints": [{"address": "192.0.2.1:%d" % port, "name": name}],
         "identity": {"block": "service-" + name, "context": CONTEXT, "service": name},
         "image": "registry.example.test/%s@sha256:%s" % (slug, DIGEST),
+        "implementation": {"DNSServer": "dns-server-dnsmasq-v1", "NTPServer": "ntp-server-chrony-v1", "Proxy": "proxy-squid-v1"}[kind],
         "kind": kind,
         "placement": LOCAL,
         "port": port,
         "unit": "bootwright-%s-%s-%s" % (CONTEXT, slug, name),
-        "version": "managed-service-v3",
+        "version": "managed-service-v4",
     }
     request.update(fields)
     return request
@@ -175,10 +176,10 @@ def rendered_templates():
             if "{{" not in source:
                 found.add((role, source))
                 continue
-            selected = re.fullmatch(r"\{\{ infra_managed_service_kind\.(\w+) \}\}", source)
+            selected = re.fullmatch(r"\{\{ infra_managed_service_implementation\.(\w+) \}\}", source)
             assert selected, "%s renders an unrecognized templated source %r" % (path, source)
-            for kind in role_vars(role)["infra_managed_service_kinds"].values():
-                found.add((role, kind[selected.group(1)]))
+            for row in role_vars(role)["infra_managed_service_implementations"].values():
+                found.add((role, row[selected.group(1)]))
     return found
 
 
@@ -250,14 +251,14 @@ MANAGED_SERVICE = "infra_managed_service"
 
 
 @pytest.mark.parametrize("template", sorted(template for role, template in SCOPES if role == MANAGED_SERVICE))
-def test_a_managed_service_kind_selects_the_templates_its_daemon_writes(template):
+def test_a_managed_service_implementation_selects_the_templates_its_daemon_writes(template):
     variables = scope(MANAGED_SERVICE, SCOPES[MANAGED_SERVICE, template])
     templar = Templar(loader=LOADER, variables=variables)
-    kind = templar.template(variables["infra_managed_service_kind"])
+    kind = templar.template(variables["infra_managed_service_implementation"])
     configuration = templar.template(variables["infra_managed_service_configuration_path"])
     assert template in (kind["configuration_template"], kind["unit_template"]), (
-        "the %s kind selects %s and %s, not %s" % (
-            variables["bootwright_managed_service_request"]["kind"], kind["configuration_template"],
+        "the %s implementation selects %s and %s, not %s" % (
+            variables["bootwright_managed_service_request"]["implementation"], kind["configuration_template"],
             kind["unit_template"], template))
     assert configuration == "%s/%s" % (templar.template(variables["infra_managed_service_config_dir"]),
                                        kind["configuration"])

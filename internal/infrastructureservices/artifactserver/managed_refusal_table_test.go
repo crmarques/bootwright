@@ -74,8 +74,12 @@ func placementRowGraph(row string, place func(machine string) api.Object) (api.C
 
 func managedServiceOf(kind api.Kind) func(string) api.Object {
 	return func(machine string) api.Object {
-		return api.NewObject(kind, "lab-service", api.Value{}, api.MapValue(text("management", "managed"), text("machineRef", machine)))
+		return api.NewObject(kind, "lab-service", api.Value{}, api.MapValue(text("management", "managed"), text("machineRef", machine), selectedImplementation(kind)))
 	}
+}
+
+func selectedImplementation(kind api.Kind) api.FieldValue {
+	return text("implementation", map[api.Kind]string{api.Proxy: "squid", api.DNSServer: "dnsmasq", api.NTPServer: "chrony"}[kind])
 }
 
 func placedArtifactServer(machine string) api.Object {
@@ -87,7 +91,7 @@ func placedArtifactServer(machine string) api.Object {
 // only an ArtifactServer declares refuses its graph with exactly its reason and
 // remedy, and a row with no graph here fails.
 func TestManagedServiceRefusalTableMatchesUnsupported(t *testing.T) {
-	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(), ntpserver.Definition()} {
+	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(nil), ntpserver.Definition()} {
 		capability := managedservice.NewCapability(definition, nil)
 		for _, row := range refusalTable(t) {
 			if artifactOnlyRows[row.name] {

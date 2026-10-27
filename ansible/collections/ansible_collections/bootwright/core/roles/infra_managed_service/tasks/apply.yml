@@ -2,8 +2,8 @@
 - name: Validate the frozen managed service request
   ansible.builtin.assert:
     that:
-      - bootwright_managed_service_request.version == 'managed-service-v3'
-      - bootwright_managed_service_request.kind in infra_managed_service_kinds
+      - bootwright_managed_service_request.version == 'managed-service-v4'
+      - bootwright_managed_service_request.implementation in infra_managed_service_implementations
       - bootwright_managed_service_request.unit is string
       - bootwright_managed_service_request.contentRoot.startswith('/var/lib/bootwright-services/')
       - bootwright_managed_service_request.contentRoot.split('/') | length == 7
@@ -135,7 +135,7 @@
 
 - name: Publish the service configuration
   ansible.builtin.template:
-    src: '{{ infra_managed_service_kind.configuration_template }}'
+    src: '{{ infra_managed_service_implementation.configuration_template }}'
     dest: '{{ infra_managed_service_configuration_path }}'
     owner: root
     group: root
@@ -144,7 +144,7 @@
 
 - name: Publish the container unit definition
   ansible.builtin.template:
-    src: '{{ infra_managed_service_kind.unit_template }}'
+    src: '{{ infra_managed_service_implementation.unit_template }}'
     dest: '{{ infra_managed_service_unit_path }}'
     owner: root
     group: root

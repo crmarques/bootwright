@@ -578,7 +578,6 @@ func TestAProvedMachineCarriesItsIdentityToTheAdapter(t *testing.T) {
 			if len(result.Machines) != 1 || result.Machines[0].Machine != "metal" {
 				t.Fatalf("result = %+v", result)
 			}
-			test.want["substrate"] = "baremetal"
 			maps.Copy(test.want, hostValues)
 			if !maps.Equal(runner.seen.MaterialValues, test.want) {
 				t.Fatalf("material values = %v, want %v", runner.seen.MaterialValues, test.want)
@@ -682,7 +681,7 @@ func TestAnUnprovedMachineCarriesItsDeclaredMACSet(t *testing.T) {
 		Stop(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, SkipConfirmation: true}); err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]string{"substrate": "baremetal", "expectedMACsBase64": "NTI6NTQ6MDA6OWE6MWI6MDE="}
+	want := map[string]string{"expectedMACsBase64": "NTI6NTQ6MDA6OWE6MWI6MDE="}
 	maps.Copy(want, hostValues)
 	if !maps.Equal(runner.seen.MaterialValues, want) || runner.seen.Refusals["hardware-mismatch"] == nil {
 		t.Fatalf("material values = %v, refusals %v", runner.seen.MaterialValues, runner.seen.Refusals)
@@ -707,8 +706,11 @@ func TestAnEmulatedMachineConsultsNoPin(t *testing.T) {
 	if len(proved.asked) != 0 {
 		t.Fatalf("an emulated Machine asked for a pin: %v", proved.asked)
 	}
-	if !maps.Equal(runner.seen.MaterialValues, map[string]string{"substrate": "libvirt"}) {
+	if len(runner.seen.MaterialValues) != 0 {
 		t.Fatalf("material values = %v", runner.seen.MaterialValues)
+	}
+	if !strings.Contains(string(runner.seen.Canonical), `"arm":"libvirt"`) {
+		t.Fatalf("the frozen request carries no libvirt arm: %s", runner.seen.Canonical)
 	}
 }
 

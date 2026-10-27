@@ -139,8 +139,7 @@ lists, not the authored positions; tracked as
 
 Loading returns `filesSeen`, `objectsDecoded`, sorted diagnostics, and a state
 only when there are no errors. `filesSeen` counts every unique discovered YAML
-file, including files later excluded by `resources`, but not files in skipped
-directory subtrees. `objectsDecoded` counts
+file, but not files in skipped directory subtrees. `objectsDecoded` counts
 selected documents whose envelope, version, kind, field names, and YAML types
 decode into a registered kind, even if later required-value or semantic
 validation fails. A scan-only excluded document does not count as decoded.
@@ -149,7 +148,7 @@ Processing is deterministic:
 
 1. discover paths, scan for the selecting Environment, validate its partial
    kind-default entries, and apply its self-default entry once;
-2. resolve resource selection and parse every selected stream;
+2. select every discovered stream and parse it;
 3. strictly decode the envelope and registered kind;
 4. validate authored-only grammar that normalization would otherwise erase;
 5. apply Environment kind defaults once to each other selected object; recheck
@@ -313,6 +312,7 @@ tracked as [B826](milestones/backlog.md#b826).
 | `spec.controller.proxy` | The controller Machine's [proxy choice](api/machines.md#machine-proxy). |
 | `spec.proxy`, `spec.infraComponents`, `spec.registries`, `spec.componentImages`, `spec.trustedCAs` | The owning consumer or service object: registry policy, image pins and connection facts stay there, and installation trust belongs to each [ContainerCluster](api/container-clusters.md#additional-installation-trust). |
 | `spec.safety` | Nothing: lifecycle authorization is command intent, never desired state. |
+| `spec.resources` | Nothing: the Environment's directory is the scope, and `spec.containerClusters` and `spec.storageClusters` are the only [narrowing](api/environment.md#cluster-selection). |
 
 The unknown-field diagnostic for a listed path names its replacement. A retired
 path of another kind stays described on its owning page, which names its

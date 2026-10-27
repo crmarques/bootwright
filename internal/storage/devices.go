@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 func cleanAbsolute(value string) bool {
@@ -55,22 +56,8 @@ func (a *admission) osd(osd api.Value, field string, nodes []api.Value) {
 			if !ok {
 				continue
 			}
-			provider, ok := a.catalog.Find(api.InfraProvider, textOf(machine.Spec(), "substrate", "providerRef"))
-			if !ok {
-				continue
-			}
-			if provider.Spec().Has("baremetal") {
-				continue
-			}
-			for _, variant := range []string{"libvirt", "vsphere", "kubevirt"} {
-				if !provider.Spec().Has(variant) {
-					continue
-				}
-				for _, profile := range provider.Spec().Get(variant, "machineProfiles").Items() {
-					if textOf(profile, "name") == textOf(machine.Spec(), "substrate", "profileRef") && !profile.Has("tpm") {
-						a.invalid(field+".tpm2", "every covered virtual Machine profile must declare TPM support", "enable TPM support in every covered virtual Machine profile or remove tpm2")
-					}
-				}
+			if _, profile, found := substrate.SelectedProfile(a.catalog, machine); found && !profile.Has("tpm") {
+				a.invalid(field+".tpm2", "every covered virtual Machine profile must declare TPM support", "enable TPM support in every covered virtual Machine profile or remove tpm2")
 			}
 		}
 	}

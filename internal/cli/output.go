@@ -124,7 +124,6 @@ type validationResult struct {
 	Counts                    admissionCounts `json:"counts"`
 	ExcludedContainerClusters []string        `json:"excludedContainerClusters"`
 	ExcludedStorageClusters   []string        `json:"excludedStorageClusters"`
-	ExcludedResourceFiles     []string        `json:"excludedResourceFiles"`
 	Advisories                []diagnostic    `json:"advisories"`
 }
 
@@ -167,7 +166,6 @@ func writeValidation(out, errOut io.Writer, command string, report *compilation.
 		Counts:                    displayCounts(report.Counts),
 		ExcludedContainerClusters: displayNames(report.ExcludedContainerClusters),
 		ExcludedStorageClusters:   displayNames(report.ExcludedStorageClusters),
-		ExcludedResourceFiles:     displayNames(report.ExcludedResourceFiles),
 		Advisories:                advisories,
 	}
 	if jsonMode {

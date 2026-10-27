@@ -18,7 +18,7 @@ func TestAnUnclaimedSMBResourceRefusesTheOperation(t *testing.T) {
 		}
 	}
 	want := []Refusal{RefusalOf(smb, "no capability of this executable realizes the StorageSMBResource kind", unclaimedRemediation(smb.Identity()))}
-	if got := Unrealizable(catalog, claimed); !reflect.DeepEqual(got, want) {
+	if got := Unrealizable(catalog, claimed, domainEffects); !reflect.DeepEqual(got, want) {
 		t.Fatalf("unclaimed SMB resource refusals = %+v, want %+v", got, want)
 	}
 }
@@ -33,7 +33,7 @@ func TestAnUnclaimedNVMeoFSubsystemRefusesTheOperation(t *testing.T) {
 		}
 	}
 	want := []Refusal{RefusalOf(subsystem, "no capability of this executable realizes the StorageNVMeoFSubsystem kind", unclaimedRemediation(subsystem.Identity()))}
-	if got := Unrealizable(catalog, claimed); !reflect.DeepEqual(got, want) {
+	if got := Unrealizable(catalog, claimed, domainEffects); !reflect.DeepEqual(got, want) {
 		t.Fatalf("unclaimed NVMe-oF subsystem refusals = %+v, want %+v", got, want)
 	}
 }

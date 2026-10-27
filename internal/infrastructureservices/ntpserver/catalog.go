@@ -18,6 +18,7 @@ func Definition() managedservice.Definition {
 	return managedservice.Definition{
 		Kind:           api.NTPServer,
 		Implementation: Implementation,
+		Selects:        "chrony",
 		Version:        managedservice.RequestVersion,
 		Slug:           "ntp",
 		Variable:       managedservice.Variable,

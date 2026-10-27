@@ -27,7 +27,7 @@ var (
 // installHost is what the install-interface rules read about the target; a
 // target that did not derive is not Known, and the builder refuses it first.
 type installHost struct {
-	Known, Libvirt, Physical bool
+	Known, Bridged, Physical bool
 	NICs                     []Interface
 }
 
@@ -35,7 +35,7 @@ func hostOfTarget(derived substrate.Target, ok bool) installHost {
 	if !ok {
 		return installHost{}
 	}
-	host := installHost{Known: true, Libvirt: derived.Substrate == substrate.ArmLibvirt, Physical: derived.Physical}
+	host := installHost{Known: true, Bridged: substrate.BridgedGuests(derived.Substrate), Physical: derived.Physical}
 	for _, nic := range derived.Interfaces {
 		host.NICs = append(host.NICs, Interface{MACAddress: nic.MACAddress, Name: nic.Name})
 	}
@@ -43,7 +43,7 @@ func hostOfTarget(derived substrate.Target, ok bool) installHost {
 }
 
 func hostOfRequest(target Target) installHost {
-	host := installHost{Known: true, Libvirt: target.Substrate == substrate.ArmLibvirt, Physical: target.Physical}
+	host := installHost{Known: true, Bridged: substrate.BridgedGuests(target.Substrate), Physical: target.Physical}
 	if target.Hardware != nil {
 		host.NICs = target.Hardware.Interfaces
 	}
@@ -170,7 +170,7 @@ func bondRefusal(template, bond api.Value, identity string, host installHost) (r
 		return "the installer configures a bond only by its full mode name, and bond " + name + " of " + identity + " declares " + declaredMode,
 			"set link-aggregation.mode of " + name + " to one of balance-rr, active-backup, balance-xor, broadcast, 802.3ad, balance-tlb or balance-alb in the network of " + identity
 	}
-	if host.Known && host.Libvirt && mode.Text() != "active-backup" {
+	if host.Known && host.Bridged && mode.Text() != "active-backup" {
 		return "a libvirt bridge qualifies only active-backup bonding, and bond " + name + " of " + identity + " declares mode " + mode.Text(),
 			"set link-aggregation.mode of " + name + " on " + identity + " to active-backup; the other modes are qualified on physical hosts (B78)"
 	}
@@ -220,7 +220,7 @@ func vlanRefusal(catalog api.Catalog, machine api.Object, template, declared api
 				name + " of " + identity + " is not one",
 			"declare " + name + " in the network of " + identity + " with vlan.base-iface an available ethernet or bond interface, vlan.id from 1 to 4094, no vlan.protocol other than 802.1q, and a name of one of those forms"
 	}
-	if !host.Known || !host.Libvirt {
+	if !host.Known || !host.Bridged {
 		return "", ""
 	}
 	provider, found := machineref.Provider(machine, catalog)
@@ -228,8 +228,8 @@ func vlanRefusal(catalog api.Catalog, machine api.Object, template, declared api
 		return "", ""
 	}
 	attachment, attached := findNamed(provider.Spec().Get("networkAttachments"), "name", machine.Spec().Get("network", "attachmentRef").Text())
-	if attached && attachment.Get("libvirt", "management").Text() == "managed" {
-		return "a managed libvirt network gives its host an untagged address on " + attachment.Get("libvirt", "bridge").Text() +
+	if network, managed := substrate.ManagedAttachment(attachment); attached && managed {
+		return "a managed libvirt network gives its host an untagged address on " + network.Bridge +
 				", so the controller cannot reach the VLAN install address of " + identity,
 			"attach " + identity + " to an external bridge whose host carries VLAN " + strconv.FormatInt(id, 10) + ", or install over an untagged interface"
 	}

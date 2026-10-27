@@ -2,7 +2,6 @@ package compilation_test
 
 import (
 	"context"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -18,7 +17,7 @@ func (f frozenContextInputs) ReadInputs(context.Context, string) (desiredstate.S
 	return f.sources, nil
 }
 
-func TestServiceReplaysOriginalDeclarationPathsAndExcludedStreams(t *testing.T) {
+func TestServiceReplaysOriginalDeclarationPaths(t *testing.T) {
 	const environment = `apiVersion: bootwright.io/v1alpha1
 kind: Environment
 metadata:
@@ -30,9 +29,6 @@ spec:
 
   controller:
     machineRef: controller
-
-  resources:
-    - declarations
 
   defaults:
     Secret:
@@ -48,20 +44,11 @@ metadata:
 
 spec: {}
 `
-	const excluded = `apiVersion: bootwright.io/v1alpha1
-kind: Secret
-metadata:
-  name: excluded
-
-spec:
-  type: unsupported
-`
 	input := desiredstate.Sources{
 		Roots: []string{"/synthetic/original"},
 		Files: []desiredstate.SourceFile{
 			desiredstate.NewSourceFile("/synthetic/original/config/environment.yaml", []byte(environment+controllerYAML)),
 			desiredstate.NewSourceFile("/synthetic/original/config/declarations/material.yaml", []byte(secret)),
-			desiredstate.NewSourceFile("/synthetic/original/config/excluded.yaml", []byte(excluded)),
 		},
 	}
 	// No filesystem reader or payload capability exists on this service. These
@@ -71,11 +58,8 @@ spec:
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
-	if report.Counts != (compilation.Counts{FilesSeen: 3, ObjectsDecoded: 3}) || !reflect.DeepEqual(report.ExcludedResourceFiles, []string{"excluded.yaml"}) || len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "api.selection" || len(report.Advisories) != 0 {
-		t.Fatalf("replay lost counts or exclusions: %#v", report)
-	}
-	if report.Diagnostics[0].Source.Path != "/synthetic/original/config/excluded.yaml" {
-		t.Fatal("replay substituted the storage path for original provenance")
+	if report.Counts != (compilation.Counts{FilesSeen: 2, ObjectsDecoded: 3}) || len(report.Diagnostics) != 0 || len(report.Advisories) != 0 {
+		t.Fatalf("replay lost counts: %#v", report)
 	}
 	result, err := service.RenderEffective(context.Background(), compilation.EffectiveRequest{ContextName: "frozen"})
 	if err != nil || result.Counts != report.Counts || len(result.Effective.Objects()) != 3 {
@@ -89,9 +73,6 @@ spec:
 	objects[0] = api.Object{}
 	if len(result.Effective.Objects()) != 3 || result.Effective.Objects()[0].Name() == "" {
 		t.Fatal("effective result exposed mutable catalog storage")
-	}
-	if len(report.Diagnostics) != 1 {
-		t.Fatal("rendering erased validation warnings from a prior result")
 	}
 
 	// A retired file source an Environment default supplies is refused for
