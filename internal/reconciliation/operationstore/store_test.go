@@ -1659,11 +1659,97 @@ func TestConcurrentBlocksPublishTheirOwnRecords(t *testing.T) {
 	}
 }
 
+// A fresh removal resolves, before it registers, each block of the apply an
+// interrupted attempt left unknown or running, so an apply's attempt keeps
+// one resolution free for each of them and for each attempt in flight beside
+// the removal's own reserve: with one block unknown, the next attempt of
+// another block is admitted while the area holds both resolutions and the
+// attempt's own writes, and refuses one entry short of that, naming what the
+// removal keeps. One resolution's bytes are kept the same way.
+func TestAnApplyKeepsTheResolutionsARemovalMakesBeforeItRegisters(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	plan := testPlan(t, "alpha", "beta")
+	operation := testOperation(t, plan)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Register(ctx, operation, plan); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.StartAttempt(ctx, operation.ID, "alpha", testBuild); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CompleteAttempt(ctx, operation.ID, "alpha", 1, reconciliation.OutcomeUnknown, reconciliation.EffectUnknown, reconciliation.BlockUnknown, nil); err != nil {
+		t.Fatal(err)
+	}
+	removal, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	held, size, err := store.held(ctx, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept := AdmissionEntries(removal) + 2*AttemptEntries
+	for index := range MaxEntries - held - 1 - kept - AttemptEntries {
+		area.files[fmt.Sprintf("filled/record-%d", index)] = []byte("{}\n")
+	}
+	admitted, err := store.AdmitAttempt(ctx, operation, plan, "beta", false)
+	if err != nil {
+		t.Fatalf("an attempt beside the removal's reserve and two resolutions refused: %+v", diagnostics.Of(err))
+	}
+	admitted()
+	area.files["filled/last"] = []byte("{}\n")
+	_, err = store.AdmitAttempt(ctx, operation, plan, "beta", false)
+	if refused := diagnostics.Of(err); !IntoTheReserve(err) || len(refused) != 1 ||
+		!strings.Contains(refused[0].Message, fmt.Sprintf("this attempt needs %d more beside the %d that removal keeps", AttemptEntries, kept)) {
+		t.Fatalf("an attempt one entry short of two resolutions reported %+v (%v)", refused, err)
+	}
+	delete(area.files, "filled/last")
+	delete(area.files, "filled/record-0")
+	if _, size, err = store.held(ctx, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	_, reserved, err := store.removalReserve(operation, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encodedRemoval, err := encode(removal, MaxPlanBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := encode(operation, MaxOperationBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registration := int64(len(encodedRemoval) + len(record) + MaxIndexBytes); reserved != registration+int64(len(removal.Blocks))*FirstPassBlockBytes {
+		t.Fatalf("the removal keeps %d bytes, want its registration's %d and its first pass's %d per block", reserved, registration, FirstPassBlockBytes)
+	}
+	padding := MaxBytes - size - reserved - 3*AttemptBytes
+	area.files["filled/output"] = make([]byte, padding)
+	admitted, err = store.AdmitAttempt(ctx, operation, plan, "beta", false)
+	if err != nil {
+		t.Fatalf("an attempt beside the removal's reserved bytes and two resolutions refused: %+v", diagnostics.Of(err))
+	}
+	admitted()
+	area.files["filled/output"] = make([]byte, padding+1)
+	_, err = store.AdmitAttempt(ctx, operation, plan, "beta", false)
+	if refused := diagnostics.Of(err); !IntoTheReserve(err) || len(refused) != 1 ||
+		!strings.Contains(refused[0].Message, fmt.Sprintf("beside the %d that removal keeps", reserved+2*AttemptBytes)) {
+		t.Fatalf("an attempt one byte short of two resolutions reported %+v (%v)", refused, err)
+	}
+}
+
 // An apply's attempt is admitted only while the area holds its writes, and
-// those of every attempt running beside it, beside the removal's reserve;
-// one that ended gives its allowance back. A removal's attempt keeps no
-// reserve but the one entry its completion needs, beside the writes of every
-// attempt in flight. Each refusal is one the caller can name an exit for.
+// those of every attempt running beside it, beside the removal's reserve,
+// which holds one resolution of the plan's one block; one that ended gives
+// its allowance back. A fresh removal's resolution of the apply's block,
+// before that removal registers, keeps the removal's registration and first
+// pass, so repeated destroys that leave the block unknown never take them. A
+// registered removal's attempt keeps no reserve but one entry more, beside
+// the writes of every attempt in flight. Each refusal is one the caller can
+// name an exit for.
 func TestAdmitAttemptKeepsTheRemovalReserve(t *testing.T) {
 	ctx := context.Background()
 	store, area := newStore(t)
@@ -1683,44 +1769,60 @@ func TestAdmitAttemptKeepsTheRemovalReserve(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for index := range MaxEntries - held - AdmissionEntries(removal) - 2*AttemptEntries - 1 {
+	for index := range MaxEntries - held - AdmissionEntries(removal) - AttemptEntries - 2*AttemptEntries - 1 {
 		area.files[fmt.Sprintf("filled/record-%d", index)] = []byte("{}\n")
 	}
-	first, err := store.AdmitAttempt(ctx, operation, plan, false)
+	first, err := store.AdmitAttempt(ctx, operation, plan, "alpha", false)
 	if err != nil {
 		t.Fatalf("the first attempt beside the reserve refused: %v", err)
 	}
-	second, err := store.AdmitAttempt(ctx, operation, plan, false)
+	second, err := store.AdmitAttempt(ctx, operation, plan, "alpha", false)
 	if err != nil {
 		t.Fatalf("the second attempt beside the reserve refused: %v", err)
 	}
-	_, err = store.AdmitAttempt(ctx, operation, plan, false)
+	_, err = store.AdmitAttempt(ctx, operation, plan, "alpha", false)
 	if refused := diagnostics.Of(err); !IntoTheReserve(err) || len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
-		!strings.Contains(refused[0].Message, "this attempt needs 18 more beside the 14 that removal keeps") {
+		!strings.Contains(refused[0].Message, "this attempt needs 18 more beside the 20 that removal keeps") {
 		t.Fatalf("a third attempt running beside two reported %+v (%v)", refused, err)
 	}
 	first()
 	first()
-	third, err := store.AdmitAttempt(ctx, operation, plan, false)
+	third, err := store.AdmitAttempt(ctx, operation, plan, "alpha", false)
 	if err != nil {
 		t.Fatalf("an attempt after one ended refused: %v", err)
 	}
 	second()
 	third()
-	for index := range AdmissionEntries(removal) + 2*AttemptEntries - AttemptEntries - 1 {
+	for index := range 2*AttemptEntries - 1 {
+		area.files[fmt.Sprintf("filled/fresh-%d", index)] = []byte("{}\n")
+	}
+	resolving, err := store.AdmitAttempt(ctx, operation, plan, "alpha", true)
+	if err != nil {
+		t.Fatalf("a fresh removal's resolution beside its registration's reserve refused: %+v", diagnostics.Of(err))
+	}
+	resolving()
+	area.files["filled/fresh-last"] = []byte("{}\n")
+	_, err = store.AdmitAttempt(ctx, operation, plan, "alpha", true)
+	if refused := diagnostics.Of(err); !IntoTheReserve(err) || len(refused) != 1 ||
+		!strings.Contains(refused[0].Message, "cannot hold another resolution before this removal registers") ||
+		!strings.Contains(refused[0].Message, fmt.Sprintf("needs 7 more beside the %d its registration keeps", AdmissionEntries(removal))) {
+		t.Fatalf("a fresh removal's resolution one entry into its registration's reserve reported %+v (%v)", refused, err)
+	}
+	for index := range AdmissionEntries(removal) - 1 {
 		area.files[fmt.Sprintf("filled/more-%d", index)] = []byte("{}\n")
 	}
-	removing, err := store.AdmitAttempt(ctx, operation, removal, true)
+	removing := testOperation(t, removal)
+	removed, err := store.AdmitAttempt(ctx, removing, removal, "alpha", false)
 	if err != nil {
 		t.Fatalf("a removal's attempt with its writes and one entry free refused: %+v", diagnostics.Of(err))
 	}
-	_, err = store.AdmitAttempt(ctx, operation, removal, true)
+	_, err = store.AdmitAttempt(ctx, removing, removal, "beta", false)
 	if refused := diagnostics.Of(err); !IntoTheReserve(err) || len(refused) != 1 || !strings.Contains(refused[0].Message, "and it needs 13 more") {
 		t.Fatalf("a second removal attempt beside one in flight with 7 entries free reported %+v (%v)", refused, err)
 	}
-	removing()
+	removed()
 	area.files["filled/last"] = []byte("{}\n")
-	_, err = store.AdmitAttempt(ctx, operation, removal, true)
+	_, err = store.AdmitAttempt(ctx, removing, removal, "alpha", false)
 	if refused := diagnostics.Of(err); !IntoTheReserve(err) || len(refused) != 1 || !strings.Contains(refused[0].Message, "cannot hold another attempt of this removal") {
 		t.Fatalf("a removal's attempt one entry short reported %+v (%v)", refused, err)
 	}

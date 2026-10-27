@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/crmarques/bootwright/ansible"
@@ -36,6 +37,8 @@ const (
 type Runner struct {
 	jobParent     string
 	scratchParent string
+	stagingParent string
+	statfs        func(string, *syscall.Statfs_t) error
 	// owner is the only identity whose run directories a sweep considers:
 	// root, which every lifecycle adapter runs as.
 	owner uint32
@@ -52,9 +55,9 @@ type Runner struct {
 // New binds the entrypoints composition authorizes, keyed by implementation
 // identity and operation, and their automation stager; anything else refuses.
 func New(playbooks map[string]string, stager prerequisites.AutomationStager) Runner {
-	// Invocation state is small and must not survive a reboot; staging is
-	// larger and must not either, so both live outside the context store.
-	return Runner{jobParent: "/run", scratchParent: "/var/tmp", owner: 0, command: exec.Command, playbooks: maps.Clone(playbooks), stager: stager}
+	// The job holds bound material and must not survive a reboot, so it lives
+	// on the runtime filesystem; the scratch is the adapters' TMPDIR.
+	return Runner{jobParent: "/run", scratchParent: scratchParent, stagingParent: stagingParent, owner: 0, command: exec.Command, playbooks: maps.Clone(playbooks), stager: stager}
 }
 
 func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {

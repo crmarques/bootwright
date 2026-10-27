@@ -108,3 +108,63 @@ def test_local_cleanup_preserves_the_live_runners_temporary_directory(tmp_path):
     scratch.manage(str(root), "libvirt-host", "absent", str(tmp_path), os.getuid())
     assert root.is_dir() and not Path(scope).exists()
     (root / "later-task").write_text("still private")
+
+
+def test_present_creates_the_private_parent_beneath_the_staging_parent(tmp_path):
+    staging = tmp_path / "bootwright-staging"
+    parent = staging / "runs"
+    root = parent / "bootwright-run-scratch-1-1"
+    scope = Path(scratch.manage(str(root), "libvirt-host", "present", str(parent), os.getuid(), remove_root=True))
+    assert scope.is_dir()
+    assert parent.stat().st_mode & 0o777 == 0o700
+    assert staging.stat().st_mode & 0o022 == 0
+    scratch.manage(str(root), "libvirt-host", "absent", str(parent), os.getuid(), remove_root=True)
+    assert list(parent.iterdir()) == []
+
+
+def test_absent_with_no_parent_creates_nothing(tmp_path):
+    parent = tmp_path / "bootwright-staging" / "runs"
+    root = parent / "bootwright-run-scratch-1-1"
+    scratch.manage(str(root), "libvirt-host", "absent", str(parent), os.getuid(), remove_root=True)
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("unsafe", ["parent-link", "parent-public", "parent-owner", "staging-writable"])
+@pytest.mark.parametrize("state", ["present", "absent"])
+def test_an_unsafe_parent_refuses_before_any_scratch_is_touched(tmp_path, unsafe, state):
+    staging = tmp_path / "bootwright-staging"
+    staging.mkdir(mode=0o711)
+    parent = staging / "runs"
+    target = tmp_path / "elsewhere"
+    target.mkdir(mode=0o700)
+    (target / "bootwright-run-scratch-1-1").mkdir(mode=0o700)
+    owner = os.getuid()
+    if unsafe == "parent-link":
+        parent.symlink_to(target, target_is_directory=True)
+    else:
+        parent.mkdir(mode=0o700)
+        if unsafe == "parent-public":
+            parent.chmod(0o755)
+        elif unsafe == "parent-owner":
+            owner += 1
+        else:
+            staging.chmod(0o777)
+    root = parent / "bootwright-run-scratch-1-1"
+    with pytest.raises(ValueError, match="the run scratch parent .* remove it or make it a directory owned by user"):
+        scratch.manage(str(root), "libvirt-host", state, str(parent), owner, remove_root=True)
+    assert list((target / "bootwright-run-scratch-1-1").iterdir()) == []
+    assert unsafe == "parent-link" or list(parent.iterdir()) == []
+
+
+def test_a_parent_on_a_noexec_filesystem_refuses_naming_the_remount(tmp_path, monkeypatch):
+    parent = tmp_path / "bootwright-staging" / "runs"
+    statvfs = os.statvfs
+
+    class Answer:
+        def __init__(self, path):
+            self.f_flag = statvfs(path).f_flag | os.ST_NOEXEC
+
+    monkeypatch.setattr(scratch.os, "statvfs", Answer)
+    with pytest.raises(ValueError, match="lies on a noexec filesystem; remount it with exec"):
+        scratch.manage(str(parent / "bootwright-run-scratch-1-1"), "libvirt-host", "present", str(parent), os.getuid())
+    assert list(parent.iterdir()) == []

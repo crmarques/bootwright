@@ -358,3 +358,112 @@ func TestAdapterOutputPublishesTheFirstLineAndCoalescesABurst(t *testing.T) {
 		t.Fatalf("the interval did not publish what had accumulated: %d writes, %q", area.appends, area.files[target])
 	}
 }
+
+// An attempt's or resolution's log keeps, with its truncation marker, at most
+// the bytes its admission counted, so what it writes after its attempt starts
+// never takes the area past what AdmitAttempt kept free for it; the
+// operation's own log keeps its larger bound the same way, marker included.
+func TestEachLogKeepsItsMarkerWithinItsBound(t *testing.T) {
+	ctx := context.Background()
+	id := "op-" + strings.Repeat("ab", 16)
+	attempt, err := AttemptLogPath(id, "alpha", 1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolution, err := AttemptLogPath(id, "alpha", 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail := strings.Repeat("x", maxLogDetail)
+	for target, bound := range map[string]int{attempt: AttemptLogBytes, resolution: AttemptLogBytes, OperationLogPath(id): MaxLogBytes} {
+		store, area := newStore(t)
+		log, err := store.OpenLog(ctx, target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for log.dropped == 0 {
+			if err := log.Append(ctx, LogRecord{Event: "custody-failed", Block: detail, Group: detail, Detail: detail}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := log.Close(ctx); err != nil {
+			t.Fatal(err)
+		}
+		written := area.files[target]
+		filled, filledArea := newStore(t)
+		last, err := filled.OpenLog(ctx, target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		opening := len(filledArea.files[target])
+		last.written = bound - opening
+		if err := last.Append(ctx, LogRecord{Event: "opened"}); err != nil || last.dropped != 1 {
+			t.Fatalf("%s kept a record that leaves no room for its marker: dropped %d (%v)", target, last.dropped, err)
+		}
+		if len(written) > bound || len(written) < bound-4*maxLogDetail-truncationMarkerBytes {
+			t.Fatalf("%s holds %d bytes with its marker, want at most and close to %d", target, len(written), bound)
+		}
+		if !strings.HasSuffix(string(written), `{"truncated":true,"dropped":1}`+"\n") {
+			t.Fatalf("%s ends without its truncation marker", target)
+		}
+	}
+}
+
+// A log another invocation already wrote is reopened at its size, so the
+// bound holds across invocations: the operation log of an operation continued
+// many times never grows past it, its marker included.
+func TestAReopenedLogKeepsItsBoundAcrossInvocations(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	target := OperationLogPath("op-" + strings.Repeat("ab", 16))
+	area.files[target] = []byte(strings.Repeat("x", MaxLogBytes-100) + "\n")
+	log, err := store.OpenLog(ctx, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		if err := log.Append(ctx, LogRecord{Event: "rebound", Detail: strings.Repeat("y", maxLogDetail)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := log.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if written := area.files[target]; len(written) > MaxLogBytes || !strings.HasSuffix(string(written), `"dropped":4}`+"\n") {
+		t.Fatalf("the reopened log holds %d bytes ending %q, want at most %d with its marker", len(written), written[max(len(written)-40, 0):], MaxLogBytes)
+	}
+}
+
+// Progress records stop short of an attempt log's bound, so the records that
+// end the attempt, its outcome among them, still land after any amount of
+// progress.
+func TestTheRecordsThatEndAnAttemptLogOutliveItsProgress(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	target, err := AttemptLogPath("op-"+strings.Repeat("ab", 16), "alpha", 1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log, err := store.OpenLog(ctx, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail := strings.Repeat("x", maxLogDetail)
+	for log.dropped == 0 {
+		if err := log.Append(ctx, LogRecord{Event: "group", Group: detail, Detail: detail}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, event := range []string{"adapter-output", "custody-failed", "outcome"} {
+		if err := log.Append(ctx, LogRecord{Event: event, Block: "alpha", Detail: detail}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := log.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	written := string(area.files[target])
+	if len(written) > AttemptLogBytes || !strings.Contains(written, `"event":"outcome"`) || !strings.Contains(written, `"event":"custody-failed"`) {
+		t.Fatalf("the attempt log holds %d bytes, its outcome %t, want at most %d with the records that end it", len(written), strings.Contains(written, `"event":"outcome"`), AttemptLogBytes)
+	}
+}

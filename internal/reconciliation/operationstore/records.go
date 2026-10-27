@@ -30,7 +30,7 @@ const (
 
 // MaxEntries bounds the entries one context's operation area holds: every
 // directory and record beneath it, the index included. The Workspace area
-// refuses a record or log write unless one entry is free, and admission keeps
+// refuses a write unless the entries it creates are free, and admission keeps
 // what a new operation needs within it.
 const MaxEntries = 8192
 
@@ -52,8 +52,8 @@ func FirstPassEntries(plan reconciliation.Plan) int {
 // AdmissionEntries is what the area must hold free to admit an operation of
 // plan: an apply needs its own first pass, its removal's (at most the blocks
 // it froze) and ReservedEntries; a removal needs its first pass and one entry
-// for later writes, since AdmitAttempt keeps the apply's later attempts out of
-// what that removal needs, so it registers.
+// more, since AdmitAttempt keeps the apply's later attempts out of what that
+// removal needs, so it registers.
 func AdmissionEntries(plan reconciliation.Plan) int {
 	if plan.Verb == reconciliation.Destroy {
 		return FirstPassEntries(plan) + 1
@@ -83,6 +83,9 @@ const MaxBytes = 64 << 20
 // adapter output never takes the area into it, so however verbose a run is,
 // only records and logs ever use what that removal needs.
 const ReservedBytes = 16 << 20
+
+// FirstPassBlockBytes is ReservedBytes shared by two first passes of MaxBlocks.
+const FirstPassBlockBytes = ReservedBytes / (2 * reconciliation.MaxBlocks)
 
 // AdmissionBytes is what the area must hold free, beside the bytes it holds,
 // to admit an operation of plan whose registration writes registration bytes

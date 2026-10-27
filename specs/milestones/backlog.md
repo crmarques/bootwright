@@ -93,7 +93,6 @@ Alias cell.
 | [B386](#b386) | new, 2026-10-06 (X41) | enabling | Controller, with Environment and Container cluster | Dead code X41 left | Found in X41; parked under D48 (D116) |
 | [B387](#b387) | new, 2026-10-06 (X41) | enabling | Managed OS | The installation request, its digest and its role drop what D82 retired | Found in X41; parked under D48 (D116); it moves every installation plan digest and the automation digest |
 | [B388](#b388) | new, 2026-10-06 (X41) | enabling | CLI, with Secrets and Machine | One confirmer port carries `ConfirmIn`, and no unconfigured-confirmer refusal is left without its command | Found in X41; parked under D48 (D116) |
-| [B389](#b389) | new, 2026-10-06 (X41) | enabling | Controller | The controller runner's job and scratch use the staging parent | Found in X41; parked under D48 (D116); B19's one runner may carry it |
 | [B390](#b390) | new, 2026-10-06 (X41) | enabling | Controller (privilege), with CLI | An interactive session's sudo refusal exits 255 | Found in X41; parked under D48 (D116); needs a start signal sudo lets through |
 | [B391](#b391) | new, 2026-10-06 (X41) | enabling | CLI, with State reconciliation | Plan previews and interrupts X41 left | Found in X41; parked under D48 (D116) |
 | [B392](#b392) | new, 2026-10-06 (X41) | enabling | Managed OS and Secrets | Two decision readings X41 applied are confirmed | Found in X41; parked under D48 (D116); needs the owner's confirmation |
@@ -153,7 +152,6 @@ Alias cell.
 | [B569](#b569) | new, 2026-10-14 (X91 audit) | safety | State reconciliation | The operation store refuses a transition the block table does not admit | Found by the X91 audit; no path reaches it today: the scheduler is the only caller |
 | [B570](#b570) | new, 2026-10-14 (X91 audit) | defect | State reconciliation | A fresh destroy records a host-free removal answer on the apply's block only after quiescence is proved | Found by the X91 audit; no milestone depends on it: it changes the D119 table and rides with the check-naming item B460 |
 | [B571](#b571) | new, 2026-10-14 (X91 audit) | safety | Infrastructure services and Substrate | A retained, running physical system blocks the removal of the services it uses | Found by the X91 audit; no milestone depends on it: the operator's destroy is explicit and the contract states the quiescence rule (B70) |
-| [B572](#b572) | new, 2026-10-14 (X91 audit) | safety | State reconciliation and Workspace | Operation-area admission reserves every record a running block's completion and resolution can need | Found by the X91 audit; no milestone depends on it: it takes roughly 340 retried attempts to reach the bound; extends B243 and B267 |
 | [B573](#b573) | new, 2026-10-14 (X91 audit) | safety | Storage | A Ceph remote worker ends on cancellation or disconnect, or the engine waits out its budget | Found by the X91 audit; no milestone depends on it: the bootstrap marker fences the one destructive race |
 | [B575](#b575) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | One pure classifier replaces the five parallel transition derivations | Found by the X91 audit; no consumer until the first scenario slice after X91, whose first step it is |
 | [B576](#b576) | new, 2026-10-14 (X91 audit) | defect | Substrate | Libvirt machine evidence proves the frozen definition the spec claims, and a redefine reports changed | D155 accepts the evidence and redefine correction for a future named slice; `diff` does not compare unproved fields meanwhile |
@@ -710,12 +708,6 @@ After D82 no installation request can carry the SSH placement arm, yet the reque
 ### B388
 
 The custody and power confirmation ports keep `Confirm` and gain an optional `ContextConfirmer` instead of requiring `ConfirmIn`, because the composition types the shared confirmer as the contexts port; and the refusals given when no confirmer is configured, in the lifecycle, media, trust enrollment and setup, name no exact command, although production always configures one (found in X41). **Exit evidence:** one confirmer type carrying both methods through the composition, the optional path gone, and each unconfigured-confirmer refusal naming its command or removed.
-
-### B389
-
-X41 moved dependency resolution under the staging parent `/var/lib/bootwright-staging`, with locked and swept stages and a refusal that names a noexec mount, while the controller runner's job and scratch parents stay under `/run` and `/var/tmp` (found in X41). [B19](delivered.md#x93--the-owner-run-of-2026-10-14)'s one runner may carry the move. The move also closes a local denial of service: the sweep counts every entry whose name matches `bootwright-run-scratch-` against its bound of 256 before any owner check (`internal/reconciliation/ansiblerunner/jobs_linux_amd64.go`, `matching`), so any local account that creates 257 such names in sticky `/var/tmp` makes every later lifecycle run refuse until root removes them; a root-owned 0700 parent, or a bound that counts only root-owned private directories, removes it. Since 2026-10-26 (X164, B806) the sweep counts only private
-directories the runner owns, with its foreign-entries test; the move to a
-root-owned 0700 parent remains. **Exit evidence:** the controller runner's job and scratch under the staging port, with its sweep and noexec refusal tested, and a test in which more than 256 foreign-owned matching entries sit in the old scratch parent and a lifecycle run still starts.
 
 ### B390
 
@@ -1513,54 +1505,6 @@ names each retained consumer that still references a removed service; the three
 code comments say so. The `Quiescent` answers do not change. It sits beside B70.
 **Exit evidence:** the spec sentence, a plan test that a retained physical
 consumer is named, and `make docs-check`.
-
-### B572
-
-`capacity()` checks `entries+1 > maxOperationEntries` on every write, including
-a Replace of an existing record and an Append to an existing log, which add no
-entry (`internal/workspace/contextfs/operations_linux_amd64.go:739-750`, with
-`:623`, `:648`, `:668` and `:697` settling zero entries). Admission reserves room
-once at registration (`2*FirstPassEntries + 1024`,
-`internal/reconciliation/operationstore/records.go:52-63`), and a continuation
-re-admits nothing, so an operation's own retries and resolutions draw the
-reserve down unchecked
-(`internal/reconciliation/operationstore/store.go:168-191`, `:231-255`).
-When an append fails at the bound, `logBoundary.fail` latches the fault and
-cancels the shared work context, interrupting every sibling effect
-(`internal/reconciliation/lifecycle/logging.go:31-48`, `:99-104`);
-`CompleteAttempt` is refused, so the block stays durably `running`
-(`internal/reconciliation/lifecycle/attempts.go:102-103`, `:153-156`); and every
-exit is refused: resume restores with an Append, resolve needs a
-`WriteExclusive`, and destroy restores before it resolves. Only `context delete
---purge --allow-orphans` remains, which leads into the same-name adoption of
-B568. The `runtime.log` remedy also names the wrong cause. **Impact:** reaching
-the entry bound takes roughly 340 retried attempts or tens of continuations with
-several persistently failing blocks. The interruption equals a crash and adapters
-tolerate it, but the promise to resume until equal is lost. This is a stronger
-form of B243 and B267. **Smallest fix:** `capacity` counts only the entries a
-write adds, so exhaustion stops at a creating write (`StartAttempt` or
-`OpenLog`) before any effect runs, with a spec edit at
-`specs/contexts.md:531`; optionally admit an attempt's whole write set before its
-effect starts; give the bound its own diagnostic; derive `FirstPassEntries` from
-one declared list of record paths. Schedule it before any scenario adds a
-per-block record. The same fix reserves the removal's first pass, its
-registration bytes and its restoration write for the removal alone: an apply
-attempt, retry or resolution whose write set would cut into that reserve
-refuses `lifecycle.state` before its effect, naming
-`bootwright destroy --context <name>`, and the contexts spec no longer accepts
-a removal refused at its registration because the apply's own later attempts
-used the reserve. **Exit evidence:** a test double that enforces the entry bound,
-a test that hits the bound mid-attempt and leaves the block resolvable, a test
-that exhausts the area by repeated apply retries and shows the next apply
-refusing before an effect while the destroy registers and completes, and the
-amended contexts spec. **Partly delivered** on 2026-10-26 by X164 (B806): an
-apply's attempt, retry or resolution refuses before its effect when it would
-cut into the removal's reserve, a removal's own retries refuse when the area
-cannot hold them, and `TestApplyRetriesNeverTakeTheRemovalReserve` runs over a
-bound-enforcing double. **Remains:** `capacity()` still counts entries+1 on
-every write, no test hits the bound mid-attempt, and log bytes written after an
-attempt starts and a destroy's resolutions before it registers are not counted
-against the reserve.
 
 ### B573
 
@@ -3680,7 +3624,7 @@ also updates this table.
 | 12 | M CLI and examples | merged (X172) |
 | 13 | L Corpus structure and skills | merged (X173) |
 | 14 | N Race coverage (B841) | merged (X174) |
-| 15 | O Store bounds and run scratch (B572, B389) | not started |
+| 15 | O Store bounds and run scratch (B572, B389) | merged (X176) |
 | 16 | Q3 Ceph object and replica refusals (B849, B838) | merged (X175) |
 | 17 | S Libvirt host evidence and routes (B845, B843, B840) | not started |
 | 18 | P Removal views and host claims (B846, B839, B844) | not started |
@@ -5685,4 +5629,4 @@ storage-cluster checks together, and `preflight infra` and `preflight all`
 park in one definition item ([B825](#b825)). The lifecycle runner moves only
 its scratch under root-owned `/var/lib/bootwright-staging/runs` on the
 controller and SSH hosts, and the job directory and bound Secret files stay
-under `/run` ([B389](#b389)).
+under `/run` ([B389](delivered.md#x176--audit-lane-o-store-bounds-and-run-scratch)).

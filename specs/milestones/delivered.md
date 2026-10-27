@@ -8475,11 +8475,11 @@ State reconciliation. Delivered on 2026-10-26.
 A production store root on tmpfs or overlayfs refuses `context.state` before
 anything is published, and the setup dry run reports it. The runner's sweep
 counts only private directories it owns, so another account's matching names
-no longer stop a run ([B389](backlog.md#b389)'s move to a root-owned parent
+no longer stop a run ([B389](#x176--audit-lane-o-store-bounds-and-run-scratch)'s move to a root-owned parent
 remains). An apply's attempts, retries and resolutions never cut into the
 removal's reserved entries, and a removal's own attempts, counted together,
 refuse when the area cannot hold them; the byte reserve and the rest of the
-accounting stay with [B572](backlog.md#b572).
+accounting stay with [B572](#x176--audit-lane-o-store-bounds-and-run-scratch).
 `context update` and `context delete` present their plan under shared locks,
 prompt with no lock held, and re-decide under the exclusive lock, refusing
 with no write when anything changed; an in-operation root transaction that
@@ -8973,6 +8973,38 @@ redhat.
 `TestReplicationNeedsAnAdditionalOSDHostOnEveryDistribution` and
 `TestGatewayDerivedPoolProtectionNeedsHosts`, each proved by a seeded mismatch;
 the delivering commit records the gates.
+
+### X176 — Audit lane O: store bounds and run scratch
+
+**Items:** B572 and B389.
+**Kind:** safety. **Owners:** Workspace, State reconciliation and Controller
+setup. Delivered on 2026-10-27 as lane O of the
+[audit remediation](backlog.md#lane-order-and-progress) under the owner's
+request to implement the remaining items, with D188's answer for B389, which
+moves only the run scratch: the job directory and bound Secret files stay
+under `/run`, so B389's exit evidence holds for the scratch alone.
+
+A context area admits a write against its bounds by the entries it creates
+and the bytes it adds, so replacing a record or appending to an existing log
+no longer costs an entry, and creating a directory counts. Attempt and
+resolution logs keep at most 128 KiB with their truncation marker, progress
+records stopping short so the closing records survive, and a reopened log
+keeps its bound across invocations. An apply's attempt keeps one resolution
+for each unresolved or running block, and a destroy's resolutions before it
+registers keep its registration and first pass; the removal's byte reserve
+budgets 32 KiB per block of its first pass, not the worst case. A log at its
+8 MiB bound now writes its truncation marker within it.
+
+The lifecycle runner scratches beneath root-owned 0700
+`/var/lib/bootwright-staging/runs` on the controller and SSH hosts; the
+runner and `lifecycle_scratch` create it and refuse a link, a foreign owner,
+group or other write, another mode or a noexec mount, naming the directory and
+its fix. Old `/var/tmp` scratch directories age out under systemd-tmpfiles.
+
+**Guard tests:** the entry-bound, mid-attempt, reserve, byte-reserve,
+repeated-destroy, reopened-log, terminal-record and scratch-parent tests and
+the `lifecycle_scratch` unit tests, each proved by a seeded mismatch; the
+delivering commit records the gates.
 
 ## M3 independent in-tree completion
 

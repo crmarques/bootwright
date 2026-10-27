@@ -58,7 +58,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	if err != nil {
 		return "", err
 	}
-	release, err := admitAttempt(ctx, tx, store, operation, plan, false)
+	release, err := admitAttempt(ctx, tx, store, operation, plan, block.ID, false)
 	if err != nil {
 		return "", err
 	}
@@ -128,8 +128,8 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	return state, runErr
 }
 
-func admitAttempt(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, removal bool) (func(), error) {
-	release, err := store.AdmitAttempt(ctx, operation, plan, removal)
+func admitAttempt(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, block string, removal bool) (func(), error) {
+	release, err := store.AdmitAttempt(ctx, operation, plan, block, removal)
 	reported := diagnostics.Of(err)
 	if err == nil || !operationstore.IntoTheReserve(err) || len(reported) != 1 {
 		return release, err
@@ -146,7 +146,7 @@ type onlyExit struct{ error }
 func (e onlyExit) Unwrap() error { return e.error }
 
 func (s Service) startResolution(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, block reconciliation.Block, attempt int, removal bool) (int, string, func(), error) {
-	release, err := admitAttempt(ctx, tx, store, operation, plan, removal)
+	release, err := admitAttempt(ctx, tx, store, operation, plan, block.ID, removal)
 	if err != nil {
 		return 0, "", nil, err
 	}

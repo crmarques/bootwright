@@ -58,6 +58,9 @@ func (r Runner) claimRun(request lifecycle.RunRequest) (string, *os.File, *os.Fi
 			return "", nil, nil, failure("lifecycle.state", "the lifecycle adapter invocation has ended", "")
 		}
 	}
+	if err := r.ensureScratchParent(); err != nil {
+		return "", nil, nil, err
+	}
 	if err := r.sweepLocked(request.Context); err != nil {
 		return "", nil, nil, err
 	}

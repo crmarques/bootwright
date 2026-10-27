@@ -1176,6 +1176,223 @@ func TestApplyRetriesNeverTakeTheRemovalReserve(t *testing.T) {
 	}
 }
 
+// The byte twin of TestApplyRetriesNeverTakeTheRemovalReserve: over an area
+// that enforces its byte bound, an apply's retries, records and logs
+// included, run until one would cut into the bytes the removal keeps, which
+// refuses before its effect naming the destroy, and the removal then
+// registers and completes.
+func TestApplyRetriesNeverTakeTheRemovalByteReserve(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, "alpha")
+	area := h.workspace.area
+	area.bound = operationstore.MaxBytes
+	h.capability.errorFor = map[string]error{"alpha": errors.New("the apply failed")}
+	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
+		t.Fatal("an apply whose block failed reported no failure")
+	}
+	kept := operationstore.MaxIndexBytes + operationstore.FirstPassBlockBytes + 2*operationstore.AttemptBytes
+	area.files["filled/output"] = make([]byte, operationstore.MaxBytes-area.held()-kept-64<<10)
+	for retries := 0; ; retries++ {
+		if retries > 200 {
+			t.Fatalf("%d retries ran and none refused", retries)
+		}
+		applied := len(h.capability.applies)
+		_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+		refused := diagnostics.Of(err)
+		if len(refused) == 1 && strings.Contains(refused[0].Message, "for the removal that takes this apply back") {
+			if len(h.capability.applies) != applied || retries == 0 {
+				t.Fatalf("retry %d refused after applying %v", retries, h.capability.applies[applied:])
+			}
+			break
+		}
+		if len(h.capability.applies) != applied+1 {
+			t.Fatalf("retry %d ran %v (%v: %+v)", retries, h.capability.applies[applied:], err, refused)
+		}
+	}
+	if free := operationstore.MaxBytes - area.held(); free < operationstore.MaxIndexBytes+operationstore.FirstPassBlockBytes {
+		t.Fatalf("the retries left %d bytes free, beneath what the removal keeps", free)
+	}
+	h.capability.errorFor = nil
+	result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if err != nil || result.Receipt.State != "done" {
+		t.Fatalf("the removal after the retries = %+v (%v: %+v)", result, err, diagnostics.Of(err))
+	}
+}
+
+// An apply whose attempt left a block unknown keeps, beside the removal's
+// reserve, the resolution a fresh removal makes of that block before it
+// registers. The apply's retries, which resolve that block again and leave
+// the other pending, run until
+// one would cut into both, which refuses before it observes or performs
+// anything, naming the destroy; the destroy then
+// resolves the unknown block, registers and completes in what was kept.
+func TestARemovalResolvesWhatTheApplyLeftUnknownWithinTheReserve(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, "alpha", "beta")
+	area := h.workspace.area
+	area.entries = operationstore.MaxEntries
+	h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
+		t.Fatal("an apply whose block was left unknown reported no failure")
+	}
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{definition("alpha"), definition("beta")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	removal, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reserve := operationstore.AdmissionEntries(removal) + operationstore.AttemptEntries
+	for index := range operationstore.MaxEntries - areaEntries(area, "") - reserve - 8*operationstore.AttemptEntries {
+		area.files[fmt.Sprintf("filled/record-%d", index)] = []byte("{}\n")
+	}
+	for retries := 0; ; retries++ {
+		if retries > 8*operationstore.AttemptEntries {
+			t.Fatalf("%d retries ran and none refused", retries)
+		}
+		ran := len(h.capability.calls)
+		_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+		if refused := diagnostics.Of(err); slices.ContainsFunc(refused, func(d diagnostics.Diagnostic) bool {
+			return strings.Contains(d.Message, "for the removal that takes this apply back")
+		}) {
+			if len(h.capability.calls) != ran || retries == 0 {
+				t.Fatalf("retry %d refused after %v", retries, h.capability.calls[ran:])
+			}
+			break
+		}
+		if len(h.capability.calls) == ran {
+			t.Fatalf("retry %d ran nothing (%v: %+v)", retries, err, diagnostics.Of(err))
+		}
+	}
+	_, states := durableOperation(t, h)
+	if states["alpha"] != reconciliation.BlockUnknown {
+		t.Fatalf("the retries left %v, want alpha unknown", states)
+	}
+	if free := operationstore.MaxEntries - areaEntries(area, ""); free < reserve {
+		t.Fatalf("the retries left %d entries free, beneath the removal's reserve and alpha's resolution %d", free, reserve)
+	}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+	result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if err != nil || result.Receipt.State != "done" {
+		t.Fatalf("the removal after the retries = %+v (%v: %+v)", result, err, diagnostics.Of(err))
+	}
+	if record, _ := durableOperation(t, h); record.Verb != reconciliation.Destroy || record.State != reconciliation.OperationDone {
+		t.Fatalf("the removal after the retries is %s %s", record.Verb, record.State)
+	}
+}
+
+// A fresh removal resolves, before it registers, an apply block an
+// interrupted attempt left unknown, and each destroy that cannot resolve it
+// writes another resolution. Those resolutions keep the removal's
+// registration and first pass: repeated destroys over an unreachable target
+// refuse before one would take them, and from the last destroy admitted, a
+// target that answers is resolved, and the removal registers and completes.
+func TestRepeatedDestroysOverAnUnknownBlockKeepTheRegistration(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, "alpha")
+	area := h.workspace.area
+	area.entries = operationstore.MaxEntries
+	h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeUnknown}}
+	if _, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
+		t.Fatal("an apply whose block was left unknown reported no failure")
+	}
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{definition("alpha")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	removal, err := plan.Inverse()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range operationstore.MaxEntries - areaEntries(area, "") - operationstore.AdmissionEntries(removal) - 6*operationstore.AttemptEntries {
+		area.files[fmt.Sprintf("filled/record-%d", index)] = []byte("{}\n")
+	}
+	var admitted *memoryArea
+	for destroys := 0; ; destroys++ {
+		if destroys > 6*operationstore.AttemptEntries {
+			t.Fatalf("%d destroys ran and none refused", destroys)
+		}
+		before, observed := area.clone(), len(h.capability.observes)
+		_, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+		refused := diagnostics.Of(err)
+		if slices.ContainsFunc(refused, func(d diagnostics.Diagnostic) bool {
+			return strings.Contains(d.Message, "cannot hold another resolution before this removal registers")
+		}) {
+			if len(h.capability.observes) != observed || admitted == nil {
+				t.Fatalf("destroy %d refused after observing %v", destroys, h.capability.observes[observed:])
+			}
+			break
+		}
+		if len(h.capability.observes) == observed || err == nil {
+			t.Fatalf("destroy %d over the unknown block observed nothing or succeeded (%v: %+v)", destroys, err, refused)
+		}
+		admitted = before
+	}
+	if free := operationstore.MaxEntries - areaEntries(area, ""); free < operationstore.AdmissionEntries(removal) {
+		t.Fatalf("the destroys left %d entries free, beneath the registration's %d", free, operationstore.AdmissionEntries(removal))
+	}
+	admitted.entries = operationstore.MaxEntries
+	h.workspace.area = admitted
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+	result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if err != nil || result.Receipt.State != "done" {
+		t.Fatalf("the destroy once the target answers = %+v (%v: %+v)", result, err, diagnostics.Of(err))
+	}
+}
+
+// An attempt that meets the entry bound while its effect runs still records
+// what it proved: its log takes the outcome and its record completes, since
+// neither adds an entry, so the block is left unknown rather than durably
+// running, with no log fault. The next invocation restores the operation log,
+// which adds nothing either, and once the area has room it resolves the block.
+func TestAnAttemptThatMeetsTheEntryBoundLeavesItsBlockResolvable(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t, "alpha")
+	area := h.workspace.area
+	area.entries = operationstore.MaxEntries
+	h.capability.outcomeFor = map[string]Result{"alpha": {Outcome: reconciliation.OutcomeUnknown}}
+	h.capability.hold = func(string) {
+		for index := range operationstore.MaxEntries - areaEntries(area, "") - 1 {
+			area.files[fmt.Sprintf("filled/record-%d", index)] = []byte("{}\n")
+		}
+	}
+	_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if code := firstCode(err); code == "runtime.log" {
+		t.Fatalf("the attempt at the bound latched a log fault: %v", err)
+	}
+	if free := operationstore.MaxEntries - areaEntries(area, ""); free != 0 {
+		t.Fatalf("the attempt left %d entries free, want the area at its bound", free)
+	}
+	record, _ := durableOperation(t, h)
+	if record.LogFault {
+		t.Fatal("the attempt at the bound recorded a log fault")
+	}
+	if _, states := durableOperation(t, h); states["alpha"] != reconciliation.BlockUnknown {
+		t.Fatalf("the attempt at the bound left alpha %s, want unknown", states["alpha"])
+	}
+	h.capability.hold = nil
+	_, err = h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if code := firstCode(err); code == "runtime.log" || err == nil {
+		t.Fatalf("the apply at the bound = %v, want a refusal before its resolution", err)
+	}
+	if record, _ := durableOperation(t, h); record.LogFault {
+		t.Fatal("the apply at the bound recorded a log fault")
+	}
+	for name := range area.files {
+		if strings.HasPrefix(name, "filled/") {
+			delete(area.files, name)
+		}
+	}
+	h.capability.observations = []Observation{{Effect: reconciliation.EffectCompleted}}
+	if result, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil || result.Receipt.State != "done" {
+		t.Fatalf("the apply once the area has room = %+v (%v: %+v)", result, err, diagnostics.Of(err))
+	}
+	if _, states := durableOperation(t, h); states["alpha"] != reconciliation.BlockDone {
+		t.Fatalf("the resolution left alpha %s, want done", states["alpha"])
+	}
+}
+
 // A removal the operation area cannot hold, as one filled by something other
 // than the apply's own attempts, refuses at its registration, at the
 // retained-operation bound, and leaves the apply it would take back as it

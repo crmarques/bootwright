@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -22,7 +23,11 @@ import (
 
 func TestTheComposedInvocationScopeAdmitsSiblingRunsOfItsRunner(t *testing.T) {
 	stager := stagelocal.NewAutomationStager(filepath.Join(t.TempDir(), "staging"))
-	runner := ansiblerunner.Isolated(map[string]string{"artifact-server-nginx-v1/apply": "apply.yml"}, t.TempDir(), t.TempDir(), stager, heldAdapter)
+	scratch := t.TempDir()
+	if err := os.Chmod(scratch, 0700); err != nil {
+		t.Fatal(err)
+	}
+	runner := ansiblerunner.Isolated(map[string]string{"artifact-server-nginx-v1/apply": "apply.yml"}, t.TempDir(), scratch, stager, heldAdapter)
 	options := lifecycleOptions(lifecycleDependencies{}, systemClock{}, runner)
 	if options.BeginInvocation == nil {
 		t.Fatal("the composed lifecycle opens no invocation scope")

@@ -22,7 +22,7 @@ func TestAdapterInvocationIsUnbufferedSoItsOutputIsReadableWhileItRuns(t *testin
 	var arguments []string
 	runner := Runner{
 		stager:    newDirStager(t),
-		jobParent: t.TempDir(), scratchParent: t.TempDir(), drain: time.Millisecond,
+		jobParent: t.TempDir(), scratchParent: privateTempDir(t), drain: time.Millisecond,
 		command: func(_ string, args ...string) *exec.Cmd {
 			arguments = args
 			return exec.Command("/bin/true")

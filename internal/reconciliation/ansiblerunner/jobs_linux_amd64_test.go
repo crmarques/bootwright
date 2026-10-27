@@ -52,10 +52,20 @@ func completing() *exec.Cmd {
 }
 
 // sweepingRunner owns the run directories it creates, in parents of its own.
+// privateTempDir is a scratch parent the runner admits: private to the user.
+func privateTempDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func sweepingRunner(t *testing.T, adapter func() *exec.Cmd) Runner {
 	return Runner{
 		stager:    newDirStager(t),
-		jobParent: t.TempDir(), scratchParent: t.TempDir(), owner: uint32(os.Geteuid()), drain: 200 * time.Millisecond,
+		jobParent: t.TempDir(), scratchParent: privateTempDir(t), owner: uint32(os.Geteuid()), drain: 200 * time.Millisecond,
 		playbooks: map[string]string{"artifact-server-nginx-v1/apply": "apply.yml"},
 		command:   func(string, ...string) *exec.Cmd { return adapter() },
 	}
@@ -589,7 +599,7 @@ func TestTheSweepRefusesBeyondItsBounds(t *testing.T) {
 	})
 }
 
-// Another account may create any name in a sticky /var/tmp, but only private
+// Another account may create any name in a parent it can write, but only private
 // directories the owner holds count toward the run-directory bound, so more
 // entries of the runner's names than the bound, created by another account or
 // left open to it, never stop a run and are never removed.

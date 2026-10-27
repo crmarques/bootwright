@@ -171,6 +171,110 @@ func TestTheIncrementalMeasureRefusesAtTheSameBound(t *testing.T) {
 	})
 }
 
+// The entry bound admits only the entries a write adds. At the bound, a
+// replacement of a record the area holds and an append to a log it holds add
+// none and complete, under the transaction that counted its way there and
+// under the next one, which walks the subtree; every write that would create
+// an entry, a record, a log or a directory, refuses, naming the area.
+func TestAnAreaAtItsEntryBoundCompletesWhatItHolds(t *testing.T) {
+	ctx := context.Background()
+	const refusal = "lifecycle operation storage has reached its bounds"
+	store, _ := lifecycleFixture(t)
+	root := operationsRoot(t, store, "example")
+	for index := range maxOperationEntries - 3 {
+		writePrivate(t, filepath.Join(root, fmt.Sprintf("planted-%05d", index)), nil)
+	}
+	atTheBound := func(tx lifecycle.Transaction) {
+		area := tx.Operations()
+		if err := area.Replace(ctx, "held/record.json", []byte("{\"completed\":true}\n"), []byte("{}\n")); err != nil {
+			t.Fatalf("a replacement at the entry bound refused: %#v", diagnostics.Of(err))
+		}
+		if err := area.Replace(ctx, "held/record.json", []byte("{}\n"), []byte("{\"completed\":true}\n")); err != nil {
+			t.Fatalf("a second replacement at the entry bound refused: %#v", diagnostics.Of(err))
+		}
+		if err := area.Append(ctx, "held/log.jsonl", []byte("outcome\n")); err != nil {
+			t.Fatalf("an append to a held log at the entry bound refused: %#v", diagnostics.Of(err))
+		}
+		for name, write := range map[string]func() error{
+			"an exclusive record":          func() error { return area.WriteExclusive(ctx, "held/another.json", []byte("{}\n")) },
+			"a replacement of nothing":     func() error { return area.Replace(ctx, "held/absent.json", []byte("{}\n"), nil) },
+			"an append that creates a log": func() error { return area.Append(ctx, "held/another.jsonl", []byte("opened\n")) },
+			"a new directory":              func() error { return area.EnsureDirectory(ctx, "held/logs") },
+			"a record in a new directory":  func() error { return area.WriteExclusive(ctx, "logs/record.json", []byte("{}\n")) },
+		} {
+			err := write()
+			if diagnostics.Of(err) == nil {
+				t.Fatalf("%s at the entry bound = %v, want the bound's refusal", name, err)
+			}
+			expectRefusal(t, err, refusal)
+		}
+	}
+	err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		area := tx.Operations()
+		if err := area.WriteExclusive(ctx, "held/record.json", []byte("{}\n")); err != nil {
+			t.Fatalf("the record that fills the area refused: %#v", diagnostics.Of(err))
+		}
+		if err := area.Append(ctx, "held/log.jsonl", []byte("opened\n")); err != nil {
+			t.Fatalf("the log that fills the area refused: %#v", diagnostics.Of(err))
+		}
+		atTheBound(tx)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("the transaction that reached the bound failed: %#v", diagnostics.Of(err))
+	}
+	if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		atTheBound(tx)
+		return nil
+	}); err != nil {
+		t.Fatalf("the transaction at the bound failed: %#v", diagnostics.Of(err))
+	}
+}
+
+// The byte bound admits only the bytes a write adds: at the bound, a
+// replacement no larger than the record it replaces lands, and one a byte
+// larger refuses, under the transaction that counted its way there and under
+// the next one, which walks the subtree.
+func TestAReplacementAtTheByteBoundIsChargedItsGrowth(t *testing.T) {
+	ctx := context.Background()
+	const refusal = "lifecycle operation storage has reached its bounds"
+	store, _ := lifecycleFixture(t)
+	planted := filepath.Join(operationsRoot(t, store, "example"), "planted.output")
+	writePrivate(t, planted, nil)
+	if err := os.Truncate(planted, maxOperationBytes-10); err != nil {
+		t.Fatal(err)
+	}
+	full, shorter, longer := []byte("0123456789"), []byte("012345678"), []byte("0123456789a")
+	atTheBound := func(tx lifecycle.Transaction, current []byte) {
+		area := tx.Operations()
+		if err := area.Replace(ctx, "record.json", full, current); err != nil {
+			t.Fatalf("a replacement filling the bound refused: %#v", diagnostics.Of(err))
+		}
+		if err := area.Replace(ctx, "record.json", shorter, full); err != nil {
+			t.Fatalf("a shrinking replacement refused: %#v", diagnostics.Of(err))
+		}
+		if err := area.Replace(ctx, "record.json", full, shorter); err != nil {
+			t.Fatalf("a replacement growing back to the bound refused: %#v", diagnostics.Of(err))
+		}
+		expectRefusal(t, area.Replace(ctx, "record.json", longer, full), refusal)
+	}
+	if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		if err := tx.Operations().WriteExclusive(ctx, "record.json", shorter); err != nil {
+			t.Fatalf("the record refused: %#v", diagnostics.Of(err))
+		}
+		atTheBound(tx, shorter)
+		return nil
+	}); err != nil {
+		t.Fatalf("the transaction that reached the bound failed: %#v", diagnostics.Of(err))
+	}
+	if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
+		atTheBound(tx, full)
+		return nil
+	}); err != nil {
+		t.Fatalf("the transaction at the bound failed: %#v", diagnostics.Of(err))
+	}
+}
+
 // A write that fails may have landed, as a replacement whose rename succeeded
 // before its read-back failed has, so the area forgets what it counted and the
 // next write walks the subtree again.

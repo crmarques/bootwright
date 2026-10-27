@@ -294,6 +294,7 @@ func automationIdentities() map[string]automationFormat {
 		"bootwright.erase=1":                      fixedBy(kindProof, "the kernel argument that proves the booted environment is the erase environment", erase),
 
 		"/var/lib/bootwright-services/":            validated("the content root every service request must lie beneath"),
+		"/var/lib/bootwright-staging/runs":         validated("the private parent every runner-issued run scratch must lie directly beneath"),
 		"/var/lib/bootwright-clusters/":            validated("the work root every cluster media and install request must lie beneath"),
 		"/var/lib/libvirt/images/bootwright/":      validated("the media pool path every libvirt request must name"),
 		"/etc/bootwright/install-marker.json":      validated("the marker path every installation request must name, and the guest agent may read"),

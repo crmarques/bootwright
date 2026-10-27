@@ -39,7 +39,7 @@ type Store struct {
 	measured bool
 	room     int64
 	attempts sync.Mutex
-	inflight int
+	inflight map[string]int
 	reserves map[string]int64
 }
 
@@ -264,7 +264,7 @@ func (s *Store) admit(ctx context.Context, id string, plan reconciliation.Plan, 
 
 const AttemptEntries = 6
 
-const AttemptBytes = 2 * MaxAttemptBytes
+const AttemptBytes = 2*MaxAttemptBytes + AttemptLogBytes
 
 type reserveRefusal struct{ error }
 
@@ -275,24 +275,35 @@ func IntoTheReserve(err error) bool {
 	return errors.As(err, &refusal)
 }
 
-// AdmitAttempt refuses, before it writes, an attempt or resolution that would
-// take the area into a removal's reserve, counting every one in flight.
-func (s *Store) AdmitAttempt(ctx context.Context, operation Operation, plan reconciliation.Plan, removal bool) (func(), error) {
+// AdmitAttempt refuses, before it writes, an attempt or resolution of block
+// that would take the area into a removal's reserve, counting every one in flight.
+func (s *Store) AdmitAttempt(ctx context.Context, operation Operation, plan reconciliation.Plan, block string, removal bool) (func(), error) {
 	s.attempts.Lock()
 	defer s.attempts.Unlock()
 	held, size, err := s.held(ctx, "", "")
 	if err != nil {
 		return nil, err
 	}
-	running := s.inflight + 1
+	running := 1
+	for _, count := range s.inflight {
+		running += count
+	}
 	entries, bytes := running*AttemptEntries+1, int64(running)*AttemptBytes
 	keptEntries, keptBytes := 0, int64(0)
 	apply := operation.Verb == reconciliation.Apply && !removal
-	if apply {
-		entries = running * AttemptEntries
+	if operation.Verb == reconciliation.Apply {
 		if keptEntries, keptBytes, err = s.removalReserve(operation, plan); err != nil {
 			return nil, err
 		}
+	}
+	if apply {
+		entries = running * AttemptEntries
+		resolutions, err := s.resolutions(ctx, operation.ID, plan, block)
+		if err != nil {
+			return nil, err
+		}
+		keptEntries += resolutions * AttemptEntries
+		keptBytes += int64(resolutions) * AttemptBytes
 	}
 	if held+entries+keptEntries > MaxEntries {
 		return nil, refuseAttempt(apply, fmt.Sprintf("it holds %d of its %d entries", held, MaxEntries), int64(entries), int64(keptEntries))
@@ -300,13 +311,18 @@ func (s *Store) AdmitAttempt(ctx context.Context, operation Operation, plan reco
 	if size+bytes+keptBytes > MaxBytes {
 		return nil, refuseAttempt(apply, fmt.Sprintf("it holds %d of its %d bytes", size, MaxBytes), bytes, keptBytes)
 	}
-	s.inflight++
+	if s.inflight == nil {
+		s.inflight = map[string]int{}
+	}
+	s.inflight[block]++
 	var once sync.Once
 	return func() {
 		once.Do(func() {
 			s.attempts.Lock()
 			defer s.attempts.Unlock()
-			s.inflight--
+			if s.inflight[block]--; s.inflight[block] == 0 {
+				delete(s.inflight, block)
+			}
 		})
 	}, nil
 }
@@ -316,7 +332,27 @@ func refuseAttempt(apply bool, holds string, needed, kept int64) error {
 		return reserveRefusal{recordError(fmt.Sprintf("the context's operation area keeps what is left of it for the removal that takes this apply back: %s, and this attempt needs %d more beside the %d that removal keeps",
 			holds, needed, kept))}
 	}
+	if kept > 0 {
+		return reserveRefusal{recordError(fmt.Sprintf("the context's operation area cannot hold another resolution before this removal registers: %s, and it needs %d more beside the %d its registration keeps", holds, needed, kept))}
+	}
 	return reserveRefusal{recordError(fmt.Sprintf("the context's operation area cannot hold another attempt of this removal: %s, and it needs %d more", holds, needed))}
+}
+
+func (s *Store) resolutions(ctx context.Context, id string, plan reconciliation.Plan, block string) (int, error) {
+	states, err := s.BlockStates(ctx, id, plan)
+	if err != nil {
+		return 0, err
+	}
+	blocks := map[string]bool{block: true}
+	for name := range s.inflight {
+		blocks[name] = true
+	}
+	for name, state := range states {
+		if state == reconciliation.BlockUnknown || state == reconciliation.BlockRunning {
+			blocks[name] = true
+		}
+	}
+	return len(blocks), nil
 }
 
 func (s *Store) removalReserve(operation Operation, plan reconciliation.Plan) (int, int64, error) {
@@ -335,7 +371,7 @@ func (s *Store) removalReserve(operation Operation, plan reconciliation.Plan) (i
 	if err != nil {
 		return 0, 0, err
 	}
-	kept := int64(len(encodedPlan) + len(record) + MaxIndexBytes)
+	kept := int64(len(encodedPlan)+len(record)+MaxIndexBytes) + int64(len(removal.Blocks))*FirstPassBlockBytes
 	if s.reserves == nil {
 		s.reserves = map[string]int64{}
 	}

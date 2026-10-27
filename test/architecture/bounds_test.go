@@ -78,6 +78,7 @@ func documentedBounds() []documentedBound {
 		{contexts, "| Entries in one context's lifecycle operation area, and in each of its runs and SSH-trust areas | %s |", operations, "MaxEntries", nil, false},
 		{contexts, "and must still keep %s entries free", operations, "ReservedEntries", nil, false},
 		{contexts, "| Bytes in one context's lifecycle operation area, and in each of its runs and SSH-trust areas | %s |", operations, "MaxBytes", nil, true},
+		{contexts, "| Bytes in one lifecycle attempt log | %s |", "internal/reconciliation/operationstore/logs.go", "AttemptLogBytes", nil, true},
 		{contexts, "fresh apply needs %s of them free", operations, "ReservedBytes", nil, true},
 		{contexts, "| One lifecycle adapter invocation whose request states no deadline | %s |", lifecycleRun, "invocationTimeout", &application{runner: "execute"}, false},
 		{contexts, "| The longest deadline a lifecycle adapter request may state | %s |", lifecycleRequest, "MaxDeadline", &application{runner: "execute", source: lifecycleRun, ceiling: true}, false},

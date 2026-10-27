@@ -105,7 +105,7 @@ func (a *completingAdapter) command(string, ...string) *exec.Cmd {
 
 func stagedRunner(t *testing.T, stager prerequisites.AutomationStager, adapter *completingAdapter) Runner {
 	return Runner{
-		jobParent: t.TempDir(), scratchParent: t.TempDir(), drain: 200 * time.Millisecond,
+		jobParent: t.TempDir(), scratchParent: privateTempDir(t), drain: 200 * time.Millisecond,
 		playbooks: map[string]string{"artifact-server-nginx-v1/apply": "apply.yml"},
 		command:   adapter.command, stager: stager,
 	}

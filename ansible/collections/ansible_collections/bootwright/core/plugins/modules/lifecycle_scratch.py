@@ -9,11 +9,13 @@ short_description: Manage one lifecycle role's private scratch
 version_added: "0.1.0"
 description:
   - Creates private scratch on the execution host using the runner's invocation identity.
+  - Creates the root-owned C(/var/lib/bootwright-staging/runs) parent, mode 0700, when absent.
+  - Refuses an unsafe parent or one on a noexec filesystem, naming the directory and its remedy.
   - Refuses links, foreign ownership and non-private directories before accessing files.
   - Removes only the named role's files and empty invocation directory.
 options:
   root:
-    description: The runner-issued scratch directory beneath C(/var/tmp).
+    description: The runner-issued scratch directory beneath C(/var/lib/bootwright-staging/runs).
     type: str
     required: true
   scope:
@@ -55,6 +57,7 @@ import stat
 from ansible.module_utils.basic import AnsibleModule
 
 SCOPES = frozenset(("libvirt-host", "libvirt-machine", "managedos-install"))
+PARENT = "/var/lib/bootwright-staging/runs"
 FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 
 
@@ -67,12 +70,39 @@ def private(parent, name, owner):
     return descriptor
 
 
-def manage(root, scope, state, parent_path="/var/tmp", owner=0, remove_root=False):
+def owned(path, owner, mode, create):
+    """Create path when asked and absent, then require a directory owner holds that no other account may write."""
+    if create:
+        try:
+            os.mkdir(path, mode)
+        except FileExistsError:
+            pass
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        if create:
+            raise
+        return False
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != owner
+            or mode == 0o700 and stat.S_IMODE(info.st_mode) != 0o700 or stat.S_IMODE(info.st_mode) & 0o022):
+        raise ValueError("the run scratch parent %s is not a directory user %d owns and alone may write; remove it or make it"
+                         " a directory owned by user %d with mode %04o" % (path, owner, owner, mode))
+    return True
+
+
+def manage(root, scope, state, parent_path=PARENT, owner=0, remove_root=False):
     name = os.path.basename(root)
     if (os.path.dirname(root) != parent_path
             or not re.fullmatch(r"bootwright-run-scratch-[0-9]+-[0-9]+", name)
             or scope not in SCOPES or state not in ("present", "absent")):
         raise ValueError("scratch is not a runner-issued role directory")
+    present = state == "present"
+    if not owned(os.path.dirname(parent_path), owner, 0o711, present) and not present:
+        return os.path.join(root, scope)
+    if not owned(parent_path, owner, 0o700, present) and not present:
+        return os.path.join(root, scope)
+    if present and os.statvfs(parent_path).f_flag & os.ST_NOEXEC:
+        raise ValueError("the run scratch parent %s lies on a noexec filesystem; remount it with exec" % parent_path)
     parent = os.open(parent_path, FLAGS)
     try:
         if state == "present":
@@ -135,7 +165,9 @@ def main():
     try:
         path = manage(module.params["root"], module.params["scope"], module.params["state"],
                       remove_root=module.params["remove_root"])
-    except (OSError, ValueError):
+    except ValueError as error:
+        module.fail_json(msg=str(error))
+    except OSError:
         module.fail_json(msg="private lifecycle scratch could not be safely prepared or removed")
     module.exit_json(changed=False, path=path)
 

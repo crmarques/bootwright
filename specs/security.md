@@ -304,8 +304,20 @@ runs to its end, and the adapter stops at its next acknowledgement, which fails
 once the invocation's ends of the channels close.
 
 Each lifecycle adapter invocation owns a job directory `bootwright-run-<n>`
-beneath `/run` and a scratch directory `bootwright-run-scratch-<n>-<m>` beneath
-`/var/tmp` that carries its job's `<n>`. Before it writes anything else into
+beneath `/run`, which holds its lent material and never survives a reboot, and
+a scratch directory `bootwright-run-scratch-<n>-<m>` that carries its job's
+`<n>` beneath `/var/lib/bootwright-staging/runs`, where no other account can
+create a name. The runner on the controller and `lifecycle_scratch` on an SSH
+execution host create that parent, and the staging parent above it, when
+absent. A parent that is a link, owned by another account, or open to another
+account's write, or a scratch parent other than mode 0700 or on a noexec
+filesystem, refuses before any scratch is touched, naming the directory and
+its remedy: the runner with `lifecycle.state` before any job exists or the
+adapter runs, the module by failing its task
+(`TestAnUnsafeOrNoexecScratchParentRefusesBeforeTheRun`,
+`TestTheRunnerScratchesBeneathTheStagingParent`). Scratch directories an
+earlier build left beneath `/var/tmp` are no longer swept; the host's
+systemd-tmpfiles ages them out of `/var/tmp`, 30 days on Fedora and RHEL. Before it writes anything else into
 the job, the runner takes an exclusive advisory lock on its `lock` file, then
 one on its `holder` file, which only the invocation holds: it is opened
 close-on-exec and never handed to the adapter. It then records beside them the

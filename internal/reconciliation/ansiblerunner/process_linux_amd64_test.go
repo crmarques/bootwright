@@ -166,7 +166,7 @@ func TestAProtocolRefusalEndsTheAdapterPromptly(t *testing.T) {
 			var adapter *exec.Cmd
 			runner := Runner{
 				stager:    newDirStager(t),
-				jobParent: t.TempDir(), scratchParent: t.TempDir(), drain: 200 * time.Millisecond,
+				jobParent: t.TempDir(), scratchParent: privateTempDir(t), drain: 200 * time.Millisecond,
 				playbooks: map[string]string{"artifact-server-nginx-v1/apply": "apply.yml"},
 				command: func(string, ...string) *exec.Cmd {
 					adapter = exec.Command(os.Args[0], "-test.run=^TestLifecycleAdapterChild$", "--", "lifecycle-child-"+mode)
@@ -540,7 +540,7 @@ func TestLifecycleInvocationHelper(t *testing.T) {
 // reaches the adapter, so none runs on into the next invocation.
 func TestAKilledInvocationTakesItsAdapter(t *testing.T) {
 	invocation := exec.Command(os.Args[0], "-test.run=^TestLifecycleInvocationHelper$")
-	invocation.Env = append(os.Environ(), "BOOTWRIGHT_INVOCATION_AREA="+t.TempDir())
+	invocation.Env = append(os.Environ(), "BOOTWRIGHT_INVOCATION_AREA="+privateTempDir(t))
 	stdout, err := invocation.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)

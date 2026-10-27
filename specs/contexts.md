@@ -602,6 +602,7 @@ Secrets limits additionally bound their trees.
 | Lifecycle operations one context retains | 1024 | `MaxOperations` in `internal/reconciliation/operationstore/records.go` |
 | Entries in one context's lifecycle operation area, and in each of its runs and SSH-trust areas | 8192 | `MaxEntries` in `internal/reconciliation/operationstore/records.go` |
 | Bytes in one context's lifecycle operation area, and in each of its runs and SSH-trust areas | 64 MiB | `MaxBytes` in `internal/reconciliation/operationstore/records.go` |
+| Bytes in one lifecycle attempt log | 128 KiB | `AttemptLogBytes` in `internal/reconciliation/operationstore/logs.go` |
 | One lifecycle adapter invocation whose request states no deadline | 2 hours | `invocationTimeout` in `internal/reconciliation/ansiblerunner/process_linux_amd64.go` |
 | The longest deadline a lifecycle adapter request may state | 6 hours | `MaxDeadline` in `internal/reconciliation/lifecycle/invocation.go` |
 | One controller Ansible run: the base of a controller-stage tool publication | 10 minutes | `runTimeout` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
@@ -636,36 +637,35 @@ each block of its frozen plan ran one attempt: seven entries of its own and six
 for each block. A fresh apply needs its own first pass and the first pass of
 the removal that takes it back, which carries at most the blocks the apply
 froze, and must still keep 1024 entries free. A removal needs its own first
-pass and one entry more, because every record or log write needs one entry
-free. Operations that ran their blocks therefore reach the bound while fewer
-directories are retained, and the next fresh apply refuses at its claim,
+pass and one entry more. A write needs only the entries it creates and the
+bytes it adds free, so an attempt at a bound completes. Operations
+that ran their blocks therefore reach the bound while fewer directories are
+retained, and the next fresh apply refuses at its claim,
 before it raises evidence or binds anything, never at one of its block writes,
 while the removal of the last apply admitted still registers and completes
 (`TestTheOperationAreaAdmitsEveryRetainedOperation`,
 `TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheLine`). The free entries
 hold the index and the later attempts and resolutions of the current apply and
 of its removal, the only operations that write again. The removal's first
-pass, its one entry more, the bytes its registration writes and the opening
-record that restores a latched log fault are its reserve, which only that
-removal writes. Before an attempt, retry or resolution of the apply writes
-anything, it counts six entries, what an attempt creates at most, and the
-bytes of its record as started and as completed, for itself and for every
-other one the same invocation runs beside it. One whose writes would cut into
-the reserve refuses `lifecycle.state` before its effect, naming
+pass at 32 KiB a block, its one entry more, its registration's bytes, a
+resolution per apply block unknown, running or in flight, and the opening
+record that
+restores a latched log fault are its reserve, which only that removal writes
+(`TestARemovalResolvesWhatTheApplyLeftUnknownWithinTheReserve`). Before an
+attempt, retry or resolution of the apply writes, it counts six
+entries, what an attempt creates at most, and the bytes of its record,
+started and done, and log, for itself and for every other one
+the same invocation runs beside it. One whose writes would cut into the
+reserve refuses `lifecycle.state` before its effect, naming
 `bootwright destroy --context <name>`, which is then that apply's only way on,
-and the apply's result names no continuation beside it; the removal then
+and its result names no continuation beside it; the removal then
 registers and completes (`TestApplyRetriesNeverTakeTheRemovalReserve`). An
 attempt, retry or resolution of the removal, or the removal's observation of
 the apply it takes back, counts the same six entries and bytes for itself and
-for every one in flight beside it, and one entry more; one that would pass the
+for every one in flight, and one entry more, and keeps its
+registration and first pass until registered; one that would pass the
 bound refuses before its effect and leaves its block as it was, naming the
 deletion the guard admits (`TestAdmitAttemptKeepsTheRemovalReserve`).
-
-Not yet met: the log records an apply's attempt writes after its start are
-not counted against the removal's byte reserve, so they can still take it, and
-the reserve holds no room for the resolutions a destroy makes, before it
-registers, of apply blocks an interrupted attempt left `unknown`; tracked as
-[B572](milestones/backlog.md#b572).
 
 The area's bytes are admitted the same way, as its byte bound counts them. A
 fresh apply needs 16 MiB of them free, which hold its records and logs and

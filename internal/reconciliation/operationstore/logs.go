@@ -14,7 +14,10 @@ import (
 )
 
 const (
-	MaxLogBytes = 8 << 20
+	MaxLogBytes           = 8 << 20
+	AttemptLogBytes       = 128 << 10
+	truncationMarkerBytes = 64
+	logTailBytes          = 32 << 10
 	// MaxAdapterOutputBytes bounds one run's retained output. It stays below
 	// the area's own per-file limit, so the bound is this store's decision to
 	// truncate rather than a write the area refuses.
@@ -49,6 +52,7 @@ type Log struct {
 	area    Area
 	stamp   func() (string, error)
 	path    string
+	limit   int
 	written int
 	dropped int
 	closed  bool
@@ -234,7 +238,19 @@ func (s *Store) OpenLog(ctx context.Context, target string) (*Log, error) {
 	if err := s.area.EnsureDirectory(ctx, path.Dir(target)); err != nil {
 		return nil, err
 	}
-	log := &Log{area: s.area, stamp: s.now, path: target}
+	log := &Log{area: s.area, stamp: s.now, path: target, limit: MaxLogBytes}
+	if attemptLog(target) {
+		log.limit = AttemptLogBytes
+	}
+	entries, err := s.area.Entries(ctx, path.Dir(target))
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range entries {
+		if entry.Name == path.Base(target) && !entry.Directory {
+			log.written = int(entry.Size)
+		}
+	}
 	if err := log.Append(ctx, LogRecord{Event: "opened"}); err != nil {
 		return nil, err
 	}
@@ -266,7 +282,11 @@ func (l *Log) Append(ctx context.Context, record LogRecord) error {
 		return recordError("a private operation log record could not be encoded")
 	}
 	line = append(line, '\n')
-	if l.written+len(line) > MaxLogBytes {
+	limit := l.limit
+	if record.Event == "group" {
+		limit -= logTailBytes
+	}
+	if l.written+len(line)+truncationMarkerBytes > limit {
 		l.dropped++
 		return nil
 	}
@@ -298,6 +318,11 @@ func (l *Log) Close(ctx context.Context) error {
 		return recordError("the private operation log truncation marker could not be encoded")
 	}
 	return l.area.Append(ctx, l.path, append(line, '\n'))
+}
+
+func attemptLog(target string) bool {
+	parts := strings.Split(target, "/")
+	return len(parts) == 5 && parts[1] == "logs" && parts[2] == "blocks" && strings.HasPrefix(parts[4], "attempt-")
 }
 
 // LogPaths lists created logs once, operation log first, then blocks in frozen

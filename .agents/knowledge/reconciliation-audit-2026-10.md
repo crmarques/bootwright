@@ -170,7 +170,7 @@ interim wording is part of B568.
 
 ### Defects and over-claims today
 
-**[B572](../../specs/milestones/backlog.md#b572): the operation-area bound hit
+**[B572](../../specs/milestones/delivered.md#x176--audit-lane-o-store-bounds-and-run-scratch): the operation-area bound hit
 mid-attempt strands blocks no verb resolves.** `capacity`
 (`internal/workspace/contextfs/operations_linux_amd64.go:739-750`) checks
 `entries+1` on every write, replacements and appends included;

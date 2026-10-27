@@ -245,9 +245,12 @@ func (a *operationArea) forget(err error) {
 }
 
 // newDirectory creates one directory of this subtree and counts it as an
-// entry.
+// entry, so it needs that entry free.
 func (a *operationArea) newDirectory(ctx context.Context, parent *directory, name string) (*directory, error) {
-	generation := a.generation()
+	generation, err := a.capacity(ctx, 1, 0)
+	if err != nil {
+		return nil, err
+	}
 	child, err := a.store.newDirectory(ctx, parent, name)
 	if err != nil {
 		a.forget(err)
@@ -358,7 +361,7 @@ func (a *operationArea) descend(ctx context.Context, parts []string, create bool
 		child, err := a.child(ctx, parent, part, create)
 		if err != nil {
 			release()
-			if errors.Is(err, syscall.ENOENT) {
+			if errors.Is(err, syscall.ENOENT) || atTheAreaBound(err) {
 				return nil, "", nil, err
 			}
 			return nil, "", nil, unsafeEntry(parent, part, err)
@@ -462,7 +465,7 @@ func (a *operationArea) directory(ctx context.Context, parts []string, create bo
 		child, err := a.child(ctx, parent, part, create)
 		if err != nil {
 			release()
-			if errors.Is(err, syscall.ENOENT) {
+			if errors.Is(err, syscall.ENOENT) || atTheAreaBound(err) {
 				return nil, nil, err
 			}
 			return nil, nil, unsafeEntry(parent, part, err)
@@ -589,7 +592,7 @@ func (a *operationArea) WriteExclusive(ctx context.Context, target string, data 
 		return err
 	}
 	defer release()
-	generation, err := a.capacity(ctx, len(data))
+	generation, err := a.capacity(ctx, 1, len(data))
 	if err != nil {
 		return err
 	}
@@ -620,7 +623,11 @@ func (a *operationArea) Replace(ctx context.Context, target string, data, expect
 		return err
 	}
 	defer release()
-	generation, err := a.capacity(ctx, len(data))
+	added, grown := 0, max(len(data)-len(expected), 0)
+	if expected == nil {
+		added = 1
+	}
+	generation, err := a.capacity(ctx, added, grown)
 	if err != nil {
 		return err
 	}
@@ -665,16 +672,9 @@ func (a *operationArea) Append(ctx context.Context, target string, data []byte) 
 		return err
 	}
 	defer release()
-	generation, err := a.capacity(ctx, len(data))
+	file, generation, created, err := a.openLog(ctx, parent, name, len(data))
 	if err != nil {
 		return err
-	}
-	if err := a.store.checkpoint(ctx, checkpointAppendOperationLog); err != nil {
-		return err
-	}
-	file, created, err := openLog(parent, name)
-	if err != nil {
-		return state("private operation log could not be opened")
 	}
 	defer file.Close()
 	stat, err := statHandle(file)
@@ -698,20 +698,44 @@ func (a *operationArea) Append(ctx context.Context, target string, data []byte) 
 	return nil
 }
 
-// openLog opens a log for appending and reports whether this call created it,
-// which a caching area counts as one more entry. A log another writer created
-// first is appended to as if it had existed.
-func openLog(parent *directory, name string) (*os.File, bool, error) {
+// openLog opens a log for appending after admitting what the append adds:
+// its bytes, and the one entry a log this call creates adds, so an append to a
+// log that exists needs no entry free. It reports whether this call created
+// the log, which a caching area counts as one more entry. A log another
+// writer created first, after this call found none, is appended to as if it
+// had existed, its entry already admitted.
+func (a *operationArea) openLog(ctx context.Context, parent *directory, name string, size int) (*os.File, uint64, bool, error) {
 	file, err := openRelative(parent, name, syscall.O_WRONLY|syscall.O_APPEND, 0)
-	if !errors.Is(err, syscall.ENOENT) {
-		return file, false, err
+	added := 0
+	switch {
+	case err == nil:
+	case errors.Is(err, syscall.ENOENT):
+		file, added = nil, 1
+	default:
+		return nil, 0, false, state("private operation log could not be opened")
+	}
+	generation, err := a.capacity(ctx, added, size)
+	if err == nil {
+		err = a.store.checkpoint(ctx, checkpointAppendOperationLog)
+	}
+	if err != nil {
+		if file != nil {
+			file.Close()
+		}
+		return nil, 0, false, err
+	}
+	if file != nil {
+		return file, generation, false, nil
 	}
 	file, err = openRelative(parent, name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL|syscall.O_APPEND, 0600)
+	created := err == nil
 	if errors.Is(err, syscall.EEXIST) {
 		file, err = openRelative(parent, name, syscall.O_WRONLY|syscall.O_APPEND, 0)
-		return file, false, err
 	}
-	return file, err == nil, err
+	if err != nil {
+		return nil, 0, false, state("private operation log could not be opened")
+	}
+	return file, generation, created, nil
 }
 
 func (a *operationArea) Sync(ctx context.Context, target string) error {
@@ -734,9 +758,13 @@ func (a *operationArea) Sync(ctx context.Context, target string) error {
 }
 
 // capacity bounds the subtree before an allocation, so a runaway operation
-// cannot consume the store its own recovery evidence lives in. It reports the
-// measurement the write it admits counts its change into.
-func (a *operationArea) capacity(ctx context.Context, additional int) (uint64, error) {
+// cannot consume the store its own recovery evidence lives in. It admits the
+// entries and bytes the write adds: a replacement of a record that exists and
+// an append to a log that exists add no entry, so the area at its entry bound
+// still completes the records and logs it holds, and only a write that
+// creates an entry refuses there. It reports the measurement the write it
+// admits counts its change into.
+func (a *operationArea) capacity(ctx context.Context, added, additional int) (uint64, error) {
 	entries, bytes, generation, err := a.measured(ctx)
 	if errors.Is(err, syscall.ENOENT) {
 		return generation, nil
@@ -744,10 +772,21 @@ func (a *operationArea) capacity(ctx context.Context, additional int) (uint64, e
 	if err != nil {
 		return generation, err
 	}
-	if entries+1 > maxOperationEntries || bytes+int64(additional) > maxOperationBytes {
-		return generation, state(a.storage() + " has reached its bounds")
+	if entries+added > maxOperationEntries || bytes+int64(additional) > maxOperationBytes {
+		return generation, areaBound{state(a.storage() + " has reached its bounds")}
 	}
 	return generation, nil
+}
+
+// areaBound is capacity's refusal, which a walk that creates a directory
+// reports as it is rather than as an entry it could not open.
+type areaBound struct{ error }
+
+func (b areaBound) Unwrap() error { return b.error }
+
+func atTheAreaBound(err error) bool {
+	var bound areaBound
+	return errors.As(err, &bound)
 }
 
 // measured is the subtree's size: scanned for every write of an area that

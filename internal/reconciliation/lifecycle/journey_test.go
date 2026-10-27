@@ -61,11 +61,13 @@ type memoryArea struct {
 	// that write, so a test can stop an invocation exactly at a durable write.
 	landing func(operation, target string, files map[string][]byte) error
 	// bound, when set, refuses a write that would take the bytes the area's
-	// records hold past it, counting a replaced record's current bytes as the
-	// real area does until its replacement lands.
+	// records hold past it, counting what a replacement adds to the record it
+	// replaces, as the real area does.
 	bound int
-	// entries, when set, refuses a record or log write unless one entry is
-	// free beneath it, as the real area's entry bound does.
+	// entries, when set, refuses a record or log write unless the entries it
+	// adds are free beneath it, as the real area's entry bound does: a
+	// replacement or an append to what exists adds none, and a record or log
+	// it creates adds itself and each directory it creates for it.
 	entries int
 }
 
@@ -84,14 +86,28 @@ func (a *memoryArea) stored() int {
 	return total
 }
 
-func (a *memoryArea) fits(data []byte) error {
-	if a.bound > 0 && a.stored()+len(data) > a.bound {
+func (a *memoryArea) fits(target string, growth int) error {
+	if a.bound > 0 && growth > 0 && a.stored()+growth > a.bound {
 		return errors.New("the operation area has reached its bytes")
 	}
-	if a.entries > 0 && areaEntries(a, "")+1 > a.entries {
+	if a.entries > 0 && areaEntries(a, "")+a.adds(target) > a.entries {
 		return errors.New("the operation area has reached its entries")
 	}
 	return nil
+}
+
+// adds is how many entries a write of target adds.
+func (a *memoryArea) adds(target string) int {
+	if _, exists := a.files[target]; exists {
+		return 0
+	}
+	added := 1
+	for parent := path.Dir(target); parent != "."; parent = path.Dir(parent) {
+		if !areadouble.IsDirectory(a.files, a.directories, parent) {
+			added++
+		}
+	}
+	return added
 }
 
 func newArea() *memoryArea {
@@ -164,6 +180,15 @@ func (a *memoryArea) EnsureDirectory(ctx context.Context, target string) error {
 	if err := a.admit(ctx, target, false); err != nil {
 		return err
 	}
+	created := 0
+	for current := target; current != "." && current != ""; current = path.Dir(current) {
+		if !areadouble.IsDirectory(a.files, a.directories, current) {
+			created++
+		}
+	}
+	if a.entries > 0 && areaEntries(a, "")+created > a.entries {
+		return errors.New("the operation area has reached its entries")
+	}
 	for current := target; current != "." && current != ""; current = path.Dir(current) {
 		a.directories[current] = true
 	}
@@ -187,7 +212,7 @@ func (a *memoryArea) WriteExclusive(ctx context.Context, target string, data []b
 	if _, exists := a.files[target]; exists {
 		return errors.New("exists")
 	}
-	if err := a.fits(data); err != nil {
+	if err := a.fits(target, len(data)); err != nil {
 		return err
 	}
 	a.files[target] = slices.Clone(data)
@@ -216,7 +241,7 @@ func (a *memoryArea) Replace(ctx context.Context, target string, data, expected 
 	} else if !exists || !slices.Equal(current, expected) {
 		return errors.New("expectation")
 	}
-	if err := a.fits(data); err != nil {
+	if err := a.fits(target, len(data)-len(current)); err != nil {
 		return err
 	}
 	a.files[target] = slices.Clone(data)
@@ -237,7 +262,7 @@ func (a *memoryArea) Append(ctx context.Context, target string, data []byte) err
 	if err := a.fail["append "+target]; err != nil {
 		return err
 	}
-	if err := a.fits(data); err != nil {
+	if err := a.fits(target, len(data)); err != nil {
 		return err
 	}
 	a.files[target] = append(a.files[target], data...)
